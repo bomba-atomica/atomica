@@ -370,6 +370,8 @@ With trustless cross-chain transaction verification, Atomic Auctions can:
 
 The technology for trustless cross-chain verification exists and is battle-tested. The remaining challenge is not "can we verify cross-chain transactions" but rather "how do we design auctions that leverage this capability to achieve game-theoretic soundness."
 
+For detailed technical implementation of cross-chain atomicity, see [Atomic Guarantee Mechanism](atomic-guarantee-mechanism.md).
+
 ## Game-Theoretic Design: Uniform Price Auctions
 
 The second critical question is whether we can design an auction mechanism that functions effectively in a partially public environment while maintaining competitive pricing and preventing manipulation. We propose using a **Uniform Price Multi-Unit Auction** (also known as a "Treasury Auction" after its use in US government bond sales).
@@ -460,8 +462,10 @@ We propose four complementary mitigations:
 - This prevents strategic reserve price manipulation after seeing bids
 
 **4. Reserve Price Cost (Auctioneer Penalty)**
-- Exercising the reserve price rejection incurs a cost to the auctioneer (e.g., 5% of total auction value)
-- This penalty is distributed to qualifying bidders as compensation for wasted time and opportunity cost
+- Exercising the reserve price rejection incurs a cost to the auctioneer: **5% of (reserve price × volume)**
+- Note: The fee is calculated on the reserve price, not the final auction clearing price
+- This creates an incentive to lower the reserve price (making auctions more attractive to bidders) to reduce insurance costs
+- The penalty is distributed to qualifying bidders as compensation for wasted time and opportunity cost
 - Creates economic disincentive for auctioneers to set unrealistic reserves
 - Ensures auctioneers only reject auctions when clearing price is genuinely unacceptable
 - Aligns incentives: auctioneers want auctions to succeed; bidders are protected against time-wasting
@@ -489,6 +493,52 @@ This design achieves several desirable properties:
 - Always-online automators lower barriers to entry
 
 This auction design enables Atomic Auctions to function effectively in a partially public environment while maintaining competitive pricing and preventing manipulation, even in thin markets with anonymous participants.
+
+For detailed game-theoretic analysis of shill bidding attacks and their mitigations, see [Shill Bidding: Formal Analysis](shill-bidding-analysis.md).
+
+## Open Questions
+
+1. **Data Availability Risk**
+   - How is data availability of the away chain guaranteed for home-chain verifiers when only block headers are submitted?
+
+2. **Fraud Proof Latency**
+   - What is the expected time window for submitting fraud proofs, and how does this affect finality and UX?
+
+3. **Validator Incentives**
+   - Since no extra reward is provided, what prevents rational home-chain validators from ignoring away-chain header submissions or fraud proofs?
+
+4. **Sybil Resistance for Bidders**
+   - Without KYC or reputation, what mechanisms limit Sybil bidding beyond griefing cost?
+
+5. **DoS on Auction Participation**
+   - Can an attacker cheaply spam fake bids or commitments to delay auction clearing or inflate verification load?
+
+6. **Economic Bounds on Griefing**
+   - What is the maximum griefing cost an attacker can impose vs. the minimum stake they must lock?
+
+7. **Misbehavior of Away-Chain Validators**
+   - If the away chain reorganizes or censors deposits, how is this detected and resolved on the home chain?
+
+8. **Handling Header Submission Failure**
+   - What happens if staked home-chain validators fail (collude or go offline) and headers stop being submitted?
+
+9. **Auction Liveness Guarantees**
+   - If no valid bids can be decrypted or verified due to fraud proof disputes, is the auction canceled, delayed, or force-closed?
+
+10. **Cross-Chain Fork Choice Conflicts**
+    - How does the home chain decide which away-chain header branch is canonical in the presence of competing submissions?
+
+11. **Upgrade & Parameter Change Governance**
+    - Who decides fee parameters, bid commitment formats, fraud proof circuits, etc., and how are upgrades coordinated across chains?
+
+12. **State Blowup from Multiple Auctions**
+    - How is storage growth managed if many auctions run in parallel and commitments must remain accessible until fraud windows close?
+
+13. **Partial Participation Strategy**
+    - If bidders only participate in select auctions, does this create exploitable patterns (e.g., inference attacks on private bids)?
+
+14. **Replay or Double-Use of Commitments**
+    - Can a malicious bidder reuse a valid commitment across auctions to create confusion or extract unintended optionality?
 
 ## References
 
