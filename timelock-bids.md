@@ -43,6 +43,58 @@ Traditional commit-reveal schemes fail because users can grief the auction by co
 
 To prevent invalid bids and ensure capital efficiency, each bid submission must include a **zero-knowledge proof** that guarantees validity without revealing sensitive information.
 
+### Implementation Architecture
+
+The ZKP system is split into two components:
+
+1. **Client-Side Proof Generator** (Rust CLI/Library)
+   - Generates ZK proofs off-chain
+   - Contains full circuit implementation + proving key (~50MB)
+   - Heavy cryptographic operations (100-500ms per proof)
+   - Produces encrypted bid + proof (~192 bytes for Groth16)
+
+2. **Blockchain Native Verifier** (MoveVM Native Function)
+   - Verifies proofs on-chain
+   - Contains only verification key (~1KB)
+   - Lightweight verification (1-2ms, ~150K gas)
+   - Called from Move smart contracts
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    CLIENT SIDE (Rust)                        │
+│                                                               │
+│  Client generates:                                           │
+│  - Encrypted Move Bid object (ciphertext of serialized      │
+│    struct produced by circuit)                               │
+│  - ZK Proof (~192 bytes)                                     │
+│  - Public inputs                                             │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        │ Submit to blockchain
+                        ↓
+┌─────────────────────────────────────────────────────────────┐
+│              BLOCKCHAIN (MoveVM Native Function)             │
+│                                                               │
+│  1. Verify ZK proof: native fun verify_bid_proof(...): bool │
+│     - Verifies proof in 1-2ms                                │
+│     - Returns true if all constraints satisfied              │
+│                                                               │
+│  2. Store encrypted Bid object on-chain                      │
+│                                                               │
+│  3. After auction ends (tlock secret revealed):              │
+│     - Decrypt ciphertext → serialized bytes                  │
+│     - Deserialize bytes → Move Bid struct                    │
+│     - Store Bid in user's account resource                   │
+│     - Execute bid logic with instantiated object             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Critical Design Point**: The ZK circuit produces an encrypted **serialized Move object**. The circuit takes the plaintext Bid struct fields as private inputs, serializes to BCS format, performs ZK-friendly encryption (Poseidon-based), and outputs the ciphertext. This ensures:
+1. The ciphertext is cryptographically bound to the proof
+2. The encrypted data is a valid Move object that can be deserialized on-chain
+3. After decryption, the Move contract can instantiate the Bid struct and execute bid logic
+4. The bidder cannot manipulate the encrypted object without invalidating the proof
+
 ### Problem Statement
 
 Without ZKP verification, attackers can:
@@ -56,18 +108,21 @@ Each bid submission must include a zero-knowledge proof with the following struc
 
 #### Private Inputs (Witness)
 
-1. **Bid amount** `b` - The actual bid price (secret)
+1. **Bid object fields** - Complete Move struct to be encrypted:
+   - Bid amount `b` - The actual bid price (secret)
+   - Bidder address
+   - Any additional bid metadata
 2. **User balance** `B` - Proven via Merkle proof from Aptos ledger state
 3. **Balance Merkle proof** - Path proving account balance in state tree
 4. **Encryption randomness** `r` - Randomness used in bid encryption (for ZK-friendly schemes)
 
 #### Public Inputs
 
-1. **Encrypted bid** `c` - The ciphertext submitted on-chain
+1. **Encrypted bid object** `c` - Ciphertext of serialized Move `Bid` struct submitted on-chain
 2. **Drand-derived encryption key** - `key = H(R_n || auctionId)` where `R_n` is the target drand round
 3. **Ledger Merkle root** - Root hash of the account state at a specific version
-4. **Auction metadata** - `auctionId`, coin type, bidder address
-5. **Balance commitment** - Commitment to user's balance (for later verification)
+4. **Auction metadata** - `auctionId`, coin type
+5. **Commitment to bid object** - Hash commitment for verification after decryption
 
 #### Proof Assertions
 
@@ -88,15 +143,30 @@ The bid does not exceed the available balance:
 b ≤ B
 ```
 
-**3. Encrypted Bid Correctness**
+**3. Encrypted Bid Object Correctness**
 ```
-The ciphertext c correctly encodes the bid b under the
-drand-derived key using ZK-friendly encryption:
+The circuit produces the ciphertext c by encrypting a serialized
+Move Bid struct using ZK-friendly encryption:
 
-c = Enc_key(b, r)
+bid_object = Bid { amount: b, bidder: addr, ... }
+serialized = bcs::serialize(bid_object)
+c = Enc_key(serialized, r)
 
-where r is the randomness and Enc is a ZK-friendly encryption
-function (e.g., Poseidon-based or MiMC-based).
+where:
+- bid_object is the complete Move struct with private fields
+- serialized is the BCS-encoded byte representation
+- r is the private randomness input
+- c is the public output (encrypted serialized object)
+- Enc is a ZK-friendly encryption function (Poseidon-based)
+
+The circuit computes the encryption and outputs c as a public value,
+cryptographically binding the ciphertext to the proof.
+
+After decryption on-chain, the Move contract can:
+1. Decrypt c with the revealed tlock secret
+2. Deserialize to recover the Bid struct
+3. Store the Bid object in user's account state
+4. Execute bid logic using the instantiated object
 ```
 
 **4. Range Validity**
@@ -117,23 +187,45 @@ min_bid ≤ b ≤ max_bid
 #### Option 1: Hash-Based Encryption with Poseidon
 
 ```
-Encrypt(message, key):
+Encrypt(bid_object, key):
+    // Serialize Move struct to bytes
+    serialized = bcs::serialize(bid_object)
+
+    // Convert bytes to field elements (chunking if needed)
+    message_fields = bytes_to_fields(serialized)
+
+    // Encrypt each field element
     r ← random scalar
-    k = Poseidon(key || r)
-    c = message + k  (mod p)
-    return (r, c)
+    ciphertext = []
+    for each m in message_fields:
+        k = Poseidon(key || r || index)
+        c = m + k  (mod p)
+        ciphertext.append(c)
+
+    return (r, ciphertext)
 
 Decrypt(ciphertext, key):
-    (r, c) = ciphertext
-    k = Poseidon(key || r)
-    message = c - k  (mod p)
-    return message
+    (r, c_array) = ciphertext
+    message_fields = []
+    for each (c, index) in c_array:
+        k = Poseidon(key || r || index)
+        m = c - k  (mod p)
+        message_fields.append(m)
+
+    // Convert field elements back to bytes
+    serialized_bytes = fields_to_bytes(message_fields)
+
+    // Deserialize to Move struct
+    bid_object = bcs::deserialize(serialized_bytes)
+    return bid_object
 ```
 
 **Advantages**:
 - Very efficient in ZK circuits (10-100x faster than AES)
 - Poseidon designed specifically for ZK-SNARKs
 - Can prove encryption correctness with ~1000 constraints
+- Works with arbitrary byte arrays (serialized Move objects)
+- On-chain decryption produces valid Move struct
 
 #### Option 2: MiMC-Based Encryption
 
@@ -150,30 +242,38 @@ Encrypt: c = (C, E) where E = b + Poseidon(key || nonce)
 
 To maintain compatibility with drand timelock while adding ZK proofs:
 
-**Layer 1 (ZK-Friendly)**: Poseidon-based encryption proven in ZK
+**Layer 1 (ZK-Friendly)**: Poseidon-based encryption of serialized Move object, proven in ZK
 ```
-c_inner = b + Poseidon(H(drand_round || auctionId) || r)
+bid_object = Bid { amount: b, bidder: addr, ... }
+serialized = bcs::serialize(bid_object)
+c_inner = PoseidonEncrypt(serialized, H(drand_round || auctionId), r)
 ```
 
-**Layer 2 (Timelock)**: Standard tlock encryption of the entire proof + bid
+**Layer 2 (Timelock)**: Optional standard tlock encryption for additional privacy
 ```
-c_outer = tlock.encrypt((c_inner, zkp), drand_round)
+c_outer = tlock.encrypt(c_inner, drand_round)
 ```
 
 **Verification Flow**:
-1. User submits `c_outer` + ZK proof of `c_inner` correctness
+1. User submits `c_inner` (or `c_outer` if using double encryption) + ZK proof
 2. Chain verifies ZK proof before accepting bid
-3. After auction ends, decrypt `c_outer` with drand, extract `c_inner`
-4. Verify `c_inner` matches the proven ciphertext
-5. Decrypt `c_inner` with Poseidon key
+3. After auction ends and drand secret revealed:
+   - If double-encrypted: decrypt `c_outer` with drand → get `c_inner`
+   - Decrypt `c_inner` with Poseidon using drand-derived key
+   - Get `serialized` bytes
+4. Deserialize to Move `Bid` struct: `bid = bcs::deserialize(serialized)`
+5. Store `Bid` in user's account resource
+6. Execute bid logic using the instantiated object
 
 ### One-Shot Settlement Property
 
 The ZKP ensures that once the drand randomness `R_n` is revealed:
-- All ciphertexts can be decrypted trustlessly
+- All ciphertexts can be decrypted trustlessly to valid Move objects
 - All bids are guaranteed to be valid (proven at submission time)
 - No additional trust or reveal phase needed
 - Capital efficiency is guaranteed (all bids are solvent)
+- Decrypted Move objects can be directly instantiated and stored in account state
+- Bid execution happens seamlessly using the recovered struct
 
 ### Privacy Guarantees
 
@@ -219,6 +319,194 @@ The zero-knowledge proof reveals:
 - No wasted gas on invalid decryptions
 - **Net benefit**: More expensive per bid, but eliminates grief attacks
 
+### Implementation Details
+
+#### Client-Side Proof Generator
+
+**Project Structure**:
+```
+bid-prover/
+├── Cargo.toml
+├── src/
+│   ├── circuit.rs           # ZK circuit definition
+│   ├── encryption.rs        # Poseidon encryption
+│   ├── merkle.rs           # Merkle proof handling
+│   ├── prover.rs           # Proof generation
+│   └── main.rs             # CLI interface
+├── keys/
+│   ├── proving.key         # Proving key (~50MB)
+│   └── verifying.key       # Verification key (~1KB)
+└── README.md
+```
+
+**Dependencies** (client-side):
+```toml
+[dependencies]
+ark-groth16 = "0.4"                    # Full prover
+ark-bls12-381 = "0.4"                  # Pairing curve
+ark-r1cs-std = "0.4"                   # Circuit gadgets
+ark-crypto-primitives = "0.4"          # Merkle, Poseidon
+ark-relations = "0.4"                  # Constraint systems
+poseidon-ark = "0.1"                   # Poseidon hash
+clap = "4.0"                           # CLI
+serde = "1.0"                          # Serialization
+```
+
+**Key Operations**:
+1. **Witness Generation**: Construct circuit with private inputs (bid, balance, Merkle proof)
+2. **Encryption**: Circuit computes Poseidon encryption internally
+3. **Proof Generation**: Generate Groth16 proof using proving key (100-500ms)
+4. **Serialization**: Output proof (~192 bytes) + public inputs
+
+**CLI Usage Example**:
+```bash
+bid-prover generate \
+  --bid-amount 1000 \
+  --balance 5000 \
+  --merkle-proof proof.json \
+  --auction-id 42 \
+  --output bid.json
+```
+
+**Output Format**:
+```json
+{
+  "encrypted_bid": "0x1234...",
+  "proof": "0xabcd...",
+  "public_inputs": {
+    "merkle_root": "0x5678...",
+    "auction_id": 42,
+    "ciphertext": "0x1234..."
+  }
+}
+```
+
+#### Blockchain Native Verifier
+
+**Location**: `/aptos-move/framework/aptos-natives/src/cryptography/bid_proof.rs`
+
+**Dependencies** (on-chain):
+```toml
+[dependencies]
+# Use verify-only feature for minimal size
+ark-groth16 = { version = "0.4", default-features = false, features = ["verify-only"] }
+ark-bls12-381 = { version = "0.4", default-features = false }
+ark-serialize = "0.4"
+```
+
+**Native Function Signature**:
+```rust
+#[native_function]
+pub fn verify_bid_proof(
+    encrypted_bid: Vec<u8>,
+    proof_bytes: Vec<u8>,
+    public_inputs_bytes: Vec<u8>,
+) -> Result<bool, NativeError>
+```
+
+**Move Declaration**:
+```move
+module auction {
+    native public fun verify_bid_proof(
+        encrypted_bid: vector<u8>,
+        proof: vector<u8>,
+        public_inputs: vector<u8>
+    ): bool;
+}
+```
+
+**Verification Flow**:
+1. Deserialize proof (~192 bytes)
+2. Deserialize public inputs
+3. Verify Groth16 proof with embedded verification key
+4. Return true/false
+
+**Performance**:
+- Verification time: 1-2ms
+- Gas cost: ~150K
+- Verification key size: ~1KB (embedded in native function)
+
+#### Circuit Design
+
+The ZK circuit implements the following constraints:
+
+```rust
+pub struct BidValidityCircuit {
+    // Private inputs (witness)
+    bid_object_fields: Option<BidFields>,  // All Move struct fields
+    user_balance: Option<u64>,
+    merkle_proof: Option<MerkleProof>,
+    encryption_randomness: Option<Fr>,
+
+    // Public inputs
+    encrypted_bid_object: Vec<u8>,  // Encrypted serialized Move struct
+    merkle_root: [u8; 32],
+    auction_id: u64,
+}
+
+pub struct BidFields {
+    amount: u64,
+    bidder: Address,
+    // ... other Move Bid struct fields
+}
+
+impl ConstraintSynthesizer<Fr> for BidValidityCircuit {
+    fn generate_constraints(self, cs: ConstraintSystemRef<Fr>) -> Result<(), SynthesisError> {
+        let bid_fields = self.bid_object_fields.unwrap();
+
+        // 1. Merkle proof verification (~300 constraints per level)
+        verify_merkle_proof(cs, merkle_proof, merkle_root, user_balance)?;
+
+        // 2. Balance comparison (~250 constraints)
+        enforce_less_than_or_equal(cs, bid_fields.amount, user_balance)?;
+
+        // 3. Range checks (~256 constraints each)
+        enforce_range(cs, bid_fields.amount, min_bid, max_bid)?;
+
+        // 4. BCS serialization of Bid struct in circuit
+        //    Serialize the Move object fields to bytes
+        let serialized_bid = bcs_serialize_in_circuit(cs, bid_fields)?;
+
+        // 5. Poseidon encryption of serialized bytes (~1000 constraints)
+        let computed_ciphertext = poseidon_encrypt_bytes(
+            cs,
+            serialized_bid,
+            encryption_randomness
+        )?;
+
+        // 6. Public output constraint - verify computed matches submitted
+        enforce_equal(cs, computed_ciphertext, encrypted_bid_object)?;
+
+        Ok(())
+    }
+}
+```
+
+**Critical Properties**:
+1. The circuit serializes the Move `Bid` struct to BCS format
+2. The circuit encrypts the serialized bytes using Poseidon
+3. The `encrypted_bid_object` output is cryptographically bound to the proof
+4. Users cannot submit a different ciphertext without invalidating the proof
+5. After decryption on-chain, bytes can be deserialized to a valid Move struct
+6. The Move contract can instantiate the `Bid` object and execute bid logic
+
+#### Trusted Setup
+
+**Phase 1: Powers of Tau** (universal, one-time)
+- Can use existing ceremony (e.g., Zcash Powers of Tau)
+- Supports circuits up to a certain size
+
+**Phase 2: Circuit-Specific Setup**
+- Generate proving key and verification key
+- Proving key stays client-side
+- Verification key embedded in blockchain
+
+**Setup Command**:
+```bash
+bid-prover setup --output keys/
+# Generates: proving.key, verifying.key
+```
+
 ### Implementation Notes
 
 1. **Merkle Proof Source**: Use Aptos ledger state Merkle tree
@@ -226,6 +514,8 @@ The zero-knowledge proof reveals:
 3. **Time-Window**: Balance proof valid for N blocks (prevents stale proofs)
 4. **Escrow Mechanism**: After proof verification, balance could be locked in escrow
 5. **Multi-Asset Support**: Proof circuit parameterized by coin type
+6. **Key Distribution**: Verification key embedded in native function, proving key distributed to clients
+7. **Circuit Upgrades**: Changing circuit requires new trusted setup and native function update
 
 ## Cryptographic Background
 
@@ -373,16 +663,35 @@ pub fn ibe_decrypt(
 ```move
 // In Move smart contract
 module auction {
+    use std::bcs;
+
+    struct Bid has key, store {
+        amount: u64,
+        bidder: address,
+        timestamp: u64,
+    }
+
     // Declare native function
     native fun ibe_decrypt(ciphertext: vector<u8>, key: vector<u8>): vector<u8>;
 
-    public fun finalize_auction(auction_id: u64) {
+    public fun finalize_auction(auction_id: u64) acquires Auction {
+        let auction = borrow_global_mut<Auction>(auction_id);
         let decryption_key = get_threshold_signature(auction_id);
-        let bid = get_encrypted_bid(auction_id, 0);
 
-        // Call Rust implementation directly
-        let plaintext = ibe_decrypt(bid.ciphertext, decryption_key);
-        // ...
+        // Get encrypted bid object
+        let encrypted_bid = vector::borrow(&auction.encrypted_bids, 0);
+
+        // Decrypt to get serialized bytes
+        let serialized_bid = ibe_decrypt(encrypted_bid.ciphertext, decryption_key);
+
+        // Deserialize to Move Bid struct
+        let bid: Bid = bcs::from_bytes(&serialized_bid);
+
+        // Store Bid in user's account
+        move_to(&bid.bidder, bid);
+
+        // Execute bid logic with the instantiated object
+        process_bid(auction, &bid);
     }
 }
 ```
@@ -446,41 +755,157 @@ pub fn tlock_decrypt(
 - ✅ No need for off-chain decryption oracle
 - ✅ Immediate verification of winning bid
 
-**Move Contract Example**:
+### Permissionless Decryption Key Submission
+
+A critical design feature is that **anyone** can submit the decryption key to finalize an auction. This provides:
+
+**Decentralization Benefits**:
+- No dependency on a specific party to finalize
+- Market participants, volunteers, or bots can submit
+- First submitter can be rewarded (optional incentive mechanism)
+- Auction cannot be "stuck" waiting for a specific actor
+
+**Security Guarantees** (enforced by smart contract):
+1. **Time lock**: `timestamp::now_seconds() >= auction.end_time`
+2. **Key validity**: `verify_drand_beacon()` validates the drand signature
+3. **Decryption validation**: Test decryption on a sample bid to ensure key works
+4. **Single submission**: Key can only be submitted once (idempotent)
+
+**Two-Phase Finalization**:
+1. **Phase 1 - Key Submission**: Anyone submits valid drand signature
+   - Contract validates time, signature, and decryption capability
+   - Key stored in auction state
+   - Submitter optionally rewarded
+
+2. **Phase 2 - Auction Finalization**: Anyone triggers finalization
+   - Uses stored decryption key
+   - Decrypts all bids
+   - Determines winner
+   - Stores Bid objects in user accounts
+
+This separation allows for gas optimization (key submission is cheap, decryption can be batched/delayed).
+
+**Move Contract Example with Permissionless Decryption**:
 ```move
 module auction {
+    use std::bcs;
+    use aptos_framework::timestamp;
+
+    struct Bid has key, store {
+        amount: u64,
+        bidder: address,
+        timestamp: u64,
+    }
+
+    struct Auction has key {
+        id: u64,
+        end_time: u64,
+        target_round: u64,
+        encrypted_bids: vector<EncryptedBid>,
+        decryption_key: Option<vector<u8>>,  // Stored once submitted
+        state: AuctionState,
+        winner: Option<address>,
+        winning_bid: u64,
+    }
+
+    struct EncryptedBid has store {
+        ciphertext: vector<u8>,
+        bidder: address,
+    }
+
+    const AUCTION_ACTIVE: u8 = 0;
+    const AUCTION_DECRYPTION_KEY_SUBMITTED: u8 = 1;
+    const AUCTION_FINALIZED: u8 = 2;
+
+    const ERROR_AUCTION_NOT_ENDED: u64 = 1;
+    const ERROR_INVALID_BEACON: u64 = 2;
+    const ERROR_DECRYPTION_FAILED: u64 = 3;
+    const ERROR_KEY_ALREADY_SUBMITTED: u64 = 4;
+    const ERROR_NO_DECRYPTION_KEY: u64 = 5;
+
     native fun verify_drand_beacon(round: u64, sig: vector<u8>, prev: vector<u8>): bool;
     native fun tlock_decrypt(ciphertext: vector<u8>, beacon: vector<u8>): vector<u8>;
 
-    public entry fun finalize_auction(
+    /// Permissionless function - anyone can submit the decryption key
+    /// Incentivize by rewarding the first submitter
+    public entry fun submit_decryption_key(
+        submitter: &signer,
         auction_id: u64,
         drand_signature: vector<u8>,
         previous_signature: vector<u8>,
-    ) {
+    ) acquires Auction {
         let auction = borrow_global_mut<Auction>(auction_id);
 
-        // Verify drand beacon on-chain
+        // 1. Check auction has ended according to chain wall clock
+        let current_time = timestamp::now_seconds();
+        assert!(current_time >= auction.end_time, ERROR_AUCTION_NOT_ENDED);
+
+        // 2. Check key not already submitted
+        assert!(option::is_none(&auction.decryption_key), ERROR_KEY_ALREADY_SUBMITTED);
+
+        // 3. Verify the drand beacon signature is valid
         assert!(
             verify_drand_beacon(auction.target_round, drand_signature, previous_signature),
             ERROR_INVALID_BEACON
         );
 
-        // Decrypt all bids on-chain
+        // 4. Test that key can decrypt at least one bid (validation)
+        if (vector::length(&auction.encrypted_bids) > 0) {
+            let test_bid = vector::borrow(&auction.encrypted_bids, 0);
+            // This will abort if decryption fails
+            let _ = tlock_decrypt(test_bid.ciphertext, drand_signature);
+        };
+
+        // Store the valid decryption key
+        auction.decryption_key = option::some(drand_signature);
+        auction.state = AUCTION_DECRYPTION_KEY_SUBMITTED;
+
+        // Optional: Reward the submitter
+        // reward_key_submitter(submitter, auction_id);
+
+        emit_event(DecryptionKeySubmitted {
+            auction_id,
+            submitter: signer::address_of(submitter),
+            timestamp: current_time,
+        });
+    }
+
+    /// Finalize auction using the stored decryption key
+    /// Can be called by anyone after key is submitted
+    public entry fun finalize_auction(
+        auction_id: u64,
+    ) acquires Auction {
+        let auction = borrow_global_mut<Auction>(auction_id);
+
+        // Require decryption key to be submitted first
+        assert!(option::is_some(&auction.decryption_key), ERROR_NO_DECRYPTION_KEY);
+
+        let drand_signature = *option::borrow(&auction.decryption_key);
+
+        // Decrypt all bid objects on-chain and store them
         let highest_bid = 0u64;
-        let winner = @0x0;
+        let winner = option::none<address>();
 
-        vector::for_each_ref(&auction.bids, |encrypted_bid| {
-            let plaintext = tlock_decrypt(encrypted_bid.ciphertext, drand_signature);
-            let bid_amount = deserialize_u64(&plaintext);
+        vector::for_each_ref(&auction.encrypted_bids, |encrypted_bid| {
+            // Decrypt to get serialized Move Bid struct
+            let serialized_bid = tlock_decrypt(encrypted_bid.ciphertext, drand_signature);
 
-            if (bid_amount > highest_bid) {
-                highest_bid = bid_amount;
-                winner = encrypted_bid.bidder;
+            // Deserialize to Move Bid object
+            let bid: Bid = bcs::from_bytes(&serialized_bid);
+
+            // Compare bid amounts
+            if (bid.amount > highest_bid) {
+                highest_bid = bid.amount;
+                winner = option::some(bid.bidder);
             }
+
+            // Store Bid object in user's account resource
+            move_to(&bid.bidder, bid);
         });
 
         auction.winner = winner;
         auction.winning_bid = highest_bid;
+        auction.state = AUCTION_FINALIZED;
     }
 }
 ```
@@ -542,50 +967,131 @@ pub fn ibe_verify_ciphertext(
 - ✅ Dramatically lower gas costs vs. pure Move
 - ✅ Much faster execution
 
-**Move Contract Example**:
+**Move Contract Example with Permissionless Threshold Signature Submission**:
 ```move
 module auction {
-    native fun ibe_encrypt(plaintext: vector<u8>, mpk: vector<u8>, id: vector<u8>): vector<u8>;
+    use std::bcs;
+    use aptos_framework::timestamp;
+    use aptos_framework::block;
+
+    struct Bid has key, store {
+        amount: u64,
+        bidder: address,
+        timestamp: u64,
+    }
+
+    struct Auction has key {
+        id: u64,
+        epoch: u64,
+        end_block: u64,
+        end_time: u64,
+        encrypted_bids: vector<EncryptedBid>,
+        threshold_signature: Option<vector<u8>>,  // IBE decryption key
+        state: u8,
+        winner: Option<address>,
+        winning_bid: u64,
+    }
+
     native fun ibe_decrypt(ciphertext: vector<u8>, key: vector<u8>): vector<u8>;
     native fun ibe_verify_ciphertext(ciphertext: vector<u8>): bool;
+    native fun verify_threshold_signature(
+        epoch: u64,
+        block_number: u64,
+        signature: vector<u8>
+    ): bool;
 
     public entry fun submit_bid(
+        bidder: &signer,
         auction_id: u64,
         encrypted_bid: vector<u8>,
-    ) {
+    ) acquires Auction {
         // Verify ciphertext is valid
         assert!(ibe_verify_ciphertext(encrypted_bid), ERROR_INVALID_CIPHERTEXT);
 
         let auction = borrow_global_mut<Auction>(auction_id);
 
-        // Store bid
-        vector::push_back(&mut auction.bids, EncryptedBid {
+        // Store encrypted bid object
+        vector::push_back(&mut auction.encrypted_bids, EncryptedBid {
             ciphertext: encrypted_bid,
             bidder: signer::address_of(bidder),
         });
     }
 
-    public entry fun finalize_auction(auction_id: u64) {
+    /// Permissionless - anyone can submit the threshold signature
+    public entry fun submit_threshold_signature(
+        submitter: &signer,
+        auction_id: u64,
+        threshold_signature: vector<u8>,
+    ) acquires Auction {
         let auction = borrow_global_mut<Auction>(auction_id);
 
-        // Get threshold signature from validators
-        let decryption_key = get_threshold_signature(auction.epoch, auction.end_block);
+        // 1. Check auction has ended (time and block height)
+        let current_time = timestamp::now_seconds();
+        let current_block = block::get_current_block_height();
+        assert!(current_time >= auction.end_time, ERROR_AUCTION_NOT_ENDED);
+        assert!(current_block >= auction.end_block, ERROR_BLOCK_NOT_REACHED);
 
-        // Decrypt all bids on-chain
+        // 2. Check signature not already submitted
+        assert!(option::is_none(&auction.threshold_signature), ERROR_KEY_ALREADY_SUBMITTED);
+
+        // 3. Verify the threshold signature is valid for this epoch/block
+        assert!(
+            verify_threshold_signature(auction.epoch, auction.end_block, threshold_signature),
+            ERROR_INVALID_SIGNATURE
+        );
+
+        // 4. Test that signature can decrypt at least one bid
+        if (vector::length(&auction.encrypted_bids) > 0) {
+            let test_bid = vector::borrow(&auction.encrypted_bids, 0);
+            let _ = ibe_decrypt(test_bid.ciphertext, threshold_signature);
+        };
+
+        // Store the valid threshold signature (IBE decryption key)
+        auction.threshold_signature = option::some(threshold_signature);
+        auction.state = AUCTION_SIGNATURE_SUBMITTED;
+
+        // Optional: Reward submitter
+        // reward_signature_submitter(submitter, auction_id);
+
+        emit_event(ThresholdSignatureSubmitted {
+            auction_id,
+            submitter: signer::address_of(submitter),
+            epoch: auction.epoch,
+        });
+    }
+
+    /// Finalize auction using stored threshold signature
+    public entry fun finalize_auction(auction_id: u64) acquires Auction {
+        let auction = borrow_global_mut<Auction>(auction_id);
+
+        // Require threshold signature to be submitted first
+        assert!(option::is_some(&auction.threshold_signature), ERROR_NO_SIGNATURE);
+
+        let decryption_key = *option::borrow(&auction.threshold_signature);
+
+        // Decrypt all bid objects on-chain
         let highest_bid = 0u64;
-        let winner = @0x0;
+        let winner = option::none<address>();
 
-        vector::for_each_ref(&auction.bids, |encrypted_bid| {
-            let plaintext = ibe_decrypt(encrypted_bid.ciphertext, decryption_key);
-            let bid_amount = from_bytes_u64(&plaintext);
+        vector::for_each_ref(&auction.encrypted_bids, |encrypted_bid| {
+            // Decrypt to get serialized Move Bid struct
+            let serialized_bid = ibe_decrypt(encrypted_bid.ciphertext, decryption_key);
 
-            if (bid_amount > highest_bid) {
-                highest_bid = bid_amount;
-                winner = encrypted_bid.bidder;
+            // Deserialize to Move Bid object
+            let bid: Bid = bcs::from_bytes(&serialized_bid);
+
+            if (bid.amount > highest_bid) {
+                highest_bid = bid.amount;
+                winner = option::some(bid.bidder);
             }
+
+            // Store Bid object in user's account
+            move_to(&bid.bidder, bid);
         });
 
         auction.winner = winner;
+        auction.winning_bid = highest_bid;
+        auction.state = AUCTION_FINALIZED;
     }
 }
 ```
@@ -1639,58 +2145,113 @@ From Aptos GitHub Issue #499:
 
 > **Updated for Native Functions**: This roadmap assumes the ability to add native Rust functions to the MoveVM, which significantly streamlines implementation and improves performance.
 
-### Phase 1: drand with Native Functions (Weeks 1-5)
+### Phase 1: drand with Native Functions + ZKP
 
-**Week 1: Native Function Development**
-- [ ] Implement `tlock_decrypt()` native function in Rust
+**ZK Circuit Design and Setup**
+- [ ] Design ZK circuit for bid validity (Groth16)
+  - Merkle proof verification constraints
+  - Balance comparison constraints
+  - Poseidon encryption constraints
+  - Range check constraints
+- [ ] Set up circuit development environment
+- [ ] Implement circuit in `ark-r1cs-std`
+- [ ] Perform trusted setup ceremony
+  - Generate proving key (~50MB)
+  - Generate verification key (~1KB)
+
+**Client-Side Proof Generator**
+- [ ] Create `bid-prover` Rust project
+- [ ] Implement circuit witness generation
+- [ ] Implement Poseidon encryption module
+- [ ] Implement proof generation logic
+- [ ] Build CLI interface for proof generation
+- [ ] Test proof generation with sample inputs
+- [ ] Benchmark performance (target: <500ms per proof)
+
+**Blockchain ZKP Verifier Native Function**
+- [ ] Implement `verify_bid_proof()` native function
+  - Location: `/aptos-move/framework/aptos-natives/src/cryptography/bid_proof.rs`
+  - Embed verification key (~1KB)
+  - Deserialize and verify Groth16 proofs
+  - Add error handling for invalid proofs
+- [ ] Implement `tlock_decrypt()` native function
   - Location: `/aptos-move/framework/aptos-natives/src/cryptography/timelock.rs`
   - Integrate tlock crate for decryption
   - Add error handling for invalid ciphertexts
 - [ ] Implement `verify_drand_beacon()` native function
   - BLS signature verification for drand beacons
   - Chain verification (signature links to previous round)
-- [ ] Write comprehensive Rust unit tests with drand test vectors
-- [ ] Register native functions with MoveVM runtime
+- [ ] Write comprehensive Rust unit tests
+- [ ] Register all native functions with MoveVM runtime
 
-**Week 2: Move Smart Contract Development**
+**Move Smart Contract Development**
 - [ ] Declare native functions in Move module
+  - `verify_bid_proof()` - ZKP verification
+  - `tlock_decrypt()` - drand decryption
+  - `verify_drand_beacon()` - beacon verification
 - [ ] Implement auction contract (creation, bidding, ending)
-- [ ] Add on-chain finalization with native decryption
-- [ ] Implement commitment scheme for additional security
+  - Integrate ZKP verification in `submit_bid()`
+  - Store encrypted bids with proofs
+  - Add auction state management with `Option<vector<u8>>` for decryption key
+- [ ] Implement permissionless decryption key submission
+  - `submit_decryption_key()` - Anyone can submit drand signature
+  - Verify wall clock time has passed (`timestamp::now_seconds()`)
+  - Verify drand beacon validity
+  - Test decryption on sample bid
+  - Store key immutably in auction state (once-only)
+  - Optional: reward mechanism for first submitter
+- [ ] Add two-phase finalization
+  - Phase 1: Key submission (separate from decryption)
+  - Phase 2: Auction finalization using stored key
 - [ ] Write Move contract unit tests
 
-**Week 3: Client Integration**
-- [ ] Build bid encryption client library (using tlock)
-- [ ] Implement round calculation utilities
+**Client Integration and Tooling**
+- [ ] Build complete bid submission workflow
+  - Generate Merkle proof from ledger state
+  - Generate ZKP using `bid-prover`
+  - Encrypt with Poseidon (inside circuit)
+  - Optional: outer tlock layer for double encryption
+- [ ] Implement round calculation utilities for drand
 - [ ] Create finalization client (fetches drand beacon, submits to chain)
-- [ ] Frontend integration (if applicable)
+- [ ] Package `bid-prover` for distribution
+- [ ] Write client documentation and examples
 
-**Week 4: Testing and Security**
+**Testing and Security**
 - [ ] Integration testing on local devnet
+  - Test full bid submission + verification flow
+  - Test invalid proof rejection
+  - Test balance verification via Merkle proof
 - [ ] End-to-end testing on testnet
 - [ ] Load testing with multiple concurrent auctions
 - [ ] Gas cost analysis and optimization
-- [ ] Security audit of native functions and contracts
+- [ ] Security audit of:
+  - ZK circuit constraints
+  - Native verification function
+  - Move contracts
+  - Proof generation code
 
-**Week 5: Deployment**
+**Deployment**
 - [ ] Deploy updated MoveVM with native functions to testnet
 - [ ] Deploy auction contracts
+- [ ] Distribute `bid-prover` tool and proving key
 - [ ] Monitor for bugs and performance issues
 - [ ] Mainnet deployment with gradual rollout
 
-**Deliverables**:
-- ✅ Working sealed-bid auction system
+**Phase 1 Deliverables**:
+- ✅ Working sealed-bid auction system with ZKP
+- ✅ Client-side proof generator tool
+- ✅ On-chain ZKP verification (1-2ms, ~150K gas)
+- ✅ Balance verification via Merkle proofs
+- ✅ Bid amount encrypted by circuit (Poseidon)
 - ✅ On-chain drand verification and decryption
-- ✅ Native functions for high-performance crypto
-- ✅ Client libraries for encryption/finalization
 - ✅ No off-chain oracle required
+- ✅ Grief-resistant (invalid bids rejected at submission)
+- ✅ Capital efficient (balance verified cryptographically)
 - ✅ Documentation and examples
 
-**Time Estimate**: 5 weeks (1 week longer due to native function integration work)
+### Phase 2: Native IBE Implementation
 
-### Phase 2: Native IBE Implementation (Weeks 6-15)
-
-**Weeks 6-7: IBE Native Function Development**
+**IBE Native Function Development**
 - [ ] Research and select IBE scheme (Boneh-Franklin recommended)
 - [ ] Implement Boneh-Franklin IBE in Rust
   - `ibe_encrypt()` - Encrypt with master pubkey and identity
@@ -1702,7 +2263,7 @@ From Aptos GitHub Issue #499:
 - [ ] Comprehensive unit tests with cryptographic test vectors
 - [ ] Benchmark performance (aim for <10ms per operation)
 
-**Weeks 8-9: Validator Integration**
+**Validator Integration**
 - [ ] Adapt threshold BLS signature mechanism for IBE
   - Validators sign block numbers on request
   - Signatures serve as IBE private keys
@@ -1712,16 +2273,26 @@ From Aptos GitHub Issue #499:
 - [ ] Add validator signature request mechanism (on-chain or P2P)
 - [ ] Test signature generation with validator set
 
-**Weeks 10-11: Move Smart Contract Development**
+**Move Smart Contract Development**
 - [ ] Declare IBE native functions in Move module
+  - `ibe_decrypt()` - IBE decryption
+  - `verify_threshold_signature()` - Validate threshold BLS signature
 - [ ] Implement epoch-scoped auction contracts
   - Validate auction duration doesn't exceed epoch
   - Store encrypted bids with epoch information
-- [ ] Add on-chain decryption with threshold signatures
+  - Add `Option<vector<u8>>` for threshold signature storage
+- [ ] Implement permissionless threshold signature submission
+  - `submit_threshold_signature()` - Anyone can submit validator signature
+  - Verify time and block height reached
+  - Verify threshold signature validity for epoch/block
+  - Test decryption on sample bid
+  - Store signature immutably in auction state (once-only)
+  - Optional: reward mechanism for first submitter
+- [ ] Add two-phase finalization with stored signature
 - [ ] Implement winner determination logic
 - [ ] Write comprehensive Move unit tests
 
-**Weeks 12-13: Testing and Optimization**
+**Testing and Optimization**
 - [ ] Integration testing with validator set
 - [ ] Test epoch transitions and edge cases
 - [ ] Performance optimization
@@ -1731,7 +2302,7 @@ From Aptos GitHub Issue #499:
 - [ ] Load testing with 100+ bids per auction
 - [ ] Security testing (invalid ciphertexts, griefing attempts, etc.)
 
-**Weeks 14-15: Migration, Audit, and Deployment**
+**Migration, Audit, and Deployment**
 - [ ] Create migration path from Phase 1 (drand) to Phase 2 (native IBE)
 - [ ] Comprehensive security audit (native functions + contracts)
 - [ ] Testnet deployment with monitoring
@@ -1739,29 +2310,16 @@ From Aptos GitHub Issue #499:
 - [ ] Documentation and developer guides
 - [ ] Mainnet deployment with phased rollout
 
-**Deliverables**:
+**Phase 2 Deliverables**:
 - ✅ Production-ready IBE implementation as native functions
 - ✅ Epoch-scoped sealed-bid auctions
 - ✅ No external dependencies (uses chain's own validators)
 - ✅ High performance (<10ms crypto operations)
 - ✅ Low gas costs (~10-20x better than pure Move)
+- ✅ ZKP system from Phase 1 (can be reused with IBE encryption)
 - ✅ Fully audited and tested system
 
-**Time Estimate**: 10 weeks (faster than original plan due to native functions)
-
-### Total Timeline
-
-- **Phase 1 (drand with native functions)**: Weeks 1-5 (5 weeks)
-- **Phase 2 (Native IBE)**: Weeks 6-15 (10 weeks)
-- **Total**: ~15 weeks (3.5 months) for complete implementation
-
-**Comparison to Non-Native Approach**:
-- Original estimate: ~4-5 months
-- With native functions: ~3.5 months
-- Performance improvement: 10-100x
-- Gas cost reduction: 10-20x
-
-### Future Enhancements (Month 5+)
+### Future Enhancements
 
 **DKG Resharing** (if needed for long auctions):
 - [ ] Implement DKG resharing protocol
@@ -1845,6 +2403,21 @@ From Aptos GitHub Issue #499:
 *Mitigation*:
 - Add buffer rounds to ensure decryption only after auction end
 - Enforce minimum time between last bid and auction end
+
+**Threat: Invalid Bid Griefing** (**Mitigated by ZKP**)
+
+*Scenario*: Attacker submits invalid ciphertexts or bids exceeding their balance
+
+*Impact*: Wastes gas, creates fake competition, potentially invalidates auction
+
+*Likelihood*: High without ZKP, **eliminated with ZKP**
+
+*Mitigation*:
+- ✅ **ZKP verification at submission time**
+- ✅ Cryptographically proves bid validity before acceptance
+- ✅ Proves balance sufficiency via Merkle proof
+- ✅ Circuit-generated ciphertext ensures decryptability
+- Result: Invalid bids are rejected immediately, no wasted gas
 
 ### Phase 2 Security Analysis (Native IBE)
 
@@ -2004,33 +2577,53 @@ assert_eq!(
 
 ## Conclusion
 
-This document outlines a pragmatic two-phase approach to implementing sealed-bid auctions with timelock encryption, **leveraging MoveVM native functions** for high-performance cryptography:
+This document outlines a pragmatic two-phase approach to implementing sealed-bid auctions with timelock encryption and zero-knowledge proofs, **leveraging MoveVM native functions** for high-performance cryptography:
 
-**Phase 1** leverages the battle-tested drand network with **on-chain verification and decryption** via native Rust functions. This provides immediate functionality with trustless finalization—no off-chain oracles needed. While it introduces a small trust assumption in drand's distributed network, the implementation is production-ready with excellent performance.
+**Phase 1** leverages the battle-tested drand network with **on-chain verification and decryption** via native Rust functions, combined with a **zero-knowledge proof system** that ensures bid validity. The ZKP system prevents griefing attacks by cryptographically proving:
+- Bid validity (well-formed ciphertext of serialized Move struct)
+- Balance sufficiency (bid ≤ user balance)
+- Ciphertext authenticity (generated by circuit, bound to proof)
 
-**Phase 2** builds native IBE capabilities as **high-performance Rust native functions**, using the blockchain's existing threshold BLS infrastructure. This eliminates external dependencies, provides 10-100x better performance than pure Move, and offers full control over the cryptographic system. The epoch-scoped design balances security and practicality.
+The **two-component ZKP architecture** is key:
+- **Client-side proof generator**: Heavy computation off-chain (100-500ms), produces encrypted serialized Move objects
+- **Blockchain verifier**: Lightweight verification on-chain (1-2ms, ~150K gas)
 
-**The native functions capability is a game-changer**: It enables cryptographic operations that would be impractical or prohibitively expensive in pure Move, while maintaining Move's safety guarantees for business logic. Both phases benefit from this architecture.
+**Critical architectural innovation**: The ZK circuit serializes Move `Bid` structs to BCS format and encrypts them. After decryption on-chain, the Move contract deserializes the bytes to recover the `Bid` object, stores it in the user's account resource, and executes bid logic using the instantiated struct. This provides seamless integration with Move's object model.
+
+This provides immediate functionality with trustless finalization—no off-chain oracles needed. While it introduces a small trust assumption in drand's distributed network, the implementation is production-ready with excellent performance and grief-resistance.
+
+**Phase 2** builds native IBE capabilities as **high-performance Rust native functions**, using the blockchain's existing threshold BLS infrastructure. This eliminates external dependencies, provides 10-100x better performance than pure Move, and offers full control over the cryptographic system. The ZKP system from Phase 1 can be adapted to verify IBE-encrypted bids as well.
+
+**The native functions capability is a game-changer**: It enables cryptographic operations that would be impractical or prohibitively expensive in pure Move (especially ZKP verification), while maintaining Move's safety guarantees for business logic. Both phases benefit from this architecture.
 
 The research into Aptos blockchain's architecture confirms that even advanced L1 chains are still developing similar capabilities, validating our phased approach. Starting with drand allows rapid iteration and real-world testing while building toward a fully native solution.
 
 ### Key Takeaways
 
-1. **MoveVM native functions enable practical cryptography** - 10-100x performance improvement over pure Move
-2. **drand is production-ready today** and provides a practical path to market with on-chain verification
-3. **Native IBE is achievable** with existing threshold BLS infrastructure, implemented as Rust native functions
-4. **Epoch-scoped auctions** are a pragmatic constraint for rotating validator sets
-5. **The approach is battle-tested** by similar projects (Filecoin, Protocol Labs)
-6. **Security trade-offs are well-understood** and acceptable for auction use cases
-7. **Timeline is faster** - ~3.5 months total vs 4-5 months without native functions
+1. **Two-component ZKP architecture** - Client generates proofs, blockchain verifies (1-2ms)
+2. **Circuit encrypts serialized Move objects** - Ensures cryptographic binding between proof and encrypted Bid struct
+3. **Seamless Move integration** - Decrypted bytes deserialize to Move objects, stored in account state, executable bid logic
+4. **Permissionless decryption** - Anyone can submit valid decryption keys (drand signature or threshold signature)
+5. **Time-locked verification** - Smart contract validates wall clock time, key validity, and decryption capability
+6. **Grief-resistance via ZKP** - Invalid bids rejected at submission time, balance verified cryptographically
+7. **MoveVM native functions enable practical cryptography** - 10-100x performance improvement over pure Move
+8. **drand is production-ready today** and provides a practical path to market with on-chain verification
+9. **Native IBE is achievable** with existing threshold BLS infrastructure, implemented as Rust native functions
+10. **Epoch-scoped auctions** are a pragmatic constraint for rotating validator sets
+11. **The approach is battle-tested** by similar projects (Filecoin, Protocol Labs)
+12. **Security trade-offs are well-understood** and acceptable for auction use cases
+13. **Phased implementation approach** - Start with drand, migrate to native IBE
 
 ### Next Steps
 
-1. Begin Phase 1 implementation with drand integration
-2. Deploy prototype to testnet for validation
-3. Gather real-world performance and usability data
-4. Start IBE implementation work in parallel
-5. Plan migration strategy from Phase 1 to Phase 2
+1. **Design ZK circuit** for bid validity verification
+2. **Implement client-side proof generator** (`bid-prover` tool)
+3. **Implement blockchain ZKP verifier** as native function
+4. **Integrate drand** with on-chain verification
+5. **Deploy prototype to testnet** for validation
+6. **Gather real-world performance** and usability data
+7. **Start IBE implementation** work for Phase 2
+8. **Plan migration strategy** from Phase 1 to Phase 2
 
 ## References
 

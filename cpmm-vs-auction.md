@@ -501,31 +501,180 @@ Bootstrapping initial market maker participation:
 
 4. **Cross-Chain Finality:** How do different away-chain finality times (Bitcoin ~60min vs Ethereum ~15min) affect both models?
 
-## Conclusion
+## Futures Market Model: A Third Approach
 
-Both CPMMs and uniform price auctions can enable trustless cross-chain atomic swaps, but they make fundamentally different tradeoffs:
+Recent design insights suggest that reframing the auction mechanism as a **futures market** rather than a spot market fundamentally addresses several challenges identified with both CPMMs and traditional auction designs.
 
-**CPMMs** prioritize user experience (instant execution, familiar interface) but face severe economic challenges without protocol fees. The passive liquidity provision model results in negative expected value for LPs through LVR and impermanent loss, requiring external subsidies to function. Note that under zero-fee assumptions, JIT attacks are economically irrational; however, introducing fees to compensate LPs would enable JIT exploitation.
+### Core Insight: Users Should Not Expect Spot Pricing
 
-**Auctions** prioritize economic sustainability through active liquidity provision and self-compensating market makers. Bid-ask spreads provide natural profit mechanisms without protocol fees or subsidies, though market makers earn competitive returns (not excess rents) and face inventory risk and winner's curse effects. However, auctions introduce execution latency, complexity, and potential timing game vulnerabilities, potentially degrading user experience compared to instant AMM swaps. Importantly, uniform price auctions are not incentive-compatible—bidders strategically shade bids below true valuations (demand reduction).
+The key realization is that cross-chain atomic swaps inherently require coordination time and settlement delays. Rather than fighting this constraint, we can embrace it by designing the system as a **futures market** where:
 
-**The core question is whether sustainable economics or superior UX should take priority.**
+1. **Commodity delivered in X hours after auction close** - Assets settle after a predetermined delay (e.g., 24 hours)
+2. **Price smoothing** - Futures pricing naturally smooths volatility and reduces sensitivity to momentary price spikes
+3. **Reduced auction frequency** - A single daily batch auction suffices, dramatically simplifying coordination
 
-If zero-fee, zero-subsidy operation is a hard constraint, auctions appear to be the only economically viable approach. CPMMs require either:
-- Protocol fees (contradicts constraint)
-- External subsidies (unsustainable/requires governance)
-- Oracles to reduce LVR (contradicts trustlessness)
+### Daily Batch Auction Architecture
 
-If protocol fees or subsidies are acceptable, CPMMs become viable and may provide better UX for certain use cases, especially high-volume pairs where subsidy costs can be justified.
+**Single Daily Auction Design:**
+- One unified batch auction per day per trading pair
+- All users with USDC (or other quote asset) auction together in a single large batch
+- All holders of the base asset (e.g., LIBRA) can submit bids
+- **No reserve prices** - Eliminates reserve price complexity and associated penalties
+- Settlement occurs X hours after auction close with known delivery time
 
-A hybrid approach—subsidized CPMMs for common small trades and auctions for large trades—may offer the best balance, though at the cost of increased system complexity.
+**Why This Works:**
 
-Ultimately, the choice depends on the project's prioritization of:
-- Economic sustainability vs. UX simplicity
-- Decentralization purity vs. pragmatic compromises
-- Long-term viability vs. short-term adoption
+**Liquidity Bootstrapping**
+- Large batch creates critical mass of volume in single auction
+- Many small users aggregate into meaningful total volume
+- Reduces chicken-and-egg problem of market maker participation
+- Lower frequency means each auction has higher total value
 
-Both mechanisms represent valid engineering choices with distinct advantages and unavoidable tradeoffs.
+**Market Maker Advantages**
+- Known settlement time allows proper hedging strategies
+- Futures pricing reduces price risk (MMs can take offsetting positions)
+- Single large auction more attractive than many small ones
+- Predictable daily rhythm enables automated participation
+
+**User Experience Benefits**
+- Clear delivery expectations (not spot market confusion)
+- Futures pricing may provide better rates due to reduced MM risk
+- Single daily auction easier to understand than continuous trading
+- Predictable schedule (auction at same time daily)
+
+### Timelocked Sealed Bids: Essential for Fair Price Discovery
+
+**Critical Requirement:** The daily batch auction **must** use timelocked sealed bids to prevent manipulation and ensure fair price discovery.
+
+**Why Sealed Bids Are Essential:**
+- **Prevents shill bidding** - Without reserve prices, preventing last-minute bid manipulation becomes critical
+- **Eliminates timing games** - Late bidders cannot observe and undercut early bids
+- **Fair information structure** - All bidders compete on equal footing without information asymmetry
+- **Winner's curse mitigation** - Bidders cannot game the uniform clearing price by observing competitor bids
+
+**Implementation via Timelock Encryption:**
+- Bids encrypted using drand-based timelock encryption (detailed in `timelock-bids.md`)
+- All bids remain cryptographically sealed until auction close time
+- Automatic decryption via drand randomness beacon (no reveal phase to grief)
+- Zero-knowledge proofs ensure bid validity (solvency, balance) without revealing amounts
+- One-shot settlement after automatic decryption
+
+**Why Feasibility is Proven:**
+As documented in `timelock-bids.md`, the technical approach combines:
+1. ZK-friendly Poseidon-based encryption for proving bid validity
+2. Drand timelock for trustless automatic decryption
+3. Zero-knowledge proofs of balance and solvency at bid submission
+4. No interactive reveal phase (prevents griefing)
+
+This approach is **practical and implementable** with current cryptographic tools, despite the limitations of commit-reveal schemes noted earlier in this document.
+
+### Comparison to Spot Auction Model
+
+| Dimension | Spot Auctions (Multiple Daily) | Futures Market (Single Daily) |
+|-----------|-------------------------------|------------------------------|
+| **Frequency** | Many auctions per day | One auction per day |
+| **Settlement** | Immediate | X hours after close |
+| **Pricing Expectation** | Spot market rates | Futures/forward rates |
+| **Liquidity per Auction** | Fragmented across many | Concentrated in one |
+| **Market Maker Appeal** | Lower volume, higher risk | Higher volume, hedgeable |
+| **Price Volatility Risk** | High (immediate settlement) | Lower (time to hedge) |
+| **Reserve Price Needed** | Yes (protect users) | No (large liquid auction) |
+| **Complexity** | Reserve price mechanism | Simpler (no reserve) |
+| **Bid Privacy** | Helpful | Essential (sealed bids required) |
+| **Bootstrapping** | Hard (need MMs for many auctions) | Easier (single large auction) |
+
+### Game-Theoretic Improvements
+
+**Without Reserve Prices:**
+- Eliminates reserve price penalty mechanism complexity
+- No commit-reveal scheme needed for reserves
+- Users cannot reject auctions (reduces strategic gaming)
+- Auctioneers and bidders have aligned interests (auction must clear)
+
+**With Sealed Bids:**
+- Information symmetry among all bidders
+- No advantage to late bidding or early bidding
+- Prevents shill bidding and collusion
+- Uniform price auction works better when bids are sealed
+
+**Futures Pricing Dynamics:**
+- Market makers can price in expected risk over settlement period
+- Bid-ask spreads may be tighter due to hedging opportunities
+- Less sensitivity to momentary volatility spikes
+- More stable, predictable pricing
+
+### Economic Viability Analysis
+
+**Market Maker Perspective:**
+- Single large daily auction worth the infrastructure investment
+- Known settlement time enables proper risk management
+- Futures pricing allows hedging on other markets
+- Sufficient volume to justify competitive bidding
+
+**User Perspective:**
+- Clear expectations (futures delivery, not spot)
+- Potentially better pricing due to reduced MM risk premium
+- Simple mental model (one auction per day)
+- Predictable schedule for planning transactions
+
+**Protocol Perspective:**
+- Self-sustaining without subsidies (like all auction models)
+- Lower coordination overhead (one auction vs. many)
+- Easier to bootstrap critical mass
+- Simpler mechanism without reserve price complexity
+
+### Implementation Considerations
+
+**Auction Schedule:**
+- Daily auction at fixed time (e.g., 12:00 UTC)
+- Bid submission window: e.g., 08:00-12:00 UTC
+- Automatic decryption at 12:00 UTC via drand timelock
+- Settlement: X hours after close (e.g., 18:00 UTC same day)
+
+**Settlement Delay Options:**
+- **Short (6-12 hours)**: Lower inventory risk for MMs, more attractive pricing
+- **Medium (24 hours)**: More time for hedging, may reduce spreads
+- **Long (48+ hours)**: True futures market, potentially best pricing but higher user patience needed
+
+**Sealed Bid Requirements:**
+- Mandatory timelocked encryption (prevents manipulation)
+- ZK proofs for bid validity (prevents griefing)
+- Automatic decryption (no reveal phase)
+- Implementation feasible per `timelock-bids.md` analysis
+
+## Conclusion (Revised)
+
+Three distinct mechanisms can enable trustless cross-chain atomic swaps, each with fundamentally different tradeoffs:
+
+**CPMMs** prioritize user experience (instant execution, familiar interface) but face severe economic challenges without protocol fees. The passive liquidity provision model results in negative expected value for LPs through LVR and impermanent loss, requiring external subsidies to function.
+
+**Spot Auctions** prioritize economic sustainability through active liquidity provision and self-compensating market makers. However, they introduce execution latency, complexity (reserve prices, penalties), and potential timing game vulnerabilities. Multiple auctions per day fragment liquidity and create bootstrapping challenges.
+
+**Futures Market Model (Daily Batch Auctions with Sealed Bids)** represents a novel synthesis that addresses many challenges of both prior approaches:
+- Self-sustaining economics (like spot auctions)
+- Concentrated liquidity through single daily batch
+- Simpler mechanism (no reserve prices needed)
+- Fair price discovery via mandatory sealed bids (timelock + ZK)
+- Better pricing for users (reduced MM risk premium through hedging)
+- Easier bootstrapping (critical mass in single auction)
+- Clear user expectations (futures delivery, not spot)
+
+**The core question shifts from "sustainable economics vs. superior UX" to "spot immediacy vs. futures predictability."**
+
+For cross-chain atomic swaps specifically, the futures market model may be optimal:
+- Cross-chain coordination already introduces latency (embrace it, don't fight it)
+- Settlement delays enable better risk management for market makers
+- Single daily auction creates natural liquidity concentration
+- Sealed bids solve information asymmetry problems
+- Simpler mechanism (no reserve prices) reduces attack surface
+
+**Recommended Approach:**
+Start with a **single daily batch auction using timelocked sealed bids** for the bootstrapping phase. This maximizes liquidity concentration, simplifies the mechanism, and creates predictable schedule for market maker participation. As volume grows, consider adding:
+- Multiple daily auctions at different times for different geographies
+- Spot auction options for users willing to pay premium for immediate settlement
+- Hybrid approaches where large trades use futures and small trades use spot
+
+The futures market model represents a practical, implementable approach that aligns incentives across all participants while maintaining trustless execution and economic sustainability.
 
 ## Academic References and Further Reading
 

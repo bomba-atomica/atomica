@@ -1,544 +1,333 @@
 # Atomica Product Requirements Document
 
-## Prior Art: Decentralized Exchanges
-
-### DEX Modalities
-
-**Atomic Swaps (circa 2013)**
-- First trustless peer-to-peer cryptocurrency exchange mechanism
-- Used Hash Time-Locked Contracts (HTLCs) to enable direct trades between parties
-- Solved the counterparty risk problem—no trusted intermediary needed
-- Enabled true cross-chain exchanges without bridges
-
-**Decentralized Central Limit Order Books (DCLOBs)**
-- Replicated traditional exchange order book models on-chain (e.g., Serum, dYdX)
-- Brought familiar maker-taker dynamics to decentralized trading
-- Achieved superior capital efficiency compared to CPMMs through price-specific liquidity provision
-- Provided better price discovery through order matching
-
-**Constant Product Market Makers (CPMMs)**
-- Popularized by Uniswap (2018) using the x*y=k formula, though Bancor (2017) launched the first AMM
-- Eliminated need for order matching and direct counterparty interaction
-- Automated liquidity provision through pooled assets
-- Drastically simplified user experience—just swap against a pool
-- Later iterations (Uniswap v3) introduced concentrated liquidity with price range thresholds, creating complex UX for liquidity providers and resulting in lumpy liquidity distribution that degrades trading experience
-
-**Cross-Chain Bridges**
-- Enable asset transfers between blockchains by locking/burning assets on source chain and minting wrapped tokens on destination chain
-- **Trusted/Custodial Bridges**: Rely on central operators (e.g., WBTC via BitGo) or federations to custody assets and issue wrapped tokens
-- **Interchain Messaging (IBC)**: Trustless general-purpose protocol enabling cross-chain data and token transfers via light clients (used by 115+ chains in Cosmos ecosystem)
-- **Optimistic Bridges**: Use fraud-proof mechanisms similar to optimistic rollups, requiring 30min-2 week challenge periods before finality
-- Orthogonal approach to cross-chain liquidity for DCLOBs and CPMMs, but introduce significant additional risks and complexity
-
-### Shortcomings
-
-**Atomic Swaps**
-- Requires both parties online simultaneously (availability problem)
-- Complex negotiation and coordination between counterparties
-- Poor user experience for discovering trading partners
-- Limited liquidity—purely peer-to-peer matching
-
-**Decentralized Central Limit Order Books**
-- Vulnerable to MEV attacks (front-running, sandwich attacks) and censorship by block producers
-- Full transparency exposes trading strategies and large orders publicly, enabling predatory behavior and eliminating privacy tools like dark pools
-- Transparency-induced game theory problems discourage bidders from revealing true prices and scare off certain market participants due to winner's curse and adverse selection risks
-- Requires active market making—no passive liquidity provision like AMMs, demanding continuous order management
-- Capital lock-up in escrow contracts for unfilled orders creates idle capital and smart contract custody risk
-- High gas costs for frequent on-chain operations (order placement, cancellation, updates)
-- Liquidity fragmentation across multiple order books and on-chain latency slower than centralized exchanges
-
-**Constant Product Market Makers**
-- Impermanent loss for liquidity providers
-- Adverse selection through Loss-Versus-Rebalancing (LVR)—LPs constantly trade at stale prices against informed arbitrageurs, with fees often insufficient to compensate
-- Poor capital efficiency (liquidity spread across entire price curve in v2)
-- JIT (Just-in-Time) liquidity attacks in v3 allow sophisticated players to capture fees without risk, disadvantaging passive LPs
-- LPs effectively provide free options to traders due to discrete price updates versus continuous market price movements
-- Vulnerable to sandwich attacks and other MEV exploitation
-- Slippage increases significantly for large trades
-- Requires substantial capital to provide meaningful liquidity
-
-**Cross-Chain Bridges**
-- Severe counterparty risk with trusted/custodial bridges—if custodian (e.g., BitGo for WBTC) is hacked, insolvent, or forced to freeze funds, all wrapped token holders lose value
-- Wrapped tokens can depeg from native assets due to market inefficiencies, liquidity issues, or loss of confidence in custodian
-- Smart contract vulnerabilities enable exploits (e.g., Wormhole $320M hack, Ronin Bridge $600M hack)
-- Minting contract governance on destination chains controlled by small multisig groups—compromised keys enable unlimited minting, and control can be transferred to controversial parties (e.g., WBTC governance changes caused mass redemptions as users lost confidence in new custodians)
-- Contract maintenance and upgradability create ongoing centralization risks—over 60% of upgradeable protocol breaches exploit weak upgrade permissions
-- Wrapped tokens on "away" chains lose native functionality and composability of home chain assets
-- Optimistic bridges introduce significant latency (30min-2 weeks) due to fraud-proof challenge periods
-- Centralization of trusted bridges contradicts decentralization ethos and creates single points of failure
-
-**Combined Bridge + Exchange Risks**
-
-When users need to exchange assets across chains (e.g., ETH on Ethereum for SOL on Solana), they face compounded risks from both bridges and exchanges:
-
-- **Multiple transaction steps** expose users to all bridge risks (counterparty, depegging, exploits) plus all DEX risks (MEV, slippage, adverse selection) sequentially
-- **Liquidity fragmentation** means wrapped tokens have significantly worse liquidity on destination chains (e.g., wETH on Solana has different liquidity pools than native ETH on Ethereum), increasing slippage
-- **Increased price impact** from routing through multiple hops: source chain swap → bridge → destination chain swap
-- **Accumulated fees** from multiple transactions: bridge fees + gas on source chain + gas on destination chain + DEX swap fees on both sides
-- **Time-based risk** as multi-step processes take minutes to hours, exposing users to price volatility between steps
-- **Multiple smart contract risk surfaces** across bridge contracts, wrapped token contracts, and DEX contracts on both chains
-- **Opacity in cross-chain routing** makes it difficult for users to understand true execution costs and risks
-- **Price inefficiencies** due to asset fragmentation across chains, where even small trades can significantly impact prices of wrapped tokens
-- **Fragmented UX requiring multiple products**—users must juggle separate wallets for each chain, interact with different bridge and DEX dApps, and manage wrapped tokens in one wallet while native assets sit in another, creating confusion and increasing error risk
-
-## Ideal Solution Characteristics
-
-An improved cross-chain exchange mechanism would address the shortcomings above with the following properties. Ideally, all information would remain private to maximize game-theoretic fairness and prevent exploitation. However, given current technology limitations (detailed below), a practical solution requires compromise: some public knowledge will be necessary for trustless execution, and some strategies must remain off-chain to preserve critical competitive advantages.
-
-**Private Strategies and Prices**
-- Trading strategies and price information remain hidden from other participants and block producers, preventing strategy copying and predatory behavior
-- *Tradeoff: Privacy mechanisms may reduce transparency for auditing and regulatory compliance*
-- *Tradeoff: Privacy often requires additional cryptographic overhead, increasing computational costs*
-
-**MEV Resistance**
-- Orders cannot be front-run, sandwiched, or censored by block producers
-- *Tradeoff: Strong MEV protection may require off-chain components or trusted execution environments*
-- *Tradeoff: Eliminating all MEV may reduce arbitrage efficiency, potentially leading to worse price discovery*
-
-**Native Cross-Chain Asset Exchange**
-- Direct trading of native assets across chains without wrapped tokens or intermediary bridges
-- *Tradeoff: Atomic cross-chain protocols require both parties online simultaneously or introduce latency*
-- *Tradeoff: May have limited blockchain compatibility compared to bridge-based solutions*
-
-**Passive Liquidity Provision**
-- Liquidity providers can earn fees or must be subsidized by the platform, without requiring active order management or suffering adverse selection
-- *Tradeoff: Passive mechanisms may be less capital efficient than active market making*
-- *Tradeoff: Protecting LPs from adverse selection may reduce execution quality for traders*
-- *Tradeoff: Platform subsidies introduce additional costs and may require governance mechanisms for funding allocation*
-
-**No Systematic Adverse Selection**
-- Eliminates scenarios where informed traders consistently profit at the expense of liquidity providers or where transparency causes winner's curse effects that discourage participation
-- *Tradeoff: Protecting against adverse selection may require limiting information available to all participants*
-- *Tradeoff: Reducing information asymmetry may decrease overall market efficiency and price discovery*
-
-**Unified User Experience**
-- Single interface for cross-chain trading without managing multiple wallets or wrapped tokens
-- *Tradeoff: Abstraction of complexity may reduce user control and transparency into execution*
-- *Tradeoff: Unified interfaces may create centralization points or single points of failure*
-
-**No Counterparty or Custodial Risk**
-- Trustless execution without relying on centralized custodians or multisig governance
-- *Tradeoff: Pure trustlessness may require longer settlement times or complex cryptographic protocols*
-- *Tradeoff: Eliminating all trusted parties may limit recourse mechanisms in case of user error*
-
-**Capital Efficiency**
-- Liquidity concentrated where trading occurs, minimizing idle capital
-- *Tradeoff: Concentrated liquidity may create gaps in price ranges, increasing slippage for large trades*
-- *Tradeoff: Highly optimized systems may be more complex and harder to audit for security*
-
-**Protection Against Illiquidity**
-- Guaranteed execution quality even in thin markets with unknown participants, preventing catastrophic slippage when legitimate bidders are scarce
-- *Tradeoff: Liquidity guarantees may require reserve capital to be set aside, reducing overall capital efficiency*
-- *Tradeoff: Backstop mechanisms introduce additional parties who must be compensated, increasing costs*
-- *Tradeoff: Protection mechanisms may limit throughput if trades must wait for sufficient liquidity conditions*
-
-## Technology Limitations
-
-Private marketplaces that would enable hidden strategies and prices are not feasible with current state-of-the-art technologies:
-
-**Commit-Reveal Schemes**
-- Require high threshold for interactivity—participants must be online for both commit and reveal phases
-- Vulnerable to manipulation where parties can strategically fail to reveal, scuttling deals when market moves against them
-- Creates timing games where late revealers gain information advantage from early revealers
-
-**Zero-Knowledge Proofs**
-- Current ZK implementations for order matching require a trusted operator who knows all participants' bids and orders
-- The prover must have access to private inputs to generate proofs, centralizing sensitive information
-- No existing ZK schemes enable fully private bilateral matching without a trusted intermediary
-
-**Homomorphic Encryption**
-- Requires an operator with decryption keys to either decrypt all individual bids or decrypt the result of homomorphic operations
-- Specialized secret sharing and multi-party computation (MPC) systems can distribute trust across operators, but introduce significant coordination overhead
-- Cannot be retrofitted to generalized smart contract platforms—requires purpose-built execution environments
-- MPC approaches face liveness challenges if any party in the computation goes offline
-
-**Functional Encryption**
-- Similar to homomorphic encryption—inputs remain encrypted but function results are publicly readable
-- Still in early research phase with no production-ready implementations
-- No maintained open-source implementations exist
-- Significant performance and security concerns remain unresolved
-
-These limitations mean that achieving truly private strategies and prices while maintaining decentralization, liveness, and trustlessness remains an open research problem. Therefore, a practical solution must leverage **game theory** to design auction mechanisms that function effectively even with public knowledge, combined with **minimal-interaction cryptography** that prevents participants from strategically slowing or scuttling deals.
-
-## Case Study: CoW Swap
-
-CoW Swap (Coincidence of Wants) is a DEX protocol that attempts to address some of the shortcomings identified above by extending the peer-to-peer matching paradigm with batch auctions and competitive solvers.
-
-### How CoW Swap Works
-
-**Batch Auctions**
-- Orders are collected over a time period (typically a few minutes) and grouped into batches for simultaneous settlement
-- Uniform clearing prices ensure identical token pairs settle at consistent prices within each batch, making transaction order irrelevant
-
-**Coincidence of Wants Matching**
-- When two traders want to swap complementary assets (e.g., Alice sells ETH for DAI, Bob sells DAI for ETH), they are matched directly peer-to-peer
-- Matched orders execute off-chain without touching AMM liquidity, saving LP fees and gas costs
-- Only unmatched portions of orders are routed to on-chain AMMs or DEX aggregators
-
-**Solver Competition**
-- Independent third-party "solvers" compete to find the best execution for each batch
-- Solvers propose settlement solutions that optimize prices across all orders
-- Winning solver must deliver users their signed limit price or better, absorbing any MEV risk
-- Competition incentivizes solvers to find optimal routing and CoW matches
-
-**Cross-Chain Approach**
-- CoW Swap does NOT support native cross-chain swaps
-- Cross-chain functionality relies on integrating with external bridge providers (e.g., Bungee Exchange)
-- Users face the same bridge risks (custody, depegging, wrapped tokens) documented earlier
-
-### Evaluation Against Ideal Characteristics
-
-**✓ Partial Success: Private Strategies and Prices**
-- Users sign orders with limit prices off-chain, keeping strategies hidden during order collection
-- However, orders become public when submitted to solvers and on-chain when settled
-- Solvers see all orders in a batch, creating information asymmetry
-
-**✓ Strong Success: MEV Resistance**
-- Batch auctions with uniform clearing prices eliminate most MEV opportunities
-- Transaction order within batch is irrelevant, preventing front-running
-- Solvers absorb MEV risk rather than users
-- However, sophisticated solvers could still exploit information advantage from seeing all batch orders
-
-**✗ Failure: Native Cross-Chain Asset Exchange**
-- CoW Swap operates on single chains (Ethereum, Gnosis Chain, etc.) in isolation
-- Cross-chain swaps require external bridge providers with all associated risks
-- No native cross-chain CoW matching—bridges create wrapped tokens and fragmented liquidity
-
-**✓ Partial Success: Passive Liquidity Provision**
-- CoW matching eliminates need for LPs when counterparties are found
-- However, unmatched orders still rely on underlying AMMs with their LP requirements
-- No alternative liquidity provision mechanism for thin markets
+## Executive Summary
 
-**✓ Success: No Systematic Adverse Selection (for matched orders)**
-- CoW-matched trades avoid LVR and adverse selection since counterparties trade directly
-- Uniform clearing prices within batches reduce information asymmetry
-- However, unmatched orders routed to AMMs still suffer from LVR and adverse selection
+**What:** Atomica enables trustless cross-chain atomic swaps via daily batch auctions with futures delivery.
 
-**✗ Failure: Unified User Experience**
-- Cross-chain swaps require separate bridge interfaces
-- Users must still manage different wallets for different chains
-- Wrapped tokens still create fragmentation
+**Why:** Existing cross-chain exchanges require bridges (introducing custody risk, wrapped tokens, and governance centralization) or suffer from liquidity fragmentation, MEV exploitation, and adverse selection for liquidity providers.
 
-**✓ Partial Success: No Counterparty or Custodial Risk**
-- On-chain settlement through smart contracts is trustless
-- However, solvers are trusted to compete fairly and not collude
-- Cross-chain functionality introduces full bridge custodial risks
+**How:** Users lock native assets on their home blockchain and participate in a single daily batch auction where professional market makers competitively bid using sealed bids. Assets settle X hours after auction close without bridges, wrapped tokens, or custodians.
 
-**✓ Success: Capital Efficiency**
-- CoW matching uses zero capital—pure peer-to-peer exchange
-- However, depends on sufficient order flow to create meaningful CoW opportunities
-- Low-volume pairs fall back to inefficient AMM routing
+**Key Innovation:** Futures market model with mandatory sealed bids (timelock encryption) concentrates liquidity, enables fair price discovery, and provides sustainable economics without protocol subsidies.
 
-**✗ Failure: Protection Against Illiquidity**
-- No guarantees of execution quality in thin markets
-- If no CoW match exists and AMM liquidity is poor, users face high slippage
-- Solver competition may help but provides no hard guarantees
+## Problem Statement
 
-### Key Limitations
+Cross-chain asset exchange today faces compounded risks:
 
-**Single-Chain Focus**
-- CoW Swap's core mechanism works only within individual blockchains
-- Cross-chain requires bridges, inheriting all bridge problems: custody risk, wrapped tokens, governance centralization, depegging
+**Bridge Risks:**
+- Custodial risk (e.g., WBTC governance changes, bridge hacks)
+- Wrapped tokens that can depeg from native assets
+- Smart contract vulnerabilities ($900M+ in bridge exploits)
+- Governance centralization via multisig control
 
-**Dependence on Order Flow**
-- CoW matching only works when complementary orders exist in the same batch
-- Thin markets or uncommon trading pairs receive minimal benefit
-- Falls back to traditional AMM routing with all associated problems
+**DEX Risks:**
+- MEV exploitation (front-running, sandwich attacks)
+- Adverse selection for passive liquidity providers (LVR, impermanent loss)
+- Liquidity fragmentation across chains
+- Capital inefficiency (idle capital in pools or locked in escrow)
 
-**Solver Centralization Risk**
-- Small number of sophisticated solvers creates potential for collusion
-- Solvers see all orders in batch before execution, enabling potential exploitation
-- Barrier to entry for running competitive solver infrastructure
+**Combined Impact:**
+- Multiple transaction steps expose users to all risks sequentially
+- Accumulated fees from bridge + DEX swaps on both chains
+- Fragmented UX requiring multiple wallets and wrapped token management
+- Time-based risk during multi-step processes
 
-**Interactivity Requirements**
-- Users must wait for batch window to close before execution
-- Introduces latency compared to instant AMM swaps
-- Market conditions can change during batch window, though limit prices provide protection
+**See:** [Prior Art: Decentralized Exchanges](docs/background/prior-art.md) for detailed analysis of existing solutions and their shortcomings.
 
-### Conclusion
+## Solution: Atomic Auctions with Futures Delivery
 
-CoW Swap successfully addresses MEV resistance and adverse selection for matched orders through its innovative batch auction and CoW mechanism. However, it fundamentally **does not solve the cross-chain problem**—it relies on external bridges with all their risks. Additionally, its benefits are highly dependent on sufficient order flow, limiting effectiveness for long-tail assets or thin markets. The protocol represents a significant improvement for high-volume pairs on single chains but does not achieve the full vision of trustless, native cross-chain exchange with protection against illiquidity.
+### Core Mechanism
 
-## Atomic Auctions: A Novel Design Space
+Atomica introduces **Atomic Auctions**: a novel design combining atomic swaps' trustless cross-chain execution with auction-based competitive price discovery.
 
-CoW Swap demonstrates a powerful insight: **single-sided auctions** where market makers (termed "solvers") compete to clear user orders can provide MEV protection and capital efficiency without requiring passive liquidity providers. This competitive auction mechanism successfully aligns incentives while avoiding the adverse selection problems that plague AMMs.
+**Key Properties:**
+1. **Native Cross-Chain Execution** - Direct delivery of native assets without bridges or wrapped tokens
+2. **Futures Market Model** - Delivery X hours after auction close (not spot market)
+3. **Batch Auctions with Sealed Bids** - Single daily auction per pair with mandatory timelock encryption
+4. **Active Liquidity Provision** - Market makers compete to clear orders (no passive LPs)
+5. **Self-Sustaining Economics** - Market makers earn through bid-ask spreads, no subsidies needed
 
-However, CoW Swap's single-chain limitation reveals an unexplored design space: what if we could combine the best properties of atomic swaps with the auction clearing mechanisms that make CoW Swap successful?
+### Why Futures, Not Spot?
 
-### The Atomic Auction Paradigm
+**Core Insight:** Cross-chain atomic swaps inherently require coordination time and settlement delays. Rather than fighting this constraint, we embrace it.
 
-We propose **Atomic Auctions** as a super-set design that extends the auction-based clearing model to native cross-chain exchanges. Atomic Auctions preserve the key advantages of both atomic swaps and order book markets while introducing competitive market maker dynamics.
+**Benefits:**
+- **Price smoothing** - Futures pricing naturally reduces sensitivity to momentary spikes
+- **Better market maker economics** - Known settlement time enables hedging, reduces risk premium
+- **Liquidity concentration** - Single daily auction aggregates all volume into critical mass
+- **Simpler mechanism** - No reserve prices needed (large liquid auction provides protection)
+- **Clear user expectations** - Users know they're buying futures for next-day delivery
 
-**Core Properties:**
+**Tradeoff:** Not suitable for time-sensitive trades requiring immediate execution. Future phases can add premium spot auctions for users willing to pay wider spreads.
 
-**Trustless Walk-Away (from Atomic Swaps)**
-- Users can exit transactions at any point without penalty
-- No escrowed funds locked in smart contracts waiting for matches
-- No wrapped tokens or synthetic assets on destination chains
-- Zero counterparty risk—no custodians, bridges, or multisig governance
-- Native asset delivery on both chains
+### Daily Batch Auction Architecture (Phase 1 Launch)
 
-**Capital Efficiency (from DCLOBs)**
-- Capital is only locked for the specific assets being traded
-- No requirement to provide liquidity across entire price curves
-- Market makers bring their own capital only when clearing specific auctions
-- No compensation required for inactive liquidity providers sitting idle
-- Capital efficiency comparable to traditional order books without on-chain escrow risks
+**Structure:**
+- **One unified batch auction per day** per trading pair (e.g., ETH/LIBRA, BTC/LIBRA, USDC/LIBRA)
+- **Auctioneers (Sellers):** Users holding quote asset (e.g., USDC on Ethereum) wanting to purchase base asset (e.g., LIBRA)
+- **Bidders (Market Makers):** Holders of base asset (LIBRA on home chain) submit sealed bids
+- **No reserve prices** at launch (relies on market maker competition in large batch)
+- **Settlement delay:** X hours after auction close (recommended 12-24 hours)
 
-**Auction-Based Price Discovery (from CoW Swap)**
-- Competitive market makers bid to clear user orders
-- Single-sided auction mechanism where users specify desired trades and market makers compete on price
-- Market maker competition drives prices toward true market rates
-- Eliminates systematic adverse selection since market makers actively choose which auctions to bid on
+**Example Flow:**
+```
+08:00 UTC - Bid Window Opens
+  └─ Users on Ethereum lock USDC and initiate auction participation
 
-**Cross-Chain Native Execution**
-- Atomic settlement across chains without bridges or wrapped tokens
-- Direct delivery of native assets on both source and destination chains
-- No liquidity fragmentation from wrapped token variants
-- No governance risk from bridge minting contracts
+08:00-12:00 UTC - Bid Submission Window
+  └─ Market makers on home chain submit encrypted sealed bids for LIBRA
+  └─ Zero-knowledge proofs ensure bid validity (solvency, balance) without revealing amounts
 
-### Key Advantages Over Prior Art
+12:00 UTC - Auction Close & Automatic Decryption
+  └─ Drand timelock automatically decrypts all bids (no reveal phase to grief)
+  └─ Clearing price determined at lowest qualifying bid (uniform price auction)
 
-Unlike atomic swaps, Atomic Auctions do not require finding a direct counterparty with complementary needs—professional market makers provide liquidity through competitive bidding. Unlike DCLOBs, no on-chain escrow is needed since atomic settlement guarantees prevent counterparty risk. Unlike bridges, no wrapped tokens or custodians are introduced. And unlike AMMs, no passive LPs suffer from adverse selection since market makers actively evaluate and bid on specific opportunities.
+18:00 UTC - Settlement (6 hours after close)
+  └─ Assets delivered to all participants atomically
+  └─ Native assets on both chains (no wrapped tokens)
+```
 
-The Atomic Auction design space represents a novel synthesis: leveraging game theory and auction mechanisms to enable trustless cross-chain exchange with capital efficiency comparable to centralized order books, but without their custody risks or geographic limitations.
+**Why Single Daily Auction:**
+- Aggregates many small users into meaningful total volume
+- Creates critical mass attractive to market makers
+- Reduces chicken-and-egg bootstrapping problem
+- Simpler coordination vs. many small auctions throughout day
 
-### Critical Questions
+## Technical Architecture
 
-This proposal naturally raises two fundamental questions that must be addressed:
+### Cross-Chain Transaction Verification
 
-**1. Is this technically possible?**
+**Challenge:** How to trustlessly verify transactions on other blockchains without oracles or bridges?
 
-Given the technology limitations documented earlier—commit-reveal schemes requiring high interactivity, ZK proofs needing trusted operators, homomorphic encryption requiring decryption keys—how can Atomic Auctions achieve cross-chain atomic settlement with competitive auctions? The challenge is coordinating atomic execution across chains while enabling market maker competition without introducing trusted intermediaries or vulnerabilities to strategic manipulation.
-
-**2. Is this game theoretically sound?**
-
-Will market makers actually participate in these auctions? What prevents them from colluding or manipulating the mechanism? How do we ensure users receive competitive prices? Can the auction design handle thin markets where few market makers are active? Are there perverse incentives that could cause the system to fail under certain conditions?
-
-The following sections address these questions by detailing the technical mechanisms that enable Atomic Auctions and analyzing the game-theoretic properties that ensure their robustness.
-
-## Technical Feasibility: Cross-Chain Transaction Verification
-
-The primary technical challenge for Atomic Auctions is **trustless verification of transactions on other chains**. Fortunately, this problem is largely solved through cryptographic accumulator techniques already deployed in production systems.
-
-### The Cross-Chain Verification Model
-
-Consider a high-throughput **Home chain** (where Atomic Auctions are coordinated) and a low-throughput **Away chain** such as Ethereum (where user assets originate). The key insight is that the Home chain can maintain a cryptographic **accumulator** containing the block headers (merkle roots) of the Away chain.
+**Solution:** The Home chain maintains cryptographic accumulators (merkle roots) of Away chain block headers, verified using zero-knowledge proofs.
 
 **How It Works:**
 
-**Step 1: Away Chain Header Commitment**
-- The Home chain maintains an on-chain record of Away chain block headers (merkle roots)
-- These headers are verified trustlessly using Zero-Knowledge Proofs
-- This approach is exemplified by Optimism's fraud-proof system and other ZK-rollup architectures
-- **Importantly, substantial production software already exists for ZKP rollups that is directly applicable to this case**, including implementations from Succinct Labs and Optimism chain
+1. **Away Chain Header Commitment**
+   - Home chain maintains on-chain record of Away chain block headers
+   - Headers verified trustlessly using ZK proofs (e.g., Succinct Labs, Optimism approaches)
+   - Substantial production software already exists for ZK rollups directly applicable here
 
-**Step 2: Transaction Inclusion Proofs**
-- Once Away chain merkle roots are trustlessly accessible on the Home chain, any transaction from the Away chain can be proven to have occurred
-- Standard merkle tree inclusion proofs demonstrate that a specific transaction was included in a specific Away chain block
-- The Home chain can verify these proofs against the committed block headers
+2. **Transaction Inclusion Proofs**
+   - Standard merkle tree proofs demonstrate specific transactions occurred on Away chain
+   - Home chain verifies proofs against committed block headers
+   - No trusted oracles or bridge operators needed
 
-**Step 3: Trustless Verification**
-- No trusted oracles or bridge operators are needed
-- Cryptographic proofs provide mathematical certainty that Away chain transactions occurred
-- The verification happens entirely on-chain on the Home chain
+3. **Atomic Settlement**
+   - Verify user locked assets on Away chain before auction execution
+   - Prove both sides of cross-chain swap completed successfully
+   - Cryptographic proofs provide same security as native on-chain verification
 
-### Addressing Performance Constraints
+**Cost Optimization:**
+- ZK batching compresses multiple verifications into single proof
+- Home chain can subsidize verification costs as public good
+- Amortize gas costs across many transactions in batch
 
-**Known Issue: Gas Costs**
-- Verifying merkle inclusion proofs on-chain consumes significant CPU and memory, resulting in high gas costs
-- This could make individual transaction verification prohibitively expensive
+**See:** [Atomic Guarantee Mechanism](atomic-guarantee-mechanism.md) for detailed technical implementation.
 
-**Solution 1: ZKP Batching and Compression**
-- The Home chain can employ additional Zero-Knowledge Proof systems to batch and compress multiple verification operations
-- A single ZK proof can verify many Away chain transactions simultaneously, amortizing gas costs across all verifications
-- Compression techniques reduce the on-chain data footprint
+### Sealed Bid Implementation: Timelock Encryption
 
-**Solution 2: Public Good Subsidization**
-- The Home chain protocol can subsidize gas costs for cross-chain verification as a public good
-- Gas fee reimbursement programs ensure users don't bear the full cost of maintaining cross-chain security
-- This is economically viable if verification costs are spread across many transactions
+**Critical Requirement:** For the daily batch futures model to work effectively, sealed bid privacy is **essential** - even more critical than in multi-auction spot models.
 
-### Why This Enables Atomic Auctions
+**Why Sealed Bids Are Mandatory:**
 
-With trustless cross-chain transaction verification, Atomic Auctions can:
+Without reserve prices to protect sellers, sealed bids become the primary defense against manipulation:
 
-1. **Verify Away chain deposits** - Confirm users have locked assets on Away chain before auction execution
-2. **Prove atomic settlement** - Demonstrate that both sides of the cross-chain swap completed successfully
-3. **Eliminate trusted intermediaries** - No bridges, custodians, or oracles needed
-4. **Maintain security guarantees** - Cryptographic proofs provide the same security as native on-chain verification
+1. **Prevents Shill Bidding** - Market makers cannot strategically lower bids at last second
+2. **Eliminates Timing Games** - No advantage to bidding early vs. late (all decrypt simultaneously)
+3. **Fair Information Structure** - All bidders compete on equal footing without information asymmetry
+4. **Winner's Curse Mitigation** - Bidders cannot game uniform clearing price by observing competitors
 
-The technology for trustless cross-chain verification exists and is battle-tested. The remaining challenge is not "can we verify cross-chain transactions" but rather "how do we design auctions that leverage this capability to achieve game-theoretic soundness."
+**Implementation via Drand Timelock:**
 
-For detailed technical implementation of cross-chain atomicity, see [Atomic Guarantee Mechanism](atomic-guarantee-mechanism.md).
+- Bids encrypted using drand-based timelock encryption
+- All bids remain cryptographically sealed until auction close time
+- Automatic decryption via drand randomness beacon (no interactive reveal phase)
+- Zero-knowledge proofs ensure bid validity (solvency, balance) at submission without revealing amounts
+- One-shot settlement after automatic decryption
 
-## Game-Theoretic Design: Uniform Price Auctions
+**Technical Feasibility:** This approach is **practical and implementable** using:
+- ZK-friendly Poseidon-based encryption for proving bid validity
+- Drand timelock for trustless automatic decryption
+- Zero-knowledge proofs of balance and solvency at bid submission
+- No interactive reveal phase (prevents griefing attacks)
 
-The second critical question is whether we can design an auction mechanism that functions effectively in a partially public environment while maintaining competitive pricing and preventing manipulation. We propose using a **Uniform Price Multi-Unit Auction** (also known as a "Treasury Auction" after its use in US government bond sales).
+**See:** [Timelock Encryption for Sealed Bids](timelock-bids.md) for complete technical specification.
 
-### The Auction Mechanism
+## Game Theory & Economics
 
-**Single-Sided Auction Structure**
+### Uniform Price Auction Mechanism
 
-The auction operates as follows:
+**How It Works:**
 
-**Auctioneer (Away Chain User)**
-- User on Away chain (e.g., Ethereum) initiates auction to sell a quantity of their native asset (e.g., ETH)
-- Assets are locked in temporary escrow (via HTLC or similar mechanism) on the Away chain
-- Escrow is released at auction conclusion based on settlement outcome
-
-**Bidders (Home Chain Market Makers)**
-- Professional market makers on Home chain bid for units of the Away chain asset
-- Bidders use unlocked balances from ordinary wallets—no capital lock-up required until auction clears
-- Each bidder submits bids specifying quantity and price for units they wish to purchase
-
-**Clearing Price Determination**
-- All qualifying bids are aggregated and sorted by price (highest to lowest)
-- The clearing price is set at the **lowest qualifying bid price** that satisfies the total quantity being auctioned
-- **All winning bidders pay the same clearing price**, regardless of their original bid
-- This uniform pricing is the key distinguishing feature
+1. Market makers submit sealed bids specifying quantity and price
+2. Bids aggregated and sorted by price (highest to lowest)
+3. Clearing price set at **lowest qualifying bid** that satisfies total quantity
+4. **All winning bidders pay the same uniform clearing price** (regardless of their bid)
 
 **Example:**
-- Auctioneer sells 100 ETH units
-- Bidder A: 40 units @ $2,000
-- Bidder B: 30 units @ $1,980
-- Bidder C: 40 units @ $1,950
+- Auction for 100 ETH
+- Bidder A: 40 ETH @ $2,000
+- Bidder B: 30 ETH @ $1,980
+- Bidder C: 40 ETH @ $1,950
+- **Result:** All clear at $1,950 (all bidders pay $1,950/ETH even though A and B bid higher)
 
-Result: All three bids clear (40+30+40 = 110 units > 100 needed). Clearing price = $1,950 (lowest qualifying bid). All bidders pay $1,950 per unit, even though A and B bid higher.
+**Why This Design:**
 
-### Why This Auction Design?
+- **Revenue equivalence** to Vickrey auctions under certain conditions (Nobel Prize-winning research by Vickrey, Milgrom, Wilson)
+- **Incentive compatibility** - Bidders motivated to bid near true valuation (protected by uniform pricing)
+- **MEV resistance** - Batch execution makes transaction ordering irrelevant
+- **Public information tolerance** - Uniform pricing makes visible bids less exploitable than in DCLOBs
 
-**Revenue Equivalence to Vickrey Auctions**
+**See:** [Uniform Price Auctions](docs/game-theory/uniform-price-auctions.md) for detailed game-theoretic analysis and [Shill Bidding: Formal Analysis](shill-bidding-analysis.md) for manipulation attack vectors and mitigations.
 
-The uniform price auction may seem counterintuitive—why should high bidders benefit from low bids? However, foundational research in auction theory demonstrates that uniform price auctions can achieve properties similar to sealed-bid Vickrey auctions under certain conditions.
+### Self-Sustaining Economics
 
-**Theoretical Foundation:**
-- William Vickrey won the 1996 Nobel Prize in Economics for his work on the revenue equivalence theorem, which proved that various auction formats yield equivalent expected revenues under benchmark conditions
-- Robert Wilson (1979) provided the seminal game-theoretic analysis of uniform-price multi-unit auctions, demonstrating their properties and strategic considerations
-- Paul Milgrom and Robert Wilson won the 2020 Nobel Prize in Economics "for improvements to auction theory and inventions of new auction formats," including work on uniform-price mechanisms
+**Market Maker Compensation:**
+- Earn through bid-ask spreads (buy at auction clearing price, sell/hedge on external markets)
+- Futures pricing allows proper hedging strategies
+- Settlement delay reduces inventory risk premium
+- No protocol fees or subsidies required
 
-In a Vickrey auction, bidders pay the second-highest price, incentivizing truthful bidding. The uniform price auction achieves similar properties: bidders are incentivized to bid near their true valuation because they pay the market-clearing price, not their bid price. This mechanism enables price discovery even when the auction operates partially in public.
+**Why Sustainable:**
+- Market makers actively choose which auctions to participate in (self-selection)
+- Competitive bidding drives spreads toward fair risk-adjusted rates
+- Single large daily auction worth infrastructure investment
+- Sufficient volume to justify competitive participation
 
-**Tolerance for Public Information**
+**Comparison to Alternatives:**
+- **CPMMs:** Passive LPs suffer LVR and impermanent loss with zero compensation (require subsidies)
+- **Spot Auctions:** Fragmented liquidity across many small auctions, harder to bootstrap
+- **Futures Auctions:** Concentrated liquidity, hedgeable risk, self-sustaining
 
-Unlike DCLOBs where full transparency creates winner's curse and adverse selection, the uniform price auction's design makes public information less exploitable:
-- Bidders benefit from others' high bids (raises clearing price) but are protected by paying only the marginal price
-- Information about existing bids helps price discovery rather than enabling front-running
-- The auction clears at a single point in time, limiting MEV opportunities
+**See:** [CPMM vs Auction: Comprehensive Comparison](cpmm-vs-auction.md) for detailed economic analysis across all three models.
 
-### The Shill Bidding Problem
+## Settlement Delay Considerations
 
-However, low-liquidity anonymous marketplaces introduce a specific vulnerability: **last-minute bid lowering** (shill bidding). A strategic bidder who knows they will receive units could lower their bid below the current lowest bid just before auction close, reducing the clearing price for all bidders (including themselves).
+The settlement delay after auction close is a key design parameter:
 
-**Attack Scenario:**
-- Current bids: A @ $2,000, B @ $1,980, C @ $1,950 (clearing at $1,950)
-- Bidder C realizes they'll win and lowers bid to $1,900 at the last second
-- New clearing price: $1,900 (all bidders save $50 per unit)
-- This collusive behavior undermines price discovery
+**Short Delay (6-12 hours):**
+- ✅ Lower inventory risk for market makers
+- ✅ Better for users wanting quick delivery
+- ✅ Closer to spot market pricing
+- ❌ Less time for market makers to hedge (may result in wider spreads)
 
-### Shill Bidding Mitigations
+**Medium Delay (24 hours):**
+- ✅ Full day for market makers to manage positions
+- ✅ May result in tighter spreads due to better hedging opportunities
+- ✅ Clear "next-day delivery" mental model
+- ❌ Longer wait for users
 
-We propose four complementary mitigations:
+**Long Delay (48+ hours):**
+- ✅ True futures market dynamics, potentially best pricing
+- ❌ Significant wait time may frustrate users
 
-**1. No Bid Lowering Policy**
-- Once a bid is submitted to an auction, it cannot be lowered
-- Bidders can increase bids or add new bids, but cannot reduce existing commitments
-- This prevents the last-minute bid lowering attack
-- Enforced cryptographically through auction smart contract logic
+**Recommended for Launch:** **12-24 hour settlement delay** balances user expectations with market maker risk management.
 
-**2. Bid Automators (Always-Online Agents)**
-- Market participants submit bids through always-online bid automators
-- These are effectively online wallets running on desktops or commodity servers
-- Automators can respond quickly to auction opportunities and adjust strategies programmatically
-- Reduces the advantage of sophisticated actors with better infrastructure
-- Creates more competitive bidding environment
+## Evolution Roadmap
 
-**3. Reserve Price with Commit-Reveal**
-- Auctioneer can set a reserve price (minimum acceptable clearing price) using commit-reveal scheme
-- During auction setup, auctioneer commits to a hash of their reserve price
-- Auction proceeds normally with this commitment on-chain
-- **Default behavior**: If auctioneer does nothing, escrow releases and auction settles normally
-- **Active rejection**: If clearing price < reserve, auctioneer must actively submit proof (reveal) that auction failed to meet reserve, triggering fund return
-- This prevents strategic reserve price manipulation after seeing bids
+The daily futures model is optimized for **bootstrapping liquidity**. As volume grows, the protocol can evolve:
 
-**4. Reserve Price Cost (Auctioneer Penalty)**
-- Exercising the reserve price rejection incurs a cost to the auctioneer: **5% of (reserve price × volume)**
-- Note: The fee is calculated on the reserve price, not the final auction clearing price
-- This creates an incentive to lower the reserve price (making auctions more attractive to bidders) to reduce insurance costs
-- The penalty is distributed to qualifying bidders as compensation for wasted time and opportunity cost
-- Creates economic disincentive for auctioneers to set unrealistic reserves
-- Ensures auctioneers only reject auctions when clearing price is genuinely unacceptable
-- Aligns incentives: auctioneers want auctions to succeed; bidders are protected against time-wasting
+### Phase 1 (Launch): Single Daily Batch Auction
+- **Focus:** Build critical mass, establish market maker relationships
+- **Goal:** Demonstrate economic viability without subsidies
+- **Features:**
+  - One daily auction per trading pair
+  - Sealed bids via timelock encryption
+  - Futures delivery (12-24 hour settlement)
+  - No reserve prices
 
-### Game-Theoretic Properties
+### Phase 2 (Growth): Multiple Daily Auctions
+- **Trigger:** Consistent volume exceeding threshold (e.g., $10M+ daily)
+- **Additions:**
+  - Auctions for different geographies (Asia, Europe, Americas hours)
+  - Maintain futures model but increase frequency
+  - Still use sealed bids for each auction
+  - Bid automators for continuous market maker participation
 
-This design achieves several desirable properties:
+### Phase 3 (Maturity): Hybrid Spot + Futures Options
+- **Trigger:** Deep liquidity with many active market makers
+- **Additions:**
+  - Premium spot auctions (shorter settlement) for users willing to pay wider spreads
+  - Maintain futures auctions for best pricing
+  - Reserve price mechanism available for large individual orders requiring guarantees
+  - Reserve price penalty (5% of reserve × volume) prevents manipulation
 
-**Incentive Compatibility**
-- Bidders are incentivized to bid near their true valuation (uniform price protects them from winner's curse)
-- Auctioneers are incentivized to set realistic reserves (penalty for rejection)
-- No advantage to strategic delay or last-minute manipulation (no bid lowering + reserve cost)
+### Phase 4 (Advanced): Market-Driven Frequency
+- **Trigger:** Mature market with predictable volume patterns
+- **Additions:**
+  - Dynamic auction timing based on volume
+  - Dynamic settlement windows based on market conditions
+  - Sophisticated order types (limit orders, fill-or-kill, etc.)
+  - Potential evolution toward continuous trading if liquidity supports it
 
-**Sybil Resistance**
-- Multiple bids from same party don't provide advantage (all pay same clearing price)
-- Bid splitting or consolidation strategies are economically neutral
+## Design Principles
 
-**Collusion Resistance**
-- Bidders cannot profitably collude to lower clearing price (no bid lowering policy)
-- Auctioneer cannot collude with bidders to manipulate reserve (commit-reveal with default release)
+Atomica prioritizes:
 
-**Market Maker Participation**
-- No capital lock-up until auction clears (low opportunity cost)
-- Competitive auction ensures market-rate pricing (no adverse selection)
-- Always-online automators lower barriers to entry
+1. **Trustlessness over convenience** - Cryptographic guarantees, no custodians
+2. **Economic sustainability over UX familiarity** - Self-sustaining market maker economics
+3. **Practical deployability over theoretical privacy ideals** - Timelock encryption, not fully homomorphic encryption
+4. **Market-driven liquidity over protocol subsidies** - Competitive bidding, no token emissions
 
-This auction design enables Atomic Auctions to function effectively in a partially public environment while maintaining competitive pricing and preventing manipulation, even in thin markets with anonymous participants.
+**Key Tradeoffs Accepted:**
+- Futures delivery instead of spot execution (embrace cross-chain latency)
+- Active market makers instead of passive LPs (sustainable economics)
+- Daily batch auction instead of continuous trading (liquidity concentration for bootstrap)
+- Temporary bid privacy instead of full privacy (practical cryptography)
 
-For detailed game-theoretic analysis of shill bidding attacks and their mitigations, see [Shill Bidding: Formal Analysis](shill-bidding-analysis.md).
+**See:** [Ideal Solution Characteristics](docs/design/ideal-characteristics.md) for full requirements analysis with tradeoffs.
 
 ## Open Questions
 
-1. **Data Availability Risk**
-   - How is data availability of the away chain guaranteed for home-chain verifiers when only block headers are submitted?
+1. **Data Availability Risk** - How is data availability of the away chain guaranteed for home-chain verifiers when only block headers are submitted?
 
-2. **Fraud Proof Latency**
-   - What is the expected time window for submitting fraud proofs, and how does this affect finality and UX?
+2. **Fraud Proof Latency** - What is the expected time window for submitting fraud proofs, and how does this affect finality and UX?
 
-3. **Validator Incentives**
-   - Since no extra reward is provided, what prevents rational home-chain validators from ignoring away-chain header submissions or fraud proofs?
+3. **Validator Incentives** - Since no extra reward is provided, what prevents rational home-chain validators from ignoring away-chain header submissions or fraud proofs?
 
-4. **Sybil Resistance for Bidders**
-   - Without KYC or reputation, what mechanisms limit Sybil bidding beyond griefing cost?
+4. **Sybil Resistance for Bidders** - Without KYC or reputation, what mechanisms limit Sybil bidding beyond griefing cost?
 
-5. **DoS on Auction Participation**
-   - Can an attacker cheaply spam fake bids or commitments to delay auction clearing or inflate verification load?
+5. **DoS on Auction Participation** - Can an attacker cheaply spam fake bids or commitments to delay auction clearing or inflate verification load?
 
-6. **Economic Bounds on Griefing**
-   - What is the maximum griefing cost an attacker can impose vs. the minimum stake they must lock?
+6. **Economic Bounds on Griefing** - What is the maximum griefing cost an attacker can impose vs. the minimum stake they must lock?
 
-7. **Misbehavior of Away-Chain Validators**
-   - If the away chain reorganizes or censors deposits, how is this detected and resolved on the home chain?
+7. **Misbehavior of Away-Chain Validators** - If the away chain reorganizes or censors deposits, how is this detected and resolved on the home chain?
 
-8. **Handling Header Submission Failure**
-   - What happens if staked home-chain validators fail (collude or go offline) and headers stop being submitted?
+8. **Handling Header Submission Failure** - What happens if staked home-chain validators fail (collude or go offline) and headers stop being submitted?
 
-9. **Auction Liveness Guarantees**
-   - If no valid bids can be decrypted or verified due to fraud proof disputes, is the auction canceled, delayed, or force-closed?
+9. **Auction Liveness Guarantees** - If no valid bids can be decrypted or verified due to fraud proof disputes, is the auction canceled, delayed, or force-closed?
 
-10. **Cross-Chain Fork Choice Conflicts**
-    - How does the home chain decide which away-chain header branch is canonical in the presence of competing submissions?
+10. **Cross-Chain Fork Choice Conflicts** - How does the home chain decide which away-chain header branch is canonical in the presence of competing submissions?
 
-11. **Upgrade & Parameter Change Governance**
-    - Who decides fee parameters, bid commitment formats, fraud proof circuits, etc., and how are upgrades coordinated across chains?
+11. **Upgrade & Parameter Change Governance** - Who decides fee parameters, bid commitment formats, fraud proof circuits, etc., and how are upgrades coordinated across chains?
 
-12. **State Blowup from Multiple Auctions**
-    - How is storage growth managed if many auctions run in parallel and commitments must remain accessible until fraud windows close?
+12. **State Blowup from Multiple Auctions** - How is storage growth managed if many auctions run in parallel and commitments must remain accessible until fraud windows close?
 
-13. **Partial Participation Strategy**
-    - If bidders only participate in select auctions, does this create exploitable patterns (e.g., inference attacks on private bids)?
+13. **Partial Participation Strategy** - If bidders only participate in select auctions, does this create exploitable patterns (e.g., inference attacks on private bids)?
 
-14. **Replay or Double-Use of Commitments**
-    - Can a malicious bidder reuse a valid commitment across auctions to create confusion or extract unintended optionality?
+14. **Replay or Double-Use of Commitments** - Can a malicious bidder reuse a valid commitment across auctions to create confusion or extract unintended optionality?
+
+## Documentation Structure
+
+This PRD provides the high-level product specification. For detailed analysis and technical specifications, see:
+
+### Background & Context
+- [Prior Art: Decentralized Exchanges](docs/background/prior-art.md) - Existing DEX mechanisms and their shortcomings
+- [CoW Swap Analysis](docs/background/cow-swap-analysis.md) - Case study of batch auction approach
+
+### Design & Requirements
+- [Ideal Solution Characteristics](docs/design/ideal-characteristics.md) - Requirements and tradeoffs
+- [CPMM vs Auction Comparison](cpmm-vs-auction.md) - Detailed economic analysis of exchange mechanisms
+
+### Technical Specifications
+- [Atomic Guarantee Mechanism](atomic-guarantee-mechanism.md) - Cross-chain atomicity implementation
+- [Timelock Encryption for Sealed Bids](timelock-bids.md) - Bid privacy technical specification
+- [Technology Limitations](docs/technical/technology-limitations.md) - Why fully private auctions aren't feasible
+
+### Game Theory & Economics
+- [Uniform Price Auctions](docs/game-theory/uniform-price-auctions.md) - Auction mechanism and strategic properties
+- [Shill Bidding Analysis](shill-bidding-analysis.md) - Manipulation attacks and mitigations
 
 ## References
 
