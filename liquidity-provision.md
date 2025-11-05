@@ -2,9 +2,14 @@
 
 ## Overview
 
-Atomic Auctions enable capital-efficient market making through **flash loan-style P2P lending**. Liquidity Providers (LPs) lend capital directly to Market Makers (MMs) within a single atomic transaction, with no protocol intermediation or fee extraction. This creates a pure P2P capital market where LPs advertise rates, MMs select the best offer per auction, and all lending happens atomically with zero default risk.
+Atomic Auctions enable capital-efficient trading through **flash loan-style P2P lending** supporting two modes:
 
-**Key insight:** Since borrowing and repayment occur in the same atomic transaction (just like flash loans), there are no defaults, no settlement risk, and no need for long-term relationships. Each auction is a standalone transaction where the MM selects an LP based on rate and available capital.
+1. **Market Makers borrow to bid**: MMs leverage capital to compete in auctions (original model)
+2. **Users borrow to auction**: Users borrow assets, auction them for other assets, and repay atomically in the received asset
+
+Liquidity Providers (LPs) lend capital directly to borrowers within a single atomic transaction, with no protocol intermediation or fee extraction. This creates a pure P2P capital market where LPs advertise rates and accepted repayment assets, borrowers select the best offer per auction, and all lending happens atomically with zero default risk.
+
+**Key insight:** Since borrowing and repayment occur in the same atomic transaction (just like flash loans), there are no defaults, no settlement risk, and no need for long-term relationships. Each auction is a standalone transaction where the borrower selects an LP based on rate, available capital, and accepted repayment assets.
 
 ## Comparison: Atomic vs Existing DeFi Lending
 
@@ -28,7 +33,7 @@ Atomic Auctions enable capital-efficient market making through **flash loan-styl
 | **Cross-Chain Native** | No | No | No (ETH only) | No | No | No | **Yes** |
 | **Smart Contract Risk** | Medium | Medium | Medium-High | Medium | High | Low-Medium | **High (ZK cross-chain)** |
 | **TVL (Approximate)** | $10B+ | $5B+ | $5B+ (DAI supply) | $1B+ | $300M+ | N/A (flash) | **TBD** |
-| **Use Case** | General lending | General lending | Stablecoin minting | Optimized lending | Leverage trading | Arbitrage, liquidations | **Cross-chain market making** |
+| **Use Case** | General lending | General lending | Stablecoin minting | Optimized lending | Leverage trading | Arbitrage, liquidations | **Cross-chain MM + leveraged conversion** |
 
 ### Key Differentiators
 
@@ -220,34 +225,109 @@ LP provides:
    - Collateral value grows with protocol adoption
    - Creates long-term commitment from market makers
 
-### Why LP Capital Matches Auction Pair?
+### Two Lending Modes: Bidder Capital vs. Auctioneer Capital
 
-**Critical design constraint:**
+The lending protocol supports two atomic repayment modes depending on who is borrowing:
 
-The LP must provide capital **in the same asset the MM needs to pay for auction wins**. This enables atomic repayment.
+#### Mode 1: Market Maker Borrows to Bid (Original Model)
 
-**Example: ETH/USDC Auction**
+**Use case:** MM wants to bid on existing auctions but lacks capital.
+
+**Key constraint:** LP provides capital in the **payment asset** (what MM needs to pay).
+
+**Example: ETH/USDC Auction (User Selling ETH)**
 ```
 Auctioneer sells: 100 ETH
 Auction clearing price: $1,990/ETH (in USDC)
 MM wins and must pay: 199,000 USDC
 
-LP provides: USDC (not ETH, not Open Libra)
+LP provides: USDC (the payment asset)
 Why: MM must repay LP in USDC atomically when receiving ETH
 ```
 
-**Flow:**
-1. MM bids using LP's USDC on Ethereum
+**Atomic Flow:**
+1. MM borrows 199,000 USDC from LP
 2. Auction clears, MM wins 100 ETH
 3. **Atomic transaction on Ethereum:**
    - MM receives 100 ETH from escrow
-   - MM sends 199,000 USDC to LP (repayment)
-   - MM sends 149.25 USDC to LP (0.15% interest on 99,500 borrowed)
+   - MM sends 199,000 USDC to LP (principal repayment)
+   - MM sends 298.50 USDC to LP (0.15% interest)
    - Transaction succeeds or reverts as unit
 4. LP receives full repayment + interest immediately
-5. MM sells 100 ETH for ~$200,000, keeps ~$350 profit
+5. MM sells 100 ETH for ~$200,000, keeps ~$701 profit
+
+#### Mode 2: User Borrows to Auction (Inverse Model)
+
+**Use case:** User wants to convert one asset to another using leverage.
+
+**Key constraint:** LP provides capital in the **auction asset** (what user will sell), accepts repayment in the **received asset** at auction clearing price.
+
+**Example: USDC/ETH Auction (User Selling Borrowed USDC)**
+```
+User deposits: 10,000 Open Libra collateral
+User borrows: 100,000 USDC from LP
+User auctions: "Selling 100,000 USDC for ETH"
+Auction clearing price: 0.0005 ETH/USDC (i.e., $2,000/ETH)
+User receives: 100,000 × 0.0005 = 50 ETH
+
+LP provides: USDC (the auction asset)
+LP accepts repayment in: ETH (the received asset)
+Why: User only has ETH after auction, no need for second conversion
+```
+
+**Atomic Flow:**
+1. User deposits Open Libra collateral on Home chain
+2. User borrows 100,000 USDC from LP on Ethereum
+3. User locks borrowed USDC in auction escrow
+4. Auction clears at 0.0005 ETH/USDC
+5. **Atomic transaction on Ethereum:**
+   - User receives 50 ETH from winning MMs
+   - User calculates repayment in ETH using clearing price:
+     - Principal: 100,000 USDC × 0.0005 = 50 ETH
+     - Interest: 150 USDC (0.15%) × 0.0005 = 0.075 ETH
+     - Total repayment: 50.075 ETH
+   - User sends 50.075 ETH to LP
+   - Transaction succeeds or reverts as unit
+6. LP receives ETH instead of USDC (converted at fair market rate)
+7. User keeps remaining ETH (if any, e.g., from collateral or other sources)
+
+**Key Innovation:** The auction clearing price provides a trustless, market-determined conversion rate for LP repayment. No oracles needed.
+
+**LP Flexibility:**
+- LPs can specify which assets they accept for repayment (e.g., "lend USDC, accept USDC or ETH")
+- Broadens LP market (some LPs want to accumulate ETH, others want stable USDC)
+- Increases borrowing options for users
+
+### Use Cases for Mode 2 (Borrowing to Auction)
+
+**Use Case 1: Leveraged Asset Conversion**
+- User wants to convert 100K USDC worth of value into ETH using 5x leverage
+- Deposits $20K Open Libra collateral
+- Borrows $100K USDC, auctions for ~50 ETH
+- Repays LP in ETH atomically
+- Net result: User acquired 50 ETH with only $20K collateral
+
+**Use Case 2: Liquidity Bootstrapping**
+- New project wants to establish initial ETH/TOKEN liquidity
+- Borrows USDC, auctions it for ETH in batches
+- Acquires ETH to pair with their token in AMM pools
+- Repays USDC loan over time from project treasury
+
+**Use Case 3: Cross-Chain Arbitrage**
+- User spots price discrepancy: USDC cheaper on Solana, ETH overpriced on Ethereum
+- Borrows USDC on Solana, auctions for ETH on Ethereum
+- Sells ETH on Ethereum for more USDC than borrowed
+- Keeps arbitrage profit
+
+**Use Case 4: Portfolio Rebalancing with Leverage**
+- User wants to shift from stablecoin exposure to ETH exposure
+- Borrows USDC equivalent to 5x their collateral value
+- Auctions USDC for ETH in one atomic operation
+- Instantly rebalances portfolio with leverage
 
 ### Atomic Settlement Flow (Flash Loan Pattern)
+
+#### Mode 1 Example: MM Borrows to Bid
 
 **Step 1: Pre-Auction Setup**
 ```
@@ -296,12 +376,68 @@ Open Libra (Home Chain):
 - MM can withdraw or immediately reuse for next auction
 ```
 
-**Key Properties:**
+#### Mode 2 Example: User Borrows to Auction
+
+**Step 1: Pre-Auction Setup**
+```
+Open Libra (Home Chain):
+- User deposits 10,000 Open Libra as collateral
+- Collateral Manager emits proof of collateral
+
+Ethereum (Away Chain):
+- LP Alice has 100,000 USDC available @ 0.15%
+- LP Alice accepts repayment in: [USDC, ETH]
+```
+
+**Step 2: User Borrows and Creates Auction**
+```
+Ethereum (Away Chain):
+- User selects LP Alice (willing to accept ETH repayment)
+- User borrows 100,000 USDC from LP Alice
+- User locks 100,000 USDC in auction escrow
+
+Open Libra (Home Chain):
+- Auction created: "Selling 100,000 USDC for ETH"
+- MMs bid with ETH:
+  - MM1: 25 ETH for 50,000 USDC (rate: 0.0005 ETH/USDC)
+  - MM2: 25 ETH for 50,000 USDC (rate: 0.0005 ETH/USDC)
+- Auction clears at 0.0005 ETH/USDC ($2,000/ETH)
+```
+
+**Step 3: Atomic Settlement on Ethereum (Single Transaction)**
+```
+Single atomic transaction on Ethereum:
+
+1. Verify auction results (ZK proof from Open Libra)
+2. Verify User has sufficient Open Libra collateral (ZK proof from Open Libra)
+3. Release 100,000 USDC to winning MMs (MM1 gets 50K, MM2 gets 50K)
+4. User receives 50 ETH from MMs (25 ETH from each)
+5. Calculate LP repayment in ETH at clearing price:
+   - Principal: 100,000 USDC × 0.0005 = 50 ETH
+   - Interest: 150 USDC × 0.0005 = 0.075 ETH
+   - Total: 50.075 ETH
+6. User sends 50.075 ETH to LP Alice
+7. LP Alice receives 50.075 ETH (converted from USDC at market rate)
+
+If any step fails, entire transaction reverts.
+Result: Zero default risk - atomicity guaranteed.
+```
+
+**Step 4: Collateral Release (Separate Transaction)**
+```
+Open Libra (Home Chain):
+- Settlement proof verified via ZK light client
+- Collateral Manager releases User's 10,000 Open Libra
+- User can withdraw or reuse for next auction
+```
+
+**Key Properties (Both Modes):**
 - **No defaults possible** - transaction succeeds or reverts
 - **No settlement windows** - everything atomic
 - **No liquidations needed** - collateral just gates borrowing capacity
-- **No long-term relationships** - MM selects best LP per auction
+- **No long-term relationships** - borrower selects best LP per auction
 - **No reputation complexity** - atomicity eliminates trust requirements
+- **Market-determined conversion** - auction clearing price provides fair rate (Mode 2)
 
 ### Multi-Chain Trading Support
 
@@ -437,27 +573,61 @@ Annual ROI: 210% on $20K collateral
 
 **Per-auction selection model (no relationships needed):**
 
-**On-chain LP Registry:**
+**On-chain LP Registry (Enhanced for Mode 2):**
 ```
-Available LPs on Ethereum for ETH/USDC auctions:
-1. LP Alice: $500K USDC @ 0.10% per tx
-2. LP Bob: $200K USDC @ 0.12% per tx
-3. LP Carol: $1M USDC @ 0.15% per tx
-4. LP Dave: $50K USDC @ 0.08% per tx (limited capital)
+Available LPs on Ethereum:
+1. LP Alice:
+   - Capital: $500K USDC @ 0.10% per tx
+   - Accepts repayment in: [USDC, ETH]
+   - Use cases: Mode 1 (MM bidding) and Mode 2 (user auctioning USDC)
+
+2. LP Bob:
+   - Capital: $200K USDC @ 0.12% per tx
+   - Accepts repayment in: [USDC only]
+   - Use cases: Mode 1 only (MM bidding)
+
+3. LP Carol:
+   - Capital: $1M USDC @ 0.15% per tx
+   - Accepts repayment in: [USDC, ETH, WBTC]
+   - Use cases: Mode 1 and Mode 2 (user auctioning USDC for any asset)
+
+4. LP Dave:
+   - Capital: $50K USDC @ 0.08% per tx (limited capital)
+   - Accepts repayment in: [USDC only]
+   - Use cases: Mode 1 only
+
+5. LP Eve:
+   - Capital: 250 ETH @ 0.12% per tx
+   - Accepts repayment in: [ETH, USDC]
+   - Use cases: Mode 2 (user auctioning ETH for USDC)
 ```
 
-**MM Selection Process:**
+**Mode 1 Selection Process (MM Borrowing to Bid):**
 1. MM sees auction for 100 ETH (needs $199,000 USDC)
 2. MM queries LP registry on Ethereum
-3. MM selects LP with lowest rate and sufficient capital
-4. Selection: LP Alice (0.10%, has $500K available)
-5. Atomic transaction executes with Alice's capital
+3. MM filters for LPs offering USDC (any repayment terms work)
+4. Selection: LP Dave (0.08%, lowest rate with sufficient capital)
+5. Atomic transaction executes with Dave's capital
+6. MM repays in USDC (original borrowed asset)
+
+**Mode 2 Selection Process (User Borrowing to Auction):**
+1. User wants to auction USDC for ETH
+2. User queries LP registry on Ethereum
+3. User filters for LPs offering USDC AND accepting ETH repayment
+4. Options: LP Alice (0.10%) or LP Carol (0.15%)
+5. Selection: LP Alice (lowest rate, accepts ETH)
+6. Atomic transaction executes:
+   - Borrow USDC from Alice
+   - Auction USDC for ETH
+   - Repay Alice in ETH at clearing price
 
 **Key properties:**
-- **No pre-commitment**: MM chooses LP per auction
-- **Rate competition**: LPs compete on price, MMs select best
+- **No pre-commitment**: Borrower chooses LP per auction
+- **Rate competition**: LPs compete on price, borrowers select best
 - **No relationships**: Pure spot market for capital
-- **High capital velocity**: Same LP capital used by many MMs
+- **High capital velocity**: Same LP capital used by many borrowers
+- **Flexible repayment**: LPs can accept multiple assets (broadens market)
+- **Market-determined conversion**: Auction clearing price sets repayment rate (Mode 2)
 
 ## Risk Analysis
 
