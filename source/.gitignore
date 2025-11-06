@@ -1,0 +1,44 @@
+# Node
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# Hardhat
+cache/
+artifacts/
+typechain-types/
+coverage/
+coverage.json
+.env
+
+# Circom
+circuits/build/
+circuits/powersOfTau*.ptau
+circuits/*.zkey
+circuits/verification_key.json
+
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Results
+benchmark-results-*/
+deployments/
+gas-report.txt
+
+# Keys (never commit!)
+*.key
+*.pem
+keys/
