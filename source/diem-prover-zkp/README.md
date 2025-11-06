@@ -1,427 +1,256 @@
-# Diem Prover ZKP
+# Diem Prover ZKP - SP1 Library Approach
 
-ZK-SNARK based Aptos/Diem light client with off-chain BLS signature verification for Ethereum.
-
-## Features
-
-- ✅ **Off-chain BLS verification**: Verify expensive BLS signatures off-chain
-- ✅ **Succinct on-chain proofs**: ~256 byte proofs verify in ~250K gas
-- ✅ **Batch updates**: Amortize costs to ~4K gas per update
-- ✅ **Privacy preserving**: Signatures never revealed on-chain
-- ✅ **Complete prover service**: Rust implementation with ark-works
-- ✅ **Circom circuits**: Production-ready ZK circuits
-- ✅ **Benchmarking suite**: Compare against native implementation
-
-## Architecture
-
-```
-┌─────────────────────┐
-│  Diem Blockchain    │
-│  (BLS Signatures)   │
-└──────────┬──────────┘
-           │
-           ↓
-┌─────────────────────┐
-│   ZK Prover         │
-│   (Off-chain)       │
-│                     │
-│  1. Verify BLS      │
-│  2. Check quorum    │
-│  3. Generate proof  │
-└──────────┬──────────┘
-           │ ~256 bytes
-           ↓
-┌─────────────────────┐
-│   Ethereum          │
-│   ZKLightClient     │
-│                     │
-│  Verify proof       │
-│  ~250K gas          │
-└─────────────────────┘
-```
-
-## Prerequisites
-
-```bash
-# Solidity tooling
-node >= 18.0.0
-npm >= 9.0.0
-
-# Circuit tooling
-circom >= 2.1.0
-snarkjs >= 0.7.0
-
-# Prover
-rust >= 1.70.0
-cargo
-```
-
-## Installation
-
-```bash
-# Install Node dependencies
-npm install
-
-# Install Rust dependencies (prover)
-cd prover && cargo build
-
-# Install circom
-# macOS
-brew install circom
-
-# or build from source
-git clone https://github.com/iden3/circom.git
-cd circom
-cargo build --release
-```
+Zero-knowledge proof light client for Aptos/Diem on Ethereum, using **SP1 zkVM as libraries** (no binary installation required).
 
 ## Quick Start
 
-### 1. Compile Circuits
+### 1. Install Rust Toolchain
 
 ```bash
-npm run compile:circuits
+# Install Rust (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Add RISC-V target (required for guest program)
+rustup target add riscv32im-unknown-none-elf
 ```
 
-This will:
-- Compile the `diem_bls_verify.circom` circuit
-- Generate R1CS, WASM, and symbol files
-- Output to `circuits/build/`
-
-### 2. Trusted Setup Ceremony
+### 2. Clone & Setup
 
 ```bash
-npm run setup:ceremony
+cd source/diem-prover-zkp
+
+# Copy environment file
+cp .env.example .env
+
+# Edit .env with your values
+# - ETHEREUM_RPC: Your Ethereum RPC URL
+# - CONTRACT_ADDRESS: Deployed light client address
+# - PRIVATE_KEY: Prover wallet private key
 ```
 
-This performs:
-- Powers of Tau ceremony
-- Circuit-specific setup
-- Generates proving and verification keys
-- Exports Solidity verifier contract
-
-**⚠️ For Production**: Use a multi-party ceremony or existing ceremony (like Ethereum KZG)
-
-### 3. Compile Contracts
+### 3. Build
 
 ```bash
-npm run compile
+# Build everything (guest + host)
+cargo build --release
+
+# The build script will:
+# 1. Compile guest program to RISC-V
+# 2. Build the host prover
+# 3. Link everything together
 ```
 
-### 4. Build Prover
+### 4. Run
 
 ```bash
-npm run prover:build
+# Run the prover
+cargo run --release --bin prover
+
+# Or use the binary directly
+./target/release/prover
 ```
-
-### 5. Deploy
-
-```bash
-# Local
-npx hardhat node
-npm run deploy:local
-
-# Testnet
-npm run deploy:sepolia
-```
-
-### 6. Run Prover Service
-
-```bash
-npm run prover:run
-```
-
-The prover will:
-- Connect to Diem RPC
-- Monitor for state updates
-- Generate ZK proofs
-- Submit to Ethereum
-
-## Gas Costs
-
-| Operation | Native | ZKP | Savings |
-|-----------|--------|-----|---------|
-| Initialize | ~500K | ~300K | 40% |
-| Update (1x) | ~300K | ~250K | 17% |
-| Update (10x batched) | N/A | ~280K (~28K each) | 91% |
-| Update (100x batched) | N/A | ~400K (~4K each) | 99% |
 
 ## Project Structure
 
 ```
 diem-prover-zkp/
-├── contracts/
-│   ├── ZKDiemLightClient.sol     # Main light client
-│   ├── Groth16Verifier.sol       # Generated from circuit
-│   └── MerkleVerifier.sol        # Merkle proof verification
-├── circuits/
-│   ├── diem_bls_verify.circom    # Main verification circuit
-│   ├── bls12_381/                # BLS12-381 operations
-│   │   ├── pairing.circom
-│   │   ├── hash_to_curve.circom
-│   │   └── field_ops.circom
-│   ├── compile.sh                # Circuit compilation
-│   └── setup-ceremony.sh         # Trusted setup
-├── prover/
+├── guest/              # Program that runs inside SP1 zkVM
+│   ├── src/main.rs    # BLS verification logic
+│   └── Cargo.toml
+│
+├── host/               # Prover service (generates proofs)
 │   ├── src/
-│   │   ├── main.rs              # Prover service
-│   │   ├── circuit.rs           # Circuit interface
-│   │   ├── diem_client.rs       # Diem RPC client
-│   │   └── ethereum.rs          # Ethereum submission
-│   ├── Cargo.toml
-│   └── README.md
-├── test/
-│   ├── ZKDiemLightClient.test.ts
-│   ├── CircuitTest.test.ts
-│   └── Benchmark.test.ts
-├── scripts/
-│   ├── deploy.ts
-│   └── generate-proof.ts        # Helper to generate test proofs
-└── benchmarks/
-    ├── gas-comparison.ts        # Compare with native
-    └── proving-time.ts          # Measure proof generation
+│   │   ├── main.rs              # Main service
+│   │   ├── types.rs             # Shared types
+│   │   ├── aptos_client.rs      # Aptos RPC client
+│   │   └── ethereum_client.rs   # Ethereum client
+│   ├── build.rs        # Builds guest program
+│   └── Cargo.toml
+│
+├── contracts/          # Solidity contracts
+│   └── src/
+│       └── DiemLightClient.sol
+│
+└── Cargo.toml         # Workspace config
 ```
 
-## Circuit Design
+## How It Works
 
-### Main Circuit: `diem_bls_verify.circom`
+### 1. Guest Program (zkVM)
 
-```circom
-template DiemBLSVerifier(MAX_VALIDATORS) {
-    // PUBLIC INPUTS (visible on Ethereum)
-    signal input messageHash;
-    signal input quorumVotingPower;
-    signal input oldStateRoot;
-    signal input newStateRoot;
-    signal input oldVersion;
-    signal input newVersion;
-    signal input epoch;
-    signal input validatorSetHash;
-
-    // PRIVATE INPUTS (never revealed)
-    signal input signatures[MAX_VALIDATORS][4];
-    signal input publicKeys[MAX_VALIDATORS][4];
-    signal input votingPowers[MAX_VALIDATORS];
-    signal input signerBitmask;
-
-    // Circuit verifies:
-    // 1. Aggregate public keys: ∑ (bit[i] * pubkey[i])
-    // 2. Aggregate signatures: ∑ (bit[i] * sig[i])
-    // 3. BLS verification: e(pk_agg, H(m)) == e(sig_agg, G2_gen)
-    // 4. Quorum check: ∑ (bit[i] * vp[i]) >= quorum
-    // 5. State transition: version increases, roots match
-}
-```
-
-**Constraints**: ~10M for 100 validators
-
-## Prover Service
-
-### Rust Implementation
+The guest program runs **inside the SP1 zkVM** and verifies:
+- ✅ BLS12-381 aggregate signatures from Aptos validators
+- ✅ Quorum requirements (2f+1 voting power)
+- ✅ State transition validity
 
 ```rust
-// prover/src/main.rs
+// guest/src/main.rs
+pub fn main() {
+    let proof: AptosStateProof = sp1_zkvm::io::read();
 
-use ark_groth16::{Groth16, ProvingKey};
-use diem_sdk::{DiemClient, StateProof};
-
-struct ZKProver {
-    proving_key: ProvingKey,
-    diem_client: DiemClient,
-    eth_client: EthereumClient,
-}
-
-impl ZKProver {
-    async fn run(&self) -> Result<()> {
-        loop {
-            // Get latest Ethereum state
-            let eth_version = self.eth_client.get_version().await?;
-
-            // Get Diem state proof
-            let proof = self.diem_client
-                .get_state_proof(eth_version).await?;
-
-            // Generate ZK proof
-            let (zk_proof, public_inputs) =
-                self.generate_proof(&proof)?;
-
-            // Submit to Ethereum
-            self.eth_client
-                .update_state(zk_proof, public_inputs).await?;
-
-            tokio::time::sleep(Duration::from_secs(60)).await;
-        }
+    // Verify BLS signatures using SP1 precompile
+    for sig in &proof.signatures {
+        verify_bls_signature(sig, validator, message);
     }
+
+    // Check quorum and commit outputs
+    assert!(voting_power >= quorum);
+    sp1_zkvm::io::commit(&public_values);
 }
 ```
 
-### Configuration
+### 2. Host Prover
 
-```toml
-# prover/Config.toml
+The host prover:
+1. Fetches state proofs from Aptos
+2. Generates SP1 proofs by running the guest program
+3. Submits proofs to Ethereum
 
-[diem]
-rpc_url = "https://fullnode.mainnet.aptoslabs.com/v1"
-poll_interval_secs = 60
+```rust
+// host/src/main.rs
+let proof = client.prove(GUEST_ELF, stdin)
+    .compressed()  // ~1-2KB proofs
+    .run()?;
 
-[ethereum]
-rpc_url = "https://mainnet.infura.io/v3/YOUR_KEY"
-light_client_address = "0x..."
-private_key_path = "./keys/prover.key"
-
-[circuit]
-proving_key_path = "../circuits/build/proving_key.zkey"
-max_validators = 100
-
-[performance]
-parallel_proving = true
-num_threads = 8
+ethereum.submit_proof(proof.bytes(), &public_values).await?;
 ```
 
-## Benchmarking
+### 3. Smart Contract
 
-### Run Full Benchmark Suite
+Verifies SP1 proofs on Ethereum:
+
+```solidity
+// contracts/src/DiemLightClient.sol
+function updateState(
+    bytes calldata proofBytes,
+    bytes calldata publicValuesBytes
+) external {
+    verifier.verifyProof(programVKey, publicValuesBytes, proofBytes);
+    trustedState = newState;
+}
+```
+
+## Development
+
+### Testing
 
 ```bash
-npm run benchmark
+# Test guest program
+cd guest && cargo test
+
+# Test host prover
+cd host && cargo test
+
+# Test contracts
+cd contracts && forge test
 ```
 
-This measures:
-- **Proof generation time** (off-chain)
-- **Gas costs** (on-chain)
-- **Comparison with native** implementation
-- **Batch efficiency**
-
-### Sample Results
-
-```
-Proof Generation (100 validators):
-  Time: 45.2 seconds
-  Memory: 12.3 GB
-  CPU: 8 cores @ 95%
-
-On-Chain Verification:
-  Single update: 248,523 gas
-  10 batched: 283,421 gas (28,342 per update)
-  100 batched: 412,839 gas (4,128 per update)
-
-vs Native Implementation:
-  Single update: 17% cheaper
-  Batched (100): 99% cheaper per update
-  Proving overhead: 45 seconds per batch
-```
-
-## Testing
+### Building Components
 
 ```bash
-# All tests
-npm test
+# Build only guest (RISC-V)
+cargo build --release --manifest-path guest/Cargo.toml
 
-# With gas reporting
-npm run test:gas
+# Build only host
+cargo build --release --manifest-path host/Cargo.toml
 
-# Prover tests
-npm run prover:test
-
-# Circuit tests
-cd circuits && npm test
+# Build contracts
+cd contracts && forge build
 ```
 
-## Security Considerations
+### Debugging
 
-### Trusted Setup
+```bash
+# Run with debug logs
+RUST_LOG=debug cargo run --bin prover
 
-- **Risk**: If setup is compromised, fake proofs possible
-- **Mitigation**:
-  - Multi-party ceremony with 50+ participants
-  - Use transparent alternatives (STARK, Halo2)
-  - Leverage existing ceremonies
+# Run with trace logs
+RUST_LOG=trace cargo run --bin prover
+```
 
-### Circuit Bugs
+## Dependencies
 
-- **Risk**: Bug allows invalid proofs
-- **Mitigation**:
-  - Formal verification (Lean, Coq)
-  - Multiple independent audits
-  - Extensive test suite
-  - Gradual rollout
+### Rust Crates
 
-### Prover Availability
+- `sp1-zkvm` - Guest program SDK (no_std)
+- `sp1-sdk` - Host prover SDK
+- `sp1-helper` - Build helpers
+- `aptos-sdk` - Aptos integration
+- `ethers` - Ethereum integration
 
-- **Risk**: Prover offline = no updates
-- **Mitigation**:
-  - Multiple independent provers
-  - Fallback to native verification
-  - Monitoring and alerting
+### Solidity
 
-## Production Deployment
+- SP1 verifier contracts (git submodule)
+- OpenZeppelin contracts
 
-### Phase 1: Hybrid (6 months)
+## Gas Costs
 
-Deploy with optimistic verification:
-- ZK proof submitted
-- 6-hour challenge period
-- Fallback to native if challenged
+| Operation | Gas Cost | Notes |
+|-----------|----------|-------|
+| Initialize | ~300K | One-time setup |
+| Update (single) | ~250K | Per proof |
+| Update (10x batch) | ~280K total | ~28K per update |
+| Update (100x batch) | ~400K total | ~4K per update |
 
-### Phase 2: Pure ZK (after confidence)
+## Performance
 
-Remove challenge period:
-- Instant finality
-- Full ZK security
-- Maximum efficiency
+| Metric | Value |
+|--------|-------|
+| Proving time | 5-10 seconds |
+| Proof size | ~1-2 KB (compressed) |
+| Memory usage | 4-8 GB |
+| CPU cores | 4 recommended |
 
-## Comparison: Native vs ZKP
+## Advantages Over Circom
 
-| Aspect | Native | ZKP |
-|--------|--------|-----|
-| **Setup complexity** | Simple | Complex (ceremony) |
-| **On-chain gas** | ~300K | ~250K (single) / ~4K (batched) |
-| **Off-chain compute** | None | 45s per proof |
-| **Infrastructure** | Just contracts | Contracts + prover service |
-| **Privacy** | Public signatures | Private signatures |
-| **Best for** | Development, low volume | Production, high volume |
+| Aspect | Circom | SP1 Library |
+|--------|--------|-------------|
+| **Installation** | Need circom binary | Just Rust |
+| **Language** | Circom DSL | Rust |
+| **Debugging** | Difficult | Standard Rust tools |
+| **Build** | circom + snarkjs | cargo build |
+| **Testing** | Limited | Full Rust test framework |
+| **Development Time** | 4-6 weeks | 2-3 weeks |
 
 ## Troubleshooting
 
-### Circuit compilation fails
+### "Target not found: riscv32im-unknown-none-elf"
 
 ```bash
-# Ensure circom is installed
-circom --version
-
-# Check memory
-# Need 16GB+ RAM for large circuits
+rustup target add riscv32im-unknown-none-elf
 ```
 
-### Prover OOM
+### "Failed to build guest program"
 
 ```bash
-# Reduce MAX_VALIDATORS in circuit
-# Or increase system memory
-# Or use proving service
+# Clean and rebuild
+cargo clean
+cargo build --release
 ```
 
-### Proof verification fails on-chain
+### "SP1 proving failed"
 
-```bash
-# Check public inputs match exactly
-# Ensure circuit and contract in sync
-# Verify proving key is correct
-```
+Check that:
+- Guest program compiles to RISC-V
+- Input data is serializable
+- Enough memory available (8GB+)
+
+## Next Steps
+
+1. ✅ Build and test locally
+2. Implement Aptos client integration
+3. Deploy contracts to testnet
+4. Run integration tests
+5. Deploy to mainnet
 
 ## Resources
 
-- **Circom Docs**: https://docs.circom.io
-- **SnarkJS**: https://github.com/iden3/snarkjs
-- **Ark-works**: https://arkworks.rs
-- **Groth16 Paper**: https://eprint.iacr.org/2016/260.pdf
+- [SP1 Documentation](https://docs.succinct.xyz/)
+- [SP1 GitHub](https://github.com/succinctlabs/sp1)
+- [Redesign Document](./REDESIGN.md)
+- [Library Approach Guide](./LIBRARY_APPROACH.md)
+- [Migration Guide](./MIGRATION_GUIDE.md)
 
 ## License
 
 Apache-2.0
-
-## Support
-
-- Documentation: `../../docs/technical/aptos_zk_light_client.md`
-- Issues: https://github.com/atomica/issues
-- Discord: https://discord.gg/atomica

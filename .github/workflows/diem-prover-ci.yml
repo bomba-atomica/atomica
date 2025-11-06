@@ -1,0 +1,248 @@
+name: Diem Prover CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'source/diem-prover-zkp/**'
+      - '.github/workflows/diem-prover-ci.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'source/diem-prover-zkp/**'
+      - '.github/workflows/diem-prover-ci.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  WORKING_DIR: source/diem-prover-zkp
+
+jobs:
+  rust-lint:
+    name: Rust Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: riscv32im-unknown-none-elf
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.WORKING_DIR }}/target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  rust-build:
+    name: Rust Build
+    runs-on: ubuntu-latest
+    needs: rust-lint
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: riscv32im-unknown-none-elf
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ${{ env.WORKING_DIR }}/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build guest program
+        run: cargo build --release --manifest-path guest/Cargo.toml --target riscv32im-unknown-none-elf
+
+      - name: Build host prover
+        run: cargo build --release --manifest-path host/Cargo.toml
+
+  rust-test:
+    name: Rust Test
+    runs-on: ubuntu-latest
+    needs: rust-lint
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: riscv32im-unknown-none-elf
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ${{ env.WORKING_DIR }}/target
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests
+        run: cargo test --all --all-features
+
+  solidity-lint:
+    name: Solidity Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}/contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install solhint
+        run: npm install -g solhint
+
+      - name: Check Solidity formatting
+        run: forge fmt --check
+
+      - name: Run solhint
+        run: solhint 'src/**/*.sol'
+        continue-on-error: true
+
+  solidity-build:
+    name: Solidity Build
+    runs-on: ubuntu-latest
+    needs: solidity-lint
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}/contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Build contracts
+        run: forge build
+
+      - name: Check contract sizes
+        run: forge build --sizes
+
+  solidity-test:
+    name: Solidity Test
+    runs-on: ubuntu-latest
+    needs: solidity-lint
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}/contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Run tests
+        run: forge test -vvv
+
+      - name: Generate gas report
+        run: forge test --gas-report
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run cargo audit
+        run: cargo audit
+
+      - name: Install Foundry (for slither)
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Run Slither
+        uses: crytic/slither-action@v0.3.0
+        continue-on-error: true
+        with:
+          target: '${{ env.WORKING_DIR }}/contracts/'
+          slither-args: '--filter-paths "lib/*"'
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: riscv32im-unknown-none-elf
+
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Run coverage
+        run: cargo tarpaulin --all-features --workspace --timeout 300 --out Xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./${{ env.WORKING_DIR }}/cobertura.xml
+          fail_ci_if_error: false

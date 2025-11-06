@@ -1,0 +1,65 @@
+# Pre-commit hooks configuration
+# Install: pip install pre-commit && pre-commit install
+
+repos:
+  # Rust
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt
+        args: ['--all', '--', '--check']
+        language: system
+        files: \.rs$
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy
+        args: ['--all-targets', '--all-features', '--', '-D', 'warnings']
+        language: system
+        files: \.rs$
+        pass_filenames: false
+
+  # Solidity
+  - repo: local
+    hooks:
+      - id: forge-fmt
+        name: forge fmt
+        entry: bash -c 'cd contracts && forge fmt --check'
+        language: system
+        files: \.sol$
+        pass_filenames: false
+
+      - id: solhint
+        name: solhint
+        entry: bash -c 'cd contracts && solhint "src/**/*.sol"'
+        language: system
+        files: \.sol$
+        pass_filenames: false
+
+  # General
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+
+  # TOML
+  - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+    rev: v2.11.0
+    hooks:
+      - id: pretty-format-toml
+        args: [--autofix]
+
+  # Markdown
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.37.0
+    hooks:
+      - id: markdownlint
+        args: ['--fix']

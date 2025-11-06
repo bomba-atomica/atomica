@@ -1,0 +1,25 @@
+[build]
+target-dir = "target"
+
+[alias]
+# Convenience aliases
+fmt-check = "fmt --all -- --check"
+lint = "clippy --all-targets --all-features -- -D warnings"
+lint-fix = "clippy --all-targets --all-features --fix --allow-dirty --allow-staged"
+
+# Build aliases
+build-guest = "build --release --manifest-path guest/Cargo.toml --target riscv32im-unknown-none-elf"
+build-host = "build --release --manifest-path host/Cargo.toml"
+build-all = "build --release --all"
+
+# Test aliases
+test-guest = "test --manifest-path guest/Cargo.toml"
+test-host = "test --manifest-path host/Cargo.toml"
+test-all = "test --all"
+
+[target.riscv32im-unknown-none-elf]
+rustflags = [
+    "-C", "passes=loweratomic",
+    "-C", "link-arg=-Ttext=0x00200800",
+    "-C", "panic=abort",
+]
