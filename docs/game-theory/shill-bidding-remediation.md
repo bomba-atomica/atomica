@@ -396,6 +396,24 @@ Random exclusion creates a **seller experience tension** that must be acknowledg
 
 **Critical Threshold:** If exclusion causes >10-15% seller attrition, the anti-collusion benefit may not justify the UX cost. This requires empirical validation post-launch.
 
+**Alternative Considered and Rejected: Collusion-Triggered Exclusion**
+
+An alternative approach was analyzed: instead of random exclusion, use bid pattern detection (bid compression, market deviation from external prices) to conditionally exclude sellers only when collusion is suspected.
+
+**This approach is NOT recommended** because:
+- ❌ Any known metric is gameable by sophisticated bidders (sacrificial bids to widen distribution)
+- ❌ Destroys incentive compatibility (bidders must strategize on metric evasion, not just true valuation)
+- ❌ Requires external price oracles (new attack vector, manipulation risk)
+- ❌ No robust prior art for real-time supply adjustment in auction theory (detection is for post-hoc prosecution)
+
+**The 1/N random supply uncertainty is superior** because:
+- ✅ Ungameable (truly random via drand)
+- ✅ Preserves incentive compatibility (dominant strategy remains: bid near true value)
+- ✅ Clean mechanism design (no external dependencies, no threshold calibration)
+- ✅ Forces truthful bidding through genuine supply uncertainty
+
+**→ See:** [Conditional Exclusion Analysis](conditional-exclusion-analysis.md) for detailed analysis with academic references and game-theoretic proofs.
+
 #### Multi-Hour Auction Prevents Flash Attacks
 
 **Timing:**
