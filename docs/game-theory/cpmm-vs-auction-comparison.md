@@ -1,8 +1,22 @@
-# CPMM vs Auction: A Comparison for Cross-Chain Atomic Swaps
+# CPMM vs Auction: Comparative Economic Analysis
+
+## Purpose of This Document
+
+This document provides a **detailed comparative economic analysis** of three exchange mechanisms for cross-chain atomic swaps:
+1. **Constant Product Market Makers (CPMMs)** - Passive liquidity pools
+2. **Spot Auctions** - Multiple daily auctions with immediate settlement
+3. **Futures Auctions** - Daily batch auction with delayed settlement (Atomica's chosen model)
+
+**Note:** This is an analytical document, not a mechanism explainer. For implementation details, see:
+- [Uniform Price Auctions](uniform-price-auctions.md) - Auction mechanism details
+- [Futures Market Model](../design/futures-market-model.md) - Why futures model for Atomica
+- [Prior Art](../background/prior-art.md) - Background on DEX mechanisms
 
 ## Executive Summary
 
-This document provides an objective comparison of two exchange mechanisms for enabling trustless cross-chain asset swaps: **Constant Product Market Makers (CPMMs)** and **Uniform Price Auctions**. Both mechanisms aim to solve the same problem—enabling users to exchange native assets across blockchains without bridges or wrapped tokens—but use fundamentally different approaches to liquidity provision and price discovery.
+This analysis compares exchange mechanisms for enabling trustless cross-chain asset swaps without bridges or wrapped tokens. The mechanisms use fundamentally different approaches to liquidity provision and price discovery, leading to distinct economic tradeoffs.
+
+**Key Finding:** For zero-fee, zero-subsidy operation, auctions (especially futures auctions) are economically superior to CPMMs due to self-sustaining market maker compensation through bid-ask spreads.
 
 ## Context and Assumptions
 
