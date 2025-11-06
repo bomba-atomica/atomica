@@ -1,4 +1,4 @@
-//! Shared types between guest and host
+/// Shared types between guest and host
 
 use serde::{Deserialize, Serialize};
 

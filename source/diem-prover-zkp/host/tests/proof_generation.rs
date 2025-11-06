@@ -5,8 +5,8 @@ use std::fs;
 // Include the types module
 include!("../src/types.rs");
 
-/// The compiled guest program ELF binary
-const GUEST_ELF: &[u8] = include_bytes!("../../../target/riscv32im-unknown-none-elf/release/diem-guest");
+/// The compiled guest program ELF binary (built by build.rs using SP1)
+const GUEST_ELF: &[u8] = include_bytes!("../../target/elf-compilation/riscv32im-succinct-zkvm-elf/release/diem-guest");
 
 #[test]
 fn test_generate_and_verify_proof() -> Result<()> {
@@ -32,6 +32,9 @@ fn test_generate_and_verify_proof() -> Result<()> {
     println!("\n🔧 Initializing SP1 prover...");
     let prover = ProverClient::new();
 
+    // Setup proving key from ELF
+    let (pk, vk) = prover.setup(GUEST_ELF);
+
     // Prepare input for the guest program
     let mut stdin = SP1Stdin::new();
     stdin.write(&state_proof);
@@ -43,7 +46,7 @@ fn test_generate_and_verify_proof() -> Result<()> {
     let start = std::time::Instant::now();
 
     let proof = prover
-        .prove(GUEST_ELF, stdin)
+        .prove(&pk, stdin)
         .compressed()
         .run()?;
 
@@ -83,7 +86,7 @@ fn test_generate_and_verify_proof() -> Result<()> {
 
     // Verify the proof
     println!("\n🔍 Verifying proof...");
-    prover.verify(&proof, &sp1_sdk::SP1VerifyingKey::from(GUEST_ELF))?;
+    prover.verify(&proof, &vk)?;
     println!("✅ Proof verified successfully!");
 
     println!("\n🎉 Integration test passed!");
