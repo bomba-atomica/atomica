@@ -9,7 +9,7 @@ sp1-sdk = "1.2.0"
 sp1-helper = "1.2.0"
 
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = "1.0"
 bincode = "1.3"
 
@@ -59,6 +59,15 @@ ethers = "2.0"
 opt-level = 3
 lto = true
 codegen-units = 1
+
+# Guest-specific release profile optimizations for zkVM
+# Note: Only opt-level and codegen-units can be overridden per-package
+[profile.release.package.diem-guest]
+opt-level = 3
+codegen-units = 1
+
+[profile.release.build-override]
+opt-level = 3
 
 [profile.dev]
 opt-level = 0

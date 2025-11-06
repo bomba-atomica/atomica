@@ -6,13 +6,4 @@ publish = false
 
 [dependencies]
 sp1-zkvm = { workspace = true }
-serde = { workspace = true, default-features = false }
-
-[profile.release]
-opt-level = 3
-lto = "fat"
-codegen-units = 1
-panic = "abort"
-
-[profile.release.build-override]
-opt-level = 3
+serde = { workspace = true }
