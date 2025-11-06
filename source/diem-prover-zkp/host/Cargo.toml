@@ -8,33 +8,21 @@ publish = false
 # SP1 SDK
 sp1-sdk = { workspace = true }
 
-# Aptos integration
-aptos-sdk = "2.0"
-aptos-types = "0.1"
+# Note: We don't import aptos-sdk/aptos-types to avoid 1100+ dependencies.
+# Instead, we define minimal types in src/types.rs and use fixture data.
+# This is a proof-of-concept focused on the cryptography, not API integration.
 
-# Ethereum integration
-ethers = { version = "2.0", features = ["full"] }
-
-# Async runtime
-tokio = { version = "1", features = ["full"] }
-
-# Serialization
+# All dependencies use workspace = true for version consistency
+ethers = { workspace = true }
+tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 bincode = { workspace = true }
-
-# Error handling
-anyhow = "1.0"
-thiserror = "1.0"
-
-# Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-# Configuration
-dotenv = "0.15"
-
-# Crypto
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+dotenv = { workspace = true }
 hex = { workspace = true }
 sha3 = { workspace = true }
 

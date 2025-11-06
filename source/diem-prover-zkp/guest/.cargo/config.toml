@@ -1,9 +1,0 @@
-[build]
-target = "riscv32im-unknown-none-elf"
-
-[target.riscv32im-unknown-none-elf]
-rustflags = [
-    "-C", "passes=loweratomic",
-    "-C", "link-arg=-Ttext=0x00200800",
-    "-C", "panic=abort",
-]
