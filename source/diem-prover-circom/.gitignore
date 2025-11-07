@@ -1,0 +1,20 @@
+# Rust
+target/
+Cargo.lock
+
+# Circom build artifacts
+circuits/build/
+circuits/*.r1cs
+circuits/*.sym
+circuits/*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
