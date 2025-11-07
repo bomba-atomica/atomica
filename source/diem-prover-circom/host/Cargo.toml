@@ -21,3 +21,8 @@ anyhow = { workspace = true }
 
 [lib]
 path = "src/lib.rs"
+
+[dev-dependencies]
+ark-snark = { workspace = true }
+color-eyre = "0.6"
+tokio = { version = "1", features = ["full"] }

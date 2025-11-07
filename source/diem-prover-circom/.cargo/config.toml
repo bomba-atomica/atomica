@@ -1,0 +1,20 @@
+# Cargo configuration for diem-prover-circom
+#
+# This configuration addresses the wasmer probestack issue on macOS.
+# The linker flags allow dynamic symbol lookup for the missing ___rust_probestack symbol.
+
+[target.x86_64-apple-darwin]
+rustflags = [
+    "-C", "link-arg=-undefined",
+    "-C", "link-arg=dynamic_lookup",
+    "-L", "/tmp",
+    "-l", "probestack",
+]
+
+[target.aarch64-apple-darwin]
+rustflags = [
+    "-C", "link-arg=-undefined",
+    "-C", "link-arg=dynamic_lookup",
+    "-L", "/tmp",
+    "-l", "probestack",
+]
