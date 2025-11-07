@@ -1,8 +1,8 @@
-use anyhow::Result;
-use ark_bn254::Bn254;
+use color_eyre::Result;
+use ark_bn254::{Bn254, Fr};
 use ark_circom::{CircomBuilder, CircomConfig};
-use ark_groth16::{Groth16, ProvingKey, VerifyingKey};
-use ark_relations::r1cs::ConstraintMatrices;
+use ark_groth16::Groth16;
+use ark_snark::SNARK;
 use ark_std::rand::thread_rng;
 use std::path::PathBuf;
 
@@ -15,8 +15,8 @@ use std::path::PathBuf;
 /// 3. Create witness from inputs
 /// 4. Generate Groth16 proof
 /// 5. Verify the proof
-#[test]
-fn test_noop_proof() -> Result<()> {
+#[tokio::test]
+async fn test_noop_proof() -> Result<()> {
     println!("🚀 Testing Circom + Groth16 Prover with No-Op Circuit");
 
     // Path to compiled circuit artifacts
@@ -42,7 +42,7 @@ fn test_noop_proof() -> Result<()> {
     println!("\n🔧 Step 1: Load circuit");
     let load_start = std::time::Instant::now();
 
-    let cfg = CircomConfig::<Bn254>::new(cfg_path, r1cs_path)?;
+    let cfg = CircomConfig::<Fr>::new(cfg_path, r1cs_path)?;
     let mut builder = CircomBuilder::new(cfg);
 
     // Set input value (43, same as SP1 noop test)
