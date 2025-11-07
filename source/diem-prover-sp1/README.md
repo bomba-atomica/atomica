@@ -1,6 +1,6 @@
-# Diem Prover ZKP - SP1 Library Approach
+# Diem Prover SP1
 
-Zero-knowledge proof light client for Aptos/Diem on Ethereum, using **SP1 zkVM as libraries** (no binary installation required).
+Zero-knowledge proof light client for Aptos/Diem on Ethereum, using **SP1 zkVM** (no binary installation required).
 
 ## Quick Start
 
@@ -17,7 +17,7 @@ rustup target add riscv32im-unknown-none-elf
 ### 2. Clone & Setup
 
 ```bash
-cd source/diem-prover-zkp
+cd source/diem-prover-sp1
 
 # Copy environment file
 cp .env.example .env
@@ -53,7 +53,7 @@ cargo run --release --bin prover
 ## Project Structure
 
 ```
-diem-prover-zkp/
+diem-prover-sp1/
 ├── guest/              # Program that runs inside SP1 zkVM
 │   ├── src/main.rs    # BLS verification logic
 │   └── Cargo.toml

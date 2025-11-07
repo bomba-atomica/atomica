@@ -1,7 +1,7 @@
 {
-  "name": "@atomica/diem-prover-zkp",
+  "name": "@atomica/diem-prover-sp1",
   "version": "0.1.0",
-  "description": "ZK-SNARK based Aptos/Diem light client with off-chain BLS verification",
+  "description": "SP1 zkVM-based Aptos/Diem light client with off-chain BLS verification",
   "main": "index.js",
   "scripts": {
     "compile": "hardhat compile",

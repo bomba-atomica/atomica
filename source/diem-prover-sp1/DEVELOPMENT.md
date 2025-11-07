@@ -23,7 +23,7 @@ make install
 
 ```bash
 # Clone and setup
-cd source/diem-prover-zkp
+cd source/diem-prover-sp1
 cp .env.example .env
 
 # Edit .env with your configuration
