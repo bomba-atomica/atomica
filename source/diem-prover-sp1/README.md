@@ -58,13 +58,12 @@ diem-prover-sp1/
 │   ├── src/main.rs    # BLS verification logic
 │   └── Cargo.toml
 │
-├── host/               # Prover service (generates proofs)
+├── host/               # Test harness (runs SP1 prover)
 │   ├── src/
-│   │   ├── main.rs              # Main service
-│   │   ├── types.rs             # Shared types
-│   │   ├── aptos_client.rs      # Aptos RPC client
-│   │   └── ethereum_client.rs   # Ethereum client
-│   ├── build.rs        # Builds guest program
+│   │   └── types.rs             # Shared types
+│   ├── tests/
+│   │   ├── noop_test.rs         # Basic prover test
+│   │   └── proof_generation.rs  # Full proof generation test
 │   └── Cargo.toml
 │
 ├── contracts/          # Solidity contracts
