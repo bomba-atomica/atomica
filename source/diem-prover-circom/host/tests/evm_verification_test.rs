@@ -1,5 +1,7 @@
 use ark_bn254::{Bn254, Fr};
 use ark_circom::{CircomBuilder, CircomConfig};
+use ark_ec::AffineRepr;
+use ark_ff::{BigInteger, PrimeField};
 use ark_groth16::Groth16;
 use ark_snark::SNARK;
 use ark_std::rand::thread_rng;
@@ -8,7 +10,7 @@ use std::path::PathBuf;
 use alloy_primitives::{Address, Bytes, U256};
 use alloy_sol_types::{sol, SolCall};
 use revm::{
-    primitives::{TransactTo, TxEnv},
+    primitives::TransactTo,
     db::InMemoryDB,
     Evm,
 };
@@ -104,12 +106,36 @@ async fn test_evm_proof_verification_gas_cost() {
     // Step 5: Convert proof to Solidity format
     println!("\nStep 5: Converting proof to Solidity format...");
 
-    // Extract proof components (this is simplified - you'd need proper serialization)
-    // For now, we'll use dummy values that pass the basic checks
-    let a: [U256; 2] = [U256::from(1), U256::from(2)];
-    let b: [[U256; 2]; 2] = [[U256::from(1), U256::from(2)], [U256::from(3), U256::from(4)]];
-    let c: [U256; 2] = [U256::from(1), U256::from(2)];
-    let public_inputs: Vec<U256> = inputs.iter().map(|_| U256::from(42)).collect();
+    // Helper to convert field element to U256
+    let fe_to_u256 = |fe: &ark_bn254::Fq| -> U256 {
+        let bytes = fe.into_bigint().to_bytes_be();
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&bytes);
+        U256::from_be_bytes(arr)
+    };
+
+    let fe2_to_u256 = |fe: &ark_bn254::Fq2| -> (U256, U256) {
+        (fe_to_u256(&fe.c1), fe_to_u256(&fe.c0))
+    };
+
+    // Convert ark-groth16 proof to Solidity format
+    let (proof_a_x, proof_a_y) = proof.a.xy().unwrap_or_default();
+    let a: [U256; 2] = [fe_to_u256(&proof_a_x), fe_to_u256(&proof_a_y)];
+
+    let (proof_b_x, proof_b_y) = proof.b.xy().unwrap_or_default();
+    let (bx1, bx0) = fe2_to_u256(&proof_b_x);
+    let (by1, by0) = fe2_to_u256(&proof_b_y);
+    let b: [[U256; 2]; 2] = [[bx1, bx0], [by1, by0]];
+
+    let (proof_c_x, proof_c_y) = proof.c.xy().unwrap_or_default();
+    let c: [U256; 2] = [fe_to_u256(&proof_c_x), fe_to_u256(&proof_c_y)];
+
+    let public_inputs: Vec<U256> = inputs.iter().map(|x| {
+        let bytes = x.into_bigint().to_bytes_be();
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&bytes);
+        U256::from_be_bytes(arr)
+    }).collect();
 
     // Step 6: Call verify function and measure gas
     println!("Step 6: Calling verify() on EVM...");

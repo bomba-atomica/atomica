@@ -63,10 +63,10 @@ fn compile_contracts() -> Result<()> {
     }
 
     // Find the verifier contract by searching through artifacts
-    let contract_path = root.join("src/SimpleGroth16Verifier.sol");
+    let contract_path = root.join("src/GeneratedVerifier.sol");
     let contract = output
-        .find(&contract_path, "SimpleGroth16Verifier")
-        .ok_or_else(|| anyhow::anyhow!("SimpleGroth16Verifier contract not found in compilation output"))?;
+        .find(&contract_path, "GeneratedVerifier")
+        .ok_or_else(|| anyhow::anyhow!("GeneratedVerifier contract not found in compilation output"))?;
 
     // Extract bytecode
     let bytecode = contract
@@ -87,7 +87,7 @@ fn compile_contracts() -> Result<()> {
 
     std::fs::write(out_dir.join("verifier_bytecode.hex"), bytecode_hex)?;
 
-    println!("cargo:warning=Successfully compiled SimpleGroth16Verifier contract");
+    println!("cargo:warning=Successfully compiled GeneratedVerifier contract");
 
     Ok(())
 }
