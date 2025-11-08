@@ -25,8 +25,8 @@ sol! {
     }
 }
 
-#[test]
-fn test_evm_proof_verification_gas_cost() {
+#[tokio::test]
+async fn test_evm_proof_verification_gas_cost() {
     println!("\n=== EVM Proof Verification Gas Test ===\n");
 
     // Step 1: Build circom circuit and generate proof

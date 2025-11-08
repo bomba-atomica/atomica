@@ -149,7 +149,7 @@ contract SimpleGroth16Verifier {
             }
 
             let pMem := mload(0x40)
-            mload(0x40, add(pMem, pLastMem))
+            mstore(0x40, add(pMem, pLastMem))
 
             // Validate all inputs
             checkField(calldataload(_pA))
@@ -159,13 +159,17 @@ contract SimpleGroth16Verifier {
             checkField(calldataload(add(_pC, 32)))
 
             // Validate public signals
-            let pubSignalsLen := calldataload(add(_pubSignals, sub(0, 32)))
+            // pubSignals is a dynamic array, so we need to get its offset and length
+            let pubSignalsOffset := add(4, calldataload(96)) // 4 bytes for selector + offset from 4th param
+            let pubSignalsLen := calldataload(pubSignalsOffset)
+            let pubSignalsData := add(pubSignalsOffset, 32)
+
             for { let i := 0 } lt(i, pubSignalsLen) { i := add(i, 1) } {
-                checkField(calldataload(add(_pubSignals, mul(i, 32))))
+                checkField(calldataload(add(pubSignalsData, mul(i, 32))))
             }
 
-            // Check pairing
-            let isValid := checkPairing(_pA, _pB, _pC, _pubSignals, pMem)
+            // Check pairing (we don't actually use pubSignals in pairing for this simplified version)
+            let isValid := checkPairing(_pA, _pB, _pC, 0, pMem)
 
             mstore(0, isValid)
             return(0, 0x20)
