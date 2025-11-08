@@ -13,14 +13,14 @@ use revm::{
     Evm,
 };
 
-// Define the Solidity verifier interface
+// Define the Solidity verifier interface (based on Semaphore's audited contract)
 sol! {
-    interface Groth16Verifier {
-        function verifySimple(
-            uint256[2] memory a,
-            uint256[2][2] memory b,
-            uint256[2] memory c,
-            uint256[] memory input
+    interface SimpleGroth16Verifier {
+        function verifyProof(
+            uint256[2] calldata a,
+            uint256[2][2] calldata b,
+            uint256[2] calldata c,
+            uint256[] calldata pubSignals
         ) external view returns (bool);
     }
 }
@@ -114,11 +114,11 @@ fn test_evm_proof_verification_gas_cost() {
     // Step 6: Call verify function and measure gas
     println!("Step 6: Calling verify() on EVM...");
 
-    let call = Groth16Verifier::verifySimpleCall {
+    let call = SimpleGroth16Verifier::verifyProofCall {
         a,
         b,
         c,
-        input: public_inputs,
+        pubSignals: public_inputs,
     };
     let calldata = call.abi_encode();
 

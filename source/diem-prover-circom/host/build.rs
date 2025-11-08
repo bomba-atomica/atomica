@@ -54,7 +54,7 @@ fn compile_contracts() -> Result<()> {
     // Create and compile project
     let project = Project::builder()
         .paths(paths)
-        .build()?;
+        .build(Default::default())?;
 
     let output = project.compile()?;
 
@@ -62,23 +62,32 @@ fn compile_contracts() -> Result<()> {
         anyhow::bail!("Solidity compilation failed:\n{}", output);
     }
 
-    // Find the verifier contract
+    // Find the verifier contract by searching through artifacts
+    let contract_path = root.join("src/SimpleGroth16Verifier.sol");
     let contract = output
-        .find("Groth16Verifier")
-        .ok_or_else(|| anyhow::anyhow!("Groth16Verifier contract not found in compilation output"))?;
+        .find(&contract_path, "SimpleGroth16Verifier")
+        .ok_or_else(|| anyhow::anyhow!("SimpleGroth16Verifier contract not found in compilation output"))?;
 
     // Extract bytecode
     let bytecode = contract
         .bytecode
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("No bytecode found for Groth16Verifier"))?;
+        .ok_or_else(|| anyhow::anyhow!("No bytecode found for SimpleGroth16Verifier"))?;
 
     // Write bytecode to a file that tests can read
     let out_dir = PathBuf::from(std::env::var("OUT_DIR")?);
-    let bytecode_hex = bytecode.object.to_string();
+
+    // Convert bytecode object to hex string
+    let bytecode_hex = match &bytecode.object {
+        foundry_compilers::artifacts::BytecodeObject::Bytecode(bytes) => {
+            format!("0x{}", hex::encode(bytes.as_ref()))
+        }
+        foundry_compilers::artifacts::BytecodeObject::Unlinked(s) => s.clone(),
+    };
+
     std::fs::write(out_dir.join("verifier_bytecode.hex"), bytecode_hex)?;
 
-    println!("cargo:warning=Successfully compiled Groth16Verifier contract");
+    println!("cargo:warning=Successfully compiled SimpleGroth16Verifier contract");
 
     Ok(())
 }
