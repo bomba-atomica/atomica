@@ -1,3 +1,32 @@
+# DEPRECATED: Liquidity Provision: Peer-to-Peer Margin Lending for Market Makers
+
+## ⚠️ DEPRECATION NOTICE
+
+**Status:** DEPRECATED as of 2025-01-09
+
+**Reason:** This document proposed a "flash loan-style P2P lending" model that is **fundamentally flawed** and **not economically viable**.
+
+**Key Problems Identified:**
+1. **Not Atomic:** Claims "atomic repayment" but borrowers receive ETH and must repay USDC, requiring external market sales that break atomicity
+2. **Has Default Risk:** Claims "zero default risk" but 24-48 hour settlement gap introduces the same default risk as traditional lending
+3. **No Unique Value:** Provides no auction-specific guarantees beyond standard DeFi lending (Aave, Compound)
+4. **Out-of-Band Lending:** Loan repayment happens completely outside the auction mechanism - this is just Aave with extra steps
+5. **No Profit Mechanism:** Uniform price auctions eliminate arbitrage opportunities during auction lifecycle, so borrowers cannot generate profit to pay lenders atomically
+
+**See Full Analysis:**
+- `/docs/analysis/margin-lending-feasibility-analysis.md` - Detailed economic analysis
+- `/docs/analysis/margin-lending-critique.md` - Why this is not auction-native lending
+
+**Recommendation:** Use existing DeFi lending protocols (Aave, Morpho) if market makers need leverage. Do not build a separate lending protocol unless it provides truly auction-native guarantees that are impossible with existing solutions.
+
+---
+
+## Original Document (Preserved for Reference)
+
+**WARNING:** The following content contains incorrect claims and flawed economic reasoning. It is preserved for historical reference only.
+
+---
+
 # Liquidity Provision: Peer-to-Peer Margin Lending for Market Makers
 
 ## Overview
@@ -10,6 +39,8 @@ Atomic Auctions enable capital-efficient trading through **flash loan-style P2P 
 Liquidity Providers (LPs) lend capital directly to borrowers within a single atomic transaction, with no protocol intermediation or fee extraction. This creates a pure P2P capital market where LPs advertise rates and accepted repayment assets, borrowers select the best offer per auction, and all lending happens atomically with zero default risk.
 
 **Key insight:** Since borrowing and repayment occur in the same atomic transaction (just like flash loans), there are no defaults, no settlement risk, and no need for long-term relationships. Each auction is a standalone transaction where the borrower selects an LP based on rate, available capital, and accepted repayment assets.
+
+**⚠️ FLAW:** This claim is false. Borrowers receive Asset A (ETH) but must repay Asset B (USDC). They cannot repay atomically without selling ETH on external markets, which happens AFTER the auction settlement transaction. This breaks atomicity and introduces default risk.
 
 ## Comparison: Atomic vs Existing DeFi Lending
 
