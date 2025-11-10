@@ -1,0 +1,25 @@
+[package]
+name = "diem-prover-stwo"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+stwo = { workspace = true }
+stwo-constraint-framework = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+hex = { workspace = true }
+itertools = { workspace = true }
+num-traits = { workspace = true }
+
+[lib]
+path = "src/lib.rs"
+
+[dev-dependencies]
+divan = "0.1"
+
+[[bench]]
+name = "eq_proving"
+harness = false
