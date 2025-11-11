@@ -1,8 +1,30 @@
-//! STARK-in-SNARK verifier using Groth16
+//! STARK-in-SNARK verifier (currently using Groth16)
 //!
 //! This module provides a two-layer verification system where a STARK proof
-//! is verified inside a Groth16 SNARK circuit. This enables EVM-compatible
-//! verification on the BN254 curve.
+//! is verified inside a SNARK circuit, enabling EVM-compatible verification
+//! on the BN254 curve.
+//!
+//! ## Current Implementation: Groth16
+//!
+//! We currently use **Groth16** for the outer SNARK layer because:
+//! - ✅ Production-ready and battle-tested (zkSync, Tornado Cash, etc.)
+//! - ✅ Compatible with Arkworks 0.4 ecosystem
+//! - ✅ Smallest proof size (~128 bytes in our implementation)
+//! - ✅ Fastest on-chain verification
+//! - ✅ Well-documented and widely deployed
+//!
+//! ## Future: PLONK Migration Path
+//!
+//! **PLONK would be preferred** because:
+//! - Universal trusted setup (not circuit-specific like Groth16)
+//! - More flexible custom gates
+//! - Better for recursive composition
+//!
+//! **Migration when ready:**
+//! 1. Wait for arkworks-compatible PLONK (currently ZK-Garage/plonk uses ark 0.3)
+//! 2. Add feature flag: `default = ["groth16"]`, optional = `["plonk"]`
+//! 3. Implement `PlonkWrapper` struct with same `ProofWrapper` trait
+//! 4. Swap implementation without changing public API
 //!
 //! ## Architecture
 //!
@@ -16,16 +38,21 @@
 //!                          │
 //!                          ▼
 //! ┌─────────────────────────────────────────────────────────┐
-//! │  Outer Layer: SNARK Proof (Groth16)                     │
+//! │  Outer Layer: SNARK Proof (Groth16 currently)           │
 //! │  - Verifies inner STARK proof in R1CS circuit           │
 //! │  - Uses BN254 curve (EVM-compatible)                    │
-//! │  - Compact proof (~200 bytes)                           │
+//! │  - Compact proof (~128 bytes)                           │
 //! │  - Fast on-chain verification                           │
 //! └─────────────────────────────────────────────────────────┘
 //! ```
 //!
-//! Note: This is a simplified demonstration. A production implementation would
+//! ## Implementation Note
+//!
+//! This is a simplified demonstration. A production implementation would
 //! require implementing the full STARK verifier as R1CS constraints.
+//!
+//! The trait-based design (`ProofWrapper`, `Verifier`) makes it easy to
+//! swap SNARK systems without changing the public API.
 
 use std::time::Instant;
 
@@ -158,13 +185,45 @@ pub struct SnarkWrapper {
 impl SnarkWrapper {
     /// Create a new SNARK wrapper with a trusted setup
     ///
+    /// ## Current Implementation: Fresh Key Generation
+    ///
+    /// This generates fresh keys for demonstration purposes.
+    ///
+    /// ## Production Considerations:
+    ///
+    /// **For Groth16 (current):**
+    /// - Requires circuit-specific trusted setup ceremony
+    /// - Can use Powers of Tau as foundation, but still needs circuit-specific phase
+    /// - Each circuit needs unique proving/verifying keys
+    /// - Verifying key should be distributed separately
+    ///
+    /// **For PLONK (future):**
+    /// - Can use Powers of Tau directly (universal setup)
+    /// - No circuit-specific setup needed
+    /// - One ceremony works for all circuits up to a certain size
+    /// - Much better trust assumptions
+    ///
+    /// ## Powers of Tau Usage:
+    ///
+    /// ```rust,ignore
+    /// // For Groth16, you would:
+    /// // 1. Load Powers of Tau SRS
+    /// // 2. Run circuit-specific setup on top
+    /// // 3. Distribute verifying key
+    ///
+    /// // For PLONK, you would:
+    /// // 1. Load Powers of Tau directly
+    /// // 2. Use it for any circuit (no additional setup)
+    /// ```
+    ///
     /// WARNING: This uses a test random number generator.
-    /// Production systems must use a secure setup ceremony.
+    /// Production systems must use a secure MPC ceremony.
     pub fn new<R: RngCore + CryptoRng>(rng: &mut R) -> Result<Self> {
         // Create an empty circuit for setup
         let circuit = StarkVerifierCircuit::empty();
 
-        // Run Groth16 setup
+        // Run Groth16 circuit-specific setup
+        // Note: In production, this would use Powers of Tau as the SRS foundation
         let (proving_key, verifying_key) =
             Groth16::<Bn254>::setup(circuit, rng)
                 .map_err(|e| anyhow::anyhow!("Setup failed: {:?}", e))?;
@@ -175,12 +234,104 @@ impl SnarkWrapper {
         })
     }
 
-    /// Create a wrapper from existing keys (deserialized)
+    /// Create a wrapper from existing keys
+    ///
+    /// This is useful for production deployments where:
+    /// 1. A trusted setup ceremony has been run (using Powers of Tau)
+    /// 2. Keys have been generated and distributed
+    /// 3. Verifying key has been published/audited
+    ///
+    /// # Example Production Workflow
+    ///
+    /// ```rust,ignore
+    /// // Load keys from ceremony results
+    /// let proving_key = ProvingKey::deserialize_compressed(&pk_bytes)?;
+    /// let verifying_key = VerifyingKey::deserialize_compressed(&vk_bytes)?;
+    ///
+    /// // Create wrapper with pre-existing keys
+    /// let wrapper = SnarkWrapper::from_keys(proving_key, verifying_key);
+    ///
+    /// // Now use for proving (no setup needed!)
+    /// let proof = wrapper.wrap(&stark_proof)?;
+    /// ```
+    ///
+    /// # For Verifiers
+    ///
+    /// Verifiers only need the verifying key (much smaller):
+    ///
+    /// ```rust,ignore
+    /// // Verifier downloads only the verifying key
+    /// let verifying_key = VerifyingKey::deserialize_compressed(&vk_bytes)?;
+    /// let verifier = SnarkVerifier::new(verifying_key);
+    ///
+    /// // Verify proofs without any proving key
+    /// verifier.verify(&wrapped_proof)?;
+    /// ```
     pub fn from_keys(proving_key: ProvingKey<Bn254>, verifying_key: VerifyingKey<Bn254>) -> Self {
         Self {
             proving_key,
             verifying_key,
         }
+    }
+
+    /// Load keys from serialized bytes (for distribution)
+    ///
+    /// This allows loading keys that were generated in a trusted setup ceremony
+    /// and distributed to provers.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use ark_serialize::CanonicalDeserialize;
+    ///
+    /// // Load keys from files distributed after ceremony
+    /// let pk_bytes = std::fs::read("stark_verifier_proving.key")?;
+    /// let vk_bytes = std::fs::read("stark_verifier_verifying.key")?;
+    ///
+    /// let wrapper = SnarkWrapper::from_serialized_keys(&pk_bytes, &vk_bytes)?;
+    /// ```
+    pub fn from_serialized_keys(pk_bytes: &[u8], vk_bytes: &[u8]) -> Result<Self> {
+        let proving_key = ProvingKey::<Bn254>::deserialize_compressed(pk_bytes)
+            .map_err(|e| anyhow::anyhow!("Failed to deserialize proving key: {}", e))?;
+
+        let verifying_key = VerifyingKey::<Bn254>::deserialize_compressed(vk_bytes)
+            .map_err(|e| anyhow::anyhow!("Failed to deserialize verifying key: {}", e))?;
+
+        Ok(Self::from_keys(proving_key, verifying_key))
+    }
+
+    /// Serialize keys for distribution
+    ///
+    /// After running a trusted setup, use this to serialize keys for distribution.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use ark_std::rand::thread_rng;
+    ///
+    /// // Run setup ceremony
+    /// let mut rng = thread_rng();
+    /// let wrapper = SnarkWrapper::new(&mut rng)?;
+    ///
+    /// // Serialize keys for distribution
+    /// let (pk_bytes, vk_bytes) = wrapper.serialize_keys()?;
+    ///
+    /// // Distribute to provers and verifiers
+    /// std::fs::write("stark_verifier_proving.key", pk_bytes)?;
+    /// std::fs::write("stark_verifier_verifying.key", vk_bytes)?;
+    /// ```
+    pub fn serialize_keys(&self) -> Result<(Vec<u8>, Vec<u8>)> {
+        let mut pk_bytes = Vec::new();
+        self.proving_key
+            .serialize_compressed(&mut pk_bytes)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize proving key: {}", e))?;
+
+        let mut vk_bytes = Vec::new();
+        self.verifying_key
+            .serialize_compressed(&mut vk_bytes)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize verifying key: {}", e))?;
+
+        Ok((pk_bytes, vk_bytes))
     }
 
     /// Get the verifying key
@@ -393,5 +544,72 @@ mod tests {
         };
         let hash3 = SnarkWrapper::hash_stark_proof(&proof2);
         assert_ne!(hash1, hash3);
+    }
+
+    #[test]
+    fn test_key_serialization_deserialization() -> Result<()> {
+        let mut rng = thread_rng();
+
+        // Generate keys via setup
+        let wrapper = SnarkWrapper::new(&mut rng)?;
+
+        // Serialize keys
+        let (pk_bytes, vk_bytes) = wrapper.serialize_keys()?;
+
+        // Verify sizes are reasonable
+        assert!(pk_bytes.len() > 100, "Proving key should be substantial");
+        assert!(vk_bytes.len() > 10, "Verifying key should exist");
+        assert!(pk_bytes.len() > vk_bytes.len(), "Proving key should be larger");
+
+        // Deserialize keys
+        let wrapper2 = SnarkWrapper::from_serialized_keys(&pk_bytes, &vk_bytes)?;
+
+        // Generate and verify a proof using deserialized keys
+        let equality_proof = prove_equality(77, 77)?;
+        let stark_proof = NativeStarkProof {
+            proof_bytes: equality_proof.proof_bytes,
+            a: equality_proof.a,
+            b: equality_proof.b,
+            num_rows: 32,
+        };
+
+        let wrapped_proof = wrapper2.wrap(&stark_proof)?;
+
+        let verifier = SnarkVerifier::new(wrapper2.verifying_key().clone());
+        verifier.verify(&wrapped_proof)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_verifier_only_needs_vk() -> Result<()> {
+        let mut rng = thread_rng();
+
+        // Setup by prover
+        let wrapper = SnarkWrapper::new(&mut rng)?;
+
+        // Generate proof
+        let equality_proof = prove_equality(99, 99)?;
+        let stark_proof = NativeStarkProof {
+            proof_bytes: equality_proof.proof_bytes,
+            a: equality_proof.a,
+            b: equality_proof.b,
+            num_rows: 32,
+        };
+        let wrapped_proof = wrapper.wrap(&stark_proof)?;
+
+        // Serialize only the verifying key (for distribution)
+        let (_, vk_bytes) = wrapper.serialize_keys()?;
+
+        // Verifier receives only VK (not PK)
+        use ark_serialize::CanonicalDeserialize;
+        let vk = VerifyingKey::<Bn254>::deserialize_compressed(&vk_bytes[..])
+            .map_err(|e| anyhow::anyhow!("VK deserialization failed: {}", e))?;
+
+        // Verifier can verify without proving key
+        let verifier = SnarkVerifier::new(vk);
+        verifier.verify(&wrapped_proof)?;
+
+        Ok(())
     }
 }

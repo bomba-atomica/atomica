@@ -21,7 +21,7 @@ p3-keccak = { git = "https://github.com/Plonky3/Plonky3.git" }
 p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git" }
 p3-circle = { git = "https://github.com/Plonky3/Plonky3.git" }
 
-# Arkworks dependencies for PLONK SNARK wrapper
+# Arkworks dependencies for SNARK wrapper
 ark-ff = "0.4"
 ark-ec = "0.4"
 ark-std = "0.4"

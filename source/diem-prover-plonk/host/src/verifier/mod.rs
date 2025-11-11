@@ -71,12 +71,12 @@
 //! ```
 
 pub mod native_stark;
-pub mod plonk_wrapper;
+pub mod snark_wrapper;
 pub mod types;
 
 // Re-export main types
 pub use native_stark::{NativeStarkProof, NativeStarkVerifier};
-pub use plonk_wrapper::{SnarkVerifier, SnarkWrapper, WrappedProof};
+pub use snark_wrapper::{SnarkVerifier, SnarkWrapper, WrappedProof};
 pub use types::{
     ProofWrapper, VerificationMethod, VerificationResult, Verifier,
 };
