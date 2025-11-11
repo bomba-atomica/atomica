@@ -1,4 +1,4 @@
-use diem_prover_stwo::{prove_equality, verify_equality};
+use diem_prover_plonk::{prove_equality, verify_equality};
 
 fn main() {
     // Run registered benchmarks
@@ -75,7 +75,7 @@ fn proof_deserialization() {
     let serialized = serde_json::to_string(&proof).unwrap();
 
     // Benchmark deserialization
-    let deserialized: diem_prover_stwo::EqualityProof =
+    let deserialized: diem_prover_plonk::EqualityProof =
         serde_json::from_str(&serialized).unwrap();
     divan::black_box(deserialized);
 }
@@ -105,7 +105,7 @@ fn full_round_trip() {
     let serialized = serde_json::to_string(&proof).unwrap();
 
     // Deserialize
-    let deserialized: diem_prover_stwo::EqualityProof =
+    let deserialized: diem_prover_plonk::EqualityProof =
         serde_json::from_str(&serialized).unwrap();
 
     // Verify

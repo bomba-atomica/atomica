@@ -31,6 +31,8 @@ pub type F = Mersenne31;
 #[derive(Clone)]
 pub struct EqualityAir {
     pub num_rows: usize,
+    pub expected_a: F,
+    pub expected_b: F,
 }
 
 impl<F: Field> BaseAir<F> for EqualityAir {
@@ -42,6 +44,7 @@ impl<F: Field> BaseAir<F> for EqualityAir {
 impl<AB: AirBuilder> Air<AB> for EqualityAir
 where
     AB::F: Field,
+    AB::Expr: From<F>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -49,6 +52,17 @@ where
 
         // Add constraint: a - b == 0 (meaning a == b)
         builder.assert_zero(local[0].clone() - local[1].clone());
+
+        // Boundary constraints: first row must match expected values
+        // This binds the proof to specific values of a and b
+        builder.when_first_row().assert_eq(
+            local[0].clone(),
+            AB::Expr::from(self.expected_a)
+        );
+        builder.when_first_row().assert_eq(
+            local[1].clone(),
+            AB::Expr::from(self.expected_b)
+        );
     }
 }
 
@@ -134,10 +148,14 @@ pub fn prove_equality(a: u32, b: u32) -> Result<EqualityProof> {
     // Generate trace
     let trace = generate_trace(NUM_ROWS, a, b);
 
-    // Create AIR
-    let air = EqualityAir { num_rows: NUM_ROWS };
+    // Create AIR with expected values (binds proof to specific a and b)
+    let air = EqualityAir {
+        num_rows: NUM_ROWS,
+        expected_a: F::new_checked(a).expect("Value must fit in field"),
+        expected_b: F::new_checked(b).expect("Value must fit in field"),
+    };
 
-    // Generate proof
+    // Generate proof (no public values needed - constraints are in the AIR)
     let proof = prove(&config, &air, trace, &vec![]);
 
     // Serialize proof to bytes
@@ -191,14 +209,18 @@ pub fn verify_equality(proof: &EqualityProof) -> Result<bool> {
     let challenger = Challenger::from_hasher(vec![], byte_hash);
     let config = MyConfig::new(pcs, challenger);
 
-    // Create AIR
-    let air = EqualityAir { num_rows: NUM_ROWS };
+    // Create AIR with expected values (must match what was used in proving)
+    let air = EqualityAir {
+        num_rows: NUM_ROWS,
+        expected_a: F::new_checked(proof.a).expect("Value must fit in field"),
+        expected_b: F::new_checked(proof.b).expect("Value must fit in field"),
+    };
 
     // Deserialize proof
     let stark_proof = bincode::deserialize(&proof.proof_bytes)
         .map_err(|e| anyhow::anyhow!("Failed to deserialize proof: {}", e))?;
 
-    // Verify proof
+    // Verify proof (no public values needed - constraints are in the AIR)
     verify(&config, &air, &stark_proof, &vec![])
         .map_err(|e| anyhow::anyhow!("Verification failed: {:?}", e))?;
 
