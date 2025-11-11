@@ -3,7 +3,9 @@
 // This module defines an Algebraic Intermediate Representation (AIR) that proves
 // two values are equal: a == b
 //
-// This uses Plonky3's modular STARK framework with the Mersenne31 field.
+// Based on the canonical Plonky3 Fibonacci example
+
+use std::marker::PhantomData;
 
 use anyhow::Result;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -12,12 +14,13 @@ use p3_circle::CirclePcs;
 use p3_commit::ExtensionMmcs;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::Field;
+use p3_fri::FriParameters;
 use p3_keccak::Keccak256Hash;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_merkle_tree::MerkleTreeMmcs;
 use p3_mersenne_31::Mersenne31;
-use p3_symmetric::{CompressionFunctionFromHasher, SerializingHasher32};
+use p3_symmetric::{CompressionFunctionFromHasher, SerializingHasher};
 use p3_uni_stark::{prove, verify, StarkConfig};
 use serde::{Deserialize, Serialize};
 
@@ -42,14 +45,10 @@ where
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0).expect("Failed to get row slice");
+        let local = main.row_slice(0).unwrap();
 
-        // Get the two columns: a and b
-        let a = local[0].clone();
-        let b = local[1].clone();
-
-        // Add constraint: a - b == 0
-        builder.assert_zero(a - b);
+        // Add constraint: a - b == 0 (meaning a == b)
+        builder.assert_zero(local[0].clone() - local[1].clone());
     }
 }
 
@@ -58,52 +57,29 @@ where
 /// The trace has 2 columns: [a, b]
 /// With num_rows rows, where all rows contain the same values
 fn generate_trace(num_rows: usize, a_val: u32, b_val: u32) -> RowMajorMatrix<F> {
-    let a_field = F::new_checked(a_val).expect("Value must be valid for Mersenne31 field");
-    let b_field = F::new_checked(b_val).expect("Value must be valid for Mersenne31 field");
-
     let mut values = Vec::with_capacity(num_rows * 2);
+    let a = F::new_checked(a_val).expect("Value must fit in Mersenne31 field");
+    let b = F::new_checked(b_val).expect("Value must fit in Mersenne31 field");
 
     for _ in 0..num_rows {
-        values.push(a_field);
-        values.push(b_field);
+        values.push(a);
+        values.push(b);
     }
 
     RowMajorMatrix::new(values, 2)
 }
 
-// Type aliases for STARK configuration
+// Type aliases matching the working Fibonacci example
 type Val = Mersenne31;
 type Challenge = BinomialExtensionField<Val, 3>;
-
-type MyHash = Keccak256Hash;
-type MyCompress = CompressionFunctionFromHasher<u8, MyHash, 2, 32>;
-type MyHasher = SerializingHasher32<MyHash>;
-
-type ValMmcs = MerkleTreeMmcs<
-    <Val as Field>::Packing,
-    <Val as Field>::Packing,
-    MyHash,
-    MyCompress,
-    32,
->;
+type ByteHash = Keccak256Hash;
+type FieldHash = SerializingHasher<ByteHash>;
+type MyCompress = CompressionFunctionFromHasher<ByteHash, 2, 32>;
+type ValMmcs = MerkleTreeMmcs<Val, u8, FieldHash, MyCompress, 32>;
 type ChallengeMmcs = ExtensionMmcs<Val, Challenge, ValMmcs>;
-
-type MyPcs = CirclePcs<Val, ValMmcs, ChallengeMmcs>;
-type MyChallenger = SerializingChallenger32<Val, HashChallenger<u8, MyHash, 32>>;
-
-type MyConfig = StarkConfig<MyPcs, Challenge, MyChallenger>;
-
-/// Create STARK configuration
-fn create_stark_config() -> MyConfig {
-    let hash = MyHash;
-    let compress = MyCompress::new(hash);
-    let val_mmcs = ValMmcs::new(hash, compress);
-    let challenge_mmcs = ChallengeMmcs::new(val_mmcs);
-
-    let pcs = MyPcs::new(challenge_mmcs);
-
-    StarkConfig::new(pcs)
-}
+type Challenger = SerializingChallenger32<Val, HashChallenger<u8, ByteHash, 32>>;
+type Pcs = CirclePcs<Val, ValMmcs, ChallengeMmcs>;
+type MyConfig = StarkConfig<Pcs, Challenge, Challenger>;
 
 /// Proof that two values are equal
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,20 +107,38 @@ pub fn prove_equality(a: u32, b: u32) -> Result<EqualityProof> {
     // Use a small trace for simple equality (must be power of 2)
     const NUM_ROWS: usize = 32;
 
+    // Setup configuration (matching Fibonacci example)
+    let byte_hash = ByteHash {};
+    let field_hash = FieldHash::new(Keccak256Hash {});
+    let compress = MyCompress::new(byte_hash);
+    let val_mmcs = ValMmcs::new(field_hash, compress);
+    let challenge_mmcs = ChallengeMmcs::new(val_mmcs.clone());
+
+    let fri_config = FriParameters {
+        log_blowup: 1,
+        num_queries: 100,
+        proof_of_work_bits: 16,
+        log_final_poly_len: 1,
+        mmcs: challenge_mmcs,
+    };
+
+    let pcs = Pcs {
+        mmcs: val_mmcs,
+        fri_params: fri_config,
+        _phantom: PhantomData,
+    };
+
+    let challenger = Challenger::from_hasher(vec![], byte_hash);
+    let config = MyConfig::new(pcs, challenger);
+
     // Generate trace
     let trace = generate_trace(NUM_ROWS, a, b);
 
     // Create AIR
     let air = EqualityAir { num_rows: NUM_ROWS };
 
-    // Setup STARK configuration
-    let config = create_stark_config();
-
-    // Create challenger
-    let mut challenger = MyChallenger::from_hasher(vec![], MyHash);
-
     // Generate proof
-    let proof = prove::<MyConfig, _>(&config, &air, &mut challenger, trace, &vec![]);
+    let proof = prove(&config, &air, trace, &vec![]);
 
     // Serialize proof to bytes
     let proof_bytes = bincode::serialize(&proof)
@@ -173,21 +167,39 @@ pub fn verify_equality(proof: &EqualityProof) -> Result<bool> {
         anyhow::bail!("Proof values are not equal: {} != {}", proof.a, proof.b);
     }
 
+    // Setup configuration (matching prove)
+    let byte_hash = ByteHash {};
+    let field_hash = FieldHash::new(Keccak256Hash {});
+    let compress = MyCompress::new(byte_hash);
+    let val_mmcs = ValMmcs::new(field_hash, compress);
+    let challenge_mmcs = ChallengeMmcs::new(val_mmcs.clone());
+
+    let fri_config = FriParameters {
+        log_blowup: 1,
+        num_queries: 100,
+        proof_of_work_bits: 16,
+        log_final_poly_len: 1,
+        mmcs: challenge_mmcs,
+    };
+
+    let pcs = Pcs {
+        mmcs: val_mmcs,
+        fri_params: fri_config,
+        _phantom: PhantomData,
+    };
+
+    let challenger = Challenger::from_hasher(vec![], byte_hash);
+    let config = MyConfig::new(pcs, challenger);
+
     // Create AIR
     let air = EqualityAir { num_rows: NUM_ROWS };
-
-    // Setup STARK configuration
-    let config = create_stark_config();
-
-    // Create challenger
-    let mut challenger = MyChallenger::from_hasher(vec![], MyHash);
 
     // Deserialize proof
     let stark_proof = bincode::deserialize(&proof.proof_bytes)
         .map_err(|e| anyhow::anyhow!("Failed to deserialize proof: {}", e))?;
 
     // Verify proof
-    verify(&config, &air, &mut challenger, &stark_proof, &vec![])
+    verify(&config, &air, &stark_proof, &vec![])
         .map_err(|e| anyhow::anyhow!("Verification failed: {:?}", e))?;
 
     Ok(true)

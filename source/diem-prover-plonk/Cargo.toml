@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace.dependencies]
-# Plonky3 prover dependencies
+# Plonky3 prover dependencies - matching canonical Fibonacci example
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git" }
 p3-matrix = { git = "https://github.com/Plonky3/Plonky3.git" }
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git" }
