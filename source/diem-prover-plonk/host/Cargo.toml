@@ -5,6 +5,7 @@ edition.workspace = true
 publish = false
 
 [dependencies]
+# Plonky3 STARK dependencies
 p3-air = { workspace = true }
 p3-matrix = { workspace = true }
 p3-field = { workspace = true }
@@ -17,6 +18,20 @@ p3-symmetric = { workspace = true }
 p3-keccak = { workspace = true }
 p3-merkle-tree = { workspace = true }
 p3-circle = { workspace = true }
+
+# Arkworks SNARK dependencies
+ark-ff = { workspace = true }
+ark-ec = { workspace = true }
+ark-std = { workspace = true }
+ark-serialize = { workspace = true }
+ark-bn254 = { workspace = true }
+ark-groth16 = { workspace = true }
+ark-snark = { workspace = true }
+ark-relations = { workspace = true }
+ark-r1cs-std = { workspace = true }
+ark-crypto-primitives = { workspace = true }
+
+# Common dependencies
 serde = { workspace = true }
 serde_json = { workspace = true }
 bincode = { workspace = true }
@@ -24,6 +39,8 @@ anyhow = { workspace = true }
 hex = { workspace = true }
 itertools = { workspace = true }
 num-traits = { workspace = true }
+rand = { workspace = true }
+sha2 = { workspace = true }
 
 [lib]
 path = "src/lib.rs"
