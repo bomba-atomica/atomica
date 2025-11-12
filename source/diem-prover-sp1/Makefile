@@ -76,8 +76,10 @@ build: build-guest build-host build-contracts
 	@echo "✅ Build complete"
 
 build-guest:
-	@echo "🔨 Building guest program (RISC-V)..."
+	@echo "🔨 Building guest programs (RISC-V)..."
 	@cargo build --release --manifest-path guest/Cargo.toml --target riscv32im-unknown-none-elf
+	@cargo build --release --manifest-path guest-noop/Cargo.toml --target riscv32im-unknown-none-elf
+	@echo "📦 Guest ELFs built in target/riscv32im-unknown-none-elf/release/"
 
 build-host:
 	@echo "🔨 Building host prover..."
