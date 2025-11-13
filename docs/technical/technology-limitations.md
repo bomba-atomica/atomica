@@ -1,5 +1,15 @@
 # Technology Limitations for Private Auction Mechanisms
 
+**⚠️ Important Update (2025-11-13)**
+
+**ZK proofs for bid validity have been REMOVED from the design.**
+
+This document describes why fully private auctions aren't feasible, which remains true. However, references to "ZK proofs for bid validity" are now **deprecated**. We use economic deposits instead.
+
+**See:** [Bid Validity Simplification Decision](../decisions/bid-validity-simplification.md)
+
+---
+
 This document outlines the current state-of-the-art limitations in cryptographic technologies that prevent fully private auction mechanisms, informing why Atomica uses timelock encryption with sealed bids rather than attempting true privacy preservation.
 
 ## The Privacy Challenge
@@ -85,16 +95,15 @@ Given these constraints, Atomica employs a **hybrid strategy**:
    - Prevents timing games and shill bidding during auction window
    - See [Timelock Encryption for Sealed Bids](../../timelock-bids.md)
 
-3. **Zero-Knowledge for Validity:** Use ZK proofs to ensure bid solvency and validity without revealing amounts:
-   - Proves bidder has sufficient balance
-   - Proves encrypted bid is well-formed
-   - Does not require trusted prover for these simple constraints
-   - See [Timelock Bids - ZK Proof Requirements](../../timelock-bids.md#zero-knowledge-proof-requirements)
+3. **~~Zero-Knowledge for Validity~~** **[DEPRECATED - See update notice above]:** ~~Use ZK proofs to ensure bid solvency and validity without revealing amounts~~
+   - **New approach:** Economic deposits prevent spam/griefing
+   - **Post-decryption validation:** Check balance and filter invalid bids
+   - See [Bid Validity Simplification Decision](../decisions/bid-validity-simplification.md)
 
 4. **Minimal-Interaction Cryptography:** Use cryptographic tools that prevent participants from strategically slowing or scuttling deals:
    - No interactive reveal phase (timelock decrypts automatically)
    - No dependence on bidder cooperation after submission
-   - Griefing prevention through upfront ZK validity proofs
+   - Griefing prevention through economic deposits (not ZK proofs)
 
 ## Future Research Directions
 
@@ -112,7 +121,7 @@ However, these remain aspirational. The current design with timelock encryption 
 The technology limitations documented here explain why Atomica doesn't attempt fully private auctions. Instead, we:
 - Use timelock encryption for **temporary bid privacy** (sufficient for auction duration)
 - Rely on **game-theoretic auction design** (uniform price, sealed bids) to function despite eventual public knowledge
-- Employ **ZK proofs for validity** (solvency, well-formedness) not full privacy
+- ~~Employ **ZK proofs for validity** (solvency, well-formedness) not full privacy~~ **[DEPRECATED]** Use **economic deposits** to prevent spam/griefing
 - Prioritize **practical deployability** over theoretical privacy ideals
 
 This pragmatic approach delivers trustless cross-chain atomic swaps today, rather than waiting for privacy-preserving cryptography breakthroughs that may be 5-10+ years away.

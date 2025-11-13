@@ -567,18 +567,18 @@ The key realization is that cross-chain atomic swaps inherently require coordina
 - **Winner's curse mitigation** - Bidders cannot game the uniform clearing price by observing competitor bids
 
 **Implementation via Timelock Encryption:**
-- Bids encrypted using drand-based timelock encryption (detailed in `timelock-bids.md`)
+- Bids encrypted using drand-based timelock encryption (IBE - detailed in `timelock-bids.md`)
 - All bids remain cryptographically sealed until auction close time
 - Automatic decryption via drand randomness beacon (no reveal phase to grief)
-- Zero-knowledge proofs ensure bid validity (solvency, balance) without revealing amounts
+- Economic deposits prevent spam bids (slashed if malformed, returned if valid)
 - One-shot settlement after automatic decryption
 
 **Why Feasibility is Proven:**
 As documented in `timelock-bids.md`, the technical approach combines:
-1. ZK-friendly Poseidon-based encryption for proving bid validity
-2. Drand timelock for trustless automatic decryption
-3. Zero-knowledge proofs of balance and solvency at bid submission
-4. No interactive reveal phase (prevents griefing)
+1. Drand tlock (Identity-Based Encryption) for trustless automatic decryption
+2. Post-decryption validation with economic deposits
+3. No interactive reveal phase (prevents griefing)
+4. **Note:** ZK proofs for bid validity were removed - see [Bid Validity Simplification](../decisions/bid-validity-simplification.md)
 
 This approach is **practical and implementable** with current cryptographic tools, despite the limitations of commit-reveal schemes noted earlier in this document.
 
@@ -652,7 +652,7 @@ This approach is **practical and implementable** with current cryptographic tool
 
 **Sealed Bid Requirements:**
 - Mandatory timelocked encryption (prevents manipulation)
-- ZK proofs for bid validity (prevents griefing)
+- Economic deposits prevent spam/griefing (not ZK proofs)
 - Automatic decryption (no reveal phase)
 - Implementation feasible per `timelock-bids.md` analysis
 

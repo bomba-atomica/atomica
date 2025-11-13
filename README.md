@@ -80,13 +80,11 @@ atomica/
 - Merkle proof inclusion
 - Atomic settlement mechanics
 
-**[Timelock Encryption for Sealed Bids](docs/technical/timelock-bids.md)** ⭐ (2663 lines)
-- Drand-based timelock encryption
-- Zero-knowledge proof requirements
-- ZK-friendly Poseidon encryption
-- Circuit design & implementation
-- Client-side prover architecture
-- On-chain verifier integration
+**[Timelock Encryption for Sealed Bids](docs/technical/timelock-bids.md)** ⭐
+- Drand-based timelock encryption (IBE)
+- Post-decryption validation with economic deposits
+- No ZK proofs required for bid validity
+- **Note:** Document contains deprecated ZK proof sections (marked as such)
 
 **[Technology Limitations](docs/technical/technology-limitations.md)**
 - Why fully private auctions aren't feasible
