@@ -1,28 +1,45 @@
 # Engineering Analysis: Unified Cryptographic Stack for Atomica
 
-**Document Status:** Engineering Analysis
+**Document Status:** Engineering Analysis (PARTIALLY SUPERSEDED - See Update Below)
 **Date:** 2025-01-XX
+**Last Updated:** 2025-11-13
 **Purpose:** Analyze cryptographic components for Atomica to minimize external dependencies while using similar technologies across all ZK proof requirements
+
+---
+
+## ⚠️ Important Update (2025-11-13)
+
+**Bid validity ZK proofs have been REMOVED from the design.**
+
+This document originally proposed ZK proofs for both cross-chain verification AND bid validity. After further analysis, we determined that:
+- Bid validity ZK proofs add massive complexity for minimal benefit
+- Post-decryption validation with economic deposits achieves the same goals
+- Development time reduced by 3-6 months
+
+**See:** [Bid Validity Simplification Decision](../decisions/bid-validity-simplification.md) for full rationale.
+
+**Current scope:** This document now applies ONLY to cross-chain state verification. Sections related to bid validity proofs are retained for historical reference but marked as deprecated.
 
 ---
 
 ## Executive Summary
 
-Atomica requires zero-knowledge cryptography for two critical functions:
+Atomica requires zero-knowledge cryptography for ONE critical function:
 1. **Cross-chain state verification** - ZK light clients proving away-chain state transitions
-2. **Sealed bid validity** - ZK proofs ensuring bid solvency and validity without revealing amounts
+2. ~~**Sealed bid validity**~~ - ~~ZK proofs ensuring bid solvency and validity without revealing amounts~~ **[REMOVED - See decision document above]**
 
-This analysis evaluates options to minimize external dependencies by using a unified cryptographic stack wherever possible. We recommend **Succinct SP1 as a unified zkVM infrastructure** for both use cases, combined with **drand timelock encryption** and **Poseidon hash-based encryption** for ZK-friendly sealed bids.
+This analysis evaluates options to minimize external dependencies by using a unified cryptographic stack wherever possible. We recommend **Succinct SP1 for cross-chain verification** combined with **drand timelock encryption (IBE)** for sealed bids.
 
-### Key Recommendation
+### Key Recommendation (Updated 2025-11-13)
 
-**Unified Stack: Succinct SP1 + drand + Poseidon**
-- Use SP1 zkVM for both cross-chain verification and bid validity proofs
-- Use drand for timelock randomness beacon
-- Use Poseidon hash for ZK-friendly encryption within circuits
-- Single vendor (Succinct Labs) for all ZK proving infrastructure
+**Simplified Stack: SP1 + drand IBE**
+- Use SP1 zkVM for cross-chain verification ONLY
+- Use drand tlock (Identity-Based Encryption) for timelock sealed bids
+- ~~Use Poseidon hash for ZK-friendly encryption within circuits~~ **[NOT NEEDED - No bid validity proving]**
+- ~~Single vendor (Succinct Labs) for all ZK proving infrastructure~~ **[SP1 only for cross-chain]**
 - Proven at production scale with multiple deployments
 - Best performance and lowest gas costs in the industry
+- 70% reduction in cryptographic complexity vs original design
 
 ---
 
@@ -50,9 +67,12 @@ This analysis evaluates options to minimize external dependencies by using a uni
 - Proofs of settlement events from Solana to Ethereum (batched)
 - Target cost: ~$0.07 per auction at 50 gwei (batched across 100+ auctions)
 
-### 1.2 Sealed Bid Validity Proofs
+### 1.2 Sealed Bid Validity Proofs **[DEPRECATED - REMOVED FROM DESIGN]**
 
-**Purpose:** Ensure bid validity and solvency without revealing bid amounts during auction window
+**⚠️ This section is retained for historical reference only. Bid validity ZK proofs have been removed.**
+**See:** [Bid Validity Simplification Decision](../decisions/bid-validity-simplification.md)
+
+**Original Purpose:** Ensure bid validity and solvency without revealing bid amounts during auction window
 
 **Requirements:**
 - Prove bidder has sufficient balance (via Merkle proof)

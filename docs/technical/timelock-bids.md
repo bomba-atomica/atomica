@@ -1,5 +1,20 @@
 # Timelock Encryption for Sealed-Bid Blockchain Auctions
 
+**⚠️ Important Update (2025-11-13)**
+
+**The ZK proof requirements in this document have been REMOVED from the design.**
+
+We have simplified the approach:
+- ✅ **Kept:** drand timelock encryption (IBE) for sealed bids
+- ❌ **Removed:** ZK proofs of bid validity (balance, solvency)
+- ✅ **Added:** Post-decryption validation with economic deposits
+
+**See:** [Bid Validity Simplification Decision](../decisions/bid-validity-simplification.md) for full rationale.
+
+**Document status:** Sections describing ZK proofs are retained for historical reference but marked as deprecated. The core timelock encryption mechanism remains unchanged.
+
+---
+
 ## Overview
 
 This document describes a practical approach to implementing sealed-bid auctions on a blockchain using time-based decryption. The solution ensures bid prices remain secret until the auction ends, while avoiding the griefing vulnerabilities of traditional commit-reveal schemes.
@@ -39,8 +54,12 @@ Traditional commit-reveal schemes fail because users can grief the auction by co
 - Zero trust (distributed trust among multiple parties acceptable)
 - Privacy after auction ends (bid prices become public knowledge)
 
-## Zero-Knowledge Proof Requirements
+## Zero-Knowledge Proof Requirements **[DEPRECATED - REMOVED FROM DESIGN]**
 
+**⚠️ This section has been superseded. ZK proofs for bid validity are NO LONGER required.**
+**See:** [Bid Validity Simplification Decision](../decisions/bid-validity-simplification.md)
+
+**Original approach (deprecated):**
 To prevent invalid bids and ensure capital efficiency, each bid submission must include a **zero-knowledge proof** that guarantees validity without revealing sensitive information.
 
 ### Implementation Architecture

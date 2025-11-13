@@ -76,8 +76,8 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 
 08:00-12:00 UTC - Bid Submission Window
   └─ Market makers on home chain submit encrypted sealed bids for LIBRA
-  └─ Zero-knowledge proofs ensure bid validity (solvency, balance) without revealing amounts
-  └─ Bids remain cryptographically sealed via drand timelock
+  └─ Economic deposits prevent spam bids (returned if valid, slashed if malformed)
+  └─ Bids remain cryptographically sealed via drand timelock (IBE)
 
 12:00 UTC - Auction Close & Automatic Decryption
   └─ Drand randomness beacon releases decryption key

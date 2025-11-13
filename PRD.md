@@ -67,9 +67,10 @@ Home chain maintains cryptographic accumulators (merkle roots) of away chain blo
 
 ### Sealed Bid Implementation
 
-Bids encrypted via drand-based timelock, remain sealed until auction close, then auto-decrypt. ZK proofs ensure bid validity (solvency, balance) at submission without revealing amounts. No interactive reveal phase prevents griefing.
+Bids encrypted via drand-based timelock (IBE), remain sealed until auction close, then auto-decrypt. Invalid bids filtered post-decryption with economic deposits preventing spam. No ZK proofs required. No interactive reveal phase prevents griefing.
 
 **→ See:** [Timelock Encryption for Sealed Bids](docs/technical/timelock-bids.md) for full specification
+**→ See:** [Bid Validity Simplification Decision](docs/decisions/bid-validity-simplification.md) for rationale
 
 ### Uniform Price Auction Mechanism
 

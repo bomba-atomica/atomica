@@ -1,5 +1,17 @@
 # Shill Bidding and Market Manipulation Defense: Atomica Architecture
 
+**⚠️ Important Update (2025-11-13)**
+
+**ZK proofs for bid validity have been REMOVED from the design.**
+
+References to "ZK proofs of bid validity" in this document are now **deprecated**. The defense mechanisms still work, but rely on **economic deposits** instead of ZK proofs to prevent spam bids.
+
+**See:** [Bid Validity Simplification Decision](../decisions/bid-validity-simplification.md) for details.
+
+**Impact on shill bidding defense:** The core defense mechanisms (uniform pricing, timelock encryption, increase-only bids) remain unchanged and equally effective. Spam prevention now uses deposits instead of ZK proofs.
+
+---
+
 ## 1. Introduction & Context
 
 Atomica implements trustless cross-chain atomic swaps via daily batch auctions with futures delivery. Market makers submit sealed bids to acquire locked user assets, with settlement occurring 12-24 hours post-auction. The auction uses a uniform price mechanism where all winning bidders pay the same clearing price.
