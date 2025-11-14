@@ -53,7 +53,7 @@
                 <div class="flex items-center justify-between p-4 bg-white rounded-lg shadow-sm">
                     <div>
                         <p class="text-xs font-medium text-gray-600">Asset Listing Deadline</p>
-                        <p class="text-sm text-gray-500">12:00 PM EST</p>
+                        <p class="text-sm text-gray-500">11:30 AM ET</p>
                     </div>
                     <div class="text-right">
                         <p class="text-2xl font-bold font-mono" :class="getCountdownColor('asset')" x-text="assetDeadlineCountdown"></p>
@@ -63,7 +63,7 @@
                 <div class="flex items-center justify-between p-4 bg-white rounded-lg shadow-sm">
                     <div>
                         <p class="text-xs font-medium text-gray-600">Bid Submission Deadline</p>
-                        <p class="text-sm text-gray-500">12:30 PM EST</p>
+                        <p class="text-sm text-gray-500">12:00 PM ET</p>
                     </div>
                     <div class="text-right">
                         <p class="text-2xl font-bold font-mono" :class="getCountdownColor('bid')" x-text="bidDeadlineCountdown"></p>
@@ -121,28 +121,28 @@
                             <div class="flex items-start gap-3">
                                 <div class="bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm flex-shrink-0">2</div>
                                 <div>
-                                    <p class="font-medium text-gray-900">Before 12:00 PM: Sellers List Assets</p>
+                                    <p class="font-medium text-gray-900">Before 11:30 AM: Sellers List Assets</p>
                                     <p class="text-sm text-gray-600">Sellers lock their assets with optional reserve prices. Listings are encrypted.</p>
                                 </div>
                             </div>
                             <div class="flex items-start gap-3">
                                 <div class="bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm flex-shrink-0">3</div>
                                 <div>
-                                    <p class="font-medium text-gray-900">Before 12:30 PM: Buyers Submit Bids</p>
+                                    <p class="font-medium text-gray-900">Before 12:00 PM: Buyers Submit Bids</p>
                                     <p class="text-sm text-gray-600">Buyers submit encrypted bids with maximum price they're willing to pay per unit.</p>
                                 </div>
                             </div>
                             <div class="flex items-start gap-3">
                                 <div class="bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm flex-shrink-0">4</div>
                                 <div>
-                                    <p class="font-medium text-gray-900">12:30 PM: Simultaneous Reveal</p>
-                                    <p class="text-sm text-gray-600">All encrypted bids and listings decrypt at once. No information cascades during submission.</p>
+                                    <p class="font-medium text-gray-900">12:00 PM: Simultaneous Reveal & Key Release</p>
+                                    <p class="text-sm text-gray-600">All encrypted bids and listings decrypt at once. Simultaneously, next day's encryption key is revealed, enabling immediate bidding for tomorrow's auction.</p>
                                 </div>
                             </div>
                             <div class="flex items-start gap-3">
                                 <div class="bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm flex-shrink-0">5</div>
                                 <div>
-                                    <p class="font-medium text-gray-900">After 12:30 PM: Sequential Clearing</p>
+                                    <p class="font-medium text-gray-900">After 12:00 PM: Sequential Clearing</p>
                                     <p class="text-sm text-gray-600">Assets clear in order from smallest to biggest market (DOGE → ETH).</p>
                                 </div>
                             </div>

@@ -184,12 +184,12 @@ function auctionApp() {
             // Get today's date in EST
             const estNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
 
-            // Set deadlines for today in EST
+            // Set deadlines for today in ET
             const assetDeadline = new Date(estNow);
-            assetDeadline.setHours(12, 0, 0, 0);
+            assetDeadline.setHours(11, 30, 0, 0);
 
             const bidDeadline = new Date(estNow);
-            bidDeadline.setHours(12, 30, 0, 0);
+            bidDeadline.setHours(12, 0, 0, 0);
 
             // If we've passed today's deadlines, show tomorrow's
             if (estNow > bidDeadline) {

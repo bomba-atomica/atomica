@@ -8,11 +8,12 @@ The Atomica Call Auction is a daily mechanism for discovering fair market prices
 
 ### 1. Auction Schedule
 
-- **Frequency**: Daily event with reveal at 12:30 PM EST
+- **Frequency**: Daily event with reveal at 12:00 PM (noon) ET
 - **Encryption Key Generation**: 24 hours before auction day
-- **Asset Listing Deadline**: 12:00 PM EST (noon)
-- **Bid Submission Deadline**: 12:30 PM EST
-- **Revelation & Clearing**: 12:30 PM EST
+- **Asset Listing Deadline**: 11:30 AM ET
+- **Bid Submission Deadline**: 12:00 PM (noon) ET
+- **Revelation & Clearing**: 12:00 PM (noon) ET
+- **Next Day Key Reveal**: 12:00 PM (noon) ET (simultaneous with decryption, enables next day's bidding)
 - **Asset Capacity**: Maximum 10 assets per day
 - **Submission Window**: Anytime before respective deadlines
 
@@ -67,11 +68,13 @@ Bid and reserve price confidentiality is maintained using time-lock encryption:
 
 **Encryption Key Generation**: Time-lock encryption key created 24 hours before auction day
 
-**Asset Listing**: Sellers can list assets anytime, but listings must be submitted by 12:00 PM EST (noon)
+**Asset Listing**: Sellers can list assets anytime, but listings must be submitted by 11:30 AM ET
 
-**Bidding**: Buyers can submit bids anytime, but bids must be submitted by 12:30 PM EST
+**Bidding**: Buyers can submit bids anytime, but bids must be submitted by 12:00 PM (noon) ET
 
-**Revelation**: All bids and listings decrypt simultaneously at 12:30 PM EST (no information cascades during submission)
+**Revelation**: All bids and listings decrypt simultaneously at 12:00 PM (noon) ET (no information cascades during submission)
+
+**Next Day Key Reveal**: At 12:00 PM (noon) ET, simultaneous with current auction decryption, the encryption key for the next day's auction is revealed, enabling immediate bidding for the following day
 
 **Clearing Order**: Auctions clear sequentially in predetermined order: **Smallest market → Biggest market**
 - Order: DOGE → LINK → UNI → DOT → ATOM → AVAX → MATIC → SOL → BTC → ETH
@@ -111,8 +114,7 @@ Result: User receives DOGE + SOL, forfeits BTC + ETH
 ### 7. Asset Trading Limits
 
 - **One auction per asset** per day
-- **6-minute duration** per auction
-- **10 assets maximum** during prime hour (12:00-1:00 PM EST)
+- **10 assets maximum** per auction window
 
 ### 8. Decryption Event
 
@@ -194,7 +196,7 @@ All auctions are isolated and self-contained:
 2. Should user-defined priority rankings be added in v2 for users who demand preference control?
 3. What is the optimal distribution formula for reserve price and deposit forfeit fees among buyers?
 4. When should migration from drand.love to alternative time-lock encryption occur?
-5. How should prime hour capacity (currently 10 assets) scale with demand?
+5. How should auction capacity (currently 10 assets) scale with demand?
 6. Which specific markets to include? Start with top 20 altcoins, or focus on more niche assets?
 
 ---

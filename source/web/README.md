@@ -48,18 +48,19 @@ A static single-page application that simulates the Atomica daily call auction s
 
 ### Auction Timeline
 
-The auction follows a specific daily schedule (all times in EST):
+The auction follows a specific daily schedule (all times in ET):
 
-1. **24 hours before bidding**: Encryption key is created using time-lock encryption (drand)
+1. **24 hours before auction**: Encryption key is created using time-lock encryption (drand)
 2. **Anytime before deadlines**: Users can submit bids or list assets for sale
-3. **12:00 PM (noon)**: Asset listing deadline - no new assets accepted after this time
-4. **12:30 PM**: Bid submission deadline - no new bids accepted after this time
-5. **12:30 PM**: Simultaneous reveal - all encrypted bids and listings decrypt
-6. **After reveal**: Sequential clearing and settlement
+3. **11:30 AM**: Asset listing deadline - no new assets accepted after this time
+4. **12:00 PM (noon)**: Bid submission deadline - no new bids accepted after this time
+5. **12:00 PM (noon)**: Simultaneous reveal - all encrypted bids and listings decrypt
+6. **12:00 PM (noon)**: Next day's encryption key revealed - new bids can be placed for tomorrow's auction
+7. **After reveal**: Sequential clearing and settlement
 
 ### Sequential Clearing Algorithm
 
-After the reveal at 12:30 PM, assets clear in order from smallest to biggest market:
+After the reveal at 12:00 PM (noon), assets clear in order from smallest to biggest market:
 - DOGE → LINK → UNI → DOT → ATOM → AVAX → MATIC → SOL → BTC → ETH
 
 ### Smart Bidding Mechanism
