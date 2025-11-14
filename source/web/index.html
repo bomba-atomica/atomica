@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atomica Call Auction - Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        canvas {
+            display: block;
+            box-sizing: border-box;
+            height: 100% !important;
+            width: 100% !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div x-data="auctionApp()" x-init="init()" class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- Header -->
+        <div class="mb-6">
+            <div class="flex items-center justify-between mb-2">
+                <h1 class="text-4xl font-bold text-gray-900">Atomica Call Auction</h1>
+                <div class="flex items-center gap-6 text-sm">
+                    <div class="text-right">
+                        <p class="text-xs text-gray-500">Bid Budget</p>
+                        <p class="font-bold text-gray-900" x-text="formatCurrency(userBalance)"></p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xs text-gray-500">Bids (<span x-text="Object.values(bids).filter(b => b.units > 0 && b.price > 0).length"></span>)</p>
+                        <p class="font-bold" :class="totalBids > userBalance ? 'text-orange-600' : 'text-green-600'" x-text="formatCurrency(totalBids)"></p>
+                        <p x-show="totalBids > userBalance" class="text-xs text-orange-600">Fee: <span x-text="formatCurrency(smartBiddingFee)"></span></p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xs text-gray-500">Selling (<span x-text="totalSells"></span>)</p>
+                        <p class="font-bold text-purple-600" x-text="totalSells"></p>
+                    </div>
+                </div>
+            </div>
+            <p class="text-gray-600">Daily multi-asset auction simulation with time-lock encryption</p>
+        </div>
+
+        <!-- Countdown Timers -->
+        <div class="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg shadow-sm p-4 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="flex items-center justify-between p-3 bg-white rounded-lg">
+                    <div>
+                        <p class="text-xs font-medium text-gray-600">Asset Listing Deadline</p>
+                        <p class="text-sm text-gray-500">12:00 PM EST</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-2xl font-bold font-mono" :class="getCountdownColor('asset')" x-text="assetDeadlineCountdown"></p>
+                        <p class="text-xs text-gray-500">HH:MM:SS</p>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between p-3 bg-white rounded-lg">
+                    <div>
+                        <p class="text-xs font-medium text-gray-600">Bid Submission Deadline</p>
+                        <p class="text-sm text-gray-500">12:30 PM EST</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-2xl font-bold font-mono" :class="getCountdownColor('bid')" x-text="bidDeadlineCountdown"></p>
+                        <p class="text-xs text-gray-500">HH:MM:SS</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="mb-6">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8">
+                    <button @click="activeTab = 'about'"
+                            :class="activeTab === 'about' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        About
+                    </button>
+                    <button @click="activeTab = 'bidder'"
+                            :class="activeTab === 'bidder' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        Bidder
+                    </button>
+                    <button @click="activeTab = 'seller'"
+                            :class="activeTab === 'seller' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        Seller
+                    </button>
+                    <button @click="activeTab = 'results'"
+                            :class="activeTab === 'results' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        Results
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- About Tab -->
+        <div x-show="activeTab === 'about'" class="space-y-6">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-4">How the Auction Works</h2>
+
+                <div class="space-y-6">
+                    <!-- Timeline -->
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900 mb-3">Auction Timeline</h3>
+                        <div class="space-y-2">
+                            <div class="flex items-start gap-3">
+                                <div class="bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm flex-shrink-0">1</div>
+                                <div>
+                                    <p class="font-medium text-gray-900">24 Hours Before: Encryption Key Generated</p>
+                                    <p class="text-sm text-gray-600">Time-lock encryption key is created using drand, ensuring bids remain secret until reveal time.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <div class="bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm flex-shrink-0">2</div>
+                                <div>
+                                    <p class="font-medium text-gray-900">Before 12:00 PM: Sellers List Assets</p>
+                                    <p class="text-sm text-gray-600">Sellers lock their assets with optional reserve prices. Listings are encrypted.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <div class="bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm flex-shrink-0">3</div>
+                                <div>
+                                    <p class="font-medium text-gray-900">Before 12:30 PM: Buyers Submit Bids</p>
+                                    <p class="text-sm text-gray-600">Buyers submit encrypted bids with maximum price they're willing to pay per unit.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <div class="bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm flex-shrink-0">4</div>
+                                <div>
+                                    <p class="font-medium text-gray-900">12:30 PM: Simultaneous Reveal</p>
+                                    <p class="text-sm text-gray-600">All encrypted bids and listings decrypt at once. No information cascades during submission.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <div class="bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm flex-shrink-0">5</div>
+                                <div>
+                                    <p class="font-medium text-gray-900">After 12:30 PM: Sequential Clearing</p>
+                                    <p class="text-sm text-gray-600">Assets clear in order from smallest to biggest market (DOGE → ETH).</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Price Discovery -->
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900 mb-3">Price Discovery Mechanism</h3>
+                        <div class="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
+                            <p class="text-sm text-gray-700"><strong>Uniform Clearing Price:</strong> All buyers pay the same price for an asset, determined by where supply meets demand.</p>
+                            <p class="text-sm text-gray-700"><strong>Supply Curve:</strong> Built from sell orders sorted lowest to highest price.</p>
+                            <p class="text-sm text-gray-700"><strong>Demand Curve:</strong> Built from buy orders sorted highest to lowest price.</p>
+                            <p class="text-sm text-gray-700"><strong>Clearing:</strong> The price where cumulative demand equals or exceeds cumulative supply.</p>
+                        </div>
+                    </div>
+
+                    <!-- Sequential Clearing -->
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900 mb-3">Sequential Clearing Order</h3>
+                        <p class="text-sm text-gray-600 mb-3">Assets clear in predetermined order to prioritize liquidity for smaller markets:</p>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="bg-gray-100 text-gray-700 px-3 py-1 rounded text-sm font-mono">DOGE</span>
+                            <span class="text-gray-400">→</span>
+                            <span class="bg-gray-100 text-gray-700 px-3 py-1 rounded text-sm font-mono">LINK</span>
+                            <span class="text-gray-400">→</span>
+                            <span class="bg-gray-100 text-gray-700 px-3 py-1 rounded text-sm font-mono">UNI</span>
+                            <span class="text-gray-400">→</span>
+                            <span class="bg-gray-100 text-gray-700 px-3 py-1 rounded text-sm font-mono">DOT</span>
+                            <span class="text-gray-400">→</span>
+                            <span class="bg-gray-100 text-gray-700 px-3 py-1 rounded text-sm font-mono">ATOM</span>
+                            <span class="text-gray-400">→</span>
+                            <span class="bg-gray-100 text-gray-700 px-3 py-1 rounded text-sm font-mono">AVAX</span>
+                            <span class="text-gray-400">→</span>
+                            <span class="bg-gray-100 text-gray-700 px-3 py-1 rounded text-sm font-mono">MATIC</span>
+                            <span class="text-gray-400">→</span>
+                            <span class="bg-gray-100 text-gray-700 px-3 py-1 rounded text-sm font-mono">SOL</span>
+                            <span class="text-gray-400">→</span>
+                            <span class="bg-gray-100 text-gray-700 px-3 py-1 rounded text-sm font-mono">BTC</span>
+                            <span class="text-gray-400">→</span>
+                            <span class="bg-gray-100 text-gray-700 px-3 py-1 rounded text-sm font-mono">ETH</span>
+                        </div>
+                    </div>
+
+                    <!-- Multiple Asset Bids -->
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900 mb-3">Multiple Asset Bids</h3>
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+                            <p class="text-sm text-gray-700"><strong>Capital Efficiency:</strong> Since all bids reveal simultaneously and you don't know which will win, you can bid on multiple assets to make your capital more efficient.</p>
+                            <p class="text-sm text-gray-700"><strong>Budget Tracking:</strong> As auctions clear sequentially, your remaining budget decreases.</p>
+                            <p class="text-sm text-gray-700"><strong>Forfeiture:</strong> If your budget runs out mid-clearing, remaining wins are forfeited.</p>
+                        </div>
+                    </div>
+
+                    <!-- Smart-Bid Fee -->
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900 mb-3">Smart-Bid Fee</h3>
+                        <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 space-y-2">
+                            <p class="text-sm text-gray-700"><strong>Over-Commitment Allowed:</strong> You can place bids totaling more than your balance.</p>
+                            <p class="text-sm text-gray-700"><strong>Fee Structure:</strong> 5% fee on budget shortfall (total bids - balance) charged upfront.</p>
+                            <p class="text-sm text-gray-700"><strong>Example:</strong> Balance = 100K LIBRA, Total Bids = 150K → Shortfall = 50K → Fee = 2.5K (5% of 50K)</p>
+                            <p class="text-sm text-gray-700"><strong>Net Budget:</strong> 100K - 2.5K = 97.5K available for winning bids during sequential clearing.</p>
+                        </div>
+                    </div>
+
+                    <!-- Reserve Prices -->
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900 mb-3">Reserve Prices (Sellers)</h3>
+                        <div class="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-2">
+                            <p class="text-sm text-gray-700"><strong>Optional:</strong> Sellers can set minimum acceptable prices.</p>
+                            <p class="text-sm text-gray-700"><strong>Fee Structure:</strong> Only charged if the asset doesn't sell (clearing price < reserve).</p>
+                            <p class="text-sm text-gray-700"><strong>Calculation:</strong> Fee based on RMS delta between clearing and reserve prices.</p>
+                            <p class="text-sm text-gray-700"><strong>Distribution:</strong> Fees distributed to buyers whose bids cleared successfully.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bidder Tab -->
+        <div x-show="activeTab === 'bidder'" class="space-y-6">
+            <!-- Funding Section -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-4">Fund Your Account</h2>
+
+                <div class="flex items-end gap-4 mb-4">
+                    <div class="flex-1">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Amount (LIBRA)</label>
+                        <input type="number" x-model="fundAmount"
+                               class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2 border"
+                               placeholder="100000" step="1000">
+                    </div>
+                    <button @click="addFunds()"
+                            class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium">
+                        Add Funds
+                    </button>
+                </div>
+
+                <div class="flex gap-2">
+                    <button @click="setFunds(50000)" class="text-sm bg-gray-100 px-4 py-2 rounded hover:bg-gray-200">50K</button>
+                    <button @click="setFunds(100000)" class="text-sm bg-gray-100 px-4 py-2 rounded hover:bg-gray-200">100K</button>
+                    <button @click="setFunds(250000)" class="text-sm bg-gray-100 px-4 py-2 rounded hover:bg-gray-200">250K</button>
+                    <button @click="setFunds(500000)" class="text-sm bg-gray-100 px-4 py-2 rounded hover:bg-gray-200">500K</button>
+                </div>
+            </div>
+
+            <!-- Bidding Section -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-4">Place Your Bids</h2>
+
+                <div class="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+                    <p class="mb-2"><strong>Bid Deadline:</strong> All bids must be submitted by 12:30 PM EST. Bids are encrypted and revealed simultaneously at 12:30 PM.</p>
+                    <p><strong>Smart Bidding:</strong> Bid on multiple assets with a single balance allocation. Since reveals are simultaneous, you can make your capital more efficient by submitting total bids exceeding your balance (5% fee on budget shortfall applies). During sequential clearing, if your budget runs out, remaining wins are forfeited.</p>
+                </div>
+
+                <!-- Asset Selection and Bid Entry -->
+                <div class="border border-gray-200 rounded-lg p-4 mb-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Select Asset</label>
+                            <select x-model="selectedBidAsset"
+                                    class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border">
+                                <template x-for="asset in assets" :key="asset.symbol">
+                                    <option :value="asset.symbol" x-text="`${asset.symbol} - ${asset.name} (${asset.marketSize})`"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Units to Buy</label>
+                            <input type="number" x-model.number="currentBid.units"
+                                   class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border"
+                                   placeholder="0" step="0.1" min="0">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Max Price per Unit (LIBRA)</label>
+                            <input type="number" x-model.number="currentBid.price"
+                                   class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border"
+                                   placeholder="0" step="0.01" min="0">
+                        </div>
+                        <div class="flex items-end">
+                            <button @click="updateBid()"
+                                    class="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 font-medium">
+                                <span x-show="hasBid(selectedBidAsset)">Update Bid</span>
+                                <span x-show="!hasBid(selectedBidAsset)">Add Bid</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div x-show="currentBid.units > 0 && currentBid.price > 0" class="mt-3 text-sm text-gray-600">
+                        Total for this bid: <span class="font-bold text-gray-900" x-text="formatCurrency(currentBid.units * currentBid.price)"></span>
+                    </div>
+                </div>
+
+                <!-- Active Bids Summary -->
+                <div x-show="Object.values(bids).some(b => b.units > 0 && b.price > 0)" class="mb-4">
+                    <h3 class="font-bold text-gray-900 mb-2">Your Active Bids</h3>
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-left text-gray-600">
+                                    <th class="pb-2">Asset</th>
+                                    <th class="pb-2 text-right">Units</th>
+                                    <th class="pb-2 text-right">Price</th>
+                                    <th class="pb-2 text-right">Total</th>
+                                    <th class="pb-2"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="asset in assets.filter(a => bids[a.symbol].units > 0 && bids[a.symbol].price > 0)" :key="asset.symbol">
+                                    <tr class="border-t border-gray-200">
+                                        <td class="py-2 font-medium" x-text="asset.symbol"></td>
+                                        <td class="py-2 text-right" x-text="bids[asset.symbol].units"></td>
+                                        <td class="py-2 text-right" x-text="formatCurrency(bids[asset.symbol].price)"></td>
+                                        <td class="py-2 text-right font-medium" x-text="formatCurrency(bids[asset.symbol].units * bids[asset.symbol].price)"></td>
+                                        <td class="py-2 text-right">
+                                            <button @click="clearBid(asset.symbol)" class="text-red-600 hover:text-red-800 text-xs">Remove</button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="flex justify-end">
+                    <button @click="submitBids()"
+                            :disabled="totalBids === 0"
+                            :class="totalBids === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'"
+                            class="text-white px-8 py-3 rounded-md font-medium text-lg">
+                        Submit Encrypted Bids
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Seller Tab -->
+        <div x-show="activeTab === 'seller'" class="space-y-6">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-4">List Assets for Sale</h2>
+
+                <div class="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm text-purple-800">
+                    <p class="mb-2"><strong>Asset Listing Deadline:</strong> All assets must be listed by 12:00 PM EST (noon). Listings are encrypted until reveal at 12:30 PM.</p>
+                    <p><strong>Reserve Price:</strong> Optional minimum price. Fee charged only if asset doesn't sell (based on RMS delta from clearing price).</p>
+                </div>
+
+                <!-- Asset Selection and Sell Entry -->
+                <div class="border border-gray-200 rounded-lg p-4 mb-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Select Asset</label>
+                            <select x-model="selectedSellAsset"
+                                    class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border">
+                                <template x-for="asset in assets" :key="asset.symbol">
+                                    <option :value="asset.symbol" x-text="`${asset.symbol} - ${asset.name}`"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Units to Sell</label>
+                            <input type="number" x-model.number="currentSell.units"
+                                   class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border"
+                                   placeholder="0" step="0.1" min="0">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Reserve Price (Optional)</label>
+                            <input type="number" x-model.number="currentSell.reservePrice"
+                                   class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border"
+                                   placeholder="0 (no reserve)" step="0.01" min="0">
+                        </div>
+                        <div class="flex items-end">
+                            <button @click="updateSell()"
+                                    class="w-full bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 font-medium">
+                                <span x-show="hasSell(selectedSellAsset)">Update Listing</span>
+                                <span x-show="!hasSell(selectedSellAsset)">Add Listing</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Active Listings Summary -->
+                <div x-show="Object.values(sells).some(s => s.units > 0)" class="mb-4">
+                    <h3 class="font-bold text-gray-900 mb-2">Your Active Listings</h3>
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-left text-gray-600">
+                                    <th class="pb-2">Asset</th>
+                                    <th class="pb-2 text-right">Units</th>
+                                    <th class="pb-2 text-right">Reserve Price</th>
+                                    <th class="pb-2"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="asset in assets.filter(a => sells[a.symbol].units > 0)" :key="asset.symbol">
+                                    <tr class="border-t border-gray-200">
+                                        <td class="py-2 font-medium" x-text="asset.symbol"></td>
+                                        <td class="py-2 text-right" x-text="sells[asset.symbol].units"></td>
+                                        <td class="py-2 text-right" x-text="sells[asset.symbol].reservePrice > 0 ? formatCurrency(sells[asset.symbol].reservePrice) : 'No reserve'"></td>
+                                        <td class="py-2 text-right">
+                                            <button @click="clearSell(asset.symbol)" class="text-red-600 hover:text-red-800 text-xs">Remove</button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="flex justify-end">
+                    <button @click="submitSells()"
+                            :disabled="totalSells === 0"
+                            :class="totalSells === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'"
+                            class="text-white px-8 py-3 rounded-md font-medium text-lg">
+                        Lock Assets for Auction
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Tab -->
+        <div x-show="activeTab === 'results'" class="space-y-6">
+            <div x-show="!simulationRun" class="bg-white rounded-lg shadow-md p-6 text-center">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Auction Not Yet Run</h2>
+                <p class="text-gray-600 mb-6">
+                    <span x-show="totalBids > 0 || totalSells > 0">Run the simulation to see your results.</span>
+                    <span x-show="totalBids === 0 && totalSells === 0">Run the simulation to observe the market with fixture data.</span>
+                </p>
+                <button @click="runSimulation()"
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-md font-medium text-lg">
+                    Run Auction Simulation
+                </button>
+            </div>
+
+            <div x-show="simulationRun" class="space-y-6">
+                <!-- Buyer Summary -->
+                <div x-show="totalBids > 0" class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-2xl font-bold text-gray-900 mb-4">Your Bidding Results</h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="bg-green-50 rounded-lg p-4">
+                            <p class="text-sm text-green-700 font-medium">Assets Won</p>
+                            <p class="text-2xl font-bold text-green-900" x-text="results.assetsWon"></p>
+                        </div>
+                        <div class="bg-blue-50 rounded-lg p-4">
+                            <p class="text-sm text-blue-700 font-medium">Total Spent</p>
+                            <p class="text-2xl font-bold text-blue-900" x-text="formatCurrency(results.totalSpent)"></p>
+                        </div>
+                        <div class="bg-purple-50 rounded-lg p-4">
+                            <p class="text-sm text-purple-700 font-medium">Remaining Balance</p>
+                            <p class="text-2xl font-bold text-purple-900" x-text="formatCurrency(results.remainingBalance)"></p>
+                        </div>
+                    </div>
+
+                    <div x-show="results.feePaid > 0" class="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+                        <p class="text-sm text-orange-800">
+                            <strong>Smart Bidding Fee Paid:</strong> <span x-text="formatCurrency(results.feePaid)"></span>
+                        </p>
+                    </div>
+
+                    <!-- Detailed Buyer Results -->
+                    <div class="space-y-3">
+                        <h3 class="font-bold text-lg text-gray-900">Detailed Results by Asset</h3>
+                        <template x-for="result in results.buyerDetails" :key="result.asset">
+                            <div class="border rounded-lg p-4"
+                                 :class="result.won ? 'border-green-200 bg-green-50' : (result.bid > 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50')">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <h4 class="font-bold" x-text="result.asset"></h4>
+                                        <p class="text-sm text-gray-600" x-text="result.status"></p>
+                                    </div>
+                                    <div class="text-right">
+                                        <template x-if="result.won">
+                                            <div>
+                                                <p class="text-sm text-gray-600">Units Won</p>
+                                                <p class="font-bold text-green-700" x-text="result.unitsWon.toFixed(4)"></p>
+                                                <p class="text-xs text-gray-600 mt-1">Clearing Price: <span x-text="formatCurrency(result.clearingPrice)"></span></p>
+                                                <p class="text-xs text-gray-600">Paid: <span x-text="formatCurrency(result.amountPaid)"></span></p>
+                                            </div>
+                                        </template>
+                                        <template x-if="!result.won && result.bid > 0">
+                                            <div>
+                                                <p class="text-sm text-red-600">Not Won</p>
+                                                <p class="text-xs text-gray-600" x-text="result.reason"></p>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Seller Summary -->
+                <div x-show="totalSells > 0" class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-2xl font-bold text-gray-900 mb-4">Your Selling Results</h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="bg-green-50 rounded-lg p-4">
+                            <p class="text-sm text-green-700 font-medium">Assets Sold</p>
+                            <p class="text-2xl font-bold text-green-900" x-text="results.assetsSold"></p>
+                        </div>
+                        <div class="bg-blue-50 rounded-lg p-4">
+                            <p class="text-sm text-blue-700 font-medium">Total Revenue</p>
+                            <p class="text-2xl font-bold text-blue-900" x-text="formatCurrency(results.totalRevenue)"></p>
+                        </div>
+                        <div class="bg-red-50 rounded-lg p-4">
+                            <p class="text-sm text-red-700 font-medium">Reserve Fees Paid</p>
+                            <p class="text-2xl font-bold text-red-900" x-text="formatCurrency(results.reserveFeesPaid)"></p>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Seller Results -->
+                    <div class="space-y-3">
+                        <h3 class="font-bold text-lg text-gray-900">Detailed Results by Asset</h3>
+                        <template x-for="result in results.sellerDetails" :key="result.asset">
+                            <div class="border rounded-lg p-4"
+                                 :class="result.sold ? 'border-green-200 bg-green-50' : (result.listed > 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50')">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <h4 class="font-bold" x-text="result.asset"></h4>
+                                        <p class="text-sm text-gray-600" x-text="result.status"></p>
+                                    </div>
+                                    <div class="text-right">
+                                        <template x-if="result.sold">
+                                            <div>
+                                                <p class="text-sm text-gray-600">Units Sold</p>
+                                                <p class="font-bold text-green-700" x-text="result.unitsSold.toFixed(4)"></p>
+                                                <p class="text-xs text-gray-600 mt-1">Clearing Price: <span x-text="formatCurrency(result.clearingPrice)"></span></p>
+                                                <p class="text-xs text-gray-600">Revenue: <span x-text="formatCurrency(result.revenue)"></span></p>
+                                            </div>
+                                        </template>
+                                        <template x-if="!result.sold && result.listed > 0">
+                                            <div>
+                                                <p class="text-sm text-red-600">Did Not Sell</p>
+                                                <p class="text-xs text-gray-600" x-text="result.reason"></p>
+                                                <p x-show="result.reserveFeePaid > 0" class="text-xs text-red-600 mt-1">
+                                                    Reserve Fee: <span x-text="formatCurrency(result.reserveFeePaid)"></span>
+                                                </p>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Spectator Mode Summary -->
+                <div x-show="totalBids === 0 && totalSells === 0" class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-2xl font-bold text-gray-900 mb-4">Market Overview (Spectator Mode)</h2>
+                    <p class="text-gray-600 mb-4">You didn't place any bids or listings. Here's what happened in the market with fixture data.</p>
+
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h3 class="font-bold text-blue-900 mb-2">Assets Cleared</h3>
+                        <p class="text-sm text-blue-800"><span class="font-bold" x-text="assetsCleared.length"></span> out of <span x-text="assets.length"></span> assets cleared successfully</p>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <template x-for="asset in assetsCleared" :key="asset">
+                                <span class="bg-blue-200 text-blue-900 px-2 py-1 rounded text-xs font-medium" x-text="asset"></span>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Demand Curves -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-2xl font-bold text-gray-900 mb-4">
+                        <span x-show="totalBids > 0 || totalSells > 0">Demand Curves for Cleared Assets</span>
+                        <span x-show="totalBids === 0 && totalSells === 0">Market Demand Curves</span>
+                    </h2>
+                    <p class="text-gray-600 mb-6">Supply and demand curves showing how the clearing price was determined.</p>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <template x-for="asset in assetsCleared" :key="asset">
+                            <div class="border border-gray-200 rounded-lg p-4">
+                                <h3 class="font-bold text-lg mb-3" x-text="asset"></h3>
+                                <div style="position: relative; height: 300px; width: 100%;">
+                                    <canvas :id="'chart-' + asset"></canvas>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow-md p-6 text-center">
+                    <button @click="resetSimulation()"
+                            class="bg-gray-600 text-white px-6 py-2 rounded-md hover:bg-gray-700 font-medium">
+                        Reset & Start Over
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function auctionApp() {
+            return {
+                activeTab: 'about',
+                userBalance: 0,
+                fundAmount: 100000,
+
+                // Asset list (in clearing order: smallest → biggest)
+                assets: [
+                    { symbol: 'DOGE', name: 'Dogecoin', marketSize: 'Small' },
+                    { symbol: 'LINK', name: 'Chainlink', marketSize: 'Small' },
+                    { symbol: 'UNI', name: 'Uniswap', marketSize: 'Medium' },
+                    { symbol: 'DOT', name: 'Polkadot', marketSize: 'Medium' },
+                    { symbol: 'ATOM', name: 'Cosmos', marketSize: 'Medium' },
+                    { symbol: 'AVAX', name: 'Avalanche', marketSize: 'Medium' },
+                    { symbol: 'MATIC', name: 'Polygon', marketSize: 'Medium' },
+                    { symbol: 'SOL', name: 'Solana', marketSize: 'Large' },
+                    { symbol: 'BTC', name: 'Bitcoin', marketSize: 'Large' },
+                    { symbol: 'ETH', name: 'Ethereum', marketSize: 'Large' }
+                ],
+
+                // Current selections
+                selectedBidAsset: 'DOGE',
+                selectedSellAsset: 'DOGE',
+                currentBid: { units: 0, price: 0 },
+                currentSell: { units: 0, reservePrice: 0 },
+
+                // Countdown timers
+                assetDeadlineCountdown: '00:00:00',
+                bidDeadlineCountdown: '00:00:00',
+                countdownInterval: null,
+
+                bids: {},
+                sells: {},
+
+                // Fixture data for simulation
+                marketData: {},
+
+                // Simulation results
+                simulationRun: false,
+                assetsCleared: [],
+                results: {
+                    assetsWon: 0,
+                    totalSpent: 0,
+                    remainingBalance: 0,
+                    feePaid: 0,
+                    buyerDetails: [],
+                    assetsSold: 0,
+                    totalRevenue: 0,
+                    reserveFeesPaid: 0,
+                    sellerDetails: []
+                },
+
+                charts: {},
+
+                init() {
+                    // Initialize bids and sells objects
+                    this.assets.forEach(asset => {
+                        this.bids[asset.symbol] = { units: 0, price: 0 };
+                        this.sells[asset.symbol] = { units: 0, reservePrice: 0 };
+                    });
+
+                    // Generate fixture market data
+                    this.generateMarketData();
+
+                    // Start countdown timers
+                    this.updateCountdowns();
+                    this.countdownInterval = setInterval(() => {
+                        this.updateCountdowns();
+                    }, 1000);
+
+                    // Watch for asset selection changes to update current inputs
+                    this.$watch('selectedBidAsset', (value) => {
+                        this.currentBid = { ...this.bids[value] };
+                    });
+
+                    this.$watch('selectedSellAsset', (value) => {
+                        this.currentSell = { ...this.sells[value] };
+                    });
+                },
+
+                generateMarketData() {
+                    const baseData = {
+                        'DOGE': { basePrice: 0.08, volatility: 0.02, supply: 10000, demandMultiplier: 0.8 },
+                        'LINK': { basePrice: 15.5, volatility: 2, supply: 500, demandMultiplier: 0.9 },
+                        'UNI': { basePrice: 6.8, volatility: 0.8, supply: 800, demandMultiplier: 1.0 },
+                        'DOT': { basePrice: 7.2, volatility: 0.9, supply: 700, demandMultiplier: 1.0 },
+                        'ATOM': { basePrice: 10.3, volatility: 1.2, supply: 600, demandMultiplier: 0.95 },
+                        'AVAX': { basePrice: 35.4, volatility: 4, supply: 400, demandMultiplier: 1.1 },
+                        'MATIC': { basePrice: 0.88, volatility: 0.1, supply: 5000, demandMultiplier: 1.0 },
+                        'SOL': { basePrice: 105, volatility: 12, supply: 200, demandMultiplier: 1.2 },
+                        'BTC': { basePrice: 43500, volatility: 2000, supply: 5, demandMultiplier: 1.3 },
+                        'ETH': { basePrice: 2280, volatility: 150, supply: 30, demandMultiplier: 1.4 }
+                    };
+
+                    this.assets.forEach(asset => {
+                        const data = baseData[asset.symbol];
+                        const sellOrders = [];
+                        const buyOrders = [];
+
+                        const numSellers = Math.floor(Math.random() * 5) + 5;
+                        for (let i = 0; i < numSellers; i++) {
+                            const price = data.basePrice + (Math.random() - 0.3) * data.volatility;
+                            const units = (Math.random() * data.supply / numSellers) + (data.supply / numSellers * 0.5);
+                            sellOrders.push({ price: Math.max(0.01, price), units });
+                        }
+
+                        const numBuyers = Math.floor(Math.random() * 8) + 10;
+                        for (let i = 0; i < numBuyers; i++) {
+                            const price = data.basePrice + (Math.random() - 0.5) * data.volatility * 2;
+                            const units = (Math.random() * data.supply * data.demandMultiplier / numBuyers) + (data.supply * 0.3 / numBuyers);
+                            buyOrders.push({ price: Math.max(0.01, price), units });
+                        }
+
+                        this.marketData[asset.symbol] = {
+                            sellOrders: sellOrders.sort((a, b) => a.price - b.price),
+                            buyOrders: buyOrders.sort((a, b) => b.price - a.price)
+                        };
+                    });
+                },
+
+                get totalBids() {
+                    return Object.entries(this.bids).reduce((sum, [symbol, bid]) => {
+                        return sum + (bid.units * bid.price);
+                    }, 0);
+                },
+
+                get totalSells() {
+                    return Object.entries(this.sells).reduce((sum, [symbol, sell]) => {
+                        return sum + (sell.units > 0 ? 1 : 0);
+                    }, 0);
+                },
+
+                get smartBiddingFee() {
+                    if (this.totalBids <= this.userBalance) return 0;
+                    const shortfall = this.totalBids - this.userBalance;
+                    return shortfall * 0.05;
+                },
+
+                hasBid(symbol) {
+                    return this.bids[symbol].units > 0 && this.bids[symbol].price > 0;
+                },
+
+                hasSell(symbol) {
+                    return this.sells[symbol].units > 0;
+                },
+
+                updateBid() {
+                    this.bids[this.selectedBidAsset] = { ...this.currentBid };
+                },
+
+                updateSell() {
+                    this.sells[this.selectedSellAsset] = { ...this.currentSell };
+                },
+
+                clearBid(symbol) {
+                    this.bids[symbol] = { units: 0, price: 0 };
+                    if (this.selectedBidAsset === symbol) {
+                        this.currentBid = { units: 0, price: 0 };
+                    }
+                },
+
+                clearSell(symbol) {
+                    this.sells[symbol] = { units: 0, reservePrice: 0 };
+                    if (this.selectedSellAsset === symbol) {
+                        this.currentSell = { units: 0, reservePrice: 0 };
+                    }
+                },
+
+                formatCurrency(amount) {
+                    return new Intl.NumberFormat('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    }).format(amount);
+                },
+
+                updateCountdowns() {
+                    const now = new Date();
+
+                    // Get today's date in EST
+                    const estNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+
+                    // Set deadlines for today in EST
+                    const assetDeadline = new Date(estNow);
+                    assetDeadline.setHours(12, 0, 0, 0);
+
+                    const bidDeadline = new Date(estNow);
+                    bidDeadline.setHours(12, 30, 0, 0);
+
+                    // If we've passed today's deadlines, show tomorrow's
+                    if (estNow > bidDeadline) {
+                        assetDeadline.setDate(assetDeadline.getDate() + 1);
+                        bidDeadline.setDate(bidDeadline.getDate() + 1);
+                    }
+
+                    // Calculate time differences in milliseconds
+                    const assetDiff = assetDeadline - estNow;
+                    const bidDiff = bidDeadline - estNow;
+
+                    // Convert to hours:mins:secs
+                    this.assetDeadlineCountdown = this.formatCountdown(assetDiff);
+                    this.bidDeadlineCountdown = this.formatCountdown(bidDiff);
+                },
+
+                formatCountdown(ms) {
+                    if (ms <= 0) return '00:00:00';
+
+                    const totalSeconds = Math.floor(ms / 1000);
+                    const hours = Math.floor(totalSeconds / 3600);
+                    const minutes = Math.floor((totalSeconds % 3600) / 60);
+                    const seconds = totalSeconds % 60;
+
+                    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                },
+
+                getCountdownColor(type) {
+                    const countdown = type === 'asset' ? this.assetDeadlineCountdown : this.bidDeadlineCountdown;
+                    const [hours, minutes, seconds] = countdown.split(':').map(Number);
+                    const totalMinutes = hours * 60 + minutes;
+
+                    if (totalMinutes < 5) return 'text-red-600';
+                    if (totalMinutes < 30) return 'text-orange-600';
+                    return 'text-green-600';
+                },
+
+                addFunds() {
+                    if (this.fundAmount > 0) {
+                        this.userBalance += parseFloat(this.fundAmount);
+                    }
+                },
+
+                setFunds(amount) {
+                    this.userBalance = amount;
+                },
+
+                submitBids() {
+                    if (this.totalBids === 0) {
+                        alert('Please enter at least one bid.');
+                        return;
+                    }
+
+                    alert('Bids encrypted and submitted! Go to Results to run the simulation.');
+                    this.activeTab = 'results';
+                },
+
+                submitSells() {
+                    if (this.totalSells === 0) {
+                        alert('Please list at least one asset.');
+                        return;
+                    }
+
+                    alert('Assets locked for auction! Go to Results to run the simulation.');
+                    this.activeTab = 'results';
+                },
+
+                runSimulation() {
+                    this.simulationRun = true;
+                    this.assetsCleared = [];
+
+                    const fee = this.smartBiddingFee;
+                    let remainingBudget = this.userBalance - fee;
+
+                    const results = {
+                        assetsWon: 0,
+                        totalSpent: 0,
+                        remainingBalance: remainingBudget,
+                        feePaid: fee,
+                        buyerDetails: [],
+                        assetsSold: 0,
+                        totalRevenue: 0,
+                        reserveFeesPaid: 0,
+                        sellerDetails: []
+                    };
+
+                    for (const asset of this.assets) {
+                        const userBid = this.bids[asset.symbol];
+                        const userSell = this.sells[asset.symbol];
+
+                        let allBuyOrders = [...this.marketData[asset.symbol].buyOrders];
+                        let allSellOrders = [...this.marketData[asset.symbol].sellOrders];
+
+                        if (userBid.units > 0 && userBid.price > 0) {
+                            allBuyOrders.push({ price: userBid.price, units: userBid.units, isUserBid: true });
+                        }
+
+                        if (userSell.units > 0) {
+                            const sellPrice = userSell.reservePrice > 0 ? userSell.reservePrice : 0.01;
+                            allSellOrders.push({ price: sellPrice, units: userSell.units, isUserSell: true, hasReserve: userSell.reservePrice > 0 });
+                        }
+
+                        allBuyOrders.sort((a, b) => b.price - a.price);
+                        allSellOrders.sort((a, b) => a.price - b.price);
+
+                        const clearingResult = this.calculateClearingPrice(allBuyOrders, allSellOrders);
+
+                        // Process buyer results
+                        if (userBid.units > 0 && userBid.price > 0) {
+                            if (!clearingResult.clears) {
+                                results.buyerDetails.push({
+                                    asset: asset.symbol,
+                                    bid: userBid.units * userBid.price,
+                                    won: false,
+                                    status: 'Market did not clear',
+                                    reason: 'No intersection between supply and demand'
+                                });
+                            } else if (userBid.price < clearingResult.price) {
+                                results.buyerDetails.push({
+                                    asset: asset.symbol,
+                                    bid: userBid.units * userBid.price,
+                                    won: false,
+                                    status: 'Bid too low',
+                                    reason: `Your bid: ${this.formatCurrency(userBid.price)}, Clearing: ${this.formatCurrency(clearingResult.price)}`,
+                                    clearingPrice: clearingResult.price
+                                });
+                            } else {
+                                const unitsWon = Math.min(userBid.units, clearingResult.unitsCleared);
+                                const cost = unitsWon * clearingResult.price;
+
+                                if (cost > remainingBudget) {
+                                    results.buyerDetails.push({
+                                        asset: asset.symbol,
+                                        bid: userBid.units * userBid.price,
+                                        won: false,
+                                        status: 'Insufficient funds',
+                                        reason: `Required: ${this.formatCurrency(cost)}, Available: ${this.formatCurrency(remainingBudget)}`,
+                                        clearingPrice: clearingResult.price
+                                    });
+                                } else {
+                                    remainingBudget -= cost;
+                                    results.assetsWon++;
+                                    results.totalSpent += cost;
+                                    results.buyerDetails.push({
+                                        asset: asset.symbol,
+                                        bid: userBid.units * userBid.price,
+                                        won: true,
+                                        status: 'Won',
+                                        unitsWon,
+                                        clearingPrice: clearingResult.price,
+                                        amountPaid: cost
+                                    });
+                                }
+                            }
+                        }
+
+                        // Process seller results
+                        if (userSell.units > 0) {
+                            if (!clearingResult.clears) {
+                                let reserveFee = 0;
+                                if (userSell.reservePrice > 0) {
+                                    reserveFee = userSell.reservePrice * userSell.units * 0.05;
+                                    results.reserveFeesPaid += reserveFee;
+                                }
+
+                                results.sellerDetails.push({
+                                    asset: asset.symbol,
+                                    listed: userSell.units,
+                                    sold: false,
+                                    status: 'Market did not clear',
+                                    reason: 'No buyers at your reserve price',
+                                    reserveFeePaid: reserveFee
+                                });
+                            } else if (userSell.reservePrice > 0 && clearingResult.price < userSell.reservePrice) {
+                                const rmsDelta = Math.abs(clearingResult.price - userSell.reservePrice);
+                                const reserveFee = rmsDelta * userSell.units * 0.05;
+                                results.reserveFeesPaid += reserveFee;
+
+                                results.sellerDetails.push({
+                                    asset: asset.symbol,
+                                    listed: userSell.units,
+                                    sold: false,
+                                    status: 'Reserve price not met',
+                                    reason: `Clearing: ${this.formatCurrency(clearingResult.price)}, Reserve: ${this.formatCurrency(userSell.reservePrice)}`,
+                                    clearingPrice: clearingResult.price,
+                                    reserveFeePaid: reserveFee
+                                });
+                            } else {
+                                const unitsSold = Math.min(userSell.units, clearingResult.unitsCleared);
+                                const revenue = unitsSold * clearingResult.price;
+
+                                results.assetsSold++;
+                                results.totalRevenue += revenue;
+                                results.sellerDetails.push({
+                                    asset: asset.symbol,
+                                    listed: userSell.units,
+                                    sold: true,
+                                    status: 'Sold',
+                                    unitsSold,
+                                    clearingPrice: clearingResult.price,
+                                    revenue,
+                                    reserveFeePaid: 0
+                                });
+                            }
+                        }
+
+                        // Track all cleared assets for demand curves
+                        if (clearingResult.clears && !this.assetsCleared.includes(asset.symbol)) {
+                            this.assetsCleared.push(asset.symbol);
+                        }
+
+                        if (clearingResult.clears) {
+                            this.$nextTick(() => {
+                                this.drawDemandCurve(asset.symbol, allBuyOrders, allSellOrders, clearingResult.price);
+                            });
+                        }
+                    }
+
+                    results.remainingBalance = remainingBudget;
+                    this.results = results;
+                },
+
+                calculateClearingPrice(buyOrders, sellOrders) {
+                    if (buyOrders.length === 0 || sellOrders.length === 0) {
+                        return { clears: false, price: null, unitsCleared: 0 };
+                    }
+
+                    // Build demand curve (cumulative from highest to lowest bid)
+                    let demandCurve = [];
+                    let cumulativeUnits = 0;
+                    for (const order of buyOrders) {
+                        cumulativeUnits += order.units;
+                        demandCurve.push({ price: order.price, units: cumulativeUnits });
+                    }
+
+                    // Build supply curve (cumulative from lowest to highest ask)
+                    let supplyCurve = [];
+                    cumulativeUnits = 0;
+                    for (const order of sellOrders) {
+                        cumulativeUnits += order.units;
+                        supplyCurve.push({ price: order.price, units: cumulativeUnits });
+                    }
+
+                    // Find clearing price: where cumulative demand meets cumulative supply
+                    // The clearing price is the highest price where demand >= supply
+                    let clearingPrice = null;
+                    let unitsCleared = 0;
+
+                    // Iterate through all possible price points (both bids and asks)
+                    const allPrices = [...new Set([...buyOrders.map(b => b.price), ...sellOrders.map(s => s.price)])].sort((a, b) => b - a);
+
+                    for (const price of allPrices) {
+                        // Count demand at this price: all buyers willing to pay >= price
+                        const demandAtPrice = demandCurve.find(d => d.price >= price);
+                        const demandUnits = demandAtPrice ? demandAtPrice.units : 0;
+
+                        // Count supply at this price: all sellers willing to sell <= price
+                        const supplyAtPrice = supplyCurve.filter(s => s.price <= price);
+                        const supplyUnits = supplyAtPrice.length > 0 ? Math.max(...supplyAtPrice.map(s => s.units)) : 0;
+
+                        // Clearing occurs when demand >= supply
+                        if (demandUnits > 0 && supplyUnits > 0 && demandUnits >= supplyUnits) {
+                            clearingPrice = price;
+                            unitsCleared = Math.min(demandUnits, supplyUnits);
+                            break;
+                        }
+                    }
+
+                    return {
+                        clears: clearingPrice !== null,
+                        price: clearingPrice,
+                        unitsCleared
+                    };
+                },
+
+                drawDemandCurve(symbol, buyOrders, sellOrders, clearingPrice) {
+                    const canvas = document.getElementById('chart-' + symbol);
+                    if (!canvas) return;
+
+                    if (this.charts[symbol]) {
+                        this.charts[symbol].destroy();
+                    }
+
+                    const ctx = canvas.getContext('2d');
+
+                    const demandData = [];
+                    const supplyData = [];
+
+                    let cumUnits = 0;
+                    for (const order of buyOrders) {
+                        cumUnits += order.units;
+                        demandData.push({ x: cumUnits, y: order.price });
+                    }
+
+                    cumUnits = 0;
+                    for (const order of sellOrders) {
+                        cumUnits += order.units;
+                        supplyData.push({ x: cumUnits, y: order.price });
+                    }
+
+                    this.charts[symbol] = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            datasets: [
+                                {
+                                    label: 'Demand',
+                                    data: demandData,
+                                    borderColor: 'rgb(34, 197, 94)',
+                                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                                    stepped: 'before',
+                                    fill: false
+                                },
+                                {
+                                    label: 'Supply',
+                                    data: supplyData,
+                                    borderColor: 'rgb(239, 68, 68)',
+                                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                    stepped: 'after',
+                                    fill: false
+                                },
+                                {
+                                    label: 'Clearing Price',
+                                    data: [{ x: 0, y: clearingPrice }, { x: Math.max(...demandData.map(d => d.x)), y: clearingPrice }],
+                                    borderColor: 'rgb(59, 130, 246)',
+                                    borderDash: [5, 5],
+                                    pointRadius: 0,
+                                    fill: false
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: false,
+                            interaction: {
+                                mode: 'nearest',
+                                intersect: false
+                            },
+                            scales: {
+                                x: {
+                                    type: 'linear',
+                                    title: {
+                                        display: true,
+                                        text: 'Cumulative Units'
+                                    }
+                                },
+                                y: {
+                                    type: 'linear',
+                                    title: {
+                                        display: true,
+                                        text: 'Price (LIBRA)'
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    display: true
+                                },
+                                tooltip: {
+                                    mode: 'nearest',
+                                    intersect: false
+                                }
+                            }
+                        }
+                    });
+                },
+
+                resetSimulation() {
+                    this.simulationRun = false;
+                    this.assetsCleared = [];
+                    this.results = {
+                        assetsWon: 0,
+                        totalSpent: 0,
+                        remainingBalance: 0,
+                        feePaid: 0,
+                        buyerDetails: [],
+                        assetsSold: 0,
+                        totalRevenue: 0,
+                        reserveFeesPaid: 0,
+                        sellerDetails: []
+                    };
+
+                    Object.values(this.charts).forEach(chart => chart.destroy());
+                    this.charts = {};
+
+                    this.assets.forEach(asset => {
+                        this.bids[asset.symbol] = { units: 0, price: 0 };
+                        this.sells[asset.symbol] = { units: 0, reservePrice: 0 };
+                    });
+
+                    this.currentBid = { units: 0, price: 0 };
+                    this.currentSell = { units: 0, reservePrice: 0 };
+
+                    this.activeTab = 'bidder';
+                }
+            };
+        }
+    </script>
+</body>
+</html>

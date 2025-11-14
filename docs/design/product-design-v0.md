@@ -8,10 +8,13 @@ The Atomica Call Auction is a daily mechanism for discovering fair market prices
 
 ### 1. Auction Schedule
 
-- **Frequency**: Daily event at 12:00 noon EST
-- **Prime Trading Window**: One hour (12:00 - 1:00 PM EST)
-- **Asset Capacity**: Maximum 10 assets during prime hour
-- **Duration per Asset**: 6 minutes per auction
+- **Frequency**: Daily event with reveal at 12:30 PM EST
+- **Encryption Key Generation**: 24 hours before auction day
+- **Asset Listing Deadline**: 12:00 PM EST (noon)
+- **Bid Submission Deadline**: 12:30 PM EST
+- **Revelation & Clearing**: 12:30 PM EST
+- **Asset Capacity**: Maximum 10 assets per day
+- **Submission Window**: Anytime before respective deadlines
 
 ### 2. Multi-Chain Architecture
 
@@ -62,21 +65,25 @@ Bid and reserve price confidentiality is maintained using time-lock encryption:
 
 ### 6. Auction Sequencing and Multi-Asset Clearing
 
-**Bidding**: All asset auctions occur simultaneously with sealed bids (8:00 AM - 12:00 PM EST)
+**Encryption Key Generation**: Time-lock encryption key created 24 hours before auction day
 
-**Revelation**: All bids decrypt simultaneously at 12:00 PM (no information cascades during bidding)
+**Asset Listing**: Sellers can list assets anytime, but listings must be submitted by 12:00 PM EST (noon)
+
+**Bidding**: Buyers can submit bids anytime, but bids must be submitted by 12:30 PM EST
+
+**Revelation**: All bids and listings decrypt simultaneously at 12:30 PM EST (no information cascades during submission)
 
 **Clearing Order**: Auctions clear sequentially in predetermined order: **Smallest market → Biggest market**
 - Order: DOGE → LINK → UNI → DOT → ATOM → AVAX → MATIC → SOL → BTC → ETH
 - **Rationale**: Prioritize liquidity for underserved small/niche markets where users have fewer alternatives
 - **Strategic Focus**: Major markets (ETH/BTC) already have deep liquidity on CEXs/DEXs. Atomica's competitive advantage is providing price discovery for long-tail assets.
 
-**Over-Budget Fee Mechanism**:
-- Users can bid on multiple assets with total bids exceeding their balance
-- If `sum(bids) > balance`, protocol charges 3-5% fee upfront (scaled by over-budget ratio)
+**Smart Bidding Mechanism**:
+- Since all bids reveal simultaneously, users can bid on multiple assets with total bids exceeding their balance to make capital more efficient
+- If `sum(bids) > balance`, protocol charges 5% fee on budget shortfall (`total_bids - balance`) upfront
 - Net budget = balance - fee
 - Auctions clear sequentially; when user's net budget exhausted, remaining wins forfeited
-- Fee creates protocol revenue and deters griefing attacks
+- Fee enables capital efficiency in simultaneous reveal auctions while deterring griefing attacks
 
 **Example**:
 ```
