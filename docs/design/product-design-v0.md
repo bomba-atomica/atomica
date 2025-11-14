@@ -87,14 +87,14 @@ Bid and reserve price confidentiality is maintained using time-lock encryption:
 
 **Example**:
 ```
-User has 100k LIBRA, bids 150k total (50% over-budget)
-Fee: 3% × 100k = 3k LIBRA (collected upfront)
-Net budget: 97k LIBRA
+User has 100k USDC, bids 150k total (50% over-budget)
+Fee: 5% × 50k shortfall = 2.5k USDC (collected upfront)
+Net budget: 97.5k USDC
 
 Clearing sequence:
-1. DOGE clears: User wins 5k → 92k remaining
-2. SOL clears: User wins 40k → 52k remaining
-3. BTC clears: User wins, needs 60k → FORFEITED (only 52k left)
+1. DOGE clears: User wins 5k → 92.5k remaining
+2. SOL clears: User wins 40k → 52.5k remaining
+3. BTC clears: User wins, needs 60k → FORFEITED (only 52.5k left)
 4. ETH clears: User wins, needs 50k → FORFEITED
 
 Result: User receives DOGE + SOL, forfeits BTC + ETH

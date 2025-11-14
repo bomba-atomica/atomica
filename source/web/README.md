@@ -6,14 +6,14 @@ A static single-page application that simulates the Atomica daily call auction s
 
 ### 1. **Bidder Tab**
 - **Funding Section:**
-  - Set your LIBRA balance
+  - Set your USDC balance
   - Quick funding buttons (50K, 100K, 250K, 500K)
   - View auction information and rules
 - **Bidding Section:**
   - Place bids on 10 different assets (DOGE, LINK, UNI, DOT, ATOM, AVAX, MATIC, SOL, BTC, ETH)
   - Each bid includes:
     - Units to buy
-    - Maximum price per unit (LIBRA)
+    - Maximum price per unit (USDC)
   - Real-time calculation of total bid amounts
   - Smart bidding allowed (bid more than balance with 5% fee on shortfall)
 
@@ -67,7 +67,7 @@ After the reveal at 12:30 PM, assets clear in order from smallest to biggest mar
 Since all bids reveal simultaneously, bidders can make their capital more efficient by bidding on multiple assets with total bids exceeding their balance.
 
 - Users can bid more than their balance
-- If `total_bids > balance`, a 5% fee is charged on the budget shortfall (`total_bids - balance`) upfront
+- If `total_bids > balance`, a 5% fee is charged on the budget shortfall (`total_bids - balance`) upfront (in USDC)
 - Net budget = balance - fee
 - During sequential clearing:
   - If your net budget runs out, remaining wins are forfeited
@@ -134,9 +134,9 @@ Once deployed, the simulator will be available at:
 ### Using the Simulator
 
 1. **As a Buyer** (Bidder tab)
-   - Fund your account with LIBRA (e.g., 100,000)
+   - Fund your account with USDC (e.g., 100,000)
    - Place bids on assets you want to buy
-   - Enter units and max price per unit
+   - Enter units and max price per unit (in USDC)
    - Watch your total bid amount and smart bidding fee warnings
    - Click "Submit Encrypted Bids"
 
@@ -191,7 +191,7 @@ For sellers who set reserve prices:
 - Simplified calculation: 5% of RMS delta between clearing and reserve prices
 - Example: Reserve = 100, Clearing = 80, Units = 10
   - RMS Delta = |100 - 80| = 20
-  - Fee = 20 × 10 × 0.05 = 10 LIBRA
+  - Fee = 20 × 10 × 0.05 = 10 USDC
 - Fees distributed to buyers whose bids cleared (simulated in fixture data)
 - No fee if asset sells successfully
 
