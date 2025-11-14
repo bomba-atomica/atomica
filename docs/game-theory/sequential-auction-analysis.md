@@ -31,7 +31,12 @@ Sequential auctions—where multiple different assets are sold one after another
 - Introduces UX complexity that might confuse users or reduce participation
 - Iterative settlement algorithm convergence not mathematically proven (needs testing)
 
-**Griefing Attack Risk**: The priority system is vulnerable to price inflation attacks where bidders submit high bids they intend to forfeit. **Proposed mitigation: Recalculate clearing prices after removing forfeited bids.** This iterative settlement algorithm should prevent phantom bids from inflating prices, but needs extensive testing.
+**Griefing Attack Risk**: The priority system is vulnerable to price inflation attacks where bidders submit high bids they intend to forfeit. **Proposed mitigations:**
+1. **Recalculate clearing prices** after removing forfeited bids (mandatory)
+2. **Smart bid execution fee** - charge 2-3% fee on wins when users bid over budget (strongly recommended)
+   - Makes griefing unprofitable (attackers pay fee even on Priority 1 wins)
+   - Creates protocol revenue ("pay for flexibility")
+   - Self-regulating economic deterrent
 
 **Trade-Off**: We're exchanging known problems (sequential gaming) for unknown problems (priority system gaming + complex settlement). Simple alternatives (single daily auction per asset) might be lower risk.
 
@@ -828,6 +833,38 @@ Result: Alice wins ETH + SOL, forfeits BTC win
 - ⚠️ No empirical data on how real users would behave with priorities
 - ⚠️ Introduces complexity that could confuse users or reduce participation
 
+**Potential Feature: Smart Bid Execution Fee**
+
+If users want to bid over their budget (using priority system for flexible execution), they could pay a fee on their winning bids:
+
+```
+Fee Structure:
+- Standard bidding (total bids ≤ budget): 0% fee
+- Over-budget bidding (total bids > budget): X% fee on Priority 1 wins
+
+Example:
+Alice has 100k budget, bids 150k total across 3 auctions
+Alice wins Priority 1 auction (50k)
+Fee: X% of 50k goes to protocol/fee pool
+```
+
+**Benefits:**
+- ✅ Makes griefing more expensive (pay fee even on Priority 1 wins if over-budget)
+- ✅ Creates revenue for protocol from "smart execution" feature
+- ✅ Natural economic deterrent to excessive over-bidding
+- ✅ Users who value flexibility pay for it ("express lane" pricing)
+
+**Considerations:**
+- What's optimal fee %? (1%? 2%? 5%?)
+- Does fee apply to all wins or only Priority 1?
+- How does fee affect bidding incentives?
+- Might reduce usage of priority system if fee too high
+
+**Needs Testing:**
+- User willingness to pay for over-budget flexibility
+- Impact on griefing attack profitability
+- Optimal fee level that balances revenue vs usage
+
 ---
 
 #### Option 3: Pro-Rata Allocation (Proportional Fills)
@@ -1314,6 +1351,79 @@ Penalty: 1% × 150k = 1,500 LIBRA (deducted from Alice's balance)
 
 ---
 
+### Mitigation 6: Smart Bid Execution Fee (Economic Deterrent)
+
+**Solution:** Charge a fee on winning bids when users bid over their budget.
+
+**Implementation:**
+```
+When processing settlements:
+- Check: total_bids > budget?
+- If YES and user wins Priority 1+ bids:
+  - Charge fee: X% of Priority 1 winning bid amount
+  - Fee goes to protocol/fee pool
+- If NO (bids ≤ budget):
+  - No fee charged
+
+Example:
+Alice: 100k budget, 150k total bids (50% over-budget)
+Alice wins Priority 1 (ETH): 50k
+Fee: 2% × 50k = 1,000 LIBRA to fee pool
+Alice receives: 50k ETH, pays 51k LIBRA (50k bid + 1k fee)
+```
+
+**Why This Helps:**
+- ✅ Makes griefing attacks unprofitable (attacker pays fee on real wins)
+- ✅ Users who want flexibility pay for it ("premium feature" pricing)
+- ✅ Creates protocol revenue from smart execution
+- ✅ Self-regulating: Higher over-commitment → higher fee (if fee scales with over-budget %)
+
+**Advanced Variant - Scaled Fee:**
+```
+Fee scales with over-budget ratio:
+- 0-50% over-budget: 1% fee
+- 50-100% over-budget: 2% fee
+- 100-200% over-budget: 3% fee
+- 200%+ over-budget: 5% fee
+
+This discourages extreme over-bidding while allowing moderate flexibility.
+```
+
+**Trade-offs:**
+- ⚠️ Adds complexity to fee structure
+- ⚠️ Might reduce priority system usage if fee too high
+- ⚠️ Need to find optimal fee % through testing
+
+**Impact on Griefing:**
+```
+Griefing Attack Cost Analysis:
+
+Without fee:
+- Attacker bids 100k (Priority 1), 100k (Priority 2 phantom)
+- Wins Priority 1 for 100k, forfeits Priority 2
+- Cost: 100k capital lock + gas
+- If attacker is seller: Profits from inflated prices
+
+With 2% fee:
+- Same bids
+- Wins Priority 1 for 100k
+- Fee: 2% × 100k = 2,000 LIBRA
+- Cost: 100k capital lock + 2k fee + gas
+- Attack must generate > 2k profit to be worthwhile
+
+With 5% fee:
+- Same bids
+- Fee: 5% × 100k = 5,000 LIBRA
+- Most griefing attacks become unprofitable
+```
+
+**Recommendation:**
+- Start with **2-3% fee** for over-budget bidding
+- Monitor usage and adjust
+- Consider scaled fee structure if abuse continues
+
+---
+
 ## Recommended Mitigation Strategy
 
 **Implement Mitigation 1 (Recalculate Clearing Prices) as MANDATORY:**
@@ -1321,12 +1431,19 @@ Penalty: 1% × 150k = 1,500 LIBRA (deducted from Alice's balance)
 - Complexity is manageable (converges quickly)
 - Ensures forfeited bids don't affect prices
 
+**Strongly Recommended Add:**
+- **Mitigation 6 (Smart Bid Execution Fee):** Makes griefing unprofitable, creates protocol revenue, self-regulating
+  - Start with 2-3% fee on over-budget wins
+  - Consider scaled fee structure
+  - Dual benefit: anti-griefing + business model
+
 **Optionally Add:**
 - **Mitigation 3 (Limit Bids Per Account):** Easy to implement, reduces DoS risk
 - **Mitigation 4 (Small Bid Fee):** Minimal friction, deters spam
 
 **Avoid:**
-- **Mitigation 5 (Forfeit Penalty):** Too punitive for legitimate users
+- **Mitigation 5 (Forfeit Penalty):** Too punitive for legitimate users (superseded by Mitigation 6)
+- **Mitigation 2 (Collateral Requirement):** Complex, Mitigation 6 achieves similar effect more simply
 
 **Algorithm Summary:**
 ```rust
@@ -1438,7 +1555,14 @@ For each auction in sequence:
    - Identified attack vectors
    - Don't know if attacks are profitable in practice
    - Mitigation (recalculation) should work but unproven
+   - Smart bid execution fee (2-3%) should make most attacks unprofitable
    - Might discover new attacks after launch
+
+4. ⚠️ **Smart bid execution fee acceptance**
+   - Will users pay 2-3% to bid over budget?
+   - Does fee deter legitimate usage too much?
+   - What's optimal fee level?
+   - Is scaled fee structure worth complexity?
 
 ### What We Don't Know (Low Confidence)
 
@@ -1572,6 +1696,12 @@ Settlement: 12:00:01 (Atomic)
 - Does market need high-frequency multi-asset trading?
 - **Consider**: Maybe 2-3 simultaneous assets is sweet spot
 
+**6. Should you charge a fee for over-budget bidding?**
+- Will users pay 2-3% for flexible execution?
+- Does fee make griefing unprofitable?
+- What fee level balances revenue vs usage?
+- **Test**: A/B test different fee levels (0%, 1%, 2%, 5%) on testnet
+
 ### Recommended Launch Strategy
 
 **Phase 1: Simple (Months 1-3)**
@@ -1651,9 +1781,17 @@ Settlement: 12:00:01 (Atomic)
 
 ---
 
-**Version**: 0.4
+**Version**: 0.5
 **Last Updated**: 2025-11-14
 **Status**: Honest Product Research with Identified Trade-Offs
+**Changes in v0.5**:
+- **Added Mitigation 6: Smart Bid Execution Fee** - charge 2-3% fee on over-budget wins
+  - Dual benefit: makes griefing unprofitable + creates protocol revenue
+  - "Pay for flexibility" business model
+  - Self-regulating economic deterrent
+  - Scaled fee structure option (higher over-commitment = higher fee)
+- Updated Executive Summary to highlight fee mechanism
+- Added fee testing recommendations to Decision Framework
 **Changes in v0.4**:
 - **Major revision**: Removed false "strategy-proof" claims
 - Added "Honest Assessment" section acknowledging unknowns and uncertainties
