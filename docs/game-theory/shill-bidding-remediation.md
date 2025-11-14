@@ -14,7 +14,7 @@ References to "ZK proofs of bid validity" in this document are now **deprecated*
 
 ## 1. Introduction & Context
 
-Atomica implements trustless cross-chain atomic swaps via daily batch auctions with futures delivery. Market makers submit sealed bids to acquire locked user assets, with settlement occurring 12-24 hours post-auction. The auction uses a uniform price mechanism where all winning bidders pay the same clearing price.
+Atomica implements trustless cross-chain atomic swaps via daily batch auctions with futures delivery. Bidders submit sealed bids to acquire locked user assets, with settlement occurring 12-24 hours post-auction. The auction uses a uniform price mechanism where all winning bidders pay the same clearing price.
 
 ### Why Shill Bidding Matters
 
@@ -61,8 +61,8 @@ We assume adversaries with the following capabilities:
 - Cannot predict drand randomness or manipulate reveal timing
 
 **Coordination:**
-- Can attempt to coordinate with other market makers (collusion)
-- Cannot prevent entry of new market makers (open participation)
+- Can attempt to coordinate with other bidders (collusion)
+- Cannot prevent entry of new bidders (open participation)
 - Cannot identify or punish defectors post-auction (anonymity)
 
 ### 2.2 Attack Taxonomy
@@ -86,7 +86,7 @@ Based on the formal analysis in [shill-bidding-analysis.md](shill-bidding-analys
 - **Impact**: Reduce competitive bidding, lower clearing price
 
 #### Type 4: Collusive Bid Depression
-- Multiple market makers coordinate to submit uniformly low bids
+- Multiple bidders coordinate to submit uniformly low bids
 - **Goal**: Collectively suppress clearing price
 - **Impact**: Extract systematic value from auctioneers
 
@@ -100,7 +100,7 @@ Based on the formal analysis in [shill-bidding-analysis.md](shill-bidding-analys
 #### Type 6: Front-Running & MEV
 - Observe pending bids, submit competing bids ahead
 - **Goal**: Extract value through information asymmetry
-- **Impact**: Unfair advantage, reduced market maker participation
+- **Impact**: Unfair advantage, reduced bidder participation
 
 #### Type 7: Denial of Service (DOS)
 - Spam auction with dust deposits or excessive bids
@@ -154,11 +154,11 @@ Atomica employs a multi-layered defense architecture combining economic, cryptog
 - 4+ hour bid windows prevent flash loan manipulation
 - Capital must be locked for extended periods
 - Reduces effectiveness of sudden price manipulation
-- **Defense**: Increases attack cost, enables market maker response time
+- **Defense**: Increases attack cost, enables bidder response time
 
 **Settlement Delay (12-24 hours):**
 - Futures delivery model reduces inventory risk premium
-- Market makers can hedge positions post-auction
+- Bidders can hedge positions post-auction
 - Reduces urgency-driven bidding behavior
 - **Defense**: Dampens price volatility manipulation incentives
 
@@ -219,7 +219,7 @@ Atomica employs a multi-layered defense architecture combining economic, cryptog
 - **Defense**: Further increases supply uncertainty, complicates coordination
 
 **Open Entry (No Whitelist):**
-- Any party can become market maker without permission
+- Any party can become bidder without permission
 - No barriers to participation beyond escrowed deposits
 - Prevents collusion groups from excluding competitors
 - **Defense**: Type 4 (collusion) unstable when new entrants can defect
@@ -268,7 +268,7 @@ This section details how the cryptographic and economic mechanisms are implement
 **Why This Doesn't Enable Manipulation:**
 - Individual bid amounts and prices remain hidden via tlock encryption
 - Bidders can't correlate deposits to specific bid strategies
-- Multi-hour auction window allows market makers to adjust strategies
+- Multi-hour auction window allows bidders to adjust strategies
 - Flash loans impossible due to multi-hour, multi-block auction duration
 - Escrowed deposits ensure bids are backed by real capital, not ephemeral flash liquidity
 
@@ -445,9 +445,9 @@ An alternative approach was analyzed: instead of random exclusion, use bid patte
 - Example: $1M locked for 4 hours @ 5% APY = $1M × 0.05 × (4/8760) = $22.83 cost
 - This cost applies to all wash bids, Sybil attacks, fake bids
 
-**Market Maker Response Time:**
-- 4-hour window allows MMs to observe aggregate deposit trends
-- MMs can adjust bid strategies during auction
+**Bidder Response Time:**
+- 4-hour window allows bidders to observe aggregate deposit trends
+- bidders can adjust bid strategies during auction
 - Cannot front-run individual bids (encrypted), but can respond to demand signals
 - Competitive dynamics favor aggressive bidding near true valuation
 
@@ -504,7 +504,7 @@ The clearing price depends on total quantity bid, not how it's distributed.
 #### Collusive Bid Depression (Type 4)
 
 **Attack Strategy:**
-- 5 major market makers collude to all bid $1,950 instead of $2,000
+- 5 major bidders collude to all bid $1,950 instead of $2,000
 - Hope to collectively lower clearing price by 2.5%
 
 **Attack Cost (for single defector):**
@@ -519,7 +519,7 @@ Monitoring cost: Cannot identify who defected (anonymity)
 Collusion clearing price: $1,950
 Honest clearing price: $1,980
 Savings per unit: $30
-Total benefit: 100 ETH × $30 = $3,000 (split among 5 MMs = $600 each)
+Total benefit: 100 ETH × $30 = $3,000 (split among 5 bidders = $600 each)
 ```
 
 **Defection Incentive:**
@@ -536,7 +536,7 @@ Defection profit ($5,000) > Cooperation profit ($600)
 
 **Additional Friction:**
 - Random seller exclusion: Total supply unknown, complicates coordination
-- Open entry: Cannot prevent new MMs from outbidding cartel
+- Open entry: Cannot prevent new bidders from outbidding cartel
 - Anonymity: Cannot identify or punish defectors in future auctions
 
 **Conclusion:** Collusion **game-theoretically unstable** in this auction design.
@@ -545,7 +545,7 @@ Defection profit ($5,000) > Cooperation profit ($600)
 
 **Attack Strategy:**
 - 3 large sellers coordinate to withhold 30% of supply
-- Induce higher bids from market makers expecting scarcity
+- Induce higher bids from bidders expecting scarcity
 
 **Attack Cost:**
 ```
@@ -557,13 +557,13 @@ Coordination risk: Other sellers may defect and supply more
 **Attack Benefit:**
 ```
 If successful: Higher clearing price on remaining 70% of supply
-Benefit depends on demand elasticity and MM response
+Benefit depends on demand elasticity and bidder response
 ```
 
 **Defense Mechanisms:**
 - **Random seller exclusion**: Uncertainty already built into supply, makes coordination signal noisy
 - **Multi-day auction cadence**: Withheld supply can be sold tomorrow, reducing withholding incentive
-- **MM hedging**: Market makers hedge on external markets, less sensitive to single auction supply
+- **MM hedging**: Bidders hedge on external markets, less sensitive to single auction supply
 - **Public audit trail**: Repeated withholding patterns detectable, reduces seller credibility
 
 **Residual Risk:** Medium. Supply coordination is the most plausible manipulation vector, though economic incentives generally favor supplying rather than withholding.
@@ -578,14 +578,14 @@ Benefit depends on demand elasticity and MM response
 - Drand tlock encryption hides bid values and quantities until reveal epoch
 - Relayers hide bidder identities during commit phase (mempool privacy)
 - Prevents Type 6 attacks (MEV, bid sniping, front-running)
-- Market makers cannot react to competitors' bids in real-time
+- Bidders cannot react to competitors' bids in real-time
 - **Benefit**: Fair competition, encourages aggressive bidding near true valuation
 
 **Observable Information During Commit (Prevents Blind Bidding):**
 - Cross-chain deposits are publicly visible (Ethereum cannot shield state)
 - Aggregate demand-side pressure observable, but not individual bid strategies
-- Multi-hour auction window allows MMs to adjust to deposit trends
-- **Benefit**: Market makers have partial demand signals, reduce extreme mispricing risk
+- Multi-hour auction window allows bidders to adjust to deposit trends
+- **Benefit**: Bidders have partial demand signals, reduce extreme mispricing risk
 
 **Anonymity Post-Reveal (Prevents Collusion Enforcement):**
 - Relayer abstraction + pseudonymous addresses
@@ -629,20 +629,20 @@ The defense mechanisms rely on several assumptions. If these are violated, addit
 
 ### 5.2 Economic Assumptions
 
-**Sufficient Market Maker Competition:**
-- **Assumption**: Multiple independent MMs compete in each auction
-- **Failure Mode**: If only 1-2 MMs participate, collusion easier or monopoly pricing
-- **Mitigation**: Large daily auction aggregates volume to attract MMs, open entry
+**Sufficient Bidder Competition:**
+- **Assumption**: Multiple independent bidders compete in each auction
+- **Failure Mode**: If only 1-2 bidders participate, collusion easier or monopoly pricing
+- **Mitigation**: Large daily auction aggregates volume to attract bidders, open entry
 - **Residual Risk**: High in early launch phase, decreases as volume grows
 
 **External Market Liquidity for Hedging:**
-- **Assumption**: MMs can hedge on external markets (CEXs, DEXs)
-- **Failure Mode**: If hedging markets illiquid, MMs may reduce bids or exit
+- **Assumption**: bidders can hedge on external markets (CEXs, DEXs)
+- **Failure Mode**: If hedging markets illiquid, bidders may reduce bids or exit
 - **Mitigation**: Launch with liquid trading pairs (ETH, BTC, stablecoins)
 - **Residual Risk**: Medium for long-tail assets
 
 **Rational Profit-Maximizing Bidders:**
-- **Assumption**: Market makers act rationally to maximize profit
+- **Assumption**: Bidders act rationally to maximize profit
 - **Failure Mode**: Irrational or adversarial bidders could disrupt auctions for non-economic reasons
 - **Mitigation**: Escrowed deposits make attacks costly, align incentives
 - **Residual Risk**: Low, but possible in adversarial scenarios (protocol attacks)
@@ -672,7 +672,7 @@ The defense mechanisms rely on several assumptions. If these are violated, addit
 **Information Leakage from Away-Chain Deposits:**
 - User deposits on away chains (Ethereum) are publicly visible before auction - cannot shield on-chain state
 - Reveals aggregate demand-side pressure, deposit amounts, and user addresses
-- Market makers can observe deposit trends during multi-hour auction window
+- Bidders can observe deposit trends during multi-hour auction window
 - **Why This Is Acceptable**:
   - Bid amounts and prices remain hidden via tlock encryption until reveal
   - Cannot correlate deposits to specific bid strategies (one deposit can fund many bids)
@@ -684,13 +684,13 @@ The defense mechanisms rely on several assumptions. If these are violated, addit
 **Futures Settlement Model (By Design, Not a Limitation):**
 - 12-24hr delay between auction close and settlement is intentional - this is a futures auction
 - Users explicitly bid for future delivery, not spot settlement
-- Market makers price bids with settlement delay in mind (futures pricing)
+- Bidders price bids with settlement delay in mind (futures pricing)
 - **Benefits**:
-  - Enables market makers to hedge positions on external markets post-auction
+  - Enables bidders to hedge positions on external markets post-auction
   - Reduces inventory risk premium compared to instant settlement
   - Dampens manipulation incentives (no urgency-driven bidding)
   - Allows time for cross-chain atomic settlement verification
-- **Not a Risk**: External price movements are priced into bids; MMs bear volatility risk voluntarily as part of futures model
+- **Not a Risk**: External price movements are priced into bids; bidders bear volatility risk voluntarily as part of futures model
 - **Note**: This is a feature differentiating Atomica from spot exchanges, not a limitation to be mitigated
 
 **Scalability of ZK Proof Verification:**
@@ -735,10 +735,10 @@ Even with strong preventive mechanisms, post-auction detection enables governanc
 **Winner Concentration:**
 - Track percentage of auction won by top 3 bidders over time
 - Flag increasing concentration (Herfindahl index)
-- **Signal**: Possible market maker consolidation or collusion
+- **Signal**: Possible bidder consolidation or collusion
 
 **Participation Patterns:**
-- Monitor entry/exit of market makers across auctions
+- Monitor entry/exit of bidders across auctions
 - Detect synchronized entry/exit (coordinated behavior)
 - **Signal**: Possible cartel formation
 
@@ -899,7 +899,7 @@ Atomica's auction architecture achieves robust manipulation resistance through *
 
 **Settlement Delay vs. Capital Efficiency:**
 - 12-24hr futures delivery reduces immediate liquidity
-- **Judgment**: Enables MM hedging, reduces manipulation incentives
+- **Judgment**: Enables bidder hedging, reduces manipulation incentives
 
 **Gas Costs vs. Participation:**
 - ZK proof verification increases per-bid costs
@@ -925,7 +925,7 @@ Atomica's auction architecture achieves robust manipulation resistance through *
 - Seller attrition due to random exclusion (track retention rates, adjust if needed)
 
 **High Risk Mitigated by Launch Strategy:**
-- Insufficient MM competition in early phase (focus on liquid pairs, gradual scaling)
+- Insufficient bidder competition in early phase (focus on liquid pairs, gradual scaling)
 - Low seller participation in early phase (exclusion probability higher with low N)
 
 ### 8.5 Incentive-Compatible Design
@@ -938,13 +938,13 @@ The core insight is that **manipulation attacks are unprofitable** under this de
 4. **Escrowed deposits** make wash bids capital-intensive (economic barrier)
 5. **Random exclusion** makes supply unpredictable (coordination difficult)
 
-**Nash Equilibrium:** All market makers bid near their true valuation. Clearing prices reflect competitive market conditions. The system is **incentive-compatible** by design.
+**Nash Equilibrium:** All bidders bid near their true valuation. Clearing prices reflect competitive market conditions. The system is **incentive-compatible** by design.
 
 ### 8.6 Empirical Validation and Monitoring
 
 **Ongoing Monitoring:**
 - Monitor clearing prices vs. external markets
-- Track MM participation and concentration
+- Track bidder participation and concentration
 - Publish transparency reports
 
 **Continuous Improvement:**

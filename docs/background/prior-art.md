@@ -16,7 +16,7 @@ This document provides background on existing decentralized exchange mechanisms 
 - Achieved superior capital efficiency compared to CPMMs through price-specific liquidity provision
 - Provided better price discovery through order matching
 
-### Constant Product Market Makers (CPMMs)
+### Constant Product Bidders (CPMMs)
 - Popularized by Uniswap (2018) using the x*y=k formula, though Bancor (2017) launched the first AMM
 - Eliminated need for order matching and direct counterparty interaction
 - Automated liquidity provision through pooled assets
@@ -47,7 +47,7 @@ This document provides background on existing decentralized exchange mechanisms 
 - High gas costs for frequent on-chain operations (order placement, cancellation, updates)
 - Liquidity fragmentation across multiple order books and on-chain latency slower than centralized exchanges
 
-### Constant Product Market Makers
+### Constant Product Bidders
 - Impermanent loss for liquidity providers
 - Adverse selection through Loss-Versus-Rebalancing (LVR)—LPs constantly trade at stale prices against informed arbitrageurs, with fees often insufficient to compensate
 - Poor capital efficiency (liquidity spread across entire price curve in v2)
@@ -86,7 +86,7 @@ When users need to exchange assets across chains (e.g., ETH on Ethereum for SOL 
 These shortcomings motivate Atomica's design:
 1. **No bridges or wrapped tokens** (addressing bridge risks)
 2. **Batch auctions with sealed bids** (addressing MEV and transparency issues)
-3. **Active market maker participation** (addressing adverse selection)
+3. **Active bidder participation** (addressing adverse selection)
 4. **Native cross-chain settlement** (addressing fragmentation)
 
 For a detailed comparison of different exchange mechanisms in the context of cross-chain swaps, see [CPMM vs Auction Analysis](../../cpmm-vs-auction.md).

@@ -138,12 +138,12 @@ This proof is **much cheaper** than the state transition proof (~50K gas) and ca
 
 **State 3: Auction Executes**
 - Bidding period runs on Home chain
-- Market makers submit bids (no Away chain interaction needed)
+- Bidders submit bids (no Away chain interaction needed)
 - Uniform price auction clears
 - Winners determined
 
 **State 4: Winners Deposit on Home Chain**
-- Winning market makers deposit Asset_B (e.g., USDC) into Home chain escrow
+- Winning bidders deposit Asset_B (e.g., USDC) into Home chain escrow
 - Total amount = clearing_price × N
 - This happens natively on Home chain (fast, no ZK proofs needed)
 
@@ -152,7 +152,7 @@ This proof is **much cheaper** than the state transition proof (~50K gas) and ca
 After the auction clears on the Home chain, settlement occurs via fully verified ZK proofs in both directions:
 
 **Step 5a: Settlement on Home Chain (User receives Asset_B)**
-- Winning market makers' deposits already in Home chain escrow
+- Winning bidders' deposits already in Home chain escrow
 - Home chain auction contract immediately releases Asset_B to user
 - Native transaction, no cross-chain proof needed
 - Instant settlement for user
@@ -228,7 +228,7 @@ Effective fee: 0.000035%
 
 **Who Can Submit Proofs**:
 - **Protocol relayers**: Automated services that batch and submit proofs
-- **Winning bidders**: Market makers who want their assets released faster
+- **Winning bidders**: Bidders who want their assets released faster
 - **Users**: Auctioneers who want their proceeds faster
 - **Any third party**: Anyone can generate and submit valid proofs
 
@@ -341,7 +341,7 @@ If winner submits immediately (no batching):
 - Option to self-submit for priority if needed ($7.50 for immediate settlement)
 - No surprise fees or hidden costs
 
-**For Winners (Market Makers)**:
+**For Winners (Bidders)**:
 - Can wait for batch (essentially free, 10-15 min)
 - Can self-submit for priority ($7.50 at 50 gwei, immediate)
 - Flexibility based on capital efficiency needs
@@ -423,12 +423,12 @@ Different chains have different finality speeds that affect settlement timing:
 **Speed**:
 - HTLC: 24-hour timeout periods required
 - ZK-Proven: 10-20 minute settlement typical
-- 70x faster settlement enables better market maker economics
+- 70x faster settlement enables better bidder economics
 
 **Capital Efficiency**:
 - HTLC: Both parties lock funds for hours/days
 - ZK-Proven: Funds locked only during auction + settlement (~30 minutes)
-- Market makers can cycle capital 50x faster, enabling tighter spreads
+- Bidders can cycle capital 50x faster, enabling tighter spreads
 
 **User Experience**:
 - HTLC: Users must come online within timeout window, run monitoring, pay gas on both chains
@@ -696,7 +696,7 @@ Annual example:
 
 **Economic Guarantees**:
 - ✅ **Competitive pricing**: Uniform price auction mechanism (see shill-bidding-analysis.md)
-- ✅ **No adverse selection**: Market makers actively choose auctions to bid on
+- ✅ **No adverse selection**: Bidders actively choose auctions to bid on
 - ✅ **Capital efficiency**: Fast settlement enables tight spreads
 - ✅ **Sustainable economics**: Protocol fees cover ZK proving costs
 
@@ -751,7 +751,7 @@ This full ZK-proven atomic guarantee mechanism provides:
 
 1. **Maximum Trust Minimization**: No optimistic assumptions, no trusted parties
 2. **Fast Settlement**: 10-20 minutes vs. hours/days for alternatives
-3. **Capital Efficiency**: Market makers cycle capital 50x faster than HTLCs
+3. **Capital Efficiency**: Bidders cycle capital 50x faster than HTLCs
 4. **Industry Alignment**: Follows Vitalik's guidance and industry best practices
 5. **Future-Proof**: Proving costs decrease 2x every 12-18 months
 6. **Composability**: Infrastructure enables many cross-chain applications
@@ -776,7 +776,7 @@ Creates a sustainable, flexible model where:
 - Protocol is self-sustaining from day one (no treasury needed)
 - Winners can prioritize settlement by submitting proofs themselves
 - Economics improve with scale (better batching → lower per-auction costs)
-- Market makers have flexibility: wait for free batch or pay for priority
+- Bidders have flexibility: wait for free batch or pay for priority
 
 **Why This Is Better Than Alternatives**:
 - **vs. Penalty-funded**: Reliable (every auction pays), not dependent on failures

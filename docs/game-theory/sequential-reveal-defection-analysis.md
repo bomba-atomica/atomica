@@ -698,7 +698,7 @@ Where:
 
 **Key Insight**: Deposit must be sized relative to **potential price impact** × **bidder's total exposure**, not just individual bid size.
 
-For bidders with multiple positions (or market makers with inventory), strategic defection can be profitable even with substantial deposits.
+For bidders with multiple positions (or bidders with inventory), strategic defection can be profitable even with substantial deposits.
 
 ## Mitigation Strategies
 

@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-**Conclusion:** The flash loan-style P2P lending model described in `liquidity-provision.md` contains a **fundamental economic flaw** that makes it unfeasible for short-term lending during atomic auctions. The core problem is that **borrowers cannot generate profit during the atomic auction lifecycle to pay lenders**, since market makers win auctions at uniform clearing prices that eliminate arbitrage opportunities.
+**Conclusion:** The flash loan-style P2P lending model described in `liquidity-provision.md` contains a **fundamental economic flaw** that makes it unfeasible for short-term lending during atomic auctions. The core problem is that **borrowers cannot generate profit during the atomic auction lifecycle to pay lenders**, since bidders win auctions at uniform clearing prices that eliminate arbitrage opportunities.
 
 This document:
 1. Evaluates the claims made in the lending documentation
@@ -16,7 +16,7 @@ This document:
 
 ### The Core Claim (from liquidity-provision.md)
 
-The document claims that liquidity providers can earn **50-400% APY** by providing flash loan-style capital to market makers during auctions, with interest rates of **0.08-0.30% per transaction**.
+The document claims that liquidity providers can earn **50-400% APY** by providing flash loan-style capital to bidders during auctions, with interest rates of **0.08-0.30% per transaction**.
 
 **Example given (lines 540-571):**
 ```
@@ -76,19 +76,19 @@ But atomic repayment is **impossible** if:
 
 ---
 
-## Analysis of Mode 1: Market Maker Borrows to Bid
+## Analysis of Mode 1: Bidder Borrows to Bid
 
 ### What the Document Claims (Lines 228-258)
 
-**Mode 1:** MM borrows USDC to bid on ETH auction, repays atomically when receiving ETH.
+**Mode 1:** bidder borrows USDC to bid on ETH auction, repays atomically when receiving ETH.
 
 **Claimed atomic flow:**
-1. MM borrows 199,000 USDC from LP
-2. Auction clears, MM wins 100 ETH
+1. bidder borrows 199,000 USDC from LP
+2. Auction clears, bidder wins 100 ETH
 3. **Atomic transaction:**
-   - MM receives 100 ETH from escrow
-   - MM sends 199,000 USDC to LP (principal)
-   - MM sends 298.50 USDC to LP (interest)
+   - bidder receives 100 ETH from escrow
+   - bidder sends 199,000 USDC to LP (principal)
+   - bidder sends 298.50 USDC to LP (interest)
    - Transaction succeeds or reverts as unit
 
 ### The Problem: Asset Mismatch
@@ -96,7 +96,7 @@ But atomic repayment is **impossible** if:
 **MM receives:** 100 ETH
 **MM must repay:** 199,298.50 USDC
 
-To repay USDC, MM must:
+To repay USDC, bidder must:
 1. Sell 100 ETH on external market
 2. Receive ~$200,000 USDC
 3. Send $199,298.50 USDC to LP
@@ -105,7 +105,7 @@ To repay USDC, MM must:
 
 - **Settlement is NOT atomic** (requires external market interaction)
 - **LP has default risk** (MM could vanish with ETH before selling)
-- **LP has volatility risk** (ETH could drop 10% before MM sells)
+- **LP has volatility risk** (ETH could drop 10% before bidder sells)
 
 ### Why This Breaks the Flash Loan Model
 
@@ -213,7 +213,7 @@ Atomica uses **uniform price auctions** where all winners pay the same clearing 
 **Key property:** Clearing price ≈ True market value (within bid-ask spread)
 
 This means:
-- Market makers bid near true market price
+- Bidders bid near true market price
 - Clearing price ≈ external market price
 - **No arbitrage spread available**
 
@@ -228,13 +228,13 @@ Flash loans work for:
 
 ### Why Atomica Auctions DON'T Create Profit
 
-**Scenario:** MM borrows $199K to bid on 100 ETH auction
+**Scenario:** bidder borrows $199K to bid on 100 ETH auction
 
 **Auction clears at $1,990/ETH (uniform price):**
-- MM pays: $199,000
-- MM receives: 100 ETH (worth ~$199,000 at clearing price)
+- bidder pays: $199,000
+- bidder receives: 100 ETH (worth ~$199,000 at clearing price)
 - **Net position: ±$0 (before interest)**
-- After paying 0.15% interest ($298.50), MM is DOWN $298.50
+- After paying 0.15% interest ($298.50), bidder is DOWN $298.50
 
 **MM's only path to profit:**
 1. Wait for settlement (12-24 hours)
@@ -252,14 +252,14 @@ Flash loans work for:
 **LP lends $199K for 0.15% interest = $298.50 per auction**
 
 **But the loan is NOT atomic:**
-- MM receives ETH, not USDC
-- MM must sell ETH externally to repay
+- bidder receives ETH, not USDC
+- bidder must sell ETH externally to repay
 - **Gap between borrowing and repayment = settlement risk**
 
 **LP's actual risk:**
-- MM defaults (keeps ETH, doesn't repay)
-- ETH price drops before MM sells
-- MM insolvent (can't sell ETH)
+- bidder defaults (keeps ETH, doesn't repay)
+- ETH price drops before bidder sells
+- bidder insolvent (can't sell ETH)
 
 **This is traditional lending risk, not flash loan risk.**
 
@@ -269,24 +269,24 @@ Flash loans work for:
 
 ### Option 1: Futures-Based Margin (Post-Auction)
 
-**Concept:** Lend to MMs AFTER auction, to be repaid AFTER futures settlement
+**Concept:** Lend to bidders AFTER auction, to be repaid AFTER futures settlement
 
 **Timeline:**
 1. Auction clears at T=0 (e.g., 12:00 UTC)
-2. MM wins 100 ETH, clearing price $1,990
-3. LP lends $199K to MM to fund settlement
+2. bidder wins 100 ETH, clearing price $1,990
+3. LP lends $199K to bidder to fund settlement
 4. Settlement occurs at T+24 hours
-5. MM receives 100 ETH
-6. MM sells ETH on external market for ~$200K
-7. MM repays LP $199K + interest
+5. bidder receives 100 ETH
+6. bidder sells ETH on external market for ~$200K
+7. bidder repays LP $199K + interest
 
 **Why this works:**
 - Loan duration: 24-48 hours (not atomic, but short-term)
 - LP earns interest on capital deployment
-- MM gets capital efficiency (doesn't need full $199K upfront)
+- bidder gets capital efficiency (doesn't need full $199K upfront)
 
 **Why this is feasible:**
-- Settlement delay (12-24 hrs) gives MM time to sell
+- Settlement delay (12-24 hrs) gives bidder time to sell
 - Collateral on home chain backs the loan
 - Interest rate reflects 24-hour lending (not per-transaction)
 
@@ -299,32 +299,32 @@ Flash loans work for:
 **Concept:** LPs stake capital to increase MM's bidding limit, earn fee share
 
 **Mechanism:**
-1. MM deposits $20K Open Libra collateral
+1. bidder deposits $20K Open Libra collateral
 2. LP stakes $180K USDC to back MM's bids
-3. MM can now bid up to $200K in auctions
-4. When MM wins auction, settlement funded from LP's staked capital
-5. MM receives ETH, sells on external market
+3. bidder can now bid up to $200K in auctions
+4. When bidder wins auction, settlement funded from LP's staked capital
+5. bidder receives ETH, sells on external market
 6. LP receives portion of MM's profit (e.g., 20% of spread)
 
 **Why this works:**
 - LP provides capital, earns profit-share (not fixed interest)
-- MM gets leverage without borrowing
-- Repayment happens AFTER MM sells ETH externally
+- bidder gets leverage without borrowing
+- Repayment happens AFTER bidder sells ETH externally
 - Risk shared between LP and MM
 
 **Economics:**
-- MM spread: $200K - $199K = $1,000
+- bidder spread: $200K - $199K = $1,000
 - LP takes: 20% × $1,000 = $200
-- MM keeps: 80% × $1,000 = $800
-- LP APY: Depends on auction frequency and MM success rate
+- bidder keeps: 80% × $1,000 = $800
+- LP APY: Depends on auction frequency and bidder success rate
 
 ### Option 3: Protocol-Pooled Margin (Like GMX/dYdX)
 
-**Concept:** Protocol maintains liquidity pool that backs all MM positions
+**Concept:** Protocol maintains liquidity pool that backs all bidder positions
 
 **Mechanism:**
 1. LPs deposit USDC into protocol pool
-2. MMs deposit collateral, borrow from pool to bid
+2. bidders deposit collateral, borrow from pool to bid
 3. Pool earns interest from all borrowers
 4. Pool bears default risk (socialized)
 5. Protocol charges fees, distributes to LPs
@@ -332,7 +332,7 @@ Flash loans work for:
 **Why this works:**
 - Proven model (GMX, dYdX, Aave)
 - LPs earn yield from pool utilization
-- MMs get capital efficiency
+- bidders get capital efficiency
 - Protocol manages risk
 
 **Trade-offs:**
@@ -345,15 +345,15 @@ Flash loans work for:
 **Concept:** Auction wins become tradeable NFTs representing future settlement
 
 **Mechanism:**
-1. MM wins auction, receives NFT representing "100 ETH deliverable at T+24h"
-2. MM can sell NFT on secondary market for ~$199K USDC
+1. bidder wins auction, receives NFT representing "100 ETH deliverable at T+24h"
+2. bidder can sell NFT on secondary market for ~$199K USDC
 3. Buyer receives 100 ETH at settlement
-4. MM gets liquidity immediately, buyer gets discounted ETH
+4. bidder gets liquidity immediately, buyer gets discounted ETH
 
 **Why this works:**
 - No lending required
 - Pure market-driven pricing
-- MMs get immediate liquidity
+- bidders get immediate liquidity
 - Buyers get potential discount
 
 **Use case for lending:**
@@ -413,13 +413,13 @@ Flash loans work for:
 **Assessment: TECHNICALLY POSSIBLE BUT IGNORES RISK**
 
 **Why:**
-- Profit assumes MM can sell 100 ETH for $200,000 externally
+- Profit assumes bidder can sell 100 ETH for $200,000 externally
 - But clearing price was $1,990, so market price should also be ~$1,990
 - Profit depends on price movement AFTER auction
 - This is directional trading risk, not arbitrage
 
 **Correction:**
-- MM profit = (Settlement Price - Clearing Price - Interest) × Quantity
+- bidder profit = (Settlement Price - Clearing Price - Interest) × Quantity
 - Settlement price is UNCERTAIN (could be higher or lower)
 - Expected profit ≈ bid-ask spread (~0.1-0.5%), not guaranteed 0.5%
 
@@ -448,25 +448,25 @@ Flash loans work for:
 **Futures Settlement Margin Lending:**
 
 **Structure:**
-1. **Collateral:** MM deposits Open Libra on home chain (current design ✓)
-2. **Bidding:** MM bids in auctions using collateral-backed capacity (current design ✓)
-3. **Winning:** MM wins at uniform clearing price (current design ✓)
+1. **Collateral:** bidder deposits Open Libra on home chain (current design ✓)
+2. **Bidding:** bidder bids in auctions using collateral-backed capacity (current design ✓)
+3. **Winning:** bidder wins at uniform clearing price (current design ✓)
 4. **Lending Period:** Between auction close and settlement delivery (NEW)
-5. **Repayment:** After MM receives assets and sells externally (NEW)
+5. **Repayment:** After bidder receives assets and sells externally (NEW)
 
 **Timeline:**
 ```
-T=0:    Auction closes, MM wins 100 ETH at $1,990 clearing price
-        MM needs $199K to settle
+T=0:    Auction closes, bidder wins 100 ETH at $1,990 clearing price
+        bidder needs $199K to settle
 
-T=0:    LP lends $199K to MM for 24-hour term @ 0.15% interest
-        MM provides 130% collateral ($258.7K Open Libra)
+T=0:    LP lends $199K to bidder for 24-hour term @ 0.15% interest
+        bidder provides 130% collateral ($258.7K Open Libra)
 
-T=24h:  Settlement: MM receives 100 ETH
+T=24h:  Settlement: bidder receives 100 ETH
 
-T=24h-48h: MM sells 100 ETH on external market for ~$199-201K
+T=24h-48h: bidder sells 100 ETH on external market for ~$199-201K
 
-T=48h:  MM repays LP $199K + $298.50 interest = $199,298.50
+T=48h:  bidder repays LP $199K + $298.50 interest = $199,298.50
         Collateral released
 ```
 
@@ -527,8 +527,8 @@ T=48h:  MM repays LP $199K + $298.50 interest = $199,298.50
 - ✅ Economically viable for both LPs and MMs
 
 **Capital Efficiency Benefits:**
-- ✅ MMs can bid with 10x leverage (vs. requiring full capital)
-- ✅ More MM competition → tighter spreads → better user prices
+- ✅ bidders can bid with 10x leverage (vs. requiring full capital)
+- ✅ More bidder competition → tighter spreads → better user prices
 - ✅ LPs earn attractive yield (~55% APY vs. 3-8% in Aave)
 
 ### What IS NOT Feasible
@@ -564,7 +564,7 @@ T=48h:  MM repays LP $199K + $298.50 interest = $199,298.50
 
 1. **Lending period:** Between auction close and settlement delivery (24-48 hours)
 2. **Interest basis:** Time-based (per 24 hours), not per-transaction
-3. **Repayment timing:** After MM receives assets and sells externally
+3. **Repayment timing:** After bidder receives assets and sells externally
 4. **Atomicity claim:** Remove "zero default risk" - use "low default risk"
 5. **Use cases:** Focus on capital efficiency, not impossible arbitrage
 
@@ -572,7 +572,7 @@ T=48h:  MM repays LP $199K + $298.50 interest = $199,298.50
 
 **Proposed outline for corrected lending doc:**
 1. Overview: Futures Settlement Margin Lending
-2. Economic Model: How MMs profit from spread AFTER settlement
+2. Economic Model: How bidders profit from spread AFTER settlement
 3. Lending Timeline: Auction → Settlement → External Sale → Repayment
 4. Interest Rates: 0.15% per 24 hours = 54.75% APY
 5. Risk Analysis: Collateral protects LPs during settlement window
@@ -587,7 +587,7 @@ The peer-to-peer margin lending model described in `liquidity-provision.md` is b
 
 **The corrected model** - Futures Settlement Lending - IS economically viable and provides value:
 - LPs earn ~55% APY (not 400%, but still attractive)
-- MMs get capital efficiency (10x leverage)
+- bidders get capital efficiency (10x leverage)
 - Risk is manageable (collateral + short duration)
 - Settlement gap is acknowledged, not hidden
 

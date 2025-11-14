@@ -6,7 +6,7 @@
 
 **Why:** Existing cross-chain exchanges require bridges (custody risk, wrapped tokens, governance centralization) or suffer from liquidity fragmentation, MEV exploitation, and adverse selection.
 
-**How:** Users lock native assets on away chains and participate in a single daily batch auction where market makers competitively bid using sealed bids. Assets settle 12-24 hours after auction close without bridges, wrapped tokens, or custodians.
+**How:** Users lock native assets on away chains and participate in a single daily batch auction where bidders competitively bid using sealed bids. Assets settle 12-24 hours after auction close without bridges, wrapped tokens, or custodians.
 
 **Key Innovation:** Futures market model with timelock-encrypted sealed bids concentrates liquidity, enables fair price discovery, and provides self-sustaining economics.
 
@@ -30,7 +30,7 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 1. Native cross-chain execution (no bridges/wrapped tokens)
 2. Futures delivery model (12-24hr settlement post-auction)
 3. Sealed bid batch auctions (mandatory timelock encryption)
-4. Active market maker participation (no passive LPs)
+4. Active bidder participation (no passive LPs)
 5. Self-sustaining economics (bid-ask spreads, no subsidies)
 
 **→ See:** [Futures Market Model](docs/design/futures-market-model.md) for why futures over spot
@@ -40,20 +40,20 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 **Structure:**
 - One unified auction per day per trading pair
 - Auctioneers (sellers): Users with quote assets wanting base assets
-- Bidders (MMs): Base asset holders submit sealed bids
-- No reserve prices (relies on MM competition in large batch)
+- Bidders: Base asset holders submit sealed bids
+- No reserve prices (relies on competitive bidding in large batch)
 - Settlement: 12-24 hours post-auction
 
 **Example Timeline:**
 ```
 08:00 UTC  Bid window opens (users lock assets on away chains)
-08:00-12:00  MM bid submission (ZK-proven sealed bids)
+08:00-12:00  Bid submission window (sealed bids)
 12:00  Auction close & automatic decryption (drand timelock)
 12:00  Clearing price determined (uniform price auction)
 18:00  Settlement (native assets delivered atomically)
 ```
 
-**Why Single Daily Auction:** Aggregates volume into critical mass, attracts market makers, simplifies coordination, reduces bootstrapping friction
+**Why Single Daily Auction:** Aggregates volume into critical mass, attracts bidders, simplifies coordination, reduces bootstrapping friction
 
 **→ See:** [Futures Market Model](docs/design/futures-market-model.md) for detailed flow and rationale
 
@@ -74,7 +74,7 @@ Bids encrypted via drand-based timelock (IBE), remain sealed until auction close
 
 ### Uniform Price Auction Mechanism
 
-Market makers submit sealed bids (quantity + price). Bids sorted, clearing price set at lowest qualifying bid. All winners pay same uniform price (regardless of their bid).
+Bidders submit sealed bids (quantity + price). Bids sorted, clearing price set at lowest qualifying bid. All winners pay same uniform price (regardless of their bid).
 
 **Example:** Auction for 100 ETH with bids: A (40@$2000), B (30@$1980), C (40@$1950) → All clear at $1950
 
@@ -84,9 +84,9 @@ Market makers submit sealed bids (quantity + price). Bids sorted, clearing price
 
 ### Self-Sustaining Economics
 
-Market makers earn through bid-ask spreads (buy at auction price, sell/hedge externally). Futures pricing enables hedging strategies. Settlement delay reduces inventory risk premium. No protocol fees or subsidies required.
+Bidders earn through bid-ask spreads (buy at auction price, sell/hedge externally). Futures pricing enables hedging strategies. Settlement delay reduces inventory risk premium. No protocol fees or subsidies required.
 
-Competitive bidding drives spreads toward fair risk-adjusted rates. Single large daily auction justifies MM infrastructure investment.
+Competitive bidding drives spreads toward fair risk-adjusted rates. Single large daily auction justifies bidder infrastructure investment.
 
 **→ See:** [CPMM vs Auction Comparison](docs/game-theory/cpmm-vs-auction-comparison.md) for detailed economic analysis
 
@@ -94,22 +94,22 @@ Competitive bidding drives spreads toward fair risk-adjusted rates. Single large
 
 **Core Design:** Single daily batch auction, sealed bids, futures delivery (12-24hr), no reserve prices
 
-**Focus:** Build critical mass, establish MM relationships, demonstrate economic viability
+**Focus:** Build critical mass, establish bidder relationships, demonstrate economic viability
 
-**Settlement Delay:** 12-24 hours balances user expectations with MM risk management. Long enough for effective hedging, short enough for next-day delivery UX.
+**Settlement Delay:** 12-24 hours balances user expectations with bidder risk management. Long enough for effective hedging, short enough for next-day delivery UX.
 
 ## Design Principles
 
 Atomica prioritizes:
 
 1. **Trustlessness over convenience** - Cryptographic guarantees, no custodians
-2. **Economic sustainability over UX familiarity** - Self-sustaining MM economics, no subsidies
+2. **Economic sustainability over UX familiarity** - Self-sustaining bidder economics, no subsidies
 3. **Practical deployability over theoretical privacy** - Timelock encryption (works today) vs FHE (years away)
 4. **Market-driven liquidity over protocol subsidies** - Competitive bidding, no token emissions
 
 **Key Tradeoffs Accepted:**
 - Futures delivery vs spot execution (embrace cross-chain latency)
-- Active MMs vs passive LPs (sustainable economics)
+- Active bidders vs passive LPs (sustainable economics)
 - Daily batch vs continuous trading (liquidity concentration for bootstrap)
 - Temporary bid privacy vs full privacy (practical cryptography)
 

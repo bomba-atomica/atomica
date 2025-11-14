@@ -37,7 +37,7 @@ This directory contains detailed technical and economic analyses of proposed fea
 
 **The economic flaw:**
 - Uniform price auctions eliminate arbitrage opportunities DURING auction
-- Market makers profit from price movements AFTER settlement (directional trading)
+- Bidders profit from price movements AFTER settlement (directional trading)
 - This is identical to borrowing from Aave to trade - no auction-specific advantage
 
 **The conclusion:**

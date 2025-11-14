@@ -103,14 +103,14 @@ Additionally, its benefits are highly dependent on sufficient order flow, limiti
 
 CoW Swap demonstrates that:
 1. **Batch auctions with uniform pricing** can effectively reduce MEV
-2. **Solver/market maker competition** can drive efficient pricing
+2. **Solver/bidder competition** can drive efficient pricing
 3. **The cross-chain problem requires novel solutions** beyond integrating bridges
 4. **Sealed bids may be necessary** to prevent solver information advantage
 
 Atomica extends these insights by:
 - Using batch auctions for cross-chain native asset swaps (no bridges)
 - Employing sealed bid timelock encryption to prevent information asymmetry
-- Targeting market makers as competitive bidders (similar to solvers)
+- Targeting bidders as competitive bidders (similar to solvers)
 - Framing as futures market to bootstrap liquidity
 
 See [Atomica PRD](../../Prd.md) for the full product design.

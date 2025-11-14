@@ -22,8 +22,8 @@ The proposed "peer-to-peer margin lending" feature has been rejected after thoro
 ### What Was Proposed
 
 A "flash loan-style P2P lending" system where:
-- Liquidity providers lend capital to market makers during auctions
-- Market makers borrow to bid in auctions with leverage (10x)
+- Liquidity providers lend capital to bidders during auctions
+- Bidders borrow to bid in auctions with leverage (10x)
 - Loans repaid "atomically" with claimed "zero default risk"
 - LPs earn 50-400% APY from high-velocity capital deployment
 
@@ -31,9 +31,9 @@ A "flash loan-style P2P lending" system where:
 
 ### Why It Seemed Appealing
 
-- Capital efficiency for market makers (10x leverage)
+- Capital efficiency for bidders (10x leverage)
 - High APY for liquidity providers (50-400%)
-- Tighter spreads for users (more MM competition)
+- Tighter spreads for users (more bidder competition)
 - Cross-chain native lending
 - Zero protocol fees (100% to LPs)
 
@@ -46,10 +46,10 @@ A "flash loan-style P2P lending" system where:
 **Claim:** "Borrowing and repayment occur in the same atomic transaction"
 
 **Reality:**
-- Market maker borrows USDC to bid on ETH auction
-- Market maker receives ETH at settlement
-- Market maker must sell ETH on external market to get USDC
-- Market maker repays LP in USDC (separate transaction, 24-48 hours later)
+- Bidder borrows USDC to bid on ETH auction
+- Bidder receives ETH at settlement
+- Bidder must sell ETH on external market to get USDC
+- Bidder repays LP in USDC (separate transaction, 24-48 hours later)
 
 **Conclusion:** There is a 24-48 hour settlement gap between receiving assets and repaying the loan. This is NOT atomic.
 
@@ -59,8 +59,8 @@ A "flash loan-style P2P lending" system where:
 
 **Reality:**
 - LP lends USDC to MM
-- MM receives ETH but owes USDC
-- Between receiving ETH and repaying USDC, MM could:
+- bidder receives ETH but owes USDC
+- Between receiving ETH and repaying USDC, bidder could:
   - Disappear with the ETH (default)
   - Wait for ETH price to drop (unable to repay)
   - Become insolvent (liquidation needed)
@@ -74,11 +74,11 @@ A "flash loan-style P2P lending" system where:
 **Reality:**
 - Atomica uses uniform price auctions
 - Clearing price ≈ true market value (no arbitrage)
-- MMs win at clearing price (e.g., $1,990/ETH)
-- MMs receive assets worth $1,990/ETH (at auction time)
+- bidders win at clearing price (e.g., $1,990/ETH)
+- bidders receive assets worth $1,990/ETH (at auction time)
 - **No profit exists at settlement time**
 
-**Where MMs actually profit:**
+**Where bidders actually profit:**
 - Price movements AFTER settlement (directional trading)
 - This is NOT auction arbitrage - it's speculation on price changes
 - Same as borrowing from Aave to trade on any exchange
@@ -112,9 +112,9 @@ A "flash loan-style P2P lending" system where:
 - More complexity (cross-chain proofs, oracles)
 - Zero additional guarantees
 
-### Problem 5: MMs Can Already Use Aave
+### Problem 5: bidders Can Already Use Aave
 
-**Reality check:** Market makers can TODAY:
+**Reality check:** Bidders can TODAY:
 1. Deposit ETH/BTC on Aave
 2. Borrow USDC at 5% APY
 3. Use borrowed USDC to bid in Atomica auctions
@@ -190,11 +190,11 @@ For lending to be truly integrated with auctions (not just out-of-band), one of 
 **Example:**
 ```
 Settlement transaction:
-1. MM won 100 ETH at $1,990 clearing price
+1. bidder won 100 ETH at $1,990 clearing price
 2. Auction escrow sends:
    - 0.15 ETH to LP (interest payment)
-   - 99.85 ETH to MM (remaining)
-3. LP gets repaid atomically, MM gets assets
+   - 99.85 ETH to bidder (remaining)
+3. LP gets repaid atomically, bidder gets assets
 ```
 
 **Why we don't have this:**
@@ -245,7 +245,7 @@ Settlement transaction:
    - Unrealistic APY claims (50-400% was miscalculated)
 
 3. **Better Alternatives Exist**
-   - MMs can use Aave/Morpho TODAY at 1/10th the cost
+   - bidders can use Aave/Morpho TODAY at 1/10th the cost
    - More liquid collateral (ETH/BTC vs Open Libra)
    - Proven protocols ($10B+ TVL, years of operation)
    - No need to build anything
@@ -271,7 +271,7 @@ Settlement transaction:
 - Improving UX for auctioneers and bidders
 
 **Leverage through existing protocols:**
-- Document how MMs can use Aave/Morpho for leverage
+- Document how bidders can use Aave/Morpho for leverage
 - Potentially integrate with existing lending (adapters)
 - Don't reinvent the wheel
 
@@ -294,7 +294,7 @@ Settlement transaction:
    - Major architecture change (probably not worth it)
 
 3. **Compelling Market Demand**
-   - Evidence that MMs need Open Libra-collateralized lending
+   - Evidence that bidders need Open Libra-collateralized lending
    - Evidence that Aave integration is insufficient
    - Currently no such evidence exists
 
@@ -328,7 +328,7 @@ Settlement transaction:
 
 2. **Assumed uniform price auctions create arbitrage opportunities**
    - Uniform pricing specifically eliminates arbitrage (that's the point!)
-   - MMs profit from price movements AFTER auction, not during
+   - bidders profit from price movements AFTER auction, not during
    - This is directional trading, not auction arbitrage
 
 3. **Didn't ask "what unique value does the auction provide?"**

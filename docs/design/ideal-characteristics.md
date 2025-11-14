@@ -55,7 +55,7 @@ Ideally, all information would remain private to maximize game-theoretic fairnes
 - Protecting LPs from adverse selection may reduce execution quality for traders
 - Platform subsidies introduce additional costs and may require governance mechanisms for funding allocation
 
-**Atomica's Approach:** Active market maker participation (not passive LPs); market makers earn competitive returns through bid-ask spreads, no subsidies needed.
+**Atomica's Approach:** Active bidder participation (not passive LPs); bidders earn competitive returns through bid-ask spreads, no subsidies needed.
 
 ---
 
@@ -67,7 +67,7 @@ Ideally, all information would remain private to maximize game-theoretic fairnes
 - Protecting against adverse selection may require limiting information available to all participants
 - Reducing information asymmetry may decrease overall market efficiency and price discovery
 
-**Atomica's Approach:** Market makers actively choose which auctions to participate in (self-selection); sealed bids prevent information asymmetry during bidding.
+**Atomica's Approach:** Bidders actively choose which auctions to participate in (self-selection); sealed bids prevent information asymmetry during bidding.
 
 ---
 
@@ -103,7 +103,7 @@ Ideally, all information would remain private to maximize game-theoretic fairnes
 - Concentrated liquidity may create gaps in price ranges, increasing slippage for large trades
 - Highly optimized systems may be more complex and harder to audit for security
 
-**Atomica's Approach:** Market makers deploy capital only when clearing specific auctions (no idle capital in pools); comparable to order book efficiency.
+**Atomica's Approach:** Bidders deploy capital only when clearing specific auctions (no idle capital in pools); comparable to order book efficiency.
 
 ---
 
@@ -117,7 +117,7 @@ Ideally, all information would remain private to maximize game-theoretic fairnes
 - Protection mechanisms may limit throughput if trades must wait for sufficient liquidity conditions
 
 **Atomica's Approach:**
-- **Current:** Single daily batch auction concentrates liquidity; no reserve prices (relies on market maker competition)
+- **Current:** Single daily batch auction concentrates liquidity; no reserve prices (relies on competitive bidding)
 - **Potential Future:** Reserve price mechanism for large individual orders requiring guaranteed minimum prices
 
 ## How Atomica Addresses These Characteristics
@@ -127,12 +127,12 @@ Ideally, all information would remain private to maximize game-theoretic fairnes
 | Private Strategies | ✓ Partial | Timelock sealed bids (temporary privacy) |
 | MEV Resistance | ✓ Strong | Batch auctions + uniform pricing |
 | Native Cross-Chain | ✓ Full | ZK proofs of away-chain state |
-| Passive LPs | ✗ Different Model | Active market makers (intentional choice) |
+| Passive LPs | ✗ Different Model | Active bidders (intentional choice) |
 | No Adverse Selection | ✓ Strong | Self-selection + sealed bids |
 | Unified UX | ✓ Partial | Single interface, futures delivery model |
 | No Custodial Risk | ✓ Full | Cryptographic proofs, atomic settlement |
 | Capital Efficiency | ✓ High | Active deployment only |
-| Illiquidity Protection | ✓ MM Competition<br>✓ Future: Reserves | Daily batch creates critical mass; reserve prices for large orders (potential future) |
+| Illiquidity Protection | ✓ Competitive Bidding<br>✓ Future: Reserves | Daily batch creates critical mass; reserve prices for large orders (potential future) |
 
 ## Design Philosophy
 
@@ -143,7 +143,7 @@ Atomica prioritizes:
 4. **Market-driven liquidity** over protocol subsidies
 
 This leads to deliberate choices:
-- Active market maker participation instead of passive LPs (sustainable economics)
+- Active bidder participation instead of passive LPs (sustainable economics)
 - Futures delivery model instead of spot trading (embraces cross-chain latency)
 - Sealed bid auctions instead of continuous trading (fairness and MEV resistance)
 - Single daily auction for launch instead of many small auctions (liquidity concentration)

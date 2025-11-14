@@ -18,18 +18,18 @@ This document provides rigorous game-theoretic analysis proving that shill biddi
 - Hopes to win allocation at artificially low price by surprising other bidders
 
 **Type 4: Collusive Bid Depression**
-- Multiple market makers coordinate to submit uniformly low bids
+- Multiple bidders coordinate to submit uniformly low bids
 - Collectively lower clearing price to extract better terms
 
 ## Formal Model
 
 **Players**:
-- N legitimate market makers: M₁, M₂, ..., Mₙ
+- N legitimate bidders: M₁, M₂, ..., Mₙ
 - 1 strategic attacker: A (may control multiple addresses)
 - 1 auctioneer: U
 
 **Strategies**:
-- Each market maker i has true valuation vᵢ for the auctioned asset
+- Each bidder i has true valuation vᵢ for the auctioned asset
 - Can submit bid bᵢ ≤ vᵢ at any time t before auction close
 - Attacker A can submit multiple bids from different addresses
 
@@ -40,9 +40,9 @@ This document provides rigorous game-theoretic analysis proving that shill biddi
 - All winning bidders pay p* (uniform pricing)
 
 **Payoffs**:
-- If market maker i wins quantity qᵢ at clearing price p*:
+- If bidder i wins quantity qᵢ at clearing price p*:
   - Profit πᵢ = (vᵢ - p*) × qᵢ
-- If market maker loses auction: πᵢ = 0
+- If bidder loses auction: πᵢ = 0
 
 ## Type 2 Analysis: Sybil Bid Withholding
 
@@ -148,11 +148,11 @@ Attacker wins: ~20 units @ $1,960
 
 **Analysis**: Attacker won at $1,960, but could have bid $1,980 and still won. By bidding low, attacker risks being outbid by other late bidders. The attacker saved $20/unit but took on risk.
 
-**BUT**: This assumes no other market makers are active. In reality:
+**BUT**: This assumes no other bidders are active. In reality:
 
-**Case B: Rational Market Maker Response**
+**Case B: Rational Bidder Response**
 
-When the attacker's $1,960 bid is public (before auction close), rational market maker M₃ observes:
+When the attacker's $1,960 bid is public (before auction close), rational bidder M₃ observes:
 - Current clearing price would be $1,960
 - M₃'s true valuation: $2,000
 - M₃ can profitably bid $1,970
@@ -195,7 +195,7 @@ The attacker bidding below market-clearing price simply loses the auction.
 ## Type 4 Analysis: Collusive Bid Depression
 
 **Attack Scenario**:
-- K market makers collude to submit artificially low bids
+- K bidders collude to submit artificially low bids
 - Agree to all bid $1,960 when true valuation is $2,000
 - Hope to jointly lower clearing price
 
@@ -233,13 +233,13 @@ Suppose colluders agree to bid $1,960:
 **Why Collusion Is Hard to Sustain**:
 
 **1. Anonymous Participants**
-- Market makers use pseudonymous addresses
+- Bidders use pseudonymous addresses
 - Cannot identify who defected
 - Cannot punish defectors in future auctions
 
 **2. Open Entry**
-- New market makers can enter freely
-- No barrier to becoming a bidder
+- New bidders can enter freely
+- No barrier to participation
 - Colluding group cannot exclude outsiders
 
 **3. One-Shot Game Nature**
@@ -286,7 +286,7 @@ If clearing price p* < $1,900:
 ```
 
 **Effect on Collusion**:
-- Colluding market makers know auctioneer will reject if price drops >5% below market
+- Colluding bidders know auctioneer will reject if price drops >5% below market
 - Collusion only profitable if clearing price ∈ [$1,900, $2,000]
 - Maximum extractable profit: $10,000 total (divided among colluders)
 - Risk of defection still dominates for individual colluders
@@ -368,6 +368,6 @@ Creates an **incentive-compatible** auction system where:
 - Collusion is unsustainable
 - System achieves competitive market pricing
 
-**Nash Equilibrium**: All market makers bid truthfully based on their valuations, and the clearing price reflects true market conditions.
+**Nash Equilibrium**: All bidders bid truthfully based on their valuations, and the clearing price reflects true market conditions.
 
 This formal analysis demonstrates that Atomic Auctions achieve game-theoretic soundness even in partially public, anonymous environments with potential adversaries.

@@ -18,19 +18,19 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 
 **1. Price Smoothing**
 - Futures pricing naturally reduces sensitivity to momentary price spikes
-- Market makers price in expected value over settlement window
+- Bidders price in expected value over settlement window
 - Less volatility-driven slippage compared to spot markets
 
-**2. Better Market Maker Economics**
+**2. Better Bidder Economics**
 - Known settlement time enables proper hedging strategies
-- Market makers can take offsetting positions on other exchanges
+- Bidders can take offsetting positions on other exchanges
 - Settlement delay reduces inventory risk premium
 - Lower risk = tighter spreads = better pricing for users
 
 **3. Liquidity Concentration**
 - Single daily auction aggregates all volume into critical mass
 - Many small users create meaningful total volume together
-- More attractive to market makers than fragmented small auctions
+- More attractive to bidders than fragmented small auctions
 - Solves chicken-and-egg bootstrapping problem
 
 **4. Simpler Mechanism**
@@ -60,10 +60,10 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 
 **Participants:**
 - **Auctioneers (Sellers):** Users holding quote asset (e.g., USDC on Ethereum) wanting to purchase base asset (e.g., LIBRA)
-- **Bidders (Market Makers):** Holders of base asset (LIBRA on home chain) submit sealed bids
+- **Bidders:** Holders of base asset (LIBRA on home chain) submit sealed bids
 
 **Key Parameters:**
-- **No reserve prices** at launch (relies on market maker competition in large batch)
+- **No reserve prices** at launch (relies on competitive bidding in large batch)
 - **Settlement delay:** X hours after auction close (recommended 12-24 hours)
 - **Bid window:** 4-hour submission window (e.g., 08:00-12:00 UTC)
 
@@ -75,7 +75,7 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
   └─ Auction contract on home chain becomes active
 
 08:00-12:00 UTC - Bid Submission Window
-  └─ Market makers on home chain submit encrypted sealed bids for LIBRA
+  └─ Bidders on home chain submit encrypted sealed bids for LIBRA
   └─ Economic deposits prevent spam bids (returned if valid, slashed if malformed)
   └─ Bids remain cryptographically sealed via drand timelock (IBE)
 
@@ -86,15 +86,15 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
   └─ All winning bidders pay same clearing price
 
 12:00-18:00 UTC - Settlement Window
-  └─ Market makers hedge positions on external markets
+  └─ Bidders hedge positions on external markets
   └─ Cross-chain proofs generated and verified
   └─ Atomic settlement prepared
 
 18:00 UTC - Settlement (6 hours after close)
   └─ Assets delivered to all participants atomically
   └─ Native assets on both chains (no wrapped tokens)
-  └─ Market makers transfer LIBRA to users
-  └─ Users' locked USDC released to market makers
+  └─ Bidders transfer LIBRA to users
+  └─ Users' locked USDC released to bidders
 ```
 
 ### Why Single Daily Auction?
@@ -102,9 +102,9 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 **Liquidity Bootstrapping:**
 - Aggregates many small users into meaningful total volume
 - Reduces fragmentation across multiple auctions
-- Creates predictable large batch attractive to market makers
+- Creates predictable large batch attractive to bidders
 
-**Market Maker Appeal:**
+**Bidder Appeal:**
 - Known schedule enables automated participation
 - Sufficient volume in single auction worth infrastructure investment
 - Predictable daily rhythm for risk management
@@ -126,13 +126,13 @@ The settlement delay after auction close is a key design parameter with tradeoff
 ### Short Delay (6-12 hours)
 
 **Advantages:**
-- ✅ Lower inventory risk for market makers (less time exposed to price movements)
+- ✅ Lower inventory risk for bidders (less time exposed to price movements)
 - ✅ Better for users wanting quick delivery (same-day settlement possible)
 - ✅ Closer to spot market pricing (futures premium smaller)
 
 **Disadvantages:**
-- ❌ Less time for market makers to hedge (may result in wider spreads to compensate for risk)
-- ❌ Tighter operational window for market makers
+- ❌ Less time for bidders to hedge (may result in wider spreads to compensate for risk)
+- ❌ Tighter operational window for bidders
 - ❌ Higher stress testing requirements
 
 **Best For:** Launch phase where proving fast execution is important for user adoption
@@ -140,22 +140,22 @@ The settlement delay after auction close is a key design parameter with tradeoff
 ### Medium Delay (24 hours)
 
 **Advantages:**
-- ✅ Full day for market makers to manage positions
+- ✅ Full day for bidders to manage positions
 - ✅ May result in tighter spreads due to better hedging opportunities
 - ✅ Clear "next-day delivery" mental model (like Amazon Prime)
-- ✅ Market makers can use global markets across timezones
+- ✅ Bidders can use global markets across timezones
 
 **Disadvantages:**
 - ❌ Longer wait for users (full 24-hour cycle)
 - ⚠️ Moderate inventory risk (more than short, less than long)
 
-**Best For:** Steady-state operation balancing user satisfaction with market maker profitability
+**Best For:** Steady-state operation balancing user satisfaction with bidder profitability
 
 ### Long Delay (48+ hours)
 
 **Advantages:**
 - ✅ True futures market dynamics
-- ✅ Maximum hedging flexibility for market makers
+- ✅ Maximum hedging flexibility for bidders
 - ✅ Potentially best pricing for users (tightest spreads)
 - ✅ Can use multi-day hedging strategies
 
@@ -168,19 +168,19 @@ The settlement delay after auction close is a key design parameter with tradeoff
 
 ### Recommendation for Launch
 
-**12-24 hour settlement delay** balances user expectations with market maker risk management.
+**12-24 hour settlement delay** balances user expectations with bidder risk management.
 
 **Rationale:**
-- Long enough for market makers to hedge effectively (encourages competitive participation)
+- Long enough for bidders to hedge effectively (encourages competitive participation)
 - Short enough to maintain user interest (next-day delivery is familiar concept)
 - Flexible range allows adjustment based on market conditions
 - Can tune within range without changing core mechanism
 
 **Tuning Parameters:**
 - Start at 18 hours (mid-range)
-- Monitor market maker feedback on spread compression opportunities
+- Monitor bidder feedback on spread compression opportunities
 - Monitor user satisfaction with timing
-- Adjust toward 12hr if users demand faster, toward 24hr if market makers need more time
+- Adjust toward 12hr if users demand faster, toward 24hr if bidders need more time
 
 ## Comparison to Alternative Models
 
@@ -189,8 +189,8 @@ The settlement delay after auction close is a key design parameter with tradeoff
 | Dimension | Futures (Single Daily) | Spot (Multiple Daily) |
 |-----------|------------------------|------------------------|
 | **Liquidity per Auction** | Concentrated | Fragmented |
-| **Market Maker Appeal** | High (worth investment) | Lower (thin auctions) |
-| **Bootstrapping** | Easier (critical mass) | Harder (need MMs for each) |
+| **Bidder Appeal** | High (worth investment) | Lower (thin auctions) |
+| **Bootstrapping** | Easier (critical mass) | Harder (need bidders for each) |
 | **User Expectations** | Clear (futures) | Confused (delayed "spot") |
 | **Reserve Prices** | Not needed | Needed for protection |
 | **Complexity** | Simpler | More complex |
@@ -203,17 +203,17 @@ The settlement delay after auction close is a key design parameter with tradeoff
 | **MEV Resistance** | Strong (batch) | Weak (ordering matters) |
 | **Sealed Bids** | Natural fit | Complex to implement |
 | **Liquidity Concentration** | Yes | Fragmented across time |
-| **Price Discovery** | Efficient (auction) | Requires continuous MM quotes |
+| **Price Discovery** | Efficient (auction) | Requires continuous quotes |
 | **Implementation** | Simpler | Much more complex |
 
 ## Success Criteria for Futures Model
 
 **Key Metrics:**
 
-1. **Auctions consistently clear** - Every daily auction has sufficient market maker participation
+1. **Auctions consistently clear** - Every daily auction has sufficient bidder participation
 2. **Competitive pricing** - Spreads comparable to spot exchanges + reasonable futures premium
 3. **User adoption** - Growing volume indicating users accept futures delivery model
-4. **Market maker profitability** - MMs remain profitable and expand participation
+4. **Bidder profitability** - Bidders remain profitable and expand participation
 5. **No gaming** - No manipulation or strategic behavior undermining mechanism
 
 **If unsuccessful:**

@@ -116,10 +116,10 @@ From `liquidity-provision.md`, the claimed advantages over Aave/Compound:
 
 **Lending timeline:**
 ```
-T=-24h:  LP lends USDC to MM (backed by Open Libra collateral)
-T=0:     Auction closes, MM wins ETH at clearing price
+T=-24h:  LP lends USDC to bidder (backed by Open Libra collateral)
+T=0:     Auction closes, bidder wins ETH at clearing price
 T=+24h:  Settlement delivers ETH to MM
-T=+48h:  MM sells ETH, repays LP
+T=+48h:  bidder sells ETH, repays LP
 ```
 
 **Auction mechanism involvement:**
@@ -165,12 +165,12 @@ T=+48h:  MM sells ETH, repays LP
 **How this would work:**
 ```
 Single atomic transaction:
-1. Verify MM won auction (ZK proof from home chain)
+1. Verify bidder won auction (ZK proof from home chain)
 2. LP lends USDC to MM
-3. MM pays USDC to auctioneer
-4. MM receives ETH from auctioneer
-5. MM sells ETH for USDC (AMM swap within same transaction)
-6. MM repays LP in USDC (principal + interest)
+3. bidder pays USDC to auctioneer
+4. bidder receives ETH from auctioneer
+5. bidder sells ETH for USDC (AMM swap within same transaction)
+6. bidder repays LP in USDC (principal + interest)
 7. If steps 1-6 succeed, commit; else revert all
 ```
 
@@ -215,14 +215,14 @@ Single atomic transaction:
 
 ### Option 3: Collateral Liquidation Integrated with Auction
 
-**Requirement:** If MM defaults, collateral automatically liquidated via auction mechanism
+**Requirement:** If bidder defaults, collateral automatically liquidated via auction mechanism
 
 **How this would work:**
 ```
-1. MM deposits 100 Open Libra collateral
+1. bidder deposits 100 Open Libra collateral
 2. LP lends $199K against collateral
-3. MM wins auction, receives 100 ETH
-4. If MM doesn't repay within 48 hours:
+3. bidder wins auction, receives 100 ETH
+4. If bidder doesn't repay within 48 hours:
    - Open Libra collateral automatically auctioned
    - Proceeds sent to LP to cover debt
    - No external liquidators needed
@@ -278,7 +278,7 @@ Single atomic transaction:
 - Risk-seeking LPs: Might try Atomica (high APY)
 - **Total addressable market: Small (high-risk capital only)**
 
-### For Market Makers (Borrowers)
+### For Bidders (Borrowers)
 
 **What Atomica offers:**
 - Borrow against Open Libra collateral
@@ -295,27 +295,27 @@ Single atomic transaction:
 - Aave costs 5% APY
 - **Atomica is 11x more expensive**
 
-**Why would an MM use Atomica?**
+**Why would an bidder use Atomica?**
 - Only if they don't have ETH/BTC collateral
 - Only if they have Open Libra tokens
 - Only if they're already in the Atomica ecosystem
 
 **Likely outcome:**
-- MMs with ETH: Use Aave (cheaper)
-- MMs with only Open Libra: Use Atomica (forced)
+- bidders with ETH: Use Aave (cheaper)
+- bidders with only Open Libra: Use Atomica (forced)
 - **Total addressable market: Only users locked into Atomica ecosystem**
 
 ### Circular Dependency Problem
 
 **The paradox:**
-1. MMs need Open Libra tokens to use Atomica lending
+1. bidders need Open Libra tokens to use Atomica lending
 2. To get Open Libra, they must buy it (creates buy pressure)
 3. To buy Open Libra, they need capital (but they need lending for capital)
 4. **Chicken-and-egg problem**
 
 **Comparison to Aave:**
-1. MMs need ETH to use Aave lending
-2. MMs already have ETH (it's what they're trading!)
+1. bidders need ETH to use Aave lending
+2. bidders already have ETH (it's what they're trading!)
 3. No circular dependency
 
 **Conclusion:** Atomica lending only works for users already in ecosystem. Not a growth driver.
@@ -408,7 +408,7 @@ Single atomic transaction:
 
 **#3 - Does auction participation justify 55% APY?**
 - ❌ No - Uniform price eliminates arbitrage
-- ❌ No - MM profit depends on external price movements (not auction)
+- ❌ No - bidder profit depends on external price movements (not auction)
 - ❌ No - Borrower could just use cheaper Aave capital (5% APY)
 
 ### What Would Make It Auction-Specific?
@@ -418,15 +418,15 @@ Single atomic transaction:
 LP lends capital ONLY to auction winners, repaid from settlement proceeds
 
 Mechanism:
-1. Auction clears, MM wins 100 ETH at $1,990
-2. LP sees MM won (provable on-chain)
+1. Auction clears, bidder wins 100 ETH at $1,990
+2. LP sees bidder won (provable on-chain)
 3. LP lends $199K to fund settlement
 4. Settlement: Auction escrow sends 100 ETH to MM, 0.15 ETH to LP (interest)
-5. LP receives 0.15 ETH ($300 interest), MM gets 99.85 ETH
+5. LP receives 0.15 ETH ($300 interest), bidder gets 99.85 ETH
 ```
 
 **Why this is auction-specific:**
-- ✅ Loan only possible because MM won auction
+- ✅ Loan only possible because bidder won auction
 - ✅ Repayment comes from auction settlement (not external sale)
 - ✅ Auction escrow enforces payment (trustless)
 
@@ -437,13 +437,13 @@ Mechanism:
 
 **Example 2 - Auction Participation Options:**
 ```
-LP sells MM a "call option" to borrow at fixed rate if they win auction
+LP sells bidder a "call option" to borrow at fixed rate if they win auction
 
 Mechanism:
-1. MM pays LP $100 upfront for "option to borrow $200K at 0.15% if I win"
-2. Auction occurs, MM may or may not win
-3. If MM wins: Exercises option, borrows $200K at 0.15%
-4. If MM loses: Option expires, LP keeps $100 premium
+1. bidder pays LP $100 upfront for "option to borrow $200K at 0.15% if I win"
+2. Auction occurs, bidder may or may not win
+3. If bidder wins: Exercises option, borrows $200K at 0.15%
+4. If bidder loses: Option expires, LP keeps $100 premium
 ```
 
 **Why this is auction-specific:**
@@ -481,7 +481,7 @@ This is **out-of-band lending** - the auction mechanism provides no unique value
 
 ### The Only Reason to Build This
 
-**If Atomica wants MMs to have leverage:**
+**If Atomica wants bidders to have leverage:**
 
 **Option A:** Build lending protocol (proposed)
 - Effort: High (cross-chain lending, liquidations, oracles)
@@ -495,14 +495,14 @@ This is **out-of-band lending** - the auction mechanism provides no unique value
 
 **Example integration:**
 ```
-1. MM deposits ETH on Aave (existing)
-2. MM borrows USDC from Aave at 5% APY
-3. MM uses USDC to bid in Atomica auctions
-4. MM wins, receives ETH, sells for USDC
-5. MM repays Aave
+1. bidder deposits ETH on Aave (existing)
+2. bidder borrows USDC from Aave at 5% APY
+3. bidder uses USDC to bid in Atomica auctions
+4. bidder wins, receives ETH, sells for USDC
+5. bidder repays Aave
 ```
 
-**This works TODAY** without building anything. MMs can already use Aave to get leverage for Atomica.
+**This works TODAY** without building anything. bidders can already use Aave to get leverage for Atomica.
 
 **Conclusion:** There's no reason to build a separate lending protocol unless it provides auction-specific guarantees that reduce risk or enable unique structures. Atomica's proposal does neither.
 
@@ -514,7 +514,7 @@ This is **out-of-band lending** - the auction mechanism provides no unique value
 
 1. **Archive lending document** - Acknowledge it doesn't provide differentiated value
 2. **Remove lending from roadmap** - Focus on core auction mechanism
-3. **Document Aave integration** - Show MMs how to use existing lending
+3. **Document Aave integration** - Show bidders how to use existing lending
 4. **Consider auction-native alternatives** - Only if they provide unique guarantees
 
 ### What NOT to Do

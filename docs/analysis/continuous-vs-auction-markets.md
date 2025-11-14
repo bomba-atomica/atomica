@@ -47,7 +47,7 @@ The world's first formal stock exchange operated primarily through **call auctio
 Originally operated with periodic "call over" sessions where each security was auctioned in sequence. The system worked well for 150+ years before transitioning to continuous trading under regulatory pressure.
 
 **New York Stock Exchange (1792-2000s):**
-Used **specialist system** with periodic batch auctions at open/close, semi-continuous trading during day with specialists as designated market makers. Opening and closing auctions consistently provided the best price discovery of the day.
+Used **specialist system** with periodic batch auctions at open/close, semi-continuous trading during day with specialists as designated bidders. Opening and closing auctions consistently provided the best price discovery of the day.
 
 ### The Continuous Trading Transition (1970s-2000s)
 
@@ -249,7 +249,7 @@ User loss: $5,000 (paid $205K instead of $200K)
 
 ### 7. Specialist System Collapse (NYSE, 2004)
 
-**Background:** NYSE used "specialist" system where designated market makers had obligation to maintain orderly markets.
+**Background:** NYSE used "specialist" system where designated bidders had obligation to maintain orderly markets.
 
 **Event:** Multiple specialists caught front-running customer orders using continuous market structure
 
@@ -574,7 +574,7 @@ CoW Swap (batch auction):
 **Definition:** Displayed liquidity (quotes on order book) that disappears when needed, especially during volatility.
 
 **Mechanism:**
-- Market makers post quotes using algorithmic systems
+- Bidders post quotes using algorithmic systems
 - Algorithms monitor for large orders or volatility
 - Quotes automatically withdrawn when risk increases
 - Liquidity appears abundant but vanishes under stress
@@ -601,7 +601,7 @@ CoW Swap (batch auction):
 **Why Continuous Markets Create Phantom Liquidity:**
 - No commitment to execute (can cancel instantly)
 - Quote flickering rewards speed over genuine liquidity provision
-- Adverse selection causes market makers to withdraw during volatility
+- Adverse selection causes bidders to withdraw during volatility
 - Continuous markets incentivize appearing liquid without being liquid
 
 **Auction Alternative:**
@@ -689,13 +689,13 @@ CoW Swap (batch auction):
 
 ### 5. Toxic Order Flow / Winner's Curse
 
-**Definition:** Market makers in continuous markets suffer adverse selection by trading with informed traders, requiring wide spreads to compensate.
+**Definition:** Bidders in continuous markets suffer adverse selection by trading with informed traders, requiring wide spreads to compensate.
 
 **Mechanism:**
-1. Market maker posts bid/ask spread
-2. Informed trader (insider, algorithmic trader, arbitrageur) selectively trades against market maker
-3. Market maker accumulates losing positions
-4. Market maker widens spread to compensate for adverse selection
+1. Bidder posts bid/ask spread
+2. Informed trader (insider, algorithmic trader, arbitrageur) selectively trades against bidder
+3. Bidder accumulates losing positions
+4. Bidder widens spread to compensate for adverse selection
 
 **Empirical Evidence:**
 
@@ -704,7 +704,7 @@ CoW Swap (batch auction):
 
 **Equity Markets (Hendershott & Menkveld, 2014):**
 - 50-70% of bid-ask spread attributable to adverse selection in continuous markets
-- Market makers lose money on ~55% of trades to informed traders
+- Bidders lose money on ~55% of trades to informed traders
 - Require profits on uninformed flow to compensate for losses
 
 **Crypto Markets (DEX LVR Research, 2021-2023):**
@@ -715,15 +715,15 @@ CoW Swap (batch auction):
 **Research (Milionis et al., 2023):** "AMM LPs systematically lose to arbitrageurs due to stale prices in continuous trading. Batch auctions would eliminate this adverse selection." [20]
 
 **Why Continuous Markets Create Winner's Curse:**
-- Market makers must quote continuously without knowing who will trade
+- Bidders must quote continuously without knowing who will trade
 - Informed traders selectively pick off stale quotes
 - Speed advantages allow informed traders to act on information first
-- Market makers forced to widen spreads or suffer losses
+- Bidders forced to widen spreads or suffer losses
 
 **Auction Solution:**
 - All participants reveal information simultaneously
 - No selective timing advantage for informed traders
-- Market makers compete on price with full information
+- Bidders compete on price with full information
 - Narrower spreads (less adverse selection cost)
 
 ---
@@ -1085,18 +1085,18 @@ Batch Auction (CoW Swap):
 
 **Key Findings:**
 - Bid-ask spreads in continuous markets primarily reflect **adverse selection costs**
-- Market makers lose money to informed traders, must widen spreads to compensate
+- Bidders lose money to informed traders, must widen spreads to compensate
 - Sequential trading creates information asymmetry
 
 **Model:**
 - Informed traders selectively time trades in continuous markets
-- Market makers cannot distinguish informed from uninformed orders
+- Bidders cannot distinguish informed from uninformed orders
 - Equilibrium spread includes adverse selection premium
 
 **Implications for Auctions:**
 - Simultaneous revelation in auctions reduces adverse selection
 - Narrower spreads possible when all participants reveal simultaneously
-- Market makers can compete on price without winner's curse
+- Bidders can compete on price without winner's curse
 
 **Impact:** Foundational paper in market microstructure, 10,000+ citations
 
@@ -1380,11 +1380,11 @@ Batch Auction (CoW Swap):
 
 ### 1. High-Frequency Hedging
 
-**Use Case:** Market makers hedging inventory second-by-second
+**Use Case:** Bidders hedging inventory second-by-second
 
 **Why Continuous Needed:** Can't wait for next auction to hedge risk
 
-**Example:** Options market maker selling call option, needs to immediately hedge with underlying stock
+**Example:** Options bidder selling call option, needs to immediately hedge with underlying stock
 
 ### 2. Time-Sensitive Arbitrage
 

@@ -488,11 +488,11 @@ Since reserves are committed before bids arrive:
 
 **Risk**: Setting reserve too high in thin markets means no sale.
 
-### Market Maker Participation
+### Bidder Participation
 
-**Advantages for Market Makers:**
+**Advantages for Bidders:**
 
-This auction format is particularly attractive for professional market makers:
+This auction format is particularly attractive for professional bidders:
 
 **Capital efficiency:**
 - No capital locked until auction clears
@@ -548,9 +548,9 @@ Traditional order book with continuous matching:
 - More granular price discovery over time
 - Established infrastructure and user familiarity
 
-### Automated Market Makers (AMMs)
+### Automated Bidders (AMMs)
 
-Constant product market makers (like Uniswap):
+Constant product bidders (like Uniswap):
 
 **Advantages of batch auction:**
 - No impermanent loss for liquidity providers
@@ -757,7 +757,7 @@ Multiple users on Away chain could batch their swaps:
 
 **Benefits:**
 - Better price discovery through aggregation
-- More efficient for market makers (batch execution)
+- More efficient for bidders (batch execution)
 - Fair pricing across all users
 - Reduced per-user overhead
 
@@ -804,7 +804,7 @@ When markets have few large participants with market power:
 Despite limitations with large participants, uniform price auctions still outperform alternatives:
 - Better price discovery than pay-as-bid (discriminatory) auctions where ALL participants shade
 - More MEV-resistant than continuous order books (CLOBs)
-- More capital efficient than automated market makers (AMMs)
+- More capital efficient than automated bidders (AMMs)
 - Fairer to small participants than mechanisms favoring speed/infrastructure
 
 **Key Takeaways:**

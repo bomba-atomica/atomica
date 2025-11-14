@@ -3,7 +3,7 @@
 ## Purpose of This Document
 
 This document provides a **detailed comparative economic analysis** of three exchange mechanisms for cross-chain atomic swaps:
-1. **Constant Product Market Makers (CPMMs)** - Passive liquidity pools
+1. **Constant Product Bidders (CPMMs)** - Passive liquidity pools
 2. **Spot Auctions** - Multiple daily auctions with immediate settlement
 3. **Futures Auctions** - Daily batch auction with delayed settlement (Atomica's chosen model)
 
@@ -16,7 +16,7 @@ This document provides a **detailed comparative economic analysis** of three exc
 
 This analysis compares exchange mechanisms for enabling trustless cross-chain asset swaps without bridges or wrapped tokens. The mechanisms use fundamentally different approaches to liquidity provision and price discovery, leading to distinct economic tradeoffs.
 
-**Key Finding:** For zero-fee, zero-subsidy operation, auctions (especially futures auctions) are economically superior to CPMMs due to self-sustaining market maker compensation through bid-ask spreads.
+**Key Finding:** For zero-fee, zero-subsidy operation, auctions (especially futures auctions) are economically superior to CPMMs due to self-sustaining bidder compensation through bid-ask spreads.
 
 ## Context and Assumptions
 
@@ -34,7 +34,7 @@ This analysis assumes the following infrastructure:
 - No protocol fees or profit extraction
 - Trustless execution (no custodians or centralized intermediaries)
 
-## Constant Product Market Maker (CPMM) Approach
+## Constant Product Bidder (CPMM) Approach
 
 ### Mechanism Overview
 
@@ -61,7 +61,7 @@ CPMMs use automated liquidity pools based on the constant product formula: **x Ã
 
 **2. Always Available Liquidity**
 - Pools provide 24/7 liquidity if LPs maintain deposits
-- No dependence on market makers being online
+- No dependence on bidders being online
 - Predictable availability
 
 **3. Simple User Experience**
@@ -151,11 +151,11 @@ LPs suffer guaranteed losses (LVR + IL) with no compensation. Rational LPs would
 
 ### Mechanism Overview
 
-Single-sided auctions where market makers competitively bid to clear user orders.
+Single-sided auctions where bidders competitively bid to clear user orders.
 
 **How it works:**
 1. User locks assets on away chain and initiates auction on home chain
-2. Market makers submit bids specifying quantity and price
+2. Bidders submit bids specifying quantity and price
 3. Bids aggregated and sorted by price (highest to lowest)
 4. Clearing price set at lowest qualifying bid that satisfies total quantity
 5. All winning bidders pay the same uniform clearing price
@@ -170,35 +170,35 @@ Single-sided auctions where market makers competitively bid to clear user orders
 
 **Price Discovery:**
 - Competitive bidding reveals market prices
-- Market makers bid based on external market conditions
-- Uniform pricing creates strategic bid-shading incentives (demand reduction). While not incentive-compatible like Vickrey auctions, competition among market makers may discipline strategic behavior. Revenue equivalence to other formats holds under certain benchmark conditions (Milgrom-Wilson 2020).
+- Bidders bid based on external market conditions
+- Uniform pricing creates strategic bid-shading incentives (demand reduction). While not incentive-compatible like Vickrey auctions, competition among bidders may discipline strategic behavior. Revenue equivalence to other formats holds under certain benchmark conditions (Milgrom-Wilson 2020).
 
 ### Advantages
 
 **1. Self-Sustaining Economics**
 
-Market makers compensated through bid-ask spreads:
+Bidders compensated through bid-ask spreads:
 - Buy from user at auction clearing price
 - Sell on external markets at higher price (or hedge positions)
 - Spread compensates for inventory risk, capital costs, and potential adverse selection
 - In competitive equilibrium, expected profits approach zero after risk adjustment (contestable markets theory)
 - No protocol fees or subsidies required
 
-**Important caveat:** Market maker compensation represents fair payment for risk-bearing and capital provision, not risk-free arbitrage profits. Market makers face inventory risk (price movements between auction clearing and external execution) and winner's curse effects (discussed below).
+**Important caveat:** Bidder compensation represents fair payment for risk-bearing and capital provision, not risk-free arbitrage profits. Bidders face inventory risk (price movements between auction clearing and external execution) and winner's curse effects (discussed below).
 
-**Impact:** Economically viable without external capital sources, though market makers earn competitive returns, not excess rents.
+**Impact:** Economically viable without external capital sources, though bidders earn competitive returns, not excess rents.
 
 **2. Active Liquidity Provision**
 
-Market makers actively choose which auctions to fill:
+Bidders actively choose which auctions to fill:
 - Evaluate each opportunity individually
 - Only participate when expected profit > risk-adjusted costs
 - Can hedge positions on other markets
-- Reduced adverse selection through self-selection, though market makers still face winner's curse (Milgrom & Weber 1982): winning an auction reveals that other bidders valued the opportunity less, which may signal negative information about asset value
+- Reduced adverse selection through self-selection, though bidders still face winner's curse (Milgrom & Weber 1982): winning an auction reveals that other bidders valued the opportunity less, which may signal negative information about asset value
 
 **3. Capital Efficiency**
 
-Market makers deploy capital only when clearing specific auctions:
+Bidders deploy capital only when clearing specific auctions:
 - No idle capital sitting in pools
 - Capital moves to where it's needed
 - Comparable efficiency to centralized order books without custody risk
@@ -215,13 +215,13 @@ Uniform price auction structure limits MEV exploitation:
 **5. No Passive LP Losses**
 
 Active participation eliminates traditional AMM problems:
-- No LVR (market makers choose when to provide liquidity)
+- No LVR (bidders choose when to provide liquidity)
 - No impermanent loss (no permanent capital deposits)
 - No JIT attacks (auction format prevents last-second extraction)
 
 **6. Competition Drives Pricing**
 
-Multiple market makers competing benefits users:
+Multiple bidders competing benefits users:
 - Bid competition narrows spreads
 - More participants = better prices
 - Natural market mechanism without protocol intervention
@@ -240,7 +240,7 @@ Auctions require waiting for batch window:
 **2. Liquidity Uncertainty**
 
 No guaranteed liquidity:
-- Depends on market maker participation
+- Depends on bidder participation
 - Thin markets may receive few or no bids
 - Users face execution risk
 
@@ -253,12 +253,12 @@ More complex than simple swap interface:
 - Reserve price decisions require market knowledge
 - Less familiar than traditional AMM UX
 
-**4. Market Maker Barriers**
+**4. Bidder Barriers**
 
 Requires sophisticated participants:
-- Market makers need capital, infrastructure, and expertise
+- Bidders need capital, infrastructure, and expertise
 - Fewer potential participants than passive LPs
-- Risk of market maker centralization
+- Risk of bidder centralization
 
 **Counter-argument:** Professional market making may actually provide better execution than amateur LPs.
 
@@ -291,9 +291,9 @@ Public bid visibility creates information asymmetries and strategic timing issue
 
 **7. Cold Start Problem**
 
-Bootstrapping initial market maker participation:
+Bootstrapping initial bidder participation:
 - New markets need critical mass of MMs
-- Chicken-and-egg: users want liquidity, MMs want volume
+- Chicken-and-egg: users want liquidity, bidders want volume
 - May require initial incentives or market making commitments
 
 ## Comparative Analysis
@@ -305,7 +305,7 @@ Bootstrapping initial market maker participation:
 | **LP/MM Compensation** | None (0% fees) | Bid-ask spread |
 | **External Subsidy Needed** | Yes (token emissions or grants) | No |
 | **Long-term Viability** | Questionable without subsidies | Self-sustaining |
-| **Rational Participation** | Negative EV for LPs | Positive EV for MMs |
+| **Rational Participation** | Negative EV for LPs | Positive EV for bidders |
 
 **Analysis:** Without fees, CPMMs lack sustainable incentive mechanisms. Auctions are self-compensating through market dynamics.
 
@@ -328,7 +328,7 @@ Bootstrapping initial market maker participation:
 | **Price Certainty** | Slippage curve | Competitive bidding |
 | **Complexity** | Simple swap interface | Auction mechanics + reserve prices |
 | **Familiarity** | High (common in DeFi) | Lower (less common) |
-| **Liquidity Guarantee** | Yes (if pools funded) | No (depends on MM participation) |
+| **Liquidity Guarantee** | Yes (if pools funded) | No (depends on bidder participation) |
 
 **Analysis:** CPMMs provide simpler UX and instant execution, but auction complexity may be justified by better economics.
 
@@ -338,7 +338,7 @@ Bootstrapping initial market maker participation:
 |-----------|------|---------|
 | **Mechanism** | Arbitrage-driven | Competitive bidding |
 | **Speed** | Continuous | Batch (auction window) |
-| **Accuracy** | Depends on arbitrageur activity | Depends on MM competition |
+| **Accuracy** | Depends on arbitrageur activity | Depends on bidder competition |
 | **Information Efficiency** | Reactive (follows external markets) | Active (MMs incorporate market data) |
 
 **Analysis:** Both rely on external market information. CPMMs update continuously; auctions discover prices in batches.
@@ -368,7 +368,7 @@ Bootstrapping initial market maker participation:
 
 | Dimension | CPMM | Auction |
 |-----------|------|---------|
-| **New Trading Pairs** | Requires new LP deposits per pair | MMs can service multiple pairs |
+| **New Trading Pairs** | Requires new LP deposits per pair | bidders can service multiple pairs |
 | **Thin Markets** | Extreme slippage or no liquidity | May receive few/no bids |
 | **High Volume Markets** | Scales well (if liquidity exists) | Scales well (attracts more MMs) |
 | **Cross-Chain Complexity** | Each chain needs separate pools | Centralized auction coordination |
@@ -386,7 +386,7 @@ Bootstrapping initial market maker participation:
 - LP subsidy burden high due to volume-based LVR
 
 **Auction:**
-- Many market makers compete (tight spreads)
+- Many bidders compete (tight spreads)
 - Auction latency may frustrate frequent traders
 - Competitive environment ensures good pricing
 - Self-sustaining without subsidies
@@ -402,9 +402,9 @@ Bootstrapping initial market maker participation:
 - Probably non-functional
 
 **Auction:**
-- May receive few market maker bids
+- May receive few bidder bids
 - Reserve prices give users control over acceptable prices
-- MMs can service many pairs without capital lock-up
+- bidders can service many pairs without capital lock-up
 - More likely to function even with thin activity
 
 **Winner:** Auctions (lower capital requirements enable long-tail coverage)
@@ -417,7 +417,7 @@ Bootstrapping initial market maker participation:
 - Slippage predictable but potentially severe
 
 **Auction:**
-- Market makers can bring substantial capital for single auction
+- Bidders can bring substantial capital for single auction
 - Competitive bidding may provide better pricing than slippage curve
 - Reserve price protects user from poor execution
 
@@ -495,9 +495,9 @@ Bootstrapping initial market maker participation:
 
 ### For Auctions
 
-1. **Auction Duration Optimization:** What is the optimal batch window balancing latency vs. MM participation?
+1. **Auction Duration Optimization:** What is the optimal batch window balancing latency vs. bidder participation?
 
-2. **Market Maker Bootstrapping:** How to attract initial market makers to new markets/chains?
+2. **Bidder Bootstrapping:** How to attract initial bidders to new markets/chains?
 
 3. **Shill Bidding Empirics:** Do no-bid-lowering and reserve price penalties sufficiently mitigate manipulation in practice?
 
@@ -509,7 +509,7 @@ Bootstrapping initial market maker participation:
 
 1. **User Preference Studies:** Do users prioritize instant execution or better pricing? How much latency is acceptable?
 
-2. **Market Maker Competition:** How many market makers are needed for competitive pricing? What are barriers to entry?
+2. **Bidder Competition:** How many bidders are needed for competitive pricing? What are barriers to entry?
 
 3. **Thin Market Solutions:** Neither approach excels in thin markets. Are there novel mechanisms for guaranteed liquidity?
 
@@ -541,10 +541,10 @@ The key realization is that cross-chain atomic swaps inherently require coordina
 **Liquidity Bootstrapping**
 - Large batch creates critical mass of volume in single auction
 - Many small users aggregate into meaningful total volume
-- Reduces chicken-and-egg problem of market maker participation
+- Reduces chicken-and-egg problem of bidder participation
 - Lower frequency means each auction has higher total value
 
-**Market Maker Advantages**
+**Bidder Advantages**
 - Known settlement time allows proper hedging strategies
 - Futures pricing reduces price risk (MMs can take offsetting positions)
 - Single large auction more attractive than many small ones
@@ -552,7 +552,7 @@ The key realization is that cross-chain atomic swaps inherently require coordina
 
 **User Experience Benefits**
 - Clear delivery expectations (not spot market confusion)
-- Futures pricing may provide better rates due to reduced MM risk
+- Futures pricing may provide better rates due to reduced bidder risk
 - Single daily auction easier to understand than continuous trading
 - Predictable schedule (auction at same time daily)
 
@@ -590,12 +590,12 @@ This approach is **practical and implementable** with current cryptographic tool
 | **Settlement** | Immediate | X hours after close |
 | **Pricing Expectation** | Spot market rates | Futures/forward rates |
 | **Liquidity per Auction** | Fragmented across many | Concentrated in one |
-| **Market Maker Appeal** | Lower volume, higher risk | Higher volume, hedgeable |
+| **Bidder Appeal** | Lower volume, higher risk | Higher volume, hedgeable |
 | **Price Volatility Risk** | High (immediate settlement) | Lower (time to hedge) |
 | **Reserve Price Needed** | Yes (protect users) | No (large liquid auction) |
 | **Complexity** | Reserve price mechanism | Simpler (no reserve) |
 | **Bid Privacy** | Helpful | Essential (sealed bids required) |
-| **Bootstrapping** | Hard (need MMs for many auctions) | Easier (single large auction) |
+| **Bootstrapping** | Hard (need bidders for many auctions) | Easier (single large auction) |
 
 ### Game-Theoretic Improvements
 
@@ -612,14 +612,14 @@ This approach is **practical and implementable** with current cryptographic tool
 - Uniform price auction works better when bids are sealed
 
 **Futures Pricing Dynamics:**
-- Market makers can price in expected risk over settlement period
+- Bidders can price in expected risk over settlement period
 - Bid-ask spreads may be tighter due to hedging opportunities
 - Less sensitivity to momentary volatility spikes
 - More stable, predictable pricing
 
 ### Economic Viability Analysis
 
-**Market Maker Perspective:**
+**Bidder Perspective:**
 - Single large daily auction worth the infrastructure investment
 - Known settlement time enables proper risk management
 - Futures pricing allows hedging on other markets
@@ -627,7 +627,7 @@ This approach is **practical and implementable** with current cryptographic tool
 
 **User Perspective:**
 - Clear expectations (futures delivery, not spot)
-- Potentially better pricing due to reduced MM risk premium
+- Potentially better pricing due to reduced bidder risk premium
 - Simple mental model (one auction per day)
 - Predictable schedule for planning transactions
 
@@ -662,14 +662,14 @@ Three distinct mechanisms can enable trustless cross-chain atomic swaps, each wi
 
 **CPMMs** prioritize user experience (instant execution, familiar interface) but face severe economic challenges without protocol fees. The passive liquidity provision model results in negative expected value for LPs through LVR and impermanent loss, requiring external subsidies to function.
 
-**Spot Auctions** prioritize economic sustainability through active liquidity provision and self-compensating market makers. However, they introduce execution latency, complexity (reserve prices, penalties), and potential timing game vulnerabilities. Multiple auctions per day fragment liquidity and create bootstrapping challenges.
+**Spot Auctions** prioritize economic sustainability through active liquidity provision and self-compensating bidders. However, they introduce execution latency, complexity (reserve prices, penalties), and potential timing game vulnerabilities. Multiple auctions per day fragment liquidity and create bootstrapping challenges.
 
 **Futures Market Model (Daily Batch Auctions with Sealed Bids)** represents a novel synthesis that addresses many challenges of both prior approaches:
 - Self-sustaining economics (like spot auctions)
 - Concentrated liquidity through single daily batch
 - Simpler mechanism (no reserve prices needed)
 - Fair price discovery via mandatory sealed bids (timelock + ZK)
-- Better pricing for users (reduced MM risk premium through hedging)
+- Better pricing for users (reduced bidder risk premium through hedging)
 - Easier bootstrapping (critical mass in single auction)
 - Clear user expectations (futures delivery, not spot)
 
@@ -677,13 +677,13 @@ Three distinct mechanisms can enable trustless cross-chain atomic swaps, each wi
 
 For cross-chain atomic swaps specifically, the futures market model may be optimal:
 - Cross-chain coordination already introduces latency (embrace it, don't fight it)
-- Settlement delays enable better risk management for market makers
+- Settlement delays enable better risk management for bidders
 - Single daily auction creates natural liquidity concentration
 - Sealed bids solve information asymmetry problems
 - Simpler mechanism (no reserve prices) reduces attack surface
 
 **Recommended Approach:**
-Start with a **single daily batch auction using timelocked sealed bids** for the bootstrapping phase. This maximizes liquidity concentration, simplifies the mechanism, and creates predictable schedule for market maker participation. As volume grows, consider adding:
+Start with a **single daily batch auction using timelocked sealed bids** for the bootstrapping phase. This maximizes liquidity concentration, simplifies the mechanism, and creates predictable schedule for bidder participation. As volume grows, consider adding:
 - Multiple daily auctions at different times for different geographies
 - Spot auction options for users willing to pay premium for immediate settlement
 - Hybrid approaches where large trades use futures and small trades use spot
@@ -732,7 +732,7 @@ These papers collectively establish that uniform price auctions are subject to s
 - Foundational model of adverse selection in market making
 - Derives bid-ask spreads as compensation for trading with informed traders
 
-### DeFi and Automated Market Makers
+### DeFi and Automated Bidders
 
 **Note:** DeFi research is rapidly evolving. The following represents current understanding but citations may be approximate:
 
@@ -746,7 +746,7 @@ These papers collectively establish that uniform price auctions are subject to s
 - Technical documentation available from Uniswap Labs
 - Increases capital efficiency but creates additional complexity and risks
 
-**Constant Function Market Makers (CFMMs):**
+**Constant Function Bidders (CFMMs):**
 - Researchers including Angeris, Chitra, and others have provided mathematical analysis
 - Work covers arbitrage conditions, price discovery, and oracle properties
 

@@ -1084,7 +1084,7 @@ Difference: Negligible (~$36/year)
 **Tasks:**
 1. **Gradual Rollout**
    - Start with small daily auctions (1-10 ETH)
-   - Invite selected market makers (closed alpha)
+   - Invite selected bidders (closed alpha)
    - Monitor every auction for issues
    - Gradually increase auction sizes
 
@@ -1097,20 +1097,20 @@ Difference: Negligible (~$36/year)
 3. **Economic Validation**
    - Verify gas cost assumptions hold in production
    - Monitor auction clearing prices and spreads
-   - Ensure market maker profitability
+   - Ensure bidder profitability
    - Validate batching efficiency (100+ auctions/proof)
 
 4. **Iterative Improvement**
    - Address any issues discovered in production
    - Optimize based on real usage patterns
-   - Collect feedback from market makers and users
+   - Collect feedback from bidders and users
    - Plan for future feature enhancements based on usage
 
 **Success Criteria:**
 - 100+ successful auctions on mainnet
 - No critical security incidents
 - Gas costs within budget (<$0.10/auction)
-- Positive market maker feedback
+- Positive bidder feedback
 
 ---
 

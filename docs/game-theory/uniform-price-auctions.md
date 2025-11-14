@@ -17,8 +17,8 @@ The auction operates as follows:
 - Assets are locked in temporary escrow (via HTLC or similar mechanism) on the Away chain
 - Escrow is released at auction conclusion based on settlement outcome
 
-**Bidders (Home Chain Market Makers)**
-- Professional market makers on Home chain bid for units of the Away chain asset
+**Bidders (Home Chain Participants)**
+- Professional bidders on Home chain bid for units of the Away chain asset
 - Bidders use unlocked balances from ordinary wallets—no capital lock-up required until auction clears
 - Each bidder submits bids specifying quantity and price for units they wish to purchase
 
@@ -144,7 +144,7 @@ This design achieves several desirable properties:
 - Auctioneer cannot collude with bidders to manipulate reserve (commit-reveal with default release)
 - Sealed bids prevent coordination during auction window
 
-### Market Maker Participation
+### Bidder Participation
 
 - No capital lock-up until auction clears (low opportunity cost)
 - Competitive auction ensures market-rate pricing (no adverse selection)
@@ -155,7 +155,7 @@ This design achieves several desirable properties:
 **Active Mitigations:**
 - No bid lowering policy (enforced in smart contract)
 - Sealed bids via timelock encryption (prevents shill bidding entirely)
-- No reserve prices (relies on market maker competition and liquidity concentration)
+- No reserve prices (relies on competitive bidding and liquidity concentration)
 
 **Rationale:** Sealed bids make most other mitigations unnecessary during auction window.
 
