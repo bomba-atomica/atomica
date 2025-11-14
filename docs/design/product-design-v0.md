@@ -60,15 +60,46 @@ Bid and reserve price confidentiality is maintained using time-lock encryption:
 - **Future Plans**: Migration to more suitable system when available
 - **Transparency Note**: No expectation of infinite privacy; revealed data serves as statistical information for future auctions
 
-### 6. Auction Sequencing
+### 6. Auction Sequencing and Multi-Asset Clearing
 
-Auctions are ordered to maximize global trading volume:
+**Bidding**: All asset auctions occur simultaneously with sealed bids (8:00 AM - 12:00 PM EST)
 
-- **Order**: Highest value assets → Lowest value assets
-- **Rationale**: Bidders with rejected bids on popular assets can participate in subsequent auctions
-- **Goal**: Maximize total volume across all auctions, not individual asset revenue
+**Revelation**: All bids decrypt simultaneously at 12:00 PM (no information cascades during bidding)
 
-**Design Consideration**: This sequencing strategy should be reviewed empirically. Alternative: if auctions ran in reverse order, participants might hold capital for last items, potentially reducing aggregate volume.
+**Clearing Order**: Auctions clear sequentially in predetermined order: **Smallest market → Biggest market**
+- Order: DOGE → LINK → UNI → DOT → ATOM → AVAX → MATIC → SOL → BTC → ETH
+- **Rationale**: Prioritize liquidity for underserved small/niche markets where users have fewer alternatives
+- **Strategic Focus**: Major markets (ETH/BTC) already have deep liquidity on CEXs/DEXs. Atomica's competitive advantage is providing price discovery for long-tail assets.
+
+**Over-Budget Fee Mechanism**:
+- Users can bid on multiple assets with total bids exceeding their balance
+- If `sum(bids) > balance`, protocol charges 3-5% fee upfront (scaled by over-budget ratio)
+- Net budget = balance - fee
+- Auctions clear sequentially; when user's net budget exhausted, remaining wins forfeited
+- Fee creates protocol revenue and deters griefing attacks
+
+**Example**:
+```
+User has 100k LIBRA, bids 150k total (50% over-budget)
+Fee: 3% × 100k = 3k LIBRA (collected upfront)
+Net budget: 97k LIBRA
+
+Clearing sequence:
+1. DOGE clears: User wins 5k → 92k remaining
+2. SOL clears: User wins 40k → 52k remaining
+3. BTC clears: User wins, needs 60k → FORFEITED (only 52k left)
+4. ETH clears: User wins, needs 50k → FORFEITED
+
+Result: User receives DOGE + SOL, forfeits BTC + ETH
+```
+
+**Design Rationale**:
+- Simultaneous revelation eliminates sequential timing games during bidding
+- Sequential clearing (smallest→biggest) with global priority provides simplest smart contract implementation
+- Fee-based griefing deterrent (economic, not algorithmic)
+- Focus on underserved markets differentiates Atomica from incumbent venues
+
+**Reference**: See [Sequential Auction Analysis](../game-theory/sequential-auction-analysis.md) for full game theory analysis and alternative designs considered.
 
 ### 7. Asset Trading Limits
 
@@ -147,17 +178,27 @@ All auctions are isolated and self-contained:
 3. **Efficiency**: Atomic settlement eliminates counterparty risk
 4. **Incentive Alignment**: Fee structures encourage honest participation and discourage spam
 5. **Volume Maximization**: Sequencing and design choices optimize for total market volume
-6. **No Protocol Extraction**: Protocol generates no revenue; all fees redistributed to participants
+6. **Strategic Market Focus**: Prioritize liquidity for underserved small/niche markets (Atomica's competitive advantage)
+7. **Protocol Sustainability**: Over-budget fees (3-5%) create protocol revenue while deterring griefing attacks
 
 ## Open Questions
 
-1. Should auction sequencing be reversed based on empirical data?
-2. What is the optimal distribution formula for reserve price and deposit forfeit fees among buyers?
-3. When should migration from drand.love to alternative time-lock encryption occur?
-4. How should prime hour capacity (currently 10 assets) scale with demand?
+1. What is the optimal over-budget fee percentage? (3% base with scaling, or higher?)
+2. Should user-defined priority rankings be added in v2 for users who demand preference control?
+3. What is the optimal distribution formula for reserve price and deposit forfeit fees among buyers?
+4. When should migration from drand.love to alternative time-lock encryption occur?
+5. How should prime hour capacity (currently 10 assets) scale with demand?
+6. Which specific markets to include? Start with top 20 altcoins, or focus on more niche assets?
 
 ---
 
-**Version**: 0.1
+**Version**: 0.2
 **Last Updated**: 2025-11-14
-**Status**: Draft
+**Status**: Draft - Multi-Asset Clearing Design Complete
+
+**Changes in v0.2**:
+- Updated auction sequencing to sequential clearing with global priority order (smallest→biggest)
+- Added over-budget fee mechanism (3-5% fee on over-committed bidders)
+- Clarified simultaneous bid revelation with sequential settlement
+- Strategic focus: prioritize liquidity for underserved small/niche markets
+- Reference to full game theory analysis document
