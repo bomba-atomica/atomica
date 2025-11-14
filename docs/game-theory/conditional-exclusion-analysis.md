@@ -246,9 +246,9 @@ Exclusion Probability:
 
 ## Recommendation
 
-### Short-Term (Phase 1 Launch)
+### Current Approach
 
-**Stick with random exclusion:**
+**Use random exclusion:**
 - Proven game theory
 - Cannot be gamed
 - Simple implementation
@@ -256,19 +256,19 @@ Exclusion Probability:
 
 **Mitigations for seller UX:**
 - Only exclude if N ≥ 10 (conditional on seller count, not bid patterns)
-- Small compensation for excluded sellers (0.1% of auction value)
+- Consider small compensation for excluded sellers (0.1% of auction value)
 - Track retention metrics
 
-### Long-Term (Phase 2+)
+### Potential Future Exploration
 
-**Experiment with hybrid approach:**
+**Hybrid approach could be explored:**
 - Implement collusion detection metrics (post-hoc, for monitoring)
 - Build dataset of competitive vs. suspicious auctions
 - Test conditional exclusion on testnet
 - A/B test with subset of auctions
 - Migrate if data shows better seller retention without increased collusion
 
-**Publish transparency reports:**
+**Transparency reporting:**
 - Share bid distribution statistics
 - Show exclusion trigger frequency
 - Build community trust in mechanism

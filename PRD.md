@@ -35,7 +35,7 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 
 **→ See:** [Futures Market Model](docs/design/futures-market-model.md) for why futures over spot
 
-### Daily Batch Auction (Phase 1 Launch)
+### Daily Batch Auction
 
 **Structure:**
 - One unified auction per day per trading pair
@@ -92,12 +92,11 @@ Competitive bidding drives spreads toward fair risk-adjusted rates. Single large
 
 ## Launch Strategy
 
-**Phase 1 (Launch):** Single daily batch auction, sealed bids, futures delivery (12-24hr), no reserve prices
+**Core Design:** Single daily batch auction, sealed bids, futures delivery (12-24hr), no reserve prices
+
 **Focus:** Build critical mass, establish MM relationships, demonstrate economic viability
 
 **Settlement Delay:** 12-24 hours balances user expectations with MM risk management. Long enough for effective hedging, short enough for next-day delivery UX.
-
-**→ See:** [Evolution Roadmap](docs/design/evolution-roadmap.md) for Phases 2-4 (multiple daily auctions, hybrid spot+futures, dynamic parameters)
 
 ## Design Principles
 
@@ -142,7 +141,6 @@ Atomica prioritizes:
 **Design & Strategy:**
 - [Ideal Solution Characteristics](docs/design/ideal-characteristics.md) - Requirements with tradeoffs
 - [Futures Market Model](docs/design/futures-market-model.md) - Why futures for cross-chain swaps
-- [Evolution Roadmap](docs/design/evolution-roadmap.md) - Phases 1-4 growth plan
 
 **Technical Specifications:**
 - [Cross-Chain Verification](docs/technical/cross-chain-verification.md) - ZK proofs, merkle inclusion

@@ -117,8 +117,8 @@ Ideally, all information would remain private to maximize game-theoretic fairnes
 - Protection mechanisms may limit throughput if trades must wait for sufficient liquidity conditions
 
 **Atomica's Approach:**
-- **Phase 1 (Launch):** Single daily batch auction concentrates liquidity; no reserve prices (relies on market maker competition)
-- **Phase 3+ (Future):** Reserve price mechanism available for large individual orders requiring guaranteed minimum prices
+- **Current:** Single daily batch auction concentrates liquidity; no reserve prices (relies on market maker competition)
+- **Potential Future:** Reserve price mechanism for large individual orders requiring guaranteed minimum prices
 
 ## How Atomica Addresses These Characteristics
 
@@ -132,7 +132,7 @@ Ideally, all information would remain private to maximize game-theoretic fairnes
 | Unified UX | ✓ Partial | Single interface, futures delivery model |
 | No Custodial Risk | ✓ Full | Cryptographic proofs, atomic settlement |
 | Capital Efficiency | ✓ High | Active deployment only |
-| Illiquidity Protection | ✓ Phase 1: Competition<br>✓ Phase 3+: Reserves | Daily batch creates critical mass; reserve prices for large orders (future) |
+| Illiquidity Protection | ✓ MM Competition<br>✓ Future: Reserves | Daily batch creates critical mass; reserve prices for large orders (potential future) |
 
 ## Design Philosophy
 

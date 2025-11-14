@@ -729,11 +729,11 @@ With coordination: All set reserves at $60 → clears at $60 or fails
 
 ## Atomica Application (Potential)
 
-While Atomica's current Phase 1 design uses single-seller auctions (one user swapping from Away chain), multi-seller batch auctions could be relevant for future phases:
+While Atomica currently uses single-seller auctions (one user swapping from Away chain), multi-seller batch auctions could be relevant for future:
 
 ### Potential Use Cases
 
-**Phase 4+: Native Market Making Pools**
+**Native Market Making Pools**
 
 Multiple liquidity providers could pool assets for auction:
 - LPs deposit units with individual reserve prices

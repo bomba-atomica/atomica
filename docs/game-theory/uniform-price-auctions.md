@@ -88,9 +88,9 @@ Atomica employs four complementary mitigations:
 
 ### 2. Bid Automators (Always-Online Agents)
 
-**Note:** This mitigation is less critical for the Phase 1 daily batch auction with sealed bids, but becomes important in later phases with multiple auctions.
+**Note:** This mitigation is less critical for the current daily batch auction with sealed bids.
 
-- Market participants submit bids through always-online bid automators
+- Market participants can submit bids through always-online bid automators
 - These are effectively online wallets running on desktops or commodity servers
 - Automators can respond quickly to auction opportunities and adjust strategies programmatically
 - Reduces the advantage of sophisticated actors with better infrastructure
@@ -98,10 +98,10 @@ Atomica employs four complementary mitigations:
 
 ### 3. Reserve Price with Commit-Reveal
 
-**Status:** Not used in Phase 1 (daily batch auction). Reserved for Phase 3+ when individual large orders need guaranteed minimum prices.
+**Status:** Not currently implemented. Potential future feature for large individual orders requiring guaranteed minimum prices.
 
 **Mechanism:**
-- Auctioneer can set a reserve price (minimum acceptable clearing price) using commit-reveal scheme
+- Auctioneer could set a reserve price (minimum acceptable clearing price) using commit-reveal scheme
 - During auction setup, auctioneer commits to a hash of their reserve price
 - Auction proceeds normally with this commitment on-chain
 - **Default behavior**: If auctioneer does nothing, escrow releases and auction settles normally
@@ -112,10 +112,10 @@ Atomica employs four complementary mitigations:
 
 ### 4. Reserve Price Cost (Auctioneer Penalty)
 
-**Status:** Applies only when reserve prices are used (Phase 3+).
+**Status:** Not currently implemented. Applies only if reserve prices are added in future.
 
 **Mechanism:**
-- Exercising the reserve price rejection incurs a cost to the auctioneer: **5% of (reserve price × volume)**
+- Exercising the reserve price rejection would incur a cost to the auctioneer: **5% of (reserve price × volume)**
 - Note: The fee is calculated on the reserve price, not the final auction clearing price
 - This creates an incentive to lower the reserve price (making auctions more attractive to bidders) to reduce insurance costs
 - The penalty is distributed to qualifying bidders as compensation for wasted time and opportunity cost
@@ -130,7 +130,7 @@ This design achieves several desirable properties:
 ### Incentive Compatibility
 
 - Bidders are incentivized to bid near their true valuation (uniform price protects them from winner's curse)
-- Auctioneers are incentivized to set realistic reserves (penalty for rejection) - **Phase 3+ only**
+- Auctioneers incentivized to set realistic reserves when used (penalty for rejection)
 - No advantage to strategic delay or last-minute manipulation (no bid lowering + sealed bids)
 
 ### Sybil Resistance
@@ -141,40 +141,32 @@ This design achieves several desirable properties:
 ### Collusion Resistance
 
 - Bidders cannot profitably collude to lower clearing price (no bid lowering policy)
-- Auctioneer cannot collude with bidders to manipulate reserve (commit-reveal with default release) - **Phase 3+ only**
-- Sealed bids prevent coordination during auction window - **Phase 1**
+- Auctioneer cannot collude with bidders to manipulate reserve (commit-reveal with default release)
+- Sealed bids prevent coordination during auction window
 
 ### Market Maker Participation
 
 - No capital lock-up until auction clears (low opportunity cost)
 - Competitive auction ensures market-rate pricing (no adverse selection)
-- Always-online automators lower barriers to entry - **Phase 2+**
+- Always-online automators can lower barriers to entry
 
-## Atomica's Phased Implementation
-
-### Phase 1: Daily Batch Auction (Launch)
+## Current Implementation
 
 **Active Mitigations:**
-- No bid lowering policy
+- No bid lowering policy (enforced in smart contract)
 - Sealed bids via timelock encryption (prevents shill bidding entirely)
 - No reserve prices (relies on market maker competition and liquidity concentration)
 
 **Rationale:** Sealed bids make most other mitigations unnecessary during auction window.
 
-### Phase 2-3: Multiple Auctions & Large Orders
-
-**Additional Mitigations:**
+**Potential Future Enhancements:**
 - Bid automators for increased competition
-- Reserve prices available for large individual orders requiring guarantees
+- Reserve prices for large individual orders requiring execution guarantees
 - Reserve price penalty mechanism to prevent abuse
-
-**Rationale:** As liquidity grows and individual large orders become possible, reserve prices provide execution guarantees while penalties prevent manipulation.
 
 ## Conclusion
 
 The uniform price auction mechanism enables Atomic Auctions to function effectively in a partially public environment while maintaining competitive pricing and preventing manipulation, even in thin markets with anonymous participants.
-
-The phased introduction of mitigations (sealed bids first, reserves later) balances simplicity for launch with flexibility for future sophistication.
 
 ## Related Documents
 

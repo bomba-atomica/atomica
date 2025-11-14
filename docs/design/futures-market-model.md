@@ -1,6 +1,6 @@
 # Futures Market Model for Atomic Auctions
 
-This document explains why Atomica uses a futures market model rather than spot trading for cross-chain atomic swaps, and details the daily batch auction architecture for Phase 1 launch.
+This document explains why Atomica uses a futures market model rather than spot trading for cross-chain atomic swaps, and details the daily batch auction architecture.
 
 ## Core Insight: Embrace Latency, Don't Fight It
 
@@ -50,9 +50,9 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 - Arbitrage opportunities with short windows
 - Users needing same-day settlement
 
-**Mitigation:** Phase 3+ can add premium spot auctions (shorter settlement) for users willing to pay wider spreads. Futures auctions maintain best pricing.
+**Potential Future Enhancement:** Premium spot auctions (shorter settlement) for users willing to pay wider spreads. Futures auctions maintain best pricing.
 
-## Daily Batch Auction Architecture (Phase 1 Launch)
+## Daily Batch Auction Architecture
 
 ### Structure
 
@@ -208,15 +208,13 @@ The settlement delay after auction close is a key design parameter with tradeoff
 
 ## Success Criteria for Futures Model
 
-**Phase 1 Validation:**
+**Key Metrics:**
 
 1. **Auctions consistently clear** - Every daily auction has sufficient market maker participation
 2. **Competitive pricing** - Spreads comparable to spot exchanges + reasonable futures premium
 3. **User adoption** - Growing volume indicating users accept futures delivery model
 4. **Market maker profitability** - MMs remain profitable and expand participation
 5. **No gaming** - No manipulation or strategic behavior undermining mechanism
-
-**If successful:** Demonstrates futures model viability, can expand to Phase 2 (multiple daily auctions)
 
 **If unsuccessful:**
 - Analyze friction points (timing, spreads, UX confusion)
@@ -226,7 +224,6 @@ The settlement delay after auction close is a key design parameter with tradeoff
 ## Related Documents
 
 - [Atomica PRD](../../Prd.md) - Product overview
-- [Evolution Roadmap](evolution-roadmap.md) - How futures model evolves in later phases
 - [CPMM vs Auction Comparison](../game-theory/cpmm-vs-auction-comparison.md) - Detailed economic analysis of why auctions over AMMs
 - [Uniform Price Auctions](../game-theory/uniform-price-auctions.md) - Auction mechanism details
 - [Timelock Encryption for Sealed Bids](../technical/timelock-bids.md) - How sealed bids work

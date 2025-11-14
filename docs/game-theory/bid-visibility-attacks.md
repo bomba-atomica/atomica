@@ -244,7 +244,7 @@ Simultaneous reveal is not optional—it is a critical security requirement for 
 
 **Atomica's Approach:**
 
-Phase 1 implements timelock encryption using drand for cryptographically guaranteed simultaneous reveal. This ensures:
+Atomica implements timelock encryption using drand for cryptographically guaranteed simultaneous reveal. This ensures:
 - No bid visibility during auction window
 - No sequential reveal vulnerabilities
 - Trustless, automatic reveal at auction close

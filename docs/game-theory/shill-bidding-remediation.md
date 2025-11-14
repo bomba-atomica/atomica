@@ -940,19 +940,19 @@ The core insight is that **manipulation attacks are unprofitable** under this de
 
 **Nash Equilibrium:** All market makers bid near their true valuation. Clearing prices reflect competitive market conditions. The system is **incentive-compatible** by design.
 
-### 8.6 Empirical Validation Path
+### 8.6 Empirical Validation and Monitoring
 
-**Phase 1 (Launch):**
+**Ongoing Monitoring:**
 - Monitor clearing prices vs. external markets
 - Track MM participation and concentration
 - Publish transparency reports
 
-**Phase 2 (Optimization):**
+**Continuous Improvement:**
 - Refine detection algorithms based on observed patterns
 - Adjust mechanism parameters (exclusion %, deposit requirements)
 - Iterate on cryptographic privacy (proof aggregation, gas optimization)
 
-**Phase 3 (Decentralization):**
+**Long-Term Evolution:**
 - Community-driven monitoring tools
 - Governance framework for intervention
 - Progressive decentralization of mechanism control

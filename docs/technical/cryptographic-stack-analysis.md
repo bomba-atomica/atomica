@@ -1079,7 +1079,7 @@ Difference: Negligible (~$36/year)
 
 #### **Phase 3: Mainnet Launch & Monitoring (Months 6-9)**
 
-**Goal:** Launch Phase 1 (daily batch auctions) on mainnet
+**Goal:** Launch daily batch auctions on mainnet
 
 **Tasks:**
 1. **Gradual Rollout**
@@ -1104,7 +1104,7 @@ Difference: Negligible (~$36/year)
    - Address any issues discovered in production
    - Optimize based on real usage patterns
    - Collect feedback from market makers and users
-   - Plan for Phase 2 features (multiple daily auctions)
+   - Plan for future feature enhancements based on usage
 
 **Success Criteria:**
 - 100+ successful auctions on mainnet
