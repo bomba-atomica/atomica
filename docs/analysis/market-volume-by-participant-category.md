@@ -885,10 +885,10 @@ However, the vast majority is perpetual swaps (synthetic spot with funding rates
 - Average position size: $5K-100K
 
 **Why these users might prefer Atomica:**
-- ✅ Simpler than options (just futures, no strikes/Greeks)
-- ✅ Physical delivery vs. cash settlement
-- ✅ Cross-chain settlement (can't do on existing DeFi options)
+- ✅ Simpler than options (just futures, no strikes/Greeks complexity)
+- ✅ Cross-chain settlement (can't do on existing DeFi options - single-chain only)
 - ✅ MEV protection (critical for large settlements)
+- ✅ More predictable execution (daily batch vs. options expiry timing risk)
 
 **Addressability: MEDIUM (10-20%)**
 - Users comfortable with delayed settlement
@@ -1827,12 +1827,13 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 
 | Feature | CEX Futures | DeFi Options | Bridge Arbitrage | **Atomica** |
 |---------|-------------|--------------|------------------|-------------|
-| **Physical settlement** | ❌ Cash | ❌ Cash | ✅ Native | ✅ Native |
-| **Cross-chain delivery** | ❌ No | ❌ No | ⚠️ Wrapped | ✅ Native |
+| **Physical settlement** | ❌ Cash | ✅ Physical | ✅ Native | ✅ Native |
+| **Cross-chain delivery** | ❌ No | ❌ Single-chain | ⚠️ Wrapped | ✅ Native cross-chain |
 | **Counterparty risk** | ❌ CEX custody | ⚠️ Smart contract | ❌ Bridge | ✅ Atomic |
-| **Bridge risk** | N/A | N/A | ❌ High | ✅ None |
+| **Bridge risk** | N/A | ✅ None | ❌ High | ✅ None |
 | **MEV protection** | N/A | ❌ Weak | ❌ Weak | ✅ Strong |
-| **Settlement time** | 1-7 days | 1-7 days | 10min-24h | 12-24h |
+| **Complexity** | ⚠️ Futures understanding | ❌ High (strikes/Greeks) | ⚠️ Medium | ✅ Simple futures |
+| **Settlement time** | 1-7 days | Hours-7 days | 10min-24h | 12-24h |
 | **Continuous trading** | ✅ Yes | ✅ Yes | ✅ Yes | ❌ Daily batch |
 
 ---
