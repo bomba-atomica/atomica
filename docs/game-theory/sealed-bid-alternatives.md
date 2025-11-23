@@ -648,6 +648,16 @@ If reveal rate >= 80%:
 
 ### Format 9: Ascending Clock with Clinching (Truthful Multi-Unit Auction)
 
+**Note**: This auction format is analyzed in depth in a separate document due to its complexity and importance. See **[ausubel-clinching-clock.md](./ausubel-clinching-clock.md)** for full technical analysis.
+
+**For beginners**: See **[ausubel-summary.md](./ausubel-summary.md)** for an accessible introduction with step-by-step examples.
+
+**For comparison with Dutch auctions**: See **[ausubel-vs-dutch-comparison.md](./ausubel-vs-dutch-comparison.md)**.
+
+---
+
+### Brief Summary
+
 **Mechanism**: Dynamic ascending-price auction where units are "clinched" (allocated) during the auction at the price when clinching occurs.
 
 **Theoretical Foundation** (Ausubel 2004):
@@ -658,13 +668,15 @@ If reveal rate >= 80%:
 
 ---
 
-### How Clinching Works
+### How Clinching Works (Brief Overview)
+
+**For detailed explanation, see [ausubel-summary.md](./ausubel-summary.md#how-it-works-simple-example)**
 
 **Basic Concept**:
 
 A bidder "clinches" units when their opponents' aggregate demand becomes less than available supply.
 
-**Example**:
+**Simple Example**:
 ```
 Auction: 100 ETH supply
 Three bidders: Alice, Bob, Carol
@@ -733,401 +745,49 @@ Where:
 
 ---
 
-### Key Properties
+### Summary of Key Properties
 
-**1. Truthful Bidding (Dominant Strategy)**:
-- Bidding true valuation is optimal regardless of others' strategies
-- No incentive for demand reduction (unlike uniform price auction)
-- Equivalent outcome to sealed-bid Vickrey auction
-
-**2. Pay-As-You-Clinch (Not Uniform Price)**:
-- Different bidders may pay different prices
-- Each bidder pays based on when they clinched units
-- **NOT uniform clearing price** - this is discriminatory pricing by timing
-
-**3. Dynamic Price Discovery**:
-- Price ascends in discrete rounds
-- Bidders can reduce demand as price rises
-- Auction ends when demand ≤ supply
-
-**4. Privacy Preservation**:
-- Bidders only reveal demand at current price (not full demand curve)
-- More private than sealed-bid revelation of entire demand function
-- But still reveals information dynamically (public bids each round)
+**1. Truthful Bidding**: Dominant strategy equilibrium (like Vickrey auction)
+**2. Pay-As-You-Clinch**: Discriminatory pricing by clinching round (not uniform)
+**3. Dynamic Price Discovery**: Ascending rounds reveal demand curve iteratively
+**4. No Over-Subscription**: Progressive clinching eliminates allocation problems
 
 ---
 
-### Blockchain Implementation Challenges
+### Detailed Analysis
 
-**Gas Costs (SEVERE)**:
-```
-Per round, per bidder:
-- Submit new demand quantity: 1 transaction
-- Contract computes clinching: Gas intensive (iterate all bidders)
-- Emit clinching events: Log storage
+**For comprehensive technical analysis including:**
+- Blockchain implementation challenges
+- L1 vs L2 deployment considerations
+- Seller protection mechanisms with reserves
+- Comparison scorecards vs other formats
+- Implementation architecture with automated bidding agents
+- Deployment strategy and risk mitigation
 
-Example:
-- 10 bidders
-- 5 rounds to clear
-- Total: 50 bid transactions + 5 clearing computations
-- Gas cost: ~10-50x simple batch auction
-```
-
-**Timing Coordination**:
-```
-Round structure:
-- Round N opens: 10 minutes for bids
-- Round N closes: Compute clinching
-- Round N+1 opens: Next price level
-- Repeat until convergence
-
-Total duration: Unpredictable (depends on bidder behavior)
-Minimum: 30-60 minutes (5-10 rounds × 5-10 min each)
-Maximum: Hours to days if slow convergence
-```
-
-**State Complexity**:
-```solidity
-contract ClinchingClockAuction {
-    struct BidderState {
-        uint256 currentDemand;
-        uint256 totalClinched;
-        mapping(uint256 => uint256) clinchedPerRound; // round => quantity
-        mapping(uint256 => uint256) pricePerRound;    // round => price paid
-    }
-
-    mapping(address => BidderState) bidders;
-    uint256 currentPrice;
-    uint256 currentRound;
-    uint256 totalSupply;
-
-    // Must track complex state across rounds
-    // High storage costs
-}
-```
+**See: [ausubel-clinching-clock.md](./ausubel-clinching-clock.md)**
 
 ---
 
-### Seller Protection Analysis
+### Quick Verdict Summary
 
-**Positive: Ascending Price Floor**:
-- Price starts low and rises
-- Sellers benefit from competitive bidding pushing price up
-- Auction doesn't clear below market if bidders active
+**Layer 1 (Ethereum Mainnet)**: NOT RECOMMENDED
+- Gas costs prohibitive (25x more expensive than simple batch)
+- ~$1,900 per auction vs $75 for simple batch
+- Complexity and duration issues
+- No blockchain precedent
 
-**Negative: No Explicit Reserve Prices**:
-- Standard clinching auction has no seller reserves
-- If under-subscribed at low price → clears at low price
-- Sellers vulnerable if insufficient bidder participation
+**Layer 2 (with infeasible sealed bids)**: RECOMMENDED
+- Gas costs negligible (~$20/auction)
+- Superior seller protection (ascending price + truthful bidding)
+- 5-15% better seller revenue than simple batch
+- Complexity mitigated by automated bidding agents
+- Score: 61/90 vs Simple Batch 58/90
 
-**Example (Undersubscription)**:
-```
-100 ETH supply, weak demand:
+**Context-dependent**: The clinching clock transforms from "impractical" to "best available option" when gas constraints removed and seller protection prioritized.
 
-Round 1 ($1,500): Total demand 30 ETH < 100 supply
-→ All 30 ETH clinches immediately at $1,500
-→ Auction ends (demand met)
-→ Sellers get $1,500 (vs $2,000 market)
-→ 70 ETH unsold (sellers keep but wasted time)
-```
-
-**Adaptation: Add Seller Reserves**:
-```
-Enhanced clinching with seller reserves:
-
-1. Sellers commit reserve prices (commit-reveal)
-2. Clinching happens only if clock price ≥ seller reserve
-3. Units below reserve don't participate until price exceeds reserve
-4. Progressive entry of supply as price rises
-```
-
-**Example (With Reserves)**:
-```
-100 ETH total:
-- Seller A: 40 ETH, reserve $1,800
-- Seller B: 30 ETH, reserve $1,850
-- Seller C: 30 ETH, reserve $1,900
-
-Round 1 ($1,500): No supply available (all below reserve)
-Round 2 ($1,800): 40 ETH available (Seller A)
-Round 3 ($1,850): 70 ETH available (A + B)
-Round 4 ($1,900): 100 ETH available (A + B + C)
-
-Progressive supply entry protects sellers
-Auction clears only if price reaches reserves
-```
+**Full analysis and rationale**: See [ausubel-clinching-clock.md](./ausubel-clinching-clock.md)
 
 ---
-
-### Comparison to Other Formats
-
-| Dimension | Clinching Clock | Uniform Price Batch | Sealed Bid Uniform |
-|-----------|----------------|---------------------|-------------------|
-| **Truthful Bidding** | ✓✓ Dominant strategy | ✗ Demand reduction | ✓✓ Dominant strategy (Vickrey) |
-| **Price Uniformity** | ✗ Discriminatory (by timing) | ✓✓ Uniform | ✓✓ Uniform |
-| **Simplicity** | ✗ Complex (multi-round) | ✓✓ Simple (one round) | ✓ Moderate |
-| **Gas Efficiency** | ✗ Very poor (multiple rounds) | ✓✓ Excellent (one round) | ✓ Good |
-| **Duration** | ✗ Long (30min - hours) | ✓✓ Fast (4 hours total) | ✓✓ Fast |
-| **Privacy** | ✗ Public (bids each round) | ✗ Public | ✓✓ Sealed |
-| **MEV Resistance** | ✗ Poor (public, multi-round) | ✗ Poor | ✓✓ Excellent |
-| **Seller Protection** | ⚠ Needs reserves | ⚠ Needs reserves | ✓ Better (hidden demand) |
-| **Implementation Complexity** | ✗ Very high | ✓ Low | ✓ Moderate |
-| **Blockchain Precedent** | ✗ None | ✓ Gnosis Auction | ✗ None (drand novel) |
-
----
-
-### Adaptations for Atomica: Enhanced Clinching with Seller Reserves
-
-**Design: Two-Sided Clinching Clock Auction**
-
-Combine clinching mechanism with seller reserve prices for protection.
-
-**Mechanism**:
-
-**Phase 1: Seller Commitment (Before Auction)**
-```
-Sellers commit:
-- Quantity available
-- Reserve price (hashed)
-- Lock assets in escrow
-```
-
-**Phase 2: Ascending Clock Auction**
-```
-Round N:
-1. Auctioneer announces price P_N
-2. Determine available supply at P_N:
-   S_available(P_N) = sum of quantities where reserve ≤ P_N
-3. Bidders submit demand D_i at price P_N
-4. Compute clinching:
-   - For each bidder i:
-     - Available after opponents: S_available - D_-i
-     - Clinched this round: max(0, min(D_i, S_available - D_-i) - Previous_clinched_i)
-   - Record: Clinch_i[round] = quantity, price P_N
-5. If total demand ≤ S_available: END
-6. Else: Increment price, continue to Round N+1
-```
-
-**Phase 3: Settlement**
-```
-For each bidder:
-  Payment = sum over rounds (Clinched[round] × Price[round])
-
-For each seller:
-  If clearing price ≥ reserve:
-    Execute sale at weighted average of clinching prices
-  Else:
-    Return assets (no penalty - price didn't reach reserve)
-```
-
-**Example**:
-```
-Sellers:
-- Alice: 40 ETH @ $1,800 reserve
-- Bob: 30 ETH @ $1,900 reserve
-- Carol: 30 ETH @ $2,000 reserve
-
-Round 1 ($1,700):
-- Available supply: 0 (all below reserve)
-- Bidders demand any amount: No clinching (no supply)
-
-Round 2 ($1,800):
-- Available supply: 40 ETH (Alice enters)
-- Bidder X demands: 50 ETH
-- Bidder Y demands: 20 ETH
-- Total: 70 > 40 → No clinching (over-subscribed)
-
-Round 3 ($1,900):
-- Available supply: 70 ETH (Alice + Bob)
-- Bidder X demands: 50 ETH
-- Bidder Y demands: 15 ETH
-- Total: 65 < 70 → Clinching happens
-  - Bidder X clinches: min(50, 70-15) - 0 = 50 units at $1,900
-  - Bidder Y clinches: min(15, 70-50) - 0 = 15 units at $1,900
-- Auction ends (demand met)
-
-Result:
-- Alice sells 40 ETH at $1,900 (above $1,800 reserve ✓)
-- Bob sells 25 ETH at $1,900 (above $1,900 reserve ✓)
-- Carol doesn't sell (price never reached $2,000 reserve)
-- Bidder X pays: 50 × $1,900 = $95,000
-- Bidder Y pays: 15 × $1,900 = $28,500
-```
-
----
-
-### Advantages for Seller Protection
-
-**1. Ascending Price Inherent Protection**:
-- Price rises until demand met
-- Competitive bidding naturally drives price up
-- Sellers benefit from price discovery
-
-**2. Truthful Bidding Reduces Exploitation**:
-- Bidders have no incentive to shade bids
-- Demand reduction eliminated
-- Better price discovery than uniform price auction
-
-**3. Progressive Supply Entry with Reserves**:
-- Low-reserve sellers enter first (most eager)
-- High-reserve sellers enter only if price justifies
-- Natural filtering mechanism
-
-**4. No Penalty Needed**:
-- If price doesn't reach reserve → seller just doesn't sell
-- No rejection penalty (unlike commit-reveal batch auction)
-- Seller downside: Wasted time, but no financial penalty
-
-**5. Dynamic Exit**:
-- Sellers can increase reserves between rounds (if mechanism allows)
-- Adaptive protection as auction progresses
-
----
-
-### Disadvantages for Atomica
-
-**1. Extreme Gas Costs**:
-```
-Conservative estimate:
-- 10 bidders
-- 5 rounds average
-- 50 bid transactions (~200K gas each) = 10M gas
-- 5 clinching computations (~500K gas each) = 2.5M gas
-- Total: ~12.5M gas
-
-At 50 gwei, $3,000 ETH: ~$1,900 in gas
-vs. Simple batch: ~500K gas = ~$75 in gas
-
-25x more expensive
-```
-
-**2. Long Duration**:
-- 5-10 rounds × 10 min/round = 50-100 minutes minimum
-- Unpredictable end time (depends on convergence)
-- Much slower than 4-hour simple batch window
-
-**3. Complexity**:
-- Bidders must understand clinching mechanism
-- Not intuitive (most users unfamiliar)
-- Higher learning curve than "submit bid, see result"
-
-**4. State Bloat**:
-- Must track clinching history per bidder per round
-- High storage costs on-chain
-- More expensive to audit and verify
-
-**5. No Blockchain Precedent**:
-- No production clinching auction on Ethereum/any chain
-- Untested in adversarial environment
-- Higher risk than proven mechanisms
-
-**6. Public Bids Still Visible**:
-- Each round, bids are public (MEV vulnerable)
-- Late round bids can be front-run
-- Doesn't solve information asymmetry problem
-
-**7. Multi-Round Griefing**:
-- Malicious bidders can bid high early rounds → force prices up
-- Then drop demand in later rounds → waste everyone's time
-- Gas griefing attack vector
-
----
-
-### Evaluation Against Requirements
-
-| Requirement | Clinching Clock | Score vs Simple Batch | Score vs Sealed Bids |
-|-------------|----------------|----------------------|---------------------|
-| **R1: Truthful Bidding** | ✓✓ Dominant strategy | Better | Equal |
-| **R2: Info Aggregation** | ✓✓ Excellent (iterative) | Better | Better |
-| **R3: Manipulation Resistance** | ✓ Good (truthful) | Better | Worse (public) |
-| **R4: MEV Resistance** | ✗ Poor (public multi-round) | Same | Much worse |
-| **R5: Sybil Neutrality** | ✓✓ Excellent | Same | Same |
-| **R6: Collusion Resistance** | ✓ Good (truthful) | Better | Worse (public) |
-| **R7: No Bid Lowering** | ✓✓ Enforced (demand only decreases) | Same | Same |
-| **R8: Capital Efficiency** | ✓✓ High | Same | Same |
-| **R9: Allocative Efficiency** | ✓✓✓ Perfect (Vickrey) | Better | Equal |
-| **R10: Liquidity Concentration** | ✓✓ Single auction | Same | Same |
-| **R11: Fair Execution** | ✓✓ Excellent (truthful) | Better | Worse (public) |
-| **R12: Sustainable Compensation** | ✓✓ Self-sustaining | Same | Same |
-| **R13: Seller Protection** | ✓✓ With reserves | Better (ascending) | Worse (public demand) |
-| **Gas Efficiency** | ✗✗ Terrible (25x cost) | Much worse | Worse |
-| **Duration** | ✗ Long (50-100 min unpredictable) | Worse | Same |
-| **Complexity** | ✗✗ Very high | Much worse | Worse |
-| **Blockchain Precedent** | ✗✗ None | Worse | Same (none) |
-
-**Overall Assessment**:
-- **Theoretically superior**: Truthful bidding, perfect efficiency
-- **Practically inferior**: Gas costs, complexity, duration prohibitive
-- **Seller protection**: Better than simple batch (ascending price), worse than sealed bids (public demand)
-
----
-
-### Verdict: Clinching Clock Auction for Atomica
-
-**Not Recommended for Primary Mechanism**
-
-**Reasons**:
-
-**1. Gas Costs Prohibitive** (Disqualifying):
-- 25x more expensive than simple batch
-- ~$2,000 in gas per auction at current Ethereum prices
-- Unsustainable for daily recurring auctions
-
-**2. No Blockchain Precedent** (High Risk):
-- Never implemented in production on any blockchain
-- Untested in adversarial environment
-- Likely hidden complexities or attacks
-
-**3. User Complexity** (Adoption Barrier):
-- Clinching mechanism non-intuitive
-- Requires understanding dynamic auction
-- Higher dropout rate than simple batch
-
-**4. Duration Unpredictable** (UX Problem):
-- Cannot guarantee auction end time
-- Users don't know when to check results
-- Worse than fixed 4-hour window
-
-**5. Still Has Public Bid Problem** (Core Issue):
-- Each round reveals bids publicly
-- MEV vulnerable (worse than single-round)
-- Doesn't solve information asymmetry
-
-**Theoretical Advantages Don't Justify Practical Costs**:
-- Truthful bidding nice, but not worth 25x gas
-- Perfect efficiency nice, but simple batch "good enough"
-- Ascending price protection nice, but reserves achieve same goal
-
----
-
-### Possible Future Consideration
-
-**When Clinching Clock Might Make Sense**:
-
-**1. Layer 2 with Cheap Gas**:
-- zkRollup or Optimistic Rollup
-- Gas costs 1/100th of L1
-- 25x penalty becomes negligible
-
-**2. Very High-Value Auctions**:
-- $100M+ auction size
-- $2K gas cost irrelevant
-- Perfect efficiency worth the cost
-
-**3. Institutional Participants Only**:
-- Sophisticated bidders understand mechanism
-- Willing to pay gas for better execution
-- Not retail-facing
-
-**4. Hybrid: Clinching for Large, Batch for Small**:
-- Route >$10M orders to clinching auction
-- Route <$10M to simple batch
-- Complexity justified for whale trades
-
-**Not Recommended for Launch**: Too experimental, too expensive, too complex for bootstrapping phase.
-
----
-
 # Part 3: Real-World Analysis
 
 ## Blockchain Implementations
