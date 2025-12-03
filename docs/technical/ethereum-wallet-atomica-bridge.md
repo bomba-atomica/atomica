@@ -9,6 +9,8 @@
 
 **Key Innovation**: Transaction signature happens with Ethereum keys, state verification checks Ethereum state (e.g., locked ETH in contract), and execution happens on Atomica—all without Ethereum gas costs.
 
+**Important UX Note**: ⚠️ Transactions will **NOT** appear in MetaMask's activity tab. You **must** build a custom transaction status UI in your dApp (3-4 week effort, examples provided below). This is standard practice for L2/cross-chain dApps (see Uniswap, Aave, OpenSea).
+
 ## Architecture Overview
 
 ```
@@ -552,6 +554,588 @@ async fn process_ethereum_transaction(
 }
 ```
 
+## Transaction Status & User Experience
+
+### ⚠️ Critical UX Consideration: Transaction Visibility
+
+> **TL;DR**: Users will **NOT** see Atomica transactions in MetaMask's activity tab. You must build a custom transaction status UI in your dApp (similar to Uniswap, Aave, etc.). This is a **required component** for MVP.
+
+---
+
+### The Problem: MetaMask Cannot Track Atomica Transactions
+
+**Users will NOT see transaction status in MetaMask** natively because:
+
+1. **They're signing a message, not submitting an Ethereum transaction**
+   - MetaMask shows: "Sign message" dialog
+   - No Ethereum transaction hash generated
+   - No entry in MetaMask's activity tab
+
+2. **Transaction executes on Atomica (non-EVM chain)**
+   - MetaMask only tracks connected networks
+   - Atomica cannot be added as a custom network (Aptos-derived, not EVM)
+   - No native cross-chain transaction tracking
+
+### What Users See
+
+**In MetaMask**:
+```
+┌──────────────────────────────┐
+│   Signature Request          │
+│                              │
+│  You are signing:            │
+│  Transaction Hash: 0x1234... │
+│  Chain: Atomica              │
+│  Expires: 2025-12-03 22:00   │
+│                              │
+│  [Cancel]  [Sign]            │
+└──────────────────────────────┘
+```
+
+**After signing**: ❌ **Nothing appears in MetaMask activity**
+
+**This is a significant UX gap** compared to normal Ethereum transactions where users see:
+- Pending status
+- Confirmation progress
+- Success/failure notification
+- Transaction history
+
+### Comparison: What Users See
+
+| Stage | Normal Ethereum TX | Atomica Bridge TX |
+|-------|-------------------|-------------------|
+| **Signing** | MetaMask: "Confirm Transaction"<br>Shows gas fee, network | MetaMask: "Sign Message"<br>No gas fee displayed |
+| **After Signing** | ✅ Appears in MetaMask activity<br>✅ Shows "Pending..." status<br>✅ Updates to "Confirmed" | ❌ Nothing in MetaMask<br>⚠️ **Must show in dApp UI** |
+| **Confirmation** | ✅ MetaMask notification<br>✅ Transaction receipt | ⚠️ **Custom dApp notification**<br>✅ Atomica block explorer link |
+| **History** | ✅ MetaMask activity tab | ⚠️ **Custom dApp transaction panel** |
+
+### Expected User Flow (With Custom UI)
+
+```
+1. User clicks "Swap ETH for APT"
+   └─> dApp shows: "Preparing transaction..."
+
+2. MetaMask popup appears
+   └─> User sees: "Sign message for Atomica transaction"
+   └─> User clicks "Sign"
+
+3. Immediately after signing:
+   └─> Toast appears: "⏳ Transaction submitting..."
+   └─> Transaction added to panel: "Pending"
+
+4. ~2-5 seconds later:
+   └─> Toast updates: "✅ Transaction confirmed! 🎉"
+   └─> Browser notification (if enabled)
+   └─> Panel shows: "Confirmed" with link to explorer
+
+5. User can:
+   ├─> Click explorer link to see details
+   ├─> View transaction history in panel
+   └─> Continue using dApp immediately
+```
+
+**Key Success Metrics**:
+- Time to first feedback: < 100ms (show "submitting" state)
+- Time to confirmation toast: < 5 seconds (Aptos ~400ms blocks)
+- User doesn't wonder "did it work?" ✅
+
+### ✅ Solution: In-dApp Transaction Status UI (Recommended for MVP)
+
+Build a custom transaction tracking interface in your dApp frontend.
+
+**Industry Standard**: This is how **all major dApps** handle cross-chain/L2 transactions:
+- **Uniswap**: Toast notifications in bottom-right corner + transaction list
+- **Aave**: Sidebar activity panel with real-time updates
+- **OpenSea**: Dedicated "Activity" tab showing all transactions
+- **Rarible**: Transaction toasts with confetti animations on success
+- **Rainbow Wallet**: In-app transaction history with status polling
+
+**Your users will find this pattern familiar and intuitive.**
+
+---
+
+**Complete Implementation**:
+
+```typescript
+// hooks/useAtomicaTransactions.ts
+import { useState, useEffect } from 'react';
+import { useLocalStorage } from './useLocalStorage';
+
+interface AtomicaTransaction {
+  id: string;
+  ethereumAddress: string;
+  ethereumSignature: string;
+  atomicaTxHash?: string;
+  status: 'signing' | 'submitting' | 'pending' | 'confirmed' | 'failed';
+  timestamp: number;
+  blockNumber?: number;
+  gasUsed?: number;
+  error?: string;
+}
+
+export function useAtomicaTransactions() {
+  const [transactions, setTransactions] = useLocalStorage<AtomicaTransaction[]>(
+    'atomica_transactions',
+    []
+  );
+  const [polling, setPolling] = useState(false);
+
+  // Poll for pending transaction updates
+  useEffect(() => {
+    const pendingTxs = transactions.filter(tx => tx.status === 'pending');
+
+    if (pendingTxs.length === 0) {
+      setPolling(false);
+      return;
+    }
+
+    setPolling(true);
+
+    const interval = setInterval(async () => {
+      for (const tx of pendingTxs) {
+        try {
+          const status = await checkAtomicaTransactionStatus(tx.atomicaTxHash!);
+
+          if (status.confirmed) {
+            updateTransaction(tx.id, {
+              status: 'confirmed',
+              blockNumber: status.blockNumber,
+              gasUsed: status.gasUsed
+            });
+
+            // Show browser notification
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification('Transaction Confirmed!', {
+                body: `Your Atomica transaction was successful`,
+                icon: '/atomica-icon.png'
+              });
+            }
+          } else if (status.failed) {
+            updateTransaction(tx.id, {
+              status: 'failed',
+              error: status.error
+            });
+          }
+        } catch (error) {
+          console.error(`Failed to check status for ${tx.id}:`, error);
+        }
+      }
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [transactions]);
+
+  const addTransaction = (tx: Omit<AtomicaTransaction, 'id' | 'timestamp'>) => {
+    const newTx: AtomicaTransaction = {
+      ...tx,
+      id: generateTxId(),
+      timestamp: Date.now()
+    };
+    setTransactions(prev => [newTx, ...prev]);
+    return newTx.id;
+  };
+
+  const updateTransaction = (id: string, updates: Partial<AtomicaTransaction>) => {
+    setTransactions(prev =>
+      prev.map(tx => tx.id === id ? { ...tx, ...updates } : tx)
+    );
+  };
+
+  return {
+    transactions,
+    addTransaction,
+    updateTransaction,
+    polling
+  };
+}
+
+// API helper
+async function checkAtomicaTransactionStatus(txHash: string) {
+  const response = await fetch(`https://atomica-rpc/transactions/${txHash}`);
+  return response.json();
+}
+```
+
+**React Components**:
+
+```typescript
+// components/TransactionPanel.tsx
+import { useAtomicaTransactions } from '../hooks/useAtomicaTransactions';
+
+export function TransactionPanel() {
+  const { transactions, polling } = useAtomicaTransactions();
+  const recentTxs = transactions.slice(0, 10); // Show last 10
+
+  return (
+    <div className="transaction-panel">
+      <div className="panel-header">
+        <h3>Your Transactions</h3>
+        {polling && <Spinner size="sm" />}
+      </div>
+
+      {recentTxs.length === 0 ? (
+        <div className="empty-state">
+          No transactions yet
+        </div>
+      ) : (
+        <div className="transaction-list">
+          {recentTxs.map(tx => (
+            <TransactionRow key={tx.id} tx={tx} />
+          ))}
+        </div>
+      )}
+
+      <a href="/transactions" className="view-all">
+        View all transactions →
+      </a>
+    </div>
+  );
+}
+
+// components/TransactionRow.tsx
+function TransactionRow({ tx }: { tx: AtomicaTransaction }) {
+  const statusConfig = {
+    signing: { icon: '✍️', color: 'blue', label: 'Signing' },
+    submitting: { icon: '📤', color: 'blue', label: 'Submitting' },
+    pending: { icon: '⏳', color: 'yellow', label: 'Pending' },
+    confirmed: { icon: '✅', color: 'green', label: 'Confirmed' },
+    failed: { icon: '❌', color: 'red', label: 'Failed' }
+  };
+
+  const config = statusConfig[tx.status];
+  const explorerUrl = `https://atomica-explorer.com/tx/${tx.atomicaTxHash}`;
+
+  return (
+    <div className={`tx-row status-${config.color}`}>
+      <span className="tx-icon">{config.icon}</span>
+
+      <div className="tx-details">
+        <div className="tx-hash">
+          {tx.atomicaTxHash
+            ? shortenHash(tx.atomicaTxHash)
+            : 'Awaiting submission...'}
+        </div>
+        <div className="tx-meta">
+          <span className="tx-status">{config.label}</span>
+          <span className="tx-time">
+            {formatRelativeTime(tx.timestamp)}
+          </span>
+        </div>
+        {tx.error && (
+          <div className="tx-error">{tx.error}</div>
+        )}
+      </div>
+
+      {tx.atomicaTxHash && (
+        <a
+          href={explorerUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="tx-explorer-link"
+        >
+          View ↗
+        </a>
+      )}
+    </div>
+  );
+}
+
+// components/TransactionToast.tsx
+export function TransactionToast({ txId }: { txId: string }) {
+  const { transactions } = useAtomicaTransactions();
+  const tx = transactions.find(t => t.id === txId);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    if (tx?.status === 'confirmed' || tx?.status === 'failed') {
+      const timer = setTimeout(() => setVisible(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [tx?.status]);
+
+  if (!visible || !tx) return null;
+
+  return (
+    <div className={`toast toast-${tx.status}`}>
+      <div className="toast-content">
+        {tx.status === 'pending' && (
+          <>
+            <Spinner />
+            <span>Transaction pending...</span>
+          </>
+        )}
+        {tx.status === 'confirmed' && (
+          <>
+            <CheckIcon />
+            <span>Transaction confirmed! 🎉</span>
+          </>
+        )}
+        {tx.status === 'failed' && (
+          <>
+            <ErrorIcon />
+            <span>Transaction failed</span>
+          </>
+        )}
+      </div>
+      <button onClick={() => setVisible(false)}>×</button>
+    </div>
+  );
+}
+```
+
+**Usage in dApp**:
+
+```typescript
+// pages/swap.tsx
+export function SwapPage() {
+  const { addTransaction } = useAtomicaTransactions();
+  const [currentTxId, setCurrentTxId] = useState<string | null>(null);
+
+  async function handleSwap() {
+    try {
+      // 1. User signs with MetaMask
+      const signature = await signWithMetaMask(txData);
+
+      // 2. Add to local tracking
+      const txId = addTransaction({
+        ethereumAddress: userAddress,
+        ethereumSignature: signature,
+        status: 'submitting'
+      });
+
+      setCurrentTxId(txId);
+
+      // 3. Submit to Atomica
+      const response = await submitToAtomica({ signature, txData });
+
+      // 4. Update with Atomica tx hash
+      updateTransaction(txId, {
+        atomicaTxHash: response.txHash,
+        status: 'pending'
+      });
+
+    } catch (error) {
+      // Handle errors
+      if (currentTxId) {
+        updateTransaction(currentTxId, {
+          status: 'failed',
+          error: error.message
+        });
+      }
+    }
+  }
+
+  return (
+    <div>
+      <SwapInterface onSwap={handleSwap} />
+
+      {/* Show toast for current transaction */}
+      {currentTxId && <TransactionToast txId={currentTxId} />}
+
+      {/* Show recent transactions panel */}
+      <TransactionPanel />
+    </div>
+  );
+}
+```
+
+### UI/UX Best Practices
+
+1. **Immediate Feedback**
+   - Show "Signing" state while MetaMask dialog is open
+   - Optimistic UI updates after signature
+   - Clear loading indicators
+
+2. **Transaction List**
+   - Persistent history in dApp (last 100 transactions)
+   - Filter by status (pending, confirmed, failed)
+   - Search by transaction hash
+
+3. **Notifications**
+   - Browser notifications for confirmations (request permission)
+   - Toast notifications in-app
+   - Sound effects for success/failure (optional)
+
+4. **Block Explorer Integration**
+   - Link to Atomica block explorer for every transaction
+   - Show detailed transaction info (gas used, block number, etc.)
+
+5. **Error Handling**
+   - Clear error messages ("Transaction failed: insufficient balance")
+   - Retry button for failed transactions
+   - Help links for common errors
+
+### Alternative Solutions (Future Enhancements)
+
+#### Option 1: Browser Extension
+
+Build a lightweight extension that monitors Atomica transactions across all dApps.
+
+**Pros**:
+- Works across multiple dApps
+- Browser notifications even when dApp closed
+- Centralized transaction history
+
+**Cons**:
+- Requires separate installation
+- Maintenance burden (Chrome, Firefox, Brave)
+- User trust required
+
+**Effort**: High (2-3 months)
+
+#### Option 2: MetaMask Snap
+
+Use MetaMask Snaps to extend MetaMask with Atomica transaction tracking.
+
+**Pros**:
+- Integrated into MetaMask UI
+- Native notifications
+- Persistent state
+
+**Cons**:
+- Still experimental
+- Limited API support for non-EVM chains
+- Requires user installation
+
+**Effort**: Medium (1-2 months)
+**Status**: Not recommended for MVP (Snaps API limitations)
+
+#### Option 3: Email/SMS Notifications
+
+Backend sends notifications for transaction status changes.
+
+**Pros**:
+- Works when browser closed
+- Familiar pattern (like Etherscan)
+
+**Cons**:
+- Requires user registration
+- Privacy concerns
+- Not real-time
+
+**Effort**: Low (2-3 weeks)
+**Use case**: Supplementary to in-dApp UI
+
+### Recommendation: Hybrid Approach
+
+**MVP (Phase 1)**:
+- ✅ In-dApp transaction status UI (required)
+- ✅ Browser notifications (via Notifications API)
+- ✅ Local storage for persistence
+
+**Phase 2** (if user demand exists):
+- Optional browser extension for power users
+- Email notifications for large transactions
+
+**Phase 3** (long-term):
+- MetaMask Snap when API matures
+- Mobile app with push notifications
+
+### Visual UI Mockup
+
+**Transaction Toast (Bottom-Right Corner)**:
+```
+┌────────────────────────────────────────┐
+│  ⏳ Transaction Pending                │
+│  Swapped 0.5 ETH for 100 APT          │
+│  View on Explorer ↗         [×]       │
+└────────────────────────────────────────┘
+```
+
+**Transaction Panel (Sidebar/Dropdown)**:
+```
+┌─────────────────────────────────────────────┐
+│  Your Transactions                    [×]   │
+├─────────────────────────────────────────────┤
+│  ✅ Swap ETH → APT                          │
+│     0x1234...5678                           │
+│     2 minutes ago            View ↗         │
+├─────────────────────────────────────────────┤
+│  ⏳ Deposit ETH                             │
+│     0xabcd...ef01                           │
+│     Just now                 View ↗         │
+├─────────────────────────────────────────────┤
+│  ✅ Claim Rewards                           │
+│     0x9876...5432                           │
+│     1 hour ago               View ↗         │
+├─────────────────────────────────────────────┤
+│               View all transactions →       │
+└─────────────────────────────────────────────┘
+```
+
+### Why This Approach Actually Improves UX
+
+**Advantages of Custom UI over MetaMask**:
+
+1. **Richer Context**
+   - Show "Swapped 0.5 ETH for 100 APT" instead of generic "Transaction"
+   - Display dollar values, token icons, action descriptions
+   - Custom success animations (confetti, checkmarks)
+
+2. **Better Control**
+   - Immediate feedback (< 100ms) vs MetaMask's delayed updates
+   - Custom error messages with retry buttons
+   - Contextual help for first-time users
+
+3. **Cross-Device Support**
+   - Works with WalletConnect (mobile wallets)
+   - Works with hardware wallets (Ledger, Trezor)
+   - Consistent experience across all wallet types
+
+4. **Analytics & Support**
+   - Track where users drop off in transaction flow
+   - Integrated customer support (chat button on failed txs)
+   - A/B test different notification styles
+
+### Implementation Checklist
+
+**Week 1-2: Basic Transaction Tracking** (REQUIRED FOR MVP)
+- [ ] `useAtomicaTransactions` hook with local storage
+- [ ] Transaction status polling (5s intervals)
+- [ ] TransactionRow component with status icons
+- [ ] Link to Atomica block explorer
+- [ ] Basic error handling with retry
+
+**Week 3: Rich UI** (REQUIRED FOR MVP)
+- [ ] TransactionPanel sidebar/dropdown
+- [ ] TransactionToast notifications
+- [ ] Loading states for all async operations
+- [ ] Mobile-responsive design
+
+**Week 4: Notifications & Polish** (NICE TO HAVE)
+- [ ] Browser Notification API integration
+- [ ] Request notification permission on first transaction
+- [ ] Sound effects for success/failure (optional)
+- [ ] Error recovery flows with helpful messages
+- [ ] Transaction history page (/transactions)
+- [ ] Filter/search functionality
+
+**Week 5: Testing & UX** (BEFORE LAUNCH)
+- [ ] User testing with non-crypto users
+- [ ] A/B test notification timing
+- [ ] Performance optimization (pagination, virtualization)
+- [ ] Accessibility audit (keyboard navigation, screen readers)
+- [ ] Test with slow networks (3G simulation)
+- [ ] Cross-browser testing (Chrome, Firefox, Safari, Brave)
+
+---
+
+### 📊 Transaction Status Summary
+
+| Question | Answer |
+|----------|--------|
+| **Can users see transactions in MetaMask?** | ❌ No - MetaMask only tracks Ethereum transactions |
+| **Is this a problem?** | ⚠️ Yes - poor UX without status feedback |
+| **What's the solution?** | ✅ Build custom transaction UI in dApp |
+| **Is this common?** | ✅ Yes - Uniswap, Aave, OpenSea all do this |
+| **Is it required for MVP?** | ✅ **YES** - core UX requirement |
+| **How long to build?** | ⏱️ 3-4 weeks for polished MVP |
+| **Can we add MetaMask integration later?** | 🔮 Maybe via Snaps (experimental, 2026+) |
+
+**Bottom Line**: Budget 3-4 weeks in your roadmap for building transaction status UI. This is **non-negotiable** for good UX. The good news: it's a solved pattern with many reference implementations (Uniswap, Aave) and you can ship a polished experience that's actually **better** than native MetaMask tracking.
+
+---
+
 ## Implementation Roadmap
 
 ### Phase 1: Core Infrastructure (MVP)
@@ -579,9 +1163,18 @@ async fn process_ethereum_transaction(
 - [ ] Gas budget monitoring and alerts
 - [ ] Simulate various attack scenarios
 
+**Week 7-9: Transaction Status UI** (REQUIRED FOR MVP)
+- [ ] Week 7: `useAtomicaTransactions` hook + basic polling
+- [ ] Week 7: TransactionRow component with status icons
+- [ ] Week 8: TransactionPanel sidebar + TransactionToast
+- [ ] Week 8: Browser Notification API integration
+- [ ] Week 9: Mobile responsive design + error handling
+- [ ] Week 9: User testing with 5-10 non-crypto users
+- [ ] **Deliverable**: Polished transaction status UI comparable to Uniswap
+
 ### Phase 2: Ethereum State Verification
 
-**Week 7-10: ZK Light Client Integration**
+**Week 10-13: ZK Light Client Integration**
 - [ ] Deploy Argument Computer's Sphinx prover infrastructure
 - [ ] Implement Plonk verifier in Move (use Argument's template)
 - [ ] Set up automated proof generation pipeline
@@ -589,7 +1182,7 @@ async fn process_ethereum_transaction(
 - [ ] Test with Ethereum mainnet data
 - [ ] Monitoring and alerting for proof failures
 
-**Week 11-12: Storage Proof Verification**
+**Week 14-15: Storage Proof Verification**
 - [ ] Implement Merkle Patricia Trie verifier in Move
 - [ ] Create locked ETH verification contract
 - [ ] Frontend library for generating storage proofs
@@ -598,27 +1191,28 @@ async fn process_ethereum_transaction(
 
 ### Phase 3: Production Hardening
 
-**Week 13-14: Security**
+**Week 16-17: Security**
 - [ ] Professional security audit of Move contracts
 - [ ] Penetration testing of sequencer
 - [ ] Rate limiting stress tests
 - [ ] Economic attack simulations
 - [ ] Bug bounty program launch
 
-**Week 15-16: UX & Monitoring**
-- [ ] Frontend SDK with MetaMask integration
-- [ ] Transaction status tracking
-- [ ] Gas sponsorship dashboard
+**Week 18-19: UX & Monitoring**
+- [ ] Frontend SDK with MetaMask integration (polish)
+- [ ] Gas sponsorship dashboard for monitoring
 - [ ] Prometheus metrics for all components
 - [ ] Alerting for anomalies
+- [ ] Performance optimization
 
-**Week 17-18: Testnet Launch**
+**Week 20-21: Testnet Launch**
 - [ ] Deploy to Atomica testnet
-- [ ] Public testing period
+- [ ] Public testing period (2 weeks minimum)
 - [ ] Documentation and guides
 - [ ] Developer workshops
+- [ ] Bug fixes from community testing
 
-### Phase 4: Mainnet (Week 19-20)
+### Phase 4: Mainnet (Week 22-23)
 
 - [ ] Gradual rollout with limits
 - [ ] 24/7 monitoring
