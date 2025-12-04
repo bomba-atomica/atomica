@@ -1,0 +1,6 @@
+# don't include codegen from halo2
+solidity/out
+solidity/cache
+solidity/lib
+solidity/.github
+

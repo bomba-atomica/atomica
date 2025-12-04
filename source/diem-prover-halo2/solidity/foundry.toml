@@ -1,0 +1,8 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+optimizer = true
+optimizer_runs = 200
+fs_permissions = [{ access = "read", path = "./proof_data.json" }]
+via_ir = true
