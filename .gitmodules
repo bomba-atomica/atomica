@@ -1,3 +1,6 @@
 [submodule "source/diem-prover-stwo/solidity/lib/forge-std"]
 	path = source/diem-prover-stwo/solidity/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
+[submodule "source/diem-prover-halo2/solidity/lib/forge-std"]
+	path = source/diem-prover-halo2/solidity/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
