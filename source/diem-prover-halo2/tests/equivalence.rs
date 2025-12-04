@@ -1,6 +1,6 @@
 mod common;
 use common::EquivalenceCircuit;
-use halo2_proofs::{
+use halo2_proofs_axiom::{
     circuit::Value,
     dev::MockProver,
     halo2curves::bn256::{Bn256, Fr},

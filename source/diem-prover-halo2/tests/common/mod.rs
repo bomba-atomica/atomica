@@ -1,4 +1,4 @@
-use halo2_proofs::{
+use halo2_proofs_axiom::{
     circuit::{Layouter, SimpleFloorPlanner, Value},
     halo2curves::bn256::Fr,
     plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Expression, Selector},
@@ -19,9 +19,14 @@ pub struct EquivalenceCircuit {
 impl Circuit<Fr> for EquivalenceCircuit {
     type Config = EquivalenceConfig;
     type FloorPlanner = SimpleFloorPlanner;
+    type Params = ();
 
     fn without_witnesses(&self) -> Self {
         Self::default()
+    }
+
+    fn params(&self) -> Self::Params {
+        ()
     }
 
     fn configure(meta: &mut ConstraintSystem<Fr>) -> Self::Config {
@@ -52,12 +57,7 @@ impl Circuit<Fr> for EquivalenceCircuit {
             |mut region| {
                 config.s_eq.enable(&mut region, 0)?;
 
-                region.assign_advice(
-                    || "private input",
-                    config.advice,
-                    0,
-                    || self.private_input,
-                )?;
+                region.assign_advice(config.advice, 0, self.private_input);
 
                 Ok(())
             },

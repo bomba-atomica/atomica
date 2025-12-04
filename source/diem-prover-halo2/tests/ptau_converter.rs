@@ -1,4 +1,4 @@
-use halo2_proofs::{
+use halo2_proofs_axiom::{
     halo2curves::bn256::{Bn256, Fr, G1Affine, G2Affine, Fq, Fq2},
     halo2curves::group::{Curve, PrimeField},
     poly::commitment::Params,
@@ -9,8 +9,8 @@ use std::fs::File;
 
 #[test]
 fn test_convert_ptau() {
-    let ptau_path = "powersOfTau28_hez_final_10.ptau";
-    
+    let ptau_path = "tests/fixtures/powersOfTau28_hez_final_10.ptau";
+
     if !std::path::Path::new(ptau_path).exists() {
         println!("Skipping ptau conversion: file not found");
         return;

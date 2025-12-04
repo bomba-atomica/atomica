@@ -1,2 +1,2 @@
-pub mod auction;
-pub mod circuit; // Export the equivalence circuit too if needed
+// Library will contain runtime prover code
+// Test circuits are in tests/common/

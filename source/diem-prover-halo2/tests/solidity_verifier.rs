@@ -1,4 +1,4 @@
-use halo2_proofs::{
+use halo2_proofs_axiom::{
     circuit::Value,
     halo2curves::bn256::{Bn256, Fr, G1Affine},
     plonk::{create_proof, keygen_pk, keygen_vk, verify_proof},
@@ -14,10 +14,12 @@ use halo2_proofs::{
         Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
     },
 };
-use halo2_solidity_verifier::{BatchOpenScheme, SolidityGenerator};
 use snark_verifier::{
     system::halo2::transcript::evm::{EvmTranscript, ChallengeEvm},
     loader::native::NativeLoader,
+};
+use snark_verifier_sdk::{
+    gen_pk, halo2::gen_snark_shplonk, CircuitExt, Snark,
 };
 use rand::rngs::OsRng;
 use std::path::Path;
@@ -30,7 +32,7 @@ fn test_solidity_verifier() {
     let k = 8; // Increased k to match previous attempts, though 4 might suffice
     // 1. Setup (Simulated Universal Setup)
     let k = 9;
-    let params_path = Path::new("kzg_bn254_9.srs");
+    let params_path = Path::new("tests/fixtures/kzg_bn254_9.srs");
     
     // Generate and save parameters if missing (simulating a downloaded file)
     if !params_path.exists() {
