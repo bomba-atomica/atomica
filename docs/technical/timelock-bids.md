@@ -1,17 +1,33 @@
 # Timelock Encryption for Sealed-Bid Blockchain Auctions
 
-**⚠️ Important Update (2025-11-13)**
+**⚠️ Important Updates**
 
-**The ZK proof requirements in this document have been REMOVED from the design.**
+**Update (2025-12-04) - Atomica Validator Timelock:**
+
+Atomica uses **Atomica validator BLS threshold signatures** for timelock encryption (not drand). This document uses drand as an example to explain the IBE (Identity-Based Encryption) timelock concept.
+
+**Atomica implementation:**
+- ✅ Atomica validators provide timelock decryption (dual purpose: consensus + timelock)
+- ✅ BLS threshold signatures (using Aptos-core infrastructure for consensus)
+- ✅ No external dependencies (drand not needed)
+- ✅ Economic alignment (validators earn from auction fees)
+
+**Note:** Atomica chain is built using Aptos-core software as the blockchain implementation, but runs as an independent network with its own validators.
+
+**See:** [Atomica Validator Timelock Decision](../decisions/aptos-validator-timelock.md) for full specification.
+
+**Update (2025-11-13) - ZK Proof Simplification:**
+
+The ZK proof requirements in this document have been REMOVED from the design.
 
 We have simplified the approach:
-- ✅ **Kept:** drand timelock encryption (IBE) for sealed bids
+- ✅ **Kept:** Timelock encryption (IBE) for sealed bids
 - ❌ **Removed:** ZK proofs of bid validity (balance, solvency)
 - ✅ **Added:** Post-decryption validation with economic deposits
 
-**See:** [Bid Validity Simplification Decision](../decisions/bid-validity-simplification.md) for full rationale.
+**See:** [Bid Validity Simplification Decision](../decisions/bid-validity-simplification.md) for rationale.
 
-**Document status:** Sections describing ZK proofs are retained for historical reference but marked as deprecated. The core timelock encryption mechanism remains unchanged.
+**Document status:** This document describes the general IBE timelock concept using drand as an example. Sections on ZK proofs are retained for historical reference but marked as deprecated.
 
 ---
 

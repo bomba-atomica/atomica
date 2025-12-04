@@ -75,16 +75,33 @@ atomica/
 
 ### 🔧 Technical Specifications
 
+**[Architecture Overview](docs/technical/architecture-overview.md)** ⭐
+- Complete system architecture
+- Unified away chain verification
+- Aptos validator timelock implementation
+- Dual-layer verification (BLS + ZK)
+- Account abstraction
+
+**[Architecture Plan](docs/technical/architecture-plan.md)**
+- Detailed technical implementation plan
+- Aptos API integration research
+- Research topics for implementation
+
 **[Cross-Chain Verification](docs/technical/cross-chain-verification.md)**
 - ZK proofs of away-chain state
 - Merkle proof inclusion
 - Atomic settlement mechanics
 
-**[Timelock Encryption for Sealed Bids](docs/technical/timelock-bids.md)** ⭐
-- Drand-based timelock encryption (IBE)
+**[Ethereum Wallet Atomica Bridge](docs/technical/ethereum-wallet-atomica-bridge.md)**
+- Account abstraction specification
+- Ethereum wallet integration
+- Cross-chain UX flow
+
+**[Timelock Encryption for Sealed Bids](docs/technical/timelock-bids.md)**
+- Timelock encryption concepts (IBE)
 - Post-decryption validation with economic deposits
 - No ZK proofs required for bid validity
-- **Note:** Document contains deprecated ZK proof sections (marked as such)
+- **Note:** Document contains deprecated sections (uses drand example, Atomica uses Aptos validator timelock)
 
 **[Technology Limitations](docs/technical/technology-limitations.md)**
 - Why fully private auctions aren't feasible
@@ -115,6 +132,27 @@ atomica/
 - Mitigation strategies
 - Game-theoretic proofs
 
+### 📋 Architecture Decision Records
+
+**[Unified Away Chain Architecture](docs/decisions/unified-away-chain-architecture.md)** ⭐
+- Decision to use single architecture for all chains
+- Analysis of chain-specific vs unified approaches
+- Gas cost trade-offs (Ethereum vs Solana)
+- Why consistency over micro-optimization
+
+**[Atomica Validator Timelock](docs/decisions/aptos-validator-timelock.md)** ⭐
+- Decision to use Atomica validators for timelock encryption
+- vs external services (drand)
+- BLS-based Identity-Based Encryption (IBE)
+- Leverages Aptos-core infrastructure
+- Security analysis and implementation plan
+
+**[Bid Validity Simplification](docs/decisions/bid-validity-simplification.md)**
+- Decision to use post-decryption validation
+- vs ZK proof pre-validation
+- Economic deposits prevent spam
+- Simpler implementation
+
 ### 📚 Background & Context
 
 **[Prior Art: Decentralized Exchanges](docs/background/prior-art.md)**
@@ -143,13 +181,21 @@ atomica/
 Novel design combining atomic swaps' trustless cross-chain execution with auction-based competitive price discovery. No bridges, no wrapped tokens, no custodians.
 
 ### Futures Market Model
-Single daily batch auction with delivery 12-24 hours after auction close (not spot market). Embraces cross-chain latency, enabling better MM economics, liquidity concentration, and simpler mechanism.
+Single daily batch auction with delivery 1-3 hours after auction close (not spot market). Embraces cross-chain latency, enabling better MM economics, liquidity concentration, and simpler mechanism. Settlement delay prevents arbitrage/information withholding and provides verification period.
 
 ### Sealed Bids via Timelock Encryption
-Bids remain cryptographically sealed until auction close, then automatically decrypt via drand randomness beacon. Prevents shill bidding, timing games, and information asymmetry.
+Bids remain cryptographically sealed until auction close, then automatically decrypt via Atomica validator threshold signatures (BLS-based Identity-Based Encryption). Atomica validators serve dual purposes: consensus and timelock authority. Prevents shill bidding, timing games, and information asymmetry.
+
+**Note:** Atomica chain uses Aptos-core as its blockchain software vendor (consensus, BLS cryptography, Move VM) while running as an independent network.
 
 ### Uniform Price Auction
 All winning bidders pay the same clearing price (lowest qualifying bid), regardless of original bid. Similar properties to Vickrey auctions under certain conditions (Nobel Prize-winning research).
+
+### Unified Cross-Chain Architecture
+All away chains (Ethereum, Solana, Base, Arbitrum, etc.) use identical verification mechanisms. Dual-layer security: BLS threshold signatures (consensus layer) + ZK proofs (computation layer). Both must agree on merkle root for settlement. Single codebase, consistent UX, unified security model.
+
+### Account Abstraction
+Users deposit on preferred chains using familiar wallets (MetaMask, Phantom). Account abstraction maps Ethereum addresses to Atomica accounts. Users sign bids with Ethereum wallet—no Atomica-native wallet or gas tokens needed. Never leave your wallet ecosystem.
 
 ### Self-Sustaining Economics
 Market makers earn through bid-ask spreads (competitive returns, not excess rents). No protocol fees, no subsidies, no token emissions required.

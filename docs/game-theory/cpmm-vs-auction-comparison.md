@@ -523,7 +523,7 @@ Recent design insights suggest that reframing the auction mechanism as a **futur
 
 The key realization is that cross-chain atomic swaps inherently require coordination time and settlement delays. Rather than fighting this constraint, we can embrace it by designing the system as a **futures market** where:
 
-1. **Commodity delivered in X hours after auction close** - Assets settle after a predetermined delay (e.g., 24 hours)
+1. **Commodity delivered in X hours after auction close** - Assets settle after a predetermined delay (1-3 hours)
 2. **Price smoothing** - Futures pricing naturally smooths volatility and reduces sensitivity to momentary price spikes
 3. **Reduced auction frequency** - A single daily batch auction suffices, dramatically simplifying coordination
 
@@ -567,15 +567,15 @@ The key realization is that cross-chain atomic swaps inherently require coordina
 - **Winner's curse mitigation** - Bidders cannot game the uniform clearing price by observing competitor bids
 
 **Implementation via Timelock Encryption:**
-- Bids encrypted using drand-based timelock encryption (IBE - detailed in `timelock-bids.md`)
+- Bids encrypted using Atomica validator BLS threshold signatures (IBE - Identity-Based Encryption)
 - All bids remain cryptographically sealed until auction close time
-- Automatic decryption via drand randomness beacon (no reveal phase to grief)
+- Automatic decryption via Atomica validator threshold signatures (no reveal phase to grief)
 - Economic deposits prevent spam bids (slashed if malformed, returned if valid)
 - One-shot settlement after automatic decryption
 
 **Why Feasibility is Proven:**
-As documented in `timelock-bids.md`, the technical approach combines:
-1. Drand tlock (Identity-Based Encryption) for trustless automatic decryption
+As documented in `aptos-validator-timelock.md`, the technical approach combines:
+1. Atomica validator BLS-based IBE for trustless automatic decryption (using Aptos-core infrastructure)
 2. Post-decryption validation with economic deposits
 3. No interactive reveal phase (prevents griefing)
 4. **Note:** ZK proofs for bid validity were removed - see [Bid Validity Simplification](../decisions/bid-validity-simplification.md)
@@ -642,13 +642,15 @@ This approach is **practical and implementable** with current cryptographic tool
 **Auction Schedule:**
 - Daily auction at fixed time (e.g., 12:00 UTC)
 - Bid submission window: e.g., 08:00-12:00 UTC
-- Automatic decryption at 12:00 UTC via drand timelock
-- Settlement: X hours after close (e.g., 18:00 UTC same day)
+- Automatic decryption at 12:00 UTC via Atomica validator threshold signatures
+- Settlement: 1-3 hours after close (e.g., 13:00 UTC same day, 1 hour)
 
-**Settlement Delay Options:**
-- **Short (6-12 hours)**: Lower inventory risk for MMs, more attractive pricing
-- **Medium (24 hours)**: More time for hedging, may reduce spreads
-- **Long (48+ hours)**: True futures market, potentially best pricing but higher user patience needed
+**Settlement Delay Rationale:**
+- **Chosen: 1-3 hours** - Prevents arbitrage/information withholding + provides verification period
+- **Economic benefit**: Private information becomes public before settlement (prevents manipulation)
+- **Verification benefit**: Time for participants to review bids and confirm correctness
+- **User benefit**: Rapid same-day settlement (bid morning, settle early afternoon)
+- **Note**: 24h NOT required for economic benefit; 1-3 hours sufficient
 
 **Sealed Bid Requirements:**
 - Mandatory timelocked encryption (prevents manipulation)

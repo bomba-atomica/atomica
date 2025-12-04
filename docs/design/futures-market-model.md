@@ -64,7 +64,7 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 
 **Key Parameters:**
 - **No reserve prices** at launch (relies on competitive bidding in large batch)
-- **Settlement delay:** X hours after auction close (recommended 12-24 hours)
+- **Settlement delay:** 1-3 hours after auction close
 - **Bid window:** 4-hour submission window (e.g., 08:00-12:00 UTC)
 
 ### Example Flow
@@ -77,20 +77,21 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 08:00-12:00 UTC - Bid Submission Window
   └─ Bidders on home chain submit encrypted sealed bids for LIBRA
   └─ Economic deposits prevent spam bids (returned if valid, slashed if malformed)
-  └─ Bids remain cryptographically sealed via drand timelock (IBE)
+  └─ Bids remain cryptographically sealed via Atomica validator timelock (IBE)
 
 12:00 UTC - Auction Close & Automatic Decryption
-  └─ Drand randomness beacon releases decryption key
+  └─ Atomica validators publish decryption shares (threshold signatures)
   └─ All bids decrypt automatically (no interactive reveal phase)
   └─ Clearing price determined at lowest qualifying bid (uniform price auction)
   └─ All winning bidders pay same clearing price
 
-12:00-18:00 UTC - Settlement Window
-  └─ Bidders hedge positions on external markets
+12:00-13:00 UTC - Settlement Window (1 hour)
+  └─ Participants review bids and verify smart contracts operated correctly
+  └─ Bidders hedge positions on external markets (prevents arbitrage)
   └─ Cross-chain proofs generated and verified
   └─ Atomic settlement prepared
 
-18:00 UTC - Settlement (6 hours after close)
+13:00 UTC - Settlement (1 hour after close)
   └─ Assets delivered to all participants atomically
   └─ Native assets on both chains (no wrapped tokens)
   └─ Bidders transfer LIBRA to users
@@ -121,66 +122,65 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 
 ## Settlement Delay Considerations
 
-The settlement delay after auction close is a key design parameter with tradeoffs:
+The settlement delay after auction close is a key design parameter. Atomica uses a **1-3 hour** settlement delay.
 
-### Short Delay (6-12 hours)
+### Rationale for Short Delay
 
-**Advantages:**
-- ✅ Lower inventory risk for bidders (less time exposed to price movements)
-- ✅ Better for users wanting quick delivery (same-day settlement possible)
-- ✅ Closer to spot market pricing (futures premium smaller)
+**Dual Purpose:**
 
-**Disadvantages:**
-- ❌ Less time for bidders to hedge (may result in wider spreads to compensate for risk)
-- ❌ Tighter operational window for bidders
-- ❌ Higher stress testing requirements
+1. **Economic Benefit:** Prevents arbitrage and private information withholding
+   - Bidders cannot exploit price movements between bid submission and delivery
+   - Private information about market conditions revealed during auction becomes public before settlement
+   - **Key insight:** 24 hours is NOT required for this benefit; a few hours is sufficient
 
-**Best For:** Launch phase where proving fast execution is important for user adoption
+2. **Verification Period:** Allows all participants to review before settlement
+   - Users can verify their bids decrypted correctly
+   - All parties can review auction clearing was computed properly
+   - Time to confirm smart contracts operated as expected
+   - Transparency builds trust in the mechanism
 
-### Medium Delay (24 hours)
+### Benefits of Short Delay (1-3 hours)
 
-**Advantages:**
-- ✅ Full day for bidders to manage positions
-- ✅ May result in tighter spreads due to better hedging opportunities
-- ✅ Clear "next-day delivery" mental model (like Amazon Prime)
-- ✅ Bidders can use global markets across timezones
+**For Users:**
+- ✅ Same-day settlement (bid morning, settle early afternoon)
+- ✅ Lower price risk exposure (minimal time between bid and delivery)
+- ✅ Faster capital velocity
+- ✅ Better UX (rapid settlement)
 
-**Disadvantages:**
-- ❌ Longer wait for users (full 24-hour cycle)
-- ⚠️ Moderate inventory risk (more than short, less than long)
+**For Bidders:**
+- ✅ Lower inventory risk (very short exposure to price movements)
+- ✅ Still sufficient time for basic hedging on external markets
+- ✅ Tighter operational requirements but manageable
+- ✅ Prevents complex arbitrage strategies (keeps mechanism simple)
 
-**Best For:** Steady-state operation balancing user satisfaction with bidder profitability
+**For Protocol:**
+- ✅ Simpler mechanism (less time for edge cases to emerge)
+- ✅ Faster feedback loops for improvements
+- ✅ Easier to monitor and respond to issues
+- ✅ Reduces attack surface (shorter window for manipulation)
 
-### Long Delay (48+ hours)
+### Comparison to Longer Delays
 
-**Advantages:**
-- ✅ True futures market dynamics
-- ✅ Maximum hedging flexibility for bidders
-- ✅ Potentially best pricing for users (tightest spreads)
-- ✅ Can use multi-day hedging strategies
+| Delay | Economic Benefit | Verification | User Experience | Bidder Complexity |
+|-------|------------------|--------------|-----------------|-------------------|
+| **1-3 hours** | ✅ Sufficient | ✅ Adequate | ✅ Rapid same-day | ✅ Manageable |
+| 6 hours | ✅ Sufficient | ✅ Ample | ✅ Same-day | ✅ More hedging time |
+| 12 hours | ✅ Sufficient | ✅ Excessive | ⚠️ Next-day | ⚠️ More time than needed |
+| 24 hours | ✅ Sufficient | ❌ Excessive | ❌ Full cycle wait | ✅ Full day to hedge |
+| 48+ hours | ✅ Sufficient | ❌ Unnecessary | ❌ Too slow | ✅ Multi-day strategies |
 
-**Disadvantages:**
-- ❌ Significant wait time may frustrate users
-- ❌ Higher price risk over longer delay period
-- ❌ Users may seek alternatives with faster settlement
+**Analysis:** The economic benefit (preventing arbitrage) does NOT require 24 hours—it only requires enough time that price information becomes public before settlement. 1-3 hours achieves this. The verification benefit similarly doesn't require a full day; 1-3 hours gives everyone time to review.
 
-**Best For:** Institutional users prioritizing best execution over speed
+### Tuning Parameters
 
-### Recommendation for Launch
+Atomica launches with **1-3 hour** settlement delay, which can be adjusted based on real-world data:
 
-**12-24 hour settlement delay** balances user expectations with bidder risk management.
+- **Shorten to 1 hour** if verification proves very fast and bidders comfortable
+- **Extend to 3 hours** if bidders need more hedging time or verification needs longer
+- Monitor spread compression vs settlement delay
+- User satisfaction with delivery timing
 
-**Rationale:**
-- Long enough for bidders to hedge effectively (encourages competitive participation)
-- Short enough to maintain user interest (next-day delivery is familiar concept)
-- Flexible range allows adjustment based on market conditions
-- Can tune within range without changing core mechanism
-
-**Tuning Parameters:**
-- Start at 18 hours (mid-range)
-- Monitor bidder feedback on spread compression opportunities
-- Monitor user satisfaction with timing
-- Adjust toward 12hr if users demand faster, toward 24hr if bidders need more time
+**Flexibility:** The core mechanism doesn't change with timing adjustments, making this a safe parameter to tune post-launch. The 1-3 hour range provides flexibility to optimize based on market feedback.
 
 ## Comparison to Alternative Models
 

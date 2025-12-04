@@ -21,238 +21,385 @@
 
 ### Design Philosophy
 
-Atomica is a **cross-chain auction protocol** that prioritizes:
-- **Trustless verification** - No reliance on external oracles or trusted intermediaries
-- **Gas efficiency** - Minimize transaction costs through batching and ZK proofs
-- **User accessibility** - Standard wallet workflows without specialized accounts
-- **Cryptographic security** - BLS signatures, ZK proofs, and merkle tree verification
+Atomica is a **cross-chain sealed-bid auction protocol** that prioritizes:
+- **Sealed auctions** - Timelock encryption prevents bid manipulation and MEV
+- **Trustless verification** - Dual-layer security (BLS threshold + ZK proofs)
+- **Gas efficiency** - Merkle-proof settlement minimizes transaction costs
+- **User accessibility** - Standard wallet workflows via account abstraction
+- **Unified architecture** - All away chains use identical verification mechanism
 
 ### High-Level Architecture
 
-Atomica implements **two distinct architectural patterns** based on away chain gas costs:
-
-#### Architecture A: Ethereum (High Gas Cost)
-**Off-Chain Double-Entry with ZK Verification**
+**Unified Cross-Chain Verification**
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                      Atomica Chain (Home)                         │
-│  • Auction executes on-chain                                      │
-│  • Settlement computed → Merkle root generated                    │
-│  • BLS-signed state proofs                                        │
+│  • Validators implement BLS threshold timelock (tlock)            │
+│  • Sealed reserve prices + bids (tlock encrypted)                │
+│  • Automatic decryption at auction deadline (2/3 threshold)       │
+│  • Ausubel auction clearing in Move                               │
+│  • Merkle root generated + BLS threshold signed                   │
 └────────────────────────┬─────────────────────────────────────────┘
                          │
-                         │ Merkle Root + BLS Signature
-                         │ ZK Proof (off-chain computation)
+                         │ BLS-Signed Merkle Root + ZK Proof
                          │
 ┌────────────────────────┴─────────────────────────────────────────┐
-│                        Ethereum                                   │
-│  • Time Lock contract with deposits                               │
-│  • Merkle root verification (BLS signatures)                      │
-│  • ZK proof verification (settlement correctness)                 │
-│  • Settlement via merkle proofs (not full transactions)           │
+│              All Away Chains (Unified Architecture)               │
+│              Ethereum, Solana, Base, Arbitrum, etc.               │
+│                                                                   │
+│  • Time Lock contracts track validator pubkeys                   │
+│  • Verify BLS threshold signatures on merkle root                │
+│  • Verify ZK proof of auction computation                        │
+│  • Enable withdrawals via merkle proofs                          │
+│  • Gas-efficient: O(1) settlement cost per auction               │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
-**Key Insight**: Users withdraw using merkle proofs, avoiding per-user transaction costs.
-
-#### Architecture B: Solana + Low-Cost Chains
-**On-Chain Double-Entry with Parallel Auction Execution**
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                      Atomica Chain (Home)                         │
-│  • Users submit bids (timelock encrypted)                         │
-│  • Auction executes: clearing, settlement                         │
-│  • Final state: merkle root of balances                           │
-│  • BLS-signed state proofs                                        │
-└───────────────────────────────────────────────────────────────────┘
-                         ↑
-                         │ Same bids submitted to both chains
-                         ↓
-┌───────────────────────────────────────────────────────────────────┐
-│                   Solana / Low-Cost Chain                          │
-│  • Users submit same bids (timelock encrypted)                    │
-│  • Auction executes: same clearing logic                          │
-│  • Final state: merkle root of balances                           │
-│  • Both chains verify: merkle roots match                         │
-└───────────────────────────────────────────────────────────────────┘
-```
-
-**Key Insight**: Ausubel auctions are **order-independent** - given the same set of bids, both chains compute identical settlement regardless of bid ordering. No nonces needed!
+**Key Properties**:
+1. **Sealed bids**: Validator timelock prevents MEV and manipulation
+2. **Unified verification**: Same mechanism works on all chains (Ethereum = Solana = Base = ...)
+3. **Dual security**: BLS consensus + ZK computation both must agree
+4. **Gas efficiency**: 100x reduction vs per-user transactions
 
 ---
 
-## Architectural Bifurcation: Why Two Approaches?
+## Unified Away Chain Architecture
 
-### Gas Cost Economics
+**Architectural Decision**: All away chains (Ethereum, Solana, Base, Arbitrum, Polygon, etc.) use **identical verification mechanisms**. There is no chain-specific architecture.
 
-| Chain Type | Cost/TX | 100 User Settlement | Feasibility |
-|------------|---------|---------------------|-------------|
-| Ethereum L1 | $10-50 | $1,000-$5,000 | ❌ Prohibitive |
-| Arbitrum/Optimism | $0.10-$1 | $10-$100 | ⚠️ Marginal |
-| Solana/Sui | $0.0001-$0.001 | $0.01-$0.10 | ✅ Viable |
-| Aptos/Atomica | $0.0001-$0.001 | $0.01-$0.10 | ✅ Viable |
+### Why Unified Architecture?
 
-### Architecture A: Ethereum (Off-Chain Double-Entry)
+**Alternative Considered**:
+- Chain-specific architectures: Merkle proofs + ZK for expensive chains (Ethereum), parallel execution for cheap chains (Solana)
 
-**Design Rationale**: Gas costs make per-user settlement transactions economically infeasible.
+**Chosen Approach**:
+- **Single architecture** for ALL away chains
+- Merkle-proof-based settlement with dual-layer verification
+- Works identically regardless of chain gas costs
+- Simplifies implementation, testing, and maintenance
 
-**Settlement Flow**:
-1. Auction completes on Atomica → settlement computed
-2. Merkle tree generated from final balances
-3. Merkle root submitted to Ethereum (single transaction)
-4. ZK proof verifies settlement correctness (single transaction)
-5. Users withdraw by providing merkle proof (individual action)
+### Gas Cost Analysis
 
-**Accounting Model**: **Off-chain double-entry**
-- Atomica: Full transaction history stored on-chain
-- Ethereum: Only merkle root stored on-chain
-- Double-entry verified cryptographically (merkle roots + ZK proofs)
+| Chain | Cost/TX | Settlement (100 users) | Architecture |
+|-------|---------|------------------------|--------------|
+| Ethereum L1 | $10-50 | $50-100 (2 TXs: root + proof) | Unified |
+| Arbitrum/Optimism | $0.10-$1 | $0.50-$2 | Unified |
+| Base/Polygon | $0.01-$0.10 | $0.05-$0.20 | Unified |
+| Solana/Sui | $0.0001-$0.001 | $0.0005-$0.002 | Unified |
 
-**Trade-offs**:
-- ✅ Extremely gas-efficient ($50 total vs $5000 for 100 users)
-- ✅ Scales to thousands of users per auction
-- ❌ Less transparency (no per-user tx on Ethereum)
-- ❌ Requires off-chain ZK proof generation
-- ❌ Users must provide merkle proofs to withdraw
+**Key Insight**: Even on Solana where gas is negligible ($0.0005), the unified architecture provides:
+- Better cross-chain consistency
+- Single codebase to maintain
+- Identical security model
+- Easier auditing
 
-### Architecture B: Solana + Low-Cost Chains (On-Chain Double-Entry)
+**Trade-off**: Solana could support per-user transactions at low cost, but unified architecture prioritizes consistency over micro-optimization.
 
-**Design Rationale**: Gas costs are negligible, enabling true parallel execution on both chains.
+---
 
-**Bid Submission Flow**:
-1. User deposits on both Atomica and Solana
-2. User submits **same bid to both chains simultaneously**
-3. Both bids timelock encrypted with same drand round
-4. Both chains receive identical bid set
+## Atomica Validator Timelock (tlock) Implementation
 
-**Auction Execution Flow**:
-1. Timelock expires → bids decrypt on both chains
-2. **Atomica executes Ausubel auction** → computes settlement
-3. **Solana executes same Ausubel auction** → computes settlement
-4. Both chains arrive at **identical settlement** (Ausubel is order-independent!)
-5. Both chains compute merkle root of final balances
-6. Merkle roots verified to match (consistency check)
+### Overview
 
-**Accounting Model**: **On-chain parallel double-entry**
-- Atomica: Full auction execution and settlement
-- Solana: Full auction execution and settlement (same logic)
-- Both chains independently compute same result
-- Cross-chain consistency verified via merkle root comparison
-- **No nonces needed** - order-independence guarantees consistency
+Atomica uses **Atomica validators' BLS threshold signature infrastructure** to implement decentralized timelock encryption for sealed bids. This eliminates dependency on external services (like drand) while leveraging Aptos-core's battle-tested validator capabilities.
 
-**Why This Works - Ausubel Order-Independence**:
+**Note on Technology**: Atomica chain is built using Aptos-core software (consensus, BLS cryptography, Move VM) as the blockchain implementation, but runs as an independent network with its own validators, governance, and token economics.
 
-Ausubel (ascending clinching) auctions have a critical property: **the final allocation and prices depend only on the SET of bids, not their ORDER**.
+### BLS Threshold Signatures (via Aptos-core)
 
-```
-Example Auction for 10 ETH:
-Bids: Alice: 5 ETH @ $2000
-      Bob:   3 ETH @ $1900
-      Carol: 4 ETH @ $1800
+**Aptos-core Infrastructure Provides**:
+- Validators maintain BLS12-381 key pairs
+- Threshold signature scheme (t-of-n) already implemented
+- Used for consensus and validator set changes
+- Publicly verifiable aggregate signatures
 
-Clearing price: $1800 (10 ETH demanded at this price)
+**Atomica Implementation**:
+- Leverage Aptos-core BLS threshold infrastructure for timelock encryption
+- Atomica validators publish decryption shares at predefined times
+- No additional cryptographic primitives needed
+- Fully compatible with Aptos-core validator operations
 
-Final allocation (independent of bid order):
-  Alice: 5 ETH @ $1900 (pays $9,500)
-  Bob:   3 ETH @ $1900 (pays $5,700)
-  Carol: 2 ETH @ $1800 (pays $3,600)
-```
+### Timelock Encryption Scheme
 
-**Mathematical Property**:
-```
-Given bid set B = {b₁, b₂, ..., bₙ}
-Ausubel(B) = Ausubel(π(B))  for any permutation π
-
-Therefore:
-  Atomica receives bids: [Alice, Bob, Carol]
-  Solana receives bids:  [Carol, Alice, Bob]
-
-  Both compute: Same clearing price, same allocation
-```
-
-**Implementation - Identical Auction Logic**:
-
+**Encryption (Client-Side)**:
 ```rust
-// Shared auction clearing algorithm (deployed on both chains)
-pub fn clear_ausubel_auction(
-    bids: Vec<Bid>,  // Order doesn't matter!
-    total_supply: u64
-) -> AuctionResult {
-    // 1. Sort bids by price (high to low)
-    let mut sorted_bids = bids.clone();
-    sorted_bids.sort_by(|a, b| b.price.cmp(&a.price));
+// 1. Get validator threshold public key
+let validator_pubkey = get_validator_threshold_pubkey(auction_id, end_time);
 
-    // 2. Find clearing price
-    let clearing_price = find_clearing_price(&sorted_bids, total_supply);
+// 2. Encrypt bid using IBE-style encryption
+let bid = Bid {
+    bidder: user_address,
+    price: 1500,
+    quantity: 10
+};
+let ciphertext = ibe_encrypt(validator_pubkey, bid, end_time);
 
-    // 3. Allocate to winners
-    let allocations = compute_allocations(&sorted_bids, clearing_price, total_supply);
+// 3. Submit encrypted bid to Atomica
+submit_bid(auction_id, ciphertext);
+```
 
-    AuctionResult {
-        clearing_price,
-        allocations,
-        merkle_root: compute_merkle_root(&allocations),
+**Decryption (Validator Threshold)**:
+```rust
+// At auction end time, validators automatically:
+// 1. Each validator generates decryption share
+let decryption_share = validator.generate_decryption_share(
+    auction_id,
+    end_time
+);
+
+// 2. Broadcast decryption share
+broadcast_decryption_share(auction_id, decryption_share);
+
+// 3. Once t-of-n shares received, anyone can combine
+if shares.len() >= threshold {
+    let decryption_key = combine_shares(shares);
+    let bid = decrypt(ciphertext, decryption_key);
+}
+```
+
+### Integration with Aptos Consensus
+
+**Validator Responsibilities**:
+1. **Block Production** (existing): Propose and vote on blocks
+2. **State Certification** (existing): Sign state roots with BLS
+3. **Decryption Share Generation** (new): Publish shares for expired timelocks
+
+**Timing Mechanism**:
+```move
+module atomica::timelock {
+    /// Validators check at each block if decryption shares needed
+    public fun maybe_publish_decryption_shares(current_time: u64) {
+        let expired_auctions = get_auctions_ending_at(current_time);
+
+        for auction in expired_auctions {
+            let share = generate_decryption_share(
+                auction.id,
+                auction.end_time
+            );
+
+            // Emit event for off-chain indexers
+            emit_decryption_share_event(auction.id, share);
+
+            // Store on-chain for on-chain decryption
+            store_decryption_share(auction.id, share);
+        }
     }
 }
 ```
 
-**Deployment**:
-- **Atomica**: Same algorithm in Move
-- **Solana**: Same algorithm in Rust/Anchor
-- **Both chains**: Receive same bids, compute same result, produce same merkle root
+**Liveness Guarantee**: As long as t-of-n validators are online, decryption will succeed. This matches Aptos consensus liveness assumptions.
 
-**Trade-offs**:
-- ✅ Full transparency (complete auction execution on both chains)
-- ✅ No ZK proofs required (simpler implementation)
-- ✅ Better auditability (all bids queryable on both chains)
-- ✅ No merkle proof burden on users
-- ✅ Truly distributed (no single source of truth)
-- ⚠️ Users must submit bids to both chains (can be automated by wallet/dApp)
-- ⚠️ Requires identical auction logic deployment on both chains
+### Security Properties
 
-### Comparison Table
+**Privacy During Auction**:
+- Bids encrypted with threshold public key
+- No single validator can decrypt
+- Requires t-of-n validator collusion to decrypt early
+- Standard: t = 2/3, matching BFT security assumptions
 
-| Feature | Ethereum (Arch A) | Solana (Arch B) |
-|---------|-------------------|-----------------|
-| **Bid Submission** | Only to Ethereum | To both chains simultaneously |
-| **Auction Execution** | Only on Atomica | On both chains in parallel |
-| **Settlement Model** | Merkle root + ZK proof | Parallel execution, merkle root comparison |
-| **On-Chain TXs** | 2 (root + proof) | N bids × 2 chains |
-| **Cost (100 bids)** | $50-100 | $0.01 ($0.0001 × 100 × 2) |
-| **Transparency** | Medium (merkle root only) | High (full auction on both chains) |
-| **User Withdrawal** | Requires merkle proof | Automatic (already settled) |
-| **ZK Proof Required** | Yes | No |
-| **Double-Entry Type** | Off-chain cryptographic | On-chain parallel execution |
-| **Order-Independence** | Not relevant | Critical (enables parallel execution) |
-| **Merkle Proof Usage** | User withdrawals | Cross-chain consistency verification |
+**Decryption Guarantee**:
+- Validators automatically publish shares at deadline
+- Economic incentive: validators earn fees from auction
+- Reputation incentive: failure hurts validator standing
+- Fallback: users can petition for decryption if validators stall
 
-### When to Use Each Architecture
+**MEV Resistance**:
+- Sealed bids prevent validators from front-running
+- Threshold requirement prevents single-validator manipulation
+- Decryption timing is deterministic (block height or timestamp)
 
-**Use Architecture A (Ethereum Model)**:
-- Away chain gas cost > $0.01/transaction
-- User base > 100 per auction (gas savings compound)
-- Examples: Ethereum L1, Polygon PoS, some L2s
+### Comparison to drand
 
-**Use Architecture B (Solana Model)**:
-- Away chain gas cost < $0.001/transaction
-- Transparency and auditability are priorities
-- Can deploy identical auction logic on away chain
-- Examples: Solana, Sui, Aptos-derived chains, ultra-low-cost L2s
+| Feature | drand | Atomica Validator tlock |
+|---------|-------|------------------------|
+| **Decentralization** | Separate network | Uses Atomica validators |
+| **External Dependency** | Yes (drand.love) | No |
+| **Liveness** | Separate liveness assumption | Shares Atomica liveness |
+| **Integration** | Must sync drand rounds | Native to Atomica |
+| **Security Assumption** | Trust League of Entropy | Trust Atomica validators |
+| **Latency** | 30 second rounds | Block-level precision |
+| **Cost** | Free (external) | Internal to protocol |
 
-**Key Decision Factor**: Can users afford to submit N bids to both chains?
-- Ethereum: N × $10 = $1000 for 100 bids → **NO**, use Arch A
-- Solana: N × $0.0001 × 2 = $0.02 for 100 bids → **YES**, use Arch B
-
-**Hybrid Approach** (Recommended):
-- Start with Architecture A on Ethereum
-- Expand to Architecture B on Solana/Sui
-- Users choose which chain to participate on based on preferences
-- Cross-chain auctions possible (Ethereum users + Solana users in same auction via Architecture A)
+**Decision Rationale**: Using Atomica validators eliminates external dependencies while providing equivalent security guarantees. Validators are already trusted for consensus; timelock adds minimal additional trust.
 
 ---
 
+## Research Topics for Aptos-core Integration
+
+The following research areas require investigation to implement the Atomica validator timelock scheme using Aptos-core infrastructure:
+
+### 1. BLS Threshold Signature Infrastructure
+
+**Questions**:
+- Does Aptos currently support threshold BLS signatures (t-of-n) or only aggregate signatures?
+- What is the current threshold parameter (t/n ratio)?
+- Can validators generate decryption shares independently without coordinator?
+- Are there APIs for accessing validator public keys and generating threshold keys?
+
+**Investigation**:
+- Review `aptos-crypto` crate for BLS threshold implementation
+- Check `aptos-types` for validator set and key management APIs
+- Examine consensus implementation for threshold signature usage
+- Look for existing decentralized key generation (DKG) implementations
+
+**Relevant Code**:
+- `crates/aptos-crypto/src/bls12381/`
+- `types/src/validator_set.rs`
+- `consensus/src/`
+
+### 2. Identity-Based Encryption (IBE) for Timelock
+
+**Questions**:
+- Can BLS signatures be repurposed for IBE-style encryption?
+- What is the cryptographic construction for BLS-based timelock encryption?
+- Are there existing IBE implementations compatible with BLS12-381?
+- What is the ciphertext overhead for IBE encryption?
+
+**Investigation**:
+- Research BLS-based IBE schemes (Boneh-Franklin, BF-IBE)
+- Investigate pairing-based encryption on BLS12-381 curve
+- Check for Rust libraries: `bls12_381`, `pairing`, `group`
+- Evaluate ciphertext size and encryption/decryption performance
+
+**Relevant Resources**:
+- Boneh-Franklin Identity Based Encryption (BF-IBE) paper
+- `bls12_381` Rust crate documentation
+- drand `tlock` scheme (reference implementation)
+
+### 3. Validator Economic Incentives
+
+**Questions**:
+- How are validators incentivized to publish decryption shares?
+- Should decryption share publication be mandatory (protocol-level)?
+- What happens if validators fail to publish shares?
+- Can we slash validators for not publishing decryption shares?
+
+**Investigation**:
+- Review Aptos validator reward structure
+- Examine slashing conditions in Aptos
+- Design incentive mechanism for timely decryption share publication
+- Consider auction fee distribution to validators
+
+**Relevant Code**:
+- `aptos-move/framework/aptos-framework/sources/staking_contract.move`
+- `aptos-move/framework/aptos-framework/sources/stake.move`
+
+### 4. Timing and Block Height Integration
+
+**Questions**:
+- Should auction deadlines be block height or timestamp based?
+- How accurate is Aptos block time (for timestamp-based deadlines)?
+- Can validators determine at block N which auctions need decryption?
+- What is the latency between deadline and decryption share availability?
+
+**Investigation**:
+- Review Aptos block time variance and consistency
+- Examine `timestamp` module in Aptos framework
+- Design efficient indexing for expired auctions
+- Consider off-chain vs on-chain decryption approaches
+
+**Relevant Code**:
+- `aptos-move/framework/aptos-framework/sources/timestamp.move`
+- `aptos-move/framework/aptos-framework/sources/block.move`
+
+### 5. Decryption Share Aggregation
+
+**Questions**:
+- Who aggregates decryption shares (validators, off-chain clients, or contracts)?
+- Should aggregation happen on-chain or off-chain?
+- What is the gas cost for on-chain share verification and combination?
+- Can we optimize share size for on-chain storage?
+
+**Investigation**:
+- Benchmark BLS signature aggregation gas costs in Move
+- Design share aggregation protocol (on-chain vs off-chain)
+- Consider lazy decryption (decrypt only when needed for auction clearing)
+- Evaluate trade-offs: gas cost vs decryption latency
+
+**Relevant Code**:
+- `aptos-move/framework/aptos-stdlib/sources/cryptography/`
+- Native function implementations for BLS operations
+
+### 6. Fallback Mechanisms
+
+**Questions**:
+- What if < t validators publish decryption shares?
+- Can users petition for decryption after extended delay?
+- Should there be a timeout for auction cancellation?
+- How to handle validator set rotation during auction?
+
+**Investigation**:
+- Design timeout and fallback logic
+- Consider social recovery mechanisms (governance vote)
+- Handle edge case: validator set changes mid-auction
+- Ensure auction liveness even with validator failures
+
+### 7. Move Contract Integration
+
+**Questions**:
+- Can Move contracts directly call BLS cryptographic primitives?
+- Are there native functions for BLS operations in Aptos VM?
+- What is the gas cost for BLS operations in Move?
+- How to store encrypted bids efficiently in Move?
+
+**Investigation**:
+- Review native function APIs in Aptos Move
+- Check `aptos_std::cryptography` module capabilities
+- Benchmark gas costs for BLS operations
+- Design storage schema for encrypted bid data
+
+**Relevant Code**:
+- `aptos-move/framework/aptos-stdlib/sources/cryptography/bls12381.move`
+- `aptos-move/framework/aptos-natives/`
+
+### 8. Cross-Chain Synchronization
+
+**Questions**:
+- How do away chains verify validator threshold public keys?
+- What is the update frequency for validator set changes?
+- Can away chains verify BLS threshold signatures efficiently?
+- What is the gas cost for BLS verification on Ethereum/Solana?
+
+**Investigation**:
+- Review BLS signature verification costs on target chains
+- Design validator set synchronization protocol
+- Consider using ZK proofs to wrap BLS verification (if too expensive)
+- Ensure validator keys are kept up-to-date on away chains
+
+**Relevant**:
+- Ethereum: EIP-2537 (BLS precompile) or ZK-wrapped verification
+- Solana: Native BLS support via syscalls
+
+---
+
+## Implementation Priority
+
+Based on research topics, recommended investigation order:
+
+**Phase 1: Feasibility Assessment** (2-3 weeks)
+1. BLS threshold signature infrastructure in Aptos
+2. IBE construction feasibility with BLS12-381
+3. Validator economic incentives and protocol integration
+
+**Phase 2: Cryptographic Design** (3-4 weeks)
+4. Timelock encryption scheme design and specification
+5. Decryption share generation and aggregation protocol
+6. Security analysis and threat modeling
+
+**Phase 3: Integration Design** (2-3 weeks)
+7. Move contract integration and gas cost analysis
+8. Timing mechanisms and block height integration
+9. Fallback and fault tolerance design
+
+**Phase 4: Cross-Chain Implementation** (3-4 weeks)
+10. Cross-chain validator synchronization
+11. Away chain BLS verification (direct or ZK-wrapped)
+12. End-to-end testing and auditing
+
+**Total Estimated Research & Design**: 10-14 weeks
+
+---
 ## Component Architecture
 
 ### 1. Atomica Chain Components
@@ -1423,373 +1570,6 @@ submit_sealed_bid(auction_id, encrypted_bid);
 
 ---
 
-## Settlement & Double-Entry Accounting
-
-### Overview
-
-Atomica implements **two distinct settlement architectures** based on away chain economics (see [Architectural Bifurcation](#architectural-bifurcation-why-two-approaches) above).
-
-### Architecture A: Ethereum Settlement (Off-Chain Double-Entry)
-
-**Challenge**: Ethereum gas costs make per-user settlement transactions prohibitive.
-
-**Solution**: Merkle-proof-based settlement with ZK verification
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Step 1: User deposits on Ethereum                            │
-│    TimeLock.deposit(auction_id, token, amount)               │
-│    → User balance tracked in contract                         │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-┌────────────────────┴─────────────────────────────────────────┐
-│  Step 2: Auction executes on Atomica                          │
-│    • Bids submitted (timelock encrypted)                     │
-│    • Auction clears after decryption                         │
-│    • Settlement computed: who pays whom                      │
-│    • Merkle tree generated: (account → balance_change)      │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-┌────────────────────┴─────────────────────────────────────────┐
-│  Step 3: Merkle root submitted to Ethereum                    │
-│    • BLS-signed state proof from Atomica                     │
-│    • Anyone can submit (permissionless)                      │
-│    • Ethereum contract verifies BLS signatures               │
-│    • Merkle root stored on-chain                             │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-┌────────────────────┴─────────────────────────────────────────┐
-│  Step 4: ZK proof submitted to Ethereum                       │
-│    • Off-chain client computes settlement from bid logs      │
-│    • ZK circuit proves computation correctness               │
-│    • Proof outputs merkle root                               │
-│    • Ethereum verifies:                                      │
-│      (a) ZK proof is valid                                   │
-│      (b) Merkle root matches BLS-signed root                 │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-┌────────────────────┴─────────────────────────────────────────┐
-│  Step 5: Users withdraw on Ethereum                           │
-│    TimeLock.withdraw(auction_id, merkle_proof)               │
-│    → Verify proof against stored merkle root                 │
-│    → Update user balance (single state change)               │
-│    → Transfer tokens to user                                 │
-└──────────────────────────────────────────────────────────────┘
-```
-
-#### Ethereum Gas Efficiency
-
-**Traditional Per-User Settlement**:
-- 100 users, 100 auctions → 20,000 transactions
-- Cost: ~$60,000 at 50 gwei, 200K gas/tx
-- **Prohibitively expensive**
-
-**Atomica Merkle-Proof Settlement**:
-- 100 users, 100 auctions → 200 transactions (2 per auction: merkle root + ZK proof)
-- Cost: ~$600 at 50 gwei
-- **100x reduction in costs**
-
-**Key**: Balances updated via merkle proofs, not individual transactions.
-
-#### Ethereum Security Guarantees
-
-**Double Verification**:
-1. **BLS Signatures**: Validators sign merkle root (consensus layer)
-2. **ZK Proofs**: Anyone can prove settlement computation is correct (verification layer)
-
-**Attack Resistance**:
-- Invalid merkle root: Rejected by BLS signature verification
-- Incorrect settlement: ZK proof will not verify
-- Collusion: Requires >2/3 validator voting power AND breaking ZK soundness
-
-**User Experience**:
-- ✅ Extremely low protocol costs
-- ❌ Users must construct merkle proofs to withdraw
-- ❌ No per-user transaction visibility on Ethereum
-
----
-
-### Architecture B: Solana/Low-Cost Chain Settlement (On-Chain Double-Entry)
-
-**Challenge**: Traditional approach is unnecessarily complex when gas costs are negligible.
-
-**Solution**: Parallel auction execution on both chains leveraging Ausubel order-independence
-
-#### Settlement Flow - Solana
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Step 1: User deposits on BOTH chains                         │
-│    Atomica: TimeLock.deposit(auction_id, token, amount)      │
-│    Solana:  TimeLock.deposit(auction_id, token, amount)      │
-│    → User balance tracked on both chains                      │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-┌────────────────────┴─────────────────────────────────────────┐
-│  Step 2: User submits bids to BOTH chains simultaneously      │
-│    Atomica: submit_bid(auction_id, encrypted_bid)            │
-│    Solana:  submit_bid(auction_id, encrypted_bid)            │
-│    • Same bid encrypted with same drand round                │
-│    • Wallet/dApp automates dual submission                   │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-┌────────────────────┴─────────────────────────────────────────┐
-│  Step 3: Auctions execute independently on BOTH chains        │
-│    Atomica:                        Solana:                   │
-│    • Bids decrypt (drand)          • Bids decrypt (drand)    │
-│    • Ausubel clearing              • Ausubel clearing        │
-│    • Settlement computed           • Settlement computed     │
-│    • Merkle root generated         • Merkle root generated   │
-│                                                               │
-│    Both chains compute SAME result (order-independent!)      │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-┌────────────────────┴─────────────────────────────────────────┐
-│  Step 4: Cross-chain merkle root verification                 │
-│    • Atomica publishes merkle root with BLS signatures       │
-│    • Solana publishes merkle root independently              │
-│    • Anyone can verify: Atomica root == Solana root          │
-│    • If mismatch → halt, investigate (should never happen!)  │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-┌────────────────────┴─────────────────────────────────────────┐
-│  Step 5: Settlement complete on BOTH chains                   │
-│    • Atomica: Balances updated, users can withdraw           │
-│    • Solana:  Balances updated, users can withdraw           │
-│    • No additional transactions needed (already settled!)    │
-└──────────────────────────────────────────────────────────────┘
-```
-
-#### Solana Implementation Details
-
-**Shared Auction Logic** - Must be identical on both chains:
-
-```rust
-// Deployed on both Atomica (Move) and Solana (Rust)
-pub fn clear_ausubel_auction(
-    bids: Vec<Bid>,
-    total_supply: u64,
-    auction_id: u64
-) -> AuctionResult {
-    // 1. Sort bids by price (descending)
-    let mut sorted_bids = bids.clone();
-    sorted_bids.sort_by(|a, b| b.price.cmp(&a.price));
-
-    // 2. Find clearing price where demand meets supply
-    let clearing_price = find_clearing_price(&sorted_bids, total_supply);
-
-    // 3. Allocate to winners
-    let mut allocations = Vec::new();
-    let mut remaining_supply = total_supply;
-
-    for bid in sorted_bids.iter() {
-        if bid.price >= clearing_price && remaining_supply > 0 {
-            let allocated = min(bid.quantity, remaining_supply);
-            allocations.push(Allocation {
-                bidder: bid.bidder,
-                quantity: allocated,
-                price: clearing_price,
-            });
-            remaining_supply -= allocated;
-        }
-    }
-
-    // 4. Compute merkle root from allocations
-    let merkle_root = compute_merkle_root(&allocations);
-
-    AuctionResult {
-        auction_id,
-        clearing_price,
-        allocations,
-        merkle_root,
-    }
-}
-```
-
-**Atomica Implementation (Move)**:
-```move
-module atomica::ausubel_auction {
-    public fun execute_auction(auction_id: u64) {
-        let bids = get_decrypted_bids(auction_id);
-        let supply = get_auction_supply(auction_id);
-
-        // Execute identical clearing logic
-        let result = clear_ausubel_auction(bids, supply, auction_id);
-
-        // Store results
-        store_auction_result(auction_id, result);
-
-        // Publish merkle root
-        emit_merkle_root_event(auction_id, result.merkle_root);
-    }
-}
-```
-
-**Solana Implementation (Rust/Anchor)**:
-```rust
-#[program]
-pub mod atomica_solana_auction {
-    pub fn execute_auction(
-        ctx: Context<ExecuteAuction>,
-        auction_id: u64
-    ) -> Result<()> {
-        let bids = get_decrypted_bids(&ctx.accounts, auction_id)?;
-        let supply = ctx.accounts.auction.total_supply;
-
-        // Execute identical clearing logic
-        let result = clear_ausubel_auction(bids, supply, auction_id);
-
-        // Store results
-        ctx.accounts.auction.result = result.clone();
-
-        // Publish merkle root
-        emit!(AuctionCleared {
-            auction_id,
-            merkle_root: result.merkle_root,
-            clearing_price: result.clearing_price,
-        });
-
-        Ok(())
-    }
-}
-```
-
-#### Solana Gas Efficiency
-
-**Cost Analysis (100 bids)**:
-- Bid submissions: 100 bids × 2 chains × $0.0001 = **$0.02**
-- Auction execution: 2 chains × $0.0001 = **$0.0002**
-- Total: **~$0.02** for complete auction
-
-**Comparison to Ethereum**:
-- Ethereum (merkle proof): $50-100 protocol cost, users withdraw via proofs
-- Solana (parallel execution): $0.02 total cost, users already settled
-- **2,500-5,000x cheaper than Ethereum**
-
-**Why Parallel Execution Makes Sense**:
-- Gas costs negligible ($0.0001/tx)
-- Full transparency on both chains
-- No merkle proof burden on users
-- Better auditability and compliance
-- Truly distributed - no single source of truth
-
-#### Solana Security Guarantees
-
-**Dual Verification**:
-1. **Independent Execution**: Both chains run auction independently
-2. **Merkle Root Comparison**: Final states verified to match
-
-**Attack Resistance**:
-- **Bid Manipulation**: Sealed bids (drand timelock) prevent manipulation
-- **Invalid Settlement**: Order-independent algorithm guarantees same result
-- **State Divergence**: Merkle roots must match or auction halted
-- **Missing Bids**: If chains receive different bid sets, roots won't match
-
-**Security Model**:
-```
-Atomica receives: {Bid_A, Bid_B, Bid_C}
-Solana receives:  {Bid_C, Bid_A, Bid_B}  // Different order
-
-Both execute: Ausubel(bids)
-Both produce: Same merkle root
-
-If Solana missing Bid_C:
-  Solana merkle root ≠ Atomica merkle root
-  → Auction halted, investigate
-```
-
-**User Experience**:
-- ✅ Full transaction visibility on both chains
-- ✅ No merkle proof required for users
-- ✅ Complete audit trail
-- ✅ Simple withdrawal (already settled!)
-- ⚠️ Must submit bids to both chains (wallet automates this)
-
-#### Cross-Chain State Consistency
-
-**Verification Protocol**:
-```rust
-// Anyone can verify consistency
-pub fn verify_cross_chain_consistency(
-    ctx: Context<VerifyConsistency>,
-    auction_id: u64,
-    atomica_merkle_root: [u8; 32],
-    atomica_bls_proof: Vec<u8>
-) -> Result<()> {
-    let auction = &ctx.accounts.auction;
-
-    // 1. Verify Atomica's BLS-signed merkle root
-    let atomica_validator_set = &ctx.accounts.atomica_validator_set;
-    require!(
-        verify_bls_signature(
-            &atomica_merkle_root,
-            &atomica_bls_proof,
-            atomica_validator_set
-        ),
-        ErrorCode::InvalidBLSSignature
-    );
-
-    // 2. Compare with Solana's independently computed root
-    let solana_merkle_root = auction.merkle_root;
-    require!(
-        solana_merkle_root == atomica_merkle_root,
-        ErrorCode::MerkleRootMismatch
-    );
-
-    // 3. Mark auction as verified
-    auction.cross_chain_verified = true;
-
-    emit!(CrossChainVerified {
-        auction_id,
-        atomica_root: atomica_merkle_root,
-        solana_root: solana_merkle_root,
-    });
-
-    Ok(())
-}
-```
-
-**Guarantee**: If merkle roots match, both chains executed identical settlement (mathematically guaranteed by Ausubel order-independence).
-
----
-
-### Comparison: Ethereum vs Solana Settlement
-
-| Feature | Ethereum (Arch A) | Solana (Arch B) |
-|---------|-------------------|-----------------|
-| **Bid Submission** | Only Ethereum | Both chains simultaneously |
-| **Auction Execution** | Only Atomica | Both chains in parallel |
-| **Transactions on Away Chain** | 2 (root + proof) | N bids (submitted by users) |
-| **Cost (100 bids)** | $50-100 | $0.02 |
-| **User Withdrawal** | Requires merkle proof | Direct (already settled) |
-| **Transparency** | Merkle root only | Full auction on both chains |
-| **Auditability** | Limited | Complete |
-| **ZK Proof Required** | Yes | No |
-| **Order-Independence** | Not relevant | Critical enabler |
-| **Double-Entry Type** | Off-chain cryptographic | On-chain parallel |
-| **Gas Efficiency** | Necessary optimization | Negligible cost regardless |
-| **Implementation Complexity** | High (ZK circuits) | Medium (identical logic deployment) |
-
-### Recommended Implementation Order
-
-**Phase 1**: Ethereum Architecture (Arch A)
-- Highest TVL expected on Ethereum
-- Most critical for product-market fit
-- Complex but necessary for L1
-- Enables cross-chain auctions (Eth users + Atomica users)
-
-**Phase 2**: Solana Architecture (Arch B)
-- Simpler implementation (no ZK proofs)
-- Reuse auction logic from Atomica (port to Rust/Anchor)
-- Better UX due to full transparency
-- Demonstrates truly distributed architecture
-
-**Phase 3**: Expand to other chains based on demand
-- Use Arch A for expensive chains (Polygon, Avalanche, Base)
-- Use Arch B for cheap chains (Sui, other Aptos forks, ultra-low-cost L2s)
-- Consider hybrid: Solana users can participate in Ethereum auctions via Arch A bridge
-
----
 
 ## Security Model
 

@@ -6,7 +6,7 @@
 
 **Why:** Existing cross-chain exchanges require bridges (custody risk, wrapped tokens, governance centralization) or suffer from liquidity fragmentation, MEV exploitation, and adverse selection.
 
-**How:** Users lock native assets on away chains and participate in a single daily batch auction where bidders competitively bid using sealed bids. Assets settle 12-24 hours after auction close without bridges, wrapped tokens, or custodians.
+**How:** Users lock native assets on away chains and participate in a single daily batch auction where bidders competitively bid using sealed bids. Assets settle 1-3 hours after auction close without bridges, wrapped tokens, or custodians.
 
 **Key Innovation:** Futures market model with timelock-encrypted sealed bids concentrates liquidity, enables fair price discovery, and provides self-sustaining economics.
 
@@ -42,15 +42,16 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 - Auctioneers (sellers): Users with quote assets wanting base assets
 - Bidders: Base asset holders submit sealed bids
 - No reserve prices (relies on competitive bidding in large batch)
-- Settlement: 12-24 hours post-auction
+- Settlement: 1-3 hours post-auction (prevents arbitrage/information withholding, allows bid verification)
 
 **Example Timeline:**
 ```
 08:00 UTC  Bid window opens (users lock assets on away chains)
 08:00-12:00  Bid submission window (sealed bids)
-12:00  Auction close & automatic decryption (drand timelock)
+12:00  Auction close & automatic decryption (Atomica validator timelock)
 12:00  Clearing price determined (uniform price auction)
-18:00  Settlement (native assets delivered atomically)
+12:00-13:00  Settlement window (verification & hedging)
+13:00  Settlement (native assets delivered atomically, 1 hour post-auction)
 ```
 
 **Why Single Daily Auction:** Aggregates volume into critical mass, attracts bidders, simplifies coordination, reduces bootstrapping friction
@@ -61,16 +62,26 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 
 ### Cross-Chain Verification
 
-Home chain maintains cryptographic accumulators (merkle roots) of away chain block headers, verified via ZK proofs. Standard merkle inclusion proofs demonstrate transactions occurred. No trusted oracles or bridges.
+**Unified Architecture:** All away chains (Ethereum, Solana, Base, Arbitrum, etc.) use identical verification mechanisms.
 
-**→ See:** [Cross-Chain Verification](docs/technical/cross-chain-verification.md) for implementation details
+**Dual-Layer Verification:**
+1. **BLS Consensus Layer:** Atomica validators sign merkle roots with BLS threshold signatures (requires 2/3+ validator agreement)
+2. **ZK Computation Layer:** Anyone can verify auction execution correctness via ZK proofs (independent of validator honesty)
+
+Settlement requires BOTH layers to agree on the merkle root. No trusted oracles or bridges.
+
+**→ See:** [Architecture Overview](docs/technical/architecture-overview.md) and [Unified Away Chain Architecture](docs/decisions/unified-away-chain-architecture.md) for details
 
 ### Sealed Bid Implementation
 
-Bids encrypted via drand-based timelock (IBE), remain sealed until auction close, then auto-decrypt. Invalid bids filtered post-decryption with economic deposits preventing spam. No ZK proofs required. No interactive reveal phase prevents griefing.
+**Atomica Validator Timelock:** Bids encrypted using Atomica validator BLS threshold signature infrastructure (Identity-Based Encryption). Atomica validators serve dual purposes: consensus (block production) and timelock authority (publishing decryption shares at auction end).
 
-**→ See:** [Timelock Encryption for Sealed Bids](docs/technical/timelock-bids.md) for full specification
-**→ See:** [Bid Validity Simplification Decision](docs/decisions/bid-validity-simplification.md) for rationale
+Bids remain cryptographically sealed until auction close, then auto-decrypt via validator threshold signatures. Invalid bids filtered post-decryption with economic deposits preventing spam. No interactive reveal phase prevents griefing.
+
+**Note:** Atomica chain is built using Aptos-core software (consensus, BLS signatures, Move VM), but runs as an independent blockchain with its own validators and governance.
+
+**→ See:** [Atomica Validator Timelock Decision](docs/decisions/aptos-validator-timelock.md) for implementation approach
+**→ See:** [Bid Validity Simplification Decision](docs/decisions/bid-validity-simplification.md) for validation rationale
 
 ### Uniform Price Auction Mechanism
 
@@ -82,21 +93,34 @@ Bidders submit sealed bids (quantity + price). Bids sorted, clearing price set a
 
 **→ See:** [Uniform Price Auctions](docs/game-theory/uniform-price-auctions.md) for game theory analysis
 
+### Account Abstraction
+
+**Seamless Cross-Chain UX:** Users deposit on their preferred chain (Ethereum, Solana, etc.) using familiar wallets (MetaMask, Phantom). Account abstraction maps Ethereum addresses to Atomica accounts, enabling users to sign bids with their Ethereum wallet without needing Atomica-native wallets or gas tokens.
+
+**Key Innovation:** Users never leave their wallet ecosystem yet participate in cross-chain auctions.
+
+**→ See:** [Ethereum Wallet Atomica Bridge](docs/technical/ethereum-wallet-atomica-bridge.md) and [Account Abstraction](docs/technical/account-abstraction.md) for specification
+
 ### Self-Sustaining Economics
 
-Bidders earn through bid-ask spreads (buy at auction price, sell/hedge externally). Futures pricing enables hedging strategies. Settlement delay reduces inventory risk premium. No protocol fees or subsidies required.
+Bidders earn through bid-ask spreads (buy at auction price, sell/hedge externally). Futures pricing enables hedging strategies. Settlement delay (1-3 hours) provides:
 
-Competitive bidding drives spreads toward fair risk-adjusted rates. Single large daily auction justifies bidder infrastructure investment.
+1. **Economic benefit:** Prevents arbitrage around bid/delivery timing and private information withholding (24h not required)
+2. **Verification period:** Gives participants time to review bids and verify smart contracts operated correctly
+
+No protocol fees or subsidies required. Competitive bidding drives spreads toward fair risk-adjusted rates. Single large daily auction justifies bidder infrastructure investment.
 
 **→ See:** [CPMM vs Auction Comparison](docs/game-theory/cpmm-vs-auction-comparison.md) for detailed economic analysis
 
 ## Launch Strategy
 
-**Core Design:** Single daily batch auction, sealed bids, futures delivery (12-24hr), no reserve prices
+**Core Design:** Single daily batch auction, sealed bids, futures delivery (1-3 hours), no reserve prices
 
 **Focus:** Build critical mass, establish bidder relationships, demonstrate economic viability
 
-**Settlement Delay:** 12-24 hours balances user expectations with bidder risk management. Long enough for effective hedging, short enough for next-day delivery UX.
+**Settlement Delay:** 1-3 hours provides two key benefits:
+1. **Economic:** Prevents price arbitrage and private information withholding around auction timing (24h not needed for this benefit)
+2. **Verification:** Allows all participants to review bids and confirm smart contracts operated as expected before settlement
 
 ## Design Principles
 
