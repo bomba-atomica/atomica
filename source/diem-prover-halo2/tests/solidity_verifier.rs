@@ -10,7 +10,7 @@ use halo2_proofs_axiom::{
         kzg::commitment::ParamsKZG,
     },
 };
-use rand::rngs::OsRng;
+
 use snark_verifier_sdk::{
     CircuitExt, SHPLONK,
     evm::{gen_evm_proof_shplonk, gen_evm_verifier_sol_code},
@@ -22,16 +22,15 @@ use common::EquivalenceCircuit;
 
 #[test]
 fn test_solidity_verifier() {
-    let k = 9;
-    let params_path = Path::new("tests/fixtures/kzg_bn254_9.srs");
+    // The "hermez-raw-9" file is a trusted setup parameter file from the Hermez Powers of Tau ceremony.
+    // It was downloaded from: https://trusted-setup-halo2kzg.s3.eu-central-1.amazonaws.com/hermez-raw-9
+    // This ensures we are using secure, production-ready parameters rather than locally generated ones.
+    let params_path = Path::new("data/hermez-raw-9");
 
     // Generate and save parameters if missing
+    // Check if parameters exist
     if !params_path.exists() {
-        println!("Generating {} locally...", params_path.display());
-        let params = ParamsKZG::<Bn256>::setup(k, OsRng);
-        let mut buf = Vec::new();
-        params.write(&mut buf).expect("failed to write params");
-        std::fs::write(params_path, buf).expect("failed to save params");
+        panic!("Trusted setup file not found at {}. Please download it from https://trusted-setup-halo2kzg.s3.eu-central-1.amazonaws.com/hermez-raw-9", params_path.display());
     }
 
     // Load parameters from the file
