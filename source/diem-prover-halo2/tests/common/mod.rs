@@ -4,6 +4,7 @@ use halo2_proofs_axiom::{
     plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Expression, Selector},
     poly::Rotation,
 };
+use snark_verifier_sdk::CircuitExt;
 
 #[derive(Clone, Copy)]
 pub struct EquivalenceConfig {
@@ -62,5 +63,17 @@ impl Circuit<Fr> for EquivalenceCircuit {
                 Ok(())
             },
         )
+    }
+}
+
+impl CircuitExt<Fr> for EquivalenceCircuit {
+    fn num_instance(&self) -> Vec<usize> {
+        // No public instances for this circuit
+        vec![]
+    }
+
+    fn instances(&self) -> Vec<Vec<Fr>> {
+        // No public instances
+        vec![]
     }
 }

@@ -7,7 +7,7 @@ edition = "2021"
 # Axiom's halo2 fork with optimizations
 halo2_proofs_axiom = { version = "0.5", package = "halo2-axiom" }
 snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.2.3", default-features = false, features = ["loader_halo2", "loader_evm", "halo2-axiom"] }
-snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.2.3", default-features = false, features = ["loader_halo2", "loader_evm", "halo2-axiom"] }
+snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.2.3", default-features = false, features = ["loader_halo2", "loader_evm", "halo2-axiom", "revm"] }
 
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
