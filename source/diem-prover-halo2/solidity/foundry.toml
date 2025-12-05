@@ -4,5 +4,5 @@ out = "out"
 libs = ["lib"]
 optimizer = true
 optimizer_runs = 200
-fs_permissions = [{ access = "read", path = "./proof_data.json" }]
+fs_permissions = [{ access = "read", path = "./proof_data.json" }, { access = "read", path = "./bad_proof_data.json" }]
 via_ir = true

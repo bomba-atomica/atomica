@@ -22,24 +22,27 @@ contract VerifierTest is Test {
         string memory json = vm.readFile(path);
 
         bytes memory proof = vm.parseJsonBytes(json, ".proof");
-        // EquivalenceCircuit has 0 instances, so we don't need to parse instances.
-        // But verifyProof signature might expect instances array.
-        // Let's check Verifier.sol signature later. Usually it's verifyProof(proof, instances).
-        // If instances is empty, we pass empty array.
         
-        uint256[] memory instances = new uint256[](0);
-
-        // Note: The generated verifier usually takes `uint256[] memory instances` 
-        // OR `uint256[][] memory instances` depending on how it's generated.
-        // For 0 instances, it might just take the proof.
-        // Or it might take `uint256[] calldata instances`.
+        // For EquivalenceCircuit, there are no public instances.
+        // The generated verifier uses a fallback function that expects the proof (and instances if any) as calldata.
+        // Since instances are empty, we just send the proof.
         
-        // Let's assume standard signature: verifyProof(bytes memory proof, uint256[] memory instances)
-        // or verifyProof(bytes calldata proof, uint256[] calldata instances)
-        
-        // I will try to call it. If signature mismatches, I'll fix it.
-        
-        bool success = verifier.verifyProof(proof, instances);
+        (bool success, ) = address(verifier).call(proof);
         assertTrue(success, "Proof verification failed");
+    }
+
+    function testVerificationFailure() public {
+        string memory root = vm.projectRoot();
+        string memory path = string.concat(root, "/bad_proof_data.json");
+        // Only run this test if the file exists to avoid breaking if run independently without the rust driver
+        if (!vm.isFile(path)) {
+            return;
+        }
+        string memory json = vm.readFile(path);
+
+        bytes memory proof = vm.parseJsonBytes(json, ".proof");
+        
+        (bool success, ) = address(verifier).call(proof);
+        assertFalse(success, "Proof verification should have failed");
     }
 }

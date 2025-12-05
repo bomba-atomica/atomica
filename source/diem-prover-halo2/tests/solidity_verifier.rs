@@ -13,7 +13,7 @@ use halo2_proofs_axiom::{
 use rand::rngs::OsRng;
 use snark_verifier_sdk::{
     CircuitExt, SHPLONK,
-    evm::{gen_evm_proof_shplonk, gen_evm_verifier_sol_code, evm_verify},
+    evm::{gen_evm_proof_shplonk, gen_evm_verifier_sol_code},
 };
 use std::path::Path;
 
@@ -85,36 +85,7 @@ fn test_solidity_verifier() {
 
     println!("✅ Foundry compilation successful!");
 
-    // Read the compiled bytecode from Foundry artifacts
-    let bytecode_json = std::fs::read_to_string(
-        "solidity/out/Verifier.sol/Halo2Verifier.json"
-    ).expect("Failed to read Foundry artifact");
 
-    let artifact: serde_json::Value = serde_json::from_str(&bytecode_json)
-        .expect("Failed to parse artifact JSON");
-
-    let bytecode_hex = artifact["bytecode"]["object"]
-        .as_str()
-        .expect("Failed to get bytecode from artifact");
-
-    // Remove "0x" prefix if present and decode hex
-    let bytecode_hex = bytecode_hex.strip_prefix("0x").unwrap_or(bytecode_hex);
-    let deployment_code = hex::decode(bytecode_hex)
-        .expect("Failed to decode deployment bytecode");
-
-    println!("📦 Deployment code: {} bytes", deployment_code.len());
-
-    // Verify the proof on the EVM using revm
-    println!("🔍 Verifying proof on EVM (revm)...");
-    match evm_verify(deployment_code, instances.clone(), proof.clone()) {
-        Ok(gas_cost) => {
-            println!("✅ PROOF VERIFIED ON EVM!");
-            println!("⛽ Gas cost: {}", gas_cost);
-        }
-        Err(e) => {
-            panic!("❌ EVM verification failed: {}", e);
-        }
-    }
 
     // Save proof data for foundry tests
     #[derive(serde::Serialize)]
@@ -139,7 +110,7 @@ fn test_solidity_verifier() {
 
     let proof_data = ProofData {
         proof: proof_hex,
-        instances: instances_hex,
+        instances: instances_hex.clone(),
     };
 
     std::fs::create_dir_all("solidity").unwrap();
@@ -147,6 +118,39 @@ fn test_solidity_verifier() {
         .expect("failed to create proof_data.json");
     serde_json::to_writer_pretty(json_file, &proof_data)
         .expect("failed to write proof_data.json");
+
+    // Generate a bad proof (corrupt the first byte)
+    let mut bad_proof = proof.clone();
+    if let Some(first) = bad_proof.first_mut() {
+        *first = first.wrapping_add(1);
+    }
+    let bad_proof_hex = format!("0x{}", hex::encode(&bad_proof));
+    let bad_proof_data = ProofData {
+        proof: bad_proof_hex,
+        instances: instances_hex,
+    };
+    let bad_json_file = std::fs::File::create("solidity/bad_proof_data.json")
+        .expect("failed to create bad_proof_data.json");
+    serde_json::to_writer_pretty(bad_json_file, &bad_proof_data)
+        .expect("failed to write bad_proof_data.json");
+
+    // Run Forge tests
+    println!("\n🔨 Running Forge tests...");
+    let forge_test_output = std::process::Command::new("forge")
+        .args(&["test", "--root", "solidity"])
+        .output()
+        .expect("Failed to run forge test");
+
+    if !forge_test_output.status.success() {
+        let stdout = String::from_utf8_lossy(&forge_test_output.stdout);
+        let stderr = String::from_utf8_lossy(&forge_test_output.stderr);
+        println!("⚠️  Forge tests failed:");
+        println!("STDOUT:\n{}", stdout);
+        println!("STDERR:\n{}", stderr);
+        panic!("Forge tests failed");
+    } else {
+        println!("✅ Forge tests passed!");
+    }
 
     println!("✅ Solidity verifier and proof generated successfully!");
 }
