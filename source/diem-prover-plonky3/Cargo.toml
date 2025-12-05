@@ -31,6 +31,7 @@ ark-groth16 = "0.4"
 ark-snark = "0.4"
 ark-relations = "0.4"
 ark-r1cs-std = "0.4"
+ark-poly-commit = "0.4"
 ark-crypto-primitives = { version = "0.4", features = ["r1cs"] }
 
 # Common dependencies

@@ -27,7 +27,8 @@ ark-ec = { workspace = true }
 ark-std = { workspace = true }
 ark-serialize = { workspace = true }
 ark-bn254 = { workspace = true }
-ark-groth16 = { workspace = true }
+ark-marlin = { git = "https://github.com/arkworks-rs/marlin", branch = "master" }
+ark-poly-commit = { workspace = true }
 ark-snark = { workspace = true }
 ark-relations = { workspace = true }
 ark-r1cs-std = { workspace = true }
@@ -43,6 +44,7 @@ itertools = { workspace = true }
 num-traits = { workspace = true }
 rand = { workspace = true }
 sha2 = { workspace = true }
+blake2 = "0.10.6"
 
 [lib]
 path = "src/lib.rs"

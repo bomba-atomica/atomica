@@ -143,7 +143,7 @@ assert!(verified);
 - **Transparency**: No trusted setup vulnerabilities
 - **Production-ready**: Used in real-world systems
 - **Flexibility**: Modular architecture allows customization
-- **Performance**: Optimized for speed with Baby Bear field
+- **Performance**: Optimized for speed with Mersenne31 field
 
 ## Dependencies
 
@@ -175,7 +175,7 @@ Additional crates:
 ## Usage Example
 
 ```rust
-use diem_prover_plonk::{prove_equality, verify_equality};
+use diem_prover_plonky3::{prove_equality, verify_equality};
 
 // Generate proof that a == b
 let proof = prove_equality(42, 42)?;

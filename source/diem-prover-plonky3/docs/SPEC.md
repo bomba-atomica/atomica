@@ -10,18 +10,18 @@ This document specifies the architecture for the `diem-prover-plonky3` system. T
 The application logic is implemented using **Plonky3**, a modular ZK proving system.
 - **Circuit Logic**: "Noop" / Equality checks.
 - **Field**: Mersenne31 (`M31`). This 31-bit prime field is highly optimized for modern CPU/GPU architectures.
-- **Commitment Scheme**: **FRI** (Fast Reed-Solomon Interactive Oracle Proofs).
-    - *Why FRI?* FRI offers faster proving times and better scalability compared to AIR-only or other commitment schemes for STARKs. It is quantum-resistant and transparent.
+- **Commitment Scheme**: **Circle STARKs** (FRI over the Circle Group).
+    - *Why Circle STARKs?* We use the Mersenne31 field (`M31`). Since `M31`'s multiplicative group is not smooth enough for standard FFTs, we use the **Circle Group** which has a smooth order, enabling efficient FFTs and FRI.
 - **Circuit Definition**: Algebraic Intermediate Representation (AIR).
 - **Output**: A STARK proof.
 
 ### 2. Compression Layer: STARK-in-SNARK Wrapper
 To achieve efficient on-chain verification, the STARK proof is verified recursively inside a **PLONK** SNARK circuit.
 
-- **Outer Proof System**: **PLONK** (specifically a variant compatible with Universal Setup).
-    - *Requirement*: MUST NOT use Groth16.
-    - *Why PLONK?* PLONK utilizes a **Universal Setup**. This allows the same Trusted Setup parameters to be used for *any* circuit logic (up to a size limit), eliminating the need for circuit-specific ceremonies.
-- **Curve**: BN254 (also known as BN128). This curve has precompiled contract support on Ethereum.
+- **Outer Proof System**: **Marlin** (Universal SNARK).
+    - **Outer Layer**: **Marlin** SNARK wrapper.
+    - *Why Marlin?* It is the standard Arkworks Universal SNARK. It provides a **Universal Setup** (unlike Groth16), meaning the same Trusted Setup parameters can be used for any circuit.
+    - *Curve*: BN254 (Ethereum compatible).
 - **Trusted Setup**: **Powers of Tau** (Universal SRS).
     - We utilize the `hermez-raw-9` parameters from the Hermez ceremony.
     - These parameters are loaded to generate the Proving Key (PK) and Verifying Key (VK) for the wrapper circuit.
