@@ -8,7 +8,7 @@ use halo2_proofs_axiom::{
         create_proof, keygen_pk, keygen_vk, verify_proof,
     },
     poly::{
-        commitment::ParamsProver,
+        commitment::{Params, ParamsProver},
         kzg::{
             commitment::{KZGCommitmentScheme, ParamsKZG},
             multiopen::{ProverSHPLONK, VerifierSHPLONK},
@@ -98,6 +98,67 @@ fn test_real_prover() {
     );
 
     assert!(result.is_ok(), "Proof verification failed");
+}
+
+#[test]
+fn test_real_prover_trusted_setup() {
+    let params_path = std::path::Path::new("data/hermez-raw-9");
+    if !params_path.exists() {
+        panic!("Trusted setup file not found at {}", params_path.display());
+    }
+
+    let mut params_file = std::fs::File::open(params_path).expect("failed to open srs file");
+    let params = ParamsKZG::<Bn256>::read(&mut params_file).expect("failed to parse srs params");
+
+    let circuit = EquivalenceCircuit {
+        private_input: Value::known(Fr::from(42)),
+    };
+
+    // Key Generation
+    let vk = keygen_vk(&params, &circuit).expect("keygen_vk failed");
+    let pk = keygen_pk(&params, vk.clone(), &circuit).expect("keygen_pk failed");
+
+    // Proof Generation
+    let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
+    create_proof::<
+        KZGCommitmentScheme<Bn256>,
+        ProverSHPLONK<'_, Bn256>,
+        Challenge255<_>,
+        _,
+        _,
+        _,
+    >(
+        &params,
+        &pk,
+        &[circuit],
+        &[&[]], // No public inputs
+        OsRng,
+        &mut transcript,
+    )
+    .expect("proof generation failed");
+
+    let proof = transcript.finalize();
+    println!("Trusted Setup Proof size: {} bytes", proof.len());
+
+    // Proof Verification
+    let strategy = SingleStrategy::new(&params);
+    let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
+    
+    let result = verify_proof::<
+        KZGCommitmentScheme<Bn256>,
+        VerifierSHPLONK<'_, Bn256>,
+        Challenge255<_>,
+        _,
+        _,
+    >(
+        &params,
+        &vk,
+        strategy,
+        &[&[]],
+        &mut transcript,
+    );
+
+    assert!(result.is_ok(), "Proof verification with trusted setup failed");
 }
 
 #[test]

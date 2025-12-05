@@ -10,7 +10,7 @@ use halo2_proofs_axiom::{
         kzg::commitment::ParamsKZG,
     },
 };
-
+use rand::rngs::OsRng;
 use snark_verifier_sdk::{
     CircuitExt, SHPLONK,
     evm::{gen_evm_proof_shplonk, gen_evm_verifier_sol_code},
@@ -20,22 +20,22 @@ use std::path::Path;
 mod common;
 use common::EquivalenceCircuit;
 
-#[test]
-fn test_solidity_verifier() {
-    // The "hermez-raw-9" file is a trusted setup parameter file from the Hermez Powers of Tau ceremony.
-    // It was downloaded from: https://trusted-setup-halo2kzg.s3.eu-central-1.amazonaws.com/hermez-raw-9
-    // This ensures we are using secure, production-ready parameters rather than locally generated ones.
-    let params_path = Path::new("data/hermez-raw-9");
+fn run_solidity_verifier_test(params_path: &Path, use_trusted_setup: bool) {
+    let k = 9;
 
-    // Generate and save parameters if missing
-    // Check if parameters exist
-    if !params_path.exists() {
-        panic!("Trusted setup file not found at {}. Please download it from https://trusted-setup-halo2kzg.s3.eu-central-1.amazonaws.com/hermez-raw-9", params_path.display());
-    }
-
-    // Load parameters from the file
-    let mut params_file = std::fs::File::open(params_path).expect("failed to open srs file");
-    let params = ParamsKZG::<Bn256>::read(&mut params_file).expect("failed to parse srs params");
+    let params = if use_trusted_setup {
+        // Check if parameters exist
+        if !params_path.exists() {
+            panic!("Trusted setup file not found at {}. Please download it from https://trusted-setup-halo2kzg.s3.eu-central-1.amazonaws.com/hermez-raw-9", params_path.display());
+        }
+        // Load parameters from the file
+        let mut params_file = std::fs::File::open(params_path).expect("failed to open srs file");
+        ParamsKZG::<Bn256>::read(&mut params_file).expect("failed to parse srs params")
+    } else {
+        // Generate parameters locally
+        println!("Generating local parameters for testing...");
+        ParamsKZG::<Bn256>::setup(k, OsRng)
+    };
 
     let circuit = EquivalenceCircuit {
         private_input: Value::known(Fr::from(42)),
@@ -83,8 +83,6 @@ fn test_solidity_verifier() {
     }
 
     println!("✅ Foundry compilation successful!");
-
-
 
     // Save proof data for foundry tests
     #[derive(serde::Serialize)]
@@ -152,4 +150,26 @@ fn test_solidity_verifier() {
     }
 
     println!("✅ Solidity verifier and proof generated successfully!");
+}
+
+use serial_test::serial;
+
+#[test]
+#[serial]
+fn test_solidity_verifier_trusted_setup() {
+    // The "hermez-raw-9" file is a trusted setup parameter file from the Hermez Powers of Tau ceremony.
+    // It was downloaded from: https://trusted-setup-halo2kzg.s3.eu-central-1.amazonaws.com/hermez-raw-9
+    // This ensures we are using secure, production-ready parameters rather than locally generated ones.
+    let params_path = Path::new("data/hermez-raw-9");
+    run_solidity_verifier_test(params_path, true);
+}
+
+#[test]
+#[serial]
+fn test_solidity_verifier_local_setup() {
+    // This test generates parameters locally to ensure the workflow works without external dependencies
+    // (except for the fact that we are testing the workflow itself).
+    // We pass a dummy path because use_trusted_setup is false.
+    let params_path = Path::new("dummy_path");
+    run_solidity_verifier_test(params_path, false);
 }
