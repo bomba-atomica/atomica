@@ -1,0 +1,55 @@
+[package]
+name = "diem-prover-plonky3"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+# Plonky3 STARK dependencies
+p3-air = { workspace = true }
+p3-matrix = { workspace = true }
+p3-field = { workspace = true }
+p3-mersenne-31 = { workspace = true }
+p3-uni-stark = { workspace = true }
+p3-commit = { workspace = true }
+p3-fri = { workspace = true }
+p3-challenger = { workspace = true }
+p3-symmetric = { workspace = true }
+p3-keccak = { workspace = true }
+p3-merkle-tree = { workspace = true }
+p3-circle = { workspace = true }
+
+# Arkworks SNARK dependencies (currently using Groth16)
+# Note: Groth16 chosen for production-readiness and Arkworks 0.4 compatibility
+# Future: Can swap to PLONK when arkworks-compatible version is available
+ark-ff = { workspace = true }
+ark-ec = { workspace = true }
+ark-std = { workspace = true }
+ark-serialize = { workspace = true }
+ark-bn254 = { workspace = true }
+ark-groth16 = { workspace = true }
+ark-snark = { workspace = true }
+ark-relations = { workspace = true }
+ark-r1cs-std = { workspace = true }
+ark-crypto-primitives = { workspace = true }
+
+# Common dependencies
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+anyhow = { workspace = true }
+hex = { workspace = true }
+itertools = { workspace = true }
+num-traits = { workspace = true }
+rand = { workspace = true }
+sha2 = { workspace = true }
+
+[lib]
+path = "src/lib.rs"
+
+[dev-dependencies]
+divan = "0.1"
+
+[[bench]]
+name = "eq_proving"
+harness = false

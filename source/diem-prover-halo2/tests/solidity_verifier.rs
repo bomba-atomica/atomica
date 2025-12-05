@@ -160,7 +160,7 @@ fn test_solidity_verifier_trusted_setup() {
     // The "hermez-raw-9" file is a trusted setup parameter file from the Hermez Powers of Tau ceremony.
     // It was downloaded from: https://trusted-setup-halo2kzg.s3.eu-central-1.amazonaws.com/hermez-raw-9
     // This ensures we are using secure, production-ready parameters rather than locally generated ones.
-    let params_path = Path::new("data/hermez-raw-9");
+    let params_path = Path::new("../data/hermez-raw-9");
     run_solidity_verifier_test(params_path, true);
 }
 

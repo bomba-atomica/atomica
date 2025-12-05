@@ -102,7 +102,7 @@ fn test_real_prover() {
 
 #[test]
 fn test_real_prover_trusted_setup() {
-    let params_path = std::path::Path::new("data/hermez-raw-9");
+    let params_path = std::path::Path::new("../data/hermez-raw-9");
     if !params_path.exists() {
         panic!("Trusted setup file not found at {}", params_path.display());
     }
