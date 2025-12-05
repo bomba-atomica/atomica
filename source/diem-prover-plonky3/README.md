@@ -208,16 +208,12 @@ cargo build --release
 
 ## Benchmarking
 
-See [BENCHMARKING.md](BENCHMARKING.md) for detailed benchmarking guide.
-
 Quick benchmark:
 ```bash
 cargo bench --bench eq_proving
 ```
 
 ## Testing
-
-See [TEST_METHODOLOGY.md](TEST_METHODOLOGY.md) for comprehensive testing strategy.
 
 Quick test:
 ```bash
@@ -265,8 +261,6 @@ Currently, the system uses a Groth16 prototype, but the **target architecture is
 
 ### Documentation
 - **Full Design Doc**: `docs/SPEC.md`
-- **STARK-in-SNARK Overview**: `/docs/technical/stark-in-snark.md`
-- **Groth16 vs PLONK**: See design doc for migration strategy
 
 ### Performance Comparison
 
