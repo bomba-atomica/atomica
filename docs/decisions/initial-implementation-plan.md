@@ -1,7 +1,7 @@
 # Initial Implementation Plan - Technology Vendor Selection
 
 **Document Type**: Implementation Decision Record
-**Status**: Draft - Awaiting Technical Validation
+**Status**: Draft - Awaiting Technical Validation & Aptos Encrypted Mempool Governance
 **Last Updated**: 2025-12-07
 **Author**: Architecture Team
 
@@ -10,17 +10,549 @@
 This document specifies the exact technology vendors and versions for Atomica's initial implementation. All version numbers, commit hashes, and release notes are referenced for reproducibility and audit purposes.
 
 **Selected Technologies**:
-- **Blockchain Foundation**: Aptos-core v1.37.5 (commit: d8d4130)
+- **Blockchain Foundation**: Aptos-core `aptos-release-v1.38` (Vendor Branch)
 - **ZK Proof System**: Axiom halo2-lib v0.5.1
+
+## 🚨 DECISION UPDATE (December 9, 2025)
+
+**Selected Base Branch**: `aptos-release-v1.38`
+
+**Analysis**: See full decision record in [`docs/decisions/aptos-v1.38-integration-analysis.md`](aptos-v1.38-integration-analysis.md).
+
+**Key Drivers**:
+- **Native Batched Threshold Encryption**: `aptos-batch-encryption` crate is available in v1.38.
+- **Encrypted Mempool**: Native MEV protection support.
+- **Timelock Feasibility**: Can leverage v1.38 DKG infrastructure for auction timelocks without custom crypto fork.
+
+**Action**: Proceed with forking from `aptos-release-v1.38`.
+
+---
+
+**Impact on Atomica**:
+- ✅ **Timelock (REQUIRED) - Infrastructure Available**: Can leverage existing DKG (AIP-79) for time-based decryption
+- ✅ **DKG Protocol Proven**: Validators already run weighted threshold DKG at every epoch
+- ⚠️ **TrX Encrypted Mempool (OPTIONAL)**: Provides MEV protection but not strictly necessary for sealed-bid auctions
+- 🔬 **Research Needed**: How to extend AIP-79 DKG for delayed decryption (identity = future block height)
+
+**Revised Understanding**:
+
+**What We NEED**:
+- **Timelock encryption**: Bids encrypted to future block height, can only be decrypted after auction closes
+- **Validator coordination**: Validators agree to publish decryption shares at specific block height
+- **DKG infrastructure**: Already exists in Aptos (AIP-79)
+
+**What's OPTIONAL**:
+- **TrX Encrypted Mempool**: Additional MEV protection (bids hidden in mempool before block inclusion)
+- **Nice-to-have but not critical**: Sealed bids already provide MEV protection through encryption
+
+**Three Implementation Paths**:
+
+1. **Recommended Path** (Extend AIP-79 DKG for Timelock) - **60% probability**:
+   - Use existing `dkg.move`, `randomness.move` infrastructure
+   - Extend DKG to support IBE-style timelock (encrypt to block height as "identity")
+   - Validators publish decryption shares at specified block height (similar to randomness, but delayed)
+   - **No dependency on TrX** - can implement immediately
+   - Timeline: +1 month for timelock extension
+   - Risk: LOW (leveraging proven infrastructure)
+
+2. **Alternative Path** (Wait for TrX, use for both) - **20% probability**:
+   - Wait for TrX encrypted mempool (Q1 2026)
+   - Use TrX for encrypted mempool + extend for timelock
+   - Get both MEV protection and sealed bids
+   - Timeline: Depends on TrX governance (uncertain)
+   - Risk: MEDIUM (governance uncertainty)
+
+3. **Fallback Path** (drand for Timelock) - **20% probability**:
+   - If AIP-79 extension proves too complex
+   - Use drand for timelock encryption (proven, external)
+   - Optionally use Aptos DKG for mempool if TrX arrives
+   - Timeline: +2 weeks for drand integration
+   - Risk: LOW (proven technology, but external dependency)
+
+**Updated Recommendation**:
+1. **Phase 0 (Immediate)**:
+   - Analyze AIP-79 DKG protocol for timelock extension feasibility
+   - Review `dkg.move`, `randomness.move` source code
+   - Prototype: Encrypt to future block height, validators decrypt at that height
+
+2. **Decision Point (Week 2)**:
+   - If AIP-79 extension feasible → proceed with Recommended Path
+   - If too complex → prepare drand fallback
+   - TrX timing doesn't block us (orthogonal feature)
+
+3. **Implementation**:
+   - Build timelock using DKG infrastructure (no TrX dependency)
+   - Monitor TrX for future MEV optimization (nice-to-have)
+
+**Risk reduction: Critical → Low**.
+- Timelock: Can extend proven DKG (AIP-79) - no need to wait for TrX
+- Encrypted mempool: Optional feature, TrX provides if/when approved
+- No longer blocked by TrX governance vote
+
+---
+
+## Technical Risk Assessment
+
+The following risks are ranked by potential impact on project feasibility and timeline. Each risk includes severity, likelihood, and mitigation strategy.
+
+### Risk Matrix
+
+| Rank | Risk | Severity | Likelihood | Status | Mitigation |
+|------|------|----------|------------|--------|------------|
+| **1** | **Extending AIP-79 DKG for Timelock** | 🟡 **MEDIUM** | Low (30%) | 🔬 Research Needed | Extend proven DKG for delayed decryption; fallback to drand if too complex |
+| **2** | **Proving Time Exceeds 10 Minutes** | 🟠 **HIGH** | Medium (50%) | ⚠️ Unknown | GPU acceleration, circuit optimization, or accept higher latency |
+| **3** | **Validator Incentive Misalignment** | 🟡 **MEDIUM** | Medium (40%) | 🔬 Design Needed | Economic modeling, slashing mechanisms, reputation system |
+| **4** | **Fork Maintenance Burden** | 🟡 **MEDIUM** | High (70%) | ⚠️ Ongoing | Quarterly security reviews, minimal core modifications, dedicated maintainer |
+| **5** | **Circuit Constraint Explosion** | 🟡 **MEDIUM** | Low (30%) | 🔨 Implementation | Incremental circuit development, early benchmarking, constraint budget |
+| **6** | **Ethereum L1 Gas Costs Too High** | 🟢 **LOW** | Medium (50%) | ✅ Mitigated | Prioritize L2 deployment (Arbitrum, Base) with 10x cheaper gas |
+| **7** | **Cross-Chain State Verification Edge Cases** | 🟢 **LOW** | Low (20%) | 🔨 Testing | Comprehensive test suite, formal verification of critical paths |
+
+---
+
+### Risk #1: Extending AIP-79 DKG for Timelock 🟡 MEDIUM
+
+**Description**: Extending Aptos's existing DKG infrastructure (designed for instant randomness) to support timelock encryption (delayed decryption) may prove more complex than anticipated.
+
+**Background (December 2025)**:
+- ✅ Aptos announced encrypted mempool in **October 2025**
+- ✅ Research paper "TrX: Encrypted Mempools in High Performance BFT Protocols" published **November 2025**
+- ✅ Uses **BLS12-381 batched threshold encryption** with DKG (same crypto as our timelock needs!)
+- ⏳ **Status**: Awaiting governance vote (expected January 2026)
+- 🎯 **If approved**: Native implementation in v1.38.x or v1.39.x (Q1 2026)
+
+**Impact if Governance Rejects**:
+- **Timeline delay**: +2 months to build custom encrypted mempool
+- **Increased complexity**: Must maintain fork of Aptos mempool (Risk #5 compounds)
+- **Higher development cost**: Additional engineering resources required
+- **Security risk**: Custom implementation less battle-tested than native Aptos
+
+**Likelihood**: Low (20%)
+- Strong technical foundation (academic paper, working prototype)
+- MEV protection is high priority for ecosystem
+- Aptos has track record of approving infrastructure improvements
+- Community likely to support (benefits all users)
+
+**Detection Point**: January 2026 governance vote
+
+**Mitigation Strategy**:
+
+**Path A: Governance Approves** ✅ (Expected, 80% probability)
+1. **Immediate**: Monitor Aptos governance portal for proposal
+2. **Technical review**: Ensure TrX implementation meets Atomica requirements
+   - Validator DKG compatible with timelock use case
+   - Ciphertext format allows auction bid encryption
+   - Decryption timing configurable (per-block vs batch)
+3. **Integration planning**: Design Atomica auction contracts to use native API
+4. **Timeline**: Launch on v1.38.x+ once encrypted mempool in mainnet (Q1 2026)
+
+**Path B: Governance Rejects or Delays** ⚠️ (20% probability)
+1. **Custom implementation**: Build encrypted mempool as originally planned
+   - Fork point: v1.37.5 (current mainnet)
+   - Development time: +2 months
+   - Architecture: Clean module separation (minimize core changes)
+2. **Consider drand fallback**: Use external timelock if custom BLS too complex
+3. **Re-evaluate alternatives**: Could pivot to different L1 (Sui, Movement)
+
+**Path C: Partial Approval** (e.g., encrypted mempool but not timelock functionality)
+1. **Hybrid approach**: Use native encrypted mempool, add timelock extension
+2. **Collaborate with Aptos**: Propose timelock AIP as follow-up
+3. **Timeline impact**: +1 month for custom timelock layer
+
+**Key Dependencies**:
+- **Aptos governance vote**: Monitor [govscan.live/aptos](https://govscan.live/aptos)
+- **TrX testnet deployment**: Track v1.38.x testnet releases
+- **API documentation**: Verify encrypted transaction submission API
+
+**Action Items**:
+- [ ] Subscribe to Aptos governance announcements
+- [ ] Review TrX paper for technical compatibility (eprint.iacr.org/2025/2032)
+- [ ] Test encrypted mempool on testnet once available
+- [ ] Prepare contingency plan (custom implementation) by December 2025
+
+**Decision Authority**: Technical Architecture Team (decision contingent on governance)
+
+---
+
+### Risk #2: Proving Time Exceeds 10 Minutes 🟠 HIGH
+
+**Description**: Axiom Halo2 auction settlement circuit may take >10 minutes to generate proofs for 1000-bid auctions, impacting user experience.
+
+**Impact if Realized**:
+- **User experience**: Longer wait time between auction close and withdrawal
+- **Throughput**: Fewer auctions per day if prover is bottleneck
+- **Cost**: Expensive GPU infrastructure ($2K/month for p3.2xlarge)
+
+**Likelihood**: Medium (50%)
+- Current estimates: 1000 bids = 5-15 minutes (single-threaded CPU)
+- Circuit size: ~5M-10M constraints (depends on optimization)
+- No production benchmarks yet for auction-specific circuits
+
+**Detection Point**: Phase 2 (ZK Proving Infrastructure) - First 100-bid circuit benchmark
+
+**Mitigation Strategy**:
+1. **Circuit Optimization**:
+   - Reduce sorting algorithm constraints (largest bottleneck)
+   - Batch range checks (reduces constraint count by 30-50%)
+   - Optimize Merkle tree depth (trade-off: tree size vs proof size)
+   - Target: <8M constraints for 1000 bids
+
+2. **Hardware Acceleration**:
+   - GPU proving with CUDA (5-10x speedup expected)
+   - Libraries: `halo2-gpu` (experimental) or custom kernels
+   - Cost: $500-$2000/month for cloud GPU
+
+3. **Incremental Proving** (if optimization insufficient):
+   - Prove bid validation in parallel (embarrassingly parallel)
+   - Aggregate sub-proofs using `snark-verifier` recursion
+   - Tradeoff: More complex architecture, but better parallelization
+
+4. **Accept Higher Latency** (last resort):
+   - 15-minute proving time still acceptable for daily auctions
+   - Settlement delay already planned (1-3 hours post-auction)
+   - Additional 10-15 minutes may be tolerable
+
+**Benchmark Targets**:
+- 100 bids: <2 minutes ✅ (acceptable)
+- 500 bids: <5 minutes ⚠️ (stretch goal)
+- 1000 bids: <10 minutes ⚠️ (target)
+
+**Fallback Plan**: Switch to SP1 (STARK-based, faster proving) if Axiom too slow
+
+---
+
+### Risk #3: BLS Timelock Integration Complexity 🟡 MEDIUM
+
+**Description**: Integrating BLS threshold encryption for timelock (bid decryption at auction deadline) may have unexpected complexity, even with Aptos DKG infrastructure available.
+
+**Background (December 2025)**:
+- ✅ Aptos TrX implementation uses BLS12-381 threshold encryption with DKG
+- ✅ Validators already run DKG protocol for encrypted mempool
+- ⚠️ TrX focuses on mempool privacy (decrypt immediately), not timelock (decrypt at future time)
+- 🔬 **Research needed**: Can we extend TrX DKG for time-based decryption?
+
+**Impact if Realized**:
+- **Timeline delay**: +1-2 months to implement timelock extension
+- **Complexity**: Validators must publish decryption shares at specific block heights
+- **Incentive design**: Need economic rewards for validators to publish shares
+- **Fallback required**: May need drand if Aptos BLS unsuitable for timelock
+
+**Likelihood**: Low-Medium (30%)
+- TrX provides most of the infrastructure (DKG, threshold decryption)
+- Extension to timelock is conceptually straightforward (encrypt to future "identity")
+- Aptos validators already incentivized to participate (encrypted mempool is native)
+- Risk is integration complexity, not cryptographic feasibility
+
+**Detection Point**: Phase 0 (Technology Validation) - After Aptos encrypted mempool in testnet
+
+**Mitigation Strategy**:
+
+**Path A: Extend Aptos TrX for Timelock** ✅ (Preferred, 70% probability)
+1. **Research TrX Implementation**:
+   - Review Aptos source code for DKG and threshold decryption
+   - Identify extension points for time-based decryption
+   - Validate that validators can sign arbitrary messages (block heights)
+
+2. **Prototype Timelock Extension**:
+   - Encrypt bids to future block height as "identity"
+   - Validators agree to publish decryption shares at that height
+   - Test on Aptos testnet with small validator set
+
+3. **Economic Incentives**:
+   - Validators earn % of auction volume for publishing shares
+   - Slashing for non-participation (if critical for liveness)
+   - Reputation tracking (public dashboard)
+
+4. **Integration with Encrypted Mempool**:
+   - Encrypted mempool stores bids until decryption height
+   - Validators automatically decrypt when height reached
+   - Auction contract validates decrypted bids
+
+**Path B: Use drand for Timelock** ⚠️ (Fallback, 30% probability)
+1. **drand Integration**:
+   - Use tlock-rs v0.0.4 for timelock encryption
+   - Encrypt bids to drand round number (30-second rounds)
+   - Decrypt using drand beacon at auction deadline
+
+2. **Trade-offs**:
+   - ✅ Proven technology (used by Filecoin, Protocol Labs)
+   - ✅ No custom validator modifications needed
+   - ❌ External dependency (liveness risk)
+   - ❌ Fixed 30-second timing (less flexible)
+
+3. **Cost**: +1-2 weeks for drand integration
+
+**Benchmark Targets**:
+- Encryption latency: <100ms per bid
+- Decryption latency (validators): <5 seconds after deadline
+- Validator participation: >90% publish shares within 10 blocks
+
+**Action Items**:
+- [ ] Review TrX paper section on threshold decryption (eprint.iacr.org/2025/2032)
+- [ ] Test encrypted mempool on Aptos testnet (once available)
+- [ ] Prototype timelock extension on testnet
+- [ ] Design validator incentive mechanism
+- [ ] **Go/No-Go on native timelock**: End of Phase 0 validation
+
+**Decision Authority**: Technical Architecture Team + Cryptography Advisor
+
+---
+
+### Risk #4: Validator Incentive Misalignment 🟡 MEDIUM
+
+**Description**: Validators may not reliably publish BLS decryption shares if economic incentives are insufficient or misaligned.
+
+**Impact if Realized**:
+- **Auction liveness**: Auctions cannot complete if <2/3 validators publish shares
+- **User frustration**: Assets locked indefinitely until validators cooperate
+- **Protocol failure**: Systemic failure if validators consistently fail to publish
+
+**Likelihood**: Medium (40%)
+- Novel mechanism (not proven in production)
+- Validators already earn consensus rewards, may not prioritize timelock
+- No precedent for slashing based on timelock participation
+
+**Detection Point**: Phase 1 (Core Blockchain) - Testnet validator behavior monitoring
+
+**Mitigation Strategy**:
+1. **Economic Incentives**:
+   - Validators earn % of auction volume (e.g., 0.1% of TVL)
+   - Rewards distributed proportional to stake (aligns with consensus)
+   - Estimated: $100-$1000 per auction for validators (material incentive)
+
+2. **Slashing Mechanism**:
+   - Validators who fail to publish shares within N blocks get slashed
+   - Slashing amount: 1-5% of stake (enough to hurt, not catastrophic)
+   - Grace period for legitimate failures (network issues, downtime)
+
+3. **Reputation System** (social layer):
+   - Public dashboard showing validator timelock participation rate
+   - Community can choose to undelegate from non-participating validators
+   - Reputation damage may be stronger incentive than economic rewards
+
+4. **Fallback Mechanism**:
+   - If <2/3 validators publish shares within 24 hours, auction cancels
+   - All deposits refunded automatically via timeout
+   - Users not permanently locked
+
+**Action Items**:
+- Economic modeling: What auction fee % ensures validator participation?
+- Game theory analysis: Can validators collude to extort higher fees?
+- Testnet experiments: Measure validator behavior with/without incentives
+
+---
+
+### Risk #5: Fork Maintenance Burden 🟡 MEDIUM
+
+**Description**: Maintaining a fork of Aptos-core requires ongoing effort to merge security patches, bug fixes, and performance improvements from upstream.
+
+**Impact if Realized**:
+- **Security vulnerabilities**: Missing critical patches from upstream
+- **Performance degradation**: Missing optimizations
+- **Technical debt accumulation**: Growing divergence from upstream
+- **Upgrade difficulty**: Major version upgrades become increasingly painful
+
+**Likelihood**: High (70%)
+- This is a certainty, not a risk - forks always have maintenance burden
+- Aptos releases updates frequently (v1.37.5 in Nov 2024, ~monthly cadence)
+
+**Detection Point**: Ongoing (quarterly reviews)
+
+**Mitigation Strategy**:
+1. **Minimal Core Modifications**:
+   - Keep custom modules in `atomica-chain/crates/` (not core)
+   - Use Rust feature flags for conditional compilation
+   - Document every modification in `ATOMICA_MODIFICATIONS.md`
+
+2. **Quarterly Security Reviews**:
+   ```bash
+   git log upstream/main --since="3 months ago" --grep="security\|CVE" --oneline
+   ```
+   - Review all security-related commits
+   - Cherry-pick critical fixes immediately
+   - Test on devnet before merging to mainnet
+
+3. **Automated Diff Tracking**:
+   - CI job that runs `git diff upstream/main -- mempool/ consensus/ crypto/`
+   - Alert if diff exceeds threshold (e.g., >1000 lines)
+   - Forces team to review divergence
+
+4. **Dedicated Maintainer**:
+   - Assign one senior engineer as "upstream tracker"
+   - Responsible for quarterly review and merge
+   - Budgeted time: 1 week per quarter
+
+5. **Upgrade Testing Protocol**:
+   - Major version upgrades (e.g., v1.37 → v1.50):
+     1. Test on local devnet (1 week)
+     2. Deploy to testnet (2 week soak test)
+     3. Mainnet upgrade (coordinated with validators)
+
+**Cost Estimate**: 1 senior engineer @ 25% time = ~$50K/year overhead
+
+---
+
+### Risk #6: Circuit Constraint Explosion 🟡 MEDIUM
+
+**Description**: Auction settlement circuit may exceed constraint budget, leading to long proving times or proof generation failures.
+
+**Impact if Realized**:
+- **Proving time**: Exponential increase with circuit size
+- **Memory usage**: May exceed available RAM (e.g., 64GB)
+- **Proof generation failures**: Out-of-memory errors
+- **Reduced capacity**: Max bids per auction reduced (e.g., 500 instead of 1000)
+
+**Likelihood**: Low (30%)
+- Axiom Halo2 circuits have proven scalable (zkEVM has 100M+ constraints)
+- Can optimize with custom gates
+- Early detection via incremental development
+
+**Detection Point**: Phase 2 (ZK Proving) - First circuit implementation and benchmark
+
+**Mitigation Strategy**:
+1. **Constraint Budget**:
+   - Bid validation: 10K constraints per bid
+   - Sorting: 50K constraints per comparison
+   - Merkle tree: 50K constraints per level
+   - Total budget: <10M constraints for 1000 bids
+
+2. **Incremental Development**:
+   - Build circuit for 10 bids first (Week 1)
+   - Benchmark and optimize (Week 2)
+   - Scale to 100 bids (Week 3)
+   - Extrapolate to 1000 bids (Week 4)
+   - Catch constraint explosion early
+
+3. **Circuit Optimization Techniques**:
+   - Use lookup tables for range checks (50% reduction)
+   - Batch operations (reduce overhead)
+   - Custom gates for auction-specific logic
+   - Optimize sorting algorithm (bitonic sort vs comparison sort)
+
+4. **Fallback**: Reduce max bids per auction
+   - 500 bids still sufficient for most auctions
+   - Can run multiple auctions per day if needed
+
+**Benchmark Target**: <10M constraints for 1000 bids (proving time <10 min on CPU)
+
+---
+
+### Risk #7: Ethereum L1 Gas Costs Too High 🟢 LOW
+
+**Description**: Gas costs for BLS verification + ZK proof verification may be prohibitively expensive on Ethereum L1 (>$50 per auction at 50 gwei).
+
+**Impact if Realized**:
+- **User cost**: High costs passed to users via fees
+- **Competitive disadvantage**: Cheaper alternatives (CEXs, optimistic bridges)
+- **Adoption barrier**: Users avoid platform due to costs
+
+**Likelihood**: Medium (50%)
+- Current estimates: ~580K gas total (~$29 at 50 gwei, $0.10 per gwei)
+  - BLS verification: ~300K gas
+  - ZK proof verification: ~280K gas
+- L1 gas prices volatile (20-200 gwei typical, 500+ gwei during congestion)
+
+**Detection Point**: Phase 3 (Away Chain Integration) - Testnet gas measurements
+
+**Mitigation Strategy**:
+1. **Prioritize L2 Deployment** ✅ (Primary Strategy):
+   - Arbitrum/Optimism: 10-50x cheaper gas ($0.50-$3 per auction)
+   - Base/Polygon: 50-100x cheaper gas ($0.30-$1 per auction)
+   - Solana: Negligible gas costs ($0.0005 per auction)
+
+2. **ZK-Wrapped BLS Verification** (if needed):
+   - Wrap BLS verification in ZK proof (saves ~20K gas)
+   - Trade-off: +2-5 minutes latency
+   - Only use if L1 gas consistently >100 gwei
+
+3. **Batch Proof Submission** (future optimization):
+   - Aggregate multiple auctions into single proof
+   - Amortize verification cost across N auctions
+   - Requires recursive proof aggregation
+
+4. **Gas Sponsorship**:
+   - Protocol pays gas costs via contract-funded pool
+   - Funded by 0.5% protocol fee on deposits
+   - Users don't pay gas directly
+
+**Cost Analysis**:
+| Chain | Gas Cost | Viability |
+|-------|----------|-----------|
+| Ethereum L1 (50 gwei) | $29 | ⚠️ Marginal |
+| Ethereum L1 (200 gwei) | $116 | ❌ Too expensive |
+| Arbitrum | $1-3 | ✅ Excellent |
+| Base/Polygon | $0.30-1 | ✅ Excellent |
+
+**Recommendation**: Launch on Arbitrum/Base (L2), defer L1 support until batch aggregation
+
+---
+
+### Risk #8: Cross-Chain State Verification Edge Cases 🟢 LOW
+
+**Description**: Aptos state proofs may have edge cases (validator set rotation during proof generation, chain reorgs, proof expiry) that break cross-chain verification.
+
+**Impact if Realized**:
+- **Verification failures**: Proofs rejected by Ethereum contracts
+- **User funds locked**: Unable to withdraw due to invalid proofs
+- **Protocol downtime**: Manual intervention required
+
+**Likelihood**: Low (20%)
+- Aptos state proof system battle-tested (in production since genesis)
+- Comprehensive test suite can catch most edge cases
+- Formal verification possible for critical paths
+
+**Detection Point**: Phase 3 (Away Chain Integration) - Edge case testing
+
+**Mitigation Strategy**:
+1. **Comprehensive Test Suite**:
+   - Validator set rotation during auction
+   - Ethereum reorgs during proof submission
+   - Proof expiry (stale state roots)
+   - Byzantine validator behavior (invalid signatures)
+
+2. **Formal Verification** (for critical paths):
+   - State proof verification logic
+   - Merkle proof validation
+   - Validator set update logic
+   - Use tools: Certora, Halmos, or manual proofs
+
+3. **Timeout & Fallback Mechanisms**:
+   - If proof verification fails, retry with fresh proof
+   - If repeated failures, manual review and protocol pause
+   - Emergency upgrade mechanism for critical bugs
+
+4. **Extensive Testnet Soak Testing**:
+   - Run 100+ auctions on testnet before mainnet
+   - Simulate all edge cases (validator rotation, reorgs, etc.)
+   - Monitor for any verification failures
+
+**Action Items**:
+- Enumerate all edge cases in design phase
+- Write test cases for each edge case
+- Formal verification of critical invariants
+
+---
+
+## Risk Mitigation Timeline
+
+| Phase | Key Risks to Address | Go/No-Go Decision |
+|-------|----------------------|-------------------|
+| **Phase 0** | Risk #1 (BLS-IBE feasibility) | Week 4: Use BLS-IBE or fallback to drand |
+| **Phase 2** | Risk #2 (Proving time), Risk #6 (Constraints) | M2.2: Proving time <10 min or activate GPU acceleration |
+| **Phase 3** | Risk #7 (Gas costs) | M3.2: Gas costs acceptable on L2 or defer L1 |
+| **Phase 4** | Risk #8 (Edge cases) | M4.2: All edge cases pass or delay mainnet |
+| **Ongoing** | Risk #3 (Mempool), Risk #4 (Incentives), Risk #5 (Fork) | Quarterly reviews |
+
+---
 
 ## Table of Contents
 
-1. [Blockchain Vendor Selection](#blockchain-vendor-selection)
-2. [ZK Proof System Selection](#zk-proof-system-selection)
-3. [Dependency Matrix](#dependency-matrix)
-4. [Integration Architecture](#integration-architecture)
-5. [Critical Research Questions](#critical-research-questions)
-6. [Implementation Phases](#implementation-phases)
+1. [Technical Risk Assessment](#technical-risk-assessment) ⬅️ **YOU ARE HERE**
+2. [Blockchain Vendor Selection](#blockchain-vendor-selection)
+3. [ZK Proof System Selection](#zk-proof-system-selection)
+4. [Dependency Matrix](#dependency-matrix)
+5. [Integration Architecture](#integration-architecture)
+6. [Critical Research Questions](#critical-research-questions)
+7. [Implementation Phases](#implementation-phases)
 
 ---
 
