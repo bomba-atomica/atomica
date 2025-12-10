@@ -312,11 +312,26 @@ struct DecryptionShare {
 - Cannot decrypt some bids but not others
 - All-or-nothing decryption
 
+
+### Offline Collusion (The "Invisible Handshake")
+
+**Risk:**
+Even if the chain is live, >2/3 of validators could coordinate *off-chain* (e.g., via private Signal chat) to reconstruct the decryption key from their shares without publishing them on-chain.
+- **Invisibility:** This coordination would be invisible to the protocol and users until the key is actually used or leaked.
+- **Plausible Deniability:** Validators could claim they never generated the key, while secretly holding it.
+
+**Mitigation:**
+This falls under the same security threshold as a consensus takeover. If >2/3 validators are coordinating secretly to break protocol rules:
+- They could also fork the chain, double-spend, or censor transactions.
+- The "Offline Collusion" risk is isomorphic to the standard "67% Attack" risk.
+- **Defense:** Detection relies on social/economic layers (whistleblowers, key leakage) rather than cryptographic prevention.
+
 ### Comparison to drand
 
 | Threat | drand | Aptos Validator tlock |
 |--------|-------|----------------------|
 | **Early decryption** | Compromise League of Entropy | Compromise >2/3 Atomica validators |
+| **Offline collusion** | League members collude invisibly | Validators collude invisibly (>2/3) |
 | **Griefing** | drand network down | >1/3 Atomica validators Byzantine |
 | **Selective decryption** | Impossible (IBE) | Impossible (IBE) |
 | **Economic attack cost** | No direct cost (reputational) | >2/3 validator stake + slashing |
