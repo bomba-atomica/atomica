@@ -324,7 +324,8 @@ Even if the chain is live, >2/3 of validators could coordinate *off-chain* (e.g.
 This falls under the same security threshold as a consensus takeover. If >2/3 validators are coordinating secretly to break protocol rules:
 - They could also fork the chain, double-spend, or censor transactions.
 - The "Offline Collusion" risk is isomorphic to the standard "67% Attack" risk.
-- **Defense:** Detection relies on social/economic layers (whistleblowers, key leakage) rather than cryptographic prevention.
+- **Defense:** We implement a **Seller-Stake DKG** and **Scuttle Reward** mechanism to make this collusion economically unstable.
+    - See **[Design: Seller-Stake DKG Timelock](../design/timelock-seller-stake-dkg.md)** for the full defense protocol involving "Onion Encryption" and "Traitor's Bounty".
 
 ### Comparison to drand
 
