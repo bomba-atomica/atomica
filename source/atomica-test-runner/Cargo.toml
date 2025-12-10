@@ -17,15 +17,15 @@ once_cell = "1.18"
 ethers = { version = "2.0", features = ["ws", "ipc", "openssl"] }
 
 # Aptos dependencies pinned to a specific commit
-aptos-forge = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
-aptos-sdk = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
-aptos-types = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
-aptos-crypto = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
-aptos-logger = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
-aptos-cached-packages = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
-aptos-framework = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
-aptos-config = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
-aptos-infallible = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
+aptos-forge = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
+aptos-sdk = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
+aptos-types = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
+aptos-crypto = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
+aptos-logger = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
+aptos-cached-packages = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
+aptos-framework = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
+aptos-config = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
+aptos-infallible = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
 
 
 [patch.crates-io]
