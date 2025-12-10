@@ -13,9 +13,6 @@ use std::num::NonZeroUsize;
 
 pub struct CrossChainTestEnv {
     pub aptos: LocalSwarm,
-    // We hold the child process handle to kill it on drop
-    pub anvil: Child,
-    pub anvil_port: u16,
 }
 
 impl CrossChainTestEnv {
@@ -54,31 +51,14 @@ impl CrossChainTestEnv {
             )
             .await?;
             
-        // Anvil Setup
-        let anvil_port = portpicker::pick_unused_port().unwrap_or(8545);
-        let anvil = Command::new("anvil")
-            .arg("--port")
-            .arg(anvil_port.to_string())
-            .arg("--chain-id")
-            .arg("31337")
-            .stdout(Stdio::null()) 
-            .stderr(Stdio::null())
-            .spawn()
-            .context("Failed to spawn anvil")?;
-
-        // Give anvil a moment to start
-        sleep(Duration::from_secs(2)).await;
-
         Ok(Self {
             aptos,
-            anvil,
-            anvil_port,
         })
     }
 }
 
 impl Drop for CrossChainTestEnv {
     fn drop(&mut self) {
-        let _ = self.anvil.kill();
+        // No anvil to kill
     }
 }

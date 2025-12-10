@@ -1,0 +1,6 @@
+[package]
+name = "AtomicaAuction"
+version = "0.0.0"
+
+[dependencies]
+AptosFramework = { local = "../zapatos/aptos-move/framework/aptos-framework" }
