@@ -74,9 +74,11 @@ Settlement requires BOTH layers to agree on the merkle root. No trusted oracles 
 
 ### Sealed Bid Implementation
 
-**Atomica Validator Timelock:** Bids encrypted using Atomica validator BLS threshold signature infrastructure (Identity-Based Encryption). Atomica validators serve dual purposes: consensus (block production) and timelock authority (publishing decryption shares at auction end).
+**Atomica Validator + Seller Timelock (Dual-Layer):** Bids encrypted using a **Dual-Layer "Onion" Timelock** scheme.
+1.  **Outer Layer:** Atomica Validator TIMELOCK (BLS12-381) - Decrypts at auction deadline.
+2.  **Inner Layer:** Seller Group DKG (BLS12-381) - Decrypts only if Sellers (stake-weighted) participate.
 
-Bids remain cryptographically sealed until auction close, then auto-decrypt via validator threshold signatures. Invalid bids filtered post-decryption with economic deposits preventing spam. No interactive reveal phase prevents griefing.
+This prevents "Invisible Handshake" attacks where validators collude off-chain. Decryption requires cooperation from BOTH the Validator Set (>67%) AND the Seller Set (>33%). Invalid bids filtered post-decryption.
 
 **Note:** Atomica chain is built using Aptos-core software (consensus, BLS signatures, Move VM), but runs as an independent blockchain with its own validators and governance.
 

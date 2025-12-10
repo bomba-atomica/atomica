@@ -77,10 +77,10 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 08:00-12:00 UTC - Bid Submission Window
   └─ Bidders on home chain submit encrypted sealed bids for LIBRA
   └─ Economic deposits prevent spam bids (returned if valid, slashed if malformed)
-  └─ Bids remain cryptographically sealed via Atomica validator timelock (IBE)
-
+  └─ Bids remain cryptographically sealed via Dual-Layer Timelock (Validator + Seller)
+ 
 12:00 UTC - Auction Close & Automatic Decryption
-  └─ Atomica validators publish decryption shares (threshold signatures)
+  └─ Validators and Seller Jury publish decryption shares (threshold signatures)
   └─ All bids decrypt automatically (no interactive reveal phase)
   └─ Clearing price determined at lowest qualifying bid (uniform price auction)
   └─ All winning bidders pay same clearing price
@@ -226,4 +226,4 @@ Atomica launches with **1-3 hour** settlement delay, which can be adjusted based
 - [Atomica PRD](../../Prd.md) - Product overview
 - [CPMM vs Auction Comparison](../game-theory/cpmm-vs-auction-comparison.md) - Detailed economic analysis of why auctions over AMMs
 - [Uniform Price Auctions](../game-theory/uniform-price-auctions.md) - Auction mechanism details
-- [Timelock Encryption for Sealed Bids](../technical/timelock-bids.md) - How sealed bids work
+- [Seller-Stake DKG Design](timelock-seller-stake-dkg.md) - How sealed bids work (Dual-Layer Timelock)

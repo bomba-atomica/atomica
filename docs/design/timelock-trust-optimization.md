@@ -1,4 +1,7 @@
-# Design: Timelock Trust Optimization (Collusion Resistance)
+# Design: Timelock Trust Optimization (DEPRECATED)
+> [!WARNING]
+> This document is **DEPRECATED**. The designs explored here (including the "Drand Onion" and "Swiss Cheese Model") have been superseded by the **Seller-Stake DKG** architecture.
+> Please refer to **[Seller-Stake DKG Design](./timelock-seller-stake-dkg.md)** for the current, active specification (v1.0).
 
 ## 1. Project Brief
 

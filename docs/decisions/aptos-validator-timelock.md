@@ -4,6 +4,11 @@
 **Status:** ACCEPTED
 **Decision Makers:** Core team
 
+**Update (v1.0):** This decision is extended by **[Seller-Stake DKG](../design/timelock-seller-stake-dkg.md)** to address "Offline Collusion".
+-   **Architecture:** The "Validator Timelock" described here is now the **Outer Layer**.
+-   **Security:** A second "Inner Layer" (Seller DKG) is added.
+-   **Cryptography:** v1.0 uses **BLS12-381** for both layers (Homogeneous Onion).
+
 ---
 
 ## Decision
@@ -325,7 +330,7 @@ This falls under the same security threshold as a consensus takeover. If >2/3 va
 - They could also fork the chain, double-spend, or censor transactions.
 - The "Offline Collusion" risk is isomorphic to the standard "67% Attack" risk.
 - **Defense:** We implement a **Seller-Stake DKG** and **Scuttle Reward** mechanism to make this collusion economically unstable.
-    - See **[Design: Seller-Stake DKG Timelock](../design/timelock-seller-stake-dkg.md)** for the full defense protocol involving "Onion Encryption" and "Traitor's Bounty".
+    - See **[Design: Seller-Stake DKG Timelock](../design/timelock-seller-stake-dkg.md)** for the full defense protocol involving "Onion Encryption" (Homogeneous v1.0) and "Traitor's Bounty".
 
 ### Comparison to drand
 

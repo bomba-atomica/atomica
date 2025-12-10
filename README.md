@@ -73,6 +73,12 @@ atomica/
 - Phase 3: Hybrid spot + futures (maturity)
 - Phase 4: Market-driven frequency (advanced)
 
+**[Seller-Stake DKG Design](docs/design/timelock-seller-stake-dkg.md)** ⭐
+- **The Dual-Layer "Onion" Timelock**
+- Preventing "Invisible Handshake" collusion
+- Seller participation and incentives (Scuttle Reward)
+- v1.0 Homogeneous Crypto (BLS12-381)
+
 ### 🔧 Technical Specifications
 
 **[Architecture Overview](docs/technical/architecture-overview.md)** ⭐
@@ -98,10 +104,8 @@ atomica/
 - Cross-chain UX flow
 
 **[Timelock Encryption for Sealed Bids](docs/technical/timelock-bids.md)**
-- Timelock encryption concepts (IBE)
-- Post-decryption validation with economic deposits
-- No ZK proofs required for bid validity
-- **Note:** Document contains deprecated sections (uses drand example, Atomica uses Aptos validator timelock)
+- **(DEPRECATED)** Historical reference for Drand/ZK approaches
+- Superseded by **[Seller-Stake DKG Design](docs/design/timelock-seller-stake-dkg.md)**
 
 **[Technology Limitations](docs/technical/technology-limitations.md)**
 - Why fully private auctions aren't feasible
@@ -142,8 +146,7 @@ atomica/
 
 **[Atomica Validator Timelock](docs/decisions/aptos-validator-timelock.md)** ⭐
 - Decision to use Atomica validators for timelock encryption
-- vs external services (drand)
-- BLS-based Identity-Based Encryption (IBE)
+- Establishes the **Outer Layer** of the dual-layer security check
 - Leverages Aptos-core infrastructure
 - Security analysis and implementation plan
 
@@ -184,7 +187,8 @@ Novel design combining atomic swaps' trustless cross-chain execution with auctio
 Single daily batch auction with delivery 1-3 hours after auction close (not spot market). Embraces cross-chain latency, enabling better MM economics, liquidity concentration, and simpler mechanism. Settlement delay prevents arbitrage/information withholding and provides verification period.
 
 ### Sealed Bids via Timelock Encryption
-Bids remain cryptographically sealed until auction close, then automatically decrypt via Atomica validator threshold signatures (BLS-based Identity-Based Encryption). Atomica validators serve dual purposes: consensus and timelock authority. Prevents shill bidding, timing games, and information asymmetry.
+### Sealed Bids via Dual-Layer Timelock
+Bids are encrypted using a **Dual-Layer "Onion"** scheme. The Outer Layer is locked by the Validator Set, and the Inner Layer is locked by a weighted threshold of Sellers. Decryption requires >67% independent Validators AND >33% Sellers to cooperate. This "Invisible Handshake" defense prevents off-chain collusion and early revealing.
 
 **Note:** Atomica chain uses Aptos-core as its blockchain software vendor (consensus, BLS cryptography, Move VM) while running as an independent network.
 

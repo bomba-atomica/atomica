@@ -13,35 +13,45 @@
 
 ## 2. Architecture
 
-### 2.1 The Onion Lock ("Crypto-Diversity")
-We employ **Heterogeneous Cryptography** to prevent supply-chain attacks or single-curve vulnerabilities.
+### 2.1 The Onion Lock ("Homogeneous v1.0")
+**Decision:** For v1.0, we use **BLS12-381** for both layers to enable direct code reuse of the robust `aptos-dkg` crate.
 
-$$C = Enc_{Validator}(Enc_{Seller}(B))$$
+$$C = Enc_{Validator\_BIBE}(Enc_{Seller\_BLS}(B))$$
 
 1.  **Validator Layer (Outer):**
-    *   **Scheme:** **Boneh-Franklin Identity-Based Encryption (BIBE)**.
-    *   **Curve:** **BLS12-381** (Pairing-friendly).
-    *   **Logic:** Standard timelock mechanism (see [Aptos Validator Timelock](../decisions/aptos-validator-timelock.md)) where key is derived from `auction_id`.
+    *   **Scheme:** **BIBE** on BLS12-381.
+    *   **Logic:** Standard validator timelock.
 2.  **Seller Layer (Inner):**
-    *   **Scheme:** **Threshold ECIES (Hybrid Encryption)**.
-    *   **Curve:** **secp256k1** (Standard Elliptic Curve, non-pairing).
-    *   **Logic:** Sellers perform DKG for $P_{Sellers}$. Payload $B$ is symmetric-encrypted (AES-GCM); key $K$ is encrypted to $P_{Sellers}$.
-    *   **Benefit:** A bug in the pairing engine or a breakthrough in solving DLP on one curve family does not compromise the other. ECIES avoids DLOG decryption traps.
+    *   **Scheme:** **Threshold BLS Encryption** (ElGamal-on-G1).
+    *   **Curve:** **BLS12-381** (Same as validators).
+    *   **Logic:** Sellers perform DKG for $P_{Group}$ using the existing Aptos DKG protocol.
+    *   **UX Note:** Since hardware wallets don't support threshold BLS, sellers generate a ephemeral "Session Key" (one-time app key) derived from their wallet signature to participate in the DKG.
+
+**Future Roadmap (v2.0):**
+*   Migration to **Heterogeneous Cryptography** (e.g., BN254 or secp256k1) is planned to eliminate single-curve failure risks.
+*   For v1.0, we prioritize implementation safety (code reuse) over theoretical crypto-diversity.
 
 To decrypt:
-1.  **Validators** peel the BIBE layer (BLS12-381).
-2.  **Sellers** peel the ElGamal layer (secp256k1) via threshold decryption.
+1.  **Validators** peel the Outer Layer.
+2.  **Sellers** peel the Inner Layer via threshold decryption.
 
-### 2.2 Enforced Reveal Sequence (Temporal Dependency)
-**Requirement:** Information leakage from the Seller set (e.g., collusion >33%) must remain unintelligible until the Validators reveal their key.
+### 2.2 Key Dependency (The "Split-Key" Model)
+**Requirement:** Seller Group key recovery must be **necessarily dependent** on the Validator Timelock.
 
-**Mechanism:** $C = Enc_{Outer\_Validator}(Enc_{Inner\_Seller}(B))$
+**Mechanism: Functional Dependency via Onion Locking**
+We treat the "Decryption Capability" as a single logical key $K_{System}$ split into two interdependent parts:
+$$K_{System} \approx (K_{Validator} \oplus K_{Seller})$$
 
-**Security Property:**
--   If 33% of Sellers collude at $T < T_{reveal}$, they can reconstruct the inner private key $S_{Seller}$.
--   However, they **cannot** apply this key to the ciphertext $C$ because the inner payload $Enc_{Seller}(B)$ is cryptographically obfuscated by the Outer Validator Layer.
--   The Seller Key $S_{Seller}$ is mathematically useless without the "entropy" (decryption transform) from the Validator set.
--   **Result:** The secrets remain secure even if the sellers are effectively compromised, as long as the validators are honest (and vice versa).
+1.  **Existential Independence:** The Seller Private Key $S_{Group}$ exists mathematically independent of the Validator Key.
+2.  **Functional Dependence:** However, the **utility** of $S_{Group}$ is strict time-dependent.
+    *   The ciphertext $C$ is wrapped in the Validator Layer.
+    *   Even if colluders reconstruct $S_{Group}$ at $T < T_{reveal}$, they lack the input ciphertext for their key.
+    *   They hold a key to a door that is inside a locked vault.
+    *   **Result:** Attempting to "discover the key in advance" yields a useless scalar that cannot decrypt the auction data.
+
+*Note on PVSS:* Implementing stricter "Existential Dependency" (where $S_{Group}$ cannot even be reconstructed) would require Time-Locked Verifiable Secret Sharing (PVSS). We reject this due to high complexity and liveness risks (verifying encrypted shares). The Functional Dependency provides equivalent security for the application layer.
+
+### 2.3 Seller Participation (The "Jury")
 
 ### 2.3 Seller Participation (The "Jury")
 -   **Selection:** Any seller attempting to sell assets in the auction *must* generate a DKG key share as part of their deposit transaction.
@@ -131,10 +141,36 @@ To prevent bots from front-running the reward claim in the mempool (stealing the
 
 ## 4. Implementation Notes
 
-### 4.1 Key Generation
--   **Sellers:** Perform DKG during the "Deposit/Registration" phase (e.g., 6 hours before auction).
--   **Finalization:** At $T_{auction\_start}$, the Seller Set is finalized. The Aggregate Public Key $P_{Sellers}$ is published.
--   Note: This requires a *fast* DKG (e.g., simplified Feldman VSS) because churn is higher than validators.
+### 4.1 Key Generation (The "2-Step & Default" Flow)
+**Philosophy:** Simplicity > UX Optimization.
+
+1.  **Step 1: Deposit Phase**
+    *   Sellers deposit assets. No reserve price is set yet.
+    *   *Deadline passes.* Seller Set is finalized.
+
+### 4.2 DKG Implementation Strategy (Direct Reuse)
+**Decision:** We will use the existing `aptos-framework::dkg` without modification.
+
+1.  **Current State:**
+    *   `aptos-dkg` (Rust) and `dkg.move` are production-ready implementations of **BLS12-381** DKG.
+2.  **Implementation Plan:**
+    *   **No New Cryptography:** We do not need to write `ark-secp256k1` adapters.
+    *   **Deployment:** We deploy a second instance of the DKG module (e.g., `0x1::seller_dkg`) or parameterize the existing one to handle the Seller Set.
+    *   **Session Keys:** The client-side application will handle the derivation of BLS12-381 keypairs from the user's wallet signature (Metamask/Trezor). This ephemeral key is used for the DKG session.
+3.  **Benefit:** Zero cryptographic development risk. We ship v1.0 with proven code.
+
+### 4.3 Key Generation (The "2-Step & Default" Flow)
+
+3.  **Step 3: Reserve & Bidding Phase**
+    *   **Sellers:** Submit Reserve Price encrypted to **Group Key** (same as bidders).
+        $$C_{Reserve} = Enc_{Validator\_BIBE}(Enc_{Group\_BLS}(R, P_{Group}))$$
+    *   **Bidders:** Submit Bids encrypted to the same keys.
+        $$C_{Bid} = Enc_{Validator\_BIBE}(Enc_{Group\_BLS}(B, P_{Group}))$$
+
+**Default Condition (The UX Failsafe):**
+*   If a Seller deposits but **fails** to submit a Reserve Price in Step 3:
+*   The protocol treats the Reserve Price as **0 (Market Sell)**.
+*   *Rationale:* This avoids "scrubbing" the auction. A lazy/disconnecting seller simply sells at market price. Client-side tooling can automate the Step 3 transaction to prevent accidental market sells.
 
 ### 4.2 Fallback
 -   If <33% of sellers show up (Liveness failure), the auction mechanism should have a fallback.

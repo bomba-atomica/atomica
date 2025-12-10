@@ -21,19 +21,20 @@ Atomica is a cross-chain sealed-bid auction system enabling trustless, gas-effic
 
 **Sealed Auction Logic**:
 - Fully implemented in Move smart contracts
-- **Sealed reserve prices** from sellers (tlock encrypted)
-- **Sealed bids** (quantity + price) from buyers (tlock encrypted)
-- Automatic decryption at auction deadline via validator threshold signatures
+- **Sealed reserve prices** from sellers (Onion Encrypted: Validator + Seller Group)
+- **Sealed bids** (quantity + price) from buyers (Onion Encrypted: Validator + Seller Group)
+- Automatic decryption at auction deadline via Validator + Seller threshold signatures
 - Produces merkle tree of final account balances upon completion
 - Merkle root hash stored as on-chain state
 - API-accessible state proofs signed by validator BLS signatures
 
-**Timelock Encryption (tlock)**:
-- Encryption key derived from validator BLS threshold public key
-- Decryption requires threshold signatures from validators (e.g., 2/3)
-- Validators automatically publish decryption shares at auction end time
-- No interactive reveal phase required
-- Grief-resistant: cannot prevent auction completion
+**Dual-Layer Timelock Encryption (Onion)**:
+- **Layer 1 (Outer):** Validator Timelock (BLS12-381 IBE). Decrypts at deadline.
+- **Layer 2 (Inner):** Seller Group Timelock (BLS12-381 Threshold). Decrypts by seller participation.
+- **Security:** Requires collusion of >2/3 Validators AND >1/3 Sellers to decrypt early.
+- **Liveness:** Decryption guaranteed if >67% Validators and >33% Sellers are honest/online.
+- **Griefing Mitigation:** Sellers providing liquidity must participate or face slashing.
+- No interactive reveal phase required.
 
 **State Proofs**:
 - Validator set changes
