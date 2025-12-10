@@ -1,0 +1,50 @@
+[package]
+name = "atomica-test-runner"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = "1.0"
+tokio = { version = "1.35", features = ["full"] }
+tempfile = "3.10"
+portpicker = "0.1.1"
+reqwest = { version = "=0.11.14", features = ["json"] }
+serde_json = "1.0"
+hex = "0.4"
+rand = "0.8"
+once_cell = "1.18"
+ethers = { version = "2.0", features = ["ws", "ipc", "openssl"] }
+
+# Aptos dependencies pinned to a specific commit
+aptos-forge = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
+aptos-sdk = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
+aptos-types = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
+aptos-crypto = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
+aptos-logger = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
+aptos-cached-packages = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
+aptos-framework = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
+aptos-config = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
+aptos-infallible = { git = "https://github.com/0LNetworkCommunity/zapatos.git", rev = "cbd965da4982950dc796b0cd2a78b96453a26355" }
+
+
+[patch.crates-io]
+# version 0.6 at commit 444eb13579c733089453806743b19f1ea2dce1c0 did not expose 'run_bench_with_bencher' as a public function, which we need
+dudect-bencher = { git = "https://github.com/aptos-labs/dudect-bencher", rev = "9515677c83c58884c1a8c764251753269d46fc0e" }
+serde-reflection = { git = "https://github.com/aptos-labs/serde-reflection", rev = "73b6bbf748334b71ff6d7d09d06a29e3062ca075" }
+merlin = { git = "https://github.com/aptos-labs/merlin" }
+futures = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-channel = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-executor = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-core = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-util = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-sink = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-io = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-task = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-macro = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+
+# There is a circular dependency between aptos-core, aptos-indexer-processor-sdk, and aptos-indexer-processors-v2,
+# so we cannot simply change the version and package for `jemalloc-sys` in one repo without running into conflicts.
+# We have to keep this shim until everything uses the same jemalloc dependency.
+jemalloc-sys = { git = "https://github.com/aptos-labs/jemalloc-sys-shim", rev = "e0920246dd74303fab9a14b990768c6ac990a59b" }
+
