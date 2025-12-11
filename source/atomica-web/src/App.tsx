@@ -3,6 +3,7 @@ import { ethers } from 'ethers'
 import { Faucet } from './components/Faucet';
 import { AuctionCreator } from './components/AuctionCreator';
 import { AuctionBidder } from './components/AuctionBidder';
+import { NetworkStatus } from './components/NetworkStatus';
 
 function App() {
   const [account, setAccount] = useState<string | null>(null);
@@ -38,6 +39,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans">
+      <NetworkStatus ethAddress={account} />
       <header className="p-4 border-b border-gray-800 flex justify-between items-center">
         <h1 className="text-2xl font-bold text-blue-400">Atomica Auction</h1>
         <div>

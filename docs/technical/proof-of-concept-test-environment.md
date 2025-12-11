@@ -6,7 +6,6 @@ Demonstrate an end-to-end auction flow where users (Sellers and Buyers) interact
 ## Scope & Constraints
 *   **Network**: Local Aptos Testnet (`aptos-node`) running Atomica contracts.
 *   **Wallet**: MetaMask (Ethereum) for signing actions.
-*   **Gas/Relay**: A "Relayer" mechanism (frontend-embedded or backend) pays Aptos gas fees, verifying the user's MetaMask signature on-chain.
 *   **Authentication**: `secp256k1` signature verification within Move contracts to authenticate actions from Ethereum addresses.
 
 ## User Stories
@@ -16,13 +15,41 @@ Demonstrate an end-to-end auction flow where users (Sellers and Buyers) interact
 4.  **Observation**: Users see a live dashboard of auction states and deadlines.
 5.  **Conclusion**: Auction ends, bids revealed (simulated/manual for PoC), assets swapped.
 
-## Technical Architecture
+# Proof of Concept Test Environment
 
-### 1. Web Interface (`atomica-web`)
-*   **Stack**: React, Vite, TailwindCSS.
-*   **Libs**: `ethers.js` (for MetaMask interaction), `aptos` (Aptos TS SDK).
-*   **Relayer**: The frontend will hold a "Relayer" private key (e.g., a pre-funded local account like `Alice`) to submit transactions to the Aptos node on behalf of the user.
-    *   *Note*: In production, this would be a backend service. For PoC, client-side is acceptable.
+This document outlines the test environment for the "Atomica Web PoC" demo.
+
+## Components
+
+*   **Frontend**: `atomica-web` (React/Vite). Serves the UI for Faucet, Auction Creation, and Bidding.
+*   **Blockchain**: `aptos-node` (Local Validator). Runs the Atomica Move contracts.
+*   **Wallet**: MetaMask (User's Ethereum Wallet).
+*   **Authentication**: **Native Ethereum Wallet Submission** via SIWE (Sign In With Ethereum). The user signs a specific message, and the frontend constructs an `AbstractAuthenticator` transaction submitted directly to the chain. (No Relayer required).
+*   **Orchestrator**: `orchestrator.ts` (Node.js). Manages the lifecycle: starts node, cleans up ports, builds contracts, runs setup scripts.
+
+## Flow
+
+1.  **Faucet**: User connects MetaMask and requests funds. The frontend calls the local faucet service to fund the user's **Derived Aptos Address**.
+2.  **Create Auction**: User inputs parameters.
+    *   Frontend generates a **SIWE Message** with `Nonce = Transaction Hash`.
+    *   User signs via MetaMask.
+    *   Frontend submits the transaction to the local node using `AbstractAuthenticator`.
+3.  **Bid**: User inputs bid amount and target auction.
+    *   Frontend encrypts the bid (IBE) and generates a SIWE Message.
+    *   User signs.
+    *   Frontend submits native transaction.
+4.  **Verification**: The Move contracts (`ethereum_derivable_account`) verify the signature and recovered address on-chain.
+
+## Key APIs (Local)
+
+*   `node`: `http://127.0.0.1:8080` (Aptos REST API)
+*   `faucet`: `http://127.0.0.1:8081` (Native Aptos Faucet for funding derived accounts)
+*   `webapp`: `http://localhost:5173`
+
+## Out of Scope (PoC)
+
+*   Production-grade Key Management.
+*   Real Settlement (Bridge) Relayers (Mocked for this stage if needed).
 
 ### 2. Smart Contracts (`atomica-move-contracts`)
 *   **Auth Module**: A module to verify `secp256k1` signatures from ETH addresses.

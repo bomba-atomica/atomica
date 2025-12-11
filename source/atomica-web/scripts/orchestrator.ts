@@ -24,16 +24,15 @@ async function main() {
     // 0. Cleanup Zombies
     cleanupPorts([8080, 8081, 4173]);
 
-    // 1. Build & Host Webapp
-    console.log("🏗️  Building Webapp...");
+    // 1. Start Webapp (Dev Mode)
+    console.log("🌐 Starting Webapp (Dev Mode)...");
     runCommand("npm", ["install"], WEB_DIR);
-    runCommand("npm", ["run", "build"], WEB_DIR);
+    // runCommand("npm", ["run", "build"], WEB_DIR); // SKIP BUILD
 
-    console.log("🌐 Hosting Webapp...");
     console.log("👉 OPEN IN BROWSER: http://localhost:4173");
 
-    const webProcess = spawn("npx", [
-        "vite", "preview",
+    const webProcess = spawn("npm", [
+        "run", "dev", "--",
         "--port", "4173",
         "--host"
     ], { cwd: WEB_DIR, stdio: 'inherit' });
@@ -85,8 +84,13 @@ async function main() {
     });
 
     // Wait for network ready (simplistic sleep)
-    console.log("⏳ Waiting for network to be ready (15s)...");
-    await sleep(15000);
+    // Wait for network ready
+    console.log("⏳ Waiting for network to be ready (Poll http://127.0.0.1:8080/v1)...");
+    await waitForUrl("http://127.0.0.1:8080/v1");
+    // Wait for Faucet
+    console.log("⏳ Waiting for Faucet to be ready (Poll http://127.0.0.1:8081)...");
+    await waitForUrl("http://127.0.0.1:8081");
+    console.log("✅ Network & Faucet are Ready!");
 
     // 3. Setup Contracts
     console.log("📜 Setting up Contracts...");
@@ -160,9 +164,9 @@ async function waitForUrl(url) {
 function runCommand(cmd, args, cwd) {
     const result = spawnSync(cmd, args, { cwd, stdio: 'inherit' });
     if (result.error) {
-        console.error(`❌ Failed to run ${cmd}: ${result.error.message}`);
+        throw new Error(`❌ Failed to run ${cmd}: ${result.error.message}`);
     } else if (result.status !== 0) {
-        console.error(`⚠️ ${cmd} exited with code ${result.status}`);
+        throw new Error(`⚠️ ${cmd} exited with code ${result.status}`);
     }
 }
 

@@ -4,9 +4,9 @@ import {
     Network,
     AccountAddress,
     Serializer,
-    InputGenerateTransactionPayloadData,
     AccountAuthenticator
 } from '@aptos-labs/ts-sdk';
+import type { InputGenerateTransactionPayloadData } from '@aptos-labs/ts-sdk';
 import { ethers } from 'ethers';
 import { sha3_256 } from '@noble/hashes/sha3';
 
@@ -189,34 +189,52 @@ export async function submitNativeTransaction(
 
     const auth = new CustomAbstractAuthenticator(digest, signatureBytes, ethBytes);
 
-    const pendingTx = await aptos.transaction.submit.simple({
-        transaction,
-        senderAuthenticator: auth
-    });
-
-    return pendingTx;
+    try {
+        const pendingTx = await aptos.transaction.submit.simple({
+            transaction,
+            senderAuthenticator: auth
+        });
+        return pendingTx;
+    } catch (e: any) {
+        console.error("Submission Failed. Details:", e);
+        if (e.response) {
+            console.error("Response Status:", e.response.status);
+            console.error("Response Text:", await e.response.text().catch(() => "Could not read text"));
+        }
+        throw new Error(`Transaction Submission verification failed: ${e.message || e}`);
+    }
 }
 
 export async function submitFaucet(ethAddress: string) {
-    // Assuming `atomica::actions::faucet`
-    // Note: User called `remote_faucet` before which calls `aptos_account::transfer`?
-    // Move code: `remote_faucet` calls `coin::transfer`?
-    // We should call `atomica::actions::faucet` if it exists, or just transfer?
-    // If the valid address is derived, we need initial gas.
-    // The "Faucet" component was minting to RELAYER. Now we mint to USER.
-    // In `getRelayer` we called local faucet service.
-    // Here we should probably call the local faucet service directly via fetch for the derived address?
-    // IF `submitFaucet` is meant to be the on-chain faucet, we use transaction.
-    // But `atomica-web` Faucet component was minting coins.
-    // Let's use the local faucet service for the `submitFaucet` action to ensure they have gas.
-    // Actually, `atomica-web` Faucet.tsx seems to use the relayer to *trigger* a faucet?
-    // The old `submitRemoteFaucet` called `remote_faucet` on chain.
-    // For Native, we should just use the REST Faucet API to fund the derived address.
-
     const derived = await getDerivedAddress(ethAddress);
     const FAUCET_URL = "http://127.0.0.1:8081";
-    await fetch(`${FAUCET_URL}/mint?amount=100000000&address=${derived.toString()}`, { method: 'POST' });
-    return { hash: "faucet-executed-via-api" };
+
+    // 1. Native APT Faucet (for Gas)
+    console.log("Funding Gas...");
+    const res = await fetch(`${FAUCET_URL}/mint?amount=100000000&address=${derived.toString()}`, { method: 'POST' });
+    if (!res.ok) throw new Error("Faucet API Failed");
+
+    // Wait slightly for balance to reflect (local node is fast but async)
+    await new Promise(r => setTimeout(r, 1000));
+
+    // 2. Mint FAKEETH (10 ETH)
+    console.log("Minting FAKEETH...");
+    // 8 decimals from Move file
+    const amountEth = BigInt(10) * BigInt(100_000_000);
+    await submitNativeTransaction(ethAddress, {
+        function: `${CONTRACT_ADDR}::FAKEETH::mint`,
+        functionArguments: [amountEth]
+    });
+
+    // 3. Mint FAKEUSD (10,000 USD)
+    console.log("Minting FAKEUSD...");
+    const amountUsd = BigInt(10000) * BigInt(100_000_000);
+    await submitNativeTransaction(ethAddress, {
+        function: `${CONTRACT_ADDR}::FAKEUSD::mint`,
+        functionArguments: [amountUsd]
+    });
+
+    return { hash: "gas-fakeeth-fakeusd-minted" };
 }
 
 export async function submitCreateAuction(
