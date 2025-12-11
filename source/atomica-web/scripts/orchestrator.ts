@@ -1,0 +1,192 @@
+
+import { spawn, execSync, spawnSync } from 'node:child_process';
+import { existsSync, rmSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Helper to get __dirname in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Constants
+const WORKSPACE_ROOT = join(__dirname, '../../..'); // web -> atomica-web -> source -> atomica
+const ZAPATOS_DIR = join(WORKSPACE_ROOT, 'source/zapatos');
+const CONTRACTS_DIR = join(WORKSPACE_ROOT, 'source/atomica-move-contracts');
+const WEB_DIR = join(WORKSPACE_ROOT, 'source/atomica-web');
+
+const DEPLOYER_PK = "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
+const DEPLOYER_ADDR = "0xb0b3bd3e06a35043681439733076dd8f731c2847c13038a83427429184ba2849";
+
+async function main() {
+    console.log("🚀 Starting Atomica Demo Orchestrator (Node.js)...");
+    console.log(`📂 Workspace Root: ${WORKSPACE_ROOT}`);
+
+    // 0. Cleanup Zombies
+    cleanupPorts([8080, 8081, 4173]);
+
+    // 1. Build & Host Webapp
+    console.log("🏗️  Building Webapp...");
+    runCommand("npm", ["install"], WEB_DIR);
+    runCommand("npm", ["run", "build"], WEB_DIR);
+
+    console.log("🌐 Hosting Webapp...");
+    console.log("👉 OPEN IN BROWSER: http://localhost:4173");
+
+    const webProcess = spawn("npx", [
+        "vite", "preview",
+        "--port", "4173",
+        "--host"
+    ], { cwd: WEB_DIR, stdio: 'inherit' });
+
+    // Wait for Webapp Health
+    console.log("⏳ Waiting for Webapp availability...");
+    await waitForUrl("http://localhost:4173");
+    console.log("✅ Webapp is Live!");
+
+    // 2. Find Aptos CLI
+    console.log("🔍 Looking for 'aptos' binary...");
+    const candidatePaths = [
+        join(ZAPATOS_DIR, 'target/debug/aptos'),
+        join(ZAPATOS_DIR, 'target/release/aptos'),
+        join(WORKSPACE_ROOT, 'source/target/debug/aptos'),
+        join(WORKSPACE_ROOT, 'source/target/release/aptos'),
+        join(WORKSPACE_ROOT, 'target/debug/aptos'),
+        join(WORKSPACE_ROOT, 'target/release/aptos'),
+    ];
+
+    let aptosBin = null;
+    for (const p of candidatePaths) {
+        if (existsSync(p)) {
+            aptosBin = p;
+            break;
+        }
+    }
+
+    if (!aptosBin) {
+        console.error("❌ 'aptos' binary NOT found in any of the following locations:");
+        candidatePaths.forEach(p => console.error(`   - ${p}`));
+        console.error("💡 Please build the CLI first (e.g. 'cargo build -p aptos')");
+        process.exit(1);
+    }
+    console.log(`✅ Found 'aptos' binary at: ${aptosBin}`);
+
+    // 3. Start Local Testnet
+    console.log("⛓️ Starting Local Testnet...");
+    const nodeProcess = spawn(aptosBin, [
+        "node", "run-local-testnet",
+        "--with-faucet",
+        "--force-restart",
+        "--assume-yes"
+    ], {
+        stdio: ['ignore', 'pipe', 'inherit'], // Pipe stdout to detect readiness or just ignore?
+        // Let's inherit stderr to see errors, pipe stdout to avoid spam but maybe we want to see it?
+        // Inheriting everything is easiest for debug.
+        stdio: 'inherit'
+    });
+
+    // Wait for network ready (simplistic sleep)
+    console.log("⏳ Waiting for network to be ready (15s)...");
+    await sleep(15000);
+
+    // 3. Setup Contracts
+    console.log("📜 Setting up Contracts...");
+
+    // Clean .aptos dir
+    const aptosConfigDir = join(CONTRACTS_DIR, '.aptos');
+    if (existsSync(aptosConfigDir)) {
+        console.log("🧹 Cleaning old .aptos config...");
+        rmSync(aptosConfigDir, { recursive: true, force: true });
+    }
+
+    // Init
+    runCommand(aptosBin, [
+        "init",
+        "--network", "local",
+        "--profile", "default",
+        "--private-key", DEPLOYER_PK,
+        "--assume-yes"
+    ], CONTRACTS_DIR);
+
+    // Fund
+    console.log(`💸 Funding Deployer: ${DEPLOYER_ADDR}`);
+    try {
+        await fetch(`http://127.0.0.1:8081/mint?amount=1000000000&address=${DEPLOYER_ADDR}`, { method: 'POST' });
+        console.log("✅ Funded.");
+    } catch (e) {
+        console.error("⚠️ Failed to fund (is faucet running?)", e);
+    }
+
+    // Publish
+    console.log("🚀 Publishing Contracts...");
+    runCommand(aptosBin, [
+        "move", "publish",
+        "--named-addresses", "atomica=default",
+        "--profile", "default",
+        "--assume-yes"
+    ], CONTRACTS_DIR);
+
+    // Init Registry
+    console.log("⚙️  Initializing Registry...");
+    runCommand(aptosBin, [
+        "move", "run",
+        "--function-id", "default::registry::initialize",
+        "--args", "hex:0123456789abcdef",
+        "--profile", "default",
+        "--assume-yes"
+    ], CONTRACTS_DIR);
+
+    // 5. Host Webapp (Moved to start)
+
+    // Handle Cleanup on Exit
+    process.on('SIGINT', () => {
+        console.log("\n🛑 Shutting down...");
+        nodeProcess.kill();
+        webProcess.kill();
+        process.exit();
+    });
+}
+
+async function waitForUrl(url) {
+    while (true) {
+        try {
+            await fetch(url);
+            return;
+        } catch (e) {
+            await sleep(1000);
+        }
+    }
+}
+
+function runCommand(cmd, args, cwd) {
+    const result = spawnSync(cmd, args, { cwd, stdio: 'inherit' });
+    if (result.error) {
+        console.error(`❌ Failed to run ${cmd}: ${result.error.message}`);
+    } else if (result.status !== 0) {
+        console.error(`⚠️ ${cmd} exited with code ${result.status}`);
+    }
+}
+
+function cleanupPorts(ports) {
+    for (const port of ports) {
+        try {
+            const output = execSync(`lsof -t -i tcp:${port}`).toString().trim();
+            if (output) {
+                const pids = output.split('\n');
+                for (const pid of pids) {
+                    if (pid) {
+                        console.log(`🧹 Killing zombie process on port ${port} (PID: ${pid})`);
+                        execSync(`kill -9 ${pid}`);
+                    }
+                }
+            }
+        } catch (e) {
+            // lsof returns exit code 1 if no process found, which throws error. Ignore it.
+        }
+    }
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+main().catch(console.error);
