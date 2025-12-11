@@ -3,14 +3,13 @@ module atomica::auction {
     use std::vector;
     use std::error;
     use aptos_framework::coin::{Self, Coin};
-    use aptos_framework::account;
     use aptos_framework::timestamp;
     
-    use aptos_std::crypto_algebra::{Self, Element};
-    use aptos_std::bls12381_algebra::{Self, G1, G2, FormatG1Uncompr, FormatG1Compr, FormatG2Uncompr, FormatG2Compr};
+    use aptos_std::crypto_algebra;
+    use aptos_std::bls12381_algebra::{G1, G2, FormatG1Uncompr, FormatG1Compr, FormatG2Uncompr, FormatG2Compr};
     
-    use atomica::fake_eth::FAKEETH;
-    use atomica::fake_usd::FAKEUSD;
+    use atomica::FAKEETH::FAKEETH;
+    use atomica::FAKEUSD::FAKEUSD;
     use atomica::timelock_encryption::{Self, EncryptedMessage};
 
     /// Error codes
@@ -28,7 +27,7 @@ module atomica::auction {
         asset: Coin<FAKEETH>,
         min_price: u64,
         end_time: u64,
-        mpk: Element<G1>, // Master Public Key (G1)
+        mpk: vector<u8>, // Master Public Key (G1 Serialized)
         bids: vector<EncryptedBid>,
         highest_bidder: address,
         highest_bid: u64,
@@ -54,14 +53,11 @@ module atomica::auction {
         let seller_addr = signer::address_of(seller);
         let eth_coins = coin::withdraw<FAKEETH>(seller, amount_eth);
         
-        // Deserialize MPK (G1)
+        // Validate MPK (G1)
         let mpk_opt = crypto_algebra::deserialize<G1, FormatG1Uncompr>(&mpk_bytes);
-        let mpk = if (std::option::is_some(&mpk_opt)) {
-            std::option::extract(&mut mpk_opt)
-        } else {
-            let mpk_opt_c = crypto_algebra::deserialize<G1, FormatG1Compr>(&mpk_bytes);
-            assert!(std::option::is_some(&mpk_opt_c), error::invalid_argument(E_INVALID_PROOF));
-            std::option::extract(&mut mpk_opt_c)
+        if (std::option::is_none(&mpk_opt)) {
+             let mpk_opt_c = crypto_algebra::deserialize<G1, FormatG1Compr>(&mpk_bytes);
+             assert!(std::option::is_some(&mpk_opt_c), error::invalid_argument(E_INVALID_PROOF));
         };
 
         move_to(seller, Auction {
@@ -69,7 +65,7 @@ module atomica::auction {
             asset: eth_coins,
             min_price,
             end_time: timestamp::now_seconds() + duration,
-            mpk,
+            mpk: mpk_bytes,
             bids: vector::empty(),
             highest_bidder: seller_addr,
             highest_bid: 0,
@@ -91,18 +87,15 @@ module atomica::auction {
         assert!(timestamp::now_seconds() < auction.end_time, error::invalid_state(E_AUCTION_ENDED));
         assert!(amount_usd >= auction.min_price, error::invalid_argument(E_BID_TOO_LOW));
 
-        // Deserialize U (G1)
+        // Validate U (G1)
         let u_opt = crypto_algebra::deserialize<G1, FormatG1Uncompr>(&u_bytes);
-        let u_element = if (std::option::is_some(&u_opt)) {
-            std::option::extract(&mut u_opt)
-        } else {
+        if (std::option::is_none(&u_opt)) {
             let u_opt_c = crypto_algebra::deserialize<G1, FormatG1Compr>(&u_bytes);
             assert!(std::option::is_some(&u_opt_c), error::invalid_argument(E_INVALID_PROOF));
-            std::option::extract(&mut u_opt_c)
         };
 
         // Construct EncryptedMessage
-        let message = timelock_encryption::create_encrypted_message(u_element, v_bytes);
+        let message = timelock_encryption::create_encrypted_message(u_bytes, v_bytes);
 
         // Lock funds
         let payment = coin::withdraw<FAKEUSD>(bidder, amount_usd);
@@ -119,7 +112,7 @@ module atomica::auction {
 
     /// Reveal bids using Timelock Secret
     public entry fun reveal_bids(
-        sender: &signer,
+        _sender: &signer,
         seller_addr: address,
         interval: u64
     ) acquires Auction {
@@ -228,7 +221,7 @@ module atomica::auction {
         let i = 0;
         while (i < 8) {
             let b = *vector::borrow(bytes, i);
-            val = val | ((b as u64) << (i * 8));
+            val = val | ((b as u64) << ((i * 8) as u8));
             i = i + 1;
         };
         val

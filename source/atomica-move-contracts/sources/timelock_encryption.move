@@ -1,16 +1,13 @@
 module atomica::timelock_encryption {
     use std::vector;
-    use std::option::{Self, Option};
-    use aptos_std::aptos_hash::keccak256;
     use aptos_std::crypto_algebra::{
-        Self, Element, hash_to, pairing, serializep,
-        zero, one, eq, mul, add, sub, neg, from_u64
+        Self, Element, hash_to
     };
     use aptos_std::ibe;
     use aptos_std::bls12381_algebra::{
-        G1, G2, Gt, Fr,
+        G1, G2, Gt,
         HashG2XmdSha256SswuRo,
-        FormatGt, FormatG1Compr
+        FormatG1Compr, FormatG1Uncompr
     };
 
     /// Error codes
@@ -20,13 +17,13 @@ module atomica::timelock_encryption {
 
     /// A struct representing an encrypted message (Hashed IBE Ciphertext).
     struct EncryptedMessage has drop, store, copy {
-        u: Element<G1>,      // U = r * G
+        u: vector<u8>,      // U = r * G (Serialized)
         ciphertext: vector<u8>, // C = M XOR Hash(e(P_pub, Q_id)^r)
     }
 
     /// Creates a new `EncryptedMessage` struct.
     public fun create_encrypted_message(
-        u: Element<G1>,
+        u: vector<u8>,
         ciphertext: vector<u8>
     ): EncryptedMessage {
         EncryptedMessage {
@@ -40,7 +37,7 @@ module atomica::timelock_encryption {
         // DST should match Drand or standard IBE implementations.
         // Using the standard BLS12-381 G2 XMD:SHA-256 SSWU RO
         let dst = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_";
-        hash_to<G2, HashG2XmdSha256SswuRo>(dst, id)
+        hash_to<G2, HashG2XmdSha256SswuRo>(&dst, id)
     }
 
     /// Decrypts a message.
@@ -55,8 +52,18 @@ module atomica::timelock_encryption {
         encrypted_msg: &EncryptedMessage,
         signature: &Element<G2>
     ): vector<u8> {
+        // Deserialize U
+        let u_opt = crypto_algebra::deserialize<G1, FormatG1Uncompr>(&encrypted_msg.u);
+        let u = if (std::option::is_some(&u_opt)) {
+            std::option::extract(&mut u_opt)
+        } else {
+            let u_opt_c = crypto_algebra::deserialize<G1, FormatG1Compr>(&encrypted_msg.u);
+            assert!(std::option::is_some(&u_opt_c), E_INVALID_CIPHERTEXT);
+            std::option::extract(&mut u_opt_c)
+        };
+
         // Use native IBE decryption which is gas-optimized
-        ibe::decrypt<G1, G2, Gt>(&encrypted_msg.u, signature, encrypted_msg.ciphertext)
+        ibe::decrypt<G1, G2, Gt>(&u, signature, encrypted_msg.ciphertext)
     }
 
     /// Helper to XOR two vectors of bytes.
@@ -122,7 +129,9 @@ module atomica::timelock_encryption {
         // Message
         let msg = b"SecretBid100";
         let ciphertext = xor(&msg, &mask);
-        let enc_msg = EncryptedMessage { u, ciphertext };
+        // Serialize U
+        let u_bytes = crypto_algebra::serialize<G1, FormatG1Uncompr>(&u);
+        let enc_msg = create_encrypted_message(u_bytes, ciphertext);
 
         // 3. Extraction Phase (Validators)
         // Signature Sig = s * Q_id
