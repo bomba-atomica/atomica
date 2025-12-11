@@ -1,4 +1,4 @@
-module AtomicaAuction::FAKEETH {
+module atomica::FAKEETH {
     use std::string;
     use std::signer;
     use aptos_framework::coin::{Self, BurnCapability, FreezeCapability, MintCapability};
@@ -32,7 +32,7 @@ module AtomicaAuction::FAKEETH {
 
     /// Mint new FAKEETH coins.
     public entry fun mint(account: &signer, amount: u64) acquires Capabilities {
-        let caps = borrow_global<Capabilities>(@AtomicaAuction);
+        let caps = borrow_global<Capabilities>(@atomica);
         let coins = coin::mint<FAKEETH>(amount, &caps.mint_cap);
         coin::deposit(signer::address_of(account), coins);
     }

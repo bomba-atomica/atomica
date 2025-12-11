@@ -3,6 +3,7 @@ import { ethers } from 'ethers'
 import { Faucet } from './components/Faucet';
 import { AuctionCreator } from './components/AuctionCreator';
 import { AuctionBidder } from './components/AuctionBidder';
+import { AccountStatus } from './components/AccountStatus';
 import { NetworkStatus } from './components/NetworkStatus';
 
 function App() {
@@ -39,21 +40,22 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans">
-      <NetworkStatus ethAddress={account} />
-      <header className="p-4 border-b border-gray-800 flex justify-between items-center">
+      <header className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/95 sticky top-0 z-50 backdrop-blur">
         <h1 className="text-2xl font-bold text-blue-400">Atomica Auction</h1>
-        <div>
+        <div className="flex items-center gap-4">
+          <NetworkStatus />
           {account ? (
-            <span className="bg-gray-800 px-4 py-2 rounded-full text-sm font-mono text-green-400">
-              {account.substring(0, 6)}...{account.substring(38)}
-            </span>
+            <AccountStatus ethAddress={account} />
           ) : (
-            <button
-              onClick={connectWallet}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition"
-            >
-              Connect MetaMask
-            </button>
+            <div className="flex items-center gap-4">
+              <AccountStatus ethAddress={null} />
+              <button
+                onClick={connectWallet}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition font-medium text-sm"
+              >
+                Connect MetaMask
+              </button>
+            </div>
           )}
         </div>
       </header>

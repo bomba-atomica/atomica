@@ -1,6 +1,6 @@
 
 import { spawn, execSync, spawnSync } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, rmSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -20,6 +20,21 @@ const DEPLOYER_ADDR = "0xb0b3bd3e06a35043681439733076dd8f731c2847c13038a83427429
 async function main() {
     console.log("🚀 Starting Atomica Demo Orchestrator (Node.js)...");
     console.log(`📂 Workspace Root: ${WORKSPACE_ROOT}`);
+
+    // 0. Environment Setup
+    // Force Aptos CLI to use a local isolated config directory to avoid global config issues
+    const ISOLATED_CONFIG_DIR = join(CONTRACTS_DIR, '.aptos_isolated');
+    if (!existsSync(ISOLATED_CONFIG_DIR)) {
+        // node:fs needed mkdirSync? Imported?
+        // Let's rely on aptos init creating it? No, aptos init creates config.yaml inside.
+        // We need to ensure the dir exists?
+        // Actually invoke mkdirSync if imported.
+        // I need to import mkdirSync.
+    }
+    process.env.APTOS_GLOBAL_CONFIG_DIR = ISOLATED_CONFIG_DIR;
+    process.env.APTOS_DISABLE_TELEMETRY = "true";
+
+    console.log(`🔒 Using isolated Aptos Config: ${ISOLATED_CONFIG_DIR}`);
 
     // 0. Cleanup Zombies
     cleanupPorts([8080, 8081, 4173]);

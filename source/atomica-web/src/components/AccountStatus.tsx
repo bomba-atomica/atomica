@@ -54,29 +54,34 @@ export function AccountStatus({ ethAddress }: AccountStatusProps) {
     }, [ethAddress]);
 
     return (
-        <div className="fixed top-16 right-4 bg-gray-900/90 text-blue-400 p-4 rounded border border-blue-800 font-mono text-sm z-50 shadow-xl backdrop-blur w-64">
-            <h3 className="text-white font-bold mb-2 border-b border-gray-700 pb-1">Wallet Status</h3>
-            <div className="mb-2">
-                <span className="text-gray-400">Connected:</span>
+        <div className="flex items-center gap-6 text-sm font-mono bg-gray-800/50 px-4 py-2 rounded border border-gray-700">
+            <div className="flex items-center">
+                <span className="text-gray-400 mr-2">Wallet:</span>
                 {ethAddress ? (
-                    <span className="text-green-400 ml-2">✓ {ethAddress.substring(0, 6)}...</span>
+                    <span className="text-green-400">{ethAddress.substring(0, 6)}...{ethAddress.substring(38)}</span>
                 ) : (
-                    <span className="text-red-400 ml-2">No</span>
+                    <span className="text-gray-500">Not Connected</span>
                 )}
             </div>
 
             {ethAddress && (
-                <div className="space-y-1">
-                    <div className="flex justify-between">
-                        <span className="text-gray-400">APT (Gas):</span> <span className="text-white">{balances.apt}</span>
+                <>
+                    <div className="h-4 w-px bg-gray-700"></div>
+                    <div className="flex items-center gap-4">
+                        <div title="Gas (APT)">
+                            <span className="text-gray-400 mr-1">APT:</span>
+                            <span className="text-white">{balances.apt}</span>
+                        </div>
+                        <div title="Fake ETH">
+                            <span className="text-gray-400 mr-1">ETH:</span>
+                            <span className="text-white">{balances.fakeEth}</span>
+                        </div>
+                        <div title="Fake USD">
+                            <span className="text-gray-400 mr-1">USD:</span>
+                            <span className="text-white">{balances.fakeUsd}</span>
+                        </div>
                     </div>
-                    <div className="flex justify-between">
-                        <span className="text-gray-400">FAKEETH:</span> <span className="text-white">{balances.fakeEth}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-gray-400">FAKEUSD:</span> <span className="text-white">{balances.fakeUsd}</span>
-                    </div>
-                </div>
+                </>
             )}
         </div>
     );

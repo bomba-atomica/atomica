@@ -1,4 +1,4 @@
-module AtomicaAuction::FAKEUSD {
+module atomica::FAKEUSD {
     use std::string;
     use std::signer;
     use aptos_framework::coin::{Self, BurnCapability, FreezeCapability, MintCapability};
@@ -32,7 +32,7 @@ module AtomicaAuction::FAKEUSD {
 
     /// Mint new FAKEUSD coins.
     public entry fun mint(account: &signer, amount: u64) acquires Capabilities {
-        let caps = borrow_global<Capabilities>(@AtomicaAuction);
+        let caps = borrow_global<Capabilities>(@atomica);
         let coins = coin::mint<FAKEUSD>(amount, &caps.mint_cap);
         coin::deposit(signer::address_of(account), coins);
     }

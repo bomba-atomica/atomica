@@ -10,7 +10,7 @@ import type { InputGenerateTransactionPayloadData } from '@aptos-labs/ts-sdk';
 import { ethers } from 'ethers';
 import { sha3_256 } from '@noble/hashes/sha3';
 
-const NODE_URL = "http://127.0.0.1:8080";
+const NODE_URL = "http://127.0.0.1:8080/v1";
 export const CONTRACT_ADDR = "0x1";
 
 const config = new AptosConfig({ network: Network.LOCAL, fullnode: NODE_URL });
