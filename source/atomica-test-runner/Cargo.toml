@@ -23,17 +23,7 @@ sha2 = "0.10"
 # ethers = { version = "2.0", features = ["ws", "ipc", "openssl"] }
 
 # Aptos dependencies pinned to a specific commit
-aptos-forge = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
-aptos-sdk = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
-aptos-types = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
-aptos-crypto = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
-aptos-logger = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
-aptos-cached-packages = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
-aptos-framework = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
-aptos-config = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
-aptos-infallible = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
-
-[patch."https://github.com/0LNetworkCommunity/zapatos.git"]
+# Aptos dependencies using local paths
 aptos-forge = { path = "../zapatos/testsuite/forge" }
 aptos-sdk = { path = "../zapatos/sdk" }
 aptos-types = { path = "../zapatos/types" }
