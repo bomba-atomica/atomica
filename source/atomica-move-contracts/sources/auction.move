@@ -144,11 +144,13 @@ module atomica::auction {
             std::option::extract(&mut sig_opt_c)
         };
 
-        // 2. Decrypt Bids
+        // 2. Decrypt Bids and Find Winner
         let i = 0;
-        let best_bid_val = auction.highest_bid;
-        let best_bidder = auction.highest_bidder;
+        let best_bid_val = 0;
+        let best_bidder = @0x0;
+        let best_bid_index = 0;
         let len = vector::length(&auction.bids);
+        let found_winner = false;
 
         while (i < len) {
             let bid = vector::borrow_mut(&mut auction.bids, i);
@@ -165,6 +167,8 @@ module atomica::auction {
                         if (coin::value(&bid.payment) >= bid_amount) {
                             best_bid_val = bid_amount;
                             best_bidder = bid.bidder;
+                            best_bid_index = i;
+                            found_winner = true;
                         }
                     }
                 };
@@ -173,9 +177,49 @@ module atomica::auction {
             i = i + 1;
         };
 
-        auction.highest_bid = best_bid_val;
-        auction.highest_bidder = best_bidder;
-        auction.winner_declared = true;
+        // 3. Settlement
+        // Process bids from end to start to use pop_back (efficient)
+        // Note: Indices needed matching, so we must be careful.
+        // If we pop from back, the index is (len - 1), then (len - 2)...
+        
+        let j = len;
+        while (j > 0) {
+            j = j - 1; // 0-based index being removed
+            let EncryptedBid { bidder, message: _, payment, revealed: _ } = vector::pop_back(&mut auction.bids);
+            
+            if (found_winner && j == best_bid_index) {
+                // WINNER SETTLEMENT
+                // 1. Pay Seller
+                // We split the payment: bid_amount goes to seller, rest refunded? 
+                // Or just send full payment? Usually strictly bid amount.
+                let payment_val = coin::value(&payment);
+                let surplus = payment_val - best_bid_val;
+                
+                let pay_coin = coin::extract(&mut payment, best_bid_val);
+                coin::deposit(seller_addr, pay_coin);
+                
+                // Refund surplus to bidder (if any)
+                if (surplus > 0) {
+                    coin::deposit(bidder, payment);
+                } else {
+                    coin::destroy_zero(payment);
+                };
+
+                // 2. Transfer Asset to Winner
+                // Extract all from Auction to Winner
+                let asset_val = coin::value(&auction.asset);
+                let asset_coin = coin::extract(&mut auction.asset, asset_val);
+                coin::deposit(bidder, asset_coin);
+
+                auction.highest_bid = best_bid_val;
+                auction.highest_bidder = best_bidder;
+                auction.winner_declared = true;
+
+            } else {
+                // REFUND LOSER (or invalid bids)
+                coin::deposit(bidder, payment);
+            }
+        };
     }
 
     fun u64_from_bytes(bytes: &vector<u8>): u64 {

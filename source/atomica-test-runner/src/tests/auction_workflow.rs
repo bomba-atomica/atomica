@@ -9,8 +9,6 @@ use blstrs::hash_to_curve::{ExpandMsgXmd, HashToCurve};
 
 #[tokio::test]
 async fn test_auction_flow() -> Result<()> {
-#[tokio::test]
-async fn test_auction_flow() -> Result<()> {
     use aptos_crypto::blstrs::{G2Projective, Scalar};
     use group::Group;
     use ff::Field;
@@ -70,7 +68,7 @@ async fn test_auction_flow() -> Result<()> {
     
     // 2. Compile/Deploy Move package
     let root = std::env::current_dir()?;
-    let aptos_cli_path = root.join("../zapatos/target/release/aptos");
+    let aptos_cli_path = root.join("../zapatos/target/debug/aptos");
     let package_path = root.join("../atomica-move-contracts");
     
     // We need to run a validator node suitable for the test. 
@@ -143,31 +141,92 @@ async fn test_auction_flow() -> Result<()> {
         return Err(anyhow::anyhow!("Failed to create auction"));
     }
 
-    // 5. Submit Bid
-    println!("Submitting bid...");
-    // submit_bid(bidder, seller_addr, amount_usd, u_bytes, v_bytes)
+    // 5. Encrypt Bid
+    use aptos_crypto::blstrs::{G1Projective, Gt, pairing};
+    use aptos_crypto::blstrs::hash_to_curve::{ExpandMsgXmd, HashToCurve};
+    use ark_serialize::CanonicalSerialize;
+    use tiny_keccak::{Hasher, Keccak};
+
     // Identity = "test_auction" (mapped to interval/ID)
     let bid_amount_usd = 20;
-    // ... Encryption logic (implemented above in placeholder) ...
-    // Reuse u_bytes from previous step placeholder context
-    // Actually passing u_bytes and v_bytes logic here.
     
-    // NOTE: Need to properly implement encryption here or mock it.
-    // Assuming helpers exist or code is inline.
+    // H(ID)
+    let dst = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
+    let h_id = <G1Projective as HashToCurve<ExpandMsgXmd<sha2::Sha256>>>::hash_to_curve(id_bytes, dst);
     
-    let u_hex = hex::encode(&u_bytes);
-    // V calculation (placeholder)
-    // We need 'key_hash' from pairing.
-    // let k = ...;
-    // let v = xor(message, hash(k));
-    // For V0 test, let's just send dummy V and valid U.
-    // Decryption will fail if we don't have matching secret. 
-    // BUT we want to verify flow.
-    // So we need valid encryption.
+    // U = r * G2 (Wait! u_bytes in submit_bid is G1??)
+    // Check auction.move: submit_bid(..., u_bytes: vector<u8>, ...)
+    // In auction.move:
+    // let u_opt = crypto_algebra::deserialize<G1, FormatG1Uncompr>(&u_bytes);
+    // So U is G1.
+    // In IBE: U = r * P (where P is generator).
+    // If U is G1, then P is G1 generator.
+    // MPK = s * P. So MPK is G1.
+    // Check auction.move create_auction: mpk_bytes is G1.
+    // Check smoke test setup:
+    // let mpk = G2Projective::generator() * s; -> WRONG. Should be G1.
+    // I need to correct Setup and Encrypt.
+
+    // CORRECT SETUP:
+    // G1 is P_pub (MPK).
+    // G2 is Q_id (Identity).
+    // Start again.
     
-    // Let's implement full encryption in the test helper functions later.
-    let v_bytes = vec![0u8; 8]; // Dummy
+    // Setup (Redo)
+    let mpk = G1Projective::generator() * s;
+    let mpk_bytes = mpk.to_uncompressed(); // Matches FormatG1Uncompr
+
+    // Encrypt
+    // U = r * G1
+    let r = Scalar::random(&mut rng);
+    let u = G1Projective::generator() * r;
+    let u_bytes = u.to_uncompressed();
+
+    // Q_id = HashToG2(ID) -> G2
+    let dst_g2 = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_";
+    let q_id = <G2Projective as HashToCurve<ExpandMsgXmd<sha2::Sha256>>>::hash_to_curve(id_bytes, dst_g2);
+
+    // K = e(MPK, Q_id)^r = e(s*G1, H(ID))^r = e(G1, H(ID))^(sr)
+    // Decryption: e(U, Sig) = e(r*G1, s*H(ID)) = e(G1, H(ID))^(rs)
+    // Matches!
+    
+    let pair_gt = pairing(&mpk, &q_id);
+    let k_gt = pair_gt * r;
+
+    // Serialize K
+    let mut k_bytes = Vec::new();
+    k_gt.serialize_uncompressed(&mut k_bytes).unwrap();
+
+    // Hash K
+    let mut sha3 = Keccak::v256();
+    sha3.update(&k_bytes);
+    let mut mask = [0u8; 32];
+    sha3.finalize(&mut mask);
+
+    // XOR V
+    // Message M = USD Amount? No, "amount_usd" is Public argument to submit_bid.
+    // Encrypted bid usually contains the bid amount (if sealed bid).
+    // In auction.move: submit_bid(amount_usd, ...) -> this amount is LOCKED coins.
+    // But the *actual bid* is inside the encrypted message?
+    // Move contract:
+    // reveal_bids: let bid_amount = u64_from_bytes(&decrypted_bytes);
+    // So M is 8 bytes of bid_amount.
+    // public arg `amount_usd` is the payment lock.
+    // Typically bid >= amount_lock? Or bid == amount_lock?
+    // In auction.move: if (coin::value(&bid.payment) >= bid_amount).
+    // So M contains the TRUE bid.
+    // Let's set M = 20 (u64).
+    let m_val: u64 = 20;
+    let m_bytes = m_val.to_le_bytes();
+    // Pad to match ciphertext length? XOR works on bytes.
+    // M len is 8. Mask is 32.
+    // XOR first 8 bytes.
+    let mut v_bytes = Vec::new();
+    for i in 0..8 {
+        v_bytes.push(m_bytes[i] ^ mask[i]);
+    }
     let v_hex = hex::encode(&v_bytes);
+    let u_hex = hex::encode(&u_bytes);
 
     let status = std::process::Command::new(&aptos_cli_path)
         .arg("move")
@@ -248,7 +307,6 @@ async fn test_auction_flow() -> Result<()> {
         .arg("--args")
         .arg(format!("address:{}", root_account.address().to_hex_literal()))
         .arg(format!("u64:{}", interval))
-        .arg(format!("hex:{}", hex::encode(id_bytes)))
         .arg("--url")
         .arg(url.to_string())
         .arg("--private-key")

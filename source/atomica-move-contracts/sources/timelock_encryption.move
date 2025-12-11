@@ -6,6 +6,7 @@ module atomica::timelock_encryption {
         Self, Element, hash_to, pairing, serializep,
         zero, one, eq, mul, add, sub, neg, from_u64
     };
+    use aptos_std::ibe;
     use aptos_std::bls12381_algebra::{
         G1, G2, Gt, Fr,
         HashG2XmdSha256SswuRo,
@@ -54,18 +55,8 @@ module atomica::timelock_encryption {
         encrypted_msg: &EncryptedMessage,
         signature: &Element<G2>
     ): vector<u8> {
-        // 1. Compute Shared Secret K = e(U, Sig)
-        let k_gt = pairing<G1, G2, Gt>(&encrypted_msg.u, signature);
-
-        // 2. Serialize K to get bytes for hashing
-        // Ideally we use a robust KDF, but simple hash often suffices for "Hashed ElGamal/IBE" variants.
-        let k_bytes = crypto_algebra::serialize<Gt, FormatGt>(&k_gt);
-        
-        // 3. Derive Mask S' = Keccak256(K_bytes)
-        let mask = keccak256(k_bytes);
-
-        // 4. M = C XOR S'
-        xor(&encrypted_msg.ciphertext, &mask)
+        // Use native IBE decryption which is gas-optimized
+        ibe::decrypt<G1, G2, Gt>(&encrypted_msg.u, signature, encrypted_msg.ciphertext)
     }
 
     /// Helper to XOR two vectors of bytes.

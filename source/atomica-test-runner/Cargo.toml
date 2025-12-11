@@ -17,6 +17,9 @@ once_cell = "1.18"
 group = "0.13"
 ff = "0.13"
 blstrs = { version = "0.7.1", features = ["serde"] }
+tiny-keccak = { version = "2.0", features = ["keccak"] }
+ark-serialize = "0.4" # Check compatibility with blstrs 0.7
+sha2 = "0.10"
 # ethers = { version = "2.0", features = ["ws", "ipc", "openssl"] }
 
 # Aptos dependencies pinned to a specific commit
