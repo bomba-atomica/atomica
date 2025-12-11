@@ -9,11 +9,14 @@ anyhow = "1.0"
 tokio = { version = "1.35", features = ["full"] }
 tempfile = "3.10"
 portpicker = "0.1.1"
-reqwest = { version = "0.11.11", features = ["json", "blocking"] }
+reqwest = { version = "=0.11.11", features = ["json", "blocking"] }
 serde_json = "1.0"
 hex = "0.4"
 rand = "0.8"
 once_cell = "1.18"
+group = "0.13"
+ff = "0.13"
+blstrs = { version = "0.7.1", features = ["serde"] }
 # ethers = { version = "2.0", features = ["ws", "ipc", "openssl"] }
 
 # Aptos dependencies pinned to a specific commit
@@ -27,9 +30,19 @@ aptos-framework = { git = "https://github.com/0LNetworkCommunity/zapatos.git", b
 aptos-config = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
 aptos-infallible = { git = "https://github.com/0LNetworkCommunity/zapatos.git", branch = "tlock-poc-1.38.5" }
 
+[patch."https://github.com/0LNetworkCommunity/zapatos.git"]
+aptos-forge = { path = "../zapatos/testsuite/forge" }
+aptos-sdk = { path = "../zapatos/sdk" }
+aptos-types = { path = "../zapatos/types" }
+aptos-crypto = { path = "../zapatos/crates/aptos-crypto" }
+aptos-logger = { path = "../zapatos/crates/aptos-logger" }
+aptos-cached-packages = { path = "../zapatos/aptos-move/framework/cached-packages" }
+aptos-framework = { path = "../zapatos/aptos-move/framework" }
+aptos-config = { path = "../zapatos/config" }
+aptos-infallible = { path = "../zapatos/crates/aptos-infallible" }
 
 [patch.crates-io]
-# version 0.6 at commit 444eb13579c733089453806743b19f1ea2dce1c0 did not expose 'run_bench_with_bencher' as a public function, which we need
+# ... previous patches stay here ...
 dudect-bencher = { git = "https://github.com/aptos-labs/dudect-bencher", rev = "9515677c83c58884c1a8c764251753269d46fc0e" }
 serde-reflection = { git = "https://github.com/aptos-labs/serde-reflection", rev = "73b6bbf748334b71ff6d7d09d06a29e3062ca075" }
 merlin = { git = "https://github.com/aptos-labs/merlin" }
