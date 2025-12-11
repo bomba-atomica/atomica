@@ -1,85 +1,44 @@
-import { useState, useEffect } from 'react';
-import { ethers } from 'ethers';
-import { submitRemoteFaucet, getNonce, computeFaucetDigest } from '../lib/aptos';
+import { useState } from 'react';
+import { submitFaucet } from '../lib/aptos';
 
-interface FaucetProps {
-    account: string;
-}
-
-export function Faucet({ account }: FaucetProps) {
+export function Faucet({ account }: { account: string }) {
     const [loading, setLoading] = useState(false);
-    const [status, setStatus] = useState<string | null>(null);
-    const [nonce, setNonce] = useState<number>(0);
+    const [txHash, setTxHash] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (account) {
-            getNonce(account).then(setNonce);
-        }
-    }, [account]);
-
-    const handleRequest = async () => {
-        if (!window.ethereum) return;
+    const handleFaucet = async () => {
+        if (!account) return;
         setLoading(true);
-        setStatus("Fetching nonce...");
-
+        setTxHash(null);
         try {
-            // Refresh nonce to be sure
-            const currentNonce = await getNonce(account);
-            setNonce(currentNonce);
-
-            const provider = new ethers.BrowserProvider(window.ethereum);
-            const signer = await provider.getSigner();
-
-            setStatus(`Signing Faucet Request (Nonce: ${currentNonce})...`);
-
-            // 1. Compute Inner Digest (matches Move)
-            const digestBytes = computeFaucetDigest(currentNonce);
-
-            // 2. Sign Outer Digest (MetaMask does the prefixinging)
-            // We pass the raw bytes of the digest so ethers treats it as binary data.
-            const signature = await signer.signMessage(digestBytes);
-
-            setStatus("Submitting to Relayer...");
-
-            // 3. Submit
-            const pendingTx = await submitRemoteFaucet(
-                account,
-                signature,
-                currentNonce
-            );
-
-            setStatus(`Transaction submitted: ${pendingTx.hash}`);
-
-            // Update nonce locally for UI optimistically?
-            // setNonce(currentNonce + 1);
-
-        } catch (error: any) {
-            console.error(error);
-            setStatus(`Error: ${error.message || "Unknown error"}`);
+            const result = await submitFaucet(account);
+            setTxHash(typeof result === 'string' ? result : (result as any).hash);
+        } catch (e) {
+            console.error(e);
+            alert("Faucet failed: " + e);
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="text-center">
-            <p className="mb-4 text-gray-300">
-                You can request 10 FAKEETH and 100,000 FAKEUSD to participate in auctions.
+        <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
+            <h2 className="text-xl font-bold mb-4 text-purple-400">1. Get Testnet Funds</h2>
+            <p className="text-gray-400 mb-4 text-sm">
+                Request standard Aptos Coin (APT) to your derived address to pay for gas.
             </p>
-            <div className="mb-4 text-sm text-gray-500 font-mono">
-                Current Nonce: {nonce}
-            </div>
+
             <button
-                onClick={handleRequest}
+                onClick={handleFaucet}
                 disabled={loading}
-                className={`w-full py-2 rounded text-white font-bold transition ${loading ? "bg-gray-600 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"
+                className={`w-full py-2 px-4 rounded font-bold ${loading ? 'bg-gray-600 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'
                     }`}
             >
-                {loading ? "Processing..." : "Request Assets (Sign & Submit)"}
+                {loading ? "Requesting..." : "Request Funds"}
             </button>
-            {status && (
-                <div className="mt-4 text-sm font-mono text-yellow-400 break-all p-2 bg-gray-900 rounded">
-                    {status}
+
+            {txHash && (
+                <div className="mt-4 p-2 bg-gray-900 rounded text-xs break-all font-mono text-green-400">
+                    Success! Hash/ID: {txHash}
                 </div>
             )}
         </div>

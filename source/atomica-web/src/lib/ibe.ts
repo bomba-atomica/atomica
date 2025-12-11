@@ -1,5 +1,18 @@
 import { PointG1, PointG2, pairing, utils } from '@noble/bls12-381';
 
+// Alias for components
+export { ibeEncrypt as encrypt };
+
+export async function generateSystemParameters(): Promise<{ mpk: Uint8Array, msk: Uint8Array }> {
+    const msk = utils.randomPrivateKey();
+    const mskBig = BigInt("0x" + Buffer.from(msk).toString('hex'));
+    const mpkPoint = PointG1.BASE.multiply(mskBig);
+    return {
+        mpk: mpkPoint.toRawBytes(true),
+        msk: msk
+    };
+}
+
 // Hashed IBE Encrypt
 // MPK: G1 Point (Compressed bytes)
 // ID: Arbitrary bytes (Auction End Time for us)

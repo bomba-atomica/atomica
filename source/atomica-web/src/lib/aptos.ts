@@ -1,221 +1,251 @@
-import { Aptos, AptosConfig, Network, Account, AccountAddress, Serializer } from '@aptos-labs/ts-sdk';
+import {
+    Aptos,
+    AptosConfig,
+    Network,
+    AccountAddress,
+    Serializer,
+    InputGenerateTransactionPayloadData,
+    AccountAuthenticator
+} from '@aptos-labs/ts-sdk';
 import { ethers } from 'ethers';
+import { sha3_256 } from '@noble/hashes/sha3';
 
 const NODE_URL = "http://127.0.0.1:8080";
-const FAUCET_URL = "http://127.0.0.1:8081";
-
-// Contract Address (Assume deployed at 0x1 or specifically 'atomica')
-// For now, let's assume it's under the account we deploy to.
-// Placeholder: "0xaddr"
-export const CONTRACT_ADDR = "0x1"; // Update this after deployment!
+export const CONTRACT_ADDR = "0x1";
 
 const config = new AptosConfig({ network: Network.LOCAL, fullnode: NODE_URL });
 export const aptos = new Aptos(config);
 
-let relayer: Account | null = null;
-
-// Prefixes matches Move
-const PREFIX_FAUCET = 1;
-const PREFIX_CREATE_AUCTION = 2;
-const PREFIX_BID = 3;
-
-export async function getRelayer(): Promise<Account> {
-    if (relayer) return relayer;
-    relayer = Account.generate();
-    console.log("Relayer Address:", relayer.accountAddress.toString());
-    try {
-        await fetch(`${FAUCET_URL}/mint?amount=100000000&address=${relayer.accountAddress.toString()}`, { method: 'POST' });
-    } catch (e) {
-        console.error("Failed to fund relayer.", e);
-    }
-    return relayer;
+function sha3(bytes: Uint8Array): Uint8Array {
+    return sha3_256(bytes);
 }
 
-export async function getNonce(ethAddress: string): Promise<number> {
-    // Hex string to bytes
-    const ethAddressBytes = ethers.getBytes(ethAddress);
+function constructSIWEMessage(
+    domain: string,
+    address: string,
+    statement: string,
+    uri: string,
+    version: string,
+    chainId: number,
+    nonce: string,
+    issuedAt: string
+): string {
+    return `${domain} wants you to sign in with your Ethereum account:
+${address}
 
-    // View function: atomica::registry::get_nonce
-    // Arg: vector<u8> (eth_address)
-    try {
-        const result = await aptos.view({
-            payload: {
-                function: `${CONTRACT_ADDR}::registry::get_nonce`,
-                functionArguments: [ethAddressBytes], // SDK handles generic vector<u8>? Or HexString?
-                // SDK usually expects hex string for vector<u8> if it's input arguments?
-                // Let's pass HexInput.
-            }
-        });
-        // Result is [nonce]
-        return Number(result[0]);
-    } catch (e) {
-        console.error("Failed to fetch nonce", e);
-        return 0;
-    }
+${statement}
+
+URI: ${uri}
+Version: ${version}
+Chain ID: ${chainId}
+Nonce: ${nonce}
+Issued At: ${issuedAt}`;
 }
 
-// Computes the inner digest for Faucet action matching Move
-export function computeFaucetDigest(nonce: number): Uint8Array {
+/**
+ * Derives the Atomica (Aptos) address for a given Ethereum address 
+ * using the `ethereum_derivable_account` scheme.
+ */
+export async function getDerivedAddress(ethAddress: string): Promise<AccountAddress> {
     const serializer = new Serializer();
-    serializer.serializeU8(PREFIX_FAUCET);
-    serializer.serializeU64(BigInt(nonce));
-    const bytes = serializer.toUint8Array();
+    // FunctionInfo { module_address, module_name, function_name }
+    AccountAddress.from("0x1").serialize(serializer);
+    serializer.serializeStr("ethereum_derivable_account");
+    serializer.serializeStr("authenticate");
+    const funcInfoBcs = serializer.toUint8Array();
 
-    // Keccak256
-    const hash = ethers.keccak256(bytes);
-    return ethers.getBytes(hash);
+    const identitySerializer = new Serializer();
+    const ethBytes = ethers.getBytes(ethAddress);
+    identitySerializer.serializeBytes(ethBytes);
+    const identityBcs = identitySerializer.toUint8Array();
+
+    const preImage = new Uint8Array(funcInfoBcs.length + identityBcs.length + 1);
+    preImage.set(funcInfoBcs);
+    preImage.set(identityBcs, funcInfoBcs.length);
+    preImage.set([5], funcInfoBcs.length + identityBcs.length); // Scheme 5
+
+    const hash = sha3(preImage);
+    return AccountAddress.from(hash);
 }
 
-export async function submitRemoteFaucet(
-    ethAddress: string,
-    signature: string,
-    nonce: number
-) {
-    const relayerAccount = await getRelayer();
-    const ethAddressBytes = ethers.getBytes(ethAddress);
-    const signatureBytes = ethers.getBytes(signature); // 65 bytes
+/**
+ * Calculates the digest expected by the Move module.
+ * sha3( "APTOS::AASigningData" ++ BCS(AASigningData { original_signing_message, function_info }) )
+ */
+function calculateAbstractDigest(signingMessage: Uint8Array): Uint8Array {
+    // 1. Serialize AASigningData
+    const serializer = new Serializer();
 
+    // Variant "V1" (index 0)
+    serializer.serializeU32AsUleb128(0);
+
+    // original_signing_message: vector<u8>
+    serializer.serializeBytes(signingMessage);
+
+    // function_info: FunctionInfo
+    AccountAddress.from("0x1").serialize(serializer);
+    serializer.serializeStr("ethereum_derivable_account");
+    serializer.serializeStr("authenticate");
+
+    const bcsData = serializer.toUint8Array();
+
+    // 2. Prepend Salt "APTOS::AASigningData"
+    const salt = new TextEncoder().encode("APTOS::AASigningData");
+    const saltHash = sha3(salt);
+
+    const combined = new Uint8Array(saltHash.length + bcsData.length);
+    combined.set(saltHash);
+    combined.set(bcsData, saltHash.length);
+
+    return sha3(combined);
+}
+
+class CustomAbstractAuthenticator extends AccountAuthenticator {
+    constructor(
+        public digest: Uint8Array,
+        public signature: Uint8Array,
+        public ethAddress: Uint8Array
+    ) { super(); }
+
+    serialize(serializer: Serializer): void {
+        // Variant 4 (Abstract)
+        serializer.serializeU32AsUleb128(4);
+
+        // FunctionInfo
+        AccountAddress.from("0x1").serialize(serializer);
+        serializer.serializeStr("ethereum_derivable_account");
+        serializer.serializeStr("authenticate");
+
+        // AuthData
+        // Variant 1 (DerivableV1)
+        serializer.serializeU32AsUleb128(1);
+
+        // digest (vector<u8>)
+        serializer.serializeBytes(this.digest);
+
+        // signature (vector<u8>)
+        serializer.serializeBytes(this.signature);
+
+        // public_key (vector<u8>) - SIWEAbstractPublicKey serialized
+        const pkSerializer = new Serializer();
+        pkSerializer.serializeBytes(this.ethAddress); // ethereum_address
+        pkSerializer.serializeBytes(new TextEncoder().encode(window.location.host)); // domain
+        const pkBcs = pkSerializer.toUint8Array();
+
+        serializer.serializeBytes(pkBcs);
+    }
+}
+
+export async function submitNativeTransaction(
+    ethAddress: string,
+    payload: InputGenerateTransactionPayloadData
+) {
+    if (!window.ethereum) throw new Error("MetaMask not found");
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+
+    const senderAddress = await getDerivedAddress(ethAddress);
+
+    // 1. Build Transaction
     const transaction = await aptos.transaction.build.simple({
-        sender: relayerAccount.accountAddress,
-        data: {
-            function: `${CONTRACT_ADDR}::remote_actions::remote_faucet`,
-            functionArguments: [
-                ethAddressBytes, // vector<u8>
-                signatureBytes,  // vector<u8>
-                nonce
-            ]
-        }
+        sender: senderAddress,
+        data: payload,
     });
 
-    const pendingTx = await aptos.signAndSubmitTransaction({
-        signer: relayerAccount,
-        transaction
+    // 2. Get Signing Message (Prefix + BCS)
+    const rawTxn = transaction.rawTransaction;
+    const rawTxnBytes = new Serializer();
+    rawTxn.serialize(rawTxnBytes);
+    const rawTxnBcs = rawTxnBytes.toUint8Array();
+
+    const rawTxnSalt = sha3(new TextEncoder().encode("APTOS::RawTransaction"));
+    const originalSigningMessage = new Uint8Array(rawTxnSalt.length + rawTxnBcs.length);
+    originalSigningMessage.set(rawTxnSalt);
+    originalSigningMessage.set(rawTxnBcs, rawTxnSalt.length);
+
+    // 3. Calculate Abstract Digest
+    const digest = calculateAbstractDigest(originalSigningMessage);
+    const digestHex = ethers.hexlify(digest);
+
+    // 4. SIWE
+    const ledgerInfo = await aptos.getLedgerInfo();
+    const siwe = constructSIWEMessage(
+        window.location.host,
+        ethAddress,
+        "Approve Atomica Transaction",
+        window.location.origin,
+        "1",
+        ledgerInfo.chain_id,
+        digestHex,
+        new Date().toISOString()
+    );
+
+    // 5. Sign
+    const signature = await signer.signMessage(siwe);
+
+    // 6. Submit
+    const signatureBytes = ethers.getBytes(signature);
+    const ethBytes = ethers.getBytes(ethAddress);
+
+    const auth = new CustomAbstractAuthenticator(digest, signatureBytes, ethBytes);
+
+    const pendingTx = await aptos.transaction.submit.simple({
+        transaction,
+        senderAuthenticator: auth
     });
 
     return pendingTx;
 }
 
-// Compute Digest for Create Auction (Prefix | Nonce | Params...)
-export function computeCreateAuctionDigest(
-    nonce: number,
-    amountEth: bigint,
-    minPrice: bigint,
-    duration: bigint,
-    mpk: Uint8Array
-): Uint8Array {
-    const serializer = new Serializer();
-    serializer.serializeU8(PREFIX_CREATE_AUCTION);
-    serializer.serializeU64(BigInt(nonce));
-    serializer.serializeU64(amountEth);
-    serializer.serializeU64(minPrice);
-    serializer.serializeU64(duration);
-    serializer.serializeFixedBytes(mpk); // Raw bytes, matching Move's vector::append
+export async function submitFaucet(ethAddress: string) {
+    // Assuming `atomica::actions::faucet`
+    // Note: User called `remote_faucet` before which calls `aptos_account::transfer`?
+    // Move code: `remote_faucet` calls `coin::transfer`?
+    // We should call `atomica::actions::faucet` if it exists, or just transfer?
+    // If the valid address is derived, we need initial gas.
+    // The "Faucet" component was minting to RELAYER. Now we mint to USER.
+    // In `getRelayer` we called local faucet service.
+    // Here we should probably call the local faucet service directly via fetch for the derived address?
+    // IF `submitFaucet` is meant to be the on-chain faucet, we use transaction.
+    // But `atomica-web` Faucet component was minting coins.
+    // Let's use the local faucet service for the `submitFaucet` action to ensure they have gas.
+    // Actually, `atomica-web` Faucet.tsx seems to use the relayer to *trigger* a faucet?
+    // The old `submitRemoteFaucet` called `remote_faucet` on chain.
+    // For Native, we should just use the REST Faucet API to fund the derived address.
 
-    // Note: Move `mpk_bytes` is raw bytes.
-
-    const bytes = serializer.toUint8Array();
-    const hash = ethers.keccak256(bytes);
-    return ethers.getBytes(hash);
+    const derived = await getDerivedAddress(ethAddress);
+    const FAUCET_URL = "http://127.0.0.1:8081";
+    await fetch(`${FAUCET_URL}/mint?amount=100000000&address=${derived.toString()}`, { method: 'POST' });
+    return { hash: "faucet-executed-via-api" };
 }
 
-export async function submitRemoteCreateAuction(
+export async function submitCreateAuction(
     ethAddress: string,
-    signature: string,
-    nonce: number,
     amountEth: bigint,
     minPrice: bigint,
     duration: bigint,
     mpk: Uint8Array
 ) {
-    const relayerAccount = await getRelayer();
-    const ethAddressBytes = ethers.getBytes(ethAddress);
-    const signatureBytes = ethers.getBytes(signature);
-
-    const transaction = await aptos.transaction.build.simple({
-        sender: relayerAccount.accountAddress,
-        data: {
-            function: `${CONTRACT_ADDR}::remote_actions::remote_create_auction`,
-            functionArguments: [
-                ethAddressBytes,
-                signatureBytes,
-                nonce,
-                amountEth,
-                minPrice,
-                duration,
-                mpk // SDK handles Uint8Array as vector<u8>
-            ]
-        }
-    });
-
-    return await aptos.signAndSubmitTransaction({
-        signer: relayerAccount,
-        transaction
+    return await submitNativeTransaction(ethAddress, {
+        function: `${CONTRACT_ADDR}::auction::create_auction`,
+        functionArguments: [amountEth, minPrice, duration, mpk]
     });
 }
 
-// Compute Digest for Bid (Prefix | Nonce | Seller | Amount | U | V)
-export function computeBidDigest(
-    nonce: number,
-    sellerAddr: string, // "0x..."
-    amountUsd: bigint,
-    u: Uint8Array,
-    v: Uint8Array
-): Uint8Array {
-    const serializer = new Serializer();
-    serializer.serializeU8(PREFIX_BID);
-    serializer.serializeU64(BigInt(nonce));
-
-    // Seller Addr: Move uses `bcs::to_bytes(&address)`.
-    // BCS address is 32 bytes without length prefix?
-    // Aptos SDK AccountAddress toBytes() matches BCS?
-    // Let's use AccountAddress.fromString(sellerAddr).bcsToBytes()
-    // Or serializer.serializeFixedBytes(AccountAddress...)
-
-    const sellerAddress = AccountAddress.fromString(sellerAddr);
-    // serializeFixedBytes expects Uint8Array? 
-    // AccountAddress struct has `data`.
-    serializer.serializeFixedBytes(sellerAddress.data);
-
-    serializer.serializeU64(amountUsd);
-    serializer.serializeFixedBytes(u); // Raw append
-    serializer.serializeFixedBytes(v); // Raw append
-
-    const bytes = serializer.toUint8Array();
-    const hash = ethers.keccak256(bytes);
-    return ethers.getBytes(hash);
-}
-
-export async function submitRemoteBid(
+export async function submitBid(
     ethAddress: string,
-    signature: string,
-    nonce: number,
     sellerAddr: string,
     amountUsd: bigint,
     u: Uint8Array,
     v: Uint8Array
 ) {
-    const relayerAccount = await getRelayer();
-    const ethAddressBytes = ethers.getBytes(ethAddress);
-    const signatureBytes = ethers.getBytes(signature);
-
-    const transaction = await aptos.transaction.build.simple({
-        sender: relayerAccount.accountAddress,
-        data: {
-            function: `${CONTRACT_ADDR}::remote_actions::remote_bid`,
-            functionArguments: [
-                ethAddressBytes,
-                signatureBytes,
-                nonce,
-                sellerAddr,
-                amountUsd,
-                u,
-                v
-            ]
-        }
-    });
-
-    return await aptos.signAndSubmitTransaction({
-        signer: relayerAccount,
-        transaction
+    return await submitNativeTransaction(ethAddress, {
+        function: `${CONTRACT_ADDR}::auction::bid`,
+        functionArguments: [
+            sellerAddr,
+            amountUsd,
+            u,
+            v
+        ]
     });
 }
