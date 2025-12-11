@@ -15,7 +15,7 @@ const CONTRACTS_DIR = join(WORKSPACE_ROOT, 'source/atomica-move-contracts');
 const WEB_DIR = join(WORKSPACE_ROOT, 'source/atomica-web');
 
 const DEPLOYER_PK = "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
-const DEPLOYER_ADDR = "0xb0b3bd3e06a35043681439733076dd8f731c2847c13038a83427429184ba2849";
+const DEPLOYER_ADDR = "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 
 async function main() {
     console.log("🚀 Starting Atomica Demo Orchestrator (Node.js)...");
@@ -50,7 +50,14 @@ async function main() {
         "run", "dev", "--",
         "--port", "4173",
         "--host"
-    ], { cwd: WEB_DIR, stdio: 'inherit' });
+    ], {
+        cwd: WEB_DIR,
+        stdio: 'inherit',
+        env: {
+            ...process.env,
+            VITE_CONTRACT_ADDRESS: DEPLOYER_ADDR
+        }
+    });
 
     // Wait for Webapp Health
     console.log("⏳ Waiting for Webapp availability...");

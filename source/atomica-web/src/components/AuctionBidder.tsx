@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ethers } from 'ethers';
 import { submitBid } from '../lib/aptos';
 import * as ibe from '../lib/ibe';
 
@@ -18,11 +19,12 @@ export function AuctionBidder({ account }: AuctionBidderProps) {
         try {
             // 1. Encrypt Bid (IBE)
             // Identity = Auction ID (here we use Seller Address as ID for simplicity in Demo)
-            const identity = sellerAddr;
+            const identityBytes = ethers.getBytes(sellerAddr);
 
             // Generate dummy MPK for demo purposes (real encryption logic handles point generation)
             const { mpk } = await ibe.generateSystemParameters();
-            const { u, v } = await ibe.encrypt(bidAmount, identity, mpk);
+            const payload = new TextEncoder().encode(bidAmount);
+            const { u, v } = await ibe.encrypt(mpk, identityBytes, payload);
 
             // 2. Submit
             setStatus("Please sign the transaction...");

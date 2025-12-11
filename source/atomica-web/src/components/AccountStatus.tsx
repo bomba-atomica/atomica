@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { aptos, CONTRACT_ADDR, getDerivedAddress } from '../lib/aptos';
+import { aptos, getDerivedAddress } from '../lib/aptos';
 
 interface AccountStatusProps {
     ethAddress: string | null;

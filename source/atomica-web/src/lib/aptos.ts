@@ -11,7 +11,8 @@ import { ethers } from 'ethers';
 import { sha3_256 } from '@noble/hashes/sha3';
 
 const NODE_URL = "http://127.0.0.1:8080/v1";
-export const CONTRACT_ADDR = "0x1";
+// 127.0.0.1:8080/v1
+export const CONTRACT_ADDR = import.meta.env.VITE_CONTRACT_ADDRESS || "0x1";
 
 const config = new AptosConfig({ network: Network.LOCAL, fullnode: NODE_URL });
 export const aptos = new Aptos(config);
@@ -20,7 +21,7 @@ function sha3(bytes: Uint8Array): Uint8Array {
     return sha3_256(bytes);
 }
 
-function constructSIWEMessage(
+export function constructSIWEMessage(
     domain: string,
     address: string,
     statement: string,
@@ -101,11 +102,26 @@ function calculateAbstractDigest(signingMessage: Uint8Array): Uint8Array {
 }
 
 class CustomAbstractAuthenticator extends AccountAuthenticator {
+    public digest: Uint8Array;
+    public signature: Uint8Array;
+    public ethAddress: Uint8Array;
+    public scheme: string;
+    public issuedAt: string;
+
     constructor(
-        public digest: Uint8Array,
-        public signature: Uint8Array,
-        public ethAddress: Uint8Array
-    ) { super(); }
+        digest: Uint8Array,
+        signature: Uint8Array,
+        ethAddress: Uint8Array,
+        scheme: string,
+        issuedAt: string
+    ) {
+        super();
+        this.digest = digest;
+        this.signature = signature;
+        this.ethAddress = ethAddress;
+        this.scheme = scheme;
+        this.issuedAt = issuedAt;
+    }
 
     serialize(serializer: Serializer): void {
         // Variant 4 (Abstract)
@@ -117,14 +133,23 @@ class CustomAbstractAuthenticator extends AccountAuthenticator {
         serializer.serializeStr("authenticate");
 
         // AuthData
-        // Variant 1 (DerivableV1)
+        // Variant 1 (DerivableV1) for AbstractionAuthData?
+        // Assuming 1 is correct based on previous code being '1'.
         serializer.serializeU32AsUleb128(1);
 
         // digest (vector<u8>)
         serializer.serializeBytes(this.digest);
 
-        // signature (vector<u8>)
-        serializer.serializeBytes(this.signature);
+        // abstract_signature (vector<u8>) -> Needs to be BCS SIWEAbstractSignature
+        const sigSerializer = new Serializer();
+        // SIWEAbstractSignature::MessageV2 (Variant 1)
+        sigSerializer.serializeU32AsUleb128(1);
+        sigSerializer.serializeStr(this.scheme);
+        sigSerializer.serializeStr(this.issuedAt);
+        sigSerializer.serializeBytes(this.signature);
+
+        const abstractSignatureBytes = sigSerializer.toUint8Array();
+        serializer.serializeBytes(abstractSignatureBytes);
 
         // public_key (vector<u8>) - SIWEAbstractPublicKey serialized
         const pkSerializer = new Serializer();
@@ -169,15 +194,35 @@ export async function submitNativeTransaction(
 
     // 4. SIWE
     const ledgerInfo = await aptos.getLedgerInfo();
+    const issuedAt = new Date().toISOString();
+    // Protocol has trailing colon, e.g. "http:", we want "http"
+    const scheme = window.location.protocol.slice(0, -1);
+    const domain = window.location.host;
+
+    // Determine Network Name based on Chain ID
+    let networkName = `custom network: ${ledgerInfo.chain_id}`;
+    if (ledgerInfo.chain_id === 1) networkName = "mainnet";
+    else if (ledgerInfo.chain_id === 2) networkName = "testnet";
+    else if (ledgerInfo.chain_id === 4) networkName = "local";
+
+    // Extract Entry Function Name
+    // payload is InputGenerateTransactionPayloadData which can be InputEntryFunctionData
+    // We expect { function: "0x...::mod::func", ... }
+    const entryFunction = (payload as any).function;
+    if (!entryFunction) throw new Error("Could not determine entry function name from payload");
+
+    // Construct Strict Statement
+    const statement = `Please confirm you explicitly initiated this request from ${domain}. You are approving to execute transaction ${entryFunction} on Aptos blockchain (${networkName}).`;
+
     const siwe = constructSIWEMessage(
-        window.location.host,
+        domain,
         ethAddress,
-        "Approve Atomica Transaction",
+        statement,
         window.location.origin,
         "1",
         ledgerInfo.chain_id,
         digestHex,
-        new Date().toISOString()
+        issuedAt
     );
 
     // 5. Sign
@@ -187,7 +232,7 @@ export async function submitNativeTransaction(
     const signatureBytes = ethers.getBytes(signature);
     const ethBytes = ethers.getBytes(ethAddress);
 
-    const auth = new CustomAbstractAuthenticator(digest, signatureBytes, ethBytes);
+    const auth = new CustomAbstractAuthenticator(digest, signatureBytes, ethBytes, scheme, issuedAt);
 
     try {
         const pendingTx = await aptos.transaction.submit.simple({
