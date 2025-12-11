@@ -54,3 +54,12 @@ futures-macro = { git = "https://github.com/aptos-labs/futures-rs", branch = "ba
 # We have to keep this shim until everything uses the same jemalloc dependency.
 jemalloc-sys = { git = "https://github.com/aptos-labs/jemalloc-sys-shim", rev = "e0920246dd74303fab9a14b990768c6ac990a59b" }
 
+[profile.dev]
+opt-level = 0
+debug = 1
+split-debuginfo = "unpacked"
+incremental = true
+
+[profile.test]
+inherits = "dev"
+
