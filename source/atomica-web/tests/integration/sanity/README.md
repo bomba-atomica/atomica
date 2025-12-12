@@ -35,8 +35,8 @@ These tests follow **clean room testing** principles:
 ---
 
 ### 2. `faucet-ed25519.test.ts`
-**Purpose**: Account funding via faucet
-**What it tests**: The faucet can fund newly generated Ed25519 accounts
+**Purpose**: Ed25519 account funding via faucet
+**What it tests**: The faucet can fund newly generated Ed25519 accounts (traditional Aptos accounts)
 
 **Key assertions**:
 - New accounts start with 0 balance
@@ -49,13 +49,41 @@ These tests follow **clean room testing** principles:
 - Default funding: 100,000,000 octas (1 APT)
 
 **Use this test to**:
-- Learn how to generate new accounts
+- Learn how to generate Ed25519 accounts
 - Understand the faucet funding flow
 - Reference account balance queries
 
 ---
 
-### 3. `transfer.test.ts`
+### 3. `faucet-secp256k1.test.ts`
+**Purpose**: SECP256k1 account funding via faucet
+**What it tests**: The faucet can fund newly generated SECP256k1 accounts (Ethereum-compatible)
+
+**Key assertions**:
+- SECP256k1 accounts can be generated and funded via faucet
+- Faucet is key-type agnostic (treats SECP256k1 same as Ed25519)
+- Ethereum private keys can be imported and funded on Aptos
+- Account creation happens automatically during faucet funding
+
+**Platform behaviors documented**:
+- SECP256k1 accounts work identically to Ed25519 for faucet funding
+- New SECP256k1 accounts return balance 0 before funding
+- Faucet automatically creates SECP256k1 accounts on-chain
+- Ethereum private keys produce different addresses on Aptos (SHA3-256 vs Keccak-256)
+
+**Test scenarios**:
+1. **Generated SECP256k1 account**: Create new random SECP256k1 account and fund it
+2. **Ethereum private key import**: Import Ethereum private key and fund the derived Aptos account
+
+**Use this test to**:
+- Verify SECP256k1 account support in the faucet
+- Test Ethereum private key compatibility
+- Confirm equal treatment of all key types
+- Understand address derivation differences
+
+---
+
+### 4. `transfer.test.ts`
 **Purpose**: Simple APT transfer between accounts
 **What it tests**: Basic token transfers using `0x1::aptos_account::transfer`
 
@@ -78,7 +106,7 @@ These tests follow **clean room testing** principles:
 
 ---
 
-### 4. `deploy-contract.test.ts`
+### 5. `deploy-contract.test.ts`
 **Purpose**: Move smart contract deployment
 **What it tests**: Compiling and deploying Move modules to the blockchain
 
@@ -103,7 +131,7 @@ These tests follow **clean room testing** principles:
 
 ---
 
-### 5. `secp256k1-account.test.ts`
+### 6. `secp256k1-account.test.ts`
 **Purpose**: SECP256k1 Ethereum-compatible account testing
 **What it tests**: Creating and using SECP256k1 accounts (Ethereum-compatible) on Aptos
 
@@ -250,17 +278,19 @@ npm test -- sanity/
 
 The tests will run sequentially in this order:
 1. `deploy-contract.test.ts` - Contract deployment test (~75s)
-2. `faucet-ed25519.test.ts` - Faucet funding test (~30s)
-3. `localnet.test.ts` - Health check test (~30s)
-4. `secp256k1-account.test.ts` - SECP256k1 account test (~35s)
-5. `transfer.test.ts` - APT transfer test (~30s)
+2. `faucet-ed25519.test.ts` - Ed25519 faucet funding test (~30s)
+3. `faucet-secp256k1.test.ts` - SECP256k1 faucet funding test (~35s)
+4. `localnet.test.ts` - Health check test (~30s)
+5. `secp256k1-account.test.ts` - SECP256k1 account test (~35s)
+6. `transfer.test.ts` - APT transfer test (~30s)
 
-**Total runtime**: ~4-5 minutes
+**Total runtime**: ~4.5-5.5 minutes
 
 ### Run individual test
 ```bash
 npm test -- sanity/localnet.test.ts
 npm test -- sanity/faucet-ed25519.test.ts
+npm test -- sanity/faucet-secp256k1.test.ts
 npm test -- sanity/transfer.test.ts
 npm test -- sanity/deploy-contract.test.ts
 npm test -- sanity/secp256k1-account.test.ts
