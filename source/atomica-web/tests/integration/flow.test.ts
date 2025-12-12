@@ -34,7 +34,7 @@ class MockProvider {
   }
 }
 
-describe("Atomica Flow Integration", () => {
+describe.sequential("Atomica Flow Integration", () => {
   // Generate a random wallet for the user
   const wallet = ethers.Wallet.createRandom();
   const mockProvider = new MockProvider(wallet.privateKey);
