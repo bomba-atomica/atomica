@@ -28,14 +28,38 @@ export async function killZombies() {
 const CONTRACTS_DIR = resolve("../../atomica-move-contracts");
 const TEST_CONFIG_DIR = resolve(".aptos_test_config");
 
+export function fundAccount(address: string, amount: number = 100_000_000): Promise<string> {
+  console.log(`[fundAccount] Requesting ${amount} for ${address}...`);
+  return new Promise((resolve, reject) => {
+    const req = http.request(`http://127.0.0.1:8081/mint?amount=${amount}&address=${address}`, { method: 'POST' }, (res) => {
+      console.log(`[fundAccount] Response status: ${res.statusCode}`);
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode === 200) {
+          resolve(data);
+        } else {
+          reject(new Error(`Funding failed with status: ${res.statusCode} Body: ${data}`));
+        }
+      });
+    });
+    req.on('error', (e) => {
+      console.error(`[fundAccount] Request error:`, e);
+      reject(e);
+    });
+    req.end();
+  });
+}
+
 const DEPLOYER_PK =
   "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 const APTOS_BIN = "/Users/lucas/code/rust/atomica/source/target/debug/aptos";
 
-async function runAptosCmd(args: string[], cwd: string = WEB_DIR) {
+export async function runAptosCmd(args: string[], cwd: string = WEB_DIR) {
   return new Promise<void>((resolve, reject) => {
+    let stderr = "";
     const proc = spawn(APTOS_BIN, args, {
       cwd,
       // Isolate config
@@ -47,12 +71,16 @@ async function runAptosCmd(args: string[], cwd: string = WEB_DIR) {
       stdio: "pipe", // Capture output
     });
     proc.stdout.on("data", (d) => console.log(`[Aptos Out] ${d}`));
-    proc.stderr.on("data", (d) => console.error(`[Aptos Err] ${d}`));
+    proc.stderr.on("data", (d) => {
+      const s = d.toString();
+      console.error(`[Aptos Err] ${s}`);
+      stderr += s;
+    });
     proc.on("close", (code) => {
       if (code === 0) resolve();
       else
         reject(
-          new Error(`Aptos cmd failed with code ${code}: ${args.join(" ")}`),
+          new Error(`Aptos cmd failed with code ${code}: ${args.join(" ")}\nStderr: ${stderr}`),
         );
     });
   });
@@ -187,7 +215,7 @@ export async function setupLocalnet() {
     // But stdout is being piped to console directly in the listener above.
     // We need to capture it in a variable too?
     // Let's implement a cleaner way:
-    if (await checkReadiness()) {
+    if (await checkAllReadiness()) {
       console.log("Localnet Started (Readiness OK).");
 
       // Start tailing logs if we can guess the path or found it
@@ -212,7 +240,7 @@ export async function setupLocalnet() {
       // quick hack: attach to localnetProcess object or valid scope
       (localnetProcess as any)._tail = tail;
 
-      await deployContracts();
+      // Decoupled: Tests must call deployContracts() explicitely if needed
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -220,23 +248,40 @@ export async function setupLocalnet() {
   throw new Error("Localnet failed to start within 120s");
 }
 
-function checkReadiness(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const req = http.get("http://127.0.0.1:8070/", (res) => {
+const MAX_RETRIES = 60; // 60 * 1s = 60s (we have 120s total loop)
+
+function checkPortReadiness(port: number, name: string): Promise<boolean> {
+  return new Promise(resolve => {
+    const req = http.get(`http://127.0.0.1:${port}/`, (res) => {
       if (res.statusCode === 200) {
+        // console.log(`[Readiness] ${name} is OK (200)`);
         resolve(true);
       } else {
-        // console.log(`[Readiness probe] Status: ${res.statusCode}`); // Optional debug
+        console.log(`[Readiness] ${name} returned ${res.statusCode}`);
         resolve(false);
       }
       res.resume();
     });
-    req.on("error", (e) => {
-      // console.log(`[Readiness probe] Error: ${e.message}`); // Optional debug
+    req.on('error', (e) => {
+      // console.log(`[Readiness] ${name} connection failed`); // noisy
       resolve(false);
     });
     req.end();
   });
+}
+
+// Ensure both Node (8070 - readiness endpoint provided by localnet) and Faucet (8081) are up
+// Actually, run-local-testnet output says "Readiness endpoint: http://127.0.0.1:8070/"
+// Faucet is at 8081 /health or /
+async function checkAllReadiness(): Promise<boolean> {
+  const nodeReady = await checkPortReadiness(8070, "Node Readiness");
+  const faucetReady = await checkPortReadiness(8081, "Faucet");
+
+  // Only print when both are ready or we debug?
+  // Let's print if one is ready but not other
+  if (nodeReady && !faucetReady) console.log("[Readiness] Node OK, waiting for Faucet...");
+
+  return nodeReady && faucetReady;
 }
 
 export async function teardownLocalnet() {
