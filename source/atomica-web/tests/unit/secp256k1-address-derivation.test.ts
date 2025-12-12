@@ -3,7 +3,6 @@ import { ethers } from 'ethers';
 import {
     Secp256k1PrivateKey,
     SingleKeyAccount,
-    AccountAddress,
 } from '@aptos-labs/ts-sdk';
 
 /**
@@ -353,10 +352,7 @@ describe('SECP256k1 Address Derivation: Ethereum vs Aptos', () => {
             console.log(`Message to sign: "${message}"`);
             console.log(`Message bytes: ${messageBytes.length} bytes\n`);
 
-            // Ethereum signature
-            const ethWallet = new ethers.Wallet(testPrivateKeyHex);
-
-            // For raw message signing (not EIP-191)
+            // Ethereum uses Keccak-256 for message hashing
             const messageHash = ethers.keccak256(messageBytes);
             console.log('Ethereum:');
             console.log(`  Message hash (Keccak-256): ${messageHash}`);

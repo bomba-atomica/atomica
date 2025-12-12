@@ -5,9 +5,11 @@ import { AuctionCreator } from "./components/AuctionCreator";
 import { AuctionBidder } from "./components/AuctionBidder";
 import { AccountStatus } from "./components/AccountStatus";
 import { NetworkStatus } from "./components/NetworkStatus";
+import { useTokenBalances } from "./hooks/useTokenBalances";
 
 function App() {
   const [account, setAccount] = useState<string | null>(null);
+  const balances = useTokenBalances(account);
 
   const connectWallet = async () => {
     if (window.ethereum) {
@@ -70,10 +72,45 @@ function App() {
         ) : (
           <div className="grid grid-cols-1 gap-8">
             <Faucet account={account} />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <AuctionCreator account={account} />
-              <AuctionBidder account={account} />
-            </div>
+
+            {/* Show disabled state if user doesn't have test tokens */}
+            {balances.fakeEth === 0 || balances.fakeUsd === 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 opacity-50">
+                <div className="bg-gray-800 p-6 rounded-lg shadow-lg border-2 border-gray-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-gray-500">
+                      2. Create Auction
+                    </h2>
+                    <span className="text-xs bg-gray-700 px-2 py-1 rounded">
+                      Disabled
+                    </span>
+                  </div>
+                  <p className="text-gray-600 text-sm">
+                    Complete step 1 to unlock auction creation.
+                    You need FAKEETH and FAKEUSD tokens.
+                  </p>
+                </div>
+                <div className="bg-gray-800 p-6 rounded-lg shadow-lg border-2 border-gray-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-gray-500">
+                      3. Bid on Auction
+                    </h2>
+                    <span className="text-xs bg-gray-700 px-2 py-1 rounded">
+                      Disabled
+                    </span>
+                  </div>
+                  <p className="text-gray-600 text-sm">
+                    Complete step 1 to unlock bidding.
+                    You need FAKEUSD tokens to bid.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <AuctionCreator account={account} />
+                <AuctionBidder account={account} />
+              </div>
+            )}
           </div>
         )}
 

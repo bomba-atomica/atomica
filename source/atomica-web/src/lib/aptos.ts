@@ -266,12 +266,14 @@ export async function submitNativeTransaction(
   }
 }
 
-export async function submitFaucet(ethAddress: string) {
+/**
+ * Step 1: Request APT tokens from faucet for gas
+ */
+export async function requestAPT(ethAddress: string) {
   const derived = await getDerivedAddress(ethAddress);
   const FAUCET_URL = "http://127.0.0.1:8081";
 
-  // 1. Native APT Faucet (for Gas)
-  console.log("Funding Gas...");
+  console.log("Funding Gas (APT)...");
   const res = await fetch(
     `${FAUCET_URL}/mint?amount=100000000&address=${derived.toString()}`,
     { method: "POST" },
@@ -287,7 +289,15 @@ export async function submitFaucet(ethAddress: string) {
   // Wait slightly for balance to reflect (local node is fast but async)
   await new Promise((r) => setTimeout(r, 1000));
 
-  // 2. Mint FAKEETH (10 ETH)
+  return { hash: "apt-funded" };
+}
+
+/**
+ * Step 2: Mint test tokens (FAKEETH and FAKEUSD)
+ * Requires contracts to be deployed
+ */
+export async function requestTestTokens(ethAddress: string) {
+  // Mint FAKEETH (10 ETH)
   console.log("Minting FAKEETH...");
   // 8 decimals from Move file
   const amountEth = BigInt(10) * BigInt(100_000_000);
@@ -296,7 +306,7 @@ export async function submitFaucet(ethAddress: string) {
     functionArguments: [amountEth],
   });
 
-  // 3. Mint FAKEUSD (10,000 USD)
+  // Mint FAKEUSD (10,000 USD)
   console.log("Minting FAKEUSD...");
   const amountUsd = BigInt(10000) * BigInt(100_000_000);
   await submitNativeTransaction(ethAddress, {
@@ -304,6 +314,37 @@ export async function submitFaucet(ethAddress: string) {
     functionArguments: [amountUsd],
   });
 
+  return { hash: "test-tokens-minted" };
+}
+
+/**
+ * Check if test token contracts are deployed
+ */
+export async function areContractsDeployed(): Promise<boolean> {
+  try {
+    // Try to get account modules at the contract address
+    const modules = await aptos.getAccountModules({
+      accountAddress: CONTRACT_ADDR,
+    });
+
+    // Check if FAKEETH and FAKEUSD modules exist
+    const hasFakeEth = modules.some((m) => m.abi?.name === "FAKEETH");
+    const hasFakeUsd = modules.some((m) => m.abi?.name === "FAKEUSD");
+
+    return hasFakeEth && hasFakeUsd;
+  } catch (e) {
+    console.log("Contracts not yet deployed:", e);
+    return false;
+  }
+}
+
+/**
+ * Legacy function for backward compatibility
+ * @deprecated Use requestAPT() and requestTestTokens() separately
+ */
+export async function submitFaucet(ethAddress: string) {
+  await requestAPT(ethAddress);
+  await requestTestTokens(ethAddress);
   return { hash: "gas-fakeeth-fakeusd-minted" };
 }
 
