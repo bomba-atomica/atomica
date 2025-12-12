@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { aptos, getDerivedAddress } from "../lib/aptos";
+import { aptos, getDerivedAddress, CONTRACT_ADDR } from "../lib/aptos";
 
 interface AccountStatusProps {
   ethAddress: string | null;
@@ -21,23 +21,36 @@ export function AccountStatus({ ethAddress }: AccountStatusProps) {
 
       try {
         const derived = await getDerivedAddress(ethAddress);
-        const resources = await aptos.getAccountResources({
-          accountAddress: derived,
-        });
+        const derivedStr = derived.toString();
 
-        let apt = "0";
-        let fakeEth = "0";
-        let fakeUsd = "0";
-
-        for (const res of resources) {
-          if (res.type === "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>") {
-            apt = (res.data as any).coin.value;
+        // Helper to fetch balance via View function (supports Coin and FA)
+        const getBalance = async (coinType: string) => {
+          try {
+            const NODE_URL = "http://127.0.0.1:8080/v1";
+            const res = await fetch(`${NODE_URL}/view`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                function: "0x1::coin::balance",
+                type_arguments: [coinType],
+                arguments: [derivedStr],
+              }),
+            });
+            if (!res.ok) return "0";
+            const data = await res.json();
+            return Array.isArray(data) ? data[0] : "0";
+          } catch (e) {
+            console.error(`Failed to fetch balance for ${coinType}`, e);
+            return "0";
           }
-          if (res.type.includes("FAKEETH"))
-            fakeEth = (res.data as any).coin.value;
-          if (res.type.includes("FAKEUSD"))
-            fakeUsd = (res.data as any).coin.value;
-        }
+        };
+
+        // Fetch balances in parallel
+        const [apt, fakeEth, fakeUsd] = await Promise.all([
+          getBalance("0x1::aptos_coin::AptosCoin"),
+          getBalance(`${CONTRACT_ADDR}::FAKEETH::FAKEETH`),
+          getBalance(`${CONTRACT_ADDR}::FAKEUSD::FAKEUSD`),
+        ]);
 
         const fmt = (val: string) => (Number(val) / 100_000_000).toFixed(4);
 

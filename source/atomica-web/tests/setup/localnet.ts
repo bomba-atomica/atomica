@@ -270,18 +270,19 @@ function checkPortReadiness(port: number, name: string): Promise<boolean> {
   });
 }
 
-// Ensure both Node (8070 - readiness endpoint provided by localnet) and Faucet (8081) are up
-// Actually, run-local-testnet output says "Readiness endpoint: http://127.0.0.1:8070/"
-// Faucet is at 8081 /health or /
-async function checkAllReadiness(): Promise<boolean> {
-  const nodeReady = await checkPortReadiness(8070, "Node Readiness");
+async function checkAllReadiness() {
+  // Ensure both Node (8070 - readiness endpoint provided by localnet) and Faucet (8081) are up
+  // Actually, run-local-testnet output says "Readiness endpoint: http://127.0.0.1:8070/"
+  // Faucet is at 8081 /health or /
+  // Port 8070 often returns 503 in this environment even when node is working.
+  // We rely on 8080 (API) and 8081 (Faucet).
+  // const nodeReady = await checkPortReadiness(8070, "Node Readiness");
+  const apiReady = await checkPortReadiness(8080, "Node API");
   const faucetReady = await checkPortReadiness(8081, "Faucet");
 
-  // Only print when both are ready or we debug?
-  // Let's print if one is ready but not other
-  if (nodeReady && !faucetReady) console.log("[Readiness] Node OK, waiting for Faucet...");
+  if (apiReady && !faucetReady) console.log("[Readiness] API OK, waiting for Faucet...");
 
-  return nodeReady && faucetReady;
+  return apiReady && faucetReady;
 }
 
 export async function teardownLocalnet() {
