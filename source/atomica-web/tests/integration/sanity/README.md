@@ -103,6 +103,142 @@ These tests follow **clean room testing** principles:
 
 ---
 
+### 5. `secp256k1-account.test.ts`
+**Purpose**: SECP256k1 Ethereum-compatible account testing
+**What it tests**: Creating and using SECP256k1 accounts (Ethereum-compatible) on Aptos
+
+**Key assertions**:
+- SECP256k1 accounts can be created using `SingleKeyAccount.generate({ scheme: SigningSchemeInput.Secp256k1Ecdsa })`
+- Ed25519 accounts can transfer to SECP256k1 accounts (cross-key-type transfers)
+- Transfers to non-existent SECP256k1 accounts automatically create them on-chain
+- SECP256k1 accounts can sign and submit transactions
+- Private keys are 32 bytes (same as Ed25519)
+- Public keys are 65 bytes uncompressed (vs 32 bytes for Ed25519)
+- Signatures are 64 bytes (same as Ed25519)
+- Ethereum private keys can be used directly on Aptos
+
+**Platform behaviors documented**:
+- SECP256k1 and Ed25519 accounts are fully interoperable
+- Both key types work identically from the user's perspective
+- Aptos uses SHA3-256 for address derivation (different from Ethereum's Keccak-256)
+- Same private key produces different addresses on Aptos vs Ethereum
+- Account creation gas costs are the same regardless of key type (~103,400 octas)
+- Transaction gas costs are the same for both key types
+
+**SECP256k1 vs Ed25519 comparison**:
+- **Ed25519**: Faster signature verification, smaller public keys (32 bytes), default on Aptos
+- **SECP256k1**: Ethereum-compatible, same curve as Bitcoin, larger public keys (65 bytes)
+- **Both**: Equal first-class citizens on Aptos, same transaction capabilities
+
+**Use cases for SECP256k1**:
+- Users with existing Ethereum private keys
+- Cross-chain applications between Aptos and Ethereum
+- Hardware wallets that support SECP256k1 but not Ed25519
+- Integration with Ethereum wallet infrastructure
+
+**Use this test to**:
+- Learn how to create SECP256k1 accounts
+- Understand cross-key-type transfers
+- Reference Ethereum private key compatibility
+- Verify SECP256k1 key properties and signature verification
+- Understand differences between Aptos and Ethereum address derivation
+
+**Note**: This test uses direct SECP256k1 accounts. For account abstraction that allows signing with MetaMask/Ethereum wallets using SIWE (Sign-In with Ethereum), see the `ethereum_derivable_account` module in the zapatos codebase.
+
+**CRITICAL UX ISSUE - Address Mapping Requirement**:
+
+When SECP256k1 accounts are created using Ethereum private keys, the Aptos address differs from the Ethereum address due to different hash functions (SHA3-256 vs Keccak-256). This creates a significant user experience problem.
+
+**The Problem**:
+- User has Ethereum address: `0xABC123...`
+- Same private key on Aptos produces: `0xDEF456...` (completely different)
+- User expects their address to be the same across chains
+- Funds are NOT at the same address on both chains
+
+**Required Solution - Address Mapping System**:
+
+We need to implement a system to store, search, and identify the relationship between Ethereum addresses and their corresponding Aptos addresses:
+
+1. **STORAGE** - Store bidirectional mappings:
+   - Ethereum address (user's expected/familiar address)
+   - Aptos address (actual on-chain location)
+   - SECP256k1 public key
+   - Account creation timestamp
+   - Derivation method (direct SECP256k1 vs ethereum_derivable_account)
+
+2. **SEARCH** - Enable bidirectional lookups:
+   - ETH address → Aptos address (for user sending to Ethereum user)
+   - Aptos address → ETH address (for displaying familiar address)
+   - Public key → both addresses (for verification)
+
+3. **IDENTIFICATION** - Display strategy for users:
+   - Primary display: Ethereum address (what user recognizes)
+   - Secondary display: Aptos address (where funds actually are)
+   - Clear indication: "Your Ethereum wallet 0xABC... is mapped to Aptos address 0xDEF..."
+   - Visual distinction between the two addresses
+
+**Possible Implementation Approaches**:
+
+a) **On-chain registry** (Move module):
+   - Pros: Decentralized, persistent, verifiable
+   - Cons: Gas costs, limited query flexibility
+   - Structure: `Table<EthAddress, AptosAddress>` and reverse mapping
+
+b) **Off-chain indexer** (Database):
+   - Pros: Fast queries, rich search, no gas costs
+   - Cons: Centralized, requires infrastructure
+   - Tech: PostgreSQL with bidirectional indexes
+
+c) **Client-side storage** (LocalStorage/IndexedDB):
+   - Pros: No backend needed, privacy
+   - Cons: Loses data across devices/browsers, not shareable
+
+d) **Hybrid approach** (RECOMMENDED):
+   - On-chain: Emit events when SECP256k1 accounts created
+   - Off-chain: Indexer listens to events, builds searchable database
+   - Client: Queries indexer for fast lookups, falls back to on-chain
+   - Benefits: Best of both worlds - verifiable + performant
+
+**Data Schema Example**:
+```typescript
+interface AddressMapping {
+    ethereumAddress: string;      // 0xABC... (20 bytes, Keccak-256 derived)
+    aptosAddress: string;          // 0xDEF... (32 bytes, SHA3-256 derived)
+    publicKey: string;             // SECP256k1 public key (65 bytes uncompressed)
+    derivationMethod: 'secp256k1' | 'ethereum_derivable_account';
+    createdAt: number;             // Unix timestamp
+    firstTransactionHash: string;  // First tx that created the account
+}
+```
+
+**API Requirements**:
+```typescript
+// Query functions needed
+getAptosByEthAddress(ethAddress: string): Promise<string>;
+getEthByAptosAddress(aptosAddress: string): Promise<string>;
+getMappingByPublicKey(publicKey: string): Promise<AddressMapping>;
+getAllMappingsForUser(): Promise<AddressMapping[]>;
+```
+
+**UI/UX Recommendations**:
+- Always show both addresses when relevant
+- Use color coding or icons to distinguish ETH vs Aptos addresses
+- Provide a "copy both addresses" button
+- Show warning when user first connects: "Your Aptos address will be different"
+- Include address mapping in account export/backup
+
+**Integration Points**:
+- Account creation flow (capture mapping immediately)
+- Wallet connection (lookup existing mapping)
+- Transaction display (show both sender/receiver addresses)
+- Balance queries (translate between address formats)
+
+This specification is critical for maintaining good UX when onboarding Ethereum users to Aptos with their existing wallets and private keys.
+
+**Full Specification**: See `docs/technical/ethereum-address-mapping.md` for complete implementation details, code examples, and project roadmap.
+
+---
+
 ## Running the Tests
 
 **IMPORTANT**: These tests run **sequentially** (one at a time), not in parallel. This is enforced by the vitest configuration (`fileParallelism: false`). Each test starts its own localnet instance on ports 8080/8081, so running multiple tests simultaneously would cause port conflicts.
@@ -116,9 +252,10 @@ The tests will run sequentially in this order:
 1. `deploy-contract.test.ts` - Contract deployment test (~75s)
 2. `faucet-ed25519.test.ts` - Faucet funding test (~30s)
 3. `localnet.test.ts` - Health check test (~30s)
-4. `transfer.test.ts` - APT transfer test (~30s)
+4. `secp256k1-account.test.ts` - SECP256k1 account test (~35s)
+5. `transfer.test.ts` - APT transfer test (~30s)
 
-**Total runtime**: ~3-4 minutes
+**Total runtime**: ~4-5 minutes
 
 ### Run individual test
 ```bash
@@ -126,6 +263,7 @@ npm test -- sanity/localnet.test.ts
 npm test -- sanity/faucet-ed25519.test.ts
 npm test -- sanity/transfer.test.ts
 npm test -- sanity/deploy-contract.test.ts
+npm test -- sanity/secp256k1-account.test.ts
 ```
 
 ### Debug a specific test
@@ -165,7 +303,13 @@ Based on the sanity tests, here are typical gas costs for reference:
 
 ### 1. Generating accounts
 ```typescript
+// Ed25519 account (default)
 const account = Account.generate();
+
+// SECP256k1 account (Ethereum-compatible)
+const secpAccount = SingleKeyAccount.generate({
+    scheme: SigningSchemeInput.Secp256k1Ecdsa
+});
 ```
 
 ### 2. Funding accounts
