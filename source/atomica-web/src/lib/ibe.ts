@@ -1,16 +1,19 @@
-import { PointG1, PointG2, pairing, utils } from '@noble/bls12-381';
+import { PointG1, PointG2, pairing, utils } from "@noble/bls12-381";
 
 // Alias for components
 export { ibeEncrypt as encrypt };
 
-export async function generateSystemParameters(): Promise<{ mpk: Uint8Array, msk: Uint8Array }> {
-    const msk = utils.randomPrivateKey();
-    const mskBig = BigInt("0x" + Buffer.from(msk).toString('hex'));
-    const mpkPoint = PointG1.BASE.multiply(mskBig);
-    return {
-        mpk: mpkPoint.toRawBytes(true),
-        msk: msk
-    };
+export async function generateSystemParameters(): Promise<{
+  mpk: Uint8Array;
+  msk: Uint8Array;
+}> {
+  const msk = utils.randomPrivateKey();
+  const mskBig = BigInt("0x" + Buffer.from(msk).toString("hex"));
+  const mpkPoint = PointG1.BASE.multiply(mskBig);
+  return {
+    mpk: mpkPoint.toRawBytes(true),
+    msk: msk,
+  };
 }
 
 // Hashed IBE Encrypt
@@ -19,35 +22,38 @@ export async function generateSystemParameters(): Promise<{ mpk: Uint8Array, msk
 // Message: Arbitrary bytes
 // Returns: { u: Uint8Array, v: Uint8Array }
 export async function ibeEncrypt(
-    mpkBytes: Uint8Array,
-    idBytes: Uint8Array,
-    messageBytes: Uint8Array
-): Promise<{ u: Uint8Array, v: Uint8Array }> {
-    // 1. Decode MPK (G1)
-    const mpkPoint = PointG1.fromHex(mpkBytes);
+  mpkBytes: Uint8Array,
+  idBytes: Uint8Array,
+  messageBytes: Uint8Array,
+): Promise<{ u: Uint8Array; v: Uint8Array }> {
+  // 1. Decode MPK (G1)
+  const mpkPoint = PointG1.fromHex(mpkBytes);
 
-    // 2. Map ID to G2
-    // Use hashToCurve to map bytes to G2 point
-    const idPoint = await PointG2.hashToCurve(idBytes);
+  // 2. Map ID to G2
+  // Use hashToCurve to map bytes to G2 point
+  const idPoint = await PointG2.hashToCurve(idBytes);
 
-    // 3. Generate Random r
-    const r = utils.randomPrivateKey(); // Returns 32 bytes random scalar
+  // 3. Generate Random r
+  const r = utils.randomPrivateKey(); // Returns 32 bytes random scalar
 
-    // 4. U = r * P (Base G1)
-    const uPoint = PointG1.BASE.multiply(BigInt("0x" + Buffer.from(r).toString('hex')));
+  // 4. U = r * P (Base G1)
+  const uPoint = PointG1.BASE.multiply(
+    BigInt("0x" + Buffer.from(r).toString("hex")),
+  );
 
-    // 5. Compute Pairing Metric
-    // e(MPK, ID)^r = e(r*MPK, ID)
-    const rMpk = mpkPoint.multiply(BigInt("0x" + Buffer.from(r).toString('hex')));
-    const gid = pairing(rMpk, idPoint); // Returns Fp12
-    console.log("GID computed for encryption:", gid);
+  // 5. Compute Pairing Metric
+  // e(MPK, ID)^r = e(r*MPK, ID)
+  const rMpk = mpkPoint.multiply(BigInt("0x" + Buffer.from(r).toString("hex")));
+  const gid = pairing(rMpk, idPoint); // Returns Fp12
+  console.log("GID computed for encryption:", gid);
 
-    // 6. Hash gid to bytes
-    // Placeholder serialization
-    const uBytes = uPoint.toRawBytes(true); // Compressed
+  // 6. Hash gid to bytes
+  // Placeholder serialization
+  const uBytes = uPoint.toRawBytes(true); // Compressed
 
-    const vBytes = new Uint8Array(messageBytes.length);
-    for (let i = 0; i < messageBytes.length; i++) vBytes[i] = messageBytes[i] ^ 0xFF; // Simple XOR
+  const vBytes = new Uint8Array(messageBytes.length);
+  for (let i = 0; i < messageBytes.length; i++)
+    vBytes[i] = messageBytes[i] ^ 0xff; // Simple XOR
 
-    return { u: uBytes, v: vBytes };
+  return { u: uBytes, v: vBytes };
 }

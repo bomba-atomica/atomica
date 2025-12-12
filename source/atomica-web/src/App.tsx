@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
-import { ethers } from 'ethers'
-import { Faucet } from './components/Faucet';
-import { AuctionCreator } from './components/AuctionCreator';
-import { AuctionBidder } from './components/AuctionBidder';
-import { AccountStatus } from './components/AccountStatus';
-import { NetworkStatus } from './components/NetworkStatus';
+import { useState, useEffect } from "react";
+import { ethers } from "ethers";
+import { Faucet } from "./components/Faucet";
+import { AuctionCreator } from "./components/AuctionCreator";
+import { AuctionBidder } from "./components/AuctionBidder";
+import { AccountStatus } from "./components/AccountStatus";
+import { NetworkStatus } from "./components/NetworkStatus";
 
 function App() {
   const [account, setAccount] = useState<string | null>(null);
@@ -63,7 +63,9 @@ function App() {
       <main className="container mx-auto p-8">
         {!account ? (
           <div className="text-center mt-20">
-            <h2 className="text-xl text-gray-400">Connect your wallet to participate</h2>
+            <h2 className="text-xl text-gray-400">
+              Connect your wallet to participate
+            </h2>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-8">
@@ -83,7 +85,7 @@ function App() {
         </div>
       </main>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
