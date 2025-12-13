@@ -23,8 +23,10 @@ export class MockWallet {
                         return [this.wallet.address];
                     case "personal_sign":
                         // Params: [message, address]
-                        // ethers wallet.signMessage handles the prefixing (\x19Ethereum Signed Message:\n...)
-                        return await this.wallet.signMessage(params[0]);
+                        // ethers jsonRpcSigner sends the message as a hex string.
+                        // We need to decode it to bytes so wallet.signMessage treats it correctly (and adds prefix).
+                        const rawMessage = ethers.getBytes(params[0]);
+                        return await this.wallet.signMessage(rawMessage);
                     case "eth_chainId":
                         // 31337 is common for local dev/anvil, but we can return whatever.
                         // Aptos doesn't strictly check this for the signature logic itself usually,

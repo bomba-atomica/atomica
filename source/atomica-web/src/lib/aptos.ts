@@ -12,10 +12,16 @@ import { sha3_256 } from "@noble/hashes/sha3";
 
 const NODE_URL = "http://127.0.0.1:8080/v1";
 // 127.0.0.1:8080/v1
-export const CONTRACT_ADDR = import.meta.env.VITE_CONTRACT_ADDRESS || "0x1";
+// Use safer env access that works in Node (test/ts-node) and Vite
+const env = (import.meta as any).env || process.env || {};
+export const CONTRACT_ADDR = env.VITE_CONTRACT_ADDRESS || "0x1";
 
 const config = new AptosConfig({ network: Network.LOCAL, fullnode: NODE_URL });
-export const aptos = new Aptos(config);
+export let aptos = new Aptos(config);
+
+export function setAptosInstance(instance: Aptos) {
+  aptos = instance;
+}
 
 function sha3(bytes: Uint8Array): Uint8Array {
   return sha3_256(bytes);
@@ -58,7 +64,9 @@ export async function getDerivedAddress(
   const funcInfoBcs = serializer.toUint8Array();
 
   const identitySerializer = new Serializer();
-  const ethBytes = ethers.getBytes(ethAddress);
+  // FIXED: Move expects the UTF8 bytes of the Hex String (e.g. "0x123...")
+  // not the raw bytes of the address.
+  const ethBytes = new TextEncoder().encode(ethAddress);
   identitySerializer.serializeBytes(ethBytes);
   const identityBcs = identitySerializer.toUint8Array();
 
@@ -106,21 +114,21 @@ function calculateAbstractDigest(signingMessage: Uint8Array): Uint8Array {
 export class CustomAbstractAuthenticator extends AccountAuthenticator {
   public digest: Uint8Array;
   public signature: Uint8Array;
-  public ethAddress: Uint8Array;
+  public ethAddressBytes: Uint8Array;
   public scheme: string;
   public issuedAt: string;
 
   constructor(
     digest: Uint8Array,
     signature: Uint8Array,
-    ethAddress: Uint8Array,
+    ethAddressBytes: Uint8Array,
     scheme: string,
     issuedAt: string,
   ) {
     super();
     this.digest = digest;
     this.signature = signature;
-    this.ethAddress = ethAddress;
+    this.ethAddressBytes = ethAddressBytes;
     this.scheme = scheme;
     this.issuedAt = issuedAt;
   }
@@ -135,8 +143,7 @@ export class CustomAbstractAuthenticator extends AccountAuthenticator {
     serializer.serializeStr("authenticate");
 
     // AuthData
-    // Variant 1 (DerivableV1) for AbstractionAuthData?
-    // Assuming 1 is correct based on previous code being '1'.
+    // Variant 1 (DerivableV1) for AbstractionAuthData
     serializer.serializeU32AsUleb128(1);
 
     // digest (vector<u8>)
@@ -155,7 +162,8 @@ export class CustomAbstractAuthenticator extends AccountAuthenticator {
 
     // public_key (vector<u8>) - SIWEAbstractPublicKey serialized
     const pkSerializer = new Serializer();
-    pkSerializer.serializeBytes(this.ethAddress); // ethereum_address
+    // ethereum_address: vector<u8> (UTF8 bytes of hex string)
+    pkSerializer.serializeBytes(this.ethAddressBytes);
     pkSerializer.serializeBytes(new TextEncoder().encode(window.location.host)); // domain
     const pkBcs = pkSerializer.toUint8Array();
 
@@ -235,12 +243,29 @@ export async function submitNativeTransaction(
 
   // 6. Submit
   const signatureBytes = ethers.getBytes(signature);
-  const ethBytes = ethers.getBytes(ethAddress);
+  const ethAddressBytes = new TextEncoder().encode(ethAddress);
+
+  // DEBUG LOGGING START
+  const debugState = {
+    ethAddress: ethAddress,
+    ethAddressBytes: Array.from(ethAddressBytes),
+    digest: digestHex,
+    scheme: scheme,
+    domain: domain,
+    issuedAt: issuedAt,
+    siweMessage: siwe,
+    signature: signature,
+    chain_id: ledgerInfo.chain_id,
+    entryFunction: entryFunction,
+    origin: window.location.origin
+  };
+  console.log("SubmitNativeTransaction Debug:", JSON.stringify(debugState, null, 2));
+  // DEBUG LOGGING END
 
   const auth = new CustomAbstractAuthenticator(
     digest,
     signatureBytes,
-    ethBytes,
+    ethAddressBytes,
     scheme,
     issuedAt,
   );
@@ -253,6 +278,8 @@ export async function submitNativeTransaction(
     return pendingTx;
   } catch (e: any) {
     console.error("Submission Failed. Details:", e);
+    // Log the debug state again on failure for visibility
+    console.error("Debug State on Failure:", JSON.stringify(debugState, null, 2));
     if (e.response) {
       console.error("Response Status:", e.response.status);
       console.error(
