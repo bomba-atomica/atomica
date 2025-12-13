@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { Faucet } from "./components/Faucet";
+import { SanityTest } from "./components/SanityTest";
 import { AuctionCreator } from "./components/AuctionCreator";
 import { AuctionBidder } from "./components/AuctionBidder";
 import { AccountStatus } from "./components/AccountStatus";
@@ -71,6 +72,9 @@ function App() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-8">
+            {/* Sanity Test - Always show first for debugging */}
+            <SanityTest account={account} />
+
             <Faucet account={account} />
 
             {/* Show disabled state if user doesn't have test tokens */}

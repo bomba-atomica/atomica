@@ -1,0 +1,138 @@
+
+// @vitest-environment happy-dom
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import { generateTestingUtils } from "eth-testing";
+import nodeFetch, { Request, Response, Headers } from "node-fetch";
+import { setupLocalnet, teardownLocalnet, fundAccount } from "../setup/localnet";
+import { aptos, getDerivedAddress, setAptosInstance, submitNativeTransaction } from "../../src/lib/aptos";
+import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+import { URL } from "url";
+import { ethers } from "ethers";
+
+// Polyfill fetch
+global.fetch = nodeFetch as any;
+global.Request = Request as any;
+global.Response = Response as any;
+global.Headers = Headers as any;
+global.URL = URL as any;
+
+window.fetch = nodeFetch as any;
+(window as any).Request = Request;
+(window as any).Response = Response;
+(window as any).Headers = Headers;
+(window as any).URL = URL;
+
+// Standard Hardhat Account 0
+const TEST_ACCOUNT = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+const TEST_PK = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+
+describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
+    const testingUtils = generateTestingUtils({ providerType: "MetaMask" });
+
+    beforeAll(async () => {
+        console.log("Starting Localnet...");
+        await setupLocalnet();
+
+        // Inject fetch-compatible Aptos instance
+        const config = new AptosConfig({
+            network: Network.LOCAL,
+            fullnode: "http://127.0.0.1:8080/v1",
+            client: {
+                provider: async (url: any, init: any) => {
+                    // (Same polyfill logic as before)
+                    let fetchUrl = url;
+                    let fetchInit = init;
+                    if (typeof url !== 'string' && !(url instanceof URL)) {
+                        if (url.url) { fetchUrl = url.url; fetchInit = { ...init, method: url.method, headers: url.headers, body: url.body }; }
+                    }
+                    try {
+                        const res = await nodeFetch(fetchUrl, fetchInit);
+                        try {
+                            const bodyClone = res.clone();
+                            const data = await bodyClone.json().catch(() => bodyClone.text());
+                            Object.defineProperty(res, 'data', { value: data });
+                        } catch (e) { }
+                        return res;
+                    } catch (e) { throw e; }
+                }
+            }
+        });
+        setAptosInstance(new Aptos(config));
+
+        // Mock window.ethereum
+        Object.defineProperty(window, "ethereum", {
+            value: testingUtils.getProvider(),
+            writable: true
+        });
+
+        // Mock window.location
+        // @ts-ignore
+        delete window.location;
+        // @ts-ignore
+        window.location = {
+            protocol: "http:",
+            host: "localhost:3000",
+            origin: "http://localhost:3000",
+            href: "http://localhost:3000/"
+        };
+
+        // Setup Provider Mocks
+        testingUtils.mockChainId("0x4");
+        testingUtils.mockAccounts([TEST_ACCOUNT]);
+        testingUtils.mockRequestAccounts([TEST_ACCOUNT]);
+
+    }, 120000);
+
+    afterAll(async () => {
+        await teardownLocalnet();
+        testingUtils.clearAllMocks();
+    });
+
+    afterEach(() => {
+        testingUtils.clearAllMocks();
+        testingUtils.mockChainId("0x4");
+        testingUtils.mockAccounts([TEST_ACCOUNT]);
+    });
+
+    it("should successfully sign and submit a simple APT transfer", async () => {
+        const derivedAddr = await getDerivedAddress(TEST_ACCOUNT);
+        const derivedAddrStr = derivedAddr.toString();
+        console.log(`Test Account: ${TEST_ACCOUNT} -> ${derivedAddrStr}`);
+
+        // 1. Fund Account
+        await fundAccount(derivedAddrStr, 100_000_000); // 1 APT
+        // Wait for funding
+        await new Promise(r => setTimeout(r, 2000));
+
+        // 2. Setup Signature Interceptor
+        const wallet = new ethers.Wallet(TEST_PK);
+        testingUtils.lowLevel.mockRequest("personal_sign", async (params: any[]) => {
+            const [msgHex, from] = params;
+            console.log(`[Mock] Signing requested...`);
+            const msgStr = ethers.toUtf8String(msgHex);
+            return await wallet.signMessage(msgStr); // Standard EIP-191 sign
+        });
+
+        // 3. Submit Transaction (Simple Transfer)
+        const recipient = "0x1"; // Burn address / Foundation
+        console.log("Submitting transfer...");
+
+        const txPromise = submitNativeTransaction(TEST_ACCOUNT, {
+            function: "0x1::aptos_account::transfer",
+            functionArguments: [recipient, 1000] // 1000 Octas
+        });
+
+        // 4. Verify Success
+        const result = await txPromise;
+        console.log("Transaction Submitted:", result.hash);
+
+        expect(result.hash).toBeDefined();
+        // Wait for execution? submitNativeTransaction returns pendingTx. 
+        // Ideally we check if it executed success.
+
+        const txInfo = await aptos.waitForTransaction({ transactionHash: result.hash });
+        expect(txInfo.success).toBe(true);
+        console.log("Transaction Executed Successfully!");
+
+    }, 60000);
+});

@@ -37,6 +37,7 @@ export function constructSIWEMessage(
   nonce: string,
   issuedAt: string,
 ): string {
+  // NOTE: The statement MUST already include the trailing periods to match Move contract format
   return `${domain} wants you to sign in with your Ethereum account:
 ${address}
 
@@ -158,6 +159,11 @@ export class CustomAbstractAuthenticator extends AccountAuthenticator {
     sigSerializer.serializeBytes(this.signature);
 
     const abstractSignatureBytes = sigSerializer.toUint8Array();
+    console.log("AbstractSignature BCS:", Array.from(abstractSignatureBytes));
+    console.log("  Variant byte:", abstractSignatureBytes[0]);
+    console.log("  Scheme:", this.scheme);
+    console.log("  IssuedAt:", this.issuedAt);
+    console.log("  Signature length:", this.signature.length);
     serializer.serializeBytes(abstractSignatureBytes);
 
     // public_key (vector<u8>) - SIWEAbstractPublicKey serialized
@@ -166,6 +172,10 @@ export class CustomAbstractAuthenticator extends AccountAuthenticator {
     pkSerializer.serializeBytes(this.ethAddressBytes);
     pkSerializer.serializeBytes(new TextEncoder().encode(window.location.host)); // domain
     const pkBcs = pkSerializer.toUint8Array();
+
+    console.log("PublicKey BCS:", Array.from(pkBcs));
+    console.log("  EthAddress bytes:", Array.from(this.ethAddressBytes));
+    console.log("  Domain:", window.location.host);
 
     serializer.serializeBytes(pkBcs);
   }
@@ -179,7 +189,24 @@ export async function submitNativeTransaction(
   const provider = new ethers.BrowserProvider(window.ethereum);
   const signer = await provider.getSigner();
 
-  const senderAddress = await getDerivedAddress(ethAddress);
+  // Use lowercase address to match Rust smoke test behavior
+  // The Rust test uses: format!("0x{}", hex::encode(address.as_bytes()))
+  // which produces lowercase hex
+  const checksummedAddress = ethAddress.toLowerCase();
+
+  const senderAddress = await getDerivedAddress(checksummedAddress);
+
+  // Check if account exists and has balance
+  try {
+    const accountInfo = await aptos.getAccountInfo({
+      accountAddress: senderAddress,
+    });
+    console.log("=== Account Info ===");
+    console.log("  Account exists: true");
+    console.log("  Sequence number:", accountInfo.sequence_number);
+  } catch (e: any) {
+    console.warn("Account may not exist yet (will be created on first tx)");
+  }
 
   // 1. Build Transaction
   const transaction = await aptos.transaction.build.simple({
@@ -229,7 +256,7 @@ export async function submitNativeTransaction(
 
   const siwe = constructSIWEMessage(
     domain,
-    ethAddress,
+    checksummedAddress,
     statement,
     window.location.origin,
     "1",
@@ -243,21 +270,27 @@ export async function submitNativeTransaction(
 
   // 6. Submit
   const signatureBytes = ethers.getBytes(signature);
-  const ethAddressBytes = new TextEncoder().encode(ethAddress);
+  const ethAddressBytes = new TextEncoder().encode(checksummedAddress);
 
   // DEBUG LOGGING START
+  const siweBytes = new TextEncoder().encode(siwe);
   const debugState = {
-    ethAddress: ethAddress,
+    ethAddress: checksummedAddress,
     ethAddressBytes: Array.from(ethAddressBytes),
     digest: digestHex,
+    digestBytes: Array.from(digest),
     scheme: scheme,
     domain: domain,
     issuedAt: issuedAt,
     siweMessage: siwe,
+    siweMessageLength: siweBytes.length,
+    siweMessageBytes: Array.from(siweBytes),
     signature: signature,
+    signatureBytes: Array.from(signatureBytes),
     chain_id: ledgerInfo.chain_id,
     entryFunction: entryFunction,
-    origin: window.location.origin
+    origin: window.location.origin,
+    networkName: networkName
   };
   console.log("SubmitNativeTransaction Debug:", JSON.stringify(debugState, null, 2));
   // DEBUG LOGGING END
@@ -271,25 +304,116 @@ export async function submitNativeTransaction(
   );
 
   try {
+    console.log("\n=== Submitting Transaction ===");
+    console.log("Transaction payload:", JSON.stringify(payload, null, 2));
+    console.log("Sender address:", senderAddress.toString());
+
     const pendingTx = await aptos.transaction.submit.simple({
       transaction,
       senderAuthenticator: auth,
     });
+
+    console.log("\n✅ Transaction submitted successfully!");
+    console.log("Transaction hash:", pendingTx.hash);
+
     return pendingTx;
   } catch (e: any) {
-    console.error("Submission Failed. Details:", e);
+    console.error("\n❌ Submission Failed");
+    console.error("Error message:", e.message);
+    console.error("Error stack:", e.stack);
+
     // Log the debug state again on failure for visibility
-    console.error("Debug State on Failure:", JSON.stringify(debugState, null, 2));
+    console.error("\n=== Debug State on Failure ===");
+    console.error(JSON.stringify(debugState, null, 2));
+
     if (e.response) {
-      console.error("Response Status:", e.response.status);
-      console.error(
-        "Response Text:",
-        await e.response.text().catch(() => "Could not read text"),
-      );
+      console.error("\n=== Response Details ===");
+      console.error("Status:", e.response.status);
+      console.error("Status Text:", e.response.statusText);
+
+      try {
+        const responseText = await e.response.text();
+        console.error("Response Body:", responseText);
+
+        try {
+          const responseJson = JSON.parse(responseText);
+          console.error("Parsed Response:", JSON.stringify(responseJson, null, 2));
+
+          if (responseJson.vm_error_code !== undefined) {
+            console.error("\n=== VM Error Details ===");
+            console.error("VM Error Code:", responseJson.vm_error_code);
+            console.error("Message:", responseJson.message);
+
+            // Provide specific guidance based on error code
+            if (responseJson.vm_error_code === 1) {
+              console.error("\n💡 INVALID_SIGNATURE (code 1) detected");
+              console.error("This means the Move contract's signature verification failed");
+              console.error("\nPossible causes:");
+              console.error("1. Entry function name mismatch between SIWE message and transaction");
+              console.error("2. Account address derivation issue");
+              console.error("3. BCS serialization mismatch");
+              console.error("\nDebugging steps:");
+              console.error("- Check that entry function in SIWE matches transaction payload");
+              console.error("- Verify the sender address is correctly derived");
+              console.error("- Check Move contract logs if available");
+            }
+          }
+        } catch (jsonError) {
+          // Response wasn't JSON, that's okay
+        }
+      } catch (textError) {
+        console.error("Could not read response text");
+      }
     }
+
     throw new Error(
       `Transaction Submission verification failed: ${e.message || e}`,
     );
+  }
+}
+
+/**
+ * Sanity Test: Simple APT transfer using MetaMask signature
+ * This tests ONLY the signature verification without any custom contracts
+ */
+export async function testSimpleAPTTransfer(ethAddress: string) {
+  console.log("\n=== 🧪 Sanity Test: Simple APT Transfer ===");
+  console.log("This tests signature verification with the simplest possible transaction");
+  console.log("Using: 0x1::aptos_account::transfer (standard Aptos function)\n");
+
+  // Show which addresses we're using
+  const derivedAddress = await getDerivedAddress(ethAddress.toLowerCase());
+  console.log("ETH Address (identity):", ethAddress);
+  console.log("Aptos Derived Address (sender):", derivedAddress.toString());
+  console.log("This is the same address the faucet funded ✓\n");
+
+  // Generate a random recipient address (standard Ed25519 Aptos account)
+  const randomRecipient = "0x" + Array.from({ length: 64 }, () =>
+    Math.floor(Math.random() * 16).toString(16)
+  ).join('');
+
+  console.log("Recipient (random):", randomRecipient);
+  console.log("Amount: 100 octas (0.000001 APT)\n");
+
+  try {
+    const result = await submitNativeTransaction(ethAddress, {
+      function: "0x1::aptos_account::transfer",
+      functionArguments: [randomRecipient, 100],
+    });
+
+    console.log("\n✅ SANITY TEST PASSED!");
+    console.log("Transaction hash:", result.hash);
+    console.log("\nConclusion: Signature verification is working correctly!");
+    console.log("The issue with FAKEETH::mint is likely contract-specific\n");
+
+    return { success: true, hash: result.hash };
+  } catch (e: any) {
+    console.error("\n❌ SANITY TEST FAILED!");
+    console.error("Error:", e.message);
+    console.error("\nConclusion: There's a fundamental issue with signature verification");
+    console.error("This needs to be fixed before trying custom contracts\n");
+
+    return { success: false, error: e.message };
   }
 }
 
@@ -300,7 +424,11 @@ export async function requestAPT(ethAddress: string) {
   const derived = await getDerivedAddress(ethAddress);
   const FAUCET_URL = "http://127.0.0.1:8081";
 
-  console.log("Funding Gas (APT)...");
+  console.log("=== Requesting APT from Faucet ===");
+  console.log("  Ethereum Address:", ethAddress);
+  console.log("  Aptos Derived Address:", derived.toString());
+  console.log("  Funding address:", derived.toString());
+
   const res = await fetch(
     `${FAUCET_URL}/mint?amount=100000000&address=${derived.toString()}`,
     { method: "POST" },
@@ -324,8 +452,15 @@ export async function requestAPT(ethAddress: string) {
  * Requires contracts to be deployed
  */
 export async function requestTestTokens(ethAddress: string) {
+  const derived = await getDerivedAddress(ethAddress);
+
+  console.log("=== Minting Test Tokens ===");
+  console.log("  Ethereum Address:", ethAddress);
+  console.log("  Aptos Derived Address:", derived.toString());
+  console.log("  Transaction sender:", derived.toString());
+
   // Mint FAKEETH (10 ETH)
-  console.log("Minting FAKEETH...");
+  console.log("\n  Minting FAKEETH...");
   // 8 decimals from Move file
   const amountEth = BigInt(10) * BigInt(100_000_000);
   await submitNativeTransaction(ethAddress, {

@@ -11,17 +11,20 @@ export function AccountStatus({ ethAddress }: AccountStatusProps) {
     fakeEth: "0",
     fakeUsd: "0",
   });
+  const [aptosAddress, setAptosAddress] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchBalances = async () => {
       if (!ethAddress) {
         setBalances({ apt: "0", fakeEth: "0", fakeUsd: "0" });
+        setAptosAddress(null);
         return;
       }
 
       try {
         const derived = await getDerivedAddress(ethAddress);
         const derivedStr = derived.toString();
+        setAptosAddress(derivedStr);
 
         // Helper to fetch balance via View function (supports Coin and FA)
         const getBalance = async (coinType: string) => {
@@ -70,21 +73,39 @@ export function AccountStatus({ ethAddress }: AccountStatusProps) {
   }, [ethAddress]);
 
   return (
-    <div className="flex items-center gap-6 text-sm font-mono bg-gray-800/50 px-4 py-2 rounded border border-gray-700">
-      <div className="flex items-center">
-        <span className="text-gray-400 mr-2">Wallet:</span>
-        {ethAddress ? (
-          <span className="text-green-400">
-            {ethAddress.substring(0, 6)}...{ethAddress.substring(38)}
-          </span>
-        ) : (
-          <span className="text-gray-500">Not Connected</span>
+    <div className="flex flex-col gap-2 text-sm font-mono bg-gray-800/50 px-4 py-3 rounded border border-gray-700">
+      {/* Address Display */}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center">
+          <span className="text-gray-400 mr-2 min-w-[100px]">ETH Address:</span>
+          {ethAddress ? (
+            <span className="text-green-400 text-xs" title={ethAddress}>
+              {ethAddress.substring(0, 8)}...{ethAddress.substring(38)}
+            </span>
+          ) : (
+            <span className="text-gray-500">Not Connected</span>
+          )}
+        </div>
+
+        {aptosAddress && (
+          <>
+            <div className="flex items-center">
+              <span className="text-gray-400 mr-2 min-w-[100px]">Aptos Address:</span>
+              <span className="text-blue-400 text-xs" title={aptosAddress}>
+                {aptosAddress.substring(0, 8)}...{aptosAddress.substring(58)}
+              </span>
+            </div>
+            <div className="text-xs text-gray-500 italic ml-[100px]">
+              ↑ Derived from ETH address (holds APT & tokens)
+            </div>
+          </>
         )}
       </div>
 
+      {/* Balances */}
       {ethAddress && (
         <>
-          <div className="h-4 w-px bg-gray-700"></div>
+          <div className="h-px bg-gray-700"></div>
           <div className="flex items-center gap-4">
             <div title="Gas (APT)">
               <span className="text-gray-400 mr-1">APT:</span>
