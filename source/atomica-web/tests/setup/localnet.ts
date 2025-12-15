@@ -55,7 +55,8 @@ const DEPLOYER_PK =
   "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
-const APTOS_BIN = "/Users/lucas/code/rust/atomica/source/target/debug/aptos";
+// Use the debug build we just created
+const APTOS_BIN = resolve("../target/debug/aptos");
 
 export async function runAptosCmd(args: string[], cwd: string = WEB_DIR) {
   return new Promise<void>((resolve, reject) => {
@@ -65,6 +66,9 @@ export async function runAptosCmd(args: string[], cwd: string = WEB_DIR) {
       // Isolate config
       env: {
         ...process.env,
+        RUST_LOG: "debug",
+        // Position trace.log alongside validator.log in the test directory
+        MOVE_VM_TRACE: resolve(process.env.HOME || "", ".aptos/testnet/trace.log"),
         APTOS_GLOBAL_CONFIG_DIR: TEST_CONFIG_DIR,
         APTOS_DISABLE_TELEMETRY: "true",
       },
@@ -166,6 +170,12 @@ export async function setupLocalnet() {
   // Ensure clean slate
   await killZombies();
 
+  // Clean previous trace
+  const tracePath = resolve(process.env.HOME || "", ".aptos/testnet/trace.log");
+  if (existsSync(tracePath)) {
+    rmSync(tracePath);
+  }
+
   console.log("Starting Local Testnet...");
 
   // We assume 'aptos' binary is available or use strict path
@@ -173,10 +183,8 @@ export async function setupLocalnet() {
   // For reliability in tests, we can follow orchestrator logic or expected path.
   // Let's assume 'aptos' is in path for now, or use the one we found earlier.
 
-  const aptosBin = "/Users/lucas/code/rust/atomica/source/target/debug/aptos";
-
   // Use the locally built aptos binary from zapatos (unified target dir) to ensure latest framework
-  const aptosBinPath = "/Users/lucas/code/rust/atomica/source/target/debug/aptos";
+  const aptosBinPath = resolve("../target/debug/aptos");
 
   localnetProcess = spawn(
     aptosBinPath,
@@ -192,6 +200,12 @@ export async function setupLocalnet() {
     {
       cwd: WEB_DIR,
       stdio: ["pipe", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        RUST_LOG: "debug",
+        // Position trace.log alongside validator.log in the test directory
+        MOVE_VM_TRACE: resolve(process.env.HOME || "", ".aptos/testnet/trace.log"),
+      }
     },
   );
 
