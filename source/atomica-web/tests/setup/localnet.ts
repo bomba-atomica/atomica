@@ -170,10 +170,13 @@ export async function setupLocalnet() {
   // Ensure clean slate
   await killZombies();
 
+  const LOCAL_TEST_DIR = resolve(WEB_DIR, ".aptos/testnet");
+  const TRACE_PATH = resolve(LOCAL_TEST_DIR, "trace.log");
+  const VALIDATOR_LOG_PATH = resolve(LOCAL_TEST_DIR, "validator.log");
+
   // Clean previous trace
-  const tracePath = resolve(process.env.HOME || "", ".aptos/testnet/trace.log");
-  if (existsSync(tracePath)) {
-    rmSync(tracePath);
+  if (existsSync(TRACE_PATH)) {
+    rmSync(TRACE_PATH);
   }
 
   console.log("Starting Local Testnet...");
@@ -196,6 +199,8 @@ export async function setupLocalnet() {
       "--with-faucet",
       "--faucet-port",
       "8081",
+      "--test-dir",
+      LOCAL_TEST_DIR,
     ],
     {
       cwd: WEB_DIR,
@@ -204,7 +209,7 @@ export async function setupLocalnet() {
         ...process.env,
         RUST_LOG: "debug",
         // Position trace.log alongside validator.log in the test directory
-        MOVE_VM_TRACE: resolve(process.env.HOME || "", ".aptos/testnet/trace.log"),
+        MOVE_VM_TRACE: TRACE_PATH,
       }
     },
   );
@@ -243,7 +248,7 @@ export async function setupLocalnet() {
       // Let's rely on standard location for now or try to parse
 
       // const home = process.env.HOME; // Unused
-      const logPath = `${process.env.HOME}/.aptos/testnet/validator.log`;
+      const logPath = VALIDATOR_LOG_PATH;
       // We set APTOS_GLOBAL_CONFIG_DIR = TEST_CONFIG_DIR in runAptosCmd (deployment),
       // BUT localnetProcess was spawned WITHOUT that env var in setupLocalnet!
       // Wait, setupLocalnet spawning aptosBin does NOT set env vars for config dir?

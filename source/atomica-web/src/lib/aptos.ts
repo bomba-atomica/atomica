@@ -5,6 +5,7 @@ import {
   AccountAddress,
   Serializer,
   AccountAuthenticator,
+  AccountAuthenticatorVariant,
 } from "@aptos-labs/ts-sdk";
 import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
 import { ethers } from "ethers";
@@ -112,72 +113,71 @@ function calculateAbstractDigest(signingMessage: Uint8Array): Uint8Array {
   return sha3(combined);
 }
 
-export class CustomAbstractAuthenticator extends AccountAuthenticator {
-  public digest: Uint8Array;
-  public signature: Uint8Array;
-  public ethAddressBytes: Uint8Array;
-  public scheme: string;
-  public issuedAt: string;
+/**
+ * Serializes a SIWE (Sign-In With Ethereum) abstract signature.
+ * Structure: SIWEAbstractSignature::MessageV2 variant with scheme, issuedAt, and signature.
+ */
+function serializeSIWEAbstractSignature(
+  scheme: string,
+  issuedAt: string,
+  signature: Uint8Array,
+): Uint8Array {
+  const serializer = new Serializer();
+  // SIWEAbstractSignature::MessageV2 (Variant 1)
+  serializer.serializeU32AsUleb128(1);
+  serializer.serializeStr(scheme);
+  serializer.serializeStr(issuedAt);
+  serializer.serializeBytes(signature);
+  return serializer.toUint8Array();
+}
 
+/**
+ * Serializes a SIWE abstract public key.
+ * Structure: Contains ethereum address bytes and domain.
+ */
+function serializeSIWEAbstractPublicKey(
+  ethAddressBytes: Uint8Array,
+  domain: string,
+): Uint8Array {
+  const serializer = new Serializer();
+  serializer.serializeBytes(ethAddressBytes);
+  serializer.serializeBytes(new TextEncoder().encode(domain));
+  return serializer.toUint8Array();
+}
+
+/**
+ * SIWE Account Authenticator using SDK's proper enums and structure.
+ * This replaces our hand-crafted serialization with the official SDK approach.
+ */
+class SIWEAccountAuthenticator extends AccountAuthenticator {
   constructor(
-    digest: Uint8Array,
-    signature: Uint8Array,
-    ethAddressBytes: Uint8Array,
-    scheme: string,
-    issuedAt: string,
+    private readonly digest: Uint8Array,
+    private readonly abstractSignature: Uint8Array,
+    private readonly accountIdentity: Uint8Array,
   ) {
     super();
-    this.digest = digest;
-    this.signature = signature;
-    this.ethAddressBytes = ethAddressBytes;
-    this.scheme = scheme;
-    this.issuedAt = issuedAt;
   }
 
   serialize(serializer: Serializer): void {
-    // Variant 4 (Abstract)
-    serializer.serializeU32AsUleb128(4);
+    // Use SDK's AccountAuthenticatorVariant enum
+    serializer.serializeU32AsUleb128(AccountAuthenticatorVariant.Abstraction);
 
-    // FunctionInfo
+    // FunctionInfo for ethereum_derivable_account::authenticate
     AccountAddress.from("0x1").serialize(serializer);
     serializer.serializeStr("ethereum_derivable_account");
     serializer.serializeStr("authenticate");
 
-    // AuthData
-    // Variant 1 (DerivableV1) for AbstractionAuthData
+    // AbstractAuthenticationDataVariant::DerivableV1 = 1 (not exported from SDK, so we use the literal)
     serializer.serializeU32AsUleb128(1);
 
-    // digest (vector<u8>)
+    // Digest
     serializer.serializeBytes(this.digest);
 
-    // abstract_signature (vector<u8>) -> Needs to be BCS SIWEAbstractSignature
-    const sigSerializer = new Serializer();
-    // SIWEAbstractSignature::MessageV2 (Variant 1)
-    sigSerializer.serializeU32AsUleb128(1);
-    sigSerializer.serializeStr(this.scheme);
-    sigSerializer.serializeStr(this.issuedAt);
-    sigSerializer.serializeBytes(this.signature);
+    // Abstract signature (already serialized SIWE structure)
+    serializer.serializeBytes(this.abstractSignature);
 
-    const abstractSignatureBytes = sigSerializer.toUint8Array();
-    console.log("AbstractSignature BCS:", Array.from(abstractSignatureBytes));
-    console.log("  Variant byte:", abstractSignatureBytes[0]);
-    console.log("  Scheme:", this.scheme);
-    console.log("  IssuedAt:", this.issuedAt);
-    console.log("  Signature length:", this.signature.length);
-    serializer.serializeBytes(abstractSignatureBytes);
-
-    // public_key (vector<u8>) - SIWEAbstractPublicKey serialized
-    const pkSerializer = new Serializer();
-    // ethereum_address: vector<u8> (UTF8 bytes of hex string)
-    pkSerializer.serializeBytes(this.ethAddressBytes);
-    pkSerializer.serializeBytes(new TextEncoder().encode(window.location.host)); // domain
-    const pkBcs = pkSerializer.toUint8Array();
-
-    console.log("PublicKey BCS:", Array.from(pkBcs));
-    console.log("  EthAddress bytes:", Array.from(this.ethAddressBytes));
-    console.log("  Domain:", window.location.host);
-
-    serializer.serializeBytes(pkBcs);
+    // Account identity (public key - already serialized)
+    serializer.serializeBytes(this.accountIdentity);
   }
 }
 
@@ -295,12 +295,32 @@ export async function submitNativeTransaction(
   console.log("SubmitNativeTransaction Debug:", JSON.stringify(debugState, null, 2));
   // DEBUG LOGGING END
 
-  const auth = new CustomAbstractAuthenticator(
-    digest,
-    signatureBytes,
-    ethAddressBytes,
+  // Build the SIWE abstract signature (scheme, issuedAt, signature)
+  const abstractSignature = serializeSIWEAbstractSignature(
     scheme,
     issuedAt,
+    signatureBytes,
+  );
+
+  // Build the SIWE abstract public key (ethAddress, domain)
+  const accountIdentity = serializeSIWEAbstractPublicKey(
+    ethAddressBytes,
+    domain,
+  );
+
+  console.log("AbstractSignature BCS:", Array.from(abstractSignature));
+  console.log("  Scheme:", scheme);
+  console.log("  IssuedAt:", issuedAt);
+  console.log("  Signature length:", signatureBytes.length);
+  console.log("AccountIdentity BCS:", Array.from(accountIdentity));
+  console.log("  EthAddress bytes:", Array.from(ethAddressBytes));
+  console.log("  Domain:", domain);
+
+  // Create account authenticator using SDK enums
+  const auth = new SIWEAccountAuthenticator(
+    digest,
+    abstractSignature,
+    accountIdentity,
   );
 
   try {
