@@ -61,6 +61,7 @@ This document outlines the test environment for the "Atomica Web PoC" demo.
 
 ### 3. Local Infrastructure
 *   `aptos-node`: Running locally Use `tlock-poc` branch.
+    *   **Note**: Must be built from source to include latest framework changes. See [Building Aptos Dependencies](../development/building-aptos-dependencies.md).
 *   `faucet`: Standard Aptos faucet for funding the Relayer.
 
 ## Deliverables

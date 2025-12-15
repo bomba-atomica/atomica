@@ -367,7 +367,7 @@ export async function submitNativeTransaction(
     }
 
     throw new Error(
-      `Transaction Submission verification failed: ${e.message || e}`,
+      `Transaction Submission verification failed: ${e.message || e}\nDebug State: ${JSON.stringify(debugState, null, 2)}`,
     );
   }
 }

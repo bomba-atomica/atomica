@@ -136,4 +136,3 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
 
     }, 60000);
 });
-```

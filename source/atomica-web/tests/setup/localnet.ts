@@ -175,8 +175,11 @@ export async function setupLocalnet() {
 
   const aptosBin = "/Users/lucas/code/rust/atomica/source/target/debug/aptos";
 
+  // Use the locally built aptos binary from zapatos (unified target dir) to ensure latest framework
+  const aptosBinPath = "/Users/lucas/code/rust/atomica/source/target/debug/aptos";
+
   localnetProcess = spawn(
-    aptosBin,
+    aptosBinPath,
     [
       "node",
       "run-local-testnet",
@@ -207,7 +210,8 @@ export async function setupLocalnet() {
 
   console.log("Waiting for Localnet to be ready...");
   const start = Date.now();
-  while (Date.now() - start < 120000) {
+  // Increase timeout to 5 minutes for debug builds
+  while (Date.now() - start < 300000) {
     if (processExited) throw new Error("Localnet process exited prematurely");
 
     // Parse Log Path
