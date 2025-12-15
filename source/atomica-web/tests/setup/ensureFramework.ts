@@ -11,7 +11,7 @@ const exec = promisify(execCb);
 const SOURCE_ROOT = resolve(__dirname, "../../..");
 const ZAPATOS_FRAMEWORK_DIR = resolve(SOURCE_ROOT, "zapatos/aptos-move/framework");
 const FIXTURES_DIR = resolve(SOURCE_ROOT, "move-framework-fixtures");
-const BUILD_SCRIPT = resolve(SOURCE_ROOT, "atomica-web/scripts/build-framework.sh");
+const BUILD_SCRIPT = resolve(SOURCE_ROOT, "move-framework-fixtures/build-framework.sh");
 
 /**
  * Recursively find all .move files in a directory

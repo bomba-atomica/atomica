@@ -6,7 +6,7 @@ set -e
 # The .mrb file is named head-{hash}.mrb where {hash} is based on all .move source files
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SOURCE_ROOT="$SCRIPT_DIR"
+SOURCE_ROOT="$SCRIPT_DIR/.."
 ZAPATOS_DIR="$SOURCE_ROOT/zapatos"
 OUTPUT_DIR="$SOURCE_ROOT/move-framework-fixtures"
 FRAMEWORK_DIR="$ZAPATOS_DIR/aptos-move/framework"
@@ -14,7 +14,7 @@ FRAMEWORK_DIR="$ZAPATOS_DIR/aptos-move/framework"
 # Compute hash of all .move files in the framework
 # This creates a deterministic hash based on content of all Move source files
 echo "Computing hash of Move framework sources..."
-MOVE_HASH=$(find "$FRAMEWORK_DIR" -name "*.move" -type f -exec shasum -a 256 {} \; | sort | shasum -a 256 | cut -d' ' -f1 | cut -c1-16)
+MOVE_HASH=$(find "$FRAMEWORK_DIR" -name "*.move" -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | cut -d' ' -f1 | cut -c1-16)
 
 OUTPUT_FILE="$OUTPUT_DIR/head-${MOVE_HASH}.mrb"
 LATEST_FILE="$OUTPUT_DIR/head.mrb"
@@ -46,7 +46,7 @@ cd "$FRAMEWORK_DIR"
 # TODO: do release bundles have all the debugging for trace and error maps?
 echo "Building framework (this will take a few minutes)..."
 
-cargo run -p aptos-framework -- release --target head
+cargo run -p aptos-framework --features testing -- release --target head
 
 # Move the generated file to our fixtures directory with hash-based name
 mv head.mrb "$OUTPUT_FILE"
