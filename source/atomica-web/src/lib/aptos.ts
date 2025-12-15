@@ -323,6 +323,28 @@ export async function submitNativeTransaction(
     accountIdentity,
   );
 
+  // SIMULATE FIRST to get detailed error info
+  console.log("\n=== Simulating Transaction ===");
+  try {
+    const [simulationResult] = await aptos.transaction.simulate.simple({
+      signerPublicKey: senderAddress, // Use sender address as public key for AA
+      transaction,
+    });
+
+    console.log("Simulation Result:");
+    console.log("  Success:", simulationResult.success);
+    console.log("  VM Status:", simulationResult.vm_status);
+    console.log("  Gas used:", simulationResult.gas_used);
+
+    if (!simulationResult.success) {
+      console.error("❌ Simulation failed!");
+      console.error("Full simulation result:", JSON.stringify(simulationResult, null, 2));
+    }
+  } catch (simError: any) {
+    console.error("❌ Simulation error:", simError.message);
+    console.error("Simulation failed, will try to submit anyway...");
+  }
+
   try {
     console.log("\n=== Submitting Transaction ===");
     console.log("Transaction payload:", JSON.stringify(payload, null, 2));
