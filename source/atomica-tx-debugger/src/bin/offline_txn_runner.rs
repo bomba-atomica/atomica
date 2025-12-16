@@ -2,14 +2,14 @@
 use clap::Parser;
 use std::path::PathBuf;
 use std::fs;
-use aptos_types::transaction::{SignedTransaction, Transaction, TransactionStatus};
+use aptos_types::transaction::{SignedTransaction, TransactionStatus};
 
 use aptos_framework::ReleaseBundle;
 
 use anyhow::{Context, Result};
 use aptos_logger::Logger;
 
-use atomica_test_executor::offline_runner::OfflineTxnRunner;
+use atomica_tx_debugger::offline_runner::OfflineTxnRunner;
 
 
 #[derive(Parser, Debug)]
@@ -26,6 +26,10 @@ struct Args {
     /// Treat the transaction file content as hex string instead of raw bytes
     #[arg(long)]
     is_hex: bool,
+
+    /// Enable verbose opcode tracing to a directory
+    #[arg(long)]
+    trace: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
@@ -44,6 +48,12 @@ fn main() -> Result<()> {
     // 2. Setup Runner
     println!("Initializing FakeExecutor...");
     let mut runner = OfflineTxnRunner::new(&release_bundle);
+
+    if let Some(trace_path) = args.trace {
+        println!("Opcode tracing enabled. Output will be saved to {:?}", trace_path);
+        fs::create_dir_all(&trace_path).context("Failed to create trace directory")?;
+        runner.enable_tracing(trace_path.clone());
+    }
 
     // 3. Load Transaction
     println!("Loading transaction from {:?}", args.txn_path);
@@ -78,20 +88,66 @@ fn main() -> Result<()> {
     println!("\n=== Execution Result ===");
     println!("Status: {:?}", tx_out.status());
     println!("Gas Used: {}", tx_out.gas_used());
-    
+
+    // Print events
+    let events = tx_out.events();
+    if !events.is_empty() {
+        println!("\n=== Events ({}) ===", events.len());
+        for (idx, event) in events.iter().enumerate() {
+            println!("Event #{}: {:?}", idx, event.type_tag());
+            if let Ok(event_data) = bcs::to_bytes(event.event_data()) {
+                println!("  Data (hex): {}", hex::encode(&event_data));
+            }
+        }
+    }
+
+    // Handle different transaction statuses
     match tx_out.status() {
         TransactionStatus::Keep(status) => {
-            println!("Keep Status: {:?}", status);
+            match status {
+                aptos_types::transaction::ExecutionStatus::Success => {
+                    println!("\n✓ Transaction executed successfully");
+                },
+                aptos_types::transaction::ExecutionStatus::OutOfGas => {
+                    println!("\n✗ Transaction ran out of gas");
+                },
+                aptos_types::transaction::ExecutionStatus::ExecutionFailure { location, function, code_offset } => {
+                    println!("\n✗ Execution failure:");
+                    println!("  Location: {:?}", location);
+                    println!("  Function: {}", function);
+                    println!("  Code offset: {}", code_offset);
+                },
+                aptos_types::transaction::ExecutionStatus::MoveAbort { location, code, info } => {
+                    println!("\n✗ Move abort:");
+                    println!("  Location: {:?}", location);
+                    println!("  Code: {}", code);
+                    if let Some(abort_info) = info {
+                        println!("  Info: {:?}", abort_info);
+                    }
+                },
+                aptos_types::transaction::ExecutionStatus::MiscellaneousError(maybe_code) => {
+                    println!("\n✗ Miscellaneous error: {:?}", maybe_code);
+                }
+            }
         },
-        TransactionStatus::Discard(status) => {
-            println!("Discard Status: {:?}", status);
-            println!("Use 'aptos move explain' or similar tools to decode specifics if needed,");
-            println!("but typically Discard implies validation failure (auth, gas, seq number).");
+        TransactionStatus::Discard(status_code) => {
+            println!("\n✗ Transaction discarded: {:?} ({})", status_code, *status_code as u64);
         },
         TransactionStatus::Retry => {
-            println!("Status: Retry (Transient error)");
+            println!("\n⟳ Status: Retry (Transient error)");
         }
     }
 
     Ok(())
+}
+
+fn print_vm_status(status: &aptos_types::vm_status::VMStatus) {
+    println!("\n--- Error Details ---");
+    println!("Code: {:?} ({})", status.status_code(), status.status_code() as u64);
+    if let Some(sub) = status.sub_status() {
+        println!("Sub-status: {}", sub);
+    }
+    if let Some(msg) = status.message() {
+        println!("Message: {}", msg);
+    }
 }
