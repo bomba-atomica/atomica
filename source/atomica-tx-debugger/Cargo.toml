@@ -18,6 +18,8 @@ aptos-gas-algebra = { path = "../zapatos/aptos-move/aptos-gas-algebra" }
 aptos-gas-schedule = { path = "../zapatos/aptos-move/aptos-gas-schedule" }
 aptos-vm-environment = { path = "../zapatos/aptos-move/aptos-vm-environment" }
 aptos-block-executor = { path = "../zapatos/aptos-move/block-executor" }
+aptos-cached-packages = { path = "../zapatos/aptos-move/framework/cached-packages" }
+aptos-crypto = { path = "../zapatos/crates/aptos-crypto" }
 move-core-types = { path = "../zapatos/third_party/move/move-core/types" }
 #todo: if this debugging flag is not respected in the build tree we may not be able to get move opcode traces
 move-vm-runtime = { path = "../zapatos/third_party/move/move-vm/runtime", features = ["debugging"] }
@@ -25,6 +27,8 @@ move-vm-runtime = { path = "../zapatos/third_party/move/move-vm/runtime", featur
 [dev-dependencies]
 aptos-cached-packages = { path = "../zapatos/aptos-move/framework/cached-packages" }
 aptos-keygen = { path = "../zapatos/crates/aptos-keygen" }
+aptos-crypto = { path = "../zapatos/crates/aptos-crypto" }
+e2e-tests = { path = "../zapatos/aptos-move/e2e-tests" }
 
 [patch.crates-io]
 dudect-bencher = { git = "https://github.com/aptos-labs/dudect-bencher", rev = "9515677c83c58884c1a8c764251753269d46fc0e" }

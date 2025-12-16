@@ -30,13 +30,22 @@ struct Args {
     /// Enable verbose opcode tracing to a directory
     #[arg(long)]
     trace: Option<PathBuf>,
+
+    /// Enable verbose logging (shows internal VM and framework logs)
+    #[arg(long, short)]
+    verbose: bool,
 }
 
 fn main() -> Result<()> {
-    // Initialize Logger to capture debug::print! output
-    Logger::new().level(aptos_logger::Level::Debug).init();
-
     let args = Args::parse();
+
+    // Initialize Logger to capture debug::print! output and optionally VM logs
+    let log_level = if args.verbose {
+        aptos_logger::Level::Debug
+    } else {
+        aptos_logger::Level::Warn
+    };
+    Logger::new().level(log_level).init();
 
     // 1. Load Genesis from .mrb
     println!("Loading genesis from {:?}", args.mrb_path);
@@ -89,6 +98,33 @@ fn main() -> Result<()> {
     println!("Status: {:?}", tx_out.status());
     println!("Gas Used: {}", tx_out.gas_used());
 
+    // Print write set (state changes)
+    let write_set = tx_out.write_set();
+    let write_set_v0 = write_set.as_v0();
+    let changes_count = write_set_v0.iter().count();
+    if changes_count > 0 {
+        println!("\n=== Write Set ({} changes) ===", changes_count);
+        for (state_key, write_op) in write_set_v0.iter() {
+            println!("State Key: {:?}", state_key);
+            if let Some(state_value) = write_op.as_state_value_opt() {
+                let bytes = state_value.bytes();
+                if bytes.len() <= 64 {
+                    println!("  Value (hex): {}", hex::encode(bytes));
+                } else {
+                    println!("  Value (hex, {} bytes): {}...", bytes.len(), hex::encode(&bytes[..64]));
+                }
+                if write_op.is_delete() {
+                    println!("  Operation: DELETION");
+                } else {
+                    println!("  Operation: CREATE/MODIFY");
+                }
+            } else {
+                println!("  Operation: DELETION");
+            }
+            println!();
+        }
+    }
+
     // Print events
     let events = tx_out.events();
     if !events.is_empty() {
@@ -120,9 +156,11 @@ fn main() -> Result<()> {
                 aptos_types::transaction::ExecutionStatus::MoveAbort { location, code, info } => {
                     println!("\n✗ Move abort:");
                     println!("  Location: {:?}", location);
-                    println!("  Code: {}", code);
+                    println!("  Abort code: {} (0x{:x})", code, code);
                     if let Some(abort_info) = info {
-                        println!("  Info: {:?}", abort_info);
+                        println!("\n  Error details:");
+                        println!("    Reason: {}", abort_info.reason_name);
+                        println!("    Description: {}", abort_info.description);
                     }
                 },
                 aptos_types::transaction::ExecutionStatus::MiscellaneousError(maybe_code) => {
@@ -131,7 +169,9 @@ fn main() -> Result<()> {
             }
         },
         TransactionStatus::Discard(status_code) => {
-            println!("\n✗ Transaction discarded: {:?} ({})", status_code, *status_code as u64);
+            println!("\n✗ Transaction discarded:");
+            println!("  Status: {:?}", status_code);
+            println!("  Code: {} (0x{:x})", *status_code as u64, *status_code as u64);
         },
         TransactionStatus::Retry => {
             println!("\n⟳ Status: Retry (Transient error)");
@@ -141,13 +181,3 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn print_vm_status(status: &aptos_types::vm_status::VMStatus) {
-    println!("\n--- Error Details ---");
-    println!("Code: {:?} ({})", status.status_code(), status.status_code() as u64);
-    if let Some(sub) = status.sub_status() {
-        println!("Sub-status: {}", sub);
-    }
-    if let Some(msg) = status.message() {
-        println!("Message: {}", msg);
-    }
-}
