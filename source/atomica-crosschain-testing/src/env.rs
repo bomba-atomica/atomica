@@ -5,7 +5,9 @@ use std::time::Duration;
 use tokio::time::sleep;
 use aptos_config::keys::ConfigKey;
 use aptos_config::utils::get_available_port;
+
 use rand::rngs::OsRng;
+
 use std::sync::Arc;
 use aptos_infallible::Mutex;
 use once_cell::sync::Lazy;
