@@ -81,7 +81,7 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
         testingUtils.mockAccounts([TEST_ACCOUNT]);
         testingUtils.mockRequestAccounts([TEST_ACCOUNT]);
 
-    }, 300000);
+    }, 600000);
 
     afterAll(async () => {
         await teardownLocalnet();

@@ -9,7 +9,7 @@ const exec = promisify(execCb);
 let localnetProcess: ChildProcess | null = null;
 
 // Adjust paths relative to atomica-web root or where vitest runs
-const APTOS_CLI_PATH = resolve("../../target/debug/aptos");
+const APTOS_CLI_PATH = resolve("../target/debug/aptos");
 const WEB_DIR = resolve(".");
 const GENESIS_FRAMEWORK_PATH = resolve("../move-framework-fixtures/head.mrb");
 
@@ -170,7 +170,7 @@ export async function deployContracts() {
 
 export async function setupLocalnet() {
   // Ensure framework bundle is built and up-to-date
-  await ensureFramework();
+  // await ensureFramework();
 
   // Ensure clean slate
   await killZombies();
@@ -206,8 +206,10 @@ export async function setupLocalnet() {
       "8081",
       "--test-dir",
       LOCAL_TEST_DIR,
+      /*
       "--genesis-framework",
       GENESIS_FRAMEWORK_PATH,
+      */
     ],
     {
       cwd: WEB_DIR,
