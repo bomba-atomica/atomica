@@ -72,7 +72,7 @@ function App() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-8">
-            <Faucet account={account} />
+            <Faucet account={account} onMintSuccess={balances.refetch} />
 
             {/* Sanity Test - Discreet debug utility */}
             <SanityTest account={account} />

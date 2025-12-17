@@ -1,20 +1,36 @@
 // Import interface implicitly (copying definition to avoid circular deposit issues if needed, but better to import)
 // We'll reimplement send logic to match LogEntry schema
+// We'll reimplement send logic to match LogEntry schema
 function getCallSite(): { file: string; line: number } | undefined {
     try {
         const err = new Error();
-        // Stack index 4 (Error -> getCallSite -> sendLog -> console.wrapper -> Caller)
-        const line = err.stack?.split("\n")[4];
-        if (!line) return undefined;
-        const match = line.match(/(?:\((.*):(\d+):(\d+)\))|(?:\s+at\s+)(.*):(\d+):(\d+)/);
-        const path = match?.[1] || match?.[4];
-        const lineNum = match?.[2] || match?.[5];
-        if (path && lineNum) {
-            // Remove protocol, query params (?t=...), and leading slash if needed
-            let clean = path.replace(/https?:\/\/[^/]+/, "");
-            clean = clean.split('?')[0]; // Remove query params
-            return { file: clean || path, line: parseInt(lineNum, 10) };
+        const stack = err.stack;
+        if (!stack) return undefined;
+
+        const lines = stack.split("\n");
+        // Iterate to find first line that isn't this file or internal
+        for (const line of lines) {
+            // Skip Error header or internal files
+            if (line.includes("debug-logger")) continue;
+            if (line.includes("Error")) continue;
+
+            // Match chrome/v8 format: at function (file:line:col) or at file:line:col
+            const match = line.match(/(?:\((.*):(\d+):(\d+)\))|(?:\s+at\s+)(.*):(\d+):(\d+)/);
+            const path = match?.[1] || match?.[4];
+            const lineNum = match?.[2] || match?.[5];
+
+            if (path && lineNum) {
+                // Remove protocol, query params (?t=...), and leading slash if needed
+                let clean = path.replace(/https?:\/\/[^/]+/, "");
+                clean = clean.split('?')[0]; // Remove query params
+
+                // If clean is empty or still "debug-logger", continue
+                if (!clean || clean.includes("debug-logger")) continue;
+
+                return { file: clean || path, line: parseInt(lineNum, 10) };
+            }
         }
+        return undefined;
     } catch { return undefined; }
 }
 

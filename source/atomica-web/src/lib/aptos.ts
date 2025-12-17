@@ -519,31 +519,39 @@ export async function requestAPT(ethAddress: string) {
  * Step 2: Mint test tokens (FAKEETH and FAKEUSD)
  * Requires contracts to be deployed
  */
-export async function requestTestTokens(ethAddress: string) {
-  const derived = await getDerivedAddress(ethAddress);
-
-  console.log("=== Minting Test Tokens ===");
-  console.log("  Ethereum Address:", ethAddress);
-  console.log("  Aptos Derived Address:", derived.toString());
-  console.log("  Transaction sender:", derived.toString());
-
-  // Mint FAKEETH (10 ETH)
-  console.log("\n  Minting FAKEETH...");
+/**
+ * Mint FAKEETH (10 ETH)
+ */
+export async function mintFakeEth(ethAddress: string) {
+  console.log("\n=== Minting FAKEETH ===");
   // 8 decimals from Move file
   const amountEth = BigInt(10) * BigInt(100_000_000);
-  await submitNativeTransaction(ethAddress, {
+  return await submitNativeTransaction(ethAddress, {
     function: `${CONTRACT_ADDR}::FAKEETH::mint`,
     functionArguments: [amountEth],
   });
+}
 
-  // Mint FAKEUSD (10,000 USD)
-  console.log("Minting FAKEUSD...");
+/**
+ * Mint FAKEUSD (10,000 USD)
+ */
+export async function mintFakeUsd(ethAddress: string) {
+  console.log("\n=== Minting FAKEUSD ===");
   const amountUsd = BigInt(10000) * BigInt(100_000_000);
-  await submitNativeTransaction(ethAddress, {
+  return await submitNativeTransaction(ethAddress, {
     function: `${CONTRACT_ADDR}::FAKEUSD::mint`,
     functionArguments: [amountUsd],
   });
+}
 
+/**
+ * Step 2: Mint test tokens (FAKEETH and FAKEUSD)
+ * Requires contracts to be deployed
+ * @deprecated Use mintFakeEth and mintFakeUsd separately
+ */
+export async function requestTestTokens(ethAddress: string) {
+  await mintFakeEth(ethAddress);
+  await mintFakeUsd(ethAddress);
   return { hash: "test-tokens-minted" };
 }
 
