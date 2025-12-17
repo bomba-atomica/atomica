@@ -200,6 +200,38 @@ async function main() {
     CONTRACTS_DIR,
   );
 
+  // Init FAKEETH
+  console.log("💰 Initializing FAKEETH...");
+  await runCommand(
+    aptosBin,
+    [
+      "move",
+      "run",
+      "--function-id",
+      "default::FAKEETH::initialize",
+      "--profile",
+      "default",
+      "--assume-yes",
+    ],
+    CONTRACTS_DIR,
+  );
+
+  // Init FAKEUSD
+  console.log("💵 Initializing FAKEUSD...");
+  await runCommand(
+    aptosBin,
+    [
+      "move",
+      "run",
+      "--function-id",
+      "default::FAKEUSD::initialize",
+      "--profile",
+      "default",
+      "--assume-yes",
+    ],
+    CONTRACTS_DIR,
+  );
+
   // 5. Host Webapp (Moved to start)
 
   // Handle Cleanup on Exit

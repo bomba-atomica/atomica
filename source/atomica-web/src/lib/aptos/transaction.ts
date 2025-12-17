@@ -205,7 +205,21 @@ export async function submitPreparedTransaction(preparedTx: PreparedTransaction)
             senderAuthenticator: auth,
         });
 
-        console.log("\n✅ Transaction submitted successfully!");
+        console.log("\n⏳ Transaction submitted, waiting for execution...");
+        console.log("Transaction hash:", pendingTx.hash);
+
+        // Wait for the transaction to be executed and check if it succeeded
+        const executedTx = await aptos.waitForTransaction({
+            transactionHash: pendingTx.hash,
+        });
+
+        if (!executedTx.success) {
+            console.error("\n❌ Transaction execution failed!");
+            console.error("VM Status:", executedTx.vm_status);
+            throw new Error(`Transaction failed: ${executedTx.vm_status}`);
+        }
+
+        console.log("\n✅ Transaction executed successfully!");
         console.log("Transaction hash:", pendingTx.hash);
 
         return pendingTx;

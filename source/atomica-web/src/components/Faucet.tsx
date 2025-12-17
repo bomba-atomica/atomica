@@ -45,7 +45,10 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
     } else {
       setUsdTxHash(hash);
     }
-    onMintSuccess?.();
+    // Wait for transaction to be indexed before refreshing balances
+    setTimeout(() => {
+      onMintSuccess?.();
+    }, 1500);
   };
 
   return (
