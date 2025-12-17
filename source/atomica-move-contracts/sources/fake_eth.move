@@ -1,39 +1,64 @@
-module atomica::FAKEETH {
-    use std::string;
+module atomica::fake_eth {
+    use aptos_framework::fungible_asset::{Self, MintRef, TransferRef, BurnRef, Metadata};
+    use aptos_framework::object::{Self, Object};
+    use aptos_framework::primary_fungible_store;
+    use std::string::utf8;
+    use std::option;
     use std::signer;
-    use aptos_framework::coin::{Self, BurnCapability, FreezeCapability, MintCapability};
 
-    /// Represents the FAKEETH coin.
-    struct FAKEETH {}
+    const ASSET_SYMBOL: vector<u8> = b"FAKEETH";
 
-    /// Stored capabilities for the coin.
-    struct Capabilities has key {
-        burn_cap: BurnCapability<FAKEETH>,
-        freeze_cap: FreezeCapability<FAKEETH>,
-        mint_cap: MintCapability<FAKEETH>,
+    /// Holds the refs for minting, transferring, and burning
+    struct ManagingRefs has key {
+        mint_ref: MintRef,
+        transfer_ref: TransferRef,
+        burn_ref: BurnRef,
     }
 
-    /// Initialize the FAKEETH coin.
-    public entry fun initialize(account: &signer) {
-        let (burn_cap, freeze_cap, mint_cap) = coin::initialize<FAKEETH>(
-            account,
-            string::utf8(b"Fake Ethereum"),
-            string::utf8(b"FAKEETH"),
-            8,
-            true,
+    /// Initialize the FAKEETH fungible asset
+    public entry fun initialize(admin: &signer) {
+        // Create a non-deletable object with a named address
+        let constructor_ref = &object::create_named_object(admin, ASSET_SYMBOL);
+        
+        // Create the FA's Metadata
+        primary_fungible_store::create_primary_store_enabled_fungible_asset(
+            constructor_ref,
+            option::none(), // No maximum supply
+            utf8(b"Fake Ethereum"),
+            utf8(ASSET_SYMBOL),
+            8, // decimals
+            utf8(b""),
+            utf8(b""),
         );
 
-        move_to(account, Capabilities {
-            burn_cap,
-            freeze_cap,
-            mint_cap,
+        // Generate refs for minting, transferring, and burning
+        let mint_ref = fungible_asset::generate_mint_ref(constructor_ref);
+        let transfer_ref = fungible_asset::generate_transfer_ref(constructor_ref);
+        let burn_ref = fungible_asset::generate_burn_ref(constructor_ref);
+
+        // Store the refs
+        move_to(admin, ManagingRefs {
+            mint_ref,
+            transfer_ref,
+            burn_ref,
         });
     }
 
-    /// Mint new FAKEETH coins.
-    public entry fun mint(account: &signer, amount: u64) acquires Capabilities {
-        let caps = borrow_global<Capabilities>(@atomica);
-        let coins = coin::mint<FAKEETH>(amount, &caps.mint_cap);
-        coin::deposit(signer::address_of(account), coins);
+    /// Mint FAKEETH to a recipient
+    public entry fun mint(admin: &signer, recipient: address, amount: u64) acquires ManagingRefs {
+        let admin_addr = signer::address_of(admin);
+        let refs = borrow_global<ManagingRefs>(admin_addr);
+        
+        // Mint the fungible asset
+        let fa = fungible_asset::mint(&refs.mint_ref, amount);
+        
+        // Deposit to the recipient's primary store
+        primary_fungible_store::deposit(recipient, fa);
+    }
+
+    /// Get the metadata object for FAKEETH
+    public fun get_metadata(): Object<Metadata> {
+        let metadata_address = object::create_object_address(&@atomica, ASSET_SYMBOL);
+        object::address_to_object<Metadata>(metadata_address)
     }
 }

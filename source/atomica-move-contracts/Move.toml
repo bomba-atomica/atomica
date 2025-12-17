@@ -7,3 +7,6 @@ AptosFramework = { local = "../zapatos/aptos-move/framework/aptos-framework" }
 
 [addresses]
 atomica = "_"
+
+[dev-addresses]
+atomica = "0xcafe"
