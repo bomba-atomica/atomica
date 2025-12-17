@@ -57,6 +57,7 @@ Issued At: ${issuedAt}`;
  */
 export async function getDerivedAddress(
   ethAddress: string,
+  domain?: string,
 ): Promise<AccountAddress> {
   const serializer = new Serializer();
   // FunctionInfo { module_address, module_name, function_name }
@@ -65,12 +66,22 @@ export async function getDerivedAddress(
   serializer.serializeStr("authenticate");
   const funcInfoBcs = serializer.toUint8Array();
 
-  const identitySerializer = new Serializer();
   // FIXED: Move expects the UTF8 bytes of the Hex String (e.g. "0x123...")
   // not the raw bytes of the address.
   const ethBytes = new TextEncoder().encode(ethAddress);
-  identitySerializer.serializeBytes(ethBytes);
-  const identityBcs = identitySerializer.toUint8Array();
+
+  // Use provided domain or fallback to window.location.host (or localhost default)
+  const actualDomain = domain || (typeof window !== 'undefined' ? window.location.host : "localhost:3000");
+
+  const serializedPubKey = serializeSIWEAbstractPublicKey(ethBytes, actualDomain);
+
+  // FIXED: Move's derive_account_address calls bcs::to_bytes(abstract_public_key).
+  // abstract_public_key is passed as a vector<u8>.
+  // bcs::to_bytes(&vector<u8>) adds a length prefix to the vector.
+  // So we must serialize the public key bytes AS A VECTOR (with length prefix).
+  const wrapperSerializer = new Serializer();
+  wrapperSerializer.serializeBytes(serializedPubKey);
+  const identityBcs = wrapperSerializer.toUint8Array();
 
   const preImage = new Uint8Array(funcInfoBcs.length + identityBcs.length + 1);
   preImage.set(funcInfoBcs);
@@ -159,15 +170,20 @@ class SIWEAccountAuthenticator extends AccountAuthenticator {
   }
 
   serialize(serializer: Serializer): void {
-    // Use SDK's AccountAuthenticatorVariant enum
-    serializer.serializeU32AsUleb128(AccountAuthenticatorVariant.Abstraction);
+    // Atomica/Zapatos has a shifted enum for AccountAuthenticator:
+    // 0: Ed25519, 1: MultiEd25519, 2: SingleKey, 3: MultiKey, 4: NoAccountAuthenticator, 5: Abstract
+    // The SDK uses 4 for Abstraction. We must use 5.
+    serializer.serializeU32AsUleb128(5);
 
     // FunctionInfo for ethereum_derivable_account::authenticate
     AccountAddress.from("0x1").serialize(serializer);
     serializer.serializeStr("ethereum_derivable_account");
     serializer.serializeStr("authenticate");
 
-    // AbstractAuthenticationDataVariant::DerivableV1 = 1 (not exported from SDK, so we use the literal)
+    // The Abstraction variant (index 5) in Zapatos contains `AbstractAuthenticationData` directly (no vector wrapper)
+    // AbstractAuthenticator { function_info, auth_data: AbstractAuthenticationData }
+
+    // AbstractAuthenticationDataVariant::DerivableV1 = 1
     serializer.serializeU32AsUleb128(1);
 
     // Digest

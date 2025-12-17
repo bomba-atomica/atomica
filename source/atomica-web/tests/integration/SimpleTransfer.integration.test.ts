@@ -23,7 +23,7 @@ window.fetch = nodeFetch as any;
 (window as any).URL = URL;
 
 // Standard Hardhat Account 0
-const TEST_ACCOUNT = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+const TEST_ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 const TEST_PK = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
 describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
@@ -114,8 +114,16 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
         });
 
         // 3. Submit Transaction (Simple Transfer)
-        const recipient = "0x1"; // Burn address / Foundation
+        const recipient = "0x0000000000000000000000000000000000000000000000000000000000000001"; // Burn address / Foundation
         console.log("Submitting transfer...");
+
+        // Get initial balance
+        let initialBalance = 0n;
+        try {
+            const res = await aptos.getAccountCoinAmount({ accountAddress: recipient, coinType: "0x1::aptos_coin::AptosCoin" });
+            initialBalance = BigInt(res);
+        } catch (e) { }
+        console.log(`Initial Balance of ${recipient}: ${initialBalance}`);
 
         const txPromise = submitNativeTransaction(TEST_ACCOUNT, {
             function: "0x1::aptos_account::transfer",
@@ -127,12 +135,18 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
         console.log("Transaction Submitted:", result.hash);
 
         expect(result.hash).toBeDefined();
-        // Wait for execution? submitNativeTransaction returns pendingTx. 
-        // Ideally we check if it executed success.
 
         const txInfo = await aptos.waitForTransaction({ transactionHash: result.hash });
         expect(txInfo.success).toBe(true);
         console.log("Transaction Executed Successfully!");
+
+        // 5. Verify Balance Change
+        const finalRes = await aptos.getAccountCoinAmount({ accountAddress: recipient, coinType: "0x1::aptos_coin::AptosCoin" });
+        const finalBalance = BigInt(finalRes);
+        console.log(`Final Balance of ${recipient}: ${finalBalance}`);
+
+        expect(finalBalance).toBe(initialBalance + 1000n);
+        console.log("Balance verification passed!");
 
     }, 60000);
 });
