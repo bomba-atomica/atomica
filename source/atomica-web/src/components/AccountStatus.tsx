@@ -70,14 +70,25 @@ export function AccountStatus({ ethAddress, balances }: AccountStatusProps) {
               <span className="text-gray-400 mr-1">APT:</span>
               <span className="text-white">{fmt(balances.apt)}</span>
             </div>
-            <div title="Fake ETH">
-              <span className="text-gray-400 mr-1">ETH:</span>
-              <span className="text-white">{fmt(balances.fakeEth)}</span>
-            </div>
-            <div title="Fake USD">
-              <span className="text-gray-400 mr-1">USD:</span>
-              <span className="text-white">{fmt(balances.fakeUsd)}</span>
-            </div>
+
+            {!balances.contractsDeployed ? (
+              <div className="text-yellow-600 text-xs animate-pulse">Contracts Loading...</div>
+            ) : (
+              <>
+                <div title="Fake ETH">
+                  <span className="text-gray-400 mr-1">ETH:</span>
+                  <span className={balances.fakeEthInitialized ? "text-white" : "text-gray-500 italic"}>
+                    {balances.fakeEthInitialized ? fmt(balances.fakeEth) : "Not Init"}
+                  </span>
+                </div>
+                <div title="Fake USD">
+                  <span className="text-gray-400 mr-1">USD:</span>
+                  <span className={balances.fakeUsdInitialized ? "text-white" : "text-gray-500 italic"}>
+                    {balances.fakeUsdInitialized ? fmt(balances.fakeUsd) : "Not Init"}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         </>
       )}

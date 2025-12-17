@@ -1,12 +1,17 @@
 import { useState, useEffect } from "react";
 import { aptos, CONTRACT_ADDR, getDerivedAddress } from "../lib/aptos";
 
+import { areContractsDeployed } from "../lib/aptos";
+
 interface TokenBalances {
   apt: number;
   fakeEth: number;
   fakeUsd: number;
   loading: boolean;
   exists: boolean;
+  fakeEthInitialized: boolean;
+  fakeUsdInitialized: boolean;
+  contractsDeployed: boolean;
 }
 
 /**
@@ -20,11 +25,14 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
     fakeUsd: 0,
     loading: true,
     exists: false,
+    fakeEthInitialized: false,
+    fakeUsdInitialized: false,
+    contractsDeployed: false,
   });
 
   useEffect(() => {
     if (!ethAddress) {
-      setBalances({ apt: 0, fakeEth: 0, fakeUsd: 0, loading: false, exists: false });
+      setBalances(prev => ({ ...prev, apt: 0, fakeEth: 0, fakeUsd: 0, loading: false, exists: false }));
       return;
     }
 
@@ -37,38 +45,52 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
           await aptos.getAccountInfo({ accountAddress: derived });
         } catch (e) {
           // Account invalid/not found - stop here
-          setBalances({ apt: 0, fakeEth: 0, fakeUsd: 0, loading: false, exists: false });
+          setBalances(prev => ({ ...prev, apt: 0, fakeEth: 0, fakeUsd: 0, loading: false, exists: false }));
           return;
         }
 
-        // Account exists, fetch balances
+        // Account exists, fetch APT balance
         const aptBalance = await aptos.getAccountAPTAmount({
           accountAddress: derived,
         });
 
-        // Get FAKEETH balance
-        let fakeEthBalance = 0;
-        try {
-          const fakeEthResource = await aptos.getAccountResource({
-            accountAddress: derived,
-            resourceType: `0x1::coin::CoinStore<${CONTRACT_ADDR}::FAKEETH::FAKEETH>`,
+        // Check contracts deployment status
+        const contractsDeployed = await areContractsDeployed();
+
+        if (!contractsDeployed) {
+          setBalances({
+            apt: aptBalance,
+            fakeEth: 0,
+            fakeUsd: 0,
+            loading: false,
+            exists: true,
+            fakeEthInitialized: false,
+            fakeUsdInitialized: false,
+            contractsDeployed: false,
           });
-          fakeEthBalance = Number((fakeEthResource as { coin: { value: string } }).coin.value);
-        } catch {
-          // Resource doesn't exist, balance is 0
+          return;
         }
 
-        // Get FAKEUSD balance
-        let fakeUsdBalance = 0;
+        // Contracts deployed, check for token initialization
+        // Fetch ALL resources once to avoid 404s on individual missing resources
+        let resources: any[] = [];
         try {
-          const fakeUsdResource = await aptos.getAccountResource({
-            accountAddress: derived,
-            resourceType: `0x1::coin::CoinStore<${CONTRACT_ADDR}::FAKEUSD::FAKEUSD>`,
-          });
-          fakeUsdBalance = Number((fakeUsdResource as { coin: { value: string } }).coin.value);
-        } catch {
-          // Resource doesn't exist, balance is 0
+          resources = await aptos.getAccountResources({ accountAddress: derived });
+        } catch (e) {
+          // Should not happen if getAccountInfo passed, but just in case
+          resources = [];
         }
+
+        const fakeEthType = `${CONTRACT_ADDR}::FAKEETH::FAKEETH`;
+        const fakeUsdType = `${CONTRACT_ADDR}::FAKEUSD::FAKEUSD`;
+        const coinStoreEth = `0x1::coin::CoinStore<${fakeEthType}>`;
+        const coinStoreUsd = `0x1::coin::CoinStore<${fakeUsdType}>`;
+
+        const ethResource = resources.find(r => r.type === coinStoreEth);
+        const usdResource = resources.find(r => r.type === coinStoreUsd);
+
+        const fakeEthBalance = ethResource ? Number((ethResource.data as any).coin.value) : 0;
+        const fakeUsdBalance = usdResource ? Number((usdResource.data as any).coin.value) : 0;
 
         setBalances({
           apt: aptBalance,
@@ -76,11 +98,13 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
           fakeUsd: fakeUsdBalance,
           loading: false,
           exists: true,
+          fakeEthInitialized: !!ethResource,
+          fakeUsdInitialized: !!usdResource,
+          contractsDeployed: true,
         });
       } catch (e: any) {
-        // If account doesn't exist or other error, mostly harmless to just show 0
-        // Don't log to console to avoid spamming "Account not found"
-        setBalances({ apt: 0, fakeEth: 0, fakeUsd: 0, loading: false, exists: false });
+        // Fallback for unexpected errors
+        setBalances(prev => ({ ...prev, loading: false, exists: false }));
       }
     };
 

@@ -35,6 +35,9 @@ export function initRemoteLogger() {
             if (typeof value === "bigint") {
                 return value.toString();
             }
+            if (value instanceof Error) {
+                return { message: value.message, stack: value.stack, name: value.name };
+            }
             if (typeof value === "object" && value !== null) {
                 if (seen.has(value)) {
                     return "[Circular]";
@@ -94,8 +97,74 @@ export function initRemoteLogger() {
         originalAlert(msg);
     };
 
-    window.addEventListener('error', e => send('error', [`Uncaught: ${e.message}`]));
-    window.addEventListener('unhandledrejection', e => send('error', [`Unhandled Rejection: ${e.reason}`]));
+    // Capture table, trace, dir
+    console.table = (...args) => { originalLog.apply(console, args); send('info', ["[TABLE]", ...args]); };
+    console.trace = (...args) => { originalLog.apply(console, args); send('debug', ["[TRACE]", ...args]); };
+    console.dir = (...args) => { originalLog.apply(console, args); send('debug', ["[DIR]", ...args]); };
 
-    console.log('[RemoteLogger] v2 Initialized');
+    // Capture global errors (including resource errors via capture phase)
+    window.addEventListener('error', (event) => {
+        // Resource errors (img/script 404) don't have event.error, but have event.target
+        // Check if it's an Element (not window)
+        const target = event.target;
+        if (target instanceof HTMLElement) {
+            const src = (target as any).src || (target as any).href;
+            if (src) {
+                send('error', [`[Resource Error] Failed to load ${target.tagName}: ${src}`]);
+                return;
+            }
+        }
+
+        // Runtime JS errors
+        const err = event.error;
+        if (err instanceof Error) {
+            send('error', [`Uncaught Exception: ${err.message}`, err.stack]);
+        } else {
+            send('error', [`Uncaught Exception: ${event.message}`]);
+        }
+    }, true); // useCapture = true to catch non-bubbling resource errors
+
+    window.addEventListener('unhandledrejection', e => {
+        const reason = e.reason;
+        if (reason instanceof Error) {
+            send('error', [`Unhandled Rejection: ${reason.message}`, reason.stack]);
+        } else {
+            send('error', [`Unhandled Rejection: ${String(reason)}`]);
+        }
+    });
+
+    // Intercept Fetch to log network errors (4xx/5xx) that console.error misses
+    const originalFetch = window.fetch;
+    window.fetch = async (input, init) => {
+        // Don't intercept the logger itself!
+        if (typeof input === 'string' && input.includes('__log')) {
+            return originalFetch(input, init);
+        }
+
+        try {
+            const response = await originalFetch(input, init);
+            if (!response.ok) {
+                // Clone strictly for logging to avoid consuming the stream body
+                const clone = response.clone();
+                // Optionally read body if text?
+                clone.text().then(text => {
+                    let bodySnippet = text.slice(0, 200);
+                    const status = response.status;
+                    const url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : input.url);
+                    send('error', [`[Network Error] ${status} ${response.statusText} on ${url}`, bodySnippet]);
+                }).catch(() => {
+                    const status = response.status;
+                    const url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : input.url);
+                    send('error', [`[Network Error] ${status} ${response.statusText} on ${url}`]);
+                });
+            }
+            return response;
+        } catch (e: any) {
+            const url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : input.url);
+            send('error', [`[Network Request Failed] ${url}: ${e.message}`]);
+            throw e;
+        }
+    };
+
+    console.log('[RemoteLogger] v2.2 Initialized (Full Capture + Network)');
 }
