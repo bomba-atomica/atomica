@@ -1,12 +1,9 @@
 import { useState, useEffect } from "react";
-import { requestAPT, mintFakeEth, mintFakeUsd, areContractsDeployed } from "../lib/aptos";
+import { requestAPT, getMintFakeEthPayload, getMintFakeUsdPayload, areContractsDeployed } from "../lib/aptos";
+import { TxButton } from "./TxButton";
 
 export function Faucet({ account, onMintSuccess }: { account: string; onMintSuccess?: () => void }) {
   const [loadingAPT, setLoadingAPT] = useState(false);
-
-  const [loadingEth, setLoadingEth] = useState(false);
-  const [loadingUsd, setLoadingUsd] = useState(false);
-
   const [aptTxHash, setAptTxHash] = useState<string | null>(null);
   const [ethTxHash, setEthTxHash] = useState<string | null>(null);
   const [usdTxHash, setUsdTxHash] = useState<string | null>(null);
@@ -42,36 +39,13 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
     }
   };
 
-  const handleMintEth = async () => {
-    if (!account) return;
-    setLoadingEth(true);
-    setEthTxHash(null);
-    try {
-      const result = await mintFakeEth(account);
-      setEthTxHash(result.hash);
-      onMintSuccess?.();
-    } catch (e) {
-      console.error("Eth mint failed:", e);
-      alert("Failed to mint FAKEETH: " + e);
-    } finally {
-      setLoadingEth(false);
+  const handleMintSuccess = (hash: string, type: 'eth' | 'usd') => {
+    if (type === 'eth') {
+      setEthTxHash(hash);
+    } else {
+      setUsdTxHash(hash);
     }
-  };
-
-  const handleMintUsd = async () => {
-    if (!account) return;
-    setLoadingUsd(true);
-    setUsdTxHash(null);
-    try {
-      const result = await mintFakeUsd(account);
-      setUsdTxHash(result.hash);
-      onMintSuccess?.();
-    } catch (e) {
-      console.error("Usd mint failed:", e);
-      alert("Failed to mint FAKEUSD: " + e);
-    } finally {
-      setLoadingUsd(false);
-    }
+    onMintSuccess?.();
   };
 
   return (
@@ -100,8 +74,8 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
           onClick={handleRequestAPT}
           disabled={loadingAPT || !!aptTxHash}
           className={`w-full py-2 px-4 rounded font-medium text-sm ${loadingAPT || !!aptTxHash
-              ? "bg-gray-700 cursor-not-allowed text-gray-500"
-              : "bg-blue-600 hover:bg-blue-700 text-white"
+            ? "bg-gray-700 cursor-not-allowed text-gray-500"
+            : "bg-blue-600 hover:bg-blue-700 text-white"
             }`}
         >
           {loadingAPT
@@ -142,8 +116,8 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
               onClick={handleMintEth}
               disabled={loadingEth || !contractsDeployed}
               className={`w-full py-2 px-4 rounded font-medium text-sm ${loadingEth || !contractsDeployed
-                  ? "bg-gray-700 cursor-not-allowed text-gray-500"
-                  : "bg-purple-600 hover:bg-purple-700 text-white"
+                ? "bg-gray-700 cursor-not-allowed text-gray-500"
+                : "bg-purple-600 hover:bg-purple-700 text-white"
                 }`}
             >
               {loadingEth ? "Minting ETH..." : "Mint 10 ETH"}
@@ -161,8 +135,8 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
               onClick={handleMintUsd}
               disabled={loadingUsd || !contractsDeployed}
               className={`w-full py-2 px-4 rounded font-medium text-sm ${loadingUsd || !contractsDeployed
-                  ? "bg-gray-700 cursor-not-allowed text-gray-500"
-                  : "bg-green-600 hover:bg-green-700 text-white"
+                ? "bg-gray-700 cursor-not-allowed text-gray-500"
+                : "bg-green-600 hover:bg-green-700 text-white"
                 }`}
             >
               {loadingUsd ? "Minting USD..." : "Mint 10k USD"}
