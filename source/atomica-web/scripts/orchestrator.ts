@@ -42,7 +42,7 @@ async function main() {
 
   // 1. Start Webapp (Dev Mode)
   console.log("🌐 Starting Webapp (Dev Mode)...");
-  runCommand("npm", ["install"], WEB_DIR);
+  await runCommand("npm", ["install"], WEB_DIR);
   // runCommand("npm", ["run", "build"], WEB_DIR); // SKIP BUILD
 
   console.log("👉 OPEN IN BROWSER: http://localhost:4173");
@@ -139,7 +139,7 @@ async function main() {
   }
 
   // Init
-  runCommand(
+  await runCommand(
     aptosBin,
     [
       "init",
@@ -168,7 +168,7 @@ async function main() {
 
   // Publish
   console.log("🚀 Publishing Contracts...");
-  runCommand(
+  await runCommand(
     aptosBin,
     [
       "move",
@@ -184,7 +184,7 @@ async function main() {
 
   // Init Registry
   console.log("⚙️  Initializing Registry...");
-  runCommand(
+  await runCommand(
     aptosBin,
     [
       "move",
@@ -222,13 +222,20 @@ async function waitForUrl(url) {
   }
 }
 
-function runCommand(cmd, args, cwd) {
-  const result = spawnSync(cmd, args, { cwd, stdio: "inherit" });
-  if (result.error) {
-    throw new Error(`❌ Failed to run ${cmd}: ${result.error.message}`);
-  } else if (result.status !== 0) {
-    throw new Error(`⚠️ ${cmd} exited with code ${result.status}`);
-  }
+function runCommand(cmd, args, cwd): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const process = spawn(cmd, args, { cwd, stdio: "inherit" });
+    process.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`⚠️ ${cmd} exited with code ${code}`));
+      } else {
+        resolve();
+      }
+    });
+    process.on("error", (err) => {
+      reject(new Error(`❌ Failed to run ${cmd}: ${err.message}`));
+    });
+  });
 }
 
 function cleanupPorts(ports) {

@@ -10,7 +10,8 @@ export function NetworkStatus() {
         const ledger = await aptos.getLedgerInfo();
         setBlockHeight(ledger.block_height);
       } catch (e) {
-        console.error("Status Poll Error", e);
+        // Suppress polling errors
+        // console.error("Status Poll Error", e);
       }
     };
 
