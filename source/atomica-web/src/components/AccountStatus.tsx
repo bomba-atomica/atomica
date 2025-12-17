@@ -22,7 +22,7 @@ export function AccountStatus({ ethAddress }: AccountStatusProps) {
       }
 
       try {
-        const derived = await getDerivedAddress(ethAddress);
+        const derived = await getDerivedAddress(ethAddress.toLowerCase());
         const derivedStr = derived.toString();
         setAptosAddress(derivedStr);
 
@@ -43,7 +43,7 @@ export function AccountStatus({ ethAddress }: AccountStatusProps) {
             const data = await res.json();
             return Array.isArray(data) ? data[0] : "0";
           } catch (e) {
-            console.error(`Failed to fetch balance for ${coinType}`, e);
+            // console.error(`Failed to fetch balance for ${coinType}`, e);
             return "0";
           }
         };
@@ -62,8 +62,8 @@ export function AccountStatus({ ethAddress }: AccountStatusProps) {
           fakeEth: fmt(fakeEth),
           fakeUsd: fmt(fakeUsd),
         });
-      } catch (e) {
-        console.error("Balance Fetch Error", e);
+      } catch (e: any) {
+        // Suppress errors (account not found is common) to avoid console spam
       }
     };
 

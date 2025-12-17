@@ -5,7 +5,6 @@ import {
   AccountAddress,
   Serializer,
   AccountAuthenticator,
-  AccountAuthenticatorVariant,
 } from "@aptos-labs/ts-sdk";
 import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
 import { ethers } from "ethers";
@@ -161,12 +160,19 @@ function serializeSIWEAbstractPublicKey(
  * This replaces our hand-crafted serialization with the official SDK approach.
  */
 class SIWEAccountAuthenticator extends AccountAuthenticator {
+  private readonly digest: Uint8Array;
+  private readonly abstractSignature: Uint8Array;
+  private readonly accountIdentity: Uint8Array;
+
   constructor(
-    private readonly digest: Uint8Array,
-    private readonly abstractSignature: Uint8Array,
-    private readonly accountIdentity: Uint8Array,
+    digest: Uint8Array,
+    abstractSignature: Uint8Array,
+    accountIdentity: Uint8Array,
   ) {
     super();
+    this.digest = digest;
+    this.abstractSignature = abstractSignature;
+    this.accountIdentity = accountIdentity;
   }
 
   serialize(serializer: Serializer): void {
@@ -343,7 +349,6 @@ export async function submitNativeTransaction(
   console.log("\n=== Simulating Transaction ===");
   try {
     const [simulationResult] = await aptos.transaction.simulate.simple({
-      signerPublicKey: senderAddress, // Use sender address as public key for AA
       transaction,
     });
 
@@ -434,7 +439,7 @@ export async function submitNativeTransaction(
  * Sanity Test: Simple APT transfer using MetaMask signature
  * This tests ONLY the signature verification without any custom contracts
  */
-export async function testSimpleAPTTransfer(ethAddress: string) {
+export async function testSimpleAPTTransfer(ethAddress: string, customRecipient?: string) {
   console.log("\n=== 🧪 Sanity Test: Simple APT Transfer ===");
   console.log("This tests signature verification with the simplest possible transaction");
   console.log("Using: 0x1::aptos_account::transfer (standard Aptos function)\n");
@@ -445,18 +450,20 @@ export async function testSimpleAPTTransfer(ethAddress: string) {
   console.log("Aptos Derived Address (sender):", derivedAddress.toString());
   console.log("This is the same address the faucet funded ✓\n");
 
-  // Generate a random recipient address (standard Ed25519 Aptos account)
+  // Generate a random recipient address (standard Ed25519 Aptos account) if not provided
   const randomRecipient = "0x" + Array.from({ length: 64 }, () =>
     Math.floor(Math.random() * 16).toString(16)
   ).join('');
 
-  console.log("Recipient (random):", randomRecipient);
+  const recipient = customRecipient || randomRecipient;
+
+  console.log("Recipient:", recipient);
   console.log("Amount: 100 octas (0.000001 APT)\n");
 
   try {
     const result = await submitNativeTransaction(ethAddress, {
       function: "0x1::aptos_account::transfer",
-      functionArguments: [randomRecipient, 100],
+      functionArguments: [recipient, 100],
     });
 
     console.log("\n✅ SANITY TEST PASSED!");
@@ -479,7 +486,8 @@ export async function testSimpleAPTTransfer(ethAddress: string) {
  * Step 1: Request APT tokens from faucet for gas
  */
 export async function requestAPT(ethAddress: string) {
-  const derived = await getDerivedAddress(ethAddress);
+  // Always use lowercase for consistency with submitNativeTransaction
+  const derived = await getDerivedAddress(ethAddress.toLowerCase());
   const FAUCET_URL = "http://127.0.0.1:8081";
 
   console.log("=== Requesting APT from Faucet ===");

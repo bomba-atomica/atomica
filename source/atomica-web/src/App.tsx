@@ -72,10 +72,10 @@ function App() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-8">
-            {/* Sanity Test - Always show first for debugging */}
-            <SanityTest account={account} />
-
             <Faucet account={account} />
+
+            {/* Sanity Test - Discreet debug utility */}
+            <SanityTest account={account} />
 
             {/* Show disabled state if user doesn't have test tokens */}
             {balances.fakeEth === 0 || balances.fakeUsd === 0 ? (

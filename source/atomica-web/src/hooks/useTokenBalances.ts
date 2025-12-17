@@ -28,7 +28,7 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
 
     const checkBalances = async () => {
       try {
-        const derived = await getDerivedAddress(ethAddress);
+        const derived = await getDerivedAddress(ethAddress.toLowerCase());
 
         // Get APT balance
         const aptBalance = await aptos.getAccountAPTAmount({
@@ -65,8 +65,9 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
           fakeUsd: fakeUsdBalance,
           loading: false,
         });
-      } catch (e) {
-        console.error("Failed to fetch balances:", e);
+      } catch (e: any) {
+        // If account doesn't exist or other error, mostly harmless to just show 0
+        // Don't log to console to avoid spamming "Account not found"
         setBalances({ apt: 0, fakeEth: 0, fakeUsd: 0, loading: false });
       }
     };
