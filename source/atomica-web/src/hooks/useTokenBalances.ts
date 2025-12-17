@@ -83,14 +83,36 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
 
       const fakeEthType = `${CONTRACT_ADDR}::FAKEETH::FAKEETH`;
       const fakeUsdType = `${CONTRACT_ADDR}::FAKEUSD::FAKEUSD`;
-      const coinStoreEth = `0x1::coin::CoinStore<${fakeEthType}>`;
-      const coinStoreUsd = `0x1::coin::CoinStore<${fakeUsdType}>`;
 
-      const ethResource = resources.find(r => r.type === coinStoreEth);
-      const usdResource = resources.find(r => r.type === coinStoreUsd);
+      // Use SDK methods to get balances - handles both Coin and FungibleAsset
+      let fakeEthBalance = 0;
+      let fakeEthInitialized = false;
+      let fakeUsdBalance = 0;
+      let fakeUsdInitialized = false;
 
-      const fakeEthBalance = ethResource ? Number((ethResource.data as any).coin.value) : 0;
-      const fakeUsdBalance = usdResource ? Number((usdResource.data as any).coin.value) : 0;
+      try {
+        fakeEthBalance = await aptos.getAccountCoinAmount({
+          accountAddress: derived,
+          coinType: fakeEthType,
+        });
+        fakeEthInitialized = true;
+      } catch (e) {
+        // Coin not initialized for this account
+        fakeEthBalance = 0;
+        fakeEthInitialized = false;
+      }
+
+      try {
+        fakeUsdBalance = await aptos.getAccountCoinAmount({
+          accountAddress: derived,
+          coinType: fakeUsdType,
+        });
+        fakeUsdInitialized = true;
+      } catch (e) {
+        // Coin not initialized for this account
+        fakeUsdBalance = 0;
+        fakeUsdInitialized = false;
+      }
 
       setBalances({
         apt: aptBalance,
@@ -98,8 +120,8 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
         fakeUsd: fakeUsdBalance,
         loading: false,
         exists: true,
-        fakeEthInitialized: !!ethResource,
-        fakeUsdInitialized: !!usdResource,
+        fakeEthInitialized,
+        fakeUsdInitialized,
         contractsDeployed: true,
       });
     } catch (e: any) {
