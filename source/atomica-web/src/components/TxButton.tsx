@@ -3,10 +3,9 @@ import {
     prepareNativeTransaction,
     simulateNativeTransaction,
     submitPreparedTransaction,
-    submitNativeTransaction,
-    PreparedTransaction,
 } from "../lib/aptos";
-import { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
+import type { PreparedTransaction } from "../lib/aptos";
+import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
 // @ts-ignore
 import { ChevronDownIcon, XCircleIcon, CheckCircleIcon } from "@heroicons/react/24/solid";
 

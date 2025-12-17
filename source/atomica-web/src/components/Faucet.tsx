@@ -112,16 +112,14 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
         <div className="grid grid-cols-2 gap-4">
           {/* Fake ETH Button */}
           <div>
-            <button
-              onClick={handleMintEth}
-              disabled={loadingEth || !contractsDeployed}
-              className={`w-full py-2 px-4 rounded font-medium text-sm ${loadingEth || !contractsDeployed
-                ? "bg-gray-700 cursor-not-allowed text-gray-500"
-                : "bg-purple-600 hover:bg-purple-700 text-white"
-                }`}
-            >
-              {loadingEth ? "Minting ETH..." : "Mint 10 ETH"}
-            </button>
+            <TxButton
+              label="10 ETH"
+              accountAddress={account}
+              prepareTransaction={getMintFakeEthPayload}
+              onSuccess={(hash) => handleMintSuccess(hash, 'eth')}
+              disabled={!contractsDeployed}
+              className="w-full"
+            />
             {ethTxHash && (
               <div className="mt-1 text-[10px] text-green-400 break-all">
                 Tx: {ethTxHash.slice(0, 10)}...
@@ -131,16 +129,14 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
 
           {/* Fake USD Button */}
           <div>
-            <button
-              onClick={handleMintUsd}
-              disabled={loadingUsd || !contractsDeployed}
-              className={`w-full py-2 px-4 rounded font-medium text-sm ${loadingUsd || !contractsDeployed
-                ? "bg-gray-700 cursor-not-allowed text-gray-500"
-                : "bg-green-600 hover:bg-green-700 text-white"
-                }`}
-            >
-              {loadingUsd ? "Minting USD..." : "Mint 10k USD"}
-            </button>
+            <TxButton
+              label="10k USD"
+              accountAddress={account}
+              prepareTransaction={getMintFakeUsdPayload}
+              onSuccess={(hash) => handleMintSuccess(hash, 'usd')}
+              disabled={!contractsDeployed}
+              className="w-full"
+            />
             {usdTxHash && (
               <div className="mt-1 text-[10px] text-green-400 break-all">
                 Tx: {usdTxHash.slice(0, 10)}...

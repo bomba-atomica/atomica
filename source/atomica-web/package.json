@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@aptos-labs/ts-sdk": "^5.2.0",
+    "@heroicons/react": "^2.2.0",
     "@noble/bls12-381": "^1.4.0",
     "@tailwindcss/postcss": "^4.1.18",
     "autoprefixer": "^10.4.22",

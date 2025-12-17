@@ -1,4 +1,4 @@
-import { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
+import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
 import { CONTRACT_ADDR, aptos } from "./config";
 import { getDerivedAddress } from "./siwe";
 import { submitNativeTransaction } from "./transaction";
