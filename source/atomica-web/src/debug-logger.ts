@@ -65,14 +65,29 @@ export function initRemoteLogger() {
             fetch('/__log', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(entry)
-            }).catch(() => { });
-        } catch { /* ignore */ }
+                body: JSON.stringify(entry),
+                keepalive: true, // Ensure logs survive page unload
+            }).catch((e) => {
+                // Last ditch effort to log locally if transport fails
+                originalError.call(console, "[RemoteLogger] Transport failed:", e);
+            });
+        } catch (e) {
+            originalError.call(console, "[RemoteLogger] Send failed:", e);
+        }
     }
 
     console.log = (...args) => { originalLog.apply(console, args); send('info', args); };
     console.warn = (...args) => { originalWarn.apply(console, args); send('warn', args); };
     console.error = (...args) => { originalError.apply(console, args); send('error', args); };
+    console.debug = (...args) => { originalLog.apply(console, args); send('debug', args); }; // Map debug to info/debug
+    console.info = (...args) => { originalLog.apply(console, args); send('info', args); };
+
+    console.assert = (assertion, ...args) => {
+        if (!assertion) {
+            originalError.apply(console, ["Assertion failed:", ...args]);
+            send('error', ["Assertion failed:", ...args]);
+        }
+    };
 
     window.alert = (msg) => {
         send('warn', [`[ALERT] ${msg}`]);

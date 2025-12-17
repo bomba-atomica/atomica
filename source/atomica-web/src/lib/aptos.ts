@@ -314,7 +314,7 @@ export async function submitNativeTransaction(
     origin: window.location.origin,
     networkName: networkName
   };
-  console.log("SubmitNativeTransaction Debug:", JSON.stringify(debugState, null, 2));
+  console.log("SubmitNativeTransaction Debug:", JSON.stringify(debugState, (_k, v) => typeof v === 'bigint' ? v.toString() : v, 2));
   // DEBUG LOGGING END
 
   // Build the SIWE abstract signature (scheme, issuedAt, signature)
@@ -368,7 +368,9 @@ export async function submitNativeTransaction(
 
   try {
     console.log("\n=== Submitting Transaction ===");
-    console.log("Transaction payload:", JSON.stringify(payload, null, 2));
+    console.log("Transaction payload:", JSON.stringify(payload, (_key, value) => {
+      return typeof value === 'bigint' ? value.toString() : value;
+    }, 2));
     console.log("Sender address:", senderAddress.toString());
 
     const pendingTx = await aptos.transaction.submit.simple({

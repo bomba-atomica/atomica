@@ -48,10 +48,10 @@ function App() {
         <div className="flex items-center gap-4">
           <NetworkStatus />
           {account ? (
-            <AccountStatus ethAddress={account} />
+            <AccountStatus ethAddress={account} balances={balances} />
           ) : (
             <div className="flex items-center gap-4">
-              <AccountStatus ethAddress={null} />
+              <AccountStatus ethAddress={null} balances={balances} />
               <button
                 onClick={connectWallet}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition font-medium text-sm"

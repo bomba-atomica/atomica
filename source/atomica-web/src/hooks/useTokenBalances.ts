@@ -6,6 +6,7 @@ interface TokenBalances {
   fakeEth: number;
   fakeUsd: number;
   loading: boolean;
+  exists: boolean;
 }
 
 /**
@@ -18,11 +19,12 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
     fakeEth: 0,
     fakeUsd: 0,
     loading: true,
+    exists: false,
   });
 
   useEffect(() => {
     if (!ethAddress) {
-      setBalances({ apt: 0, fakeEth: 0, fakeUsd: 0, loading: false });
+      setBalances({ apt: 0, fakeEth: 0, fakeUsd: 0, loading: false, exists: false });
       return;
     }
 
@@ -30,7 +32,16 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
       try {
         const derived = await getDerivedAddress(ethAddress.toLowerCase());
 
-        // Get APT balance
+        // Check if account exists on-chain first
+        try {
+          await aptos.getAccountInfo({ accountAddress: derived });
+        } catch (e) {
+          // Account invalid/not found - stop here
+          setBalances({ apt: 0, fakeEth: 0, fakeUsd: 0, loading: false, exists: false });
+          return;
+        }
+
+        // Account exists, fetch balances
         const aptBalance = await aptos.getAccountAPTAmount({
           accountAddress: derived,
         });
@@ -64,11 +75,12 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
           fakeEth: fakeEthBalance,
           fakeUsd: fakeUsdBalance,
           loading: false,
+          exists: true,
         });
       } catch (e: any) {
         // If account doesn't exist or other error, mostly harmless to just show 0
         // Don't log to console to avoid spamming "Account not found"
-        setBalances({ apt: 0, fakeEth: 0, fakeUsd: 0, loading: false });
+        setBalances({ apt: 0, fakeEth: 0, fakeUsd: 0, loading: false, exists: false });
       }
     };
 

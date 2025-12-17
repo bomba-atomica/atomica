@@ -62,13 +62,20 @@ function getCallSite(stackIndex = 2): LogEntry["source"] | undefined {
 function transport(entry: LogEntry) {
     if (!import.meta.env.DEV) return;
 
-    // Safe serialization handling circular refs if needed (simplified here)
+    // Safe serialization handling circular refs and BigInt
+    const seen = new WeakSet();
     const body = JSON.stringify(entry, (_key, value) => {
         if (typeof value === "bigint") {
             return value.toString();
         }
-        if (value instanceof Error) {
-            return { message: value.message, stack: value.stack, name: value.name };
+        if (typeof value === "object" && value !== null) {
+            if (value instanceof Error) {
+                return { message: value.message, stack: value.stack, name: value.name };
+            }
+            if (seen.has(value)) {
+                return "[Circular]";
+            }
+            seen.add(value);
         }
         return value;
     });
