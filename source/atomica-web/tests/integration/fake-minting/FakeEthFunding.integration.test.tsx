@@ -5,9 +5,9 @@ import "@testing-library/jest-dom";
 import nodeFetch, { Request, Response, Headers } from "node-fetch";
 // import { MockWallet } from "../utils/MockWallet"; // Removed in favor of eth-testing
 import { generateTestingUtils } from "eth-testing";
-import { setupLocalnet, teardownLocalnet, fundAccount } from "../setup/localnet";
-import { aptos, getDerivedAddress, setAptosInstance } from "../../src/lib/aptos";
-import { Faucet } from "../../src/components/Faucet";
+import { setupLocalnet, teardownLocalnet, fundAccount } from "../../setup/localnet";
+import { aptos, getDerivedAddress, setAptosInstance } from "../../../src/lib/aptos";
+import { Faucet } from "../../../src/components/Faucet";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 
 import { URL } from "url";
@@ -27,13 +27,13 @@ window.fetch = nodeFetch as any;
 
 const DEPLOYER_ADDR = "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 // Standard Hardhat Account 0 Private Key (for reference, eth-testing simulates the signer)
-// const TEST_PK = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"; 
+// const TEST_PK = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const TEST_ACCOUNT = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Hardhat Account 0
 
 import { vi } from "vitest";
 // Mock the CONTRACT_ADDR to match our localnet deployer
 vi.mock("../../src/lib/aptos", async (importOriginal) => {
-    const actual = await importOriginal<typeof import("../../src/lib/aptos")>();
+    const actual = await importOriginal<typeof import("../../../src/lib/aptos")>();
     return {
         ...actual,
         CONTRACT_ADDR: "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa"
@@ -212,7 +212,7 @@ describe.sequential("FakeETH Funding Integration", () => {
 
         // Wait for personal_sign request
         await waitFor(() => {
-            // We can peek at requests? 
+            // We can peek at requests?
             // testingUtils.lowLevel.requests contains the log
         }, { timeout: 5000 });
 

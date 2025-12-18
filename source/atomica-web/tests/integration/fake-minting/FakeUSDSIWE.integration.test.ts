@@ -1,9 +1,9 @@
 // SIWE integration test for FakeUSD using Secp256k1 signing
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { setupLocalnet, teardownLocalnet, fundAccount, deployContracts } from "../setup/localnet";
-import { getDerivedAddress } from "../../src/lib/aptos/siwe";
-import { submitNativeTransaction } from "../../src/lib/aptos/transaction";
+import { setupLocalnet, teardownLocalnet, fundAccount, deployContracts } from "../../setup/localnet";
+import { getDerivedAddress } from "../../../src/lib/aptos/siwe";
+import { submitNativeTransaction } from "../../../src/lib/aptos/transaction";
 import { ethers } from "ethers";
 import { generateTestingUtils } from "eth-testing";
 
