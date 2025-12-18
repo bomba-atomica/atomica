@@ -1,6 +1,7 @@
 import { spawn, ChildProcess, exec as execCb } from "child_process";
-import { resolve, join } from "path";
+import { resolve, join, dirname } from "path";
 import { promisify } from "util";
+import { fileURLToPath } from "url";
 import http from "node:http";
 import { rmSync, mkdirSync, existsSync } from "fs";
 import { ensureFramework } from "./ensureFramework";
@@ -8,10 +9,11 @@ import { ensureFramework } from "./ensureFramework";
 const exec = promisify(execCb);
 let localnetProcess: ChildProcess | null = null;
 
-// Adjust paths relative to atomica-web root or where vitest runs
-const APTOS_CLI_PATH = resolve("../target/debug/aptos");
-const WEB_DIR = resolve(".");
-const GENESIS_FRAMEWORK_PATH = resolve("../move-framework-fixtures/head.mrb");
+// Adjust paths relative to this file's location
+const TEST_SETUP_DIR = dirname(fileURLToPath(import.meta.url));
+const APTOS_BIN = resolve(TEST_SETUP_DIR, "../../../target/debug/aptos");
+const WEB_DIR = resolve(TEST_SETUP_DIR, "../..");
+const GENESIS_FRAMEWORK_PATH = resolve(TEST_SETUP_DIR, "../../../move-framework-fixtures/head.mrb");
 
 export async function killZombies() {
   try {
@@ -69,6 +71,7 @@ export function fundAccount(address: string, amount: number = 100_000_000): Prom
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
+        console.log(`[fundAccount] Response body: ${data}`);
         if (res.statusCode === 200) {
           resolve(data);
         } else {
@@ -88,11 +91,15 @@ const DEPLOYER_PK =
   "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
-// Use the debug build we just created
-const APTOS_BIN = resolve("../target/debug/aptos");
 
-export async function runAptosCmd(args: string[], cwd: string = WEB_DIR) {
-  return new Promise<void>((resolve, reject) => {
+export async function runAptosCmd(args: string[], cwd: string = WEB_DIR): Promise<{ stdout: string, stderr: string }> {
+  // Ensure config dir exists
+  if (!existsSync(TEST_CONFIG_DIR)) {
+    mkdirSync(TEST_CONFIG_DIR, { recursive: true });
+  }
+
+  return new Promise<{ stdout: string, stderr: string }>((resolve, reject) => {
+    let stdout = "";
     let stderr = "";
     const proc = spawn(APTOS_BIN, args, {
       cwd,
@@ -107,17 +114,21 @@ export async function runAptosCmd(args: string[], cwd: string = WEB_DIR) {
       },
       stdio: "pipe", // Capture output
     });
-    proc.stdout.on("data", (d) => console.log(`[Aptos Out] ${d}`));
+    proc.stdout.on("data", (d) => {
+      const s = d.toString();
+      stdout += s;
+      // process.stdout.write(`[Aptos Out] ${s}`); // Debug
+    });
     proc.stderr.on("data", (d) => {
       const s = d.toString();
-      console.error(`[Aptos Err] ${s}`);
       stderr += s;
+      // process.stderr.write(`[Aptos Err] ${s}`); // Debug
     });
     proc.on("close", (code) => {
-      if (code === 0) resolve();
+      if (code === 0) resolve({ stdout, stderr });
       else
         reject(
-          new Error(`Aptos cmd failed with code ${code}: ${args.join(" ")}\nStderr: ${stderr}`),
+          new Error(`Aptos cmd failed with code ${code}: ${args.join(" ")}\nStderr: ${stderr}\nStdout: ${stdout}`),
         );
     });
   });
@@ -223,7 +234,7 @@ export async function setupLocalnet() {
   // Let's assume 'aptos' is in path for now, or use the one we found earlier.
 
   // Use the locally built aptos binary from zapatos (unified target dir) to ensure latest framework
-  const aptosBinPath = resolve("../target/debug/aptos");
+  const aptosBinPath = APTOS_BIN;
 
   localnetProcess = spawn(
     aptosBinPath,

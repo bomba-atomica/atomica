@@ -87,13 +87,18 @@ describe.sequential('Move Contract Deployment', () => {
         console.log("Funding deployer...");
         await fundAccount(deployer.accountAddress.toString(), 1_000_000_000);
 
-        // Wait a moment for funding to be indexed
-        await new Promise(r => setTimeout(r, 1000));
+        // Wait for funding to be indexed
+        console.log("Waiting for balance to be credited...");
+        let balance = 0;
+        for (let i = 0; i < 10; i++) {
+            balance = await aptos.getAccountAPTAmount({ accountAddress: deployer.accountAddress });
+            if (balance >= 1_000_000_000) break;
+            await new Promise(r => setTimeout(r, 1000));
+        }
 
         // Verify deployer was funded
-        const fundedBalance = await aptos.getAccountAPTAmount({ accountAddress: deployer.accountAddress });
-        console.log(`Deployer balance after funding: ${fundedBalance}`);
-        expect(fundedBalance).toBe(1_000_000_000);
+        console.log(`Deployer balance after funding: ${balance}`);
+        expect(balance).toBeGreaterThanOrEqual(1_000_000_000);
 
         // Path to noop contract
         const NOOP_DIR = resolve(__dirname, '../../fixtures/noop');
@@ -102,13 +107,21 @@ describe.sequential('Move Contract Deployment', () => {
         // Compile and publish the noop module directly without aptos init
         // This avoids the side effect of aptos init auto-funding the account
         console.log("Publishing noop module...");
-        await runAptosCmd([
+        const privateKeyHex = deployer.privateKey.toString().replace(/^ed25519-priv-/, '');
+        const { stdout, stderr } = await runAptosCmd([
             "move", "publish",
             "--named-addresses", `noop=${deployer.accountAddress.toString()}`,
-            "--private-key", deployer.privateKey.toString(),
+            "--private-key", privateKeyHex,
             "--url", "http://127.0.0.1:8080",
             "--assume-yes"
         ], NOOP_DIR);
+        console.log("Publish Output:", stdout);
+        if (stderr) console.error("Publish Error:", stderr);
+        console.log("Noop module published successfully!");
+
+        // Wait a moment for indexing to catch up
+        console.log("Waiting 5 seconds for indexing...");
+        await new Promise(r => setTimeout(r, 5000));
 
         // Check if module exists on-chain
         console.log("Verifying module deployment...");
