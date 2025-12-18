@@ -52,62 +52,62 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
   };
 
   return (
-    <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
-      <h2 className="text-xl font-bold mb-4 text-purple-400">
+    <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-800">
+      <h2 className="text-xl font-bold mb-4 text-zinc-300">
         1. Get Testnet Funds
       </h2>
-      <p className="text-gray-400 mb-6 text-sm">
+      <p className="text-zinc-500 mb-6 text-sm">
         Get tokens to interact with the auction demo.
       </p>
 
       {/* Step 1: Request APT for gas */}
-      <div className="mb-4 p-4 bg-gray-900 rounded">
+      <div className="mb-4 p-4 bg-zinc-950/50 border border-zinc-900 rounded">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold text-blue-300">
+          <h3 className="text-sm font-semibold text-zinc-400">
             Step 1a: Request APT (Gas Tokens)
           </h3>
           {aptTxHash && (
-            <span className="text-xs text-green-400">✓ Completed</span>
+            <span className="text-xs text-zinc-500">✓ Completed</span>
           )}
         </div>
-        <p className="text-xs text-gray-500 mb-3">
+        <p className="text-xs text-zinc-600 mb-3">
           APT tokens are used to pay for transaction gas fees on Aptos.
         </p>
         <button
           onClick={handleRequestAPT}
           disabled={loadingAPT || !!aptTxHash}
-          className={`w-full py-2 px-4 rounded font-medium text-sm ${loadingAPT || !!aptTxHash
-            ? "bg-gray-700 cursor-not-allowed text-gray-500"
-            : "bg-blue-600 hover:bg-blue-700 text-white"
+          className={`w-full py-2 px-4 rounded font-medium text-sm transition-colors ${loadingAPT || !!aptTxHash
+            ? "bg-zinc-800 cursor-not-allowed text-zinc-600"
+            : "bg-zinc-100 hover:bg-white text-zinc-900"
             }`}
         >
           {loadingAPT
             ? "Requesting APT..."
             : aptTxHash
-              ? "APT Received ✓"
+              ? "APT Received"
               : "Request APT"}
         </button>
         {aptTxHash && (
-          <div className="mt-2 p-2 bg-gray-800 rounded text-xs break-all font-mono text-green-400">
+          <div className="mt-2 p-2 bg-zinc-900 text-zinc-400 rounded text-xs break-all font-mono border border-zinc-800">
             Success! APT tokens added to your account
           </div>
         )}
       </div>
 
       {/* Step 2: Request Test Tokens */}
-      <div className="mb-4 p-4 bg-gray-900 rounded">
+      <div className="mb-4 p-4 bg-zinc-950/50 border border-zinc-900 rounded">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold text-purple-300">
+          <h3 className="text-sm font-semibold text-zinc-400">
             Step 1b: Request Test Tokens
           </h3>
         </div>
 
         {!contractsDeployed ? (
-          <div className="text-xs text-yellow-400 mb-3">
+          <div className="text-xs text-zinc-500 mb-3 animate-pulse">
             ⏳ Waiting for contracts to be deployed...
           </div>
         ) : (
-          <p className="text-xs text-gray-500 mb-3">
+          <p className="text-xs text-zinc-600 mb-3">
             Mint FAKEETH and FAKEUSD separately for testing.
           </p>
         )}
@@ -124,7 +124,7 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
               className="w-full"
             />
             {ethTxHash && (
-              <div className="mt-1 text-[10px] text-green-400 break-all">
+              <div className="mt-1 text-[10px] text-zinc-500 break-all font-mono">
                 Tx: {ethTxHash.slice(0, 10)}...
               </div>
             )}
@@ -141,7 +141,7 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
               className="w-full"
             />
             {usdTxHash && (
-              <div className="mt-1 text-[10px] text-green-400 break-all">
+              <div className="mt-1 text-[10px] text-zinc-500 break-all font-mono">
                 Tx: {usdTxHash.slice(0, 10)}...
               </div>
             )}
@@ -150,17 +150,17 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
       </div>
 
       {/* Status indicator */}
-      <div className="mt-4 pt-4 border-t border-gray-700">
-        <div className="text-xs text-gray-500">
+      <div className="mt-4 pt-4 border-t border-zinc-800">
+        <div className="text-xs text-zinc-500">
           {!aptTxHash && !ethTxHash && !usdTxHash && (
-            <p>📍 Start by requesting APT tokens above</p>
+            <p>Start by requesting APT tokens above</p>
           )}
           {aptTxHash && (!ethTxHash && !usdTxHash) && contractsDeployed && (
-            <p>✅ APT received. Now mint test tokens.</p>
+            <p>APT received. Now mint test tokens.</p>
           )}
           {ethTxHash && usdTxHash && (
-            <p className="text-green-400">
-              ✅ All setup complete! You can now create or bid on auctions.
+            <p className="text-zinc-400">
+              All setup complete! You can now create or bid on auctions.
             </p>
           )}
         </div>

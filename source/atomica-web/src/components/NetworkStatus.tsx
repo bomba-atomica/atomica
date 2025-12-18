@@ -21,9 +21,9 @@ export function NetworkStatus() {
   }, []);
 
   return (
-    <div className="text-green-400 font-mono text-sm border border-green-800 rounded px-3 py-2 bg-black/50 flex items-center">
+    <div className="text-zinc-500 font-mono text-sm border border-zinc-900 rounded px-3 py-2 bg-zinc-900/50 flex items-center">
       <div>
-        Block: <span className="text-white ml-2">{blockHeight}</span>
+        Block: <span className="text-zinc-300 ml-2">{blockHeight}</span>
       </div>
     </div>
   );

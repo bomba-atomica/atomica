@@ -136,7 +136,7 @@ export function TxButton({
             case "simulating": return "Simulating...";
             case "ready": return `Submit ${label}`;
             case "submitting": return "Submitting...";
-            case "success": return "Success!";
+            case "success": return "Success";
             case "error": return "Retry Simulation";
         }
     };
@@ -150,17 +150,17 @@ export function TxButton({
                     onClick={getMainButtonAction()}
                     disabled={disabled || isBusy || phase === "success"}
                     className={`
-            flex-grow px-4 py-2 font-bold text-white rounded-l-md transition-colors
-            ${phase === "error" ? "bg-red-600 hover:bg-red-700" :
-                            phase === "success" ? "bg-green-600" :
-                                phase === "ready" ? "bg-blue-600 hover:bg-blue-700" :
-                                    "bg-indigo-600 hover:bg-indigo-700"}
+            flex-grow px-4 py-2 font-bold rounded-l-md transition-colors border-r border-zinc-900/10
+            ${phase === "error" ? "bg-zinc-800 text-zinc-400 hover:bg-zinc-700" :
+                            phase === "success" ? "bg-zinc-800 text-zinc-400" :
+                                phase === "ready" ? "bg-zinc-100 text-zinc-950 hover:bg-white" :
+                                    "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"}
             ${disabled || isBusy ? "opacity-50 cursor-not-allowed" : ""}
           `}
                 >
                     <div className="flex items-center justify-center gap-2">
                         {isBusy && (
-                            <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <svg className="animate-spin h-4 w-4 text-zinc-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
@@ -174,23 +174,23 @@ export function TxButton({
                         onClick={() => !isBusy && setShowDropdown(!showDropdown)}
                         disabled={disabled || isBusy}
                         className={`
-                h-full px-2 rounded-r-md border-l border-white/20 transition-colors
-                ${phase === "error" ? "bg-red-600 hover:bg-red-700" :
-                                phase === "success" ? "bg-green-600" :
-                                    phase === "ready" ? "bg-blue-600 hover:bg-blue-700" :
-                                        "bg-indigo-600 hover:bg-indigo-700"}
+                h-full px-2 rounded-r-md transition-colors
+                ${phase === "error" ? "bg-zinc-800 text-zinc-400 hover:bg-zinc-700" :
+                                phase === "success" ? "bg-zinc-800 text-zinc-400" :
+                                    phase === "ready" ? "bg-zinc-100 text-zinc-950 hover:bg-white" :
+                                        "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"}
                 ${disabled || isBusy ? "opacity-50 cursor-not-allowed" : ""}
             `}
                     >
-                        <ChevronDownIcon className="w-5 h-5 text-white" />
+                        <ChevronDownIcon className="w-5 h-5 opacity-70" />
                     </button>
 
                     {showDropdown && (
-                        <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-zinc-800 rounded-md shadow-lg z-50 ring-1 ring-black ring-opacity-5">
+                        <div className="absolute right-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-md shadow-xl z-50">
                             <div className="py-1">
                                 <button
                                     onClick={handleSkipAndSubmit}
-                                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-700"
+                                    className="block w-full text-left px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800"
                                 >
                                     Skip & Submit
                                 </button>
@@ -202,14 +202,14 @@ export function TxButton({
 
             {/* Simulation Result / Error Details */}
             {(phase === "ready" || phase === "error") && simulationDetails && (
-                <div className={`mt-2 text-xs flex items-center gap-1 ${phase === "error" ? "text-red-500" : "text-green-500"}`}>
+                <div className={`mt-2 text-xs flex items-center gap-1 ${phase === "error" ? "text-zinc-500" : "text-zinc-500"}`}>
                     {phase === "error" ? <XCircleIcon className="w-4 h-4" /> : <CheckCircleIcon className="w-4 h-4" />}
-                    <span>Gas: {simulationDetails.gasUsed}</span>
+                    <span className="font-mono">Gas: {simulationDetails.gasUsed}</span>
                 </div>
             )}
 
             {error && !simulationDetails && (
-                <div className="mt-2 text-xs text-red-500 max-w-[200px] break-words">
+                <div className="mt-2 text-xs text-zinc-500 max-w-[200px] break-words font-mono">
                     {error}
                 </div>
             )}

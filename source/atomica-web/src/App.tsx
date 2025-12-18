@@ -42,9 +42,9 @@ function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white font-sans">
-      <header className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/95 sticky top-0 z-50 backdrop-blur">
-        <h1 className="text-2xl font-bold text-blue-400">Atomica Auction</h1>
+    <div className="min-h-screen bg-zinc-950 text-zinc-400 font-sans selection:bg-zinc-800 selection:text-white">
+      <header className="p-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-950/95 sticky top-0 z-50 backdrop-blur">
+        <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">Atomica Auction</h1>
         <div className="flex items-center gap-4">
           <NetworkStatus />
           {account ? (
@@ -54,7 +54,7 @@ function App() {
               <AccountStatus ethAddress={null} balances={balances} />
               <button
                 onClick={connectWallet}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition font-medium text-sm"
+                className="bg-zinc-100 hover:bg-white text-zinc-900 px-4 py-2 rounded transition font-medium text-sm"
               >
                 Connect MetaMask
               </button>
@@ -63,10 +63,10 @@ function App() {
         </div>
       </header>
 
-      <main className="container mx-auto p-8">
+      <main className="container mx-auto p-8 max-w-5xl">
         {!account ? (
           <div className="text-center mt-20">
-            <h2 className="text-xl text-gray-400">
+            <h2 className="text-xl text-zinc-600 font-medium">
               Connect your wallet to participate
             </h2>
           </div>
@@ -79,31 +79,31 @@ function App() {
 
             {/* Show disabled state if user doesn't have test tokens */}
             {balances.fakeEth === 0 || balances.fakeUsd === 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 opacity-50">
-                <div className="bg-gray-800 p-6 rounded-lg shadow-lg border-2 border-gray-700">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 opacity-40 grayscale">
+                <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-800">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-gray-500">
+                    <h2 className="text-xl font-bold text-zinc-500">
                       2. Create Auction
                     </h2>
-                    <span className="text-xs bg-gray-700 px-2 py-1 rounded">
+                    <span className="text-xs bg-zinc-800 text-zinc-500 px-2 py-1 rounded border border-zinc-700">
                       Disabled
                     </span>
                   </div>
-                  <p className="text-gray-600 text-sm">
+                  <p className="text-zinc-600 text-sm">
                     Complete step 1 to unlock auction creation.
                     You need FAKEETH and FAKEUSD tokens.
                   </p>
                 </div>
-                <div className="bg-gray-800 p-6 rounded-lg shadow-lg border-2 border-gray-700">
+                <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-800">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-gray-500">
+                    <h2 className="text-xl font-bold text-zinc-500">
                       3. Bid on Auction
                     </h2>
-                    <span className="text-xs bg-gray-700 px-2 py-1 rounded">
+                    <span className="text-xs bg-zinc-800 text-zinc-500 px-2 py-1 rounded border border-zinc-700">
                       Disabled
                     </span>
                   </div>
-                  <p className="text-gray-600 text-sm">
+                  <p className="text-zinc-600 text-sm">
                     Complete step 1 to unlock bidding.
                     You need FAKEUSD tokens to bid.
                   </p>
@@ -119,9 +119,9 @@ function App() {
         )}
 
         <div className="mt-12">
-          <h2 className="text-2xl font-bold mb-4">Active Auctions</h2>
-          <div className="bg-gray-800 p-4 rounded text-center text-gray-500">
-            No active auctions found. (Integration TODO)
+          <h2 className="text-2xl font-bold mb-4 text-zinc-200">Active Auctions</h2>
+          <div className="bg-zinc-900/50 border border-zinc-900 p-8 rounded text-center text-zinc-600">
+            No active auctions found.
           </div>
         </div>
       </main>

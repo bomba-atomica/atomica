@@ -44,48 +44,47 @@ export function AuctionBidder({ account }: AuctionBidderProps) {
   };
 
   return (
-    <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
-      <h2 className="text-xl font-bold mb-4 text-green-400">
+    <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-800">
+      <h2 className="text-xl font-bold mb-4 text-zinc-500">
         3. Bid on Auction
       </h2>
       <div className="space-y-4">
         <div>
-          <label className="block text-gray-400 text-sm mb-1">
+          <label className="block text-zinc-500 text-sm mb-1">
             Auction/Seller Address
           </label>
           <input
             type="text"
             value={sellerAddr}
             onChange={(e) => setSellerAddr(e.target.value)}
-            className="w-full bg-gray-700 text-white rounded p-2 text-xs font-mono"
+            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 text-xs font-mono border border-zinc-700 focus:outline-none focus:border-zinc-500"
             placeholder="0x..."
           />
         </div>
         <div>
-          <label className="block text-gray-400 text-sm mb-1">
+          <label className="block text-zinc-500 text-sm mb-1">
             Bid Amount (USD)
           </label>
           <input
             type="number"
             value={bidAmount}
             onChange={(e) => setBidAmount(e.target.value)}
-            className="w-full bg-gray-700 text-white rounded p-2"
+            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
           />
         </div>
 
         <button
           onClick={handleBid}
           disabled={loading}
-          className={`w-full py-2 rounded font-bold transition ${
-            loading
-              ? "bg-gray-600 cursor-not-allowed"
-              : "bg-green-600 hover:bg-green-700"
-          }`}
+          className={`w-full py-2 rounded font-bold transition-colors ${loading
+              ? "bg-zinc-800 cursor-not-allowed text-zinc-600 border border-zinc-700"
+              : "bg-zinc-100 hover:bg-white text-zinc-900"
+            }`}
         >
           {loading ? "Processing..." : "Submit Encrypted Bid"}
         </button>
         {status && (
-          <div className="mt-4 text-sm font-mono text-yellow-400 break-all p-2 bg-gray-900 rounded">
+          <div className="mt-4 text-sm font-mono text-zinc-400 break-all p-2 bg-zinc-950 rounded border border-zinc-800">
             {status}
           </div>
         )}

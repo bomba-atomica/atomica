@@ -30,34 +30,34 @@ export function AccountStatus({ ethAddress, balances }: AccountStatusProps) {
   const fmtApt = (val: number) => (val / 100_000_000).toFixed(4); // 8 decimals for APT
 
   return (
-    <div className="flex flex-col gap-2 text-sm font-mono bg-gray-800/50 px-4 py-3 rounded border border-gray-700">
+    <div className="flex flex-col gap-2 text-sm font-mono bg-zinc-900 px-4 py-3 rounded border border-zinc-800">
       {/* Address Display */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center">
-          <span className="text-gray-400 mr-2 min-w-[100px]">ETH Address:</span>
+          <span className="text-zinc-500 mr-2 min-w-[100px]">ETH Address:</span>
           {ethAddress ? (
-            <span className="text-green-400 text-xs" title={ethAddress}>
+            <span className="text-zinc-300 text-xs" title={ethAddress}>
               {ethAddress.substring(0, 8)}...{ethAddress.substring(38)}
             </span>
           ) : (
-            <span className="text-gray-500">Not Connected</span>
+            <span className="text-zinc-600">Not Connected</span>
           )}
         </div>
 
         {aptosAddress && (
           <>
             <div className="flex items-center">
-              <span className="text-gray-400 mr-2 min-w-[100px]">Aptos Address:</span>
-              <span className="text-blue-400 text-xs" title={aptosAddress}>
+              <span className="text-zinc-500 mr-2 min-w-[100px]">Aptos Address:</span>
+              <span className="text-zinc-400 text-xs" title={aptosAddress}>
                 {aptosAddress.substring(0, 8)}...{aptosAddress.substring(58)}
               </span>
             </div>
-            <div className="text-xs text-gray-500 italic ml-[100px]">
-              ↑ Derived from ETH address (holds APT & tokens)
+            <div className="text-xs text-zinc-600 ml-[100px]">
+              Derived from ETH address (holds APT & tokens)
             </div>
             {!balances.exists && !balances.loading && ethAddress && (
-              <div className="text-xs text-red-400 ml-[100px] mt-1">
-                ⚠ Account not found on chain (please use Faucet)
+              <div className="text-xs text-zinc-500 ml-[100px] mt-1 border-l-2 border-zinc-700 pl-2">
+                Account not found on chain (please use Faucet)
               </div>
             )}
           </>
@@ -67,26 +67,26 @@ export function AccountStatus({ ethAddress, balances }: AccountStatusProps) {
       {/* Balances */}
       {ethAddress && balances.exists && (
         <>
-          <div className="h-px bg-gray-700"></div>
+          <div className="h-px bg-zinc-800"></div>
           <div className="flex items-center gap-4">
             <div title="Gas (APT)">
-              <span className="text-gray-400 mr-1">APT:</span>
-              <span className="text-white">{fmtApt(balances.apt)}</span>
+              <span className="text-zinc-500 mr-1">APT:</span>
+              <span className="text-zinc-200">{fmtApt(balances.apt)}</span>
             </div>
 
             {!balances.contractsDeployed ? (
-              <div className="text-yellow-600 text-xs animate-pulse">Contracts Loading...</div>
+              <div className="text-zinc-500 text-xs animate-pulse">Contracts Loading...</div>
             ) : (
               <>
                 <div title="Fake ETH (8 decimals)">
-                  <span className="text-gray-400 mr-1">ETH:</span>
-                  <span className={balances.fakeEthInitialized ? "text-white" : "text-gray-500 italic"}>
+                  <span className="text-zinc-500 mr-1">ETH:</span>
+                  <span className={balances.fakeEthInitialized ? "text-zinc-200" : "text-zinc-600"}>
                     {balances.fakeEthInitialized ? fmtEth(balances.fakeEth) : "Not Init"}
                   </span>
                 </div>
                 <div title="Fake USD (6 decimals)">
-                  <span className="text-gray-400 mr-1">USD:</span>
-                  <span className={balances.fakeUsdInitialized ? "text-white" : "text-gray-500 italic"}>
+                  <span className="text-zinc-500 mr-1">USD:</span>
+                  <span className={balances.fakeUsdInitialized ? "text-zinc-200" : "text-zinc-600"}>
                     {balances.fakeUsdInitialized ? fmtUsd(balances.fakeUsd) : "Not Init"}
                   </span>
                 </div>

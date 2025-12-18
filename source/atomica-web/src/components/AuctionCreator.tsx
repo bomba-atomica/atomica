@@ -48,55 +48,54 @@ export function AuctionCreator({ account }: AuctionCreatorProps) {
   };
 
   return (
-    <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
-      <h2 className="text-xl font-bold mb-4 text-blue-400">
+    <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-800">
+      <h2 className="text-xl font-bold mb-4 text-zinc-500">
         2. Create Auction
       </h2>
       <div className="space-y-4">
         <div>
-          <label className="block text-gray-400 text-sm mb-1">ETH Amount</label>
+          <label className="block text-zinc-500 text-sm mb-1">ETH Amount</label>
           <input
             type="number"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="w-full bg-gray-700 text-white rounded p-2"
+            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
           />
         </div>
         <div>
-          <label className="block text-gray-400 text-sm mb-1">
+          <label className="block text-zinc-500 text-sm mb-1">
             Min Price (USD)
           </label>
           <input
             type="number"
             value={minPrice}
             onChange={(e) => setMinPrice(e.target.value)}
-            className="w-full bg-gray-700 text-white rounded p-2"
+            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
           />
         </div>
         <div>
-          <label className="block text-gray-400 text-sm mb-1">
+          <label className="block text-zinc-500 text-sm mb-1">
             Duration (seconds)
           </label>
           <input
             type="number"
             value={duration}
             onChange={(e) => setDuration(e.target.value)}
-            className="w-full bg-gray-700 text-white rounded p-2"
+            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
           />
         </div>
         <button
           onClick={handleCreateAuction}
           disabled={loading}
-          className={`w-full py-2 rounded font-bold transition ${
-            loading
-              ? "bg-gray-600 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700"
-          }`}
+          className={`w-full py-2 rounded font-bold transition-colors ${loading
+              ? "bg-zinc-800 cursor-not-allowed text-zinc-600 border border-zinc-700"
+              : "bg-zinc-100 hover:bg-white text-zinc-900"
+            }`}
         >
           {loading ? "Processing..." : "Create Auction"}
         </button>
         {status && (
-          <div className="mt-4 text-sm font-mono text-yellow-400 break-all p-2 bg-gray-900 rounded">
+          <div className="mt-4 text-sm font-mono text-zinc-400 break-all p-2 bg-zinc-950 rounded border border-zinc-800">
             {status}
           </div>
         )}
