@@ -6,13 +6,13 @@ import {
   setupLocalnet,
   teardownLocalnet,
   fundAccount,
-} from "../setup/localnet";
+} from "../../setup/localnet";
 import {
   aptos,
   getDerivedAddress,
   setAptosInstance,
   submitNativeTransaction,
-} from "../../src/lib/aptos";
+} from "../../../src/lib/aptos";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { URL } from "url";
 import { ethers } from "ethers";
