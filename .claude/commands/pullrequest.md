@@ -25,8 +25,12 @@ WORKFLOW:
 
 ## 0. Prerequisites check
 - Verify GitHub CLI authentication: `gh auth status 2>&1`
+- Check if the authenticated account has access to the repository:
+  - If you see an error like "Could not resolve to a Repository" when trying to access the PR, the wrong GitHub account may be active
+  - Inform user they may need to switch accounts: `gh auth switch`
+  - Or login with a different account: `gh auth login`
 - If not authenticated, inform user to run `gh auth login` and wait for them to authenticate
-- Only proceed after authentication is confirmed
+- Only proceed after authentication is confirmed with the correct account
 
 ## 1. Merge from main branch
 **IMPORTANT: Always attempt to merge from main before creating/updating PR to ensure branch is up to date**
@@ -184,6 +188,8 @@ Provide a clear summary based on which path was taken:
   - New commits → Push and exit (don't wait for CI)
   - No new commits → Check CI status and optionally fix failures
 - **Authentication**: Always check `gh auth status` first to avoid mid-workflow failures
+  - **Multiple accounts**: If you work with multiple GitHub accounts, use `gh auth switch` to change accounts or `gh auth login` to add a new one
+  - Repository access errors usually mean you need to switch to the correct account
 - **Heredoc syntax**: Use heredoc for PR descriptions to preserve formatting: `--body "$(cat <<'EOF'\n...\nEOF\n)"`
 - **Branch detection**: Auto-detect base branch instead of assuming `main`
 - **Engineer agent**: Use the engineer agent (not manual fixes) to resolve CI failures - it can analyze, fix, and test locally
