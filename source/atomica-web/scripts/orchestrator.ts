@@ -1,5 +1,5 @@
-import { spawn, execSync, spawnSync } from "node:child_process";
-import { existsSync, rmSync, mkdirSync } from "node:fs";
+import { spawn, execSync } from "node:child_process";
+import { existsSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -248,7 +248,7 @@ async function waitForUrl(url) {
     try {
       await fetch(url);
       return;
-    } catch (e) {
+    } catch {
       await sleep(1000);
     }
   }
@@ -285,7 +285,7 @@ function cleanupPorts(ports) {
           }
         }
       }
-    } catch (e) {
+    } catch {
       // lsof returns exit code 1 if no process found, which throws error. Ignore it.
     }
   }

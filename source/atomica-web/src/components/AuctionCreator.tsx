@@ -37,11 +37,11 @@ export function AuctionCreator({ account }: AuctionCreatorProps) {
         mpk,
       );
 
-      const hash = (pendingTx as any).hash || "submitted";
+      const hash = (pendingTx as { hash?: string }).hash || "submitted";
       setStatus(`Auction Created! Tx: ${hash}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      setStatus(`Error: ${error.message || "Unknown error"}`);
+      setStatus(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setLoading(false);
     }

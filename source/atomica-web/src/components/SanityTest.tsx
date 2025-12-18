@@ -22,7 +22,7 @@ export function SanityTest({ account }: { account: string }) {
         const derived = await getDerivedAddress(account.toLowerCase());
         await aptos.getAccountInfo({ accountAddress: derived });
         setAccountExists(true);
-      } catch (e) {
+      } catch {
         setAccountExists(false);
       } finally {
         setCheckingAccount(false);

@@ -33,11 +33,11 @@ export function AuctionBidder({ account }: AuctionBidderProps) {
       const pendingTx = await submitBid(account, sellerAddr, amountBn, u, v);
 
       // Access hash safely (type assertion if needed)
-      const hash = (pendingTx as any).hash || "submitted";
+      const hash = (pendingTx as { hash?: string }).hash || "submitted";
       setStatus(`Bid Submitted! Tx: ${hash}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      setStatus(`Error: ${error.message || "Unknown error"}`);
+      setStatus(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setLoading(false);
     }
