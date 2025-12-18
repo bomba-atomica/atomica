@@ -1,0 +1,131 @@
+name: Warmup Rust Cache
+
+on:
+  workflow_dispatch:
+
+jobs:
+  warmup-small:
+    name: Warmup Small Dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libssl-dev pkg-config libclang-dev cmake lld libudev-dev
+
+      - name: Setup Rust toolchain
+        run: |
+          rustup default stable
+          rustup update stable
+
+      - name: Setup Rust Cache (Small)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "source/zapatos"
+          key: "warmup-small"
+          cache-on-failure: true
+
+      - name: Build Small Deps
+        env:
+          RUSTC_WRAPPER: ""
+        run: |
+          cd source/zapatos
+          cargo build --release -p move-core-types -p move-binary-format -p move-model
+
+  warmup-medium:
+    name: Warmup Medium Dependencies
+    needs: warmup-small
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libssl-dev pkg-config libclang-dev cmake lld libudev-dev
+
+      - name: Setup Rust toolchain
+        run: |
+          rustup default stable
+          rustup update stable
+
+      - name: Restore Small Cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            source/zapatos/target
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-warmup-small-${{ hashFiles('source/zapatos/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-warmup-small-
+
+      - name: Setup Rust Cache (Medium)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "source/zapatos"
+          key: "warmup-medium"
+          cache-on-failure: true
+
+      - name: Build Medium Deps
+        env:
+          RUSTC_WRAPPER: ""
+        run: |
+          cd source/zapatos
+          cargo build --release -p aptos-framework -p aptos-types -p aptos-crypto
+
+  warmup-large:
+    name: Warmup Large Dependencies
+    needs: warmup-medium
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libssl-dev pkg-config libclang-dev cmake lld libudev-dev
+
+      - name: Setup Rust toolchain
+        run: |
+          rustup default stable
+          rustup update stable
+
+      - name: Restore Medium Cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            source/zapatos/target
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-warmup-medium-${{ hashFiles('source/zapatos/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-warmup-medium-
+
+      - name: Setup Rust Cache (Large)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "source/zapatos"
+          key: "warmup-large"
+          cache-on-failure: true
+
+      - name: Build Large Deps
+        env:
+          RUSTC_WRAPPER: ""
+        run: |
+          cd source/zapatos
+          cargo build --release -p aptos-vm -p aptos-storage-interface -p aptos-api
