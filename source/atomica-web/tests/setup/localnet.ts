@@ -1,5 +1,5 @@
 import { spawn, ChildProcess, exec as execCb } from "child_process";
-import { resolve, join, dirname } from "path";
+import { resolve as pathResolve, join, dirname } from "path";
 import { promisify } from "util";
 import { fileURLToPath } from "url";
 import http from "node:http";
@@ -11,9 +11,9 @@ let localnetProcess: ChildProcess | null = null;
 
 // Adjust paths relative to this file's location
 const TEST_SETUP_DIR = dirname(fileURLToPath(import.meta.url));
-const APTOS_BIN = resolve(TEST_SETUP_DIR, "../../../target/debug/aptos");
-const WEB_DIR = resolve(TEST_SETUP_DIR, "../..");
-const GENESIS_FRAMEWORK_PATH = resolve(TEST_SETUP_DIR, "../../../move-framework-fixtures/head.mrb");
+const APTOS_BIN = pathResolve(TEST_SETUP_DIR, "../../../../source/target/debug/aptos");
+const WEB_DIR = pathResolve(TEST_SETUP_DIR, "../..");
+const GENESIS_FRAMEWORK_PATH = pathResolve(TEST_SETUP_DIR, "../../../move-framework-fixtures/head.mrb");
 
 export async function killZombies() {
   try {
@@ -47,7 +47,7 @@ export async function killZombies() {
     }
 
     // Clean up stale localnet directory to prevent port binding issues
-    const LOCAL_TEST_DIR = resolve(WEB_DIR, ".aptos/testnet");
+    const LOCAL_TEST_DIR = pathResolve(WEB_DIR, ".aptos/testnet");
     if (existsSync(LOCAL_TEST_DIR)) {
       console.log(`Removing stale localnet directory: ${LOCAL_TEST_DIR}`);
       rmSync(LOCAL_TEST_DIR, { recursive: true, force: true });
@@ -60,8 +60,8 @@ export async function killZombies() {
   }
 }
 
-const CONTRACTS_DIR = resolve("../../atomica-move-contracts");
-const TEST_CONFIG_DIR = resolve(".aptos_test_config");
+const CONTRACTS_DIR = pathResolve("../../atomica-move-contracts");
+const TEST_CONFIG_DIR = pathResolve(".aptos_test_config");
 
 export function fundAccount(address: string, amount: number = 100_000_000): Promise<string> {
   console.log(`[fundAccount] Requesting ${amount} for ${address}...`);
@@ -108,7 +108,7 @@ export async function runAptosCmd(args: string[], cwd: string = WEB_DIR): Promis
         ...process.env,
         RUST_LOG: "debug",
         // Position trace.log alongside validator.log in the test directory
-        MOVE_VM_TRACE: resolve(process.env.HOME || "", ".aptos/testnet/trace.log"),
+        MOVE_VM_TRACE: pathResolve(process.env.HOME || "", ".aptos/testnet/trace.log"),
         APTOS_GLOBAL_CONFIG_DIR: TEST_CONFIG_DIR,
         APTOS_DISABLE_TELEMETRY: "true",
       },
@@ -217,9 +217,9 @@ export async function setupLocalnet() {
   // Ensure clean slate
   await killZombies();
 
-  const LOCAL_TEST_DIR = resolve(WEB_DIR, ".aptos/testnet");
-  const TRACE_PATH = resolve(LOCAL_TEST_DIR, "trace.log");
-  const VALIDATOR_LOG_PATH = resolve(LOCAL_TEST_DIR, "validator.log");
+  const LOCAL_TEST_DIR = pathResolve(WEB_DIR, ".aptos/testnet");
+  const TRACE_PATH = pathResolve(LOCAL_TEST_DIR, "trace.log");
+  const VALIDATOR_LOG_PATH = pathResolve(LOCAL_TEST_DIR, "validator.log");
 
   // Clean previous trace
   if (existsSync(TRACE_PATH)) {
