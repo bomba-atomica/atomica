@@ -84,10 +84,16 @@ export async function requestAPT(ethAddress: string) {
 /**
  * Mint FAKEETH Payload Builder
  */
-export function getMintFakeEthPayload(): InputGenerateTransactionPayloadData {
-    const amountEth = BigInt(10) * BigInt(100_000_000);
+export async function getMintFakeEthPayload(ethAddress: string): Promise<InputGenerateTransactionPayloadData> {
+    // Verify contracts are deployed before building payload
+    const deployed = await areContractsDeployed();
+    if (!deployed) {
+        throw new Error("fake_eth contract not deployed yet. Please wait for contract deployment to complete.");
+    }
+
+    const amountEth = BigInt(10) * BigInt(100_000_000); // 10 FAKEETH with 8 decimals
     return {
-        function: `${CONTRACT_ADDR}::FAKEETH::mint`,
+        function: `${CONTRACT_ADDR}::fake_eth::mint`,
         functionArguments: [amountEth],
     };
 }
@@ -97,16 +103,22 @@ export function getMintFakeEthPayload(): InputGenerateTransactionPayloadData {
  */
 export async function mintFakeEth(ethAddress: string) {
     console.log("\n=== Minting FAKEETH ===");
-    return await submitNativeTransaction(ethAddress, getMintFakeEthPayload());
+    return await submitNativeTransaction(ethAddress, await getMintFakeEthPayload(ethAddress));
 }
 
 /**
  * Mint FAKEUSD Payload Builder
  */
-export function getMintFakeUsdPayload(): InputGenerateTransactionPayloadData {
-    const amountUsd = BigInt(10000) * BigInt(100_000_000);
+export async function getMintFakeUsdPayload(ethAddress: string): Promise<InputGenerateTransactionPayloadData> {
+    // Verify contracts are deployed before building payload
+    const deployed = await areContractsDeployed();
+    if (!deployed) {
+        throw new Error("fake_usd contract not deployed yet. Please wait for contract deployment to complete.");
+    }
+
+    const amountUsd = BigInt(10000) * BigInt(1_000_000); // 10,000 USD with 6 decimals
     return {
-        function: `${CONTRACT_ADDR}::FAKEUSD::mint`,
+        function: `${CONTRACT_ADDR}::fake_usd::mint`,
         functionArguments: [amountUsd],
     };
 }
@@ -116,7 +128,7 @@ export function getMintFakeUsdPayload(): InputGenerateTransactionPayloadData {
  */
 export async function mintFakeUsd(ethAddress: string) {
     console.log("\n=== Minting FAKEUSD ===");
-    return await submitNativeTransaction(ethAddress, getMintFakeUsdPayload());
+    return await submitNativeTransaction(ethAddress, await getMintFakeUsdPayload(ethAddress));
 }
 
 /**
@@ -140,9 +152,9 @@ export async function areContractsDeployed(): Promise<boolean> {
             accountAddress: CONTRACT_ADDR,
         });
 
-        // Check if FAKEETH and FAKEUSD modules exist
-        const hasFakeEth = modules.some((m) => m.abi?.name === "FAKEETH");
-        const hasFakeUsd = modules.some((m) => m.abi?.name === "FAKEUSD");
+        // Check if fake_eth and fake_usd modules exist
+        const hasFakeEth = modules.some((m) => m.abi?.name === "fake_eth");
+        const hasFakeUsd = modules.some((m) => m.abi?.name === "fake_usd");
 
         return hasFakeEth && hasFakeUsd;
     } catch (e) {

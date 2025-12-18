@@ -8,6 +8,12 @@ module atomica::fake_usd {
 
     const ASSET_SYMBOL: vector<u8> = b"FAKEUSD";
 
+    /// Maximum amount that can be minted per transaction (10,000 FAKEUSD with 6 decimals)
+    const MAX_MINT_AMOUNT: u64 = 10_000_000_000;
+
+    /// Error code when trying to mint more than the maximum allowed
+    const E_EXCEEDS_MAX_MINT: u64 = 1;
+
     /// Holds the refs for minting, transferring, and burning
     struct ManagingRefs has key {
         mint_ref: MintRef,
@@ -44,15 +50,21 @@ module atomica::fake_usd {
         });
     }
 
-    /// Mint FAKEUSD to a recipient
-    public entry fun mint(admin: &signer, recipient: address, amount: u64) acquires ManagingRefs {
-        let admin_addr = signer::address_of(admin);
-        let refs = borrow_global<ManagingRefs>(admin_addr);
-        
+    /// Mint FAKEUSD to yourself
+    /// Anyone can call this (it's a faucet for testing)
+    /// Maximum 10,000 FAKEUSD per mint transaction
+    public entry fun mint(account: &signer, amount: u64) acquires ManagingRefs {
+        // Enforce maximum mint amount per transaction
+        assert!(amount <= MAX_MINT_AMOUNT, E_EXCEEDS_MAX_MINT);
+
+        // Get refs from the contract address (where initialize was called)
+        let refs = borrow_global<ManagingRefs>(@atomica);
+
         // Mint the fungible asset
         let fa = fungible_asset::mint(&refs.mint_ref, amount);
-        
-        // Deposit to the recipient's primary store
+
+        // Deposit to the signer's primary store
+        let recipient = signer::address_of(account);
         primary_fungible_store::deposit(recipient, fa);
     }
 
