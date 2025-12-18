@@ -37,18 +37,34 @@ jobs:
         run: |
           CACHE_KEY="aptos-binary-${{ runner.os }}-${{ steps.zapatos-commit.outputs.hash }}"
           BINARY_PATH="${{ github.workspace }}/bin/aptos"
+          CARGO_CACHE_KEY="cargo-build-${{ runner.os }}-${{ steps.zapatos-commit.outputs.hash }}"
           echo "cache-key=$CACHE_KEY" >> $GITHUB_OUTPUT
           echo "binary-path=$BINARY_PATH" >> $GITHUB_OUTPUT
+          echo "cargo-cache-key=$CARGO_CACHE_KEY" >> $GITHUB_OUTPUT
           echo "Cache key: $CACHE_KEY"
           echo "Binary path: $BINARY_PATH"
+          echo "Cargo cache key: $CARGO_CACHE_KEY"
 
-      - name: Check cache
+      - name: Check binary cache
         id: cache-check
         uses: actions/cache@v4
         with:
           path: ${{ steps.cache-info.outputs.binary-path }}
           key: ${{ steps.cache-info.outputs.cache-key }}
           lookup-only: true
+
+      - name: Restore cargo build cache
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            source/zapatos/target
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+          key: ${{ steps.cache-info.outputs.cargo-cache-key }}
+          restore-keys: |
+            cargo-build-${{ runner.os }}-
 
       - name: Setup Rust toolchain
         if: steps.cache-check.outputs.cache-hit != 'true'
@@ -79,7 +95,18 @@ jobs:
           # Verify binary
           ${{ steps.cache-info.outputs.binary-path }} --version
 
-      - name: Save to cache
+      - name: Save cargo build cache
+        if: always() && steps.cache-check.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            source/zapatos/target
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+          key: ${{ steps.cache-info.outputs.cargo-cache-key }}
+
+      - name: Save binary to cache
         if: steps.cache-check.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
