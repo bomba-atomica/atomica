@@ -53,9 +53,15 @@ export async function prepareNativeTransaction(
     }
 
     // 1. Build Transaction
+    // Set expiration to 5 minutes from now (300 seconds)
+    const expirationTimestamp = Math.floor(Date.now() / 1000) + 300;
+
     const transaction = await aptos.transaction.build.simple({
         sender: senderAddress,
         data: payload,
+        options: {
+            expireTimestamp: expirationTimestamp,
+        },
     });
 
     // 2. Get Signing Message (Prefix + BCS)
