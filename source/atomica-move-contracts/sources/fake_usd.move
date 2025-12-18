@@ -74,4 +74,10 @@ module atomica::fake_usd {
         let metadata_address = object::create_object_address(&@atomica, ASSET_SYMBOL);
         object::address_to_object<Metadata>(metadata_address)
     }
+
+    #[view]
+    /// Get the balance of FAKEUSD directly
+    public fun balance(owner: address): u64 {
+        primary_fungible_store::balance(owner, get_metadata())
+    }
 }

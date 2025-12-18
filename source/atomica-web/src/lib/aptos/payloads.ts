@@ -84,7 +84,7 @@ export async function requestAPT(ethAddress: string) {
 /**
  * Mint FAKEETH Payload Builder
  */
-export async function getMintFakeEthPayload(ethAddress: string): Promise<InputGenerateTransactionPayloadData> {
+export async function getMintFakeEthPayload(_ethAddress: string): Promise<InputGenerateTransactionPayloadData> {
     // Verify contracts are deployed before building payload
     const deployed = await areContractsDeployed();
     if (!deployed) {
@@ -109,7 +109,7 @@ export async function mintFakeEth(ethAddress: string) {
 /**
  * Mint FAKEUSD Payload Builder
  */
-export async function getMintFakeUsdPayload(ethAddress: string): Promise<InputGenerateTransactionPayloadData> {
+export async function getMintFakeUsdPayload(_ethAddress: string): Promise<InputGenerateTransactionPayloadData> {
     // Verify contracts are deployed before building payload
     const deployed = await areContractsDeployed();
     if (!deployed) {

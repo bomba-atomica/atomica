@@ -156,12 +156,12 @@ Applications building on these test tokens should implement their own rate limit
 - **`source/atomica-move-contracts/sources/fake_eth.move`**
   - Module `atomica::fake_eth`
   - Constants: `MAX_MINT_AMOUNT = 1_000_000_000_000` (10,000 with 8 decimals)
-  - Functions: `initialize()`, `mint(account: &signer, amount: u64)`, `get_metadata()`
+  - Functions: `initialize()`, `mint(account: &signer, amount: u64)`, `get_metadata()`, `balance(owner: address): u64`
 
 - **`source/atomica-move-contracts/sources/fake_usd.move`**
   - Module `atomica::fake_usd`
   - Constants: `MAX_MINT_AMOUNT = 10_000_000_000` (10,000 with 6 decimals)
-  - Functions: `initialize()`, `mint(account: &signer, amount: u64)`, `get_metadata()`
+  - Functions: `initialize()`, `mint(account: &signer, amount: u64)`, `get_metadata()`, `balance(owner: address): u64`
 
 ### TypeScript/Web Integration
 - **`source/atomica-web/src/lib/aptos/payloads.ts`**

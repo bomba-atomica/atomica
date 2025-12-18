@@ -71,78 +71,37 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
         return;
       }
 
-      // Contracts deployed, check for fungible asset balances
-      // Fetch ALL resources to inspect primary fungible stores
-      let resources: any[] = [];
-      try {
-        resources = await aptos.getAccountResources({ accountAddress: derived });
-      } catch (e) {
-        resources = [];
-      }
-
+      // Contracts deployed, fetch balances directly using view functions
       let fakeEthBalance = 0;
       let fakeEthInitialized = false;
       let fakeUsdBalance = 0;
       let fakeUsdInitialized = false;
-
-      // Get metadata addresses by calling the view functions
       try {
-        // Call fake_eth::get_metadata() to get FAKEETH metadata address
-        const fakeEthMetadataResult = await aptos.view({
+        // Get FAKEETH balance
+        const fakeEthResult = await aptos.view({
           payload: {
-            function: `${CONTRACT_ADDR}::fake_eth::get_metadata`,
-            functionArguments: [],
+            function: `${CONTRACT_ADDR}::fake_eth::balance`,
+            functionArguments: [derived.toString()],
           },
         });
+        fakeEthBalance = Number(fakeEthResult[0]);
+        fakeEthInitialized = true; // If call succeeds, it's initialized (or 0)
 
-        // Call fake_usd::get_metadata() to get FAKEUSD metadata address
-        const fakeUsdMetadataResult = await aptos.view({
+        // Get FAKEUSD balance
+        const fakeUsdResult = await aptos.view({
           payload: {
-            function: `${CONTRACT_ADDR}::fake_usd::get_metadata`,
-            functionArguments: [],
+            function: `${CONTRACT_ADDR}::fake_usd::balance`,
+            functionArguments: [derived.toString()],
           },
         });
+        fakeUsdBalance = Number(fakeUsdResult[0]);
+        fakeUsdInitialized = true;
 
-        // Extract metadata addresses from results
-        const fakeEthMetadataAddr = fakeEthMetadataResult[0] as string;
-        const fakeUsdMetadataAddr = fakeUsdMetadataResult[0] as string;
-
-        // Now match primary stores to these metadata addresses
-        for (const resource of resources) {
-          if (resource.type.startsWith("0x1::primary_fungible_store::PrimaryStore")) {
-            try {
-              // The full type includes the metadata address as type parameter
-              // e.g., "0x1::primary_fungible_store::PrimaryStore<0xMETADATA_ADDR>"
-
-              // Extract metadata address from the type parameter
-              const typeMatch = resource.type.match(/PrimaryStore<(.+)>/);
-              if (typeMatch && typeMatch[1]) {
-                const metadataAddrInType = typeMatch[1].trim();
-
-                // Access the balance from fungible_store
-                const store = resource.data?.fungible_store;
-                if (store?.balance !== undefined) {
-                  const balance = parseInt(store.balance);
-
-                  // Match against our known metadata addresses
-                  if (metadataAddrInType === fakeEthMetadataAddr) {
-                    fakeEthBalance = balance;
-                    fakeEthInitialized = true;
-                  } else if (metadataAddrInType === fakeUsdMetadataAddr) {
-                    fakeUsdBalance = balance;
-                    fakeUsdInitialized = true;
-                  }
-                }
-              }
-            } catch (e) {
-              console.warn("Error parsing fungible asset store:", e);
-            }
-          }
-        }
       } catch (e) {
-        console.warn("Error fetching fungible asset metadata:", e);
-        // Fallback: balances remain 0
+        console.warn("Error fetching token balances via view functions:", e);
+        // Fallback or leave as 0
       }
+
 
       setBalances({
         apt: aptBalance,
