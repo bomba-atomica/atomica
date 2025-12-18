@@ -9,9 +9,15 @@ import { join } from "path";
 const exec = promisify(execCb);
 
 const SOURCE_ROOT = resolve(__dirname, "../../..");
-const ZAPATOS_FRAMEWORK_DIR = resolve(SOURCE_ROOT, "zapatos/aptos-move/framework");
+const ZAPATOS_FRAMEWORK_DIR = resolve(
+  SOURCE_ROOT,
+  "zapatos/aptos-move/framework",
+);
 const FIXTURES_DIR = resolve(SOURCE_ROOT, "move-framework-fixtures");
-const BUILD_SCRIPT = resolve(SOURCE_ROOT, "move-framework-fixtures/build-framework.sh");
+const BUILD_SCRIPT = resolve(
+  SOURCE_ROOT,
+  "move-framework-fixtures/build-framework.sh",
+);
 
 /**
  * Recursively find all .move files in a directory
@@ -26,7 +32,7 @@ async function findMoveFiles(dir: string): Promise<string[]> {
       const fullPath = join(currentDir, entry.name);
       if (entry.isDirectory()) {
         await walk(fullPath);
-      } else if (entry.isFile() && entry.name.endsWith('.move')) {
+      } else if (entry.isFile() && entry.name.endsWith(".move")) {
         files.push(fullPath);
       }
     }
@@ -46,14 +52,15 @@ async function computeFrameworkHash(): Promise<string> {
   const hashes: string[] = [];
   for (const file of moveFiles) {
     const content = await readFile(file);
-    const hash = crypto.createHash('sha256').update(content).digest('hex');
+    const hash = crypto.createHash("sha256").update(content).digest("hex");
     hashes.push(hash);
   }
 
   // Hash all the hashes together for a final hash
-  const finalHash = crypto.createHash('sha256')
-    .update(hashes.join(''))
-    .digest('hex')
+  const finalHash = crypto
+    .createHash("sha256")
+    .update(hashes.join(""))
+    .digest("hex")
     .slice(0, 16); // First 16 chars
 
   return finalHash;

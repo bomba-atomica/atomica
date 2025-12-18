@@ -37,7 +37,9 @@ export function AuctionBidder({ account }: AuctionBidderProps) {
       setStatus(`Bid Submitted! Tx: ${hash}`);
     } catch (error: unknown) {
       console.error(error);
-      setStatus(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+      setStatus(
+        `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     } finally {
       setLoading(false);
     }
@@ -76,10 +78,11 @@ export function AuctionBidder({ account }: AuctionBidderProps) {
         <button
           onClick={handleBid}
           disabled={loading}
-          className={`w-full py-2 rounded font-bold transition-colors ${loading
+          className={`w-full py-2 rounded font-bold transition-colors ${
+            loading
               ? "bg-zinc-800 cursor-not-allowed text-zinc-600 border border-zinc-700"
               : "bg-zinc-100 hover:bg-white text-zinc-900"
-            }`}
+          }`}
         >
           {loading ? "Processing..." : "Submit Encrypted Bid"}
         </button>

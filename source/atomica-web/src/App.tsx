@@ -44,7 +44,9 @@ function App() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-400 font-sans selection:bg-zinc-800 selection:text-white">
       <header className="p-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-950/95 sticky top-0 z-50 backdrop-blur">
-        <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">Atomica Auction</h1>
+        <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">
+          Atomica Auction
+        </h1>
         <div className="flex items-center gap-4">
           <NetworkStatus />
           {account ? (
@@ -90,8 +92,8 @@ function App() {
                     </span>
                   </div>
                   <p className="text-zinc-600 text-sm">
-                    Complete step 1 to unlock auction creation.
-                    You need FAKEETH and FAKEUSD tokens.
+                    Complete step 1 to unlock auction creation. You need FAKEETH
+                    and FAKEUSD tokens.
                   </p>
                 </div>
                 <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-800">
@@ -104,8 +106,8 @@ function App() {
                     </span>
                   </div>
                   <p className="text-zinc-600 text-sm">
-                    Complete step 1 to unlock bidding.
-                    You need FAKEUSD tokens to bid.
+                    Complete step 1 to unlock bidding. You need FAKEUSD tokens
+                    to bid.
                   </p>
                 </div>
               </div>
@@ -119,7 +121,9 @@ function App() {
         )}
 
         <div className="mt-12">
-          <h2 className="text-2xl font-bold mb-4 text-zinc-200">Active Auctions</h2>
+          <h2 className="text-2xl font-bold mb-4 text-zinc-200">
+            Active Auctions
+          </h2>
           <div className="bg-zinc-900/50 border border-zinc-900 p-8 rounded text-center text-zinc-600">
             No active auctions found.
           </div>

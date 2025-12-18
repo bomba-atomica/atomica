@@ -1,9 +1,14 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { setupLocalnet, teardownLocalnet, runAptosCmd, fundAccount } from '../../setup/localnet';
-import { Aptos, AptosConfig, Network, Account } from '@aptos-labs/ts-sdk';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import {
+  setupLocalnet,
+  teardownLocalnet,
+  runAptosCmd,
+  fundAccount,
+} from "../../setup/localnet";
+import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 
 /**
  * Test: Move Contract Deployment
@@ -56,87 +61,105 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const config = new AptosConfig({
-    network: Network.CUSTOM,
-    fullnode: "http://127.0.0.1:8080/v1",
-    faucet: "http://127.0.0.1:8081"
+  network: Network.CUSTOM,
+  fullnode: "http://127.0.0.1:8080/v1",
+  faucet: "http://127.0.0.1:8081",
 });
 const aptos = new Aptos(config);
 
-describe.sequential('Move Contract Deployment', () => {
-    beforeAll(async () => {
-        await setupLocalnet();
-    }, 120000);
+describe.sequential("Move Contract Deployment", () => {
+  beforeAll(async () => {
+    await setupLocalnet();
+  }, 120000);
 
-    afterAll(async () => {
-        await teardownLocalnet();
+  afterAll(async () => {
+    await teardownLocalnet();
+  });
+
+  it("should deploy a noop contract", async () => {
+    console.log("Starting contract deployment test...");
+
+    // Generate deployer account
+    const deployer = Account.generate();
+    console.log(`Deployer address: ${deployer.accountAddress.toString()}`);
+
+    // Verify deployer starts with 0 balance
+    const initialBalance = await aptos.getAccountAPTAmount({
+      accountAddress: deployer.accountAddress,
     });
+    console.log(`Deployer initial balance: ${initialBalance}`);
+    expect(initialBalance).toBe(0);
 
-    it('should deploy a noop contract', async () => {
-        console.log("Starting contract deployment test...");
+    // Fund deployer with 1 billion octas (10 APT)
+    console.log("Funding deployer...");
+    await fundAccount(deployer.accountAddress.toString(), 1_000_000_000);
 
-        // Generate deployer account
-        const deployer = Account.generate();
-        console.log(`Deployer address: ${deployer.accountAddress.toString()}`);
+    // Wait a moment for funding to be indexed
+    await new Promise((r) => setTimeout(r, 1000));
 
-        // Verify deployer starts with 0 balance
-        const initialBalance = await aptos.getAccountAPTAmount({ accountAddress: deployer.accountAddress });
-        console.log(`Deployer initial balance: ${initialBalance}`);
-        expect(initialBalance).toBe(0);
+    // Verify deployer was funded
+    const fundedBalance = await aptos.getAccountAPTAmount({
+      accountAddress: deployer.accountAddress,
+    });
+    console.log(`Deployer balance after funding: ${fundedBalance}`);
+    expect(fundedBalance).toBe(1_000_000_000);
 
-        // Fund deployer with 1 billion octas (10 APT)
-        console.log("Funding deployer...");
-        await fundAccount(deployer.accountAddress.toString(), 1_000_000_000);
+    // Path to noop contract
+    const NOOP_DIR = resolve(__dirname, "../../fixtures/noop");
+    console.log(`Noop contract directory: ${NOOP_DIR}`);
 
-        // Wait a moment for funding to be indexed
-        await new Promise(r => setTimeout(r, 1000));
+    // Compile and publish the noop module directly without aptos init
+    // This avoids the side effect of aptos init auto-funding the account
+    console.log("Publishing noop module...");
+    await runAptosCmd(
+      [
+        "move",
+        "publish",
+        "--named-addresses",
+        `noop=${deployer.accountAddress.toString()}`,
+        "--private-key",
+        deployer.privateKey.toString(),
+        "--url",
+        "http://127.0.0.1:8080",
+        "--assume-yes",
+      ],
+      NOOP_DIR,
+    );
 
-        // Verify deployer was funded
-        const fundedBalance = await aptos.getAccountAPTAmount({ accountAddress: deployer.accountAddress });
-        console.log(`Deployer balance after funding: ${fundedBalance}`);
-        expect(fundedBalance).toBe(1_000_000_000);
+    // Check if module exists on-chain
+    console.log("Verifying module deployment...");
+    const modules = await aptos.getAccountModules({
+      accountAddress: deployer.accountAddress,
+    });
+    console.log(`Found ${modules.length} module(s) at deployer address`);
 
-        // Path to noop contract
-        const NOOP_DIR = resolve(__dirname, '../../fixtures/noop');
-        console.log(`Noop contract directory: ${NOOP_DIR}`);
+    const noopModule = modules.find((m) => m.abi?.name === "noop");
+    expect(noopModule).toBeDefined();
+    console.log(`Noop module found: ${noopModule?.abi?.name}`);
 
-        // Compile and publish the noop module directly without aptos init
-        // This avoids the side effect of aptos init auto-funding the account
-        console.log("Publishing noop module...");
-        await runAptosCmd([
-            "move", "publish",
-            "--named-addresses", `noop=${deployer.accountAddress.toString()}`,
-            "--private-key", deployer.privateKey.toString(),
-            "--url", "http://127.0.0.1:8080",
-            "--assume-yes"
-        ], NOOP_DIR);
+    // Verify the module has the expected function
+    const hasDoNothing = noopModule?.abi?.exposed_functions.some(
+      (f) => f.name === "do_nothing",
+    );
+    expect(hasDoNothing).toBe(true);
+    console.log("Module has 'do_nothing' function: true");
 
-        // Check if module exists on-chain
-        console.log("Verifying module deployment...");
-        const modules = await aptos.getAccountModules({ accountAddress: deployer.accountAddress });
-        console.log(`Found ${modules.length} module(s) at deployer address`);
+    // Log all exposed functions
+    const functionNames =
+      noopModule?.abi?.exposed_functions.map((f) => f.name) || [];
+    console.log(`Exposed functions: ${functionNames.join(", ")}`);
 
-        const noopModule = modules.find(m => m.abi?.name === "noop");
-        expect(noopModule).toBeDefined();
-        console.log(`Noop module found: ${noopModule?.abi?.name}`);
+    // Check deployer's final balance (should be less than initial 1B due to deployment gas)
+    const finalBalance = await aptos.getAccountAPTAmount({
+      accountAddress: deployer.accountAddress,
+    });
+    console.log(`Deployer final balance: ${finalBalance}`);
+    const gasUsed = 1_000_000_000 - finalBalance;
+    console.log(`Gas used for deployment: ${gasUsed} octas`);
 
-        // Verify the module has the expected function
-        const hasDoNothing = noopModule?.abi?.exposed_functions.some(f => f.name === "do_nothing");
-        expect(hasDoNothing).toBe(true);
-        console.log("Module has 'do_nothing' function: true");
-
-        // Log all exposed functions
-        const functionNames = noopModule?.abi?.exposed_functions.map(f => f.name) || [];
-        console.log(`Exposed functions: ${functionNames.join(', ')}`);
-
-        // Check deployer's final balance (should be less than initial 1B due to deployment gas)
-        const finalBalance = await aptos.getAccountAPTAmount({ accountAddress: deployer.accountAddress });
-        console.log(`Deployer final balance: ${finalBalance}`);
-        const gasUsed = 1_000_000_000 - finalBalance;
-        console.log(`Gas used for deployment: ${gasUsed} octas`);
-
-        // Deployment gas should be relatively small (< 1M octas)
-        expect(finalBalance).toBeLessThan(1_000_000_000);
-        expect(gasUsed).toBeGreaterThan(0);
-        expect(gasUsed).toBeLessThan(1_000_000); // Deployment should cost less than 1M octas
-    }, 180000); // 180s timeout (3 minutes) - allows time for downloading git dependencies
+    // Deployment gas should be relatively small (< 1M octas)
+    expect(finalBalance).toBeLessThan(1_000_000_000);
+    expect(gasUsed).toBeGreaterThan(0);
+    expect(gasUsed).toBeLessThan(1_000_000); // Deployment should cost less than 1M octas
+  }, 180000); // 180s timeout (3 minutes) - allows time for downloading git dependencies
 });

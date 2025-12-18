@@ -26,7 +26,7 @@ export function AccountStatus({ ethAddress, balances }: AccountStatusProps) {
 
   // Format balances with correct decimal places
   const fmtEth = (val: number) => (val / 100_000_000).toFixed(4); // 8 decimals for ETH
-  const fmtUsd = (val: number) => (val / 1_000_000).toFixed(2);   // 6 decimals for USD
+  const fmtUsd = (val: number) => (val / 1_000_000).toFixed(2); // 6 decimals for USD
   const fmtApt = (val: number) => (val / 100_000_000).toFixed(4); // 8 decimals for APT
 
   return (
@@ -47,7 +47,9 @@ export function AccountStatus({ ethAddress, balances }: AccountStatusProps) {
         {aptosAddress && (
           <>
             <div className="flex items-center">
-              <span className="text-zinc-500 mr-2 min-w-[100px]">Aptos Address:</span>
+              <span className="text-zinc-500 mr-2 min-w-[100px]">
+                Aptos Address:
+              </span>
               <span className="text-zinc-400 text-xs" title={aptosAddress}>
                 {aptosAddress.substring(0, 8)}...{aptosAddress.substring(58)}
               </span>
@@ -75,19 +77,37 @@ export function AccountStatus({ ethAddress, balances }: AccountStatusProps) {
             </div>
 
             {!balances.contractsDeployed ? (
-              <div className="text-zinc-500 text-xs animate-pulse">Contracts Loading...</div>
+              <div className="text-zinc-500 text-xs animate-pulse">
+                Contracts Loading...
+              </div>
             ) : (
               <>
                 <div title="Fake ETH (8 decimals)">
                   <span className="text-zinc-500 mr-1">ETH:</span>
-                  <span className={balances.fakeEthInitialized ? "text-zinc-200" : "text-zinc-600"}>
-                    {balances.fakeEthInitialized ? fmtEth(balances.fakeEth) : "Not Init"}
+                  <span
+                    className={
+                      balances.fakeEthInitialized
+                        ? "text-zinc-200"
+                        : "text-zinc-600"
+                    }
+                  >
+                    {balances.fakeEthInitialized
+                      ? fmtEth(balances.fakeEth)
+                      : "Not Init"}
                   </span>
                 </div>
                 <div title="Fake USD (6 decimals)">
                   <span className="text-zinc-500 mr-1">USD:</span>
-                  <span className={balances.fakeUsdInitialized ? "text-zinc-200" : "text-zinc-600"}>
-                    {balances.fakeUsdInitialized ? fmtUsd(balances.fakeUsd) : "Not Init"}
+                  <span
+                    className={
+                      balances.fakeUsdInitialized
+                        ? "text-zinc-200"
+                        : "text-zinc-600"
+                    }
+                  >
+                    {balances.fakeUsdInitialized
+                      ? fmtUsd(balances.fakeUsd)
+                      : "Not Init"}
                   </span>
                 </div>
               </>

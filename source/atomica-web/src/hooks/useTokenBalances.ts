@@ -20,7 +20,7 @@ interface TokenBalances {
  * Returns balances for APT, FAKEETH, and FAKEUSD
  */
 export function useTokenBalances(ethAddress: string | null): TokenBalances {
-  const [balances, setBalances] = useState<Omit<TokenBalances, 'refetch'>>({
+  const [balances, setBalances] = useState<Omit<TokenBalances, "refetch">>({
     apt: 0,
     fakeEth: 0,
     fakeUsd: 0,
@@ -33,7 +33,14 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
 
   const checkBalances = useCallback(async () => {
     if (!ethAddress) {
-      setBalances(prev => ({ ...prev, apt: 0, fakeEth: 0, fakeUsd: 0, loading: false, exists: false }));
+      setBalances((prev) => ({
+        ...prev,
+        apt: 0,
+        fakeEth: 0,
+        fakeUsd: 0,
+        loading: false,
+        exists: false,
+      }));
       return;
     }
 
@@ -43,9 +50,16 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
       // Check if account exists on-chain first
       try {
         await aptos.getAccountInfo({ accountAddress: derived });
-      } catch (e) {
+      } catch {
         // Account invalid/not found - stop here
-        setBalances(prev => ({ ...prev, apt: 0, fakeEth: 0, fakeUsd: 0, loading: false, exists: false }));
+        setBalances((prev) => ({
+          ...prev,
+          apt: 0,
+          fakeEth: 0,
+          fakeUsd: 0,
+          loading: false,
+          exists: false,
+        }));
         return;
       }
 
@@ -96,12 +110,10 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
         });
         fakeUsdBalance = Number(fakeUsdResult[0]);
         fakeUsdInitialized = true;
-
       } catch (e) {
         console.warn("Error fetching token balances via view functions:", e);
         // Fallback or leave as 0
       }
-
 
       setBalances({
         apt: aptBalance,
@@ -113,17 +125,27 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
         fakeUsdInitialized,
         contractsDeployed: true,
       });
-    } catch (e: any) {
+    } catch {
       // Fallback for unexpected errors
-      setBalances(prev => ({ ...prev, loading: false, exists: false }));
+      setBalances((prev) => ({ ...prev, loading: false, exists: false }));
     }
   }, [ethAddress]);
 
   useEffect(() => {
-    checkBalances();
+    // Initial check and polling - wrapped to avoid synchronous setState
+    let cancelled = false;
+    const runCheck = async () => {
+      if (!cancelled) {
+        await checkBalances();
+      }
+    };
+    void runCheck();
     // Poll every 5 seconds
-    const interval = setInterval(checkBalances, 5000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => void runCheck(), 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [checkBalances]);
 
   return { ...balances, refetch: checkBalances };

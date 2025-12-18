@@ -107,8 +107,7 @@ describe("Aptos Helpers", () => {
           // So we expect to find: [ULEB128 len] [GoldenBytes] inside the full stream.
           // Length of golden bytes is likely small (<127), so 1 byte length.
 
-          const goldenBytes = ethers.getBytes("0x" + testCase.bcs_hex);
-          const lenByte = goldenBytes.length;
+          ethers.getBytes("0x" + testCase.bcs_hex);
 
           // Convert whole thing to hex to search string
           // We are looking for: `...lenByte + goldenHex...`

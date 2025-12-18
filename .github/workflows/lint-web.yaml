@@ -37,6 +37,11 @@ jobs:
           cd source/atomica-web
           npm run lint
 
+      - name: Check Prettier formatting
+        run: |
+          cd source/atomica-web
+          npm run format:check
+
       - name: Check TypeScript compilation
         run: |
           cd source/atomica-web

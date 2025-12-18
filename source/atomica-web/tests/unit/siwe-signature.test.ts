@@ -16,7 +16,8 @@ describe("SIWE Message Construction", () => {
     const entryFunction = "0x1::aptos_account::transfer";
     const networkName = "local";
     const chainId = 4;
-    const nonce = "0xf790024c9374b4e2f58a5dd758b83c9b59cf41d0cb8ac5087fa02d9047866ace";
+    const nonce =
+      "0xf790024c9374b4e2f58a5dd758b83c9b59cf41d0cb8ac5087fa02d9047866ace";
     const issuedAt = "2025-12-13T03:22:05.317Z";
 
     const statement = `Please confirm you explicitly initiated this request from ${domain}. You are approving to execute transaction ${entryFunction} on Aptos blockchain (${networkName}).`;
@@ -29,14 +30,20 @@ describe("SIWE Message Construction", () => {
       "1",
       chainId,
       nonce,
-      issuedAt
+      issuedAt,
     );
 
     // Verify the message structure matches Move contract expectations
-    expect(message).toContain(`${domain} wants you to sign in with your Ethereum account:`);
+    expect(message).toContain(
+      `${domain} wants you to sign in with your Ethereum account:`,
+    );
     expect(message).toContain(ethAddress);
-    expect(message).toContain(`Please confirm you explicitly initiated this request from ${domain}.`);
-    expect(message).toContain(`You are approving to execute transaction ${entryFunction}`);
+    expect(message).toContain(
+      `Please confirm you explicitly initiated this request from ${domain}.`,
+    );
+    expect(message).toContain(
+      `You are approving to execute transaction ${entryFunction}`,
+    );
     expect(message).toContain(`on Aptos blockchain (${networkName}).`);
     expect(message).toContain(`URI: http://${domain}`);
     expect(message).toContain("Version: 1");
@@ -51,7 +58,8 @@ describe("SIWE Message Construction", () => {
     const entryFunction = "0x1::aptos_account::transfer";
     const networkName = "local";
     const chainId = 4;
-    const nonce = "0xf790024c9374b4e2f58a5dd758b83c9b59cf41d0cb8ac5087fa02d9047866ace";
+    const nonce =
+      "0xf790024c9374b4e2f58a5dd758b83c9b59cf41d0cb8ac5087fa02d9047866ace";
     const issuedAt = "2025-12-13T03:22:05.317Z";
 
     const statement = `Please confirm you explicitly initiated this request from ${domain}. You are approving to execute transaction ${entryFunction} on Aptos blockchain (${networkName}).`;
@@ -64,7 +72,7 @@ describe("SIWE Message Construction", () => {
       "1",
       chainId,
       nonce,
-      issuedAt
+      issuedAt,
     );
 
     // What Move constructs (based on ethereum_derivable_account.move)
@@ -96,7 +104,8 @@ Chain ID: 4
 Nonce: 0xf790024c9374b4e2f58a5dd758b83c9b59cf41d0cb8ac5087fa02d9047866ace
 Issued At: 2025-12-13T03:22:05.317Z`;
 
-    const signature = "0x6008bdda63f89f9b9c19b4ee24edc05415893db13d9bcf813827d7366f008aa14b2631340d643fa4a6dee51903c7f811c153ee0ebdc220a72aa1f2689e79e41d1b";
+    const signature =
+      "0x6008bdda63f89f9b9c19b4ee24edc05415893db13d9bcf813827d7366f008aa14b2631340d643fa4a6dee51903c7f811c153ee0ebdc220a72aa1f2689e79e41d1b";
     const expectedAddress = "0x77ec57a1249ba952ca73a09ba78caded07c9a00d";
 
     const recoveredAddress = ethers.verifyMessage(siweMessage, signature);
@@ -105,7 +114,8 @@ Issued At: 2025-12-13T03:22:05.317Z`;
   });
 
   it("should have correct signature format (65 bytes with valid v value)", () => {
-    const signature = "0x6008bdda63f89f9b9c19b4ee24edc05415893db13d9bcf813827d7366f008aa14b2631340d643fa4a6dee51903c7f811c153ee0ebdc220a72aa1f2689e79e41d1b";
+    const signature =
+      "0x6008bdda63f89f9b9c19b4ee24edc05415893db13d9bcf813827d7366f008aa14b2631340d643fa4a6dee51903c7f811c153ee0ebdc220a72aa1f2689e79e41d1b";
 
     const sigBytes = ethers.getBytes(signature);
 
@@ -131,7 +141,10 @@ describe("Entry Function Name Formatting", () => {
 
   it("should format entry function names correctly", () => {
     const testCases = [
-      { input: "0x1::aptos_account::transfer", expected: "0x1::aptos_account::transfer" },
+      {
+        input: "0x1::aptos_account::transfer",
+        expected: "0x1::aptos_account::transfer",
+      },
       { input: "0x1::coin::transfer", expected: "0x1::coin::transfer" },
     ];
 

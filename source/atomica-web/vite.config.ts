@@ -18,12 +18,14 @@ export default defineConfig({
 
                 let source = "";
                 if (entry.source?.file) {
-                  const fname = entry.source.file.split('/').pop();
+                  const fname = entry.source.file.split("/").pop();
                   source = `\x1b[90m${fname}:${entry.source.line}\x1b[0m`;
                 }
 
                 // Join message parts
-                const msg = Array.isArray(entry.message) ? entry.message.join(" ") : String(entry.message);
+                const msg = Array.isArray(entry.message)
+                  ? entry.message.join(" ")
+                  : String(entry.message);
 
                 // Construct log message
                 const logMessage = `\x1b[90m(client)\x1b[0m ${source} ${msg}`;
@@ -37,7 +39,9 @@ export default defineConfig({
                   server.config.logger.info(logMessage, { timestamp: true });
                 }
               } catch (e) {
-                server.config.logger.error(`Failed to parse remote log: ${e}`, { timestamp: true });
+                server.config.logger.error(`Failed to parse remote log: ${e}`, {
+                  timestamp: true,
+                });
               }
               res.statusCode = 200;
               res.end();
@@ -47,7 +51,7 @@ export default defineConfig({
           }
         });
       },
-    }
+    },
   ],
   server: {
     // Enable verbose logging to help debug browser errors

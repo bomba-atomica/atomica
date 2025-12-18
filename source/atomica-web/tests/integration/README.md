@@ -21,7 +21,9 @@ tests/integration/
 ## Test Categories
 
 ### Sanity Tests (`sanity/`)
+
 Clean room tests of the underlying Aptos platform features. These tests serve as:
+
 - **Reference implementations** - Examples of how to use core Aptos functionality
 - **Platform verification** - Ensures the localnet and platform features work correctly
 - **Documentation** - Living examples of expected behavior and gas costs
@@ -29,7 +31,9 @@ Clean room tests of the underlying Aptos platform features. These tests serve as
 See [`sanity/README.md`](./sanity/README.md) for detailed documentation.
 
 ### Application Tests
+
 Tests for application-specific functionality:
+
 - `flow.test.ts` - End-to-end auction flow test
 
 ## Runtime Environment
@@ -37,11 +41,13 @@ Tests for application-specific functionality:
 **All integration tests run in Node.js environment** (not browser/happy-dom).
 
 Every integration test file includes:
+
 ```typescript
 // @vitest-environment node
 ```
 
 This is required because integration tests:
+
 - Spawn child processes (`aptos` CLI)
 - Use Node.js HTTP/networking APIs
 - Access the file system
@@ -57,7 +63,7 @@ Unit tests and component tests use the default `happy-dom` environment (simulate
 
 ```typescript
 // Each integration test uses describe.sequential()
-describe.sequential('Test Name', () => {
+describe.sequential("Test Name", () => {
   beforeAll(async () => {
     await setupLocalnet();
   }, 120000);
@@ -69,6 +75,7 @@ describe.sequential('Test Name', () => {
 ### Why Sequential?
 
 Integration tests start their own localnet instances that bind to fixed ports:
+
 - **Port 8080** - Aptos node API
 - **Port 8081** - Faucet API
 - **Port 8070** - Readiness endpoint
@@ -78,11 +85,13 @@ Running tests in parallel would cause port conflicts and test failures.
 ### Performance Impact
 
 Sequential execution means longer total test runtime:
+
 - Each test must wait for the previous test to complete
 - Each test starts/stops its own localnet instance (~25-30s overhead per test)
 - Total sanity test suite: ~3-4 minutes
 
 This trade-off ensures:
+
 - Complete test isolation
 - Clean room conditions
 - Reproducible results
@@ -91,6 +100,7 @@ This trade-off ensures:
 ## Running Tests
 
 ### Run all integration tests
+
 ```bash
 npm test -- integration/
 ```
@@ -98,17 +108,20 @@ npm test -- integration/
 Tests will run sequentially in alphabetical order by filename.
 
 ### Run sanity tests only
+
 ```bash
 npm test -- sanity/
 ```
 
 ### Run specific test
+
 ```bash
 npm test -- flow.test.ts
 npm test -- sanity/transfer.test.ts
 ```
 
 ### Run with verbose output
+
 ```bash
 npm test -- integration/ --reporter=verbose
 ```
@@ -129,29 +142,31 @@ When adding new integration tests:
 
 ```typescript
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { setupLocalnet, teardownLocalnet } from '../setup/localnet';
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { setupLocalnet, teardownLocalnet } from "../setup/localnet";
 
 // IMPORTANT: Use describe.sequential() for integration tests
-describe.sequential('My Integration Test', () => {
-    beforeAll(async () => {
-        await setupLocalnet();
-    }, 120000); // 2 min timeout for localnet startup
+describe.sequential("My Integration Test", () => {
+  beforeAll(async () => {
+    await setupLocalnet();
+  }, 120000); // 2 min timeout for localnet startup
 
-    afterAll(async () => {
-        await teardownLocalnet();
-    });
+  afterAll(async () => {
+    await teardownLocalnet();
+  });
 
-    it('should test something', async () => {
-        // Your test here
-    });
+  it("should test something", async () => {
+    // Your test here
+  });
 });
 ```
 
 ## Troubleshooting
 
 ### Port already in use
+
 If tests fail with port conflicts:
+
 ```bash
 # Kill any zombie localnet processes
 pkill -f 'aptos node run-local-testnet'
@@ -164,11 +179,13 @@ npm test -- integration/
 ```
 
 ### Tests hanging
+
 - Check the localnet logs: `~/.aptos/testnet/validator.log` or `.aptos/testnet/validator.log`
 - Increase timeout if needed (especially for first-time git dependency downloads)
 - Ensure you have enough system resources (localnet is resource-intensive)
 
 ### Tests failing intermittently
+
 - May be related to timing/indexing delays
 - Check if balance queries need more retry attempts
 - Ensure you're using `waitForTransaction()` before checking results

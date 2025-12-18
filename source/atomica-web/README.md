@@ -19,11 +19,13 @@ cargo b -p aptos --features testing
 ```
 
 You will also need a browser wallet installed:
+
 - **MetaMask** (or any other Ethereum wallet that supports SIWE - Sign-In with Ethereum)
 
 ### 2. Run the Demo
 
 Once the binary is compiled, you can start the demo environment. This command will:
+
 1. Validates prerequisites (node binary, ports)
 2. Compiles backend contracts
 3. Starts a local Aptos testnet

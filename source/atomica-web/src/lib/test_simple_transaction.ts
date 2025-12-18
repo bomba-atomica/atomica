@@ -11,7 +11,9 @@ export async function testSimpleTransaction(ethAddress: string) {
   console.log("=== Testing Simple Transaction ===");
   console.log("This will attempt to call aptos_account::transfer");
   console.log("If this fails, the issue is with signature verification itself");
-  console.log("If this succeeds, the issue might be with the FAKEETH contract\n");
+  console.log(
+    "If this succeeds, the issue might be with the FAKEETH contract\n",
+  );
 
   try {
     // Try a simple transfer (like the Rust smoke test)
@@ -30,14 +32,20 @@ export async function testSimpleTransaction(ethAddress: string) {
     return { success: true };
   } catch (e: any) {
     console.error("\n❌ Simple transaction failed:", e.message);
-    console.error("This means there's an issue with signature verification itself");
+    console.error(
+      "This means there's an issue with signature verification itself",
+    );
 
     if (e.message.includes("INVALID_SIGNATURE")) {
       console.error("\nINVALID_SIGNATURE error detected");
       console.error("Possible causes:");
-      console.error("1. The Move contract is receiving different message bytes than what we signed");
+      console.error(
+        "1. The Move contract is receiving different message bytes than what we signed",
+      );
       console.error("2. There's a bug in the BCS serialization");
-      console.error("3. The entry function name extraction in Move differs from what we put in SIWE message");
+      console.error(
+        "3. The entry function name extraction in Move differs from what we put in SIWE message",
+      );
     }
 
     return { success: false, error: e.message };

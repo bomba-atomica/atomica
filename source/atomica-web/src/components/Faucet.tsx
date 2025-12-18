@@ -1,8 +1,19 @@
 import { useState, useEffect } from "react";
-import { requestAPT, getMintFakeEthPayload, getMintFakeUsdPayload, areContractsDeployed } from "../lib/aptos";
+import {
+  requestAPT,
+  getMintFakeEthPayload,
+  getMintFakeUsdPayload,
+  areContractsDeployed,
+} from "../lib/aptos";
 import { TxButton } from "./TxButton";
 
-export function Faucet({ account, onMintSuccess }: { account: string; onMintSuccess?: () => void }) {
+export function Faucet({
+  account,
+  onMintSuccess,
+}: {
+  account: string;
+  onMintSuccess?: () => void;
+}) {
   const [loadingAPT, setLoadingAPT] = useState(false);
   const [aptTxHash, setAptTxHash] = useState<string | null>(null);
   const [ethTxHash, setEthTxHash] = useState<string | null>(null);
@@ -39,8 +50,8 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
     }
   };
 
-  const handleMintSuccess = (hash: string, type: 'eth' | 'usd') => {
-    if (type === 'eth') {
+  const handleMintSuccess = (hash: string, type: "eth" | "usd") => {
+    if (type === "eth") {
       setEthTxHash(hash);
     } else {
       setUsdTxHash(hash);
@@ -76,10 +87,11 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
         <button
           onClick={handleRequestAPT}
           disabled={loadingAPT || !!aptTxHash}
-          className={`w-full py-2 px-4 rounded font-medium text-sm transition-colors ${loadingAPT || !!aptTxHash
-            ? "bg-zinc-800 cursor-not-allowed text-zinc-600"
-            : "bg-zinc-100 hover:bg-white text-zinc-900"
-            }`}
+          className={`w-full py-2 px-4 rounded font-medium text-sm transition-colors ${
+            loadingAPT || !!aptTxHash
+              ? "bg-zinc-800 cursor-not-allowed text-zinc-600"
+              : "bg-zinc-100 hover:bg-white text-zinc-900"
+          }`}
         >
           {loadingAPT
             ? "Requesting APT..."
@@ -119,7 +131,7 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
               label="10 ETH"
               accountAddress={account}
               prepareTransaction={() => getMintFakeEthPayload(account)}
-              onSuccess={(hash) => handleMintSuccess(hash, 'eth')}
+              onSuccess={(hash) => handleMintSuccess(hash, "eth")}
               disabled={!contractsDeployed}
               className="w-full"
             />
@@ -136,7 +148,7 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
               label="10k USD"
               accountAddress={account}
               prepareTransaction={() => getMintFakeUsdPayload(account)}
-              onSuccess={(hash) => handleMintSuccess(hash, 'usd')}
+              onSuccess={(hash) => handleMintSuccess(hash, "usd")}
               disabled={!contractsDeployed}
               className="w-full"
             />
@@ -155,7 +167,7 @@ export function Faucet({ account, onMintSuccess }: { account: string; onMintSucc
           {!aptTxHash && !ethTxHash && !usdTxHash && (
             <p>Start by requesting APT tokens above</p>
           )}
-          {aptTxHash && (!ethTxHash && !usdTxHash) && contractsDeployed && (
+          {aptTxHash && !ethTxHash && !usdTxHash && contractsDeployed && (
             <p>APT received. Now mint test tokens.</p>
           )}
           {ethTxHash && usdTxHash && (

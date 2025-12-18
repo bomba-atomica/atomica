@@ -11,9 +11,15 @@ let localnetProcess: ChildProcess | null = null;
 
 // Adjust paths relative to this file's location
 const TEST_SETUP_DIR = dirname(fileURLToPath(import.meta.url));
-const APTOS_BIN = pathResolve(TEST_SETUP_DIR, "../../../../source/target/debug/aptos");
+const APTOS_BIN = pathResolve(
+  TEST_SETUP_DIR,
+  "../../../../source/target/debug/aptos",
+);
 const WEB_DIR = pathResolve(TEST_SETUP_DIR, "../..");
-const GENESIS_FRAMEWORK_PATH = pathResolve(TEST_SETUP_DIR, "../../../move-framework-fixtures/head.mrb");
+const GENESIS_FRAMEWORK_PATH = pathResolve(
+  TEST_SETUP_DIR,
+  "../../../move-framework-fixtures/head.mrb",
+);
 
 export async function killZombies() {
   try {
@@ -36,7 +42,10 @@ export async function killZombies() {
       try {
         // Find and kill process listening on port
         const { stdout } = await exec(`lsof -ti :${port} || true`);
-        const pids = stdout.trim().split('\n').filter(pid => pid);
+        const pids = stdout
+          .trim()
+          .split("\n")
+          .filter((pid) => pid);
         for (const pid of pids) {
           console.log(`Killing process ${pid} on port ${port}`);
           await exec(`kill -9 ${pid} || true`);
@@ -63,23 +72,34 @@ export async function killZombies() {
 const CONTRACTS_DIR = pathResolve("../../atomica-move-contracts");
 const TEST_CONFIG_DIR = pathResolve(".aptos_test_config");
 
-export function fundAccount(address: string, amount: number = 100_000_000): Promise<string> {
+export function fundAccount(
+  address: string,
+  amount: number = 100_000_000,
+): Promise<string> {
   console.log(`[fundAccount] Requesting ${amount} for ${address}...`);
   return new Promise((resolve, reject) => {
-    const req = http.request(`http://127.0.0.1:8081/mint?amount=${amount}&address=${address}`, { method: 'POST' }, (res) => {
-      console.log(`[fundAccount] Response status: ${res.statusCode}`);
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        console.log(`[fundAccount] Response body: ${data}`);
-        if (res.statusCode === 200) {
-          resolve(data);
-        } else {
-          reject(new Error(`Funding failed with status: ${res.statusCode} Body: ${data}`));
-        }
-      });
-    });
-    req.on('error', (e) => {
+    const req = http.request(
+      `http://127.0.0.1:8081/mint?amount=${amount}&address=${address}`,
+      { method: "POST" },
+      (res) => {
+        console.log(`[fundAccount] Response status: ${res.statusCode}`);
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          console.log(`[fundAccount] Response body: ${data}`);
+          if (res.statusCode === 200) {
+            resolve(data);
+          } else {
+            reject(
+              new Error(
+                `Funding failed with status: ${res.statusCode} Body: ${data}`,
+              ),
+            );
+          }
+        });
+      },
+    );
+    req.on("error", (e) => {
       console.error(`[fundAccount] Request error:`, e);
       reject(e);
     });
@@ -92,13 +112,16 @@ const DEPLOYER_PK =
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 
-export async function runAptosCmd(args: string[], cwd: string = WEB_DIR): Promise<{ stdout: string, stderr: string }> {
+export async function runAptosCmd(
+  args: string[],
+  cwd: string = WEB_DIR,
+): Promise<{ stdout: string; stderr: string }> {
   // Ensure config dir exists
   if (!existsSync(TEST_CONFIG_DIR)) {
     mkdirSync(TEST_CONFIG_DIR, { recursive: true });
   }
 
-  return new Promise<{ stdout: string, stderr: string }>((resolve, reject) => {
+  return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     let stdout = "";
     let stderr = "";
     const proc = spawn(APTOS_BIN, args, {
@@ -108,7 +131,10 @@ export async function runAptosCmd(args: string[], cwd: string = WEB_DIR): Promis
         ...process.env,
         RUST_LOG: "debug",
         // Position trace.log alongside validator.log in the test directory
-        MOVE_VM_TRACE: pathResolve(process.env.HOME || "", ".aptos/testnet/trace.log"),
+        MOVE_VM_TRACE: pathResolve(
+          process.env.HOME || "",
+          ".aptos/testnet/trace.log",
+        ),
         APTOS_GLOBAL_CONFIG_DIR: TEST_CONFIG_DIR,
         APTOS_DISABLE_TELEMETRY: "true",
       },
@@ -128,7 +154,9 @@ export async function runAptosCmd(args: string[], cwd: string = WEB_DIR): Promis
       if (code === 0) resolve({ stdout, stderr });
       else
         reject(
-          new Error(`Aptos cmd failed with code ${code}: ${args.join(" ")}\nStderr: ${stderr}\nStdout: ${stdout}`),
+          new Error(
+            `Aptos cmd failed with code ${code}: ${args.join(" ")}\nStderr: ${stderr}\nStdout: ${stdout}`,
+          ),
         );
     });
   });
@@ -261,7 +289,7 @@ export async function setupLocalnet() {
         RUST_LOG: "debug",
         // Position trace.log alongside validator.log in the test directory
         MOVE_VM_TRACE: TRACE_PATH,
-      }
+      },
     },
   );
 
@@ -325,7 +353,7 @@ export async function setupLocalnet() {
 const MAX_RETRIES = 60; // 60 * 1s = 60s (we have 120s total loop)
 
 function checkPortReadiness(port: number, name: string): Promise<boolean> {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const req = http.get(`http://127.0.0.1:${port}/`, (res) => {
       if (res.statusCode === 200) {
         // console.log(`[Readiness] ${name} is OK (200)`);
@@ -336,7 +364,7 @@ function checkPortReadiness(port: number, name: string): Promise<boolean> {
       }
       res.resume();
     });
-    req.on('error', (e) => {
+    req.on("error", (e) => {
       // console.log(`[Readiness] ${name} connection failed`); // noisy
       resolve(false);
     });
@@ -354,7 +382,8 @@ async function checkAllReadiness() {
   const apiReady = await checkPortReadiness(8080, "Node API");
   const faucetReady = await checkPortReadiness(8081, "Faucet");
 
-  if (apiReady && !faucetReady) console.log("[Readiness] API OK, waiting for Faucet...");
+  if (apiReady && !faucetReady)
+    console.log("[Readiness] API OK, waiting for Faucet...");
 
   return apiReady && faucetReady;
 }

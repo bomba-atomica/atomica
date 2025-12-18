@@ -1,66 +1,72 @@
-import fs from 'fs';
-import path from 'path';
-import { spawnSync } from 'child_process';
+import fs from "fs";
+import path from "path";
+import { spawnSync } from "child_process";
 
-const APTOS_BIN_PATH = "/Users/lucas/code/rust/atomica/source/target/debug/aptos";
+const APTOS_BIN_PATH =
+  "/Users/lucas/code/rust/atomica/source/target/debug/aptos";
 
 export interface DebugState {
-    ethAddress: string;
-    ethAddressBytes: number[];
-    digest: string;
-    digestBytes: number[];
-    scheme: string;
-    domain: string;
-    issuedAt: string;
-    siweMessage: string;
-    siweMessageLength: number;
-    siweMessageBytes: number[];
-    signature: string;
-    signatureBytes: number[];
-    chain_id: number;
-    entryFunction: string;
-    origin: string;
-    networkName: string;
+  ethAddress: string;
+  ethAddressBytes: number[];
+  digest: string;
+  digestBytes: number[];
+  scheme: string;
+  domain: string;
+  issuedAt: string;
+  siweMessage: string;
+  siweMessageLength: number;
+  siweMessageBytes: number[];
+  signature: string;
+  signatureBytes: number[];
+  chain_id: number;
+  entryFunction: string;
+  origin: string;
+  networkName: string;
 }
 
 export class DebugUtils {
-    static DEBUG_DIR = path.resolve(__dirname, '../../debug-repro');
+  static DEBUG_DIR = path.resolve(__dirname, "../../debug-repro");
 
-    static generateReproPackage(debugState: DebugState) {
-        if (fs.existsSync(this.DEBUG_DIR)) {
-            fs.rmSync(this.DEBUG_DIR, { recursive: true, force: true });
-        }
-        fs.mkdirSync(path.join(this.DEBUG_DIR, 'sources'), { recursive: true });
-
-        this.writeMoveToml();
-        this.writeMoveModule(debugState);
-
-        console.log(`[DebugUtils] Generated reproduction package at ${this.DEBUG_DIR}`);
+  static generateReproPackage(debugState: DebugState) {
+    if (fs.existsSync(this.DEBUG_DIR)) {
+      fs.rmSync(this.DEBUG_DIR, { recursive: true, force: true });
     }
+    fs.mkdirSync(path.join(this.DEBUG_DIR, "sources"), { recursive: true });
 
-    static runMoveTest() {
-        console.log(`[DebugUtils] Running 'aptos move test' in ${this.DEBUG_DIR}...`);
-        const result = spawnSync(APTOS_BIN_PATH, ['move', 'test'], {
-            cwd: this.DEBUG_DIR,
-            stdio: 'pipe',
-            encoding: 'utf-8'
-        });
+    this.writeMoveToml();
+    this.writeMoveModule(debugState);
 
-        if (result.status !== 0) {
-            console.error(`[DebugUtils] Move test failed with code ${result.status}`);
-            if (result.error) console.error(`[DebugUtils] Spawn Error: ${result.error.message}`);
-            if (result.signal) console.error(`[DebugUtils] Signal: ${result.signal}`);
-            console.error(`[DebugUtils] STDERR:\n${result.stderr}`);
-            console.log(`[DebugUtils] STDOUT:\n${result.stdout}`);
-        } else {
-            console.log(`[DebugUtils] Move test completed.`);
-            console.log(`[DebugUtils] STDOUT:\n${result.stdout}`);
-        }
-        return result;
+    console.log(
+      `[DebugUtils] Generated reproduction package at ${this.DEBUG_DIR}`,
+    );
+  }
+
+  static runMoveTest() {
+    console.log(
+      `[DebugUtils] Running 'aptos move test' in ${this.DEBUG_DIR}...`,
+    );
+    const result = spawnSync(APTOS_BIN_PATH, ["move", "test"], {
+      cwd: this.DEBUG_DIR,
+      stdio: "pipe",
+      encoding: "utf-8",
+    });
+
+    if (result.status !== 0) {
+      console.error(`[DebugUtils] Move test failed with code ${result.status}`);
+      if (result.error)
+        console.error(`[DebugUtils] Spawn Error: ${result.error.message}`);
+      if (result.signal) console.error(`[DebugUtils] Signal: ${result.signal}`);
+      console.error(`[DebugUtils] STDERR:\n${result.stderr}`);
+      console.log(`[DebugUtils] STDOUT:\n${result.stdout}`);
+    } else {
+      console.log(`[DebugUtils] Move test completed.`);
+      console.log(`[DebugUtils] STDOUT:\n${result.stdout}`);
     }
+    return result;
+  }
 
-    private static writeMoveToml() {
-        const tomlContent = `[package]
+  private static writeMoveToml() {
+    const tomlContent = `[package]
 name = "DebugSignatureRepro"
 version = "0.0.0"
 
@@ -69,14 +75,16 @@ AptosFramework = { local = "../../zapatos/aptos-move/framework/aptos-framework" 
 AptosStdlib = { local = "../../zapatos/aptos-move/framework/aptos-stdlib" }
 MoveStdlib = { local = "../../zapatos/aptos-move/framework/move-stdlib" }
 `;
-        fs.writeFileSync(path.join(this.DEBUG_DIR, 'Move.toml'), tomlContent);
-    }
+    fs.writeFileSync(path.join(this.DEBUG_DIR, "Move.toml"), tomlContent);
+  }
 
-    private static writeMoveModule(state: DebugState) {
-        // Convert signature string to failing vector literal if needed, but signatureBytes is cleaner
-        const sigHex = state.signature.startsWith('0x') ? state.signature.substring(2) : state.signature;
+  private static writeMoveModule(state: DebugState) {
+    // Convert signature string to failing vector literal if needed, but signatureBytes is cleaner
+    const sigHex = state.signature.startsWith("0x")
+      ? state.signature.substring(2)
+      : state.signature;
 
-        const moveContent = `module 0x1::debug_repro {
+    const moveContent = `module 0x1::debug_repro {
     use std::debug;
     use std::string::{Self, String, utf8};
     use std::string_utils;
@@ -256,6 +264,9 @@ MoveStdlib = { local = "../../zapatos/aptos-move/framework/move-stdlib" }
     }
 }
 `;
-        fs.writeFileSync(path.join(this.DEBUG_DIR, 'sources', 'debug_repro.move'), moveContent);
-    }
+    fs.writeFileSync(
+      path.join(this.DEBUG_DIR, "sources", "debug_repro.move"),
+      moveContent,
+    );
+  }
 }

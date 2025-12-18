@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import * as ibe from "../../src/lib/ibe";
-import { PointG1, PointG2 } from "@noble/bls12-381";
 
 describe("IBE Logic", () => {
   it("should generate valid system parameters", async () => {
