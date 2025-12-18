@@ -54,4 +54,5 @@ jobs:
       - name: Run TypeScript tests with Vitest
         run: |
           cd source/atomica-web
-          npx vitest run
+          # run a sanity test
+          npx vitest run localnet
