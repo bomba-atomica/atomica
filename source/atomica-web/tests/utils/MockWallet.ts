@@ -15,7 +15,7 @@ export class MockWallet {
   getProvider() {
     return {
       isMetaMask: true,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       request: async ({
         method,
         params,

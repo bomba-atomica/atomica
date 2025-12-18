@@ -10,6 +10,7 @@ export interface LogEntry {
     line: number;
     function?: string;
   };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   context?: Record<string, any>;
 }
 
@@ -89,22 +90,27 @@ function transport(entry: LogEntry) {
 }
 
 export class Logger {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static info(...args: any[]) {
     this.log("info", args);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static warn(...args: any[]) {
     this.log("warn", args);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static error(...args: any[]) {
     this.log("error", args);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static debug(...args: any[]) {
     this.log("debug", args);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private static log(level: LogEntry["level"], args: any[]) {
     // 1. Capture metadata
     const entry: LogEntry = {

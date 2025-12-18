@@ -21,9 +21,11 @@ function sha3(bytes: Uint8Array): Uint8Array {
 }
 
 export interface PreparedTransaction {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   transaction: any;
   auth: AccountAuthenticator;
   senderAddress: AccountAddress;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   debugState: any;
   payload: InputGenerateTransactionPayloadData;
 }
@@ -48,7 +50,7 @@ export async function prepareNativeTransaction(
     console.log("=== Account Info ===");
     console.log("  Account exists: true");
     console.log("  Sequence number:", accountInfo.sequence_number);
-  } catch (e: any) {
+  } catch {
     console.warn("Account may not exist yet (will be created on first tx)");
   }
 
@@ -95,6 +97,7 @@ export async function prepareNativeTransaction(
   else if (ledgerInfo.chain_id === 4) networkName = "local";
 
   // Extract Entry Function Name
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const entryFunction = (payload as any).function;
   if (!entryFunction)
     throw new Error("Could not determine entry function name from payload");
@@ -186,9 +189,8 @@ export async function simulateNativeTransaction(
   try {
     const [simulationResult] = await aptos.transaction.simulate.simple({
       transaction: preparedTx.transaction,
-      // @ts-ignore
       senderAuthenticator: preparedTx.auth,
-    });
+    } as Parameters<typeof aptos.transaction.simulate.simple>[0]);
 
     console.log("Simulation Result:");
     console.log("  Success:", simulationResult.success);
@@ -203,8 +205,10 @@ export async function simulateNativeTransaction(
       );
     }
     return simulationResult;
-  } catch (simError: any) {
-    console.error("❌ Simulation error:", simError.message);
+  } catch (simError: unknown) {
+    const errorMessage =
+      simError instanceof Error ? simError.message : String(simError);
+    console.error("❌ Simulation error:", errorMessage);
     throw simError;
   }
 }
@@ -250,10 +254,12 @@ export async function submitPreparedTransaction(
     console.log("Transaction hash:", pendingTx.hash);
 
     return pendingTx;
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("\n❌ Submission Failed");
-    console.error("Error message:", e.message);
-    console.error("Error stack:", e.stack);
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    const errorStack = e instanceof Error ? e.stack : undefined;
+    console.error("Error message:", errorMessage);
+    console.error("Error stack:", errorStack);
 
     // Log the debug state again on failure for visibility
     console.error("\n=== Debug State on Failure ===");
@@ -300,16 +306,16 @@ export async function submitPreparedTransaction(
               console.error("- Check Move contract logs if available");
             }
           }
-        } catch (jsonError) {
+        } catch {
           // Response wasn't JSON, that's okay
         }
-      } catch (textError) {
+      } catch {
         console.error("Could not read response text");
       }
     }
 
     throw new Error(
-      `Transaction Submission verification failed: ${e.message || e}\nDebug State: ${JSON.stringify(debugState, null, 2)}`,
+      `Transaction Submission verification failed: ${errorMessage}\nDebug State: ${JSON.stringify(debugState, null, 2)}`,
     );
   }
 }
@@ -332,7 +338,7 @@ export async function submitNativeTransaction(
   // Backward compatibility: Simulate and log, but don't block unless error throws
   try {
     await simulateNativeTransaction(prepared);
-  } catch (e) {
+  } catch {
     console.error(
       "Simulation error caught in wrapper, proceeding to submit...",
     );

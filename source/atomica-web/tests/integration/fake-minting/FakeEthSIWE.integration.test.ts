@@ -56,15 +56,16 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
     (window as any).ethereum = testingUtils.getProvider();
 
     // Mock window.location
-    // @ts-ignore
-    delete window.location;
-    // @ts-ignore
-    window.location = {
-      protocol: "http:",
-      host: "localhost:3000",
-      origin: "http://localhost:3000",
-      href: "http://localhost:3000/",
-    };
+    Object.defineProperty(window, "location", {
+      value: {
+        protocol: "http:",
+        host: "localhost:3000",
+        origin: "http://localhost:3000",
+        href: "http://localhost:3000/",
+      },
+      writable: true,
+      configurable: true,
+    });
 
     // Setup Mock Provider
     testingUtils.mockChainId("0x4");
@@ -75,7 +76,7 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
     testingUtils.lowLevel.mockRequest(
       "personal_sign",
       async (params: any[]) => {
-        const [msgHex, from] = params;
+        const [msgHex] = params;
         const msgStr = ethers.toUtf8String(msgHex);
         console.log(`[Mock] Signing SIWE message...`);
         return await wallet.signMessage(msgStr);
@@ -135,7 +136,7 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
         accountAddress: derivedAddr.toString(),
         coinType: `${DEPLOYER_ADDR}::FAKEETH::FAKEETH`,
       });
-    } catch (e) {
+    } catch {
       // Account might not have FAKEETH yet
     }
 

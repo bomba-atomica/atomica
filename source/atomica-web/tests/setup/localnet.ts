@@ -1,10 +1,9 @@
 import { spawn, ChildProcess, exec as execCb } from "child_process";
-import { resolve as pathResolve, join, dirname } from "path";
+import { resolve as pathResolve, dirname } from "path";
 import { promisify } from "util";
 import { fileURLToPath } from "url";
 import http from "node:http";
 import { rmSync, mkdirSync, existsSync } from "fs";
-import { ensureFramework } from "./ensureFramework";
 
 const exec = promisify(execCb);
 let localnetProcess: ChildProcess | null = null;
@@ -16,10 +15,6 @@ const APTOS_BIN = pathResolve(
   "../../../../source/target/debug/aptos",
 );
 const WEB_DIR = pathResolve(TEST_SETUP_DIR, "../..");
-const GENESIS_FRAMEWORK_PATH = pathResolve(
-  TEST_SETUP_DIR,
-  "../../../move-framework-fixtures/head.mrb",
-);
 
 export async function killZombies() {
   try {
@@ -50,7 +45,7 @@ export async function killZombies() {
           console.log(`Killing process ${pid} on port ${port}`);
           await exec(`kill -9 ${pid} || true`);
         }
-      } catch (e) {
+      } catch {
         // Ignore errors - port might not be in use
       }
     }
@@ -63,9 +58,8 @@ export async function killZombies() {
     }
 
     await new Promise((resolve) => setTimeout(resolve, 2000)); // Give time to release ports and clean up
-  } catch (_e) {
+  } catch {
     // Ignore errors if no process found
-    // console.log("Kill failed", e);
   }
 }
 
@@ -350,8 +344,6 @@ export async function setupLocalnet() {
   throw new Error("Localnet failed to start within 120s");
 }
 
-const MAX_RETRIES = 60; // 60 * 1s = 60s (we have 120s total loop)
-
 function checkPortReadiness(port: number, name: string): Promise<boolean> {
   return new Promise((resolve) => {
     const req = http.get(`http://127.0.0.1:${port}/`, (res) => {
@@ -364,7 +356,7 @@ function checkPortReadiness(port: number, name: string): Promise<boolean> {
       }
       res.resume();
     });
-    req.on("error", (e) => {
+    req.on("error", () => {
       // console.log(`[Readiness] ${name} connection failed`); // noisy
       resolve(false);
     });

@@ -17,26 +17,25 @@ import { URL } from "url";
 import { ethers } from "ethers";
 
 // Polyfill fetch for happy-dom
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 global.fetch = nodeFetch as any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 global.Request = Request as any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 global.Response = Response as any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 global.Headers = Headers as any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 global.URL = URL as any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 window.fetch = nodeFetch as any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 (window as any).Request = Request;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 (window as any).Response = Response;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 (window as any).Headers = Headers;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 (window as any).URL = URL;
 
 const DEPLOYER_ADDR =
@@ -59,7 +58,6 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
       network: Network.LOCAL,
       fullnode: "http://127.0.0.1:8080/v1",
       client: {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         provider: async (url: any, init: any) => {
           let fetchUrl = url;
           let fetchInit = init;
@@ -86,7 +84,7 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
               // Ignore data parsing errors
             }
             return res;
-          } catch (e) {
+          } catch {
             throw e;
           }
         },
@@ -98,19 +96,20 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     await deployContracts();
 
     // Mock window.ethereum
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (window as any).ethereum = testingUtils.getProvider();
 
     // Mock window.location
-    // @ts-expect-error
-    delete window.location;
-    // @ts-expect-error
-    window.location = {
-      protocol: "http:",
-      host: "localhost:3000",
-      origin: "http://localhost:3000",
-      href: "http://localhost:3000/",
-    };
+    Object.defineProperty(window, "location", {
+      value: {
+        protocol: "http:",
+        host: "localhost:3000",
+        origin: "http://localhost:3000",
+        href: "http://localhost:3000/",
+      },
+      writable: true,
+      configurable: true,
+    });
 
     // Setup Provider Mocks
     testingUtils.mockChainId("0x4");
@@ -119,7 +118,7 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
 
     // Setup signature interceptor
     const wallet = new ethers.Wallet(TEST_PK);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     testingUtils.lowLevel.mockRequest(
       "personal_sign",
       async (params: any[]) => {

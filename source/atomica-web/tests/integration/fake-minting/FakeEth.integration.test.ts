@@ -1,12 +1,6 @@
 // Low-level integration test for FakeEth using Ed25519 signing
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import {
-  Aptos,
-  AptosConfig,
-  Network,
-  Account,
-  Ed25519PrivateKey,
-} from "@aptos-labs/ts-sdk";
+import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 import {
   setupLocalnet,
   teardownLocalnet,
@@ -86,7 +80,7 @@ describe.sequential("FakeEth Integration Test (Ed25519)", () => {
     expect(txInfo.success).toBe(true);
 
     // Verify balance using fungible asset API
-    const metadata = await aptos
+    await aptos
       .getFungibleAssetMetadataByAssetType({
         assetType: `${DEPLOYER_ADDR}::fake_eth::get_metadata`,
       })

@@ -5,7 +5,6 @@ import {
   AptosConfig,
   Network,
   Account,
-  Ed25519PrivateKey,
 } from "@aptos-labs/ts-sdk";
 import {
   setupLocalnet,

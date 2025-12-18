@@ -91,12 +91,12 @@ describe.sequential("FakeETH Funding Integration", () => {
               const bodyClone = res.clone();
               const data = await bodyClone.json().catch(() => bodyClone.text());
               Object.defineProperty(res, "data", { value: data });
-            } catch (e) {
+            } catch {
               console.warn("Failed to polyfill .data on response", e);
             }
 
             return res;
-          } catch (e) {
+          } catch {
             console.error(`[Fetch Error] ${fetchUrl}`, e);
             throw e;
           }
@@ -113,7 +113,7 @@ describe.sequential("FakeETH Funding Integration", () => {
       console.log(
         `[Connectivity check] Connected to chain ID: ${ledger.chain_id}`,
       );
-    } catch (e) {
+    } catch {
       console.error("[Connectivity check] Failed:", e);
       throw new Error("Could not connect to local node. Aborting test.");
     }
@@ -134,15 +134,16 @@ describe.sequential("FakeETH Funding Integration", () => {
 
     // Ensure window.location has protocol/host
     if (!window.location.protocol) {
-      // @ts-ignore
-      delete window.location;
-      // @ts-ignore
-      window.location = {
-        protocol: "http:",
-        host: "localhost:3000",
-        origin: "http://localhost:3000",
-        href: "http://localhost:3000/",
-      };
+      Object.defineProperty(window, "location", {
+        value: {
+          protocol: "http:",
+          host: "localhost:3000",
+          origin: "http://localhost:3000",
+          href: "http://localhost:3000/",
+        },
+        writable: true,
+        configurable: true,
+      });
     }
   }, 120000);
 
@@ -163,17 +164,14 @@ describe.sequential("FakeETH Funding Integration", () => {
   it("should sign SIWE and mint FAKEETH when requested", async () => {
     const derivedAddr = await getDerivedAddress(TEST_ACCOUNT);
     const derivedAddrStr = derivedAddr.toString();
-    // IMPORTANT: Move requires lowercase address for hex decoding to work with our fix
-    const testAccountLower = TEST_ACCOUNT.toLowerCase();
 
     console.log(`Test Account: ${TEST_ACCOUNT} -> ${derivedAddrStr}`);
 
     // 1. Initial funding for Gas (APT)
-    const fundRes = await fundAccount(derivedAddrStr, 10_0000_0000);
+    await fundAccount(derivedAddrStr, 10_0000_0000);
     console.log("Gas funding initiated.");
 
     // Wait for gas funding to commit
-    let gasConfirmed = false;
     for (let i = 0; i < 20; i++) {
       try {
         const balance = await aptos.getAccountResource({
@@ -181,11 +179,12 @@ describe.sequential("FakeETH Funding Integration", () => {
           resourceType: "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>",
         });
         if (balance) {
-          gasConfirmed = true;
           console.log("Gas confirmed.");
           break;
         }
-      } catch (e) {}
+      } catch {
+        // Balance not available yet, retry
+      }
       await new Promise((r) => setTimeout(r, 1000));
     }
 
@@ -241,7 +240,7 @@ describe.sequential("FakeETH Funding Integration", () => {
     testingUtils.lowLevel.mockRequest(
       "personal_sign",
       async (params: any[]) => {
-        const [msgHex, from] = params;
+        const [msgHex] = params;
         console.log(`[MockMetaMask] personal_sign requested from ${from}`);
 
         // Decode message to verify it's the SIWE message we expect

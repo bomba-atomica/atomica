@@ -68,9 +68,11 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
               const bodyClone = res.clone();
               const data = await bodyClone.json().catch(() => bodyClone.text());
               Object.defineProperty(res, "data", { value: data });
-            } catch (e) {}
+            } catch {
+              // Ignore error
+            }
             return res;
-          } catch (e) {
+          } catch {
             throw e;
           }
         },
@@ -85,15 +87,16 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
     });
 
     // Mock window.location
-    // @ts-ignore
-    delete window.location;
-    // @ts-ignore
-    window.location = {
-      protocol: "http:",
-      host: "localhost:3000",
-      origin: "http://localhost:3000",
-      href: "http://localhost:3000/",
-    };
+    Object.defineProperty(window, "location", {
+      value: {
+        protocol: "http:",
+        host: "localhost:3000",
+        origin: "http://localhost:3000",
+        href: "http://localhost:3000/",
+      },
+      writable: true,
+      configurable: true,
+    });
 
     // Setup Provider Mocks
     testingUtils.mockChainId("0x4");
@@ -127,7 +130,7 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
     testingUtils.lowLevel.mockRequest(
       "personal_sign",
       async (params: any[]) => {
-        const [msgHex, from] = params;
+        const [msgHex] = params;
         console.log(`[Mock] Signing requested...`);
         const msgStr = ethers.toUtf8String(msgHex);
         return await wallet.signMessage(msgStr); // Standard EIP-191 sign
@@ -147,7 +150,9 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
         coinType: "0x1::aptos_coin::AptosCoin",
       });
       initialBalance = BigInt(res);
-    } catch (e) {}
+    } catch {
+      // Ignore error
+    }
     console.log(`Initial Balance of ${recipient}: ${initialBalance}`);
 
     const txPromise = submitNativeTransaction(TEST_ACCOUNT, {

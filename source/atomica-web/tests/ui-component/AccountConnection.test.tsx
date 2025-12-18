@@ -1,10 +1,9 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeAll, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import App from "../../src/App";
 import { MockWallet } from "../utils/MockWallet";
-import { ethers } from "ethers";
 
 // Random secp256k1 private key for testing
 const TEST_PK =

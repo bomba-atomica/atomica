@@ -1,22 +1,10 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
-import {
-  render,
-  screen,
-  fireEvent,
-  waitFor,
-  act,
-} from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { AccountStatus } from "../../src/components/AccountStatus";
-import { getDerivedAddress } from "../../src/lib/aptos";
-import {
-  setupLocalnet,
-  teardownLocalnet,
-  fundAccount,
-} from "../setup/localnet";
+import { setupLocalnet, teardownLocalnet } from "../setup/localnet";
 import { MockWallet } from "../utils/MockWallet";
-import { ethers } from "ethers";
 import nodeFetch from "node-fetch";
 import { useTokenBalances } from "../../src/hooks/useTokenBalances";
 
@@ -114,7 +102,7 @@ describe.sequential("AccountStatus Integration", () => {
   //                 accountBalance = await aptos.getAccountAPTAmount({ accountAddress: derivedAddr });
   //                 console.log(`✓ Account verified. Balance: ${accountBalance} octas`);
   //                 break;
-  //             } catch (e) {
+  //             } catch {
   //                 if (i === 9) {
   //                     console.error("Account not queryable after 10 attempts");
   //                     throw e;

@@ -6,7 +6,6 @@ import {
 } from "../lib/aptos";
 import type { PreparedTransaction } from "../lib/aptos";
 import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
-// @ts-expect-error - heroicons types not available
 import {
   ChevronDownIcon,
   XCircleIcon,

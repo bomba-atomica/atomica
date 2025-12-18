@@ -30,13 +30,14 @@ export async function testSimpleTransaction(ethAddress: string) {
     console.log("The issue might be specific to the FAKEETH contract");
 
     return { success: true };
-  } catch (e: any) {
-    console.error("\n❌ Simple transaction failed:", e.message);
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    console.error("\n❌ Simple transaction failed:", errorMessage);
     console.error(
       "This means there's an issue with signature verification itself",
     );
 
-    if (e.message.includes("INVALID_SIGNATURE")) {
+    if (errorMessage.includes("INVALID_SIGNATURE")) {
       console.error("\nINVALID_SIGNATURE error detected");
       console.error("Possible causes:");
       console.error(
