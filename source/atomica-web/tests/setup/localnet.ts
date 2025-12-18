@@ -20,7 +20,38 @@ export async function killZombies() {
     await exec("pkill -f 'aptos node run-local-testnet' || true");
     // Also simpler check if standard name is used
     await exec("pkill -f 'aptos' || true");
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // Give time to release ports
+
+    // Kill by port to catch all services:
+    // - 8070: Readiness endpoint
+    // - 8080: REST API
+    // - 8081: Faucet
+    // - 9101: Inspection/metrics service
+    // - 9102: Admin service
+    // - 50051: Indexer gRPC (transaction streaming)
+    // - 6180, 6181, 7180: Fullnode network ports
+    const ports = [8070, 8080, 8081, 9101, 9102, 50051, 6180, 6181, 7180];
+    for (const port of ports) {
+      try {
+        // Find and kill process listening on port
+        const { stdout } = await exec(`lsof -ti :${port} || true`);
+        const pids = stdout.trim().split('\n').filter(pid => pid);
+        for (const pid of pids) {
+          console.log(`Killing process ${pid} on port ${port}`);
+          await exec(`kill -9 ${pid} || true`);
+        }
+      } catch (e) {
+        // Ignore errors - port might not be in use
+      }
+    }
+
+    // Clean up stale localnet directory to prevent port binding issues
+    const LOCAL_TEST_DIR = resolve(WEB_DIR, ".aptos/testnet");
+    if (existsSync(LOCAL_TEST_DIR)) {
+      console.log(`Removing stale localnet directory: ${LOCAL_TEST_DIR}`);
+      rmSync(LOCAL_TEST_DIR, { recursive: true, force: true });
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // Give time to release ports and clean up
   } catch (_e) {
     // Ignore errors if no process found
     // console.log("Kill failed", e);
