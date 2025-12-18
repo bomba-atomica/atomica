@@ -8,12 +8,11 @@ import { rmSync, mkdirSync, existsSync } from "fs";
 const exec = promisify(execCb);
 let localnetProcess: ChildProcess | null = null;
 
+import { findAptosBinary } from "../utils/findAptosBinary";
+
 // Adjust paths relative to this file's location
 const TEST_SETUP_DIR = dirname(fileURLToPath(import.meta.url));
-const APTOS_BIN = pathResolve(
-  TEST_SETUP_DIR,
-  "../../../../source/target/debug/aptos",
-);
+const APTOS_BIN = findAptosBinary();
 const WEB_DIR = pathResolve(TEST_SETUP_DIR, "../..");
 
 export async function killZombies() {
