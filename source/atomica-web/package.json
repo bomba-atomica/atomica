@@ -10,6 +10,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:ui": "vitest run tests/ui-component",
     "demo": "npx tsx scripts/orchestrator.ts"
   },
   "dependencies": {

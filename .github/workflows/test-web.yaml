@@ -13,9 +13,13 @@ jobs:
     uses: ./.github/workflows/build-aptos-binary.yaml
 
   test-web:
-    name: Web Tests (Vitest)
+    name: Web Tests (${{ matrix.type }})
     runs-on: ubuntu-latest
     needs: setup-aptos
+    strategy:
+      fail-fast: false
+      matrix:
+        type: [unit, integration, ui]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -54,5 +58,4 @@ jobs:
       - name: Run TypeScript tests with Vitest
         run: |
           cd source/atomica-web
-          # run a sanity test
-          npx vitest run localnet
+          npm run test:${{ matrix.type }}
