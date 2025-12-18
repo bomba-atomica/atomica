@@ -1,0 +1,103 @@
+name: Build and Cache Aptos Binary
+
+on:
+  workflow_call:
+    outputs:
+      cache-key:
+        description: "Cache key for the aptos binary"
+        value: ${{ jobs.build-aptos.outputs.cache-key }}
+      binary-path:
+        description: "Path to the cached aptos binary"
+        value: ${{ jobs.build-aptos.outputs.binary-path }}
+
+jobs:
+  build-aptos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      cache-key: ${{ steps.cache-info.outputs.cache-key }}
+      binary-path: ${{ steps.cache-info.outputs.binary-path }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Get zapatos commit hash
+        id: zapatos-commit
+        run: |
+          cd source/zapatos
+          ZAPATOS_HASH=$(git rev-parse HEAD)
+          echo "hash=$ZAPATOS_HASH" >> $GITHUB_OUTPUT
+          echo "Zapatos commit: $ZAPATOS_HASH"
+
+      - name: Set cache info
+        id: cache-info
+        run: |
+          CACHE_KEY="aptos-binary-${{ runner.os }}-${{ steps.zapatos-commit.outputs.hash }}"
+          BINARY_PATH="${{ github.workspace }}/bin/aptos"
+          echo "cache-key=$CACHE_KEY" >> $GITHUB_OUTPUT
+          echo "binary-path=$BINARY_PATH" >> $GITHUB_OUTPUT
+          echo "Cache key: $CACHE_KEY"
+          echo "Binary path: $BINARY_PATH"
+
+      - name: Check cache
+        id: cache-check
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.cache-info.outputs.binary-path }}
+          key: ${{ steps.cache-info.outputs.cache-key }}
+          lookup-only: true
+
+      - name: Setup Rust toolchain
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache: true
+
+      - name: Install build dependencies
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libssl-dev pkg-config libclang-dev cmake
+
+      - name: Build aptos binary
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: |
+          cd source/zapatos
+          echo "Building aptos binary from zapatos commit: ${{ steps.zapatos-commit.outputs.hash }}"
+          cargo build -p aptos --release --features testing
+
+          # Create bin directory and copy binary
+          mkdir -p ${{ github.workspace }}/bin
+          cp target/release/aptos ${{ steps.cache-info.outputs.binary-path }}
+          chmod +x ${{ steps.cache-info.outputs.binary-path }}
+
+          # Verify binary
+          ${{ steps.cache-info.outputs.binary-path }} --version
+
+      - name: Save to cache
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.cache-info.outputs.binary-path }}
+          key: ${{ steps.cache-info.outputs.cache-key }}
+
+      - name: Restore from cache
+        if: steps.cache-check.outputs.cache-hit == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.cache-info.outputs.binary-path }}
+          key: ${{ steps.cache-info.outputs.cache-key }}
+
+      - name: Verify cached binary
+        run: |
+          if [ -f "${{ steps.cache-info.outputs.binary-path }}" ]; then
+            chmod +x ${{ steps.cache-info.outputs.binary-path }}
+            echo "✓ Aptos binary found (cached: ${{ steps.cache-check.outputs.cache-hit == 'true' }})"
+            ${{ steps.cache-info.outputs.binary-path }} --version
+          else
+            echo "✗ Aptos binary not found!"
+            exit 1
+          fi

@@ -1,0 +1,59 @@
+name: Test Web (TypeScript/Vitest)
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  setup-aptos:
+    name: Setup Aptos Binary
+    uses: ./.github/workflows/build-aptos-binary.yaml
+
+  test-web:
+    name: Web Tests (Vitest)
+    runs-on: ubuntu-latest
+    needs: setup-aptos
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: source/atomica-web/package-lock.json
+
+      - name: Restore aptos binary from cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ needs.setup-aptos.outputs.binary-path }}
+          key: ${{ needs.setup-aptos.outputs.cache-key }}
+          fail-on-cache-miss: true
+
+      - name: Add aptos to PATH
+        run: |
+          mkdir -p $HOME/.local/bin
+          cp ${{ needs.setup-aptos.outputs.binary-path }} $HOME/.local/bin/aptos
+          chmod +x $HOME/.local/bin/aptos
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Verify aptos binary
+        run: |
+          which aptos
+          aptos --version
+
+      - name: Install dependencies
+        run: |
+          cd source/atomica-web
+          npm install
+
+      - name: Run TypeScript tests with Vitest
+        run: |
+          cd source/atomica-web
+          npx vitest run

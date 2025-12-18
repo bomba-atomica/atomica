@@ -1,0 +1,44 @@
+name: Lint Web
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'source/atomica-web/**'
+      - '.github/workflows/lint-web.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'source/atomica-web/**'
+      - '.github/workflows/lint-web.yaml'
+  workflow_dispatch:
+
+jobs:
+  lint-web:
+    name: Lint and Format Check (atomica-web)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: source/atomica-web/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd source/atomica-web
+          npm install
+
+      - name: Run ESLint
+        run: |
+          cd source/atomica-web
+          npm run lint
+
+      - name: Check TypeScript compilation
+        run: |
+          cd source/atomica-web
+          npx tsc --noEmit
