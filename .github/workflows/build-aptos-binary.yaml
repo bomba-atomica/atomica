@@ -54,7 +54,7 @@ jobs:
         if: steps.cache-check.outputs.cache-hit != 'true'
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          cache: true
+          cache: false
 
       - name: Install build dependencies
         if: steps.cache-check.outputs.cache-hit != 'true'
