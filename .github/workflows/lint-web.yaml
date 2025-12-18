@@ -1,22 +1,21 @@
 name: Lint Web
 
 on:
-  # Temporarily disabled - focus on build and tests
-  # pull_request:
-  #   branches: [main]
-  #   paths:
-  #     - 'source/atomica-web/**'
-  #     - '.github/workflows/lint-web.yaml'
-  # push:
-  #   branches: [main]
-  #   paths:
-  #     - 'source/atomica-web/**'
-  #     - '.github/workflows/lint-web.yaml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'source/atomica-web/**'
+      - '.github/workflows/lint-web.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'source/atomica-web/**'
+      - '.github/workflows/lint-web.yaml'
   workflow_dispatch:
 
 jobs:
-  lint-web:
-    name: Lint and Format Check (atomica-web)
+  eslint:
+    name: ESLint Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -30,17 +29,51 @@ jobs:
       - name: Install dependencies
         run: |
           cd source/atomica-web
-          npm install
+          npm ci
 
       - name: Run ESLint
         run: |
           cd source/atomica-web
           npm run lint
 
+  prettier:
+    name: Prettier Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd source/atomica-web
+          npm ci
+
       - name: Check Prettier formatting
         run: |
           cd source/atomica-web
           npm run format:check
+
+  typescript:
+    name: TypeScript Compilation Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd source/atomica-web
+          npm ci
 
       - name: Check TypeScript compilation
         run: |
