@@ -1,11 +1,6 @@
 // Low-level integration test for FakeUSD using Ed25519 signing
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import {
-  Aptos,
-  AptosConfig,
-  Network,
-  Account,
-} from "@aptos-labs/ts-sdk";
+import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 import {
   setupLocalnet,
   teardownLocalnet,
