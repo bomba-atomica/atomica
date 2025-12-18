@@ -71,47 +71,77 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
         return;
       }
 
-      // Contracts deployed, check for token initialization
-      // Fetch ALL resources once to avoid 404s on individual missing resources
+      // Contracts deployed, check for fungible asset balances
+      // Fetch ALL resources to inspect primary fungible stores
       let resources: any[] = [];
       try {
         resources = await aptos.getAccountResources({ accountAddress: derived });
       } catch (e) {
-        // Should not happen if getAccountInfo passed, but just in case
         resources = [];
       }
 
-      const fakeEthType = `${CONTRACT_ADDR}::FAKEETH::FAKEETH`;
-      const fakeUsdType = `${CONTRACT_ADDR}::FAKEUSD::FAKEUSD`;
-
-      // Use SDK methods to get balances - handles both Coin and FungibleAsset
       let fakeEthBalance = 0;
       let fakeEthInitialized = false;
       let fakeUsdBalance = 0;
       let fakeUsdInitialized = false;
 
+      // Get metadata addresses by calling the view functions
       try {
-        fakeEthBalance = await aptos.getAccountCoinAmount({
-          accountAddress: derived,
-          coinType: fakeEthType,
+        // Call fake_eth::get_metadata() to get FAKEETH metadata address
+        const fakeEthMetadataResult = await aptos.view({
+          payload: {
+            function: `${CONTRACT_ADDR}::fake_eth::get_metadata`,
+            functionArguments: [],
+          },
         });
-        fakeEthInitialized = true;
-      } catch (e) {
-        // Coin not initialized for this account
-        fakeEthBalance = 0;
-        fakeEthInitialized = false;
-      }
 
-      try {
-        fakeUsdBalance = await aptos.getAccountCoinAmount({
-          accountAddress: derived,
-          coinType: fakeUsdType,
+        // Call fake_usd::get_metadata() to get FAKEUSD metadata address
+        const fakeUsdMetadataResult = await aptos.view({
+          payload: {
+            function: `${CONTRACT_ADDR}::fake_usd::get_metadata`,
+            functionArguments: [],
+          },
         });
-        fakeUsdInitialized = true;
+
+        // Extract metadata addresses from results
+        const fakeEthMetadataAddr = fakeEthMetadataResult[0] as string;
+        const fakeUsdMetadataAddr = fakeUsdMetadataResult[0] as string;
+
+        // Now match primary stores to these metadata addresses
+        for (const resource of resources) {
+          if (resource.type.startsWith("0x1::primary_fungible_store::PrimaryStore")) {
+            try {
+              // The full type includes the metadata address as type parameter
+              // e.g., "0x1::primary_fungible_store::PrimaryStore<0xMETADATA_ADDR>"
+
+              // Extract metadata address from the type parameter
+              const typeMatch = resource.type.match(/PrimaryStore<(.+)>/);
+              if (typeMatch && typeMatch[1]) {
+                const metadataAddrInType = typeMatch[1].trim();
+
+                // Access the balance from fungible_store
+                const store = resource.data?.fungible_store;
+                if (store?.balance !== undefined) {
+                  const balance = parseInt(store.balance);
+
+                  // Match against our known metadata addresses
+                  if (metadataAddrInType === fakeEthMetadataAddr) {
+                    fakeEthBalance = balance;
+                    fakeEthInitialized = true;
+                  } else if (metadataAddrInType === fakeUsdMetadataAddr) {
+                    fakeUsdBalance = balance;
+                    fakeUsdInitialized = true;
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn("Error parsing fungible asset store:", e);
+            }
+          }
+        }
       } catch (e) {
-        // Coin not initialized for this account
-        fakeUsdBalance = 0;
-        fakeUsdInitialized = false;
+        console.warn("Error fetching fungible asset metadata:", e);
+        // Fallback: balances remain 0
       }
 
       setBalances({

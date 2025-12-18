@@ -68,6 +68,7 @@ module atomica::fake_eth {
         primary_fungible_store::deposit(recipient, fa);
     }
 
+    #[view]
     /// Get the metadata object for FAKEETH
     public fun get_metadata(): Object<Metadata> {
         let metadata_address = object::create_object_address(&@atomica, ASSET_SYMBOL);
