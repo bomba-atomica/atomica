@@ -37,13 +37,10 @@ jobs:
         run: |
           CACHE_KEY="aptos-binary-${{ runner.os }}-${{ steps.zapatos-commit.outputs.hash }}"
           BINARY_PATH="${{ github.workspace }}/bin/aptos"
-          CARGO_CACHE_KEY="cargo-build-${{ runner.os }}-${{ steps.zapatos-commit.outputs.hash }}"
           echo "cache-key=$CACHE_KEY" >> $GITHUB_OUTPUT
           echo "binary-path=$BINARY_PATH" >> $GITHUB_OUTPUT
-          echo "cargo-cache-key=$CARGO_CACHE_KEY" >> $GITHUB_OUTPUT
           echo "Cache key: $CACHE_KEY"
           echo "Binary path: $BINARY_PATH"
-          echo "Cargo cache key: $CARGO_CACHE_KEY"
 
       - name: Check binary cache
         id: cache-check
@@ -53,24 +50,19 @@ jobs:
           key: ${{ steps.cache-info.outputs.cache-key }}
           lookup-only: true
 
-      - name: Restore cargo build cache
-        if: steps.cache-check.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            source/zapatos/target
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git
-          key: ${{ steps.cache-info.outputs.cargo-cache-key }}
-          restore-keys: |
-            cargo-build-${{ runner.os }}-
-
       - name: Setup Rust toolchain
         if: steps.cache-check.outputs.cache-hit != 'true'
         run: |
           rustup default stable
           rustup update stable
+
+      - name: Setup Rust cache
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "source/zapatos"
+          key: ${{ steps.zapatos-commit.outputs.hash }}
+          cache-on-failure: true
 
       - name: Install build dependencies
         if: steps.cache-check.outputs.cache-hit != 'true'
@@ -94,17 +86,6 @@ jobs:
 
           # Verify binary
           ${{ steps.cache-info.outputs.binary-path }} --version
-
-      - name: Save cargo build cache
-        if: always() && steps.cache-check.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            source/zapatos/target
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git
-          key: ${{ steps.cache-info.outputs.cargo-cache-key }}
 
       - name: Save binary to cache
         if: steps.cache-check.outputs.cache-hit != 'true'
