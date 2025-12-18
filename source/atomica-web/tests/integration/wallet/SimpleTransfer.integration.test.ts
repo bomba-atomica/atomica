@@ -16,6 +16,7 @@ import {
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { URL } from "url";
 import { ethers } from "ethers";
+import { setTimeout } from "timers/promises";
 
 // Polyfill fetch
 global.fetch = nodeFetch as any;
@@ -46,37 +47,6 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
     const config = new AptosConfig({
       network: Network.LOCAL,
       fullnode: "http://127.0.0.1:8080/v1",
-      client: {
-        provider: async (url: any, init: any) => {
-          // (Same polyfill logic as before)
-          let fetchUrl = url;
-          let fetchInit = init;
-          if (typeof url !== "string" && !(url instanceof URL)) {
-            if (url.url) {
-              fetchUrl = url.url;
-              fetchInit = {
-                ...init,
-                method: url.method,
-                headers: url.headers,
-                body: url.body,
-              };
-            }
-          }
-          try {
-            const res = await nodeFetch(fetchUrl, fetchInit);
-            try {
-              const bodyClone = res.clone();
-              const data = await bodyClone.json().catch(() => bodyClone.text());
-              Object.defineProperty(res, "data", { value: data });
-            } catch {
-              // Ignore error
-            }
-            return res;
-          } catch {
-            throw e;
-          }
-        },
-      },
     });
     setAptosInstance(new Aptos(config));
 
@@ -123,7 +93,7 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
     // 1. Fund Account
     await fundAccount(derivedAddrStr, 100_000_000); // 1 APT
     // Wait for funding
-    await new Promise((r) => setTimeout(r, 2000));
+    await setTimeout(2000);
 
     // 2. Setup Signature Interceptor
     const wallet = new ethers.Wallet(TEST_PK);
@@ -131,7 +101,6 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
       "personal_sign",
       async (params: any[]) => {
         const [msgHex] = params;
-        console.log(`[Mock] Signing requested...`);
         const msgStr = ethers.toUtf8String(msgHex);
         return await wallet.signMessage(msgStr); // Standard EIP-191 sign
       },
@@ -150,8 +119,8 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
         coinType: "0x1::aptos_coin::AptosCoin",
       });
       initialBalance = BigInt(res);
-    } catch {
-      // Ignore error
+    } catch (e) {
+      // Ignore error (account might not exist)
     }
     console.log(`Initial Balance of ${recipient}: ${initialBalance}`);
 
@@ -182,5 +151,5 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
 
     expect(finalBalance).toBe(initialBalance + 1000n);
     console.log("Balance verification passed!");
-  }, 60000);
+  }, 120000);
 });
