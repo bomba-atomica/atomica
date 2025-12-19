@@ -124,11 +124,13 @@ Atomica is a cross-chain sealed-bid auction system enabling trustless, gas-effic
 - Standard ERC-20/SPL token transfers
 
 **Bid Submission on Atomica** (Abstracted Workflow):
-- Users sign with their Ethereum wallet (MetaMask)
-- Account abstraction maps Ethereum address to Atomica account
-- Transaction executes on Atomica with gas sponsorship
+- Users sign with their Ethereum wallet (MetaMask) using SIWE standard
+- Deterministic account derivation from Ethereum address + domain (no pre-existing account needed)
+- Gasless onboarding: FeePayer backend service sponsors first transaction
+- Account implicitly created on first transaction
+- (Optional) Pre-fund user with AUA for subsequent P2P transactions
 - Bid encrypted with validator tlock public key
-- No Atomica wallet or gas tokens required
+- No Atomica wallet required
 
 **Settlement & Withdrawal**:
 - After auction clears, users withdraw on away chain
@@ -137,7 +139,10 @@ Atomica is a cross-chain sealed-bid auction system enabling trustless, gas-effic
 
 **Key Innovation**: Users never leave their preferred wallet ecosystem, yet participate in cross-chain auctions.
 
-**See**: `ethereum-wallet-atomica-bridge.md` for complete account abstraction specification
+**See**:
+- `native_ethereum_transactions.md` for SIWE implementation and transaction flow
+- `fee-payer.md` for gas sponsorship strategy (contract-sponsored model)
+- `account-abstraction.md` for derivable account abstraction details
 
 ## Key Features
 

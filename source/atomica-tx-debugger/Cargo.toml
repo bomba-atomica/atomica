@@ -1,0 +1,46 @@
+[package]
+name = "atomica-tx-debugger"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = "1.0.98"
+clap = { version = "4.3.9", features = ["derive"] }
+hex = { version = "0.4.3", features = ["serde"] }
+bcs = { git = "https://github.com/aptos-labs/bcs.git", rev = "d31fab9d81748e2594be5cd5cdf845786a30562d" }
+aptos-logger = { path = "../zapatos/crates/aptos-logger" }
+aptos-types = { path = "../zapatos/types", default-features = false }
+aptos-framework = { path = "../zapatos/aptos-move/framework" }
+aptos-vm = { path = "../zapatos/aptos-move/aptos-vm" }
+aptos-vm-genesis = { path = "../zapatos/aptos-move/vm-genesis" }
+aptos-gas-algebra = { path = "../zapatos/aptos-move/aptos-gas-algebra" }
+aptos-gas-schedule = { path = "../zapatos/aptos-move/aptos-gas-schedule" }
+aptos-vm-environment = { path = "../zapatos/aptos-move/aptos-vm-environment" }
+aptos-block-executor = { path = "../zapatos/aptos-move/block-executor" }
+aptos-cached-packages = { path = "../zapatos/aptos-move/framework/cached-packages" }
+aptos-crypto = { path = "../zapatos/crates/aptos-crypto" }
+move-core-types = { path = "../zapatos/third_party/move/move-core/types" }
+#todo: if this debugging flag is not respected in the build tree we may not be able to get move opcode traces
+move-vm-runtime = { path = "../zapatos/third_party/move/move-vm/runtime", features = ["debugging"] }
+
+[dev-dependencies]
+aptos-cached-packages = { path = "../zapatos/aptos-move/framework/cached-packages" }
+aptos-keygen = { path = "../zapatos/crates/aptos-keygen" }
+aptos-crypto = { path = "../zapatos/crates/aptos-crypto" }
+e2e-tests = { path = "../zapatos/aptos-move/e2e-tests" }
+
+[patch.crates-io]
+dudect-bencher = { git = "https://github.com/aptos-labs/dudect-bencher", rev = "9515677c83c58884c1a8c764251753269d46fc0e" }
+serde-reflection = { git = "https://github.com/aptos-labs/serde-reflection", rev = "73b6bbf748334b71ff6d7d09d06a29e3062ca075" }
+merlin = { git = "https://github.com/aptos-labs/merlin" }
+futures = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-channel = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-executor = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-core = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-util = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-sink = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-io = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-task = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-macro = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+# jemalloc-sys = { git = "https://github.com/aptos-labs/jemalloc-sys-shim", rev = "e0920246dd74303fab9a14b990768c6ac990a59b" }

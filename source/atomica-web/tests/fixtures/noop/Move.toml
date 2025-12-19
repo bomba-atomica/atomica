@@ -1,0 +1,9 @@
+[package]
+name = "noop"
+version = "1.0.0"
+
+[dependencies]
+AptosFramework = { local = "../../../../zapatos/aptos-move/framework/aptos-framework" }
+
+[addresses]
+noop = "_"

@@ -23,6 +23,11 @@ target/
 Cargo.lock
 **/*.rs.bk
 
+# Move/Aptos
+build/
+.aptos/
+.movement/
+
 # IDE
 .vscode/
 .idea/

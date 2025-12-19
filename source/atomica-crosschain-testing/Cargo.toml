@@ -1,0 +1,78 @@
+[package]
+name = "atomica-cross-chain"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = "1.0"
+tokio = { version = "1.35", features = ["full"] }
+tempfile = "3.10"
+portpicker = "0.1.1"
+reqwest = { version = "=0.11.11", features = ["json", "blocking"] }
+serde_json = "1.0"
+hex = "0.4"
+
+
+rand = "0.7.3"
+
+
+once_cell = "1.18"
+group = "0.13"
+ff = "0.13"
+blstrs = { version = "0.7.1", features = ["serde"] }
+tiny-keccak = { version = "2.0", features = ["keccak"] }
+ark-serialize = "0.4" # Check compatibility with blstrs 0.7
+
+sha2 = "0.10"
+bcs = { git = "https://github.com/aptos-labs/bcs.git", rev = "d31fab9d81748e2594be5cd5cdf845786a30562d" }
+
+# ethers = { version = "2.0", features = ["ws", "ipc", "openssl"] }
+
+# Aptos dependencies pinned to a specific commit
+# Aptos dependencies using local paths
+aptos-forge = { path = "../zapatos/testsuite/forge" }
+aptos-sdk = { path = "../zapatos/sdk" }
+aptos-types = { path = "../zapatos/types" }
+aptos-crypto = { path = "../zapatos/crates/aptos-crypto" }
+aptos-logger = { path = "../zapatos/crates/aptos-logger" }
+aptos-cached-packages = { path = "../zapatos/aptos-move/framework/cached-packages" }
+
+aptos-framework = { path = "../zapatos/aptos-move/framework", features = ["testing"] }
+aptos-config = { path = "../zapatos/config" }
+aptos-infallible = { path = "../zapatos/crates/aptos-infallible" }
+
+aptos-language-e2e-tests = { path = "../zapatos/aptos-move/e2e-tests" }
+aptos = { path = "../zapatos/crates/aptos", features = ["testing"] }
+move-vm-runtime = { path = "../zapatos/third_party/move/move-vm/runtime", features = ["debugging"] }
+clap = { version = "4.5.53", features = ["derive"] }
+
+[patch.crates-io]
+# ... previous patches stay here ...
+dudect-bencher = { git = "https://github.com/aptos-labs/dudect-bencher", rev = "9515677c83c58884c1a8c764251753269d46fc0e" }
+serde-reflection = { git = "https://github.com/aptos-labs/serde-reflection", rev = "73b6bbf748334b71ff6d7d09d06a29e3062ca075" }
+merlin = { git = "https://github.com/aptos-labs/merlin" }
+futures = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-channel = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-executor = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-core = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-util = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-sink = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-io = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-task = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+futures-macro = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+
+# There is a circular dependency between aptos-core, aptos-indexer-processor-sdk, and aptos-indexer-processors-v2,
+# so we cannot simply change the version and package for `jemalloc-sys` in one repo without running into conflicts.
+# We have to keep this shim until everything uses the same jemalloc dependency.
+jemalloc-sys = { git = "https://github.com/aptos-labs/jemalloc-sys-shim", rev = "e0920246dd74303fab9a14b990768c6ac990a59b" }
+
+[profile.dev]
+opt-level = 0
+debug = 1
+split-debuginfo = "unpacked"
+incremental = true
+
+[profile.test]
+inherits = "dev"
+

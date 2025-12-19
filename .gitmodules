@@ -7,4 +7,4 @@
 [submodule "source/zapatos"]
 	path = source/zapatos
 	url = https://github.com/0LNetworkCommunity/zapatos.git
-	branch = eth-signer-poc-1.83.5
+	branch = tlock-poc-1.38.5

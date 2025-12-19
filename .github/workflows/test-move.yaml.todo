@@ -1,0 +1,45 @@
+name: Test Move Contracts
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  setup-aptos:
+    name: Setup Aptos Binary
+    uses: ./.github/workflows/build-aptos-binary.yaml
+
+  test-move-contracts:
+    name: Move Contract Tests
+    runs-on: ubuntu-latest
+    needs: setup-aptos
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Restore aptos binary from cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ needs.setup-aptos.outputs.binary-path }}
+          key: ${{ needs.setup-aptos.outputs.cache-key }}
+          fail-on-cache-miss: true
+
+      - name: Add aptos to PATH
+        run: |
+          mkdir -p $HOME/.local/bin
+          cp ${{ needs.setup-aptos.outputs.binary-path }} $HOME/.local/bin/aptos
+          chmod +x $HOME/.local/bin/aptos
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Verify aptos binary
+        run: aptos --version
+
+      - name: Test Move contracts
+        run: |
+          cd source/atomica-move-contracts
+          aptos move test
