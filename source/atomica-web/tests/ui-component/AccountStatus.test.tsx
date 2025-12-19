@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import { AccountStatus } from "../../src/components/AccountStatus";
 import { commands } from "vitest/browser";
-import { MockWallet } from "../browser-utils/MockWallet";
+import { MockWallet } from "../../test-utils/browser-utils/MockWallet";
 import { useTokenBalances } from "../../src/hooks/useTokenBalances";
 
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";

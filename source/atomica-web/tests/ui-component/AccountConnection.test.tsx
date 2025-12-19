@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import App from "../../src/App";
-import { MockWallet } from "../browser-utils/MockWallet";
+import { MockWallet } from "../../test-utils/browser-utils/MockWallet";
 
 // Random secp256k1 private key for testing
 const TEST_PK =

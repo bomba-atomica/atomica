@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import "@testing-library/jest-dom";
 import { commands } from "vitest/browser";
-import { setupBrowserWalletMock } from "../browser-utils/wallet-mock";
+import { setupBrowserWalletMock } from "../../test-utils/browser-utils/wallet-mock";
 import { TxButton } from "../../src/components/TxButton";
 import {
   Aptos,

@@ -47,7 +47,7 @@
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { setupBrowserWalletMock } from "../../browser-utils/wallet-mock";
+import { setupBrowserWalletMock } from "../../../test-utils/browser-utils/wallet-mock";
 import { commands } from "vitest/browser";
 import {
   aptos,

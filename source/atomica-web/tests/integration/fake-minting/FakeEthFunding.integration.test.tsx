@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import nodeFetch, { Request, Response, Headers } from "node-fetch";
-// import { MockWallet } from "../browser-utils/MockWallet"; // Removed in favor of eth-testing
+// import { MockWallet } from "../../test-utils/browser-utils/MockWallet"; // Removed in favor of eth-testing
 import { generateTestingUtils } from "eth-testing";
 import {
   setupLocalnet,

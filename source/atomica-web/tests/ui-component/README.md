@@ -211,7 +211,7 @@ describe("MyComponent", () => {
 ### Testing with Wallet Providers
 
 ```typescript
-import { MockWallet } from "../browser-utils/MockWallet";
+import { MockWallet } from "../../test-utils/browser-utils/MockWallet";
 
 describe("Component with wallet", () => {
   it("should connect to wallet", async () => {
@@ -421,13 +421,13 @@ describe("AuthButton", () => {
 
 ### Browser Utilities
 
-Located in `tests/browser-utils/`:
+Located in `test-utils/browser-utils/`:
 
 - **`MockWallet.ts`** - Mock Ethereum wallet provider
 - **`wallet-mock.ts`** - Browser-compatible wallet mock setup
 - **`faucet.ts`** - Browser-compatible faucet client
 
-See [browser-utils/README.md](../browser-utils/README.md) for details.
+See [test-utils/browser-utils/README.md](../../test-utils/browser-utils/README.md) for details.
 
 ### React Testing Library Utilities
 
