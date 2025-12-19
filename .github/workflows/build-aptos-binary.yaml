@@ -63,39 +63,22 @@ jobs:
           lookup-only: true
 
       - name: Setup Rust toolchain
-        if: steps.cache-check.outputs.cache-hit != 'true'
         run: |
           rustup default stable
           rustup update stable
 
-      - name: Restore warmup cache
-        if: steps.cache-check.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            source/zapatos/target
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-warmup-${{ hashFiles('source/zapatos/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-warmup-
-
       - name: Setup Rust cache
-        if: steps.cache-check.outputs.cache-hit != 'true'
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "source/zapatos"
-          key: ${{ steps.zapatos-commit.outputs.hash }}
+          key: "zapatos"
           cache-on-failure: true
 
       - name: Install build dependencies
-        if: steps.cache-check.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libssl-dev pkg-config libclang-dev cmake lld libudev-dev libdw-dev
 
       - name: Build aptos binary
-        if: steps.cache-check.outputs.cache-hit != 'true'
         env:
           RUSTC_WRAPPER: ""
         run: |
@@ -112,18 +95,11 @@ jobs:
           ${{ steps.cache-info.outputs.binary-path }} --version
 
       - name: Save binary to cache
-        if: steps.cache-check.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.cache-info.outputs.binary-path }}
           key: ${{ steps.cache-info.outputs.cache-key }}
 
-      - name: Restore from cache
-        if: steps.cache-check.outputs.cache-hit == 'true'
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ steps.cache-info.outputs.binary-path }}
-          key: ${{ steps.cache-info.outputs.cache-key }}
 
       - name: Verify cached binary
         run: |
