@@ -1,4 +1,77 @@
 {
+  /**
+   * TypeScript Project References - Root Configuration
+   *
+   * This is the ROOT TypeScript configuration that orchestrates the entire project
+   * using TypeScript's Project References feature.
+   *
+   * WHAT THIS FILE DOES:
+   * - Defines a "solution" that contains multiple sub-projects
+   * - Each sub-project has its own tsconfig with specific settings
+   * - Enables incremental builds across project boundaries
+   * - Keeps browser code (src/) separate from Node.js tooling code (vite.config.ts)
+   *
+   * WHY PROJECT REFERENCES?
+   *
+   * This project has code that runs in TWO different environments:
+   *   1. Browser code (src/) - React app, UI components, browser-side SDK
+   *   2. Node.js code (vite.config.ts, test-utils/) - Build tools, test infrastructure
+   *
+   * These environments have DIFFERENT TypeScript requirements:
+   *   - Browser: needs DOM types, no Node.js types
+   *   - Node.js: needs Node.js types, no DOM types
+   *
+   * Project References allow us to have separate tsconfig files for each environment
+   * while still maintaining a unified project structure.
+   *
+   * THE TWO SUB-PROJECTS:
+   *
+   * 1. tsconfig.app.json
+   *    - Compiles: src/ directory (application code)
+   *    - Environment: Browser
+   *    - Types: DOM, DOM.Iterable, vite/client
+   *    - Target: ES2022
+   *    - Use for: React components, UI code, browser-side SDK
+   *
+   * 2. tsconfig.node.json
+   *    - Compiles: vite.config.ts, vitest.config.ts (tooling)
+   *    - Environment: Node.js
+   *    - Types: node
+   *    - Target: ES2023
+   *    - Use for: Vite config, Vitest config, build scripts
+   *
+   * HOW IT WORKS:
+   *
+   * When you run `tsc --build`, TypeScript:
+   *   1. Reads this root config
+   *   2. Sees the "references" array
+   *   3. Builds each referenced project in dependency order
+   *   4. Enables incremental builds (only rebuilds what changed)
+   *
+   * IMPORTANT FOR AI AGENTS:
+   *
+   * 1. DON'T add "compilerOptions" to this file
+   *    - This is a references-only config
+   *    - All compiler options go in the referenced configs
+   *
+   * 2. DON'T add "include" to this file
+   *    - Each referenced config has its own "include"
+   *    - This file just orchestrates the sub-projects
+   *
+   * 3. When adding new environment-specific code:
+   *    - Browser code? Add to src/ (automatically included by tsconfig.app.json)
+   *    - Node.js tooling? Update "include" in tsconfig.node.json
+   *
+   * 4. Test code is NOT included here
+   *    - Tests use Vitest's built-in TypeScript handling
+   *    - Test type checking happens during test execution
+   *    - See vitest.config.ts and vitest.config.nodejs.ts
+   *
+   * SEE ALSO:
+   * - tsconfig.app.json - Browser/application code configuration
+   * - tsconfig.node.json - Node.js tooling configuration
+   * - https://www.typescriptlang.org/docs/handbook/project-references.html
+   */
   "files": [],
   "references": [
     { "path": "./tsconfig.app.json" },

@@ -254,6 +254,202 @@ describe.sequential("My Browser Test", () => {
 });
 ```
 
+### Understanding Browser Commands Architecture
+
+**CRITICAL CONCEPT**: Browser tests have a split execution model where test flow control runs in the browser, but infrastructure operations execute in Node.js.
+
+#### The Problem
+
+Browser tests run in a real Chromium browser (via Playwright) to test:
+- React component rendering (requires real DOM)
+- Wallet integration (requires `window.ethereum`)
+- UI interactions (requires real browser events)
+- Browser-side SDK usage (requires browser APIs)
+
+However, certain operations **CANNOT** run in a browser:
+- Starting/stopping localnet (requires spawning child processes)
+- Running Aptos CLI commands (requires filesystem and process access)
+- Funding accounts via faucet (requires server-side HTTP requests)
+- Deploying contracts (requires executing CLI commands)
+
+#### The Solution: Browser Commands (RPC Bridge)
+
+Vitest's browser mode provides a **Remote Procedure Call (RPC)** mechanism that allows browser tests to call Node.js functions:
+
+```
+┌─────────────────────────────┐         ┌─────────────────────────────┐
+│   Browser Test (Chromium)   │         │   Node.js Server Process    │
+│                              │         │                             │
+│  Test flow control runs here│         │  Infrastructure ops run here│
+│                              │         │                             │
+│  commands.setupLocalnet() ───┼────────►│  setupLocalnetCommand()     │
+│                              │   RPC   │    ↓                        │
+│                              │         │  killZombies()              │
+│                              │         │    ↓                        │
+│                              │         │  spawn("aptos ...")         │
+│                              │         │    ↓                        │
+│  await result            ◄───┼─────────│  return { success: true }   │
+│                              │         │                             │
+│  Continue testing with       │         │                             │
+│  browser-side code...        │         │                             │
+└─────────────────────────────┘         └─────────────────────────────┘
+```
+
+#### How It Works: Step by Step
+
+1. **Test code runs in browser** (Chromium)
+2. Test calls `commands.setupLocalnet()`
+3. **Vitest sends RPC** from browser to Node.js server
+4. **Node.js executes** `setupLocalnetCommand()` function
+5. Node.js starts localnet, waits for readiness
+6. **Result returns** to browser via RPC
+7. **Test continues** in browser with localnet running
+
+#### Available Browser Commands
+
+```typescript
+import { commands } from 'vitest/browser';
+
+// Start localnet on ports 8080/8081 (runs in Node.js)
+await commands.setupLocalnet();
+
+// Fund an account via faucet (runs in Node.js)
+await commands.fundAccount("0x123...", 1_000_000_000);
+
+// Deploy Atomica contracts (runs in Node.js)
+await commands.deployContracts();
+
+// Run arbitrary Aptos CLI command (runs in Node.js)
+const result = await commands.runAptosCmd(["move", "compile", "--package-dir", "..."]);
+```
+
+#### Why This Architecture?
+
+**Test flow control stays in browser** because:
+- Need real DOM for React component testing
+- Need `window.ethereum` for wallet integration testing
+- Need real browser events for UI interaction testing
+- Need browser APIs for frontend SDK testing
+
+**Certain operations delegate to Node.js** because:
+- Browsers cannot spawn child processes
+- Browsers cannot access filesystem directly
+- Browsers cannot run CLI tools
+- Browsers have security restrictions on system access
+
+**Browser commands bridge the gap** by:
+- Keeping test logic in browser context
+- Delegating infrastructure operations to Node.js via RPC
+- Returning results back to browser for assertions
+
+#### Comparison: Browser Tests vs Meta Tests
+
+| Aspect | Browser Tests (vitest.config.ts) | Meta Tests (vitest.config.nodejs.ts) |
+|--------|----------------------------------|--------------------------------------|
+| **Execution Environment** | Chromium browser | Node.js process |
+| **Test Flow Control** | Runs in browser | Runs in Node.js |
+| **Infrastructure Ops** | Delegates to Node.js via RPC | Runs directly in Node.js |
+| **Import Pattern** | `import { commands } from 'vitest/browser'` | `import { setupLocalnet } from "../../test-utils/localnet"` |
+| **Use Case** | Testing application code (React, wallet, UI) | Testing infrastructure (localnet, SDK, platform) |
+| **Access to DOM** | ✅ Yes (real browser) | ❌ No |
+| **Access to window.ethereum** | ✅ Yes (can inject mock) | ❌ No |
+| **Access to child_process** | Via commands (RPC to Node.js) | ✅ Yes (direct) |
+| **Access to filesystem** | Via commands (RPC to Node.js) | ✅ Yes (direct) |
+
+#### Example: Full Browser Test Flow
+
+```typescript
+import { commands } from 'vitest/browser';
+import { render, screen } from '@testing-library/react';
+import { MyWalletComponent } from '../src/components/MyWalletComponent';
+
+describe.sequential("Wallet Integration Test", () => {
+  beforeAll(async () => {
+    // This runs in Node.js (via RPC)
+    await commands.setupLocalnet();
+    await commands.deployContracts();
+  }, 120000);
+
+  it("should connect wallet and display balance", async () => {
+    // Generate account (this code runs in browser)
+    const testAccount = Account.generate();
+    const address = testAccount.accountAddress.toString();
+
+    // Fund account via Node.js (via RPC)
+    await commands.fundAccount(address, 1_000_000_000);
+
+    // Now back to browser-side testing
+    // Render React component (requires real DOM)
+    render(<MyWalletComponent />);
+
+    // Inject mock wallet (requires window.ethereum)
+    window.ethereum = createMockWallet(testAccount);
+
+    // Simulate user clicking connect button (requires real browser events)
+    await userEvent.click(screen.getByText("Connect"));
+
+    // Assert UI updates correctly (requires real DOM)
+    expect(screen.getByText(address.slice(0, 6))).toBeInTheDocument();
+    expect(screen.getByText("10 APT")).toBeInTheDocument();
+  });
+});
+```
+
+In this example:
+- **Lines 6-8**: Infrastructure setup (runs in Node.js via RPC)
+- **Lines 11-12**: Test logic in browser
+- **Line 15**: Infrastructure operation (runs in Node.js via RPC)
+- **Lines 18-27**: Browser-side testing (React, DOM, events)
+
+#### Implementation Details
+
+Browser commands are defined in `test-utils/browser-commands.ts`:
+
+```typescript
+import type { BrowserCommand } from "vitest/node";
+import { setupLocalnet, fundAccount } from "./localnet";
+
+// The BrowserCommand type tells Vitest to expose this to browser tests
+export const setupLocalnetCommand: BrowserCommand<[]> = async () => {
+  await setupLocalnet();  // This runs in Node.js
+  return { success: true }; // Result sent back to browser
+};
+
+export const fundAccountCommand: BrowserCommand<[string, number?]> =
+  async (_context, address: string, amount: number = 100_000_000) => {
+    const txHash = await fundAccount(address, amount);
+    return { success: true, txHash };
+  };
+```
+
+These are then registered in `vitest.config.ts`:
+
+```typescript
+export default defineConfig({
+  test: {
+    browser: {
+      commands: {
+        setupLocalnet: setupLocalnetCommand,  // Exposed to browser as commands.setupLocalnet()
+        fundAccount: fundAccountCommand,      // Exposed to browser as commands.fundAccount()
+        // ... other commands
+      }
+    }
+  }
+});
+```
+
+#### Key Takeaways for AI Agents
+
+1. **Browser test code runs in Chromium**, not Node.js
+2. **Infrastructure operations run in Node.js**, accessed via `commands.*`
+3. **This is an RPC mechanism** - browser calls Node.js functions remotely
+4. **Test flow stays in browser** - you write tests as if in browser context
+5. **Use `commands.*` for anything requiring Node.js** (CLI, filesystem, processes)
+6. **This is different from meta tests** which run entirely in Node.js
+7. **Don't try to access `child_process` or `fs` directly** in browser tests - use commands
+
+See `vitest.config.ts` for detailed browser commands documentation.
+
 ### Important Path Configuration
 
 The `WEB_DIR` constant in `test-utils/localnet.ts` **must** point to the `atomica-web/` directory:

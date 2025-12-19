@@ -1,4 +1,142 @@
 {
+  /**
+   * TypeScript Configuration - Node.js Tooling Code
+   *
+   * This configuration is for CODE THAT RUNS IN NODE.JS (build tools, configs).
+   *
+   * WHAT THIS COMPILES:
+   * - vite.config.ts (Vite configuration)
+   * - vitest.config.ts (Vitest browser config)
+   * - vitest.config.nodejs.ts (Vitest Node.js config)
+   * - Other build/tooling scripts
+   *
+   * ENVIRONMENT: Node.js (v18+)
+   * TARGET: ES2023 (latest Node.js features)
+   *
+   * IMPORTANT FOR AI AGENTS:
+   *
+   * 1. This config is for NODE.JS TOOLING ONLY
+   *    - ✅ vite.config.ts (Vite setup)
+   *    - ✅ vitest.config.ts (test configuration)
+   *    - ✅ Build scripts
+   *    - ✅ Deployment scripts
+   *    - ❌ Application code (use tsconfig.app.json instead)
+   *    - ❌ React components (use tsconfig.app.json instead)
+   *    - ❌ Test files (handled by Vitest, not this config)
+   *
+   * 2. AVAILABLE GLOBALS
+   *    - Node.js APIs (fs, path, child_process, http, etc.)
+   *    - process, __dirname, __filename, require
+   *    - Modern JavaScript features (ES2023)
+   *    - NO browser APIs (no window, document, DOM, etc.)
+   *
+   * 3. When adding new tooling files:
+   *    - Add to "include" array in this file
+   *    - Example: "include": ["vite.config.ts", "scripts/**/*.ts"]
+   *    - Use Node.js APIs freely
+   *    - Don't use browser globals (window, document, etc.)
+   *
+   * KEY DIFFERENCES FROM tsconfig.app.json:
+   *
+   * | Feature | tsconfig.app.json | tsconfig.node.json |
+   * |---------|-------------------|-------------------|
+   * | Environment | Browser | Node.js |
+   * | Target | ES2022 | ES2023 |
+   * | Lib | ES2022, DOM, DOM.Iterable | ES2023 |
+   * | Types | vite/client | node |
+   * | window, document | ✅ Yes | ❌ No |
+   * | fs, path, process | ❌ No | ✅ Yes |
+   * | JSX | react-jsx | Not supported |
+   * | Include | src/ | vite.config.ts, etc. |
+   *
+   * KEY COMPILER OPTIONS EXPLAINED:
+   *
+   * "target": "ES2023"
+   *   - Output JavaScript compatible with ES2023
+   *   - Latest Node.js features (Node.js 18+)
+   *   - More modern than browser target (browsers lag behind Node.js)
+   *
+   * "lib": ["ES2023"]
+   *   - ES2023 JavaScript features
+   *   - NO DOM types (this is Node.js, not browser)
+   *   - Includes: async/await, top-level await, etc.
+   *
+   * "types": ["node"]
+   *   - Node.js type definitions
+   *   - Enables: process, __dirname, fs, path, etc.
+   *   - Provides types for all built-in Node.js modules
+   *
+   * "module": "ESNext"
+   *   - Use ES modules (import/export)
+   *   - Vite config files use ES module syntax
+   *   - Node.js supports ES modules natively
+   *
+   * BUNDLER MODE OPTIONS:
+   *
+   * "moduleResolution": "bundler"
+   *   - Resolves modules for bundler environments
+   *   - Vite uses this for config files
+   *   - Understands package.json "exports"
+   *
+   * "allowImportingTsExtensions": true
+   *   - Can import .ts files directly
+   *   - Example: import { config } from './config.ts'
+   *   - Vite handles TypeScript compilation
+   *
+   * "noEmit": true
+   *   - TypeScript doesn't output files
+   *   - Vite handles transpilation
+   *   - This is just for type checking
+   *
+   * WHAT FILES ARE INCLUDED:
+   *
+   * Currently: ["vite.config.ts"]
+   *   - Only Vite configuration file
+   *   - vitest.config.ts is NOT included here (it imports from vite.config.ts)
+   *
+   * To add more tooling files:
+   *   "include": [
+   *     "vite.config.ts",
+   *     "vitest.config.ts",
+   *     "vitest.config.nodejs.ts",
+   *     "scripts/**/*.ts"
+   *   ]
+   *
+   * WHY SEPARATE FROM tsconfig.app.json?
+   *
+   * Tooling code has different requirements:
+   *   - Needs Node.js APIs (fs, path, child_process)
+   *   - Doesn't need DOM types
+   *   - Can use newer ES features (Node.js updates faster than browsers)
+   *   - Different module resolution rules
+   *
+   * Mixing browser and Node.js configs leads to:
+   *   - Type errors (can't use 'window' in Node.js)
+   *   - Incorrect autocomplete
+   *   - Confusion about what APIs are available
+   *
+   * RELATIONSHIP TO OTHER CONFIGS:
+   *
+   * - tsconfig.json (root) - References this config
+   * - tsconfig.app.json - For browser/application code
+   * - vitest.config.ts - Uses types from this config
+   * - vitest.config.nodejs.ts - Uses types from this config
+   *
+   * TEST CODE IS NOT HERE:
+   *
+   * Test files (tests/**/*.test.ts) are NOT included in this config.
+   * Why?
+   *   - Vitest handles TypeScript compilation for tests
+   *   - Tests run in different environments (browser or Node.js)
+   *   - Test type checking happens during test execution
+   *   - See vitest.config.ts and vitest.config.nodejs.ts for test setup
+   *
+   * SEE ALSO:
+   * - tsconfig.json - Root configuration with project references
+   * - tsconfig.app.json - Browser/application code configuration
+   * - vite.config.ts - Vite build configuration
+   * - tests/README.md - Test infrastructure documentation
+   */
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "target": "ES2023",
