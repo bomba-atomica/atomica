@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  cleanup,
+} from "@testing-library/react";
 import "@testing-library/jest-dom";
 import nodeFetch, { Request, Response, Headers } from "node-fetch";
 import { generateTestingUtils } from "eth-testing";
@@ -12,7 +18,12 @@ import {
 } from "../node-utils/localnet";
 import { getDerivedAddress } from "../../src/lib/aptos/siwe";
 import { TxButton } from "../../src/components/TxButton";
-import { Aptos, AptosConfig, Network, InputEntryFunctionData } from "@aptos-labs/ts-sdk";
+import {
+  Aptos,
+  AptosConfig,
+  Network,
+  InputEntryFunctionData,
+} from "@aptos-labs/ts-sdk";
 import { URL } from "url";
 import { ethers } from "ethers";
 import { setTimeout } from "timers/promises";
@@ -98,7 +109,10 @@ describe.sequential("TxButton Simulate then Submit Mode", () => {
           throw new Error("Message is null");
         }
         const msgStr = ethers.toUtf8String(msgHex);
-        console.log("[Mock personal_sign] Signing message:", msgStr.substring(0, 100));
+        console.log(
+          "[Mock personal_sign] Signing message:",
+          msgStr.substring(0, 100),
+        );
         const sig = await wallet.signMessage(msgStr);
         console.log("[Mock personal_sign] Signature:", sig);
         return sig;
@@ -139,7 +153,10 @@ describe.sequential("TxButton Simulate then Submit Mode", () => {
           throw new Error("Message is null");
         }
         const msgStr = ethers.toUtf8String(msgHex);
-        console.log("[Mock personal_sign] Signing message:", msgStr.substring(0, 100));
+        console.log(
+          "[Mock personal_sign] Signing message:",
+          msgStr.substring(0, 100),
+        );
         const sig = await wallet.signMessage(msgStr);
         console.log("[Mock personal_sign] Signature:", sig);
         return sig;

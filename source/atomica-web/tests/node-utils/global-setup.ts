@@ -1,16 +1,18 @@
 /**
  * Global setup for browser tests
- * This runs in Node.js before browser tests start
+ *
+ * Setup: Nothing (browser commands handle orchestration)
+ * Teardown: Ensure localnet is stopped when all tests complete
  */
-import { setupLocalnet, deployContracts } from "./localnet";
+import { teardownLocalnet } from "./localnet";
 
 export async function setup() {
-    console.log("[Global Setup] Starting localnet for browser tests...");
-    await setupLocalnet();
-    await deployContracts();
-    console.log("[Global Setup] Localnet ready");
+  // No-op: Browser commands handle all setup
+  // Tests use: await commands.setupLocalnet(); await commands.deployContracts();
 }
 
 export async function teardown() {
-    console.log("[Global Setup] Teardown - localnet will be cleaned up by process exit");
+  console.log("[Global Teardown] Stopping localnet...");
+  await teardownLocalnet();
+  console.log("[Global Teardown] Complete");
 }

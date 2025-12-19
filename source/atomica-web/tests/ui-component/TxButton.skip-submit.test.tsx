@@ -3,7 +3,12 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { setupBrowserWalletMock } from "../browser-utils/wallet-mock";
 import { TxButton } from "../../src/components/TxButton";
-import { Aptos, AptosConfig, Network, InputEntryFunctionData } from "@aptos-labs/ts-sdk";
+import {
+  Aptos,
+  AptosConfig,
+  Network,
+  InputEntryFunctionData,
+} from "@aptos-labs/ts-sdk";
 
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
@@ -28,17 +33,12 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     // Setup browser-compatible wallet mock
     setupBrowserWalletMock(TEST_ACCOUNT, TEST_PK);
 
-    // Mock window.location
-    Object.defineProperty(window, "location", {
-      value: {
-        protocol: "http:",
-        host: "localhost:3000",
-        origin: "http://localhost:3000",
-        href: "http://localhost:3000/",
-      },
-      writable: true,
-      configurable: true,
-    });
+    // Note: window.location is already available in real browser tests
+    // No need to mock it - Vitest browser mode provides a real browser context
+    console.log(
+      "[TxButton Test] Using browser window.location:",
+      window.location.origin,
+    );
 
     // Get derived address and fund it
     const { getDerivedAddress } = await import("../../src/lib/aptos/siwe");
@@ -47,20 +47,17 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     ).toString();
 
     // Fund account using fetch (browser-compatible)
-    const fundResponse = await fetch("http://127.0.0.1:8081/mint", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        address: derivedAddr,
-        amount: 100_000_000,
-      }),
-    });
+    // Note: Aptos faucet uses query params, not JSON body
+    const fundResponse = await fetch(
+      `http://127.0.0.1:8081/mint?amount=100000000&address=${derivedAddr}`,
+      { method: "POST" },
+    );
 
     if (!fundResponse.ok) {
       throw new Error(`Failed to fund account: ${await fundResponse.text()}`);
     }
 
-    await new Promise<void>(resolve => setTimeout(resolve, 2000));
+    await new Promise<void>((resolve) => setTimeout(resolve, 2000));
 
     console.log("Browser test environment ready");
   }, 120000);

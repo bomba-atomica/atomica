@@ -146,7 +146,7 @@ export function TxButton({
   const getMainButtonAction = () => {
     if (phase === "idle" || phase === "error") return handleSimulate;
     if (phase === "ready") return handleSubmit;
-    return () => { };
+    return () => {};
   };
 
   const getMainButtonText = () => {
@@ -180,13 +180,14 @@ export function TxButton({
           disabled={disabled || isBusy || phase === "success"}
           className={`
             flex-grow px-4 py-2 font-bold rounded-l-md transition-colors border-r border-zinc-900/10
-            ${phase === "error"
-              ? "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-              : phase === "success"
-                ? "bg-zinc-800 text-zinc-400"
-                : phase === "ready"
-                  ? "bg-zinc-100 text-zinc-950 hover:bg-white"
-                  : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+            ${
+              phase === "error"
+                ? "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                : phase === "success"
+                  ? "bg-zinc-800 text-zinc-400"
+                  : phase === "ready"
+                    ? "bg-zinc-100 text-zinc-950 hover:bg-white"
+                    : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
             }
             ${disabled || isBusy ? "opacity-50 cursor-not-allowed" : ""}
           `}
@@ -225,14 +226,15 @@ export function TxButton({
             disabled={disabled || isBusy}
             className={`
                 h-full px-2 rounded-r-md transition-colors
-                ${phase === "error"
-                ? "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                : phase === "success"
-                  ? "bg-zinc-800 text-zinc-400"
-                  : phase === "ready"
-                    ? "bg-zinc-100 text-zinc-950 hover:bg-white"
-                    : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
-              }
+                ${
+                  phase === "error"
+                    ? "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                    : phase === "success"
+                      ? "bg-zinc-800 text-zinc-400"
+                      : phase === "ready"
+                        ? "bg-zinc-100 text-zinc-950 hover:bg-white"
+                        : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                }
                 ${disabled || isBusy ? "opacity-50 cursor-not-allowed" : ""}
             `}
           >

@@ -29,7 +29,9 @@ export async function fundAccount(
   address: string,
   amount: number = 100_000_000,
 ): Promise<string> {
-  console.log(`[Browser fundAccount] Requesting ${amount} Octas for ${address}...`);
+  console.log(
+    `[Browser fundAccount] Requesting ${amount} Octas for ${address}...`,
+  );
 
   const response = await fetch(
     `http://127.0.0.1:8081/mint?amount=${amount}&address=${address}`,

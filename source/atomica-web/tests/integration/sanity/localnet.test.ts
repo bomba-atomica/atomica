@@ -1,6 +1,14 @@
-// @vitest-environment node
+/**
+ * Localnet Health Check - Browser Test
+ *
+ * This test verifies that the local Aptos testnet is running and healthy.
+ * It uses browser commands to call Node.js orchestration code for setup.
+ *
+ * The setup command starts localnet and deploys contracts.
+ * Teardown is handled by globalSetup when all tests complete.
+ */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { setupLocalnet, teardownLocalnet } from "../../node-utils/localnet";
+import { commands } from "vitest/browser";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 
 const config = new AptosConfig({
@@ -12,12 +20,15 @@ const aptos = new Aptos(config);
 
 describe.sequential("Localnet Health Check", () => {
   beforeAll(async () => {
-    await setupLocalnet();
-  }, 120000);
+    // Start localnet via browser command (runs in Node.js)
+    await commands.setupLocalnet();
+    // Deploy contracts via browser command (runs in Node.js)
+    await commands.deployContracts();
+  }, 180000); // 3 minute timeout for setup + deploy
 
-  afterAll(async () => {
-    await teardownLocalnet();
-  });
+  // Note: We rely on globalSetup for final teardown to avoid breaking
+  // the Vitest browser runner connection (which happens if we kill processes too early).
+  // Setup is idempotent via browser commands.
 
   it("should have a running localnet with correct chain ID", async () => {
     const info = await aptos.getLedgerInfo();

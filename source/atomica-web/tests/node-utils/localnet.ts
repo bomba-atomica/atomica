@@ -7,6 +7,7 @@ import { rmSync, mkdirSync, existsSync } from "fs";
 
 const exec = promisify(execCb);
 let localnetProcess: ChildProcess | null = null;
+let setupComplete = false;
 
 import { findAptosBinary } from "./findAptosBinary";
 
@@ -122,7 +123,7 @@ export async function runAptosCmd(
       // Isolate config
       env: {
         ...process.env,
-        RUST_LOG: "debug",
+        RUST_LOG: "warn",
         // Position trace.log alongside validator.log in the test directory
         MOVE_VM_TRACE: pathResolve(
           process.env.HOME || "",
@@ -155,7 +156,15 @@ export async function runAptosCmd(
   });
 }
 
+let contractsDeployed = false;
+
 export async function deployContracts() {
+  // Guard against double deployment (globalSetup may run twice in browser mode)
+  if (contractsDeployed) {
+    console.log("[deployContracts] Already deployed, skipping");
+    return;
+  }
+
   console.log("Deploying Contracts...");
 
   // Clean config
@@ -259,9 +268,16 @@ export async function deployContracts() {
   );
 
   console.log("Contracts Deployed!");
+  contractsDeployed = true;
 }
 
 export async function setupLocalnet() {
+  // Guard against double setup (globalSetup + test beforeAll can both call this)
+  if (setupComplete && localnetProcess) {
+    console.log("[setupLocalnet] Already running, skipping setup");
+    return;
+  }
+
   // Ensure framework bundle is built and up-to-date
   // await ensureFramework();
 
@@ -309,7 +325,7 @@ export async function setupLocalnet() {
       stdio: ["pipe", "pipe", "pipe"],
       env: {
         ...process.env,
-        RUST_LOG: "debug",
+        RUST_LOG: "warn",
         // Position trace.log alongside validator.log in the test directory
         MOVE_VM_TRACE: TRACE_PATH,
       },
@@ -319,15 +335,20 @@ export async function setupLocalnet() {
   let processExited = false;
   localnetProcess.on("exit", (code) => {
     console.error(`[Localnet] Process exited with code ${code}`);
+    if (code !== null && code !== 0) {
+      console.error(`[Localnet] Output:\n${localnetOutput}`);
+    }
     processExited = true;
   });
 
-  localnetProcess.stdout?.on("data", (data) =>
-    console.log(`[Localnet] ${data} `),
-  );
-  localnetProcess.stderr?.on("data", (data) =>
-    console.error(`[Localnet ER] ${data} `),
-  );
+  // Mute verbose output - only capture for error diagnosis
+  let localnetOutput = "";
+  localnetProcess.stdout?.on("data", (data) => {
+    localnetOutput += data.toString();
+  });
+  localnetProcess.stderr?.on("data", (data) => {
+    localnetOutput += data.toString();
+  });
 
   console.log("Waiting for Localnet to be ready...");
   const start = Date.now();
@@ -349,23 +370,13 @@ export async function setupLocalnet() {
       // "aptos node run-local-testnet" usually uses ~/.aptos/testnet
       // Let's rely on standard location for now or try to parse
 
-      // const home = process.env.HOME; // Unused
-      const logPath = VALIDATOR_LOG_PATH;
-      // We set APTOS_GLOBAL_CONFIG_DIR = TEST_CONFIG_DIR in runAptosCmd (deployment),
-      // BUT localnetProcess was spawned WITHOUT that env var in setupLocalnet!
-      // Wait, setupLocalnet spawning aptosBin does NOT set env vars for config dir?
-      // Line 23: localnetProcess = spawn(aptosBin, [...], { cwd, stdio... }) -> no env provided?
-      // If no env provided, it uses default ~/.aptos/testnet.
-      // Duplicate assignment removed
-
-      // Spawn tail
-      console.log(`Tailing validator log: ${logPath}`);
-      const tail = spawn("tail", ["-f", logPath], { stdio: "inherit" });
-      // Track it to kill later?
-      // quick hack: attach to localnetProcess object or valid scope
-      (localnetProcess as any)._tail = tail;
-
-      // Decoupled: Tests must call deployContracts() explicitely if needed
+      // Decoupled: Tests must call deployContracts() explicitly if needed
+      // Note: We no longer tail the validator log to reduce noise
+      // Logs are available at: VALIDATOR_LOG_PATH if debugging is needed
+      console.log(
+        `[Localnet] Validator log available at: ${VALIDATOR_LOG_PATH}`,
+      );
+      setupComplete = true;
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -412,12 +423,10 @@ async function checkAllReadiness() {
 export async function teardownLocalnet() {
   console.log("Stopping Localnet...");
   if (localnetProcess) {
-    if ((localnetProcess as any)._tail) {
-      (localnetProcess as any)._tail.kill();
-    }
     localnetProcess.kill();
     localnetProcess = null;
   }
+  setupComplete = false;
   // Force clean up any potential lingering processes
   await killZombies();
 }
