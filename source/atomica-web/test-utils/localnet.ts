@@ -13,7 +13,6 @@ import { findAptosBinary } from "./findAptosBinary";
 
 // Ensure cleanup happens on process exit
 let cleanupRegistered = false;
-let forceExitTimer: NodeJS.Timeout | null = null;
 
 function registerCleanupHandlers() {
   if (cleanupRegistered) return;
@@ -24,7 +23,7 @@ function registerCleanupHandlers() {
       console.log("\n[Cleanup] Killing localnet process...");
       try {
         localnetProcess.kill("SIGKILL");
-      } catch (e) {
+      } catch {
         // Process may already be dead
       }
       localnetProcess = null;
@@ -66,7 +65,7 @@ export async function killZombies() {
     const start = Date.now();
     while (Date.now() - start < 10000) {
       // 10s timeout
-      let busyPorts = [];
+      const busyPorts = [];
       for (const port of ports) {
         try {
           const { stdout } = await exec(`lsof -ti :${port} || true`);
@@ -118,7 +117,7 @@ export async function fundAccount(
   amount: number = 100_000_000,
 ): Promise<string> {
   const maxRetries = 3;
-  let lastError: any;
+  let lastError: Error | undefined;
 
   for (let i = 0; i < maxRetries; i++) {
     try {

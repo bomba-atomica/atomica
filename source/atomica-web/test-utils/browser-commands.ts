@@ -16,7 +16,7 @@ import {
   // teardownLocalnet, // Unused in persistent mode
   deployContracts,
   fundAccount,
-  killZombies,
+  // killZombies, // Unused - setupLocalnet handles cleanup internally
   runAptosCmd,
 } from "./localnet";
 

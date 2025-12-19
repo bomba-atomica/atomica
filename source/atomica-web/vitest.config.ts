@@ -39,7 +39,8 @@
  *    - They run in Node.js environment via vitest.config.nodejs.ts
  *    - Don't try to run meta tests with `npm test` - use the Node.js config instead
  *
- * 4. TEST FILE PATTERN (include: ["tests/**/*.test.{ts,tsx}"])
+ * 4. TEST FILE PATTERN
+ *    - Pattern: tests/ ** /*.test.{ts,tsx} (without spaces)
  *    - All files matching *.test.ts or *.test.tsx
  *    - Except those in tests/meta/ and test-utils/
  *
