@@ -1,3 +1,83 @@
+/**
+ * Localnet Management Utilities for Node.js Tests
+ *
+ * This module provides functions for managing an Aptos localnet instance for testing.
+ * It is used ONLY by Node.js tests (meta tests and browser command proxies).
+ *
+ * CRITICAL CONCEPTS:
+ *
+ * 1. PERSISTENT LOCALNET MODE
+ *    - Localnet stays running between tests (not torn down after each test)
+ *    - Faster test execution (no restart overhead)
+ *    - Tests must use fresh accounts to avoid state conflicts
+ *    - See setupLocalnet() for implementation details
+ *
+ * 2. FIXED PORT BINDING
+ *    - Port 8080: Aptos node API
+ *    - Port 8081: Faucet service
+ *    - Only ONE localnet can run at a time
+ *    - Tests MUST run sequentially (never in parallel)
+ *    - See tests/README.md#sequential-execution-required
+ *
+ * 3. WEB_DIR PATH (CRITICAL!)
+ *    - WEB_DIR = pathResolve(TEST_SETUP_DIR, "..") points to atomica-web/
+ *    - Used as default cwd for runAptosCmd()
+ *    - Contract paths like ../atomica-move-contracts resolve relative to WEB_DIR
+ *    - WRONG PATH = "Unable to find package manifest" errors
+ *    - See tests/README.md#important-path-configuration
+ *
+ * MAIN FUNCTIONS:
+ *
+ * - setupLocalnet() - Start localnet and wait for readiness
+ * - killZombies() - Clean up zombie processes and free ports
+ * - fundAccount(address, amount) - Fund account via faucet
+ * - deployContracts() - Deploy Atomica contracts
+ * - runAptosCmd(args, cwd) - Run Aptos CLI commands
+ * - teardownLocalnet() - Stop localnet (usually unused in persistent mode)
+ *
+ * USAGE PATTERNS:
+ *
+ * Meta Tests (Node.js):
+ *   import { setupLocalnet, fundAccount } from "../../test-utils/localnet";
+ *   await setupLocalnet();
+ *   await fundAccount(address, 1_000_000_000);
+ *
+ * Browser Tests (via commands):
+ *   import { commands } from 'vitest/browser';
+ *   await commands.setupLocalnet();  // Calls setupLocalnet() via RPC
+ *   await commands.fundAccount(address, 1_000_000_000);
+ *
+ * IMPORTANT FOR AI AGENTS:
+ *
+ * 1. This module runs in NODE.JS only (not browser)
+ *    - Uses child_process, fs, http - all Node.js APIs
+ *    - Browser tests access these via browser commands (RPC)
+ *    - See test-utils/browser-commands.ts for RPC wrappers
+ *
+ * 2. Localnet lifecycle is PERSISTENT
+ *    - setupLocalnet() starts localnet if not running
+ *    - Localnet stays running between tests
+ *    - teardownLocalnet() rarely used (persistent mode)
+ *    - Tests create fresh accounts instead of resetting state
+ *
+ * 3. Port management is CRITICAL
+ *    - killZombies() MUST run before starting localnet
+ *    - Ensures ports 8080/8081 are free
+ *    - Tests fail without port cleanup
+ *
+ * 4. Contract deployment paths
+ *    - Relative paths resolve from WEB_DIR (atomica-web/)
+ *    - Example: ../atomica-move-contracts from WEB_DIR
+ *    - Absolute paths also work but less portable
+ *
+ * SEE ALSO:
+ * - tests/README.md - Complete test infrastructure documentation
+ * - tests/README.md#understanding-browser-commands-architecture
+ * - test-utils/browser-commands.ts - RPC wrappers for browser tests
+ * - test-utils/findAptosBinary.ts - Locates Aptos CLI binary
+ * - tests/meta/README.md - Meta test documentation
+ */
+
 import { spawn, ChildProcess, exec as execCb } from "child_process";
 import { resolve as pathResolve, dirname } from "path";
 import { promisify } from "util";
@@ -6,14 +86,32 @@ import http from "node:http";
 import { rmSync, mkdirSync, existsSync } from "fs";
 
 const exec = promisify(execCb);
+
+/** Global localnet process handle (single instance across all tests) */
 let localnetProcess: ChildProcess | null = null;
+
+/** Flag indicating localnet has been set up and is ready */
 let setupComplete = false;
 
 import { findAptosBinary } from "./findAptosBinary";
 
-// Ensure cleanup happens on process exit
+/**
+ * Flag to ensure cleanup handlers are registered only once.
+ * Prevents duplicate signal handlers on process.
+ */
 let cleanupRegistered = false;
 
+/**
+ * Registers process cleanup handlers to ensure localnet is killed on exit.
+ *
+ * This function sets up handlers for:
+ * - process.on("exit") - Normal exit
+ * - process.on("SIGINT") - Ctrl+C
+ * - process.on("SIGTERM") - Kill signal
+ * - process.on("uncaughtException") - Unhandled errors
+ *
+ * IMPORTANT: Only registers once (idempotent)
+ */
 function registerCleanupHandlers() {
   if (cleanupRegistered) return;
   cleanupRegistered = true;
@@ -47,11 +145,76 @@ function registerCleanupHandlers() {
   });
 }
 
-// Adjust paths relative to this file's location
+/**
+ * CRITICAL PATH CONSTANTS
+ *
+ * These paths are used throughout the test infrastructure.
+ * DO NOT MODIFY without understanding the implications!
+ */
+
+/**
+ * TEST_SETUP_DIR: Directory containing this file (test-utils/)
+ * Example: /Users/name/project/atomica-web/test-utils
+ */
 const TEST_SETUP_DIR = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * APTOS_BIN: Path to Aptos CLI binary
+ * Found via findAptosBinary() which checks:
+ *   1. ~/.cargo/bin/aptos (global install)
+ *   2. Workspace target directory
+ * See: test-utils/findAptosBinary.ts
+ */
 const APTOS_BIN = findAptosBinary();
+
+/**
+ * WEB_DIR: Root directory of atomica-web project
+ *
+ * CRITICAL: This is the DEFAULT working directory for runAptosCmd()
+ *
+ * Path calculation:
+ *   TEST_SETUP_DIR = .../atomica-web/test-utils/
+ *   WEB_DIR = pathResolve(TEST_SETUP_DIR, "..")
+ *   WEB_DIR = .../atomica-web/
+ *
+ * Used for:
+ *   - Default cwd in runAptosCmd()
+ *   - Resolving relative contract paths (../atomica-move-contracts)
+ *
+ * COMMON MISTAKE:
+ *   ❌ pathResolve(TEST_SETUP_DIR, "../..") points to parent of atomica-web!
+ *   ✅ pathResolve(TEST_SETUP_DIR, "..") points to atomica-web/ (correct)
+ *
+ * See: tests/README.md#important-path-configuration
+ */
 const WEB_DIR = pathResolve(TEST_SETUP_DIR, "..");
 
+/**
+ * Clean up zombie Aptos processes and free ports.
+ *
+ * This function:
+ *   1. Kills all processes matching 'aptos' (pkill -f 'aptos')
+ *   2. Waits for ports to be released (8070, 8080, 8081, etc.)
+ *   3. Removes stale localnet directory (.aptos/testnet)
+ *
+ * WHY NEEDED:
+ * - Previous test runs may leave localnet processes running
+ * - Ports must be free before starting new localnet
+ * - Stale state can cause test failures
+ *
+ * RETRY LOGIC:
+ * - Retries for up to 10 seconds
+ * - Checks each port with `lsof -ti :PORT`
+ * - Kills processes occupying ports
+ * - Waits until all ports are free
+ *
+ * USAGE:
+ *   await killZombies();  // Before setupLocalnet()
+ *
+ * NOTE: Called automatically by setupLocalnet(), usually don't need to call directly
+ *
+ * @throws Never throws - errors are silently ignored
+ */
 export async function killZombies() {
   try {
     console.log("Cleaning up zombie Aptos processes...");
@@ -109,9 +272,48 @@ export async function killZombies() {
   }
 }
 
+/** Path to atomica-move-contracts directory (relative to WEB_DIR) */
 const CONTRACTS_DIR = pathResolve("../atomica-move-contracts");
+
+/** Test-specific Aptos config directory (isolated from user's ~/.aptos) */
 const TEST_CONFIG_DIR = pathResolve(".aptos_test_config");
 
+/**
+ * Fund an account via the localnet faucet.
+ *
+ * WHAT IT DOES:
+ * - Makes HTTP POST request to http://127.0.0.1:8081/mint
+ * - Creates account if it doesn't exist
+ * - Funds account with specified amount
+ * - Returns transaction hash
+ *
+ * RETRY LOGIC:
+ * - Retries up to 3 times on failure
+ * - Waits 1 second between retries
+ * - Common failures: faucet not ready, network issues
+ *
+ * USAGE:
+ *   Meta Tests:
+ *     import { fundAccount } from "../../test-utils/localnet";
+ *     await fundAccount(account.accountAddress.toString(), 1_000_000_000);
+ *
+ *   Browser Tests:
+ *     import { commands } from 'vitest/browser';
+ *     await commands.fundAccount(address, 1_000_000_000);
+ *
+ * IMPORTANT:
+ * - Localnet must be running (call setupLocalnet() first)
+ * - Amount is in octas (1 APT = 100_000_000 octas)
+ * - Wait ~1 second after funding before checking balance (indexing delay)
+ * - Default amount: 100_000_000 octas (1 APT)
+ *
+ * @param address - Aptos account address (0x... format)
+ * @param amount - Amount in octas (default: 100_000_000 = 1 APT)
+ * @returns Transaction hash from faucet response
+ * @throws Error if funding fails after all retries
+ *
+ * See: tests/README.md#creating-and-funding-accounts
+ */
 export async function fundAccount(
   address: string,
   amount: number = 100_000_000,
@@ -157,11 +359,71 @@ export async function fundAccount(
   throw lastError || new Error("Funding failed after retries");
 }
 
+/**
+ * Fixed deployer private key for deployContracts() function.
+ * This is a TEST KEY - never use in production!
+ */
 const DEPLOYER_PK =
   "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
+
+/**
+ * Address derived from DEPLOYER_PK.
+ * Used as the deployment address for Atomica contracts.
+ */
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 
+/**
+ * Run an Aptos CLI command.
+ *
+ * WHAT IT DOES:
+ * - Spawns Aptos CLI process with given arguments
+ * - Captures stdout and stderr
+ * - Uses isolated config directory (TEST_CONFIG_DIR)
+ * - Returns output or throws on error
+ *
+ * CRITICAL - CWD PARAMETER:
+ * - Default cwd: WEB_DIR (atomica-web/)
+ * - Relative paths in args resolve from cwd
+ * - Example: --package-dir ../atomica-move-contracts resolves from cwd
+ * - WRONG CWD = "Unable to find package manifest" errors
+ *
+ * USAGE:
+ *   // Deploy contract (uses default WEB_DIR)
+ *   await runAptosCmd([
+ *     "move", "publish",
+ *     "--package-dir", "../atomica-move-contracts",  // Relative to WEB_DIR
+ *     "--named-addresses", "atomica=0x123...",
+ *     "--private-key", privateKey,
+ *     "--url", "http://127.0.0.1:8080",
+ *     "--assume-yes"
+ *   ]);
+ *
+ *   // Compile contract with custom cwd
+ *   await runAptosCmd(
+ *     ["move", "compile"],
+ *     "/path/to/contract/directory"
+ *   );
+ *
+ * ENVIRONMENT ISOLATION:
+ * - APTOS_GLOBAL_CONFIG_DIR set to TEST_CONFIG_DIR
+ * - Prevents interference with user's ~/.aptos config
+ * - Each test run uses clean config
+ *
+ * IMPORTANT FOR AI AGENTS:
+ * - Always use --assume-yes flag (no interactive prompts)
+ * - Always specify --url http://127.0.0.1:8080 for localnet
+ * - For contract deployment, use absolute paths or paths relative to WEB_DIR
+ * - Check cwd parameter if getting "file not found" errors
+ *
+ * @param args - Aptos CLI arguments (e.g., ["move", "compile"])
+ * @param cwd - Working directory for command (default: WEB_DIR)
+ * @returns Object with stdout and stderr strings
+ * @throws Error if command exits with non-zero code
+ *
+ * See: tests/README.md#deploying-contracts
+ * See: test-utils/localnet.ts#WEB_DIR documentation
+ */
 export async function runAptosCmd(
   args: string[],
   cwd: string = WEB_DIR,
@@ -212,8 +474,49 @@ export async function runAptosCmd(
   });
 }
 
+/** Guard flag to prevent duplicate contract deployments */
 let contractsDeployed = false;
 
+/**
+ * Deploy Atomica contracts to localnet.
+ *
+ * WHAT IT DOES:
+ * 1. Initializes Aptos CLI profile with DEPLOYER_PK
+ * 2. Funds deployer account with 10 APT
+ * 3. Publishes atomica-move-contracts package
+ * 4. Initializes registry module
+ * 5. Initializes fake_eth module
+ * 6. Initializes fake_usd module
+ *
+ * IDEMPOTENT:
+ * - Uses contractsDeployed flag to prevent double deployment
+ * - Safe to call multiple times (only deploys once)
+ * - Useful when multiple test files import this
+ *
+ * DEPLOYER ACCOUNT:
+ * - Uses fixed DEPLOYER_PK and DEPLOYER_ADDR
+ * - Test key only - never use in production!
+ * - Contracts deployed to DEPLOYER_ADDR
+ *
+ * USAGE:
+ *   Meta Tests:
+ *     import { deployContracts } from "../../test-utils/localnet";
+ *     await setupLocalnet();
+ *     await deployContracts();
+ *
+ *   Browser Tests:
+ *     import { commands } from 'vitest/browser';
+ *     await commands.setupLocalnet();
+ *     await commands.deployContracts();
+ *
+ * IMPORTANT:
+ * - Localnet must be running first (call setupLocalnet())
+ * - Takes ~30-60 seconds to complete
+ * - Modules deployed: registry, fake_eth, fake_usd
+ *
+ * See: tests/meta/deploy-atomica-contracts.test.ts for usage example
+ * See: tests/README.md#deploying-contracts
+ */
 export async function deployContracts() {
   // Guard against double deployment (globalSetup may run twice in browser mode)
   if (contractsDeployed) {
@@ -327,6 +630,89 @@ export async function deployContracts() {
   contractsDeployed = true;
 }
 
+/**
+ * Start Aptos localnet and wait for readiness.
+ *
+ * THIS IS THE MAIN ENTRY POINT for test infrastructure setup.
+ *
+ * WHAT IT DOES:
+ * 1. Kills zombie processes and frees ports (killZombies())
+ * 2. Spawns `aptos node run-local-testnet` process
+ * 3. Waits for ports 8080 (API) and 8081 (faucet) to respond
+ * 4. Registers cleanup handlers for graceful shutdown
+ * 5. Sets setupComplete = true
+ *
+ * PERSISTENT MODE:
+ * - Localnet stays running between tests (not torn down)
+ * - Faster test execution (~25-30s saved per test)
+ * - Tests must use fresh accounts to avoid state conflicts
+ * - setupComplete flag prevents duplicate startup
+ *
+ * PORT BINDING:
+ * - Port 8080: Aptos node API (fullnode)
+ * - Port 8081: Faucet service
+ * - Only ONE localnet can run at a time
+ * - Tests MUST run sequentially (never parallel)
+ *
+ * READINESS CHECKS:
+ * - Polls ports 8080 and 8081 every second
+ * - Timeout: 5 minutes (300 seconds)
+ * - First run may take longer (downloads git dependencies)
+ * - Subsequent runs: ~10-15 seconds
+ *
+ * LOGS:
+ * - Validator log: {WEB_DIR}/.aptos/testnet/validator.log
+ * - Trace log: {WEB_DIR}/.aptos/testnet/trace.log
+ * - Process output captured but not displayed (reduce noise)
+ * - Check logs if localnet fails to start
+ *
+ * USAGE:
+ *   Meta Tests:
+ *     import { setupLocalnet } from "../../test-utils/localnet";
+ *
+ *     describe.sequential("My Test", () => {
+ *       beforeAll(async () => {
+ *         await setupLocalnet();
+ *       }, 120000);  // 2 min timeout
+ *
+ *       it("should test something", async () => {
+ *         // Localnet is now running...
+ *       });
+ *     });
+ *
+ *   Browser Tests:
+ *     import { commands } from 'vitest/browser';
+ *
+ *     describe.sequential("My Browser Test", () => {
+ *       beforeAll(async () => {
+ *         await commands.setupLocalnet();  // RPC to setupLocalnet()
+ *       }, 120000);
+ *     });
+ *
+ * IDEMPOTENT:
+ * - Safe to call multiple times
+ * - Checks setupComplete flag
+ * - Skips if already running
+ *
+ * IMPORTANT FOR AI AGENTS:
+ * 1. ALWAYS call this before running tests that need localnet
+ * 2. ALWAYS use `describe.sequential()` for tests calling this
+ * 3. ALWAYS set timeout to at least 120000ms (2 minutes)
+ * 4. First run may need longer timeout (downloads dependencies)
+ * 5. Wait ~1 second after funding before checking balances
+ *
+ * TROUBLESHOOTING:
+ * - "Port already in use" → Call killZombies() manually
+ * - "Localnet failed to start" → Check validator.log
+ * - Tests hanging → Increase beforeAll timeout
+ * - Tests failing → Ensure sequential execution
+ *
+ * See: tests/README.md#localnet-infrastructure
+ * See: tests/meta/localnet.test.ts for basic usage example
+ * See: tests/README.md#sequential-execution-required
+ *
+ * @throws Error if localnet fails to start within 5 minutes
+ */
 export async function setupLocalnet() {
   // Guard against double setup (globalSetup + test beforeAll can both call this)
   if (setupComplete && localnetProcess) {

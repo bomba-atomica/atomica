@@ -1,5 +1,36 @@
 # Move Language Coding Guidelines
 
+## Definition of Done
+
+**CRITICAL**: A task is NOT complete until ALL of the following criteria are met. Agents must perform this preflight check before marking any work as done.
+
+### Preflight Checklist
+
+- [ ] **Tests written FIRST** (we practice TDD - Test-Driven Development)
+- [ ] **All tests pass** - Move unit tests and integration tests (`aptos move test`)
+- [ ] **Zero compilation warnings** - Code compiles cleanly (`aptos move compile`)
+- [ ] **Zero lint warnings** - No linter warnings from Move compiler
+- [ ] **Documentation complete** - All public functions have `///` doc comments
+- [ ] **README updated** - Relevant README files updated with links to project docs
+- [ ] **Consensus-critical requirements met** - If applicable, see [consensus-critical-guidelines.md](./consensus-critical-guidelines.md)
+
+**If ANY item fails, the work is INCOMPLETE. Do not proceed to the next task.**
+
+### Quick Validation Commands
+
+```bash
+# Navigate to Move contracts directory
+cd source/atomica-move-contracts
+
+# Run all checks before marking work complete
+aptos move compile --named-addresses atomica=0xcafe  # Must succeed with 0 warnings
+aptos move test --named-addresses atomica=0xcafe     # All tests must pass
+```
+
+**Expected Success:**
+- Compilation: `"Result": [...]` with exit code 0, no warnings
+- Tests: All tests passed
+
 ## Overview
 
 This document establishes coding standards and best practices for writing Move smart contracts in the Atomica project. Following these guidelines ensures consistency, maintainability, and correctness across the codebase.
@@ -39,6 +70,7 @@ public fun get_metadata(): Object<Metadata> {
 - Document complex private functions that need clarification
 - Include parameter descriptions for non-obvious inputs
 - Document error conditions and assertions
+- **Link to project documentation** - Reference relevant docs in `atomica/docs/`
 
 #### Example
 ```move
@@ -47,8 +79,33 @@ public fun get_metadata(): Object<Metadata> {
 ///
 /// Returns 0 if the account has not been initialized with this token.
 /// This is a read-only operation that does not modify state.
+///
+/// See [architecture-overview.md](../../docs/technical/architecture-overview.md)
+/// for the overall token accounting system design.
 public fun get_balance(account: address): u64 acquires TokenStore {
     // implementation
+}
+```
+
+#### Module-level Documentation
+
+Add documentation at the top of each module:
+
+```move
+/// Fake ETH token module for testing and development.
+///
+/// This module implements a test token that mimics ETH behavior on Aptos.
+/// It follows the fungible asset standard as described in
+/// [architecture-overview.md](../../docs/technical/architecture-overview.md).
+///
+/// For testing requirements, see
+/// [move-coding-guidelines.md](../../docs/development/move-coding-guidelines.md).
+///
+/// Related modules:
+/// - `fake_usd` - Test USD token
+/// - `registry` - Token registry
+module atomica::fake_eth {
+    // module contents
 }
 ```
 
@@ -480,17 +537,58 @@ rm -rf ~/.move/
 aptos move compile --named-addresses atomica=0xcafe
 ```
 
-### Pre-Commit Checklist
+### Pre-Commit Checklist (CRITICAL)
 
-Before committing Move code changes:
+Run this checklist before marking ANY task as complete:
+
+```bash
+# Navigate to Move contracts directory
+cd source/atomica-move-contracts
+
+# 1. Tests written first (TDD)
+# Verify tests exist for new functionality
+
+# 2. Compile with zero warnings
+aptos move compile --named-addresses atomica=0xcafe
+# Must show: "Result": [...] with exit code 0, no warnings
+
+# 3. Run all tests
+aptos move test --named-addresses atomica=0xcafe
+# Must show: All tests passed
+
+# 4. Check for lint issues
+# The Move compiler will show lint warnings during compilation
+# Ensure 0 warnings
+
+# 5. Verify documentation
+# Check that all public functions have /// comments
+# Check that module-level docs exist and link to project docs
+
+# 6. Verify README files updated
+# Check that relevant READMEs have been updated
+```
+
+**Before committing Move code changes:**
 
 - [ ] Code compiles without errors: `aptos move compile`
-- [ ] No lint warnings produced
+- [ ] **Zero lint warnings** produced
 - [ ] All tests pass: `aptos move test`
 - [ ] Documentation comments are properly placed (after attributes)
 - [ ] Error codes are documented
 - [ ] New public functions have tests
 - [ ] Code follows naming conventions
+- [ ] Module-level documentation includes links to `atomica/docs/`
+- [ ] README files updated with links to project documentation
+
+**ONLY when all checks pass is the work complete.**
+
+**For consensus-critical code:**
+If your changes affect consensus (DKG, Timelock, Validator Transactions), you must also meet ALL requirements in [consensus-critical-guidelines.md](./consensus-critical-guidelines.md):
+- Rust unit tests (>80% coverage)
+- Move unit tests
+- Move integration tests
+- Move formal verification
+- Smoke tests on local testnet
 
 ## Related Files
 

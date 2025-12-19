@@ -38,6 +38,25 @@ This repository contains interconnected documentation spanning business domains 
 - Create breadcrumb trails: `// See README.md in this directory for architecture overview`
 - Link to deeper resources: `// For authentication flow details, see atomica/docs/technical/auth.md`
 
+**Embed coding standards:**
+- Include relevant coding standards and conventions directly in documentation where agents will see them
+- Add standards reminders in READMEs for directories where they commonly apply
+- Reference the coding standards in `atomica/docs/development/`:
+  - `rust-coding-guidelines.md` - **CRITICAL: Definition of Done preflight checklist**
+  - `typescript-coding-guidelines.md` - TypeScript standards
+  - `move-coding-guidelines.md` - Move smart contract standards
+  - `consensus-critical-guidelines.md` - Multi-layer testing requirements
+- Examples of where to embed standards:
+  - **Preflight checklist** in all development directories (TDD, tests pass, zero warnings, linted)
+  - Testing standards in test directories
+  - Error handling patterns in service/API code
+  - Naming conventions for specific subsystems
+  - Performance considerations for data-heavy modules
+  - Consensus-critical code guidelines in blockchain/consensus modules
+- Strategy: Link to the full standards documents while highlighting the most relevant rules for each area
+- **Critical**: Agents often forget standards as they work through tasks - embedding contextual reminders prevents this "amnesia"
+- **Most Important**: Remind agents that work is INCOMPLETE until ALL preflight checks pass (see rust-coding-guidelines.md)
+
 ### 2. Knowledge Base Curation
 
 **Audit and improve:**
@@ -60,6 +79,7 @@ Good documentation should:
 - Use consistent formatting and structure
 - Include examples where helpful
 - Be up-to-date with the current code
+- **Remind agents of coding standards** relevant to that code area to prevent "amnesia" during task execution
 
 ## Output Format
 

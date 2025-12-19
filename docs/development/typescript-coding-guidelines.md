@@ -2,8 +2,36 @@
 
 This document outlines the TypeScript coding standards and best practices for the Atomica project, specifically for the `atomica-web` application.
 
+## Definition of Done
+
+**CRITICAL**: A task is NOT complete until ALL of the following criteria are met. Agents must perform this preflight check before marking any work as done.
+
+### Preflight Checklist
+
+- [ ] **Tests written FIRST** (we practice TDD - Test-Driven Development)
+- [ ] **All tests pass** - Both new tests and the entire existing test suite (`npm test`)
+- [ ] **Zero linting errors** - ESLint passes with 0 errors (`npm run lint`)
+- [ ] **Formatted** - Code is formatted with Prettier (`npm run format`)
+- [ ] **Type check passes** - TypeScript compilation succeeds (`npx tsc --noEmit`)
+- [ ] **No type suppressions in src/** - No `@ts-ignore`, `@ts-expect-error`, or `any` in source code
+- [ ] **Documentation complete** - JSDoc comments on public functions, updated README files
+- [ ] **README updated** - Relevant README files updated with links to project docs
+
+**If ANY item fails, the work is INCOMPLETE. Do not proceed to the next task.**
+
+### Quick Validation Commands
+
+```bash
+# Run all checks before marking work complete
+npm run lint           # Must show: 0 errors
+npm run format:check   # Must pass
+npx tsc --noEmit      # Must succeed with no errors
+npm test              # All tests must pass
+```
+
 ## Table of Contents
 
+- [Definition of Done](#definition-of-done)
 - [Overview](#overview)
 - [Type Safety](#type-safety)
 - [Import Statements](#import-statements)
@@ -12,6 +40,8 @@ This document outlines the TypeScript coding standards and best practices for th
 - [React Best Practices](#react-best-practices)
 - [Testing Guidelines](#testing-guidelines)
 - [Common Patterns](#common-patterns)
+- [Documentation](#documentation)
+- [Pre-Commit Checklist](#pre-commit-checklist)
 
 ## Overview
 
@@ -21,6 +51,7 @@ All TypeScript code in the `atomica-web` project must:
 - Be formatted with Prettier
 - Avoid use of `@ts-ignore`, `@ts-expect-error`, and `any` types in source code
 - Use proper TypeScript type annotations
+- Have comprehensive tests (TDD approach)
 
 ## Type Safety
 
@@ -146,6 +177,68 @@ declare module "@heroicons/react/24/solid" {
   export const XCircleIcon: FC<SVGProps<SVGSVGElement>>;
 }
 ```
+
+### Prefer Module Augmentation in Source Files Over Separate `.d.ts` Files
+
+When augmenting third-party module types, declare the augmentation in your **source `.ts` file** rather than creating a separate `.d.ts` file.
+
+❌ **Bad - Separate `.d.ts` file:**
+
+```typescript
+// test-utils/browser-commands.d.ts (UNNECESSARY!)
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    setupLocalnet(): Promise<{ success: boolean }>;
+  }
+}
+
+// test-utils/browser-commands.ts
+import type { BrowserCommand } from "vitest/node";
+
+export const setupLocalnetCommand: BrowserCommand<[]> = async () => {
+  await setupLocalnet();
+  return { success: true };
+};
+```
+
+✅ **Good - Module augmentation in source file:**
+
+```typescript
+// test-utils/browser-commands.ts
+import type { BrowserCommand } from "vitest/node";
+
+/**
+ * Augment Vitest's browser commands with our custom commands.
+ * This provides TypeScript autocomplete in browser tests.
+ */
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    setupLocalnet(): Promise<{ success: boolean }>;
+  }
+}
+
+export const setupLocalnetCommand: BrowserCommand<[]> = async () => {
+  await setupLocalnet();
+  return { success: true };
+};
+```
+
+**Why This Is Better:**
+
+1. **Single Source of Truth**: Types live next to their implementation
+2. **No Sync Issues**: No need to keep two files in sync
+3. **Easier Maintenance**: One file to update when adding/changing commands
+4. **How It Works**: TypeScript's `declare module` works in any `.ts` or `.d.ts` file that gets compiled
+
+**When to Use `.d.ts` Files:**
+
+Only use separate `.d.ts` files for **ambient declarations** without implementation:
+- Adding types for completely untyped npm packages
+- Global type declarations that aren't tied to any implementation
+
+**Key Principle:**
+
+> If you're writing implementation code in a `.ts` file, put your type augmentations there too.
 
 ## Error Handling
 
@@ -427,9 +520,98 @@ export function TxButton({
 }
 ```
 
-## Pre-Commit Checklist
+## Documentation
 
-Before submitting a PR, ensure:
+### JSDoc Comments
+
+All public functions and complex logic must have JSDoc comments:
+
+```typescript
+/**
+ * Derives an Aptos address from an Ethereum address using SIWE.
+ *
+ * This function implements the address derivation scheme described in
+ * [ethereum-wallet-atomica-bridge.md](../../docs/technical/ethereum-wallet-atomica-bridge.md).
+ *
+ * @param ethereumAddress - The Ethereum address (0x-prefixed hex string)
+ * @param chainId - The chain ID for SIWE message signing
+ * @returns The derived Aptos address
+ * @throws {Error} If the Ethereum address is invalid
+ *
+ * @example
+ * ```typescript
+ * const aptosAddr = await getDerivedAddress("0x1234...", 1);
+ * console.log(aptosAddr); // "0xabcd..."
+ * ```
+ *
+ * @see {@link ../../docs/technical/ethereum-wallet-atomica-bridge.md}
+ */
+export async function getDerivedAddress(
+  ethereumAddress: string,
+  chainId: number
+): Promise<string> {
+  // implementation
+}
+```
+
+### Linking to Project Documentation
+
+Always link to relevant documentation in comments:
+
+```typescript
+/**
+ * Transaction utilities for the Atomica protocol.
+ *
+ * See [architecture-overview.md](../../docs/technical/architecture-overview.md)
+ * for the overall system design.
+ *
+ * For testing these utilities, refer to
+ * [typescript-coding-guidelines.md](../../docs/development/typescript-coding-guidelines.md).
+ */
+```
+
+### README Files
+
+Every significant module directory should have a README.md that:
+- Explains the purpose of the module
+- Links to related documentation in `docs/`
+- Provides usage examples
+- Lists related modules
+
+## Pre-Commit Checklist (CRITICAL)
+
+Run this checklist before marking ANY task as complete:
+
+```bash
+# 1. Tests written first (TDD)
+# Verify tests exist for new functionality
+
+# 2. All tests pass
+npm test
+# Must show: All tests passed
+
+# 3. Lint check - zero errors
+npm run lint
+# Must show: 0 errors (warnings in tests/ are acceptable)
+
+# 4. Format check
+npm run format:check
+# Must pass without changes needed
+
+# 5. TypeScript compilation
+npx tsc --noEmit
+# Must succeed with no errors
+
+# 6. Verify no suppressions in src/
+# Check that no @ts-ignore, @ts-expect-error, or any types were added to src/
+grep -r "@ts-ignore\|@ts-expect-error" src/
+# Should find nothing (or only justified cases with comments)
+
+# 7. Verify README files updated
+# Check that relevant READMEs have been updated with links to project docs
+```
+
+**Additional checks:**
 
 - [ ] `npm run lint` shows **0 errors** (warnings in tests are OK)
 - [ ] `npm run format:check` passes
@@ -438,6 +620,9 @@ Before submitting a PR, ensure:
 - [ ] All caught errors use `unknown` type with proper type guards
 - [ ] All React effects have correct dependency arrays
 - [ ] New external libraries without types have declaration files in `src/types/`
+- [ ] Public functions have JSDoc comments with links to relevant docs
+
+**ONLY when all checks pass is the work complete.**
 
 ## GitHub Actions
 
