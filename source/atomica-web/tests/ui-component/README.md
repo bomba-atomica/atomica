@@ -4,6 +4,17 @@
 
 This directory contains **UI component tests** for React components in the Atomica web application. These tests verify that components render correctly, handle user interactions, and integrate properly with state management and wallet providers.
 
+## Important: Testing Library Configuration
+
+**We use standard vitest matchers, NOT `@testing-library/jest-dom`.**
+
+- ✅ DO use `screen.getByText()` for positive assertions (throws if not found)
+- ✅ DO use `expect(screen.queryByText()).toBeNull()` for negative assertions
+- ❌ DON'T import or use `@testing-library/jest-dom`
+- ❌ DON'T use `.toBeInTheDocument()`, `.toBeVisible()`, etc.
+
+This simplifies our testing setup and works seamlessly with Vitest's browser mode.
+
 ## What Belongs Here
 
 UI component tests are appropriate for:
@@ -57,16 +68,23 @@ UI component tests run in a real browser environment to ensure accurate renderin
 
 **What it tests**:
 
-- Account balance display
-- Balance updates after transactions
+- **Unfunded account warning** - Shows "Account not found on chain" message
+- **Balance display after funding** - Tests complete flow from unfunded → funded
+- Account balance updates via polling (5 second intervals)
 - Loading states
 - Error handling
 - Localnet integration
+
+**Test scenarios**:
+
+1. **Without funded account** - Verifies warning message for 0 APT balance
+2. **With funded account** - Funds via faucet, waits for hook to poll, verifies balance display
 
 **Use cases**:
 
 - Account dashboard
 - Balance monitoring
+- Faucet integration
 - Transaction confirmations
 
 **Note**: This is an integration test (requires localnet) but tests a UI component, hence the `.integration.test.tsx` naming.
@@ -156,6 +174,8 @@ npm test -- tests/ui-component/ --watch
 
 ### Test Structure with React Testing Library
 
+**Important**: We use standard vitest matchers, **NOT** `@testing-library/jest-dom`. Do not import or use jest-dom.
+
 ```typescript
 import { describe, it, expect } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -165,7 +185,8 @@ import { MyComponent } from "../../src/components/MyComponent";
 describe("MyComponent", () => {
   it("should render with correct text", () => {
     render(<MyComponent text="Hello World" />);
-    expect(screen.getByText("Hello World")).toBeInTheDocument();
+    // getByText throws if not found, so this is an implicit assertion
+    screen.getByText("Hello World");
   });
 
   it("should handle button click", async () => {
@@ -178,31 +199,34 @@ describe("MyComponent", () => {
 
     expect(onClickMock).toHaveBeenCalledTimes(1);
   });
+
+  it("should not show element when hidden", () => {
+    render(<MyComponent hidden={true} />);
+    // Use queryBy* (returns null) for negative assertions
+    expect(screen.queryByText("Hidden Content")).toBeNull();
+  });
 });
 ```
 
 ### Testing with Wallet Providers
 
 ```typescript
-import { WalletProvider } from "@aptos-labs/wallet-adapter-react";
 import { MockWallet } from "../browser-utils/MockWallet";
 
 describe("Component with wallet", () => {
   it("should connect to wallet", async () => {
+    const user = userEvent.setup();
     const mockWallet = new MockWallet("0x1234...");
 
-    render(
-      <WalletProvider>
-        <MyWalletComponent />
-      </WalletProvider>
-    );
-
-    // Inject mock wallet
+    // Inject mock wallet before rendering
     window.ethereum = mockWallet.getProvider();
+
+    render(<MyWalletComponent />);
 
     // Test wallet connection
     await user.click(screen.getByText("Connect"));
-    expect(screen.getByText(/0x1234/)).toBeInTheDocument();
+    // getByText with regex throws if not found
+    screen.getByText(/0x1234/);
   });
 });
 ```
@@ -215,6 +239,7 @@ import { commands } from "vitest/browser";
 describe.sequential("Component with blockchain", () => {
   beforeAll(async () => {
     await commands.setupLocalnet();
+    await commands.deployContracts();
   }, 120000);
 
   it("should fetch and display balance", async () => {
@@ -224,7 +249,7 @@ describe.sequential("Component with blockchain", () => {
     render(<BalanceDisplay address={address} />);
 
     await waitFor(() => {
-      expect(screen.getByText("10 APT")).toBeInTheDocument();
+      screen.getByText("10.0000"); // Formatted balance
     });
   });
 });
@@ -255,11 +280,11 @@ screen.getByClassName("btn-primary");
 ```typescript
 // ✅ CORRECT - Wait for element to appear
 await waitFor(() => {
-  expect(screen.getByText("Success")).toBeInTheDocument();
+  screen.getByText("Success");
 });
 
 // ❌ WRONG - May fail due to timing
-expect(screen.getByText("Success")).toBeInTheDocument();
+screen.getByText("Success"); // Throws immediately if not present
 ```
 
 ### 3. User-Centric Testing
@@ -280,9 +305,10 @@ fireEvent.click(button);
 ```typescript
 // ✅ CORRECT - Test behavior
 it("should display error message on invalid input", async () => {
+  const user = userEvent.setup();
   render(<LoginForm />);
   await user.click(screen.getByRole("button", { name: "Login" }));
-  expect(screen.getByText("Email is required")).toBeInTheDocument();
+  screen.getByText("Email is required");
 });
 
 // ❌ WRONG - Test implementation details
@@ -343,7 +369,8 @@ describe("ContactForm", () => {
 describe("DataComponent", () => {
   it("should show loading state", () => {
     render(<DataComponent loading={true} />);
-    expect(screen.getByRole("status")).toHaveTextContent("Loading...");
+    const status = screen.getByRole("status");
+    expect(status.textContent).toBe("Loading...");
   });
 
   it("should show data when loaded", async () => {
@@ -351,8 +378,8 @@ describe("DataComponent", () => {
 
     rerender(<DataComponent loading={false} data={mockData} />);
 
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.getByText(mockData.title)).toBeInTheDocument();
+    expect(screen.queryByRole("status")).toBeNull();
+    screen.getByText(mockData.title);
   });
 });
 ```
@@ -363,7 +390,8 @@ describe("DataComponent", () => {
 describe("ErrorBoundary", () => {
   it("should display error message", () => {
     render(<ErrorBoundary error="Something went wrong" />);
-    expect(screen.getByRole("alert")).toHaveTextContent("Something went wrong");
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toMatch(/Something went wrong/);
   });
 });
 ```
@@ -374,12 +402,17 @@ describe("ErrorBoundary", () => {
 describe("AuthButton", () => {
   it("should show login when not authenticated", () => {
     render(<AuthButton isAuthenticated={false} />);
-    expect(screen.getByRole("button", { name: "Login" })).toBeInTheDocument();
+    screen.getByRole("button", { name: "Login" });
   });
 
   it("should show logout when authenticated", () => {
     render(<AuthButton isAuthenticated={true} />);
-    expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
+    screen.getByRole("button", { name: "Logout" });
+  });
+
+  it("should not show login when authenticated", () => {
+    render(<AuthButton isAuthenticated={true} />);
+    expect(screen.queryByRole("button", { name: "Login" })).toBeNull();
   });
 });
 ```
@@ -422,16 +455,39 @@ Some UI component tests require localnet for blockchain integration. These tests
 ### Element not found
 
 ```typescript
-// Problem: Element not appearing
+// Problem: Element not appearing immediately
 screen.getByText("Submit"); // Throws error
 
-// Solution: Wait for element
+// Solution: Wait for element to appear
 await waitFor(() => {
-  expect(screen.getByText("Submit")).toBeInTheDocument();
+  screen.getByText("Submit");
 });
 
-// Or check if element exists
-expect(screen.queryByText("Submit")).toBeInTheDocument();
+// Or check if element doesn't exist (negative assertion)
+expect(screen.queryByText("Submit")).toBeNull();
+```
+
+### Assertion Patterns
+
+**DO NOT** use `@testing-library/jest-dom` matchers like `.toBeInTheDocument()`. Use these instead:
+
+```typescript
+// ✅ POSITIVE ASSERTIONS - Element should exist
+screen.getByText("Text"); // Throws if not found - implicit assertion
+expect(screen.queryByText("Text")).toBeTruthy(); // Explicit check
+
+// ✅ NEGATIVE ASSERTIONS - Element should not exist
+expect(screen.queryByText("Text")).toBeNull();
+expect(screen.queryByText("Text")).toBeFalsy();
+
+// ✅ ASYNC ASSERTIONS - Wait for element
+await waitFor(() => {
+  screen.getByText("Text");
+});
+
+// ❌ AVOID - Don't use jest-dom matchers
+expect(screen.getByText("Text")).toBeInTheDocument(); // DON'T USE
+expect(screen.queryByText("Text")).not.toBeInTheDocument(); // DON'T USE
 ```
 
 ### User events not working
@@ -465,14 +521,14 @@ render(
 // Problem: State updates after test completes
 it("should update", () => {
   render(<AsyncComponent />);
-  expect(screen.getByText("Loaded")).toBeInTheDocument(); // Fails
+  screen.getByText("Loaded"); // Throws - element not yet rendered
 });
 
 // Solution: Wait for updates
 it("should update", async () => {
   render(<AsyncComponent />);
   await waitFor(() => {
-    expect(screen.getByText("Loaded")).toBeInTheDocument();
+    screen.getByText("Loaded");
   });
 });
 ```
