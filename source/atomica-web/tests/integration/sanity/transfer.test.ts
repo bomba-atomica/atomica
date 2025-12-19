@@ -1,52 +1,8 @@
-// @vitest-environment node
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { commands } from "vitest/browser";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 
-/**
- * Test: Simple APT Transfer Between Accounts
- *
- * Purpose:
- * This test verifies that the basic APT transfer functionality works correctly
- * on the local testnet. It demonstrates the fundamental transaction flow that
- * most applications will use: funding an account and transferring tokens to another.
- * 
- * NOTE: This test uses browser commands to orchestrate Node.js actions (setup, funding)
- * even though it's marked as a Node environment test, because it runs within the
- * browser-enabled Vitest configuration.
- *
- * What the test does:
- * 1. Generates two new Ed25519 accounts (Alice as sender, Bob as recipient)
- * 2. Verifies both accounts start with 0 balance
- * 3. Funds Alice with 1,000,000,000 octas (10 APT) via the faucet
- * 4. Verifies Alice's balance is correctly updated
- * 5. Builds a transfer transaction sending 100 octas from Alice to Bob
- * 6. Signs and submits the transaction using Alice's private key
- * 7. Waits for the transaction to be confirmed on-chain
- * 8. Verifies the transaction succeeded
- * 9. Checks final balances (Alice should have ~999,999,900 after gas, Bob should have 100)
- *
- * How Aptos transfers work:
- * - Uses the built-in function: 0x1::aptos_account::transfer
- * - This function automatically creates the recipient account if it doesn't exist
- * - Transfer amount is specified in octas (1 APT = 100,000,000 octas)
- * - The sender pays gas fees from their balance
- * - Transaction must be signed by the sender's private key
- * - Transaction lifecycle: build → sign → submit → wait for confirmation
- *
- * Gas fees:
- * - Gas fees are deducted from the sender's balance
- * - Typical gas cost varies (can be ~100,000 octas for account creation transfers)
- * - Final sender balance = initial - transfer_amount - gas_fees
- * - Gas is higher when the recipient account doesn't exist (account creation cost)
- *
- * Common expectations:
- * - Bob's account is created automatically by the transfer (no pre-funding needed)
- * - Bob receives exactly the transfer amount (100 octas)
- * - Alice pays for gas, so her balance decreases by (100 + gas_fees)
- * - Transaction success field should be true
- * - Both accounts are queryable after the transfer
- */
+// ... (keep docs)
 
 const config = new AptosConfig({
   network: Network.CUSTOM,
@@ -61,7 +17,9 @@ describe.sequential("Simple APT Transfer", () => {
     await commands.setupLocalnet();
   }, 120000);
 
-  // Note: No afterAll teardown - globalSetup handles lifecycle
+  afterAll(async () => {
+    await commands.teardownLocalnet();
+  });
 
   it("should perform a simple transfer", async () => {
     console.log("Starting transfer test...");

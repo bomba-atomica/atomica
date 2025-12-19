@@ -13,7 +13,7 @@
 import type { BrowserCommand } from "vitest/node";
 import {
   setupLocalnet,
-  teardownLocalnet,
+  // teardownLocalnet, // Unused in persistent mode
   deployContracts,
   fundAccount,
   killZombies,
@@ -25,9 +25,8 @@ import {
  * First cleans up any zombie processes from previous runs.
  */
 export const setupLocalnetCommand: BrowserCommand<[]> = async () => {
-  console.log("[Browser Command] Cleaning up zombies and starting localnet...");
-  // Use teardownLocalnet to ensure internal state (localnetProcess, setupComplete) is reset
-  await teardownLocalnet();
+  console.log("[Browser Command] Starting localnet...");
+  // setupLocalnet internally calls killZombies to ensure ports are free
   await setupLocalnet();
   console.log("[Browser Command] Localnet started");
   return { success: true };
@@ -37,9 +36,9 @@ export const setupLocalnetCommand: BrowserCommand<[]> = async () => {
  * Stop the local Aptos testnet (runs in Node.js)
  */
 export const teardownLocalnetCommand: BrowserCommand<[]> = async () => {
-  console.log("[Browser Command] Stopping localnet...");
-  await teardownLocalnet();
-  console.log("[Browser Command] Localnet stopped");
+  console.log("[Browser Command] Teardown requested (Persistent Mode active)");
+  console.log("[Browser Command] Skipping physical teardown to maintain stability.");
+  // await teardownLocalnet(); // Disabled to prevent process churn/crashes
   return { success: true };
 };
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { commands } from "vitest/browser";
 import {
   Aptos,
@@ -26,7 +26,9 @@ describe.sequential("SECP256k1 Account Faucet Funding", () => {
     await commands.setupLocalnet();
   }, 120000);
 
-  // No afterAll needed
+  afterAll(async () => {
+    await commands.teardownLocalnet();
+  });
 
   it("should fund a SECP256k1 account via faucet", async () => {
     console.log("\n=== Starting SECP256k1 Faucet Test ===\n");

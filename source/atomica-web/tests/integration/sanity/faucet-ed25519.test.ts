@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { commands } from "vitest/browser";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 
@@ -19,7 +19,9 @@ describe.sequential("Ed25519 Faucet Funding", () => {
     await commands.setupLocalnet();
   }, 120000);
 
-  // No afterAll needed
+  afterAll(async () => {
+    await commands.teardownLocalnet();
+  });
 
   it("should fund an Ed25519 account via faucet", async () => {
     console.log("Starting faucet test...");

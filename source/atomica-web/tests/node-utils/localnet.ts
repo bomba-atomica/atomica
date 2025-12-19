@@ -19,86 +19,97 @@ const WEB_DIR = pathResolve(TEST_SETUP_DIR, "../..");
 export async function killZombies() {
   try {
     console.log("Cleaning up zombie Aptos processes...");
-    // Kill potential zombie aptos processes to free ports 8080/8081
+
+    // Initial kill attempt
     await exec("pkill -f 'aptos node run-local-testnet' || true");
-    // Also simpler check if standard name is used
     await exec("pkill -f 'aptos' || true");
 
-    // Kill by port to catch all services:
-    // - 8070: Readiness endpoint
-    // - 8080: REST API
-    // - 8081: Faucet
-    // - 9101: Inspection/metrics service
-    // - 9102: Admin service
-    // - 50051: Indexer gRPC (transaction streaming)
-    // - 6180, 6181, 7180: Fullnode network ports
     const ports = [8070, 8080, 8081, 9101, 9102, 50051, 6180, 6181, 7180];
-    for (const port of ports) {
-      try {
-        // Find and kill process listening on port
-        const { stdout } = await exec(`lsof -ti :${port} || true`);
-        const pids = stdout
-          .trim()
-          .split("\n")
-          .filter((pid) => pid);
-        for (const pid of pids) {
-          console.log(`Killing process ${pid} on port ${port}`);
-          await exec(`kill -9 ${pid} || true`);
+
+    // Retry loop to ensure ports are free
+    const start = Date.now();
+    while (Date.now() - start < 10000) { // 10s timeout
+      let busyPorts = [];
+      for (const port of ports) {
+        try {
+          const { stdout } = await exec(`lsof -ti :${port} || true`);
+          const pids = stdout.trim().split("\n").filter((pid) => pid);
+          if (pids.length > 0) {
+            busyPorts.push(port);
+            for (const pid of pids) {
+              // console.log(`Killing process ${pid} on port ${port}`);
+              await exec(`kill -9 ${pid} || true`);
+            }
+          }
+        } catch {
+          // lsof failed implies port free or error
         }
-      } catch {
-        // Ignore errors - port might not be in use
       }
+
+      if (busyPorts.length === 0) {
+        // Double check after a brief pause
+        await new Promise(r => setTimeout(r, 500));
+        // We could check again but let's assume if 0 found, we are good.
+        // Actually, let's verify cleanliness.
+        // If we found nothing, break.
+        break;
+      }
+
+      console.log(`Waiting for ports ${busyPorts.join(", ")} to free...`);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
-    // Clean up stale localnet directory to prevent port binding issues
+    // Clean up stale localnet directory
     const LOCAL_TEST_DIR = pathResolve(WEB_DIR, ".aptos/testnet");
     if (existsSync(LOCAL_TEST_DIR)) {
-      console.log(`Removing stale localnet directory: ${LOCAL_TEST_DIR}`);
+      // console.log(`Removing stale localnet directory: ${LOCAL_TEST_DIR}`);
       rmSync(LOCAL_TEST_DIR, { recursive: true, force: true });
     }
-
-    await new Promise((resolve) => setTimeout(resolve, 2000)); // Give time to release ports and clean up
   } catch {
-    // Ignore errors if no process found
+    // Ignore errors
   }
 }
 
 const CONTRACTS_DIR = pathResolve("../atomica-move-contracts");
 const TEST_CONFIG_DIR = pathResolve(".aptos_test_config");
 
-export function fundAccount(
+export async function fundAccount(
   address: string,
   amount: number = 100_000_000,
 ): Promise<string> {
-  console.log(`[fundAccount] Requesting ${amount} for ${address}...`);
-  return new Promise((resolve, reject) => {
-    const req = http.request(
-      `http://127.0.0.1:8081/mint?amount=${amount}&address=${address}`,
-      { method: "POST" },
-      (res) => {
-        console.log(`[fundAccount] Response status: ${res.statusCode}`);
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          console.log(`[fundAccount] Response body: ${data}`);
-          if (res.statusCode === 200) {
-            resolve(data);
-          } else {
-            reject(
-              new Error(
-                `Funding failed with status: ${res.statusCode} Body: ${data}`,
-              ),
-            );
+  const maxRetries = 3;
+  let lastError: any;
+
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      console.log(`[fundAccount] Requesting ${amount} for ${address}... (Attempt ${i + 1}/${maxRetries})`);
+      return await new Promise<string>((resolve, reject) => {
+        const req = http.request(
+          `http://127.0.0.1:8081/mint?amount=${amount}&address=${address}`,
+          { method: "POST" },
+          (res) => {
+            let data = "";
+            res.on("data", (chunk) => (data += chunk));
+            res.on("end", () => {
+              if (res.statusCode === 200) {
+                console.log(`[fundAccount] Success: ${data}`);
+                resolve(data);
+              } else {
+                reject(new Error(`Funding failed with status: ${res.statusCode} Body: ${data}`));
+              }
+            });
           }
-        });
-      },
-    );
-    req.on("error", (e) => {
-      console.error(`[fundAccount] Request error:`, e);
-      reject(e);
-    });
-    req.end();
-  });
+        );
+        req.on("error", (e) => reject(e));
+        req.end();
+      });
+    } catch (e) {
+      console.error(`[fundAccount] Attempt ${i + 1} failed:`, e);
+      lastError = e;
+      await new Promise((r) => setTimeout(r, 1000)); // Wait before retry
+    }
+  }
+  throw lastError || new Error("Funding failed after retries");
 }
 
 const DEPLOYER_PK =
@@ -275,6 +286,14 @@ export async function setupLocalnet() {
   // Guard against double setup (globalSetup + test beforeAll can both call this)
   if (setupComplete && localnetProcess) {
     console.log("[setupLocalnet] Already running, skipping setup");
+    return;
+  }
+
+  // Check if active on ports (Persistent Localnet Mode)
+  // This allows multiple test files to reuse the same localnet instance without restart
+  if (await checkAllReadiness()) {
+    console.log("[setupLocalnet] Found active localnet on ports, skipping startup");
+    setupComplete = true;
     return;
   }
 

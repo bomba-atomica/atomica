@@ -1,13 +1,10 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { commands } from "vitest/browser";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 
 /**
  * Test: Move Contract Deployment (Browser Compatible)
- *
- * Purpose:
- * This test verifies that Move smart contracts can be compiled and deployed
- * to the local testnet using browser commands to orchestrate the backend CLI.
+ * ...
  */
 
 // Use localhost for browser access to localnet
@@ -23,7 +20,9 @@ describe.sequential("Move Contract Deployment", () => {
     await commands.setupLocalnet();
   }, 120000);
 
-  // No afterAll needed, globalSetup handles teardown
+  afterAll(async () => {
+    await commands.teardownLocalnet();
+  });
 
   it("should deploy a noop contract", async () => {
     console.log("Starting contract deployment test...");

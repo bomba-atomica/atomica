@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { commands } from "vitest/browser";
 import {
   Aptos,
@@ -11,7 +11,7 @@ import {
 } from "@aptos-labs/ts-sdk";
 
 /**
- * Test: SECP256k1 Ethereum-Compatible Account Creation and Usage
+ * Test: SECP256k1 Account Creation and Usage
  * ...
  */
 
@@ -27,7 +27,9 @@ describe.sequential("SECP256k1 Account Creation and Usage", () => {
     await commands.setupLocalnet();
   }, 120000);
 
-  // No afterAll needed
+  afterAll(async () => {
+    await commands.teardownLocalnet();
+  });
 
   it("should create SECP256k1 account, receive transfer, and send back", async () => {
     console.log("\n=== Starting SECP256k1 Account Test ===\n");

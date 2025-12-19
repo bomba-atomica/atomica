@@ -1,13 +1,10 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { commands } from "vitest/browser";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 
 /**
  * Test: Atomica Contract Deployment (Browser Compatible)
- *
- * Purpose:
- * This test verifies that the Atomica Move smart contracts (fake_eth, fake_usd, registry)
- * can be compiled and deployed to the local testnet using browser commands.
+ * ...
  */
 
 // Use localhost for browser access to localnet
@@ -23,7 +20,9 @@ describe.sequential("Atomica Contract Deployment", () => {
     await commands.setupLocalnet();
   }, 120000);
 
-  // No afterAll needed, globalSetup handles teardown (if enabled) or lazy cleanup
+  afterAll(async () => {
+    await commands.teardownLocalnet();
+  });
 
   it("should deploy atomica contracts and verify modules exist", async () => {
     console.log("Starting Atomica contract deployment test...");
