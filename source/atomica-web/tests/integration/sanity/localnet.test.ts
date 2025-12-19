@@ -7,7 +7,7 @@
  * The setup command starts localnet and deploys contracts.
  * Teardown is handled by globalSetup when all tests complete.
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { commands } from "vitest/browser";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 

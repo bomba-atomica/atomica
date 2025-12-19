@@ -6,6 +6,9 @@ import { commands } from "vitest/browser";
 import { MockWallet } from "../browser-utils/MockWallet";
 import { useTokenBalances } from "../../src/hooks/useTokenBalances";
 
+import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+import { setAptosInstance } from "../../src/lib/aptos";
+
 describe.sequential("AccountStatus Integration", () => {
   const TEST_PK =
     "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
@@ -16,6 +19,14 @@ describe.sequential("AccountStatus Integration", () => {
     // Use browser command shortcuts
     await commands.setupLocalnet();
     await commands.deployContracts();
+
+    // Configure Aptos SDK to use Localnet
+    const config = new AptosConfig({
+      network: Network.LOCAL,
+      fullnode: "http://127.0.0.1:8080/v1",
+      faucet: "http://127.0.0.1:8081",
+    });
+    setAptosInstance(new Aptos(config));
   }, 120000);
 
   // Note: No afterAll teardown - globalSetup handles lifecycle

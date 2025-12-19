@@ -50,7 +50,7 @@ export function setupBrowserWalletMock(
           return chainId;
 
         case "personal_sign": {
-          const [message, address] = args.params || [];
+          const [message] = args.params || [];
           if (!message) {
             throw new Error("Message is required for personal_sign");
           }

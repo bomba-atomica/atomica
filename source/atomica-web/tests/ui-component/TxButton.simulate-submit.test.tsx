@@ -1,5 +1,4 @@
-// @vitest-environment happy-dom
-import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import {
   render,
   screen,
@@ -8,14 +7,8 @@ import {
   cleanup,
 } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import nodeFetch, { Request, Response, Headers } from "node-fetch";
-import { generateTestingUtils } from "eth-testing";
-import {
-  setupLocalnet,
-  teardownLocalnet,
-  fundAccount,
-  deployContracts,
-} from "../node-utils/localnet";
+import { commands } from "vitest/browser";
+import { setupBrowserWalletMock } from "../browser-utils/wallet-mock";
 import { getDerivedAddress } from "../../src/lib/aptos/siwe";
 import { TxButton } from "../../src/components/TxButton";
 import {
@@ -24,144 +17,54 @@ import {
   Network,
   InputEntryFunctionData,
 } from "@aptos-labs/ts-sdk";
-import { URL } from "url";
-import { ethers } from "ethers";
-import { setTimeout } from "timers/promises";
-
-// Polyfill fetch for happy-dom
-
-global.fetch = nodeFetch as any;
-
-global.Request = Request as any;
-
-global.Response = Response as any;
-
-global.Headers = Headers as any;
-
-global.URL = URL as any;
-
-window.fetch = nodeFetch as any;
-
-(window as any).Request = Request;
-
-(window as any).Response = Response;
-
-(window as any).Headers = Headers;
-
-(window as any).URL = URL;
+import { setAptosInstance } from "../../src/lib/aptos";
 
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
-const TEST_ACCOUNT = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Hardhat Account 0
+const TEST_ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"; // Hardhat Account 0
 const TEST_PK =
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
 describe.sequential("TxButton Simulate then Submit Mode", () => {
-  const testingUtils = generateTestingUtils({ providerType: "MetaMask" });
   let derivedAddr: string;
   let aptos: Aptos;
 
   beforeAll(async () => {
     console.log("Starting Localnet...");
-    await setupLocalnet();
+    // Use browser command shortcuts
+    await commands.setupLocalnet();
+    await commands.deployContracts();
 
     // Inject fetch-compatible Aptos instance
     const config = new AptosConfig({
       network: Network.LOCAL,
       fullnode: "http://127.0.0.1:8080/v1",
+      faucet: "http://127.0.0.1:8081",
     });
     aptos = new Aptos(config);
+    setAptosInstance(aptos);
 
-    // Deploy contracts
-    await deployContracts();
-
-    // Mock window.ethereum
-
-    (window as any).ethereum = testingUtils.getProvider();
-
-    // Mock window.location
-    Object.defineProperty(window, "location", {
-      value: {
-        protocol: "http:",
-        host: "localhost:3000",
-        origin: "http://localhost:3000",
-        href: "http://localhost:3000/",
-      },
-      writable: true,
-      configurable: true,
-    });
-
-    // Setup Provider Mocks
-    testingUtils.mockChainId("0x4");
-    testingUtils.mockAccounts([TEST_ACCOUNT]);
-    testingUtils.mockRequestAccounts([TEST_ACCOUNT]);
-
-    // Setup signature interceptor
-    const wallet = new ethers.Wallet(TEST_PK);
-
-    testingUtils.lowLevel.mockRequest(
-      "personal_sign",
-      async (params: any[]) => {
-        console.log("[Mock personal_sign] params:", params);
-        const [msgHex, address] = params;
-        if (!msgHex) {
-          console.error("[Mock personal_sign] msgHex is null or undefined!");
-          throw new Error("Message is null");
-        }
-        const msgStr = ethers.toUtf8String(msgHex);
-        console.log(
-          "[Mock personal_sign] Signing message:",
-          msgStr.substring(0, 100),
-        );
-        const sig = await wallet.signMessage(msgStr);
-        console.log("[Mock personal_sign] Signature:", sig);
-        return sig;
-      },
-    );
+    // Setup browser wallet mock (replaces eth-testing)
+    setupBrowserWalletMock(TEST_ACCOUNT, TEST_PK);
 
     // Fund account
     derivedAddr = (
       await getDerivedAddress(TEST_ACCOUNT.toLowerCase())
     ).toString();
-    await fundAccount(derivedAddr, 100_000_000);
-    await setTimeout(2000);
+    await commands.fundAccount(derivedAddr, 100_000_000);
+
+    // Wait for funding
+    await new Promise((r) => setTimeout(r, 2000));
 
     console.log("Test environment ready");
   }, 120000);
 
-  afterAll(async () => {
-    console.log("Stopping Localnet...");
-    await teardownLocalnet();
-    testingUtils.clearAllMocks();
-  });
+  // Note: No afterAll teardown - globalSetup handles lifecycle
 
   afterEach(() => {
     cleanup();
-    testingUtils.clearAllMocks();
-    testingUtils.mockChainId("0x4");
-    testingUtils.mockAccounts([TEST_ACCOUNT]);
-
-    // Re-establish personal_sign mock after clearAllMocks
-    const wallet = new ethers.Wallet(TEST_PK);
-    testingUtils.lowLevel.mockRequest(
-      "personal_sign",
-      async (params: any[]) => {
-        console.log("[Mock personal_sign] params:", params);
-        const [msgHex, address] = params;
-        if (!msgHex) {
-          console.error("[Mock personal_sign] msgHex is null or undefined!");
-          throw new Error("Message is null");
-        }
-        const msgStr = ethers.toUtf8String(msgHex);
-        console.log(
-          "[Mock personal_sign] Signing message:",
-          msgStr.substring(0, 100),
-        );
-        const sig = await wallet.signMessage(msgStr);
-        console.log("[Mock personal_sign] Signature:", sig);
-        return sig;
-      },
-    );
+    // Re-setup mock if cleanup destroys window.ethereum (setupBrowserWalletMock handles window global)
+    setupBrowserWalletMock(TEST_ACCOUNT, TEST_PK);
   });
 
   it("should simulate FakeEth mint transaction", async () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
+import { commands } from "vitest/browser";
 import { setupBrowserWalletMock } from "../browser-utils/wallet-mock";
 import { TxButton } from "../../src/components/TxButton";
 import {
@@ -9,10 +10,11 @@ import {
   Network,
   InputEntryFunctionData,
 } from "@aptos-labs/ts-sdk";
+import { setAptosInstance } from "../../src/lib/aptos";
 
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
-const TEST_ACCOUNT = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Hardhat Account 0
+const TEST_ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"; // Hardhat Account 0
 const TEST_PK =
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
@@ -23,15 +25,32 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
   beforeAll(async () => {
     console.log("Setting up browser test environment...");
 
-    // Inject fetch-compatible Aptos instance
+    // 1. Setup Localnet & Contracts (via browser commands)
+    await commands.setupLocalnet();
+    await commands.deployContracts();
+
+    // 2. Inject fetch-compatible Aptos instance
     const config = new AptosConfig({
       network: Network.LOCAL,
       fullnode: "http://127.0.0.1:8080/v1",
+      faucet: "http://127.0.0.1:8081",
     });
     aptos = new Aptos(config);
+    setAptosInstance(aptos);
 
-    // Setup browser-compatible wallet mock
+    // 3. Setup browser-compatible wallet mock
     setupBrowserWalletMock(TEST_ACCOUNT, TEST_PK);
+
+    // 4. Get derived address and fund it via browser command
+    const { getDerivedAddress } = await import("../../src/lib/aptos/siwe");
+    derivedAddr = (
+      await getDerivedAddress(TEST_ACCOUNT.toLowerCase())
+    ).toString();
+
+    await commands.fundAccount(derivedAddr, 100_000_000);
+
+    // Wait for funding to be indexed
+    await new Promise<void>((resolve) => setTimeout(resolve, 2000));
 
     // Note: window.location is already available in real browser tests
     // No need to mock it - Vitest browser mode provides a real browser context
@@ -39,25 +58,6 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
       "[TxButton Test] Using browser window.location:",
       window.location.origin,
     );
-
-    // Get derived address and fund it
-    const { getDerivedAddress } = await import("../../src/lib/aptos/siwe");
-    derivedAddr = (
-      await getDerivedAddress(TEST_ACCOUNT.toLowerCase())
-    ).toString();
-
-    // Fund account using fetch (browser-compatible)
-    // Note: Aptos faucet uses query params, not JSON body
-    const fundResponse = await fetch(
-      `http://127.0.0.1:8081/mint?amount=100000000&address=${derivedAddr}`,
-      { method: "POST" },
-    );
-
-    if (!fundResponse.ok) {
-      throw new Error(`Failed to fund account: ${await fundResponse.text()}`);
-    }
-
-    await new Promise<void>((resolve) => setTimeout(resolve, 2000));
 
     console.log("Browser test environment ready");
   }, 120000);
