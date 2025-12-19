@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import "@testing-library/jest-dom";
 import { AccountStatus } from "../../src/components/AccountStatus";
 import { commands } from "vitest/browser";
 import { MockWallet } from "../browser-utils/MockWallet";
@@ -46,9 +45,7 @@ describe.sequential("AccountStatus Integration", () => {
       // Wait for the component to finish loading and show the "account not found" warning
       await waitFor(
         () => {
-          expect(
-            screen.getByText(/Account not found on chain/),
-          ).toBeInTheDocument();
+          screen.getByText(/Account not found on chain/);
         },
         { timeout: 10000 },
       );
