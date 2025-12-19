@@ -12,9 +12,11 @@ import {
 export default defineConfig({
   plugins: [react()],
   test: {
-    globals: true,
+    // globals: true,
     fileParallelism: false,
     maxConcurrency: 1,
+    // reporters: ["default", "./tests/forceExitReporter.ts"],
+    // setupFiles: ["./tests/setup.ts"],
 
     // All tests run in browser (Chromium via Playwright)
     // No more happy-dom - everything is real browser testing

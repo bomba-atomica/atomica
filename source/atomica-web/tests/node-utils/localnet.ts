@@ -11,6 +11,43 @@ let setupComplete = false;
 
 import { findAptosBinary } from "./findAptosBinary";
 
+// Ensure cleanup happens on process exit
+let cleanupRegistered = false;
+let forceExitTimer: NodeJS.Timeout | null = null;
+
+function registerCleanupHandlers() {
+  if (cleanupRegistered) return;
+  cleanupRegistered = true;
+
+  const cleanup = () => {
+    if (localnetProcess && !localnetProcess.killed) {
+      console.log("\n[Cleanup] Killing localnet process...");
+      try {
+        localnetProcess.kill("SIGKILL");
+      } catch (e) {
+        // Process may already be dead
+      }
+      localnetProcess = null;
+    }
+  };
+
+  // Register handlers for various exit scenarios
+  process.on("exit", cleanup);
+  process.on("SIGINT", () => {
+    cleanup();
+    process.exit(130);
+  });
+  process.on("SIGTERM", () => {
+    cleanup();
+    process.exit(143);
+  });
+  process.on("uncaughtException", (err) => {
+    console.error("Uncaught exception:", err);
+    cleanup();
+    process.exit(1);
+  });
+}
+
 // Adjust paths relative to this file's location
 const TEST_SETUP_DIR = dirname(fileURLToPath(import.meta.url));
 const APTOS_BIN = findAptosBinary();
@@ -21,7 +58,6 @@ export async function killZombies() {
     console.log("Cleaning up zombie Aptos processes...");
 
     // Initial kill attempt
-    await exec("pkill -f 'aptos node run-local-testnet' || true");
     await exec("pkill -f 'aptos' || true");
 
     const ports = [8070, 8080, 8081, 9101, 9102, 50051, 6180, 6181, 7180];
@@ -289,19 +325,12 @@ export async function setupLocalnet() {
     return;
   }
 
-  // Check if active on ports (Persistent Localnet Mode)
-  // This allows multiple test files to reuse the same localnet instance without restart
-  if (await checkAllReadiness()) {
-    console.log("[setupLocalnet] Found active localnet on ports, skipping startup");
-    setupComplete = true;
-    return;
-  }
+  // Ensure clean slate
+  await killZombies();
 
   // Ensure framework bundle is built and up-to-date
   // await ensureFramework();
 
-  // Ensure clean slate
-  await killZombies();
 
   const LOCAL_TEST_DIR = pathResolve(WEB_DIR, ".aptos/testnet");
   const TRACE_PATH = pathResolve(LOCAL_TEST_DIR, "trace.log");
@@ -321,6 +350,9 @@ export async function setupLocalnet() {
 
   // Use the locally built aptos binary from zapatos (unified target dir) to ensure latest framework
   const aptosBinPath = APTOS_BIN;
+
+  // Register cleanup handlers before spawning
+  registerCleanupHandlers();
 
   localnetProcess = spawn(
     aptosBinPath,
@@ -442,7 +474,17 @@ async function checkAllReadiness() {
 export async function teardownLocalnet() {
   console.log("Stopping Localnet...");
   if (localnetProcess) {
-    localnetProcess.kill();
+    // Try graceful shutdown first
+    localnetProcess.kill("SIGTERM");
+
+    // Wait a bit for graceful shutdown
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // If still alive, force kill
+    if (!localnetProcess.killed) {
+      localnetProcess.kill("SIGKILL");
+    }
+
     localnetProcess = null;
   }
   setupComplete = false;

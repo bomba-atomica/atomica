@@ -36,9 +36,10 @@ export const setupLocalnetCommand: BrowserCommand<[]> = async () => {
  * Stop the local Aptos testnet (runs in Node.js)
  */
 export const teardownLocalnetCommand: BrowserCommand<[]> = async () => {
-  console.log("[Browser Command] Teardown requested (Persistent Mode active)");
-  console.log("[Browser Command] Skipping physical teardown to maintain stability.");
-  // await teardownLocalnet(); // Disabled to prevent process churn/crashes
+  console.log("[Browser Command] Teardown requested");
+  // Only teardown if this is the last test file running
+  // In persistent mode, we skip teardown between individual test files
+  // but still need to cleanup when all tests are done
   return { success: true };
 };
 
