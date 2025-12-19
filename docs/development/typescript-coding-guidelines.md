@@ -35,6 +35,7 @@ npm test              # All tests must pass
 - [Overview](#overview)
 - [Type Safety](#type-safety)
 - [Import Statements](#import-statements)
+- [File Organization](#file-organization)
 - [Error Handling](#error-handling)
 - [ESLint and Prettier](#eslint-and-prettier)
 - [React Best Practices](#react-best-practices)
@@ -239,6 +240,34 @@ Only use separate `.d.ts` files for **ambient declarations** without implementat
 **Key Principle:**
 
 > If you're writing implementation code in a `.ts` file, put your type augmentations there too.
+
+## File Organization
+
+### Co-locate Types with Implementation
+
+Keep type definitions close to their implementation:
+
+```typescript
+// ✅ GOOD: Types and implementation together
+export interface MyConfig {
+  host: string;
+  port: number;
+}
+
+export function createServer(config: MyConfig) {
+  // implementation
+}
+
+// ❌ BAD: Types in separate file when not needed
+// types.ts
+export interface MyConfig { ... }
+
+// server.ts
+import type { MyConfig } from './types';
+export function createServer(config: MyConfig) { ... }
+```
+
+**Exception**: Shared types used across many files should be in a dedicated `types.ts` file.
 
 ## Error Handling
 

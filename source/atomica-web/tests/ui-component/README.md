@@ -38,6 +38,7 @@ UI component tests run in a real browser environment to ensure accurate renderin
 **Purpose**: Account connection UI component
 
 **What it tests**:
+
 - Component renders with wallet providers
 - Connect button appears and is clickable
 - Connected state displays correctly
@@ -45,6 +46,7 @@ UI component tests run in a real browser environment to ensure accurate renderin
 - Wallet address display
 
 **Use cases**:
+
 - Wallet connection interface
 - Account status display
 - User authentication flow
@@ -54,6 +56,7 @@ UI component tests run in a real browser environment to ensure accurate renderin
 **Purpose**: Account status component with blockchain integration
 
 **What it tests**:
+
 - Account balance display
 - Balance updates after transactions
 - Loading states
@@ -61,6 +64,7 @@ UI component tests run in a real browser environment to ensure accurate renderin
 - Localnet integration
 
 **Use cases**:
+
 - Account dashboard
 - Balance monitoring
 - Transaction confirmations
@@ -72,6 +76,7 @@ UI component tests run in a real browser environment to ensure accurate renderin
 **Purpose**: Transaction button with simulated submission
 
 **What it tests**:
+
 - Transaction button rendering
 - Submit action triggers transaction
 - Loading states during submission
@@ -79,6 +84,7 @@ UI component tests run in a real browser environment to ensure accurate renderin
 - Button disabled states
 
 **Use cases**:
+
 - Transaction submission UI
 - Form actions
 - User feedback during transactions
@@ -88,6 +94,7 @@ UI component tests run in a real browser environment to ensure accurate renderin
 **Purpose**: Transaction button without actual submission
 
 **What it tests**:
+
 - Button component rendering
 - Props handling
 - Click events
@@ -95,6 +102,7 @@ UI component tests run in a real browser environment to ensure accurate renderin
 - Visual states (loading, success, error)
 
 **Use cases**:
+
 - Component API testing
 - Visual regression testing
 - State machine verification
@@ -104,6 +112,7 @@ UI component tests run in a real browser environment to ensure accurate renderin
 **Purpose**: Simple transfer flow in browser
 
 **What it tests**:
+
 - Complete transfer UI flow
 - Form input handling
 - Transaction submission
@@ -111,6 +120,7 @@ UI component tests run in a real browser environment to ensure accurate renderin
 - Browser environment integration
 
 **Use cases**:
+
 - Transfer interface
 - End-to-end browser flow
 - Real browser API usage
@@ -118,22 +128,26 @@ UI component tests run in a real browser environment to ensure accurate renderin
 ## Running Tests
 
 ### Run all UI component tests
+
 ```bash
 npm test -- tests/ui-component/
 ```
 
 ### Run specific test file
+
 ```bash
 npm test -- tests/ui-component/AccountConnection.test.tsx
 npm test -- tests/ui-component/TxButton.simulate-submit.test.tsx
 ```
 
 ### Run with verbose output
+
 ```bash
 npm test -- tests/ui-component/ --reporter=verbose
 ```
 
 ### Watch mode
+
 ```bash
 npm test -- tests/ui-component/ --watch
 ```
@@ -224,16 +238,16 @@ Prefer queries in this order (most accessible to least):
 
 ```typescript
 // ✅ BEST - Accessible to everyone
-screen.getByRole("button", { name: "Submit" })
-screen.getByLabelText("Email")
-screen.getByPlaceholderText("Enter email")
+screen.getByRole("button", { name: "Submit" });
+screen.getByLabelText("Email");
+screen.getByPlaceholderText("Enter email");
 
 // ✅ GOOD - Semantic content
-screen.getByText("Welcome")
+screen.getByText("Welcome");
 
 // ❌ AVOID - Implementation details
-screen.getByTestId("submit-button")
-screen.getByClassName("btn-primary")
+screen.getByTestId("submit-button");
+screen.getByClassName("btn-primary");
 ```
 
 ### 2. Wait for Asynchronous Updates
@@ -474,6 +488,7 @@ UI component tests should be relatively fast:
 - Clean up after tests (timers, listeners)
 
 If a test takes >5 seconds, consider:
+
 - Mocking async operations
 - Reducing test scope
 - Moving to integration tests if testing full flows

@@ -38,12 +38,14 @@ Unit tests run in a real browser environment to ensure compatibility with browse
 **Purpose**: Identity-Based Encryption (IBE) cryptographic operations
 
 **What it tests**:
+
 - IBE encryption and decryption
 - Key derivation from identities
 - Message confidentiality
 - Cryptographic primitives
 
 **Use cases**:
+
 - Encrypted messaging between accounts
 - Privacy-preserving data storage
 - Identity-based access control
@@ -53,12 +55,14 @@ Unit tests run in a real browser environment to ensure compatibility with browse
 **Purpose**: Aptos account address derivation
 
 **What it tests**:
+
 - Address generation from public keys
 - Account abstraction address derivation
 - Ethereum-compatible address calculations
 - Deterministic address generation
 
 **Use cases**:
+
 - Creating resource accounts
 - Predicting contract addresses
 - Implementing account abstraction
@@ -68,12 +72,14 @@ Unit tests run in a real browser environment to ensure compatibility with browse
 **Purpose**: Sign-In With Ethereum (SIWE) signature validation
 
 **What it tests**:
+
 - SIWE message format compliance
 - Ethereum signature verification
 - Message parsing and validation
 - Cross-chain authentication
 
 **Use cases**:
+
 - MetaMask wallet authentication
 - Ethereum wallet integration
 - Cross-chain identity verification
@@ -84,18 +90,21 @@ Unit tests run in a real browser environment to ensure compatibility with browse
 **Purpose**: SECP256k1 (Ethereum-compatible) address derivation on Aptos
 
 **What it tests**:
+
 - Ethereum private key to Aptos address conversion
 - SECP256k1 public key derivation
 - Address calculation differences (Aptos SHA3-256 vs Ethereum Keccak-256)
 - Account abstraction with Ethereum keys
 
 **Use cases**:
+
 - Importing Ethereum wallets to Aptos
 - Cross-chain account management
 - MetaMask integration with Aptos
 - Understanding address derivation differences
 
 **Key behaviors documented**:
+
 - Same Ethereum private key produces different addresses on Aptos vs Ethereum
 - Aptos uses SHA3-256 for hashing (different from Ethereum's Keccak-256)
 - SECP256k1 accounts are first-class citizens on Aptos
@@ -106,12 +115,14 @@ Unit tests run in a real browser environment to ensure compatibility with browse
 **Purpose**: Aptos transaction authenticator serialization
 
 **What it tests**:
+
 - Serialization of different authenticator types (Ed25519, SECP256k1, Multi-sig)
 - BCS (Binary Canonical Serialization) encoding
 - Authenticator structure and format
 - Account abstraction authenticators
 
 **Use cases**:
+
 - Building custom transaction authenticators
 - Implementing account abstraction
 - Understanding transaction signature formats
@@ -120,22 +131,26 @@ Unit tests run in a real browser environment to ensure compatibility with browse
 ## Running Tests
 
 ### Run all unit tests
+
 ```bash
 npm test -- tests/unit/
 ```
 
 ### Run specific test file
+
 ```bash
 npm test -- tests/unit/ibe.test.ts
 npm test -- tests/unit/siwe-signature.test.ts
 ```
 
 ### Run with verbose output
+
 ```bash
 npm test -- tests/unit/ --reporter=verbose
 ```
 
 ### Watch mode
+
 ```bash
 npm test -- tests/unit/ --watch
 ```
@@ -199,6 +214,7 @@ Before marking any test work as done, verify:
 ### Common Patterns
 
 #### Testing with fixtures
+
 ```typescript
 import goldenVectors from "../fixtures/golden_vectors.json";
 
@@ -212,6 +228,7 @@ describe("cryptographic operations", () => {
 ```
 
 #### Testing error conditions
+
 ```typescript
 it("should throw on invalid input", () => {
   expect(() => parseAddress("invalid")).toThrow("Invalid address format");
@@ -223,6 +240,7 @@ it("should return null for missing values", () => {
 ```
 
 #### Testing async operations
+
 ```typescript
 it("should complete async operation", async () => {
   const result = await asyncFunction();

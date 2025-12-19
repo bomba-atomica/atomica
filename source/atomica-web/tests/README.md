@@ -3,6 +3,7 @@
 ## TL;DR - For AI Agents
 
 **DO:**
+
 - ✅ Run meta tests using: `npx vitest run --config vitest.config.nodejs.ts tests/meta/`
 - ✅ Run browser tests using: `npm test` (default)
 - ✅ Use `WEB_DIR = pathResolve(TEST_SETUP_DIR, "..")` to point to `atomica-web/` directory
@@ -14,6 +15,7 @@
 - ✅ Add 1-2 second delays after funding for indexing: `await new Promise(r => setTimeout(r, 1000))`
 
 **DON'T:**
+
 - ❌ Don't use `pathResolve(TEST_SETUP_DIR, "../..")` - this points to wrong directory!
 - ❌ Don't run meta tests with default `npm test` - they're excluded from browser config
 - ❌ Don't run tests in parallel if they use localnet - ports will conflict
@@ -78,6 +80,7 @@ Infrastructure validation tests that verify the testing setup works correctly. T
 - Document expected gas costs and behaviors
 
 **Why Node.js?**
+
 - Direct access to filesystem and child processes
 - Can spawn and manage Aptos CLI commands
 - Faster execution without browser overhead
@@ -115,8 +118,9 @@ End-to-end tests that verify feature flows:
 - Test full user flows
 
 **Browser commands** from `test-utils/browser-commands.ts`:
+
 ```typescript
-import { commands } from 'vitest/browser';
+import { commands } from "vitest/browser";
 await commands.setupLocalnet();
 await commands.fundAccount(address, amount);
 await commands.deployContracts();
@@ -179,27 +183,32 @@ React component tests using React Testing Library:
 ## Running Tests
 
 ### All browser tests (default)
+
 ```bash
 npm test
 ```
 
 ### Meta tests only
+
 ```bash
 npx vitest run --config vitest.config.nodejs.ts tests/meta/
 ```
 
 ### Specific test file
+
 ```bash
 npm test -- tests/unit/ibe.test.ts
 npx vitest run --config vitest.config.nodejs.ts tests/meta/localnet.test.ts
 ```
 
 ### Watch mode
+
 ```bash
 npm test -- --watch
 ```
 
 ### With verbose output
+
 ```bash
 npm test -- --reporter=verbose
 ```
@@ -209,6 +218,7 @@ npm test -- --reporter=verbose
 ### Overview
 
 Many tests require a local Aptos blockchain (localnet) running on:
+
 - **Port 8080**: Aptos node API
 - **Port 8081**: Faucet service
 
@@ -219,7 +229,11 @@ Many tests require a local Aptos blockchain (localnet) running on:
 Direct access to localnet utilities:
 
 ```typescript
-import { setupLocalnet, fundAccount, runAptosCmd } from "../../test-utils/localnet";
+import {
+  setupLocalnet,
+  fundAccount,
+  runAptosCmd,
+} from "../../test-utils/localnet";
 
 describe.sequential("My Test", () => {
   beforeAll(async () => {
@@ -239,7 +253,7 @@ describe.sequential("My Test", () => {
 Use browser commands that proxy to Node.js:
 
 ```typescript
-import { commands } from 'vitest/browser';
+import { commands } from "vitest/browser";
 
 describe.sequential("My Browser Test", () => {
   beforeAll(async () => {
@@ -261,12 +275,14 @@ describe.sequential("My Browser Test", () => {
 #### The Problem
 
 Browser tests run in a real Chromium browser (via Playwright) to test:
+
 - React component rendering (requires real DOM)
 - Wallet integration (requires `window.ethereum`)
 - UI interactions (requires real browser events)
 - Browser-side SDK usage (requires browser APIs)
 
 However, certain operations **CANNOT** run in a browser:
+
 - Starting/stopping localnet (requires spawning child processes)
 - Running Aptos CLI commands (requires filesystem and process access)
 - Funding accounts via faucet (requires server-side HTTP requests)
@@ -308,7 +324,7 @@ Vitest's browser mode provides a **Remote Procedure Call (RPC)** mechanism that 
 #### Available Browser Commands
 
 ```typescript
-import { commands } from 'vitest/browser';
+import { commands } from "vitest/browser";
 
 // Start localnet on ports 8080/8081 (runs in Node.js)
 await commands.setupLocalnet();
@@ -320,41 +336,49 @@ await commands.fundAccount("0x123...", 1_000_000_000);
 await commands.deployContracts();
 
 // Run arbitrary Aptos CLI command (runs in Node.js)
-const result = await commands.runAptosCmd(["move", "compile", "--package-dir", "..."]);
+const result = await commands.runAptosCmd([
+  "move",
+  "compile",
+  "--package-dir",
+  "...",
+]);
 ```
 
 #### Why This Architecture?
 
 **Test flow control stays in browser** because:
+
 - Need real DOM for React component testing
 - Need `window.ethereum` for wallet integration testing
 - Need real browser events for UI interaction testing
 - Need browser APIs for frontend SDK testing
 
 **Certain operations delegate to Node.js** because:
+
 - Browsers cannot spawn child processes
 - Browsers cannot access filesystem directly
 - Browsers cannot run CLI tools
 - Browsers have security restrictions on system access
 
 **Browser commands bridge the gap** by:
+
 - Keeping test logic in browser context
 - Delegating infrastructure operations to Node.js via RPC
 - Returning results back to browser for assertions
 
 #### Comparison: Browser Tests vs Meta Tests
 
-| Aspect | Browser Tests (vitest.config.ts) | Meta Tests (vitest.config.nodejs.ts) |
-|--------|----------------------------------|--------------------------------------|
-| **Execution Environment** | Chromium browser | Node.js process |
-| **Test Flow Control** | Runs in browser | Runs in Node.js |
-| **Infrastructure Ops** | Delegates to Node.js via RPC | Runs directly in Node.js |
-| **Import Pattern** | `import { commands } from 'vitest/browser'` | `import { setupLocalnet } from "../../test-utils/localnet"` |
-| **Use Case** | Testing application code (React, wallet, UI) | Testing infrastructure (localnet, SDK, platform) |
-| **Access to DOM** | ✅ Yes (real browser) | ❌ No |
-| **Access to window.ethereum** | ✅ Yes (can inject mock) | ❌ No |
-| **Access to child_process** | Via commands (RPC to Node.js) | ✅ Yes (direct) |
-| **Access to filesystem** | Via commands (RPC to Node.js) | ✅ Yes (direct) |
+| Aspect                        | Browser Tests (vitest.config.ts)             | Meta Tests (vitest.config.nodejs.ts)                        |
+| ----------------------------- | -------------------------------------------- | ----------------------------------------------------------- |
+| **Execution Environment**     | Chromium browser                             | Node.js process                                             |
+| **Test Flow Control**         | Runs in browser                              | Runs in Node.js                                             |
+| **Infrastructure Ops**        | Delegates to Node.js via RPC                 | Runs directly in Node.js                                    |
+| **Import Pattern**            | `import { commands } from 'vitest/browser'`  | `import { setupLocalnet } from "../../test-utils/localnet"` |
+| **Use Case**                  | Testing application code (React, wallet, UI) | Testing infrastructure (localnet, SDK, platform)            |
+| **Access to DOM**             | ✅ Yes (real browser)                        | ❌ No                                                       |
+| **Access to window.ethereum** | ✅ Yes (can inject mock)                     | ❌ No                                                       |
+| **Access to child_process**   | Via commands (RPC to Node.js)                | ✅ Yes (direct)                                             |
+| **Access to filesystem**      | Via commands (RPC to Node.js)                | ✅ Yes (direct)                                             |
 
 #### Example: Full Browser Test Flow
 
@@ -396,6 +420,7 @@ describe.sequential("Wallet Integration Test", () => {
 ```
 
 In this example:
+
 - **Lines 6-8**: Infrastructure setup (runs in Node.js via RPC)
 - **Lines 11-12**: Test logic in browser
 - **Line 15**: Infrastructure operation (runs in Node.js via RPC)
@@ -411,15 +436,18 @@ import { setupLocalnet, fundAccount } from "./localnet";
 
 // The BrowserCommand type tells Vitest to expose this to browser tests
 export const setupLocalnetCommand: BrowserCommand<[]> = async () => {
-  await setupLocalnet();  // This runs in Node.js
+  await setupLocalnet(); // This runs in Node.js
   return { success: true }; // Result sent back to browser
 };
 
-export const fundAccountCommand: BrowserCommand<[string, number?]> =
-  async (_context, address: string, amount: number = 100_000_000) => {
-    const txHash = await fundAccount(address, amount);
-    return { success: true, txHash };
-  };
+export const fundAccountCommand: BrowserCommand<[string, number?]> = async (
+  _context,
+  address: string,
+  amount: number = 100_000_000,
+) => {
+  const txHash = await fundAccount(address, amount);
+  return { success: true, txHash };
+};
 ```
 
 These are then registered in `vitest.config.ts`:
@@ -429,12 +457,12 @@ export default defineConfig({
   test: {
     browser: {
       commands: {
-        setupLocalnet: setupLocalnetCommand,  // Exposed to browser as commands.setupLocalnet()
-        fundAccount: fundAccountCommand,      // Exposed to browser as commands.fundAccount()
+        setupLocalnet: setupLocalnetCommand, // Exposed to browser as commands.setupLocalnet()
+        fundAccount: fundAccountCommand, // Exposed to browser as commands.fundAccount()
         // ... other commands
-      }
-    }
-  }
+      },
+    },
+  },
 });
 ```
 
@@ -464,6 +492,7 @@ const WEB_DIR = pathResolve(TEST_SETUP_DIR, "../..");
 ```
 
 This is critical because:
+
 - `runAptosCmd` uses `WEB_DIR` as default working directory
 - Contract paths like `../atomica-move-contracts` are resolved relative to `WEB_DIR`
 - Wrong path = "Unable to find package manifest" errors
@@ -536,11 +565,11 @@ const account = Account.generate();
 await fundAccount(account.accountAddress.toString(), 1_000_000_000); // 10 APT
 
 // Wait for indexing
-await new Promise(r => setTimeout(r, 1000));
+await new Promise((r) => setTimeout(r, 1000));
 
 // Check balance
 const balance = await aptos.getAccountAPTAmount({
-  accountAddress: account.accountAddress
+  accountAddress: account.accountAddress,
 });
 ```
 
@@ -686,6 +715,7 @@ npm test
 ### 1. Test Isolation
 
 Each test should be completely independent:
+
 - Generate new random accounts
 - Don't rely on state from previous tests
 - Clean up resources in `afterAll` (if needed)
@@ -693,6 +723,7 @@ Each test should be completely independent:
 ### 2. Clear Logging
 
 Help future developers debug:
+
 ```typescript
 console.log(`Deployer address: ${deployer.accountAddress.toString()}`);
 console.log(`Starting balance: ${balance}`);
@@ -702,6 +733,7 @@ console.log(`Gas used: ${gasUsed} octas`);
 ### 3. Document Behaviors
 
 Explain what the test verifies and why:
+
 ```typescript
 /**
  * Test: FakeEth Minting
@@ -719,6 +751,7 @@ Explain what the test verifies and why:
 ### 4. Use Sequential Execution
 
 Always use `describe.sequential()` for tests using localnet:
+
 ```typescript
 describe.sequential("My Test", () => {
   // ... tests
@@ -728,13 +761,14 @@ describe.sequential("My Test", () => {
 ### 5. Handle Timing
 
 Blockchain operations take time:
+
 ```typescript
 // After funding
-await new Promise(r => setTimeout(r, 1000));
+await new Promise((r) => setTimeout(r, 1000));
 
 // After transactions
 await aptos.waitForTransaction({ transactionHash });
-await new Promise(r => setTimeout(r, 1000));
+await new Promise((r) => setTimeout(r, 1000));
 ```
 
 ## Contributing

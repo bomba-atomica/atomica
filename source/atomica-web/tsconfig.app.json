@@ -1,139 +1,24 @@
 {
-  /**
-   * TypeScript Configuration - Browser/Application Code
-   *
-   * This configuration is for CODE THAT RUNS IN THE BROWSER.
-   *
-   * WHAT THIS COMPILES:
-   * - src/ directory (all application code)
-   * - React components
-   * - UI logic
-   * - Browser-side SDK usage
-   * - Frontend utilities
-   *
-   * ENVIRONMENT: Browser (Chromium, Firefox, Safari)
-   * TARGET: Modern browsers supporting ES2022
-   *
-   * IMPORTANT FOR AI AGENTS:
-   *
-   * 1. This config is for BROWSER CODE ONLY
-   *    - ✅ React components (src/components/)
-   *    - ✅ Browser utilities (src/lib/)
-   *    - ✅ Frontend pages (src/pages/)
-   *    - ✅ Browser-side state management
-   *    - ❌ Node.js tooling (use tsconfig.node.json instead)
-   *    - ❌ Test utilities (handled by Vitest)
-   *    - ❌ Build scripts (use tsconfig.node.json instead)
-   *
-   * 2. AVAILABLE GLOBALS
-   *    - window, document, DOM APIs (from "lib": ["DOM", "DOM.Iterable"])
-   *    - Modern JavaScript features (from "lib": ["ES2022"])
-   *    - Vite client types (import.meta.env, etc.)
-   *    - NO Node.js globals (no process, __dirname, require, etc.)
-   *
-   * 3. When adding new files to src/:
-   *    - They're automatically included (no config change needed)
-   *    - Use browser APIs freely (window, document, fetch, etc.)
-   *    - Don't import Node.js modules (fs, path, child_process, etc.)
-   *
-   * KEY COMPILER OPTIONS EXPLAINED:
-   *
-   * "target": "ES2022"
-   *   - Output JavaScript compatible with ES2022
-   *   - Modern browsers (Chrome 94+, Firefox 93+, Safari 15.4+)
-   *   - Supports: async/await, optional chaining, nullish coalescing, etc.
-   *
-   * "lib": ["ES2022", "DOM", "DOM.Iterable"]
-   *   - ES2022: Modern JavaScript features
-   *   - DOM: Browser APIs (window, document, Element, etc.)
-   *   - DOM.Iterable: Iteration over DOM collections (NodeList, HTMLCollection)
-   *
-   * "module": "ESNext"
-   *   - Use latest ES module features
-   *   - import/export syntax
-   *   - Dynamic imports supported
-   *
-   * "types": ["vite/client"]
-   *   - Vite-specific types (import.meta.env, import.meta.hot, etc.)
-   *   - Enables TypeScript to understand Vite's special globals
-   *
-   * "jsx": "react-jsx"
-   *   - Use React 17+ JSX transform
-   *   - No need to import React in every file
-   *   - Automatically transforms JSX to React.createElement
-   *
-   * BUNDLER MODE OPTIONS:
-   *
-   * "moduleResolution": "bundler"
-   *   - Vite/bundler-aware module resolution
-   *   - Understands package.json "exports" field
-   *   - Resolves .ts/.tsx extensions correctly
-   *
-   * "allowImportingTsExtensions": true
-   *   - Can import .ts/.tsx files directly
-   *   - Example: import { Foo } from './Foo.tsx'
-   *   - Vite handles the compilation
-   *
-   * "noEmit": true
-   *   - TypeScript doesn't output files
-   *   - Vite handles transpilation and bundling
-   *   - This is just for type checking
-   *
-   * STRICT TYPE CHECKING:
-   *
-   * "strict": true
-   *   - Enables all strict type-checking options
-   *   - noImplicitAny, strictNullChecks, strictFunctionTypes, etc.
-   *   - Catches more errors at compile time
-   *
-   * "noUnusedLocals": true
-   *   - Error on unused local variables
-   *   - Helps keep code clean
-   *
-   * "noUnusedParameters": true
-   *   - Error on unused function parameters
-   *   - Prefix with _ to explicitly mark as unused: (_param) => {}
-   *
-   * "noFallthroughCasesInSwitch": true
-   *   - Error on switch cases that fall through without break/return
-   *   - Catches common bugs
-   *
-   * BUILD INFO:
-   *
-   * "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo"
-   *   - Stores incremental build information
-   *   - Speeds up subsequent type checks
-   *   - Stored in node_modules/.tmp (gitignored)
-   *
-   * RELATIONSHIP TO OTHER CONFIGS:
-   *
-   * - tsconfig.json (root) - References this config
-   * - tsconfig.node.json - For Node.js tooling (vite.config.ts, etc.)
-   * - vitest.config.ts - Test configuration (separate from this)
-   *
-   * SEE ALSO:
-   * - tsconfig.json - Root configuration with project references
-   * - tsconfig.node.json - Node.js tooling configuration
-   * - vite.config.ts - Vite build configuration
-   */
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "target": "ES2022",
     "useDefineForClassFields": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
-    "types": ["vite/client"],
+    "types": [
+      "vite/client"
+    ],
     "skipLibCheck": true,
-
-    /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
-
-    /* Linting */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -141,5 +26,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }
