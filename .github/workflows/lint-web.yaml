@@ -1,0 +1,81 @@
+name: Lint Web
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'source/atomica-web/**'
+      - '.github/workflows/lint-web.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'source/atomica-web/**'
+      - '.github/workflows/lint-web.yaml'
+  workflow_dispatch:
+
+jobs:
+  eslint:
+    name: ESLint Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd source/atomica-web
+          npm install
+
+      - name: Run ESLint
+        run: |
+          cd source/atomica-web
+          npm run lint
+
+  prettier:
+    name: Prettier Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd source/atomica-web
+          npm install
+
+      - name: Check Prettier formatting
+        run: |
+          cd source/atomica-web
+          npm run format:check
+
+  typescript:
+    name: TypeScript Compilation Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd source/atomica-web
+          npm install
+
+      - name: Check TypeScript compilation
+        run: |
+          cd source/atomica-web
+          npx tsc --noEmit

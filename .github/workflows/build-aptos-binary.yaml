@@ -1,0 +1,139 @@
+name: Build and Cache Aptos Binary
+
+on:
+  workflow_call:
+    outputs:
+      cache-key:
+        description: "Cache key for the aptos binary"
+        value: ${{ jobs.build-aptos.outputs.cache-key }}
+      binary-path:
+        description: "Path to the cached aptos binary"
+        value: ${{ jobs.build-aptos.outputs.binary-path }}
+
+jobs:
+  build-aptos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      cache-key: ${{ steps.cache-info.outputs.cache-key }}
+      binary-path: ${{ steps.cache-info.outputs.binary-path }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          # free up space for the build
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Get zapatos commit hash
+        id: zapatos-commit
+        run: |
+          cd source/zapatos
+          ZAPATOS_HASH=$(git rev-parse HEAD)
+          echo "hash=$ZAPATOS_HASH" >> $GITHUB_OUTPUT
+          echo "Zapatos commit: $ZAPATOS_HASH"
+
+      - name: Set cache info
+        id: cache-info
+        run: |
+          CACHE_KEY="aptos-binary-${{ runner.os }}-${{ steps.zapatos-commit.outputs.hash }}"
+          BINARY_PATH="${{ github.workspace }}/bin/aptos"
+          echo "cache-key=$CACHE_KEY" >> $GITHUB_OUTPUT
+          echo "binary-path=$BINARY_PATH" >> $GITHUB_OUTPUT
+          echo "Cache key: $CACHE_KEY"
+          echo "Binary path: $BINARY_PATH"
+
+      - name: Check binary cache
+        id: cache-check
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.cache-info.outputs.binary-path }}
+          key: ${{ steps.cache-info.outputs.cache-key }}
+          lookup-only: true
+
+      - name: Setup Rust toolchain
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: |
+          rustup default stable
+          rustup update stable
+
+      - name: Restore warmup cache
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            source/zapatos/target
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-warmup-large-${{ hashFiles('source/zapatos/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-warmup-large-
+            ${{ runner.os }}-cargo-warmup-medium-
+            ${{ runner.os }}-cargo-warmup-small-
+
+      - name: Setup Rust cache
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "source/zapatos"
+          key: ${{ steps.zapatos-commit.outputs.hash }}
+          cache-on-failure: true
+
+      - name: Install build dependencies
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libssl-dev pkg-config libclang-dev cmake lld libudev-dev libdw-dev
+
+      - name: Build aptos binary
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        env:
+          RUSTC_WRAPPER: ""
+        run: |
+          cd source/zapatos
+          echo "Building aptos binary from zapatos commit: ${{ steps.zapatos-commit.outputs.hash }}"
+          cargo build -p aptos --release --features testing
+
+          # Create bin directory and copy binary
+          mkdir -p ${{ github.workspace }}/bin
+          cp target/release/aptos ${{ steps.cache-info.outputs.binary-path }}
+          chmod +x ${{ steps.cache-info.outputs.binary-path }}
+
+          # Verify binary
+          ${{ steps.cache-info.outputs.binary-path }} --version
+
+      - name: Save binary to cache
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.cache-info.outputs.binary-path }}
+          key: ${{ steps.cache-info.outputs.cache-key }}
+
+      - name: Restore from cache
+        if: steps.cache-check.outputs.cache-hit == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.cache-info.outputs.binary-path }}
+          key: ${{ steps.cache-info.outputs.cache-key }}
+
+      - name: Verify cached binary
+        run: |
+          if [ -f "${{ steps.cache-info.outputs.binary-path }}" ]; then
+            chmod +x ${{ steps.cache-info.outputs.binary-path }}
+            echo "✓ Aptos binary found (cached: ${{ steps.cache-check.outputs.cache-hit == 'true' }})"
+            ${{ steps.cache-info.outputs.binary-path }} --version
+          else
+            echo "✗ Aptos binary not found!"
+            exit 1
+          fi

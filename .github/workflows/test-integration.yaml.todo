@@ -1,0 +1,91 @@
+name: Test Integration
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  setup-aptos:
+    name: Setup Aptos Binary
+    uses: ./.github/workflows/build-aptos-binary.yaml
+
+  test-crosschain:
+    name: Crosschain Integration Tests
+    runs-on: ubuntu-latest
+    needs: setup-aptos
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache: true
+
+      - name: Restore aptos binary from cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ needs.setup-aptos.outputs.binary-path }}
+          key: ${{ needs.setup-aptos.outputs.cache-key }}
+          fail-on-cache-miss: true
+
+      - name: Add aptos to PATH
+        run: |
+          mkdir -p $HOME/.local/bin
+          cp ${{ needs.setup-aptos.outputs.binary-path }} $HOME/.local/bin/aptos
+          chmod +x $HOME/.local/bin/aptos
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Verify aptos binary
+        run: aptos --version
+
+      - name: Run crosschain integration tests
+        run: |
+          cd source/atomica-crosschain-testing
+          cargo test --all-features
+
+  test-tx-debugger:
+    name: Transaction Debugger Tests
+    runs-on: ubuntu-latest
+    needs: setup-aptos
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache: true
+
+      - name: Restore aptos binary from cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ needs.setup-aptos.outputs.binary-path }}
+          key: ${{ needs.setup-aptos.outputs.cache-key }}
+          fail-on-cache-miss: true
+
+      - name: Add aptos to PATH
+        run: |
+          mkdir -p $HOME/.local/bin
+          cp ${{ needs.setup-aptos.outputs.binary-path }} $HOME/.local/bin/aptos
+          chmod +x $HOME/.local/bin/aptos
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Verify aptos binary
+        run: aptos --version
+
+      - name: Run transaction debugger tests
+        run: |
+          cd source/atomica-tx-debugger
+          cargo test --all-features
