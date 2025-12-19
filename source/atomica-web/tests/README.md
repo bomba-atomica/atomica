@@ -219,8 +219,8 @@ npm test -- --reporter=verbose
 
 Many tests require a local Aptos blockchain (localnet) running on:
 
-- **Port 8080**: Aptos node API
-- **Port 8081**: Faucet service
+- **Port 8080**: Aptos node API (default)
+- **Port 8081**: Faucet service (default)
 
 ### Two Ways to Use Localnet
 
@@ -513,7 +513,7 @@ describe("My Localnet Test", () => {
 });
 ```
 
-**Why?** Localnet binds to fixed ports (8080, 8081). Running tests in parallel causes port conflicts.
+**Why?** Localnet defaults to ports 8080/8081. Running tests in parallel may cause conflicts if using default ports.
 
 ## Test Utilities
 
@@ -522,7 +522,7 @@ describe("My Localnet Test", () => {
 Core localnet management for Node.js tests:
 
 - `setupLocalnet()` - Start localnet and wait for readiness
-- `teardownLocalnet()` - Stop localnet (usually skipped in persistent mode)
+- `teardownLocalnet()` - Stop localnet
 - `killZombies()` - Clean up zombie processes and free ports
 - `fundAccount(address, amount)` - Fund account via faucet
 - `deployContracts()` - Deploy Atomica contracts
@@ -680,8 +680,10 @@ expect(gasUsed).toBeGreaterThan(0);
 ### Port Conflicts
 
 ```bash
-# Kill zombie processes
-pkill -f 'aptos'
+# Kill zombie processes (specific to avoid side effects)
+pkill -f 'aptos node'
+pkill -f 'aptos move'
+pkill -f 'aptos init'
 
 # Wait for ports to free
 sleep 2

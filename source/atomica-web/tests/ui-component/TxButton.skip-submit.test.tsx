@@ -147,14 +147,14 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     );
 
     // Open dropdown
-    const dropdownBtn = screen.getByRole("button", { name: "" });
+    const dropdownBtn = screen.getByTestId("tx-button-dropdown");
     fireEvent.click(dropdownBtn);
 
     // Click Skip & Submit
     await waitFor(() => {
-      expect(screen.getByText("Skip & Submit")).toBeInTheDocument();
+      expect(screen.getByTestId("tx-button-skip-submit")).toBeInTheDocument();
     });
-    const skipSubmitBtn = screen.getByText("Skip & Submit");
+    const skipSubmitBtn = screen.getByTestId("tx-button-skip-submit");
     fireEvent.click(skipSubmitBtn);
 
     // Should go directly to submitting without showing "ready" state
@@ -200,14 +200,14 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
       );
 
       // Open dropdown and click Skip & Submit
-      const dropdownBtn = screen.getByRole("button", { name: "" });
+      const dropdownBtn = screen.getByTestId("tx-button-dropdown");
       fireEvent.click(dropdownBtn);
 
       await waitFor(() => {
-        expect(screen.getByText("Skip & Submit")).toBeInTheDocument();
+        expect(screen.getByTestId("tx-button-skip-submit")).toBeInTheDocument();
       });
 
-      const skipSubmitBtn = screen.getByText("Skip & Submit");
+      const skipSubmitBtn = screen.getByTestId("tx-button-skip-submit");
       fireEvent.click(skipSubmitBtn);
 
       // Wait for success
@@ -221,8 +221,8 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
       expect(txHash).toBeTruthy();
       txHashes.push(txHash!);
 
+      // Cleanup for next iteration
       unmount();
-      document.body.innerHTML = "";
     }
 
     console.log("All transactions completed:", txHashes);
