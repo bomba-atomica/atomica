@@ -1,22 +1,10 @@
-// @vitest-environment happy-dom
-import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { AccountStatus } from "../../src/components/AccountStatus";
-import { setupLocalnet, teardownLocalnet } from "../node-utils/localnet";
+import { commands } from "vitest/browser";
 import { MockWallet } from "../browser-utils/MockWallet";
-import nodeFetch from "node-fetch";
 import { useTokenBalances } from "../../src/hooks/useTokenBalances";
-
-// Polyfill fetch for happy-dom environment to allow localhost connections
-global.fetch = nodeFetch as any;
-window.fetch = nodeFetch as any;
-
-// Verification: Is fetch patched?
-console.log(
-  "Fetch implementation:",
-  global.fetch.name || global.fetch.toString(),
-);
 
 describe.sequential("AccountStatus Integration", () => {
   const TEST_PK =
@@ -25,18 +13,12 @@ describe.sequential("AccountStatus Integration", () => {
 
   beforeAll(async () => {
     console.log("Starting Localnet...");
-    await setupLocalnet();
-  }, 120000); // Allow time for localnet startup
+    // Use browser command shortcuts
+    await commands.setupLocalnet();
+    await commands.deployContracts();
+  }, 120000);
 
-  afterAll(async () => {
-    console.log("Stopping Localnet...");
-    await teardownLocalnet();
-  });
-
-  afterEach(() => {
-    // Clean up DOM
-    document.body.innerHTML = "";
-  });
+  // Note: No afterAll teardown - globalSetup handles lifecycle
 
   describe.sequential("Without funded account", () => {
     it("should show 'account not found' warning when account doesn't exist", async () => {

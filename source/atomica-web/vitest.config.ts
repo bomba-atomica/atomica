@@ -44,6 +44,7 @@ export default defineConfig({
     include: [
       "tests/ui-component/**/*.test.{ts,tsx}",
       "tests/integration/sanity/localnet.test.ts",
+      "tests/integration/sanity/transfer.test.ts",
     ],
 
     // Exclude node-utils and tests that require Node.js modules
@@ -53,7 +54,6 @@ export default defineConfig({
     exclude: [
       "tests/node-utils/**",
       "**/node_modules/**",
-      "tests/ui-component/AccountStatus.integration.test.tsx",
       "tests/ui-component/TxButton.simulate-submit.test.tsx",
     ],
   },

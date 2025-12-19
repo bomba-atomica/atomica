@@ -1,10 +1,6 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import {
-  setupLocalnet,
-  teardownLocalnet,
-  fundAccount,
-} from "../../node-utils/localnet";
+import { describe, it, expect, beforeAll } from "vitest";
+import { commands } from "vitest/browser";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 
 /**
@@ -14,6 +10,10 @@ import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
  * This test verifies that the basic APT transfer functionality works correctly
  * on the local testnet. It demonstrates the fundamental transaction flow that
  * most applications will use: funding an account and transferring tokens to another.
+ * 
+ * NOTE: This test uses browser commands to orchestrate Node.js actions (setup, funding)
+ * even though it's marked as a Node environment test, because it runs within the
+ * browser-enabled Vitest configuration.
  *
  * What the test does:
  * 1. Generates two new Ed25519 accounts (Alice as sender, Bob as recipient)
@@ -57,12 +57,11 @@ const aptos = new Aptos(config);
 
 describe.sequential("Simple APT Transfer", () => {
   beforeAll(async () => {
-    await setupLocalnet();
+    // Use browser command to setup localnet (idempotent)
+    await commands.setupLocalnet();
   }, 120000);
 
-  afterAll(async () => {
-    await teardownLocalnet();
-  });
+  // Note: No afterAll teardown - globalSetup handles lifecycle
 
   it("should perform a simple transfer", async () => {
     console.log("Starting transfer test...");
@@ -87,7 +86,7 @@ describe.sequential("Simple APT Transfer", () => {
 
     // Fund Alice with 1 billion octas (10 APT)
     console.log("Funding Alice...");
-    await fundAccount(alice.accountAddress.toString(), 1_000_000_000);
+    await commands.fundAccount(alice.accountAddress.toString(), 1_000_000_000);
 
     // Wait a moment for the funding to be indexed
     await new Promise((r) => setTimeout(r, 1000));
