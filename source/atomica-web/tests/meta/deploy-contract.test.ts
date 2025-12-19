@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { setupLocalnet, fundAccount, runAptosCmd } from "../../test-utils/localnet";
+import {
+  setupLocalnet,
+  fundAccount,
+  runAptosCmd,
+} from "../../test-utils/localnet";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 
 /**

@@ -36,7 +36,9 @@ describe.sequential("Localnet Health Check", () => {
     console.log("\n=== Localnet Health Check ===\n");
 
     // Step 1: Verify we can get ledger info (confirms ports are responding)
-    console.log("Step 1: Checking ledger info (verifies port 8080 responds)...");
+    console.log(
+      "Step 1: Checking ledger info (verifies port 8080 responds)...",
+    );
     const ledgerInfo = await aptos.getLedgerInfo();
     console.log(`Chain ID: ${ledgerInfo.chain_id}`);
     console.log(`Ledger version: ${ledgerInfo.ledger_version}`);
@@ -73,7 +75,9 @@ describe.sequential("Localnet Health Check", () => {
     console.log("✓ Port 8080 (fullnode API) responding");
     console.log("✓ Port 8081 (faucet) responding");
     console.log("✓ Chain ID is 4 (local testnet)");
-    console.log(`✓ Ledger is initialized (version: ${ledgerInfo.ledger_version})`);
+    console.log(
+      `✓ Ledger is initialized (version: ${ledgerInfo.ledger_version})`,
+    );
     console.log(`✓ API queries working (${resourceCount} resources found)`);
     console.log("✓ All systems operational!\n");
   }, 60000); // 60s timeout

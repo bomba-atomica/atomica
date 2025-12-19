@@ -38,9 +38,7 @@ export async function ibeEncrypt(
   const r = utils.randomPrivateKey(); // Returns 32 bytes random scalar
 
   // 4. U = r * P (Base G1)
-  const uPoint = PointG1.BASE.multiply(
-    BigInt(ethers.hexlify(r)),
-  );
+  const uPoint = PointG1.BASE.multiply(BigInt(ethers.hexlify(r)));
 
   // 5. Compute Pairing Metric
   // e(MPK, ID)^r = e(r*MPK, ID)

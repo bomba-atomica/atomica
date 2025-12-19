@@ -102,7 +102,11 @@ function findInPath(binaryName: string): string | null {
     // Find first path that doesn't include node_modules
     for (const path of paths) {
       const trimmedPath = path.trim();
-      if (trimmedPath && existsSync(trimmedPath) && !trimmedPath.includes("node_modules")) {
+      if (
+        trimmedPath &&
+        existsSync(trimmedPath) &&
+        !trimmedPath.includes("node_modules")
+      ) {
         return trimmedPath;
       }
     }

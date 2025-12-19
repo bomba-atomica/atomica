@@ -64,12 +64,16 @@ export async function killZombies() {
 
     // Retry loop to ensure ports are free
     const start = Date.now();
-    while (Date.now() - start < 10000) { // 10s timeout
+    while (Date.now() - start < 10000) {
+      // 10s timeout
       let busyPorts = [];
       for (const port of ports) {
         try {
           const { stdout } = await exec(`lsof -ti :${port} || true`);
-          const pids = stdout.trim().split("\n").filter((pid) => pid);
+          const pids = stdout
+            .trim()
+            .split("\n")
+            .filter((pid) => pid);
           if (pids.length > 0) {
             busyPorts.push(port);
             for (const pid of pids) {
@@ -84,7 +88,7 @@ export async function killZombies() {
 
       if (busyPorts.length === 0) {
         // Double check after a brief pause
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 500));
         // We could check again but let's assume if 0 found, we are good.
         // Actually, let's verify cleanliness.
         // If we found nothing, break.
@@ -118,7 +122,9 @@ export async function fundAccount(
 
   for (let i = 0; i < maxRetries; i++) {
     try {
-      console.log(`[fundAccount] Requesting ${amount} for ${address}... (Attempt ${i + 1}/${maxRetries})`);
+      console.log(
+        `[fundAccount] Requesting ${amount} for ${address}... (Attempt ${i + 1}/${maxRetries})`,
+      );
       return await new Promise<string>((resolve, reject) => {
         const req = http.request(
           `http://127.0.0.1:8081/mint?amount=${amount}&address=${address}`,
@@ -131,10 +137,14 @@ export async function fundAccount(
                 console.log(`[fundAccount] Success: ${data}`);
                 resolve(data);
               } else {
-                reject(new Error(`Funding failed with status: ${res.statusCode} Body: ${data}`));
+                reject(
+                  new Error(
+                    `Funding failed with status: ${res.statusCode} Body: ${data}`,
+                  ),
+                );
               }
             });
-          }
+          },
         );
         req.on("error", (e) => reject(e));
         req.end();
@@ -331,7 +341,6 @@ export async function setupLocalnet() {
   // Ensure framework bundle is built and up-to-date
   // await ensureFramework();
 
-
   const LOCAL_TEST_DIR = pathResolve(WEB_DIR, ".aptos/testnet");
   const TRACE_PATH = pathResolve(LOCAL_TEST_DIR, "trace.log");
   const VALIDATOR_LOG_PATH = pathResolve(LOCAL_TEST_DIR, "validator.log");
@@ -414,7 +423,9 @@ export async function setupLocalnet() {
     const status = await checkAllReadiness();
 
     if (status === true) {
-      console.log(`Localnet Started (Readiness OK after ${checkCount} checks).`);
+      console.log(
+        `Localnet Started (Readiness OK after ${checkCount} checks).`,
+      );
 
       // Decoupled: Tests must call deployContracts() explicitly if needed
       // Note: We no longer tail the validator log to reduce noise
