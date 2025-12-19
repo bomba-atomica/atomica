@@ -40,7 +40,7 @@ jobs:
       - name: Setup Rust Cache (Small)
         uses: Swatinem/rust-cache@v2
         with:
-          key: "zapatos"
+          shared-key: "zapatos"
           cache-on-failure: true
 
       - name: Build Small Deps
@@ -83,8 +83,7 @@ jobs:
   #     - name: Setup Rust Cache (Medium)
   #       uses: Swatinem/rust-cache@v2
   #       with:
-  #         workspaces: "source/zapatos"
-  #         key: "zapatos"
+  #         shared-key: "zapatos"
   #         cache-on-failure: true
 
   #     - name: Build Medium Deps
@@ -127,8 +126,7 @@ jobs:
   #     - name: Setup Rust Cache (Large)
   #       uses: Swatinem/rust-cache@v2
   #       with:
-  #         workspaces: "source/zapatos"
-  #         key: "zapatos"
+  #         shared-key: "zapatos"
   #         cache-on-failure: true
 
   #     - name: Build Large Deps

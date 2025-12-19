@@ -70,7 +70,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: "zapatos"
+          shared-key: "zapatos"
           cache-on-failure: true
 
       - name: Install build dependencies
