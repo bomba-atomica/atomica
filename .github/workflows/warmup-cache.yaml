@@ -1,6 +1,8 @@
 name: Warmup Rust Cache
 
 on:
+  push:
+    branches: [ci-cache]
   workflow_dispatch:
 
 jobs:
