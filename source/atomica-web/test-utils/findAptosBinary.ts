@@ -41,7 +41,7 @@ export function findAptosBinary(): string {
     candidates.push({ path: debugPath, mtime: stats.mtime });
   }
 
-  // Check user's $PATH
+  // Check user's $PATH (findInPath already filters out node_modules)
   const pathBinary = findInPath("aptos");
   if (pathBinary) {
     const stats = statSync(pathBinary);
@@ -84,20 +84,27 @@ export function findAptosBinary(): string {
 
 /**
  * Searches for a binary in the user's $PATH
+ * Skips node_modules wrappers and looks for the real CLI binary
  *
  * @param binaryName The name of the binary to find
  * @returns The absolute path to the binary, or null if not found
  */
 function findInPath(binaryName: string): string | null {
-  const result = spawnSync("which", [binaryName], {
+  // Use 'which -a' to get all matches, then filter out node_modules
+  const result = spawnSync("which", ["-a", binaryName], {
     encoding: "utf-8",
     stdio: "pipe",
   });
 
   if (result.status === 0 && result.stdout) {
-    const path = result.stdout.trim();
-    if (path && existsSync(path)) {
-      return path;
+    const paths = result.stdout.trim().split("\n");
+
+    // Find first path that doesn't include node_modules
+    for (const path of paths) {
+      const trimmedPath = path.trim();
+      if (trimmedPath && existsSync(trimmedPath) && !trimmedPath.includes("node_modules")) {
+        return trimmedPath;
+      }
     }
   }
 

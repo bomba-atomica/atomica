@@ -13,6 +13,7 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:ui": "vitest run tests/ui-component",
+    "test:meta": "vitest run --config vitest.config.nodejs.ts",
     "demo": "npx tsx scripts/orchestrator.ts"
   },
   "dependencies": {

@@ -7,7 +7,7 @@ import {
   deployContractsCommand,
   fundAccountCommand,
   runAptosCmdCommand,
-} from "./tests/node-utils/browser-commands";
+} from "./test-utils/browser-commands";
 
 export default defineConfig({
   plugins: [react()],
@@ -40,9 +40,9 @@ export default defineConfig({
       },
     },
 
-    // Include all test files in browser environment
+    // Include all test files in browser environment (except meta tests which run in Node.js)
     include: ["tests/**/*.test.{ts,tsx}"],
 
-    exclude: ["tests/node-utils/**", "**/node_modules/**"],
+    exclude: ["tests/meta/**", "test-utils/**", "**/node_modules/**"],
   },
 });

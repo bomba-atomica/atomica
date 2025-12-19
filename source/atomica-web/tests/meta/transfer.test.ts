@@ -1,8 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { commands } from "vitest/browser";
+import { setupLocalnet, fundAccount } from "../../test-utils/localnet";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 
-// ... (keep docs)
+/**
+ * Test: Simple APT Transfer
+ * Meta test running in Node.js environment to verify localnet infrastructure
+ */
 
 const config = new AptosConfig({
   network: Network.CUSTOM,
@@ -13,12 +16,11 @@ const aptos = new Aptos(config);
 
 describe.sequential("Simple APT Transfer", () => {
   beforeAll(async () => {
-    // Use browser command to setup localnet (idempotent)
-    await commands.setupLocalnet();
+    await setupLocalnet();
   }, 120000);
 
   afterAll(async () => {
-    await commands.teardownLocalnet();
+    // No teardown in persistent mode
   });
 
   it("should perform a simple transfer", async () => {
@@ -44,7 +46,7 @@ describe.sequential("Simple APT Transfer", () => {
 
     // Fund Alice with 1 billion octas (10 APT)
     console.log("Funding Alice...");
-    await commands.fundAccount(alice.accountAddress.toString(), 1_000_000_000);
+    await fundAccount(alice.accountAddress.toString(), 1_000_000_000);
 
     // Wait a moment for the funding to be indexed
     await new Promise((r) => setTimeout(r, 1000));

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { commands } from "vitest/browser";
+import { setupLocalnet, fundAccount } from "../../test-utils/localnet";
 import {
   Aptos,
   AptosConfig,
@@ -12,7 +12,7 @@ import {
 
 /**
  * Test: SECP256k1 Account Creation and Usage
- * ...
+ * Meta test running in Node.js environment to verify localnet infrastructure
  */
 
 const config = new AptosConfig({
@@ -24,11 +24,11 @@ const aptos = new Aptos(config);
 
 describe.sequential("SECP256k1 Account Creation and Usage", () => {
   beforeAll(async () => {
-    await commands.setupLocalnet();
+    await setupLocalnet();
   }, 120000);
 
   afterAll(async () => {
-    await commands.teardownLocalnet();
+    // No teardown in persistent mode
   });
 
   it("should create SECP256k1 account, receive transfer, and send back", async () => {
@@ -71,7 +71,7 @@ describe.sequential("SECP256k1 Account Creation and Usage", () => {
 
     // Step 3: Fund Alice
     console.log("\nStep 3: Funding Alice with 1 billion octas (10 APT)...");
-    await commands.fundAccount(alice.accountAddress.toString(), 1_000_000_000);
+    await fundAccount(alice.accountAddress.toString(), 1_000_000_000);
     await new Promise((r) => setTimeout(r, 1000)); // Wait for indexing
 
     const aliceFundedBalance = await aptos.getAccountAPTAmount({

@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        type: [unit, integration, ui]
+        type: [unit, integration, ui, meta]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

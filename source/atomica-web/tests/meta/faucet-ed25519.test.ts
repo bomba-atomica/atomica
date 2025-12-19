@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { commands } from "vitest/browser";
+import { setupLocalnet, fundAccount } from "../../test-utils/localnet";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 
 /**
  * Test: Ed25519 Account Funding via Faucet
- * ...
+ * Meta test running in Node.js environment to verify localnet infrastructure
  */
 
 const config = new AptosConfig({
@@ -16,11 +16,11 @@ const aptos = new Aptos(config);
 
 describe.sequential("Ed25519 Faucet Funding", () => {
   beforeAll(async () => {
-    await commands.setupLocalnet();
+    await setupLocalnet();
   }, 120000);
 
   afterAll(async () => {
-    await commands.teardownLocalnet();
+    // No teardown in persistent mode
   });
 
   it("should fund an Ed25519 account via faucet", async () => {
@@ -35,8 +35,7 @@ describe.sequential("Ed25519 Faucet Funding", () => {
     console.log(`Initial balance: ${initialBalance} (should be 0)`);
     expect(initialBalance).toBe(0);
 
-    const result = await commands.fundAccount(alice.accountAddress.toString());
-    const faucetResponse = result.txHash;
+    const faucetResponse = await fundAccount(alice.accountAddress.toString());
     console.log("Funding request completed. Response:", faucetResponse);
 
     // Faucet returns array of txn hashes e.g. ["0x..."]

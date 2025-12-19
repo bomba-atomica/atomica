@@ -51,7 +51,7 @@ function registerCleanupHandlers() {
 // Adjust paths relative to this file's location
 const TEST_SETUP_DIR = dirname(fileURLToPath(import.meta.url));
 const APTOS_BIN = findAptosBinary();
-const WEB_DIR = pathResolve(TEST_SETUP_DIR, "../..");
+const WEB_DIR = pathResolve(TEST_SETUP_DIR, "..");
 
 export async function killZombies() {
   try {
@@ -403,23 +403,18 @@ export async function setupLocalnet() {
 
   console.log("Waiting for Localnet to be ready...");
   const start = Date.now();
+  let checkCount = 0;
+  let lastStatus = "";
+
   // Increase timeout to 5 minutes for debug builds
   while (Date.now() - start < 300000) {
     if (processExited) throw new Error("Localnet process exited prematurely");
 
-    // Parse Log Path
-    // We look for: 'Log file: "/path/to/validator.log"' in stdout
-    // But stdout is being piped to console directly in the listener above.
-    // We need to capture it in a variable too?
-    // Let's implement a cleaner way:
-    if (await checkAllReadiness()) {
-      console.log("Localnet Started (Readiness OK).");
+    checkCount++;
+    const status = await checkAllReadiness();
 
-      // Start tailing logs if we can guess the path or found it
-      // Default path is typically ~/.aptos/testnet/validator.log for local network
-      // Or relative to workspace if we didn't specify?
-      // "aptos node run-local-testnet" usually uses ~/.aptos/testnet
-      // Let's rely on standard location for now or try to parse
+    if (status === true) {
+      console.log(`Localnet Started (Readiness OK after ${checkCount} checks).`);
 
       // Decoupled: Tests must call deployContracts() explicitly if needed
       // Note: We no longer tail the validator log to reduce noise
@@ -430,6 +425,13 @@ export async function setupLocalnet() {
       setupComplete = true;
       return;
     }
+
+    // Only log status changes to reduce verbosity
+    if (status !== lastStatus) {
+      console.log(`[Readiness Check ${checkCount}] ${status}`);
+      lastStatus = status;
+    }
+
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   throw new Error("Localnet failed to start within 120s");
@@ -455,7 +457,7 @@ function checkPortReadiness(port: number, name: string): Promise<boolean> {
   });
 }
 
-async function checkAllReadiness() {
+async function checkAllReadiness(): Promise<boolean | string> {
   // Ensure both Node (8070 - readiness endpoint provided by localnet) and Faucet (8081) are up
   // Actually, run-local-testnet output says "Readiness endpoint: http://127.0.0.1:8070/"
   // Faucet is at 8081 /health or /
@@ -465,10 +467,15 @@ async function checkAllReadiness() {
   const apiReady = await checkPortReadiness(8080, "Node API");
   const faucetReady = await checkPortReadiness(8081, "Faucet");
 
-  if (apiReady && !faucetReady)
-    console.log("[Readiness] API OK, waiting for Faucet...");
-
-  return apiReady && faucetReady;
+  if (apiReady && faucetReady) {
+    return true;
+  } else if (apiReady && !faucetReady) {
+    return "API OK, waiting for Faucet...";
+  } else if (!apiReady && faucetReady) {
+    return "Faucet OK, waiting for API...";
+  } else {
+    return "Waiting for API and Faucet...";
+  }
 }
 
 export async function teardownLocalnet() {

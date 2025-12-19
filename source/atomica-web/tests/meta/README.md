@@ -1,12 +1,34 @@
-# Sanity Test Suite
+# Meta Test Suite
 
 ## Overview
 
-This directory contains **clean room tests** of the underlying Aptos platform features. These tests serve as:
+This directory contains **meta tests** that verify the testing infrastructure and platform dependencies. These tests run in a **Node.js environment** (not the browser) and serve as:
 
-1. **Reference implementations** - Examples of how to interact with core Aptos functionality
-2. **Sanity checks** - Verification that the local testnet and platform features work correctly
-3. **Documentation** - Living documentation of expected behavior and gas costs
+1. **Infrastructure validation** - Verification that localnet, Aptos CLI, and testing utilities work correctly
+2. **Dependency checks** - Confirmation that core Aptos SDK features function as expected
+3. **Reference implementations** - Clean examples of basic Aptos operations
+4. **Documentation** - Living documentation of expected behavior and gas costs
+
+## Why Node.js Tests?
+
+These tests intentionally run in Node.js rather than the browser environment because:
+
+- **They don't test production code** - These verify testing infrastructure, not application logic
+- **They require Node.js APIs** - Direct access to filesystem, child processes, and system utilities
+- **They manage localnet** - Starting/stopping Aptos localnet requires Node.js process control
+- **They're faster** - No browser overhead for infrastructure validation
+- **They're simpler** - No need for browser compatibility or DOM APIs
+
+**Production web application tests** (unit, integration, UI component) run in the browser environment using Playwright. Meta tests are specifically for infrastructure validation only.
+
+## Test Configuration
+
+Meta tests use a dedicated Vitest configuration:
+
+- **Config file**: `vitest.config.nodejs.ts`
+- **Environment**: Node.js (not browser)
+- **Execution**: Sequential (`fileParallelism: false`, `maxConcurrency: 1`)
+- **Run command**: `npm run test:meta`
 
 ## Philosophy
 
@@ -22,18 +44,31 @@ These tests follow **clean room testing** principles:
 ### 1. `localnet.test.ts`
 
 **Purpose**: Localnet health check
-**What it tests**: Verifies the local testnet starts correctly and has the expected configuration
+**What it tests**: Verifies the localnet infrastructure can start and respond correctly
 
 **Key assertions**:
 
+- Aptos binary can be found and executed
+- Localnet starts successfully on ports 8080 (API) and 8081 (faucet)
 - Chain ID is 4 (local testnet identifier)
-- Ledger info is accessible
+- Ledger is initialized and advancing
+- API endpoints respond to basic queries
+- Account resources can be queried
+
+**Platform behaviors documented**:
+
+- Localnet startup takes approximately 10-15 seconds
+- API becomes available before faucet during startup
+- Framework account (0x1) always exists with 50+ resources
+- Ledger version advances from genesis
 
 **Use this test to**:
 
-- Verify your development environment is set up correctly
+- Verify development environment is set up correctly
 - Debug localnet startup issues
-- Confirm network connectivity
+- Confirm Aptos CLI binary is accessible
+- Validate network connectivity
+- Test basic infrastructure before running other tests
 
 ---
 
@@ -151,7 +186,26 @@ These tests follow **clean room testing** principles:
 
 ---
 
-### 6. `secp256k1-account.test.ts`
+### 6. `deploy-atomica-contracts.test.ts`
+
+**Purpose**: Atomica contract deployment
+**What it tests**: Deploying the full Atomica contract suite
+
+**Key assertions**:
+
+- All Atomica modules deploy successfully
+- Modules contain expected functions
+- Deployment completes within gas budget
+
+**Use this test to**:
+
+- Verify contract compilation works
+- Test contract deployment process
+- Validate module structure
+
+---
+
+### 7. `secp256k1-account.test.ts`
 
 **Purpose**: SECP256k1 Ethereum-compatible account testing
 **What it tests**: Creating and using SECP256k1 accounts (Ethereum-compatible) on Aptos
@@ -197,108 +251,7 @@ These tests follow **clean room testing** principles:
 - Verify SECP256k1 key properties and signature verification
 - Understand differences between Aptos and Ethereum address derivation
 
-**Note**: This test uses direct SECP256k1 accounts. For account abstraction that allows signing with MetaMask/Ethereum wallets using SIWE (Sign-In with Ethereum), see the `ethereum_derivable_account` module in the zapatos codebase.
-
-**CRITICAL UX ISSUE - Address Mapping Requirement**:
-
-When SECP256k1 accounts are created using Ethereum private keys, the Aptos address differs from the Ethereum address due to different hash functions (SHA3-256 vs Keccak-256). This creates a significant user experience problem.
-
-**The Problem**:
-
-- User has Ethereum address: `0xABC123...`
-- Same private key on Aptos produces: `0xDEF456...` (completely different)
-- User expects their address to be the same across chains
-- Funds are NOT at the same address on both chains
-
-**Required Solution - Address Mapping System**:
-
-We need to implement a system to store, search, and identify the relationship between Ethereum addresses and their corresponding Aptos addresses:
-
-1. **STORAGE** - Store bidirectional mappings:
-   - Ethereum address (user's expected/familiar address)
-   - Aptos address (actual on-chain location)
-   - SECP256k1 public key
-   - Account creation timestamp
-   - Derivation method (direct SECP256k1 vs ethereum_derivable_account)
-
-2. **SEARCH** - Enable bidirectional lookups:
-   - ETH address → Aptos address (for user sending to Ethereum user)
-   - Aptos address → ETH address (for displaying familiar address)
-   - Public key → both addresses (for verification)
-
-3. **IDENTIFICATION** - Display strategy for users:
-   - Primary display: Ethereum address (what user recognizes)
-   - Secondary display: Aptos address (where funds actually are)
-   - Clear indication: "Your Ethereum wallet 0xABC... is mapped to Aptos address 0xDEF..."
-   - Visual distinction between the two addresses
-
-**Possible Implementation Approaches**:
-
-a) **On-chain registry** (Move module):
-
-- Pros: Decentralized, persistent, verifiable
-- Cons: Gas costs, limited query flexibility
-- Structure: `Table<EthAddress, AptosAddress>` and reverse mapping
-
-b) **Off-chain indexer** (Database):
-
-- Pros: Fast queries, rich search, no gas costs
-- Cons: Centralized, requires infrastructure
-- Tech: PostgreSQL with bidirectional indexes
-
-c) **Client-side storage** (LocalStorage/IndexedDB):
-
-- Pros: No backend needed, privacy
-- Cons: Loses data across devices/browsers, not shareable
-
-d) **Hybrid approach** (RECOMMENDED):
-
-- On-chain: Emit events when SECP256k1 accounts created
-- Off-chain: Indexer listens to events, builds searchable database
-- Client: Queries indexer for fast lookups, falls back to on-chain
-- Benefits: Best of both worlds - verifiable + performant
-
-**Data Schema Example**:
-
-```typescript
-interface AddressMapping {
-  ethereumAddress: string; // 0xABC... (20 bytes, Keccak-256 derived)
-  aptosAddress: string; // 0xDEF... (32 bytes, SHA3-256 derived)
-  publicKey: string; // SECP256k1 public key (65 bytes uncompressed)
-  derivationMethod: "secp256k1" | "ethereum_derivable_account";
-  createdAt: number; // Unix timestamp
-  firstTransactionHash: string; // First tx that created the account
-}
-```
-
-**API Requirements**:
-
-```typescript
-// Query functions needed
-getAptosByEthAddress(ethAddress: string): Promise<string>;
-getEthByAptosAddress(aptosAddress: string): Promise<string>;
-getMappingByPublicKey(publicKey: string): Promise<AddressMapping>;
-getAllMappingsForUser(): Promise<AddressMapping[]>;
-```
-
-**UI/UX Recommendations**:
-
-- Always show both addresses when relevant
-- Use color coding or icons to distinguish ETH vs Aptos addresses
-- Provide a "copy both addresses" button
-- Show warning when user first connects: "Your Aptos address will be different"
-- Include address mapping in account export/backup
-
-**Integration Points**:
-
-- Account creation flow (capture mapping immediately)
-- Wallet connection (lookup existing mapping)
-- Transaction display (show both sender/receiver addresses)
-- Balance queries (translate between address formats)
-
-This specification is critical for maintaining good UX when onboarding Ethereum users to Aptos with their existing wallets and private keys.
-
-**Full Specification**: See `docs/technical/ethereum-address-mapping.md` for complete implementation details, code examples, and project roadmap.
+**Note**: This test uses direct SECP256k1 accounts. For account abstraction that allows signing with MetaMask/Ethereum wallets using SIWE (Sign-In with Ethereum), see the `ethereum_derivable_account` module.
 
 ---
 
@@ -306,56 +259,50 @@ This specification is critical for maintaining good UX when onboarding Ethereum 
 
 **IMPORTANT**: These tests run **sequentially** (one at a time), not in parallel. This is enforced by the vitest configuration (`fileParallelism: false`). Each test starts its own localnet instance on ports 8080/8081, so running multiple tests simultaneously would cause port conflicts.
 
-### Run all sanity tests
+### Run all meta tests
 
 ```bash
-npm test -- sanity/
+npm run test:meta
 ```
 
-The tests will run sequentially in this order:
-
-1. `deploy-contract.test.ts` - Contract deployment test (~75s)
-2. `faucet-ed25519.test.ts` - Ed25519 faucet funding test (~30s)
-3. `faucet-secp256k1.test.ts` - SECP256k1 faucet funding test (~35s)
-4. `localnet.test.ts` - Health check test (~30s)
-5. `secp256k1-account.test.ts` - SECP256k1 account test (~35s)
-6. `transfer.test.ts` - APT transfer test (~30s)
+The tests will run sequentially with each test managing its own localnet instance.
 
 **Total runtime**: ~4.5-5.5 minutes
 
 ### Run individual test
 
 ```bash
-npm test -- sanity/localnet.test.ts
-npm test -- sanity/faucet-ed25519.test.ts
-npm test -- sanity/faucet-secp256k1.test.ts
-npm test -- sanity/transfer.test.ts
-npm test -- sanity/deploy-contract.test.ts
-npm test -- sanity/secp256k1-account.test.ts
+npm run test:meta tests/meta/localnet.test.ts
+npm run test:meta tests/meta/faucet-ed25519.test.ts
+npm run test:meta tests/meta/faucet-secp256k1.test.ts
+npm run test:meta tests/meta/transfer.test.ts
+npm run test:meta tests/meta/deploy-contract.test.ts
+npm run test:meta tests/meta/deploy-atomica-contracts.test.ts
+npm run test:meta tests/meta/secp256k1-account.test.ts
 ```
 
 ### Debug a specific test
 
 ```bash
-npm test -- sanity/transfer.test.ts --reporter=verbose
+npm run test:meta tests/meta/transfer.test.ts -- --reporter=verbose
 ```
 
 ### Why sequential execution?
 
-Each test spins up a complete localnet instance that binds to specific ports (8080 for the API, 8081 for the faucet). Running tests in parallel would cause port conflicts. All sanity tests use `describe.sequential()` to enforce sequential execution within the suite.
+Each test spins up a complete localnet instance that binds to specific ports (8080 for the API, 8081 for the faucet). Running tests in parallel would cause port conflicts. All meta tests use `describe.sequential()` to enforce sequential execution within the suite.
 
 ## Test Isolation
 
 Each test:
 
 - Starts its own localnet instance in `beforeAll()`
-- Tears down the localnet in `afterAll()`
+- No teardown in persistent mode (localnet stays running between tests)
 - Uses fresh, randomly generated accounts
 - Logs detailed output for debugging
 
 ## Expected Gas Costs
 
-Based on the sanity tests, here are typical gas costs for reference:
+Based on the meta tests, here are typical gas costs for reference:
 
 | Operation                    | Gas Cost (octas) | Notes                       |
 | ---------------------------- | ---------------- | --------------------------- |
@@ -450,13 +397,14 @@ const response = await aptos.waitForTransaction({
 
 ## Contributing
 
-When adding new sanity tests:
+When adding new meta tests:
 
 1. **Follow clean room principles** - No side effects, isolated state
 2. **Document thoroughly** - Explain what, why, and expected behavior
 3. **Log key information** - Help future developers debug
 4. **Test one thing** - Keep tests focused and simple
 5. **Update this README** - Add your test to the documentation
+6. **Run in Node.js** - Use the Node.js test configuration, not browser
 
 ## See Also
 

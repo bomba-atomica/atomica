@@ -1,13 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { commands } from "vitest/browser";
+import { setupLocalnet, fundAccount, runAptosCmd } from "../../test-utils/localnet";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 
 /**
- * Test: Move Contract Deployment (Browser Compatible)
- * ...
+ * Test: Move Contract Deployment
+ * Meta test running in Node.js environment to verify localnet infrastructure
  */
 
-// Use localhost for browser access to localnet
 const config = new AptosConfig({
   network: Network.CUSTOM,
   fullnode: "http://127.0.0.1:8080/v1",
@@ -17,11 +16,11 @@ const aptos = new Aptos(config);
 
 describe.sequential("Move Contract Deployment", () => {
   beforeAll(async () => {
-    await commands.setupLocalnet();
+    await setupLocalnet();
   }, 120000);
 
   afterAll(async () => {
-    await commands.teardownLocalnet();
+    // No teardown in persistent mode
   });
 
   it("should deploy a noop contract", async () => {
@@ -40,7 +39,7 @@ describe.sequential("Move Contract Deployment", () => {
 
     // Fund deployer with 1 billion octas (10 APT)
     console.log("Funding deployer...");
-    await commands.fundAccount(deployer.accountAddress.toString(), 1_000_000_000);
+    await fundAccount(deployer.accountAddress.toString(), 1_000_000_000);
 
     // Wait a moment for funding to be indexed
     await new Promise((r) => setTimeout(r, 1000));
@@ -59,8 +58,8 @@ describe.sequential("Move Contract Deployment", () => {
     // Compile and publish the noop module directly without aptos init
     console.log("Publishing noop module...");
 
-    // We use the runAptosCmd command which executes on the server
-    await commands.runAptosCmd(
+    // Run aptos CLI to publish the contract
+    await runAptosCmd(
       [
         "move",
         "publish",

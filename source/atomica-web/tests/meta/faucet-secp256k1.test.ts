@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { commands } from "vitest/browser";
+import { setupLocalnet, fundAccount } from "../../test-utils/localnet";
 import {
   Aptos,
   AptosConfig,
@@ -11,7 +11,7 @@ import {
 
 /**
  * Test: SECP256k1 Account Funding via Faucet
- * ...
+ * Meta test running in Node.js environment to verify localnet infrastructure
  */
 
 const config = new AptosConfig({
@@ -23,11 +23,11 @@ const aptos = new Aptos(config);
 
 describe.sequential("SECP256k1 Account Faucet Funding", () => {
   beforeAll(async () => {
-    await commands.setupLocalnet();
+    await setupLocalnet();
   }, 120000);
 
   afterAll(async () => {
-    await commands.teardownLocalnet();
+    // No teardown in persistent mode
   });
 
   it("should fund a SECP256k1 account via faucet", async () => {
@@ -61,7 +61,7 @@ describe.sequential("SECP256k1 Account Faucet Funding", () => {
     const fundingAmount = 1_000_000_000; // 10 APT (1 APT = 100,000,000 octas)
     console.log(`Requesting ${fundingAmount} octas (10 APT)...`);
 
-    await commands.fundAccount(bob.accountAddress.toString(), fundingAmount);
+    await fundAccount(bob.accountAddress.toString(), fundingAmount);
 
     // ...
 
@@ -131,7 +131,7 @@ describe.sequential("SECP256k1 Account Faucet Funding", () => {
     // Step 3: Fund via faucet
     console.log("\nStep 3: Funding account via faucet...");
     const fundingAmount = 500_000_000; // 5 APT
-    await commands.fundAccount(aptosAccount.accountAddress.toString(), fundingAmount);
+    await fundAccount(aptosAccount.accountAddress.toString(), fundingAmount);
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     // Step 4: Verify funding succeeded
