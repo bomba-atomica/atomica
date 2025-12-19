@@ -14,10 +14,21 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space-action@v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libssl-dev pkg-config libclang-dev cmake lld libudev-dev
+          sudo apt-get install -y build-essential libssl-dev pkg-config libclang-dev cmake lld libudev-dev libdw-dev
 
       - name: Setup Rust toolchain
         run: |
@@ -49,10 +60,21 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space-action@v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libssl-dev pkg-config libclang-dev cmake lld libudev-dev
+          sudo apt-get install -y build-essential libssl-dev pkg-config libclang-dev cmake lld libudev-dev libdw-dev
 
       - name: Setup Rust toolchain
         run: |
@@ -95,10 +117,21 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space-action@v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libssl-dev pkg-config libclang-dev cmake lld libudev-dev
+          sudo apt-get install -y build-essential libssl-dev pkg-config libclang-dev cmake lld libudev-dev libdw-dev
 
       - name: Setup Rust toolchain
         run: |
