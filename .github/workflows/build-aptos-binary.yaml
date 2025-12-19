@@ -25,7 +25,7 @@ jobs:
           submodules: recursive
 
       - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space-action@v1.3.1
+        uses: jlumbroso/free-disk-space@v1.3.1
         with:
           # free up space for the build
           tool-cache: false
