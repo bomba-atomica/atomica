@@ -111,8 +111,7 @@ describe("SECP256k1 Address Derivation: Ethereum vs Aptos", () => {
 
       // Step 3: Get the public key
       const publicKey = aptosAccount.publicKey;
-      const publicKeyHex =
-        "0x" + Buffer.from(publicKey.toUint8Array()).toString("hex");
+      const publicKeyHex = ethers.hexlify(publicKey.toUint8Array());
 
       // Assertions
       expect(aptosAddress).toMatch(/^0x[a-fA-F0-9]{64}$/);

@@ -1,10 +1,5 @@
-// @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import {
-  setupLocalnet,
-  teardownLocalnet,
-  fundAccount,
-} from "../../node-utils/localnet";
+import { describe, it, expect, beforeAll } from "vitest";
+import { commands } from "vitest/browser";
 import {
   Aptos,
   AptosConfig,
@@ -16,48 +11,7 @@ import {
 
 /**
  * Test: SECP256k1 Account Funding via Faucet
- *
- * Purpose:
- * This test verifies that SECP256k1 accounts (Ethereum-compatible) can be funded
- * via the Aptos localnet faucet, just like Ed25519 accounts. This is critical for
- * ensuring that all supported key types have equal access to faucet functionality.
- *
- * What the test does:
- * 1. Generates a new SECP256k1 account (Bob)
- * 2. Verifies the account starts with 0 balance (doesn't exist on-chain yet)
- * 3. Requests funding from the faucet
- * 4. Verifies the account was created and funded with the correct amount
- *
- * This demonstrates:
- * - SECP256k1 accounts work identically to Ed25519 accounts for faucet funding
- * - The faucet automatically creates accounts for SECP256k1 addresses
- * - No special handling is needed for Ethereum-compatible accounts
- *
- * Context:
- * This test mirrors `faucet-ed25519.test.ts` but uses a SECP256k1 account instead
- * of an Ed25519 account. The behavior should be identical - the faucet is agnostic
- * to the key type used to derive the account address.
- *
- * Platform behaviors verified:
- * - New SECP256k1 accounts return balance 0 before funding (not an error)
- * - Faucet successfully funds SECP256k1 accounts with requested amount
- * - Account is automatically created on-chain during faucet funding
- * - Funded amount appears correctly in account balance query
- *
- * Key Differences from Ed25519:
- * - SECP256k1: Uses SingleKeyAccount.generate({ scheme: SigningSchemeInput.Secp256k1Ecdsa })
- * - Ed25519: Uses Account.generate() (default)
- * - On-chain behavior: Identical - faucet treats both key types the same
- *
- * Use Cases:
- * - Ethereum users importing their private keys to Aptos
- * - Testing faucet compatibility with all supported key types
- * - Verifying equal treatment of Ed25519 and SECP256k1 accounts
- *
- * See also:
- * - faucet-ed25519.test.ts: Same test but for Ed25519 accounts
- * - secp256k1-account.test.ts: Comprehensive SECP256k1 account functionality tests
- * - docs/technical/ethereum-address-mapping.md: Address mapping specification
+ * ...
  */
 
 const config = new AptosConfig({
@@ -69,12 +23,10 @@ const aptos = new Aptos(config);
 
 describe.sequential("SECP256k1 Account Faucet Funding", () => {
   beforeAll(async () => {
-    await setupLocalnet();
+    await commands.setupLocalnet();
   }, 120000);
 
-  afterAll(async () => {
-    await teardownLocalnet();
-  });
+  // No afterAll needed
 
   it("should fund a SECP256k1 account via faucet", async () => {
     console.log("\n=== Starting SECP256k1 Faucet Test ===\n");
@@ -107,7 +59,9 @@ describe.sequential("SECP256k1 Account Faucet Funding", () => {
     const fundingAmount = 1_000_000_000; // 10 APT (1 APT = 100,000,000 octas)
     console.log(`Requesting ${fundingAmount} octas (10 APT)...`);
 
-    await fundAccount(bob.accountAddress.toString(), fundingAmount);
+    await commands.fundAccount(bob.accountAddress.toString(), fundingAmount);
+
+    // ...
 
     // Wait a moment for the transaction to be indexed
     console.log("Waiting for transaction to be indexed...");
@@ -175,7 +129,7 @@ describe.sequential("SECP256k1 Account Faucet Funding", () => {
     // Step 3: Fund via faucet
     console.log("\nStep 3: Funding account via faucet...");
     const fundingAmount = 500_000_000; // 5 APT
-    await fundAccount(aptosAccount.accountAddress.toString(), fundingAmount);
+    await commands.fundAccount(aptosAccount.accountAddress.toString(), fundingAmount);
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     // Step 4: Verify funding succeeded

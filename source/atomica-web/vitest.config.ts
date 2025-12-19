@@ -6,6 +6,7 @@ import {
   teardownLocalnetCommand,
   deployContractsCommand,
   fundAccountCommand,
+  runAptosCmdCommand,
 } from "./tests/node-utils/browser-commands";
 
 export default defineConfig({
@@ -15,8 +16,8 @@ export default defineConfig({
     fileParallelism: false,
     maxConcurrency: 1,
 
-    // Browser mode for UI component tests only
-    // Integration/sanity tests run in Node.js via globalSetup orchestration
+    // All tests run in browser (Chromium via Playwright)
+    // No more happy-dom - everything is real browser testing
     browser: {
       enabled: true,
       headless: true,
@@ -33,28 +34,13 @@ export default defineConfig({
         teardownLocalnet: teardownLocalnetCommand,
         deployContracts: deployContractsCommand,
         fundAccount: fundAccountCommand,
+        runAptosCmd: runAptosCmdCommand,
       },
     },
 
-    // globalSetup handles teardown only - browser commands handle setup
-    // Tests use: await commands.setupLocalnet(); await commands.deployContracts();
-    globalSetup: "./tests/node-utils/global-setup.ts",
+    // Include all test files in browser environment
+    include: ["tests/**/*.test.{ts,tsx}"],
 
-    // Include UI component tests and browser-compatible integration tests
-    include: [
-      "tests/ui-component/**/*.test.{ts,tsx}",
-      "tests/integration/sanity/localnet.test.ts",
-      "tests/integration/sanity/transfer.test.ts",
-      "tests/integration/wallet/WalletAdapter.test.ts",
-    ],
-
-    // Exclude node-utils and tests that require Node.js modules
-    // These tests use happy-dom environment and can't run in real browser:
-    // - AccountStatus.integration.test.tsx: imports node-utils/localnet
-    // - TxButton.simulate-submit.test.tsx: imports node-fetch, eth-testing, node-utils
-    exclude: [
-      "tests/node-utils/**",
-      "**/node_modules/**",
-    ],
+    exclude: ["tests/node-utils/**", "**/node_modules/**"],
   },
 });

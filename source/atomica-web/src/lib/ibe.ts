@@ -1,4 +1,5 @@
 import { PointG1, PointG2, pairing, utils } from "@noble/bls12-381";
+import { ethers } from "ethers";
 
 // Alias for components
 export { ibeEncrypt as encrypt };
@@ -8,7 +9,7 @@ export async function generateSystemParameters(): Promise<{
   msk: Uint8Array;
 }> {
   const msk = utils.randomPrivateKey();
-  const mskBig = BigInt("0x" + Buffer.from(msk).toString("hex"));
+  const mskBig = BigInt(ethers.hexlify(msk));
   const mpkPoint = PointG1.BASE.multiply(mskBig);
   return {
     mpk: mpkPoint.toRawBytes(true),
@@ -38,12 +39,12 @@ export async function ibeEncrypt(
 
   // 4. U = r * P (Base G1)
   const uPoint = PointG1.BASE.multiply(
-    BigInt("0x" + Buffer.from(r).toString("hex")),
+    BigInt(ethers.hexlify(r)),
   );
 
   // 5. Compute Pairing Metric
   // e(MPK, ID)^r = e(r*MPK, ID)
-  const rMpk = mpkPoint.multiply(BigInt("0x" + Buffer.from(r).toString("hex")));
+  const rMpk = mpkPoint.multiply(BigInt(ethers.hexlify(r)));
   const gid = pairing(rMpk, idPoint); // Returns Fp12
   console.log("GID computed for encryption:", gid);
 

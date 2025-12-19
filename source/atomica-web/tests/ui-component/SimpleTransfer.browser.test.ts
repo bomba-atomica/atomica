@@ -158,7 +158,7 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer (Browser)", () => 
         coinType: "0x1::aptos_coin::AptosCoin",
       });
       initialBalance = BigInt(res);
-    } catch (e) {
+    } catch {
       // Ignore error (account might not exist yet)
     }
     console.log(

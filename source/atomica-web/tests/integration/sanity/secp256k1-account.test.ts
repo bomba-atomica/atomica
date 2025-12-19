@@ -1,10 +1,5 @@
-// @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import {
-  setupLocalnet,
-  teardownLocalnet,
-  fundAccount,
-} from "../../node-utils/localnet";
+import { describe, it, expect, beforeAll } from "vitest";
+import { commands } from "vitest/browser";
 import {
   Aptos,
   AptosConfig,
@@ -17,89 +12,7 @@ import {
 
 /**
  * Test: SECP256k1 Ethereum-Compatible Account Creation and Usage
- *
- * Purpose:
- * This test verifies that SECP256k1 accounts (Ethereum-compatible) can be created
- * and used on Aptos. This is critical for users who want to use Ethereum-derived
- * keys or integrate with Ethereum wallets.
- *
- * What the test does:
- * 1. Creates an Ed25519 account (Alice) - traditional Aptos account
- * 2. Creates a SECP256k1 account (Bob) - Ethereum-compatible account
- * 3. Funds Alice with APT tokens
- * 4. Alice sends APT to Bob (who doesn't exist on-chain yet)
- * 5. Verifies Bob's account was created and received the tokens
- * 6. Bob signs a transaction to send tokens back to Alice
- * 7. Verifies Alice received the tokens back
- *
- * This demonstrates:
- * - SECP256k1 accounts work the same as Ed25519 accounts
- * - Transfers automatically create recipient accounts (regardless of key type)
- * - SECP256k1 accounts can sign and submit transactions
- * - Cross-key-type transfers work seamlessly
- *
- * About SECP256k1 on Aptos:
- * - Same elliptic curve used by Ethereum and Bitcoin
- * - Private keys are 32 bytes (same as Ed25519)
- * - Public keys are 65 bytes uncompressed (vs 32 bytes for Ed25519)
- * - Signatures are 64 bytes (same as Ed25519)
- * - Address derivation uses SHA3-256 (different from Ethereum's Keccak-256)
- * - Can use Ethereum private keys directly, but addresses will differ
- *
- * Key Differences from Ed25519:
- * - Ed25519: Faster signature verification, smaller public keys
- * - SECP256k1: Ethereum-compatible, same curve as Bitcoin
- * - Both: Supported by Aptos SDK, equal first-class citizens
- *
- * Account Creation:
- * - Ed25519: Account.generate() (default)
- * - SECP256k1: SingleKeyAccount.generate({ scheme: SigningSchemeInput.Secp256k1Ecdsa })
- *
- * Use Cases for SECP256k1:
- * - Users with existing Ethereum private keys
- * - Cross-chain applications
- * - Hardware wallets that support SECP256k1
- * - Integration with Ethereum wallet infrastructure
- *
- * Note on Ethereum Derivable Accounts:
- * This test uses direct SECP256k1 accounts. For account abstraction that
- * allows signing with MetaMask/Ethereum wallets, see the ethereum_derivable_account
- * module (not tested here).
- *
- * IMPORTANT - Address Mapping Requirement:
- * When SECP256k1 accounts are created using Ethereum private keys, the resulting
- * Aptos address will differ from the Ethereum address due to different hash functions:
- * - Ethereum: Keccak-256 (last 20 bytes of hash)
- * - Aptos: SHA3-256 (NIST standard)
- *
- * This creates a UX challenge: Ethereum users expect their address to be the same
- * across chains. We need to implement a system to:
- *
- * 1. STORAGE: Store the mapping between:
- *    - Ethereum address (what user expects: 0xABC...)
- *    - Aptos address (actual on-chain address: 0xXYZ...)
- *    - SECP256k1 public key
- *    - Account creation timestamp
- *
- * 2. SEARCH: Enable lookups in both directions:
- *    - Given Ethereum address → find Aptos address
- *    - Given Aptos address → find original Ethereum address
- *
- * 3. IDENTIFICATION: Display both addresses to users:
- *    - Primary: Show Ethereum address (familiar to user)
- *    - Secondary: Show Aptos address (actual on-chain location)
- *    - Indicate relationship: "Your Ethereum wallet 0xABC... maps to Aptos address 0xXYZ..."
- *
- * Possible implementation approaches:
- * a) On-chain registry: Move module storing ETH→Aptos mappings
- * b) Off-chain indexer: Database tracking address relationships
- * c) Client-side storage: Local wallet mapping (loses cross-device sync)
- * d) Hybrid: On-chain events + off-chain indexer for fast lookups
- *
- * This specification is critical for maintaining good UX when onboarding
- * Ethereum users to Aptos with their existing wallets and private keys.
- *
- * See full specification: docs/technical/ethereum-address-mapping.md
+ * ...
  */
 
 const config = new AptosConfig({
@@ -111,12 +24,10 @@ const aptos = new Aptos(config);
 
 describe.sequential("SECP256k1 Account Creation and Usage", () => {
   beforeAll(async () => {
-    await setupLocalnet();
+    await commands.setupLocalnet();
   }, 120000);
 
-  afterAll(async () => {
-    await teardownLocalnet();
-  });
+  // No afterAll needed
 
   it("should create SECP256k1 account, receive transfer, and send back", async () => {
     console.log("\n=== Starting SECP256k1 Account Test ===\n");
@@ -158,7 +69,7 @@ describe.sequential("SECP256k1 Account Creation and Usage", () => {
 
     // Step 3: Fund Alice
     console.log("\nStep 3: Funding Alice with 1 billion octas (10 APT)...");
-    await fundAccount(alice.accountAddress.toString(), 1_000_000_000);
+    await commands.fundAccount(alice.accountAddress.toString(), 1_000_000_000);
     await new Promise((r) => setTimeout(r, 1000)); // Wait for indexing
 
     const aliceFundedBalance = await aptos.getAccountAPTAmount({

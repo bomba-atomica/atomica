@@ -17,6 +17,7 @@ import {
   deployContracts,
   fundAccount,
   killZombies,
+  runAptosCmd,
 } from "./localnet";
 
 /**
@@ -25,7 +26,8 @@ import {
  */
 export const setupLocalnetCommand: BrowserCommand<[]> = async () => {
   console.log("[Browser Command] Cleaning up zombies and starting localnet...");
-  await killZombies();
+  // Use teardownLocalnet to ensure internal state (localnetProcess, setupComplete) is reset
+  await teardownLocalnet();
   await setupLocalnet();
   console.log("[Browser Command] Localnet started");
   return { success: true };
@@ -61,4 +63,15 @@ export const fundAccountCommand: BrowserCommand<
   const result = await fundAccount(address, amount);
   console.log("[Browser Command] Account funded");
   return { success: true, txHash: result };
+};
+
+/**
+ * Run generic CLI command (runs in Node.js)
+ */
+export const runAptosCmdCommand: BrowserCommand<
+  [args: string[], cwd?: string]
+> = async (_context, args: string[], cwd?: string) => {
+  console.log(`[Browser Command] Running aptos ${args.join(" ")}...`);
+  const result = await runAptosCmd(args, cwd);
+  return result;
 };
