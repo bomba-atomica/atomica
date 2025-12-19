@@ -6,7 +6,7 @@ import {
   teardownLocalnet,
   fundAccount,
   deployContracts,
-} from "../setup/localnet";
+} from "../node-utils/localnet";
 
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";

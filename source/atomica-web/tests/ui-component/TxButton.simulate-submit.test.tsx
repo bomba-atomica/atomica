@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import nodeFetch, { Request, Response, Headers } from "node-fetch";
 import { generateTestingUtils } from "eth-testing";
@@ -9,12 +9,13 @@ import {
   teardownLocalnet,
   fundAccount,
   deployContracts,
-} from "../setup/localnet";
+} from "../node-utils/localnet";
 import { getDerivedAddress } from "../../src/lib/aptos/siwe";
 import { TxButton } from "../../src/components/TxButton";
-import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+import { Aptos, AptosConfig, Network, InputEntryFunctionData } from "@aptos-labs/ts-sdk";
 import { URL } from "url";
 import { ethers } from "ethers";
+import { setTimeout } from "timers/promises";
 
 // Polyfill fetch for happy-dom
 
@@ -57,38 +58,6 @@ describe.sequential("TxButton Simulate then Submit Mode", () => {
     const config = new AptosConfig({
       network: Network.LOCAL,
       fullnode: "http://127.0.0.1:8080/v1",
-      client: {
-        provider: async (url: any, init: any) => {
-          let fetchUrl = url;
-          let fetchInit = init;
-
-          if (typeof url !== "string" && !(url instanceof URL)) {
-            if (url.url) {
-              fetchUrl = url.url;
-              fetchInit = {
-                ...init,
-                method: url.method,
-                headers: url.headers,
-                body: url.body,
-              };
-            }
-          }
-
-          try {
-            const res = await nodeFetch(fetchUrl, fetchInit);
-            try {
-              const bodyClone = res.clone();
-              const data = await bodyClone.json().catch(() => bodyClone.text());
-              Object.defineProperty(res, "data", { value: data });
-            } catch {
-              // Ignore data parsing errors
-            }
-            return res;
-          } catch {
-            throw e;
-          }
-        },
-      },
     });
     aptos = new Aptos(config);
 
@@ -122,9 +91,17 @@ describe.sequential("TxButton Simulate then Submit Mode", () => {
     testingUtils.lowLevel.mockRequest(
       "personal_sign",
       async (params: any[]) => {
-        const [msgHex] = params;
+        console.log("[Mock personal_sign] params:", params);
+        const [msgHex, address] = params;
+        if (!msgHex) {
+          console.error("[Mock personal_sign] msgHex is null or undefined!");
+          throw new Error("Message is null");
+        }
         const msgStr = ethers.toUtf8String(msgHex);
-        return await wallet.signMessage(msgStr);
+        console.log("[Mock personal_sign] Signing message:", msgStr.substring(0, 100));
+        const sig = await wallet.signMessage(msgStr);
+        console.log("[Mock personal_sign] Signature:", sig);
+        return sig;
       },
     );
 
@@ -133,7 +110,7 @@ describe.sequential("TxButton Simulate then Submit Mode", () => {
       await getDerivedAddress(TEST_ACCOUNT.toLowerCase())
     ).toString();
     await fundAccount(derivedAddr, 100_000_000);
-    await new Promise((r) => setTimeout(r, 2000));
+    await setTimeout(2000);
 
     console.log("Test environment ready");
   }, 120000);
@@ -145,15 +122,34 @@ describe.sequential("TxButton Simulate then Submit Mode", () => {
   });
 
   afterEach(() => {
-    document.body.innerHTML = "";
+    cleanup();
     testingUtils.clearAllMocks();
     testingUtils.mockChainId("0x4");
     testingUtils.mockAccounts([TEST_ACCOUNT]);
+
+    // Re-establish personal_sign mock after clearAllMocks
+    const wallet = new ethers.Wallet(TEST_PK);
+    testingUtils.lowLevel.mockRequest(
+      "personal_sign",
+      async (params: any[]) => {
+        console.log("[Mock personal_sign] params:", params);
+        const [msgHex, address] = params;
+        if (!msgHex) {
+          console.error("[Mock personal_sign] msgHex is null or undefined!");
+          throw new Error("Message is null");
+        }
+        const msgStr = ethers.toUtf8String(msgHex);
+        console.log("[Mock personal_sign] Signing message:", msgStr.substring(0, 100));
+        const sig = await wallet.signMessage(msgStr);
+        console.log("[Mock personal_sign] Signature:", sig);
+        return sig;
+      },
+    );
   });
 
   it("should simulate FakeEth mint transaction", async () => {
-    const prepareTransaction = () => ({
-      function: `${DEPLOYER_ADDR}::FAKEETH::mint`,
+    const prepareTransaction = (): InputEntryFunctionData => ({
+      function: `${DEPLOYER_ADDR}::fake_eth::mint`,
       functionArguments: [1000000000], // 10 FAKEETH
     });
 
@@ -192,8 +188,8 @@ describe.sequential("TxButton Simulate then Submit Mode", () => {
   it("should submit FakeEth mint after simulation", async () => {
     let txHash: string | null = null;
 
-    const prepareTransaction = () => ({
-      function: `${DEPLOYER_ADDR}::FAKEETH::mint`,
+    const prepareTransaction = (): InputEntryFunctionData => ({
+      function: `${DEPLOYER_ADDR}::fake_eth::mint`,
       functionArguments: [500000000], // 5 FAKEETH
     });
 
@@ -235,11 +231,14 @@ describe.sequential("TxButton Simulate then Submit Mode", () => {
     expect(txHash).toBeTruthy();
     console.log("Transaction submitted:", txHash);
 
-    // Verify balance on-chain
-    const balance = await aptos.getAccountCoinAmount({
-      accountAddress: derivedAddr,
-      coinType: `${DEPLOYER_ADDR}::FAKEETH::FAKEETH`,
+    // Verify balance on-chain using view function (same as production)
+    const balanceResult = await aptos.view({
+      payload: {
+        function: `${DEPLOYER_ADDR}::fake_eth::balance`,
+        functionArguments: [derivedAddr],
+      },
     });
+    const balance = Number(balanceResult[0]);
 
     expect(Number(balance)).toBeGreaterThan(0);
     console.log("Balance verified:", balance);

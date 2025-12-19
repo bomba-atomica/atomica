@@ -1,42 +1,9 @@
-// @vitest-environment happy-dom
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import nodeFetch, { Request, Response, Headers } from "node-fetch";
-import { generateTestingUtils } from "eth-testing";
-import {
-  setupLocalnet,
-  teardownLocalnet,
-  fundAccount,
-  deployContracts,
-} from "../setup/localnet";
-import { getDerivedAddress } from "../../src/lib/aptos/siwe";
+import { setupBrowserWalletMock } from "../browser-utils/wallet-mock";
 import { TxButton } from "../../src/components/TxButton";
-import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { URL } from "url";
-import { ethers } from "ethers";
-
-// Polyfill fetch for happy-dom
-
-global.fetch = nodeFetch as any;
-
-global.Request = Request as any;
-
-global.Response = Response as any;
-
-global.Headers = Headers as any;
-
-global.URL = URL as any;
-
-window.fetch = nodeFetch as any;
-
-(window as any).Request = Request;
-
-(window as any).Response = Response;
-
-(window as any).Headers = Headers;
-
-(window as any).URL = URL;
+import { Aptos, AptosConfig, Network, InputEntryFunctionData } from "@aptos-labs/ts-sdk";
 
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
@@ -45,59 +12,21 @@ const TEST_PK =
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
 describe.sequential("TxButton Skip & Submit Mode", () => {
-  const testingUtils = generateTestingUtils({ providerType: "MetaMask" });
   let derivedAddr: string;
   let aptos: Aptos;
 
   beforeAll(async () => {
-    console.log("Starting Localnet...");
-    await setupLocalnet();
+    console.log("Setting up browser test environment...");
 
     // Inject fetch-compatible Aptos instance
     const config = new AptosConfig({
       network: Network.LOCAL,
       fullnode: "http://127.0.0.1:8080/v1",
-      client: {
-        provider: async (url: any, init: any) => {
-          let fetchUrl = url;
-          let fetchInit = init;
-
-          if (typeof url !== "string" && !(url instanceof URL)) {
-            if (url.url) {
-              fetchUrl = url.url;
-              fetchInit = {
-                ...init,
-                method: url.method,
-                headers: url.headers,
-                body: url.body,
-              };
-            }
-          }
-
-          try {
-            const res = await nodeFetch(fetchUrl, fetchInit);
-            try {
-              const bodyClone = res.clone();
-              const data = await bodyClone.json().catch(() => bodyClone.text());
-              Object.defineProperty(res, "data", { value: data });
-            } catch {
-              // Ignore data parsing errors
-            }
-            return res;
-          } catch {
-            throw e;
-          }
-        },
-      },
     });
     aptos = new Aptos(config);
 
-    // Deploy contracts
-    await deployContracts();
-
-    // Mock window.ethereum
-
-    (window as any).ethereum = testingUtils.getProvider();
+    // Setup browser-compatible wallet mock
+    setupBrowserWalletMock(TEST_ACCOUNT, TEST_PK);
 
     // Mock window.location
     Object.defineProperty(window, "location", {
@@ -111,51 +40,44 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
       configurable: true,
     });
 
-    // Setup Provider Mocks
-    testingUtils.mockChainId("0x4");
-    testingUtils.mockAccounts([TEST_ACCOUNT]);
-    testingUtils.mockRequestAccounts([TEST_ACCOUNT]);
-
-    // Setup signature interceptor
-    const wallet = new ethers.Wallet(TEST_PK);
-
-    testingUtils.lowLevel.mockRequest(
-      "personal_sign",
-      async (params: any[]) => {
-        const [msgHex] = params;
-        const msgStr = ethers.toUtf8String(msgHex);
-        return await wallet.signMessage(msgStr);
-      },
-    );
-
-    // Fund account
+    // Get derived address and fund it
+    const { getDerivedAddress } = await import("../../src/lib/aptos/siwe");
     derivedAddr = (
       await getDerivedAddress(TEST_ACCOUNT.toLowerCase())
     ).toString();
-    await fundAccount(derivedAddr, 100_000_000);
-    await new Promise((r) => setTimeout(r, 2000));
 
-    console.log("Test environment ready");
+    // Fund account using fetch (browser-compatible)
+    const fundResponse = await fetch("http://127.0.0.1:8081/mint", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        address: derivedAddr,
+        amount: 100_000_000,
+      }),
+    });
+
+    if (!fundResponse.ok) {
+      throw new Error(`Failed to fund account: ${await fundResponse.text()}`);
+    }
+
+    await new Promise<void>(resolve => setTimeout(resolve, 2000));
+
+    console.log("Browser test environment ready");
   }, 120000);
 
   afterAll(async () => {
-    console.log("Stopping Localnet...");
-    await teardownLocalnet();
-    testingUtils.clearAllMocks();
+    // Localnet teardown handled by global setup
   });
 
   afterEach(() => {
-    document.body.innerHTML = "";
-    testingUtils.clearAllMocks();
-    testingUtils.mockChainId("0x4");
-    testingUtils.mockAccounts([TEST_ACCOUNT]);
+    // No cleanup needed - wallet mock persists
   });
 
   it("should skip simulation and submit FakeEth mint directly", async () => {
     let txHash: string | null = null;
 
-    const prepareTransaction = () => ({
-      function: `${DEPLOYER_ADDR}::FAKEETH::mint`,
+    const prepareTransaction = (): InputEntryFunctionData => ({
+      function: `${DEPLOYER_ADDR}::fake_eth::mint`,
       functionArguments: [1000000000], // 10 FAKEETH
     });
 
@@ -170,19 +92,19 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
       />,
     );
 
-    // Find the dropdown button (chevron)
-    const dropdownBtn = screen.getByRole("button", { name: "" });
-
-    // Click to open dropdown
+    // Find and click the dropdown button using test ID
+    const dropdownBtn = screen.getByTestId("tx-button-dropdown");
+    console.log("Clicking dropdown button...");
     fireEvent.click(dropdownBtn);
 
-    // Wait for dropdown to appear
+    // Wait for dropdown to appear and click Skip & Submit
+    console.log("Waiting for Skip & Submit button...");
     await waitFor(() => {
-      expect(screen.getByText("Skip & Submit")).toBeInTheDocument();
+      expect(screen.getByTestId("tx-button-skip-submit")).toBeInTheDocument();
     });
 
-    // Click "Skip & Submit"
-    const skipSubmitBtn = screen.getByText("Skip & Submit");
+    const skipSubmitBtn = screen.getByTestId("tx-button-skip-submit");
+    console.log("Clicking Skip & Submit...");
     fireEvent.click(skipSubmitBtn);
 
     // Wait for success (should skip simulation phase)
@@ -196,11 +118,14 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     expect(txHash).toBeTruthy();
     console.log("Transaction submitted directly:", txHash);
 
-    // Verify balance on-chain
-    const balance = await aptos.getAccountCoinAmount({
-      accountAddress: derivedAddr,
-      coinType: `${DEPLOYER_ADDR}::FAKEETH::FAKEETH`,
+    // Verify balance on-chain using view function (same as production)
+    const balanceResult = await aptos.view({
+      payload: {
+        function: `${DEPLOYER_ADDR}::fake_eth::balance`,
+        functionArguments: [derivedAddr],
+      },
     });
+    const balance = Number(balanceResult[0]);
 
     expect(Number(balance)).toBeGreaterThan(0);
     console.log("Balance verified:", balance);
@@ -209,8 +134,8 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
   it("should not show simulation details when skipping", async () => {
     let txHash: string | null = null;
 
-    const prepareTransaction = () => ({
-      function: `${DEPLOYER_ADDR}::FAKEETH::mint`,
+    const prepareTransaction = (): InputEntryFunctionData => ({
+      function: `${DEPLOYER_ADDR}::fake_eth::mint`,
       functionArguments: [300000000], // 3 FAKEETH
     });
 
@@ -262,8 +187,8 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     for (const amount of amounts) {
       let txHash: string | null = null;
 
-      const prepareTransaction = () => ({
-        function: `${DEPLOYER_ADDR}::FAKEETH::mint`,
+      const prepareTransaction = (): InputEntryFunctionData => ({
+        function: `${DEPLOYER_ADDR}::fake_eth::mint`,
         functionArguments: [amount],
       });
 
@@ -306,11 +231,14 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
 
     console.log("All transactions completed:", txHashes);
 
-    // Verify final balance
-    const balance = await aptos.getAccountCoinAmount({
-      accountAddress: derivedAddr,
-      coinType: `${DEPLOYER_ADDR}::FAKEETH::FAKEETH`,
+    // Verify final balance using view function (same as production)
+    const balanceResult = await aptos.view({
+      payload: {
+        function: `${DEPLOYER_ADDR}::fake_eth::balance`,
+        functionArguments: [derivedAddr],
+      },
     });
+    const balance = Number(balanceResult[0]);
 
     const expectedMinBalance = amounts.reduce((a, b) => a + b, 0);
     expect(Number(balance)).toBeGreaterThanOrEqual(expectedMinBalance);

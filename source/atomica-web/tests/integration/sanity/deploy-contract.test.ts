@@ -5,7 +5,7 @@ import {
   teardownLocalnet,
   runAptosCmd,
   fundAccount,
-} from "../../setup/localnet";
+} from "../../node-utils/localnet";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";

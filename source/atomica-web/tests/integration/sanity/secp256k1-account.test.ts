@@ -4,7 +4,7 @@ import {
   setupLocalnet,
   teardownLocalnet,
   fundAccount,
-} from "../../setup/localnet";
+} from "../../node-utils/localnet";
 import {
   Aptos,
   AptosConfig,

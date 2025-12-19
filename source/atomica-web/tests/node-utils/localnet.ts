@@ -8,7 +8,7 @@ import { rmSync, mkdirSync, existsSync } from "fs";
 const exec = promisify(execCb);
 let localnetProcess: ChildProcess | null = null;
 
-import { findAptosBinary } from "../utils/findAptosBinary";
+import { findAptosBinary } from "./findAptosBinary";
 
 // Adjust paths relative to this file's location
 const TEST_SETUP_DIR = dirname(fileURLToPath(import.meta.url));
@@ -62,7 +62,7 @@ export async function killZombies() {
   }
 }
 
-const CONTRACTS_DIR = pathResolve("../../atomica-move-contracts");
+const CONTRACTS_DIR = pathResolve("../atomica-move-contracts");
 const TEST_CONFIG_DIR = pathResolve(".aptos_test_config");
 
 export function fundAccount(
@@ -221,6 +221,36 @@ export async function deployContracts() {
       "default::registry::initialize",
       "--args",
       "hex:0123456789abcdef",
+      "--profile",
+      "default",
+      "--assume-yes",
+    ],
+    WEB_DIR,
+  );
+
+  // 5. Init fake_eth
+  console.log("Initializing fake_eth...");
+  await runAptosCmd(
+    [
+      "move",
+      "run",
+      "--function-id",
+      "default::fake_eth::initialize",
+      "--profile",
+      "default",
+      "--assume-yes",
+    ],
+    WEB_DIR,
+  );
+
+  // 6. Init fake_usd
+  console.log("Initializing fake_usd...");
+  await runAptosCmd(
+    [
+      "move",
+      "run",
+      "--function-id",
+      "default::fake_usd::initialize",
       "--profile",
       "default",
       "--assume-yes",

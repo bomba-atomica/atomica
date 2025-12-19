@@ -146,7 +146,7 @@ export function TxButton({
   const getMainButtonAction = () => {
     if (phase === "idle" || phase === "error") return handleSimulate;
     if (phase === "ready") return handleSubmit;
-    return () => {};
+    return () => { };
   };
 
   const getMainButtonText = () => {
@@ -175,18 +175,18 @@ export function TxButton({
     <div className={`relative inline-flex flex-col items-start ${className}`}>
       <div className="flex w-full">
         <button
+          data-testid="tx-button-main"
           onClick={getMainButtonAction()}
           disabled={disabled || isBusy || phase === "success"}
           className={`
             flex-grow px-4 py-2 font-bold rounded-l-md transition-colors border-r border-zinc-900/10
-            ${
-              phase === "error"
-                ? "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                : phase === "success"
-                  ? "bg-zinc-800 text-zinc-400"
-                  : phase === "ready"
-                    ? "bg-zinc-100 text-zinc-950 hover:bg-white"
-                    : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+            ${phase === "error"
+              ? "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+              : phase === "success"
+                ? "bg-zinc-800 text-zinc-400"
+                : phase === "ready"
+                  ? "bg-zinc-100 text-zinc-950 hover:bg-white"
+                  : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
             }
             ${disabled || isBusy ? "opacity-50 cursor-not-allowed" : ""}
           `}
@@ -220,19 +220,19 @@ export function TxButton({
 
         <div className="relative">
           <button
+            data-testid="tx-button-dropdown"
             onClick={() => !isBusy && setShowDropdown(!showDropdown)}
             disabled={disabled || isBusy}
             className={`
                 h-full px-2 rounded-r-md transition-colors
-                ${
-                  phase === "error"
-                    ? "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                    : phase === "success"
-                      ? "bg-zinc-800 text-zinc-400"
-                      : phase === "ready"
-                        ? "bg-zinc-100 text-zinc-950 hover:bg-white"
-                        : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
-                }
+                ${phase === "error"
+                ? "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                : phase === "success"
+                  ? "bg-zinc-800 text-zinc-400"
+                  : phase === "ready"
+                    ? "bg-zinc-100 text-zinc-950 hover:bg-white"
+                    : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+              }
                 ${disabled || isBusy ? "opacity-50 cursor-not-allowed" : ""}
             `}
           >
@@ -243,6 +243,7 @@ export function TxButton({
             <div className="absolute right-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-md shadow-xl z-50">
               <div className="py-1">
                 <button
+                  data-testid="tx-button-skip-submit"
                   onClick={handleSkipAndSubmit}
                   className="block w-full text-left px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800"
                 >

@@ -1,11 +1,11 @@
 /**
- * SimpleTransfer Integration Test
+ * SimpleTransfer Browser Test
  *
  * PURPOSE:
  * This test validates the complete end-to-end flow of submitting an Aptos blockchain
- * transaction using Sign-In with Ethereum (SIWE) authentication. It demonstrates that
- * an Ethereum wallet (MetaMask) can control an Aptos account through cryptographic
- * signatures without requiring the user to have an Aptos wallet.
+ * transaction using Sign-In with Ethereum (SIWE) authentication IN A REAL BROWSER.
+ * It demonstrates that an Ethereum wallet (MetaMask) can control an Aptos account
+ * through cryptographic signatures without requiring the user to have an Aptos wallet.
  *
  * WHAT IT TESTS:
  * 1. Ethereum wallet mocking - Simulates MetaMask without browser extension
@@ -23,46 +23,66 @@
  * - This enables "wallet-less" Aptos interactions using existing Ethereum wallets
  *
  * TEST ENVIRONMENT:
- * - Runs in happy-dom (lightweight DOM simulation)
- * - Uses eth-testing library to mock window.ethereum provider
+ * - Runs in REAL Chromium browser via Playwright (not happy-dom simulation)
+ * - Uses browser-compatible wallet mock (setupBrowserWalletMock)
  * - Connects to local Aptos testnet (localnet) running on port 8080
  * - Uses deterministic test wallet (Hardhat Account 0)
+ *
+ * ARCHITECTURE DECISIONS:
+ * - **Browser-only code**: This test uses ONLY browser APIs (fetch, window, etc.)
+ * - **No Node.js modules**: All Node.js-specific code (fs, http, child_process) is in
+ *   test setup files (global-setup.ts, localnet.ts) which run in Node.js context
+ * - **Separation of concerns**:
+ *   - global-setup.ts (Node.js): Starts localnet, deploys contracts
+ *   - This test file (Browser): Pure web code that runs in Chromium
+ * - **Browser-compatible utilities**: Uses native fetch for faucet calls instead of
+ *   Node.js http module
+ *
+ * DIFFERENCES FROM HAPPY-DOM VERSION:
+ * - Uses browser-compatible wallet mock instead of eth-testing (which requires Node.js)
+ * - Uses native fetch instead of node-fetch polyfills
+ * - Runs in actual Chromium browser (more realistic testing)
+ * - Better testing of real browser APIs and behaviors
+ * - All code in this file can run in production web environment
  */
 
-// @vitest-environment happy-dom
-import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
-import { generateTestingUtils } from "eth-testing";
-import nodeFetch, { Request, Response, Headers } from "node-fetch";
-import {
-  setupLocalnet,
-  teardownLocalnet,
-  fundAccount,
-} from "../../node-utils/localnet";
+import { describe, it, expect, beforeAll } from "vitest";
+import { setupBrowserWalletMock } from "../browser-utils/wallet-mock";
 import {
   aptos,
   getDerivedAddress,
   setAptosInstance,
   submitNativeTransaction,
-} from "../../../src/lib/aptos";
+} from "../../src/lib/aptos";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { URL } from "url";
-import { ethers } from "ethers";
-import { setTimeout } from "timers/promises";
 
-// Polyfill fetch for happy-dom environment
-// happy-dom doesn't have native fetch, so we inject node-fetch
-// This allows Aptos SDK to make HTTP requests to the localnet
-global.fetch = nodeFetch as any;
-global.Request = Request as any;
-global.Response = Response as any;
-global.Headers = Headers as any;
-global.URL = URL as any;
+/**
+ * Browser-compatible faucet funding function
+ * Uses native fetch API instead of Node.js http module
+ */
+async function fundAccountBrowser(
+  address: string,
+  amount: number = 100_000_000,
+): Promise<string> {
+  console.log(`[Browser fundAccount] Requesting ${amount} for ${address}...`);
 
-window.fetch = nodeFetch as any;
-(window as any).Request = Request;
-(window as any).Response = Response;
-(window as any).Headers = Headers;
-(window as any).URL = URL;
+  const response = await fetch(
+    `http://127.0.0.1:8081/mint?amount=${amount}&address=${address}`,
+    { method: "POST" },
+  );
+
+  console.log(`[Browser fundAccount] Response status: ${response.status}`);
+  const data = await response.text();
+  console.log(`[Browser fundAccount] Response body: ${data}`);
+
+  if (response.ok) {
+    return data;
+  } else {
+    throw new Error(
+      `Funding failed with status: ${response.status} Body: ${data}`,
+    );
+  }
+}
 
 // Standard Hardhat Account 0 - Deterministic test account
 // This is a well-known test account with publicly known private key
@@ -71,70 +91,34 @@ const TEST_ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 const TEST_PK =
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
-describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
-  // Create eth-testing utilities to mock MetaMask provider
-  // This provides window.ethereum without requiring the browser extension
-  const testingUtils = generateTestingUtils({ providerType: "MetaMask" });
-
+describe.sequential("MetaMask Mock Fidelity - Simple Transfer (Browser)", () => {
   beforeAll(async () => {
-    console.log("Starting Localnet...");
-    // STEP 1: Start local Aptos blockchain (validator node)
-    // This spawns a Docker container running Aptos localnet on port 8080
-    await setupLocalnet();
+    console.log("[Browser Test] Initializing test environment...");
 
-    // STEP 2: Configure Aptos SDK to connect to localnet
-    // This client will be used throughout the test to interact with the blockchain
+    // NOTE: Localnet is already started by global-setup.ts
+    // We just need to configure the Aptos SDK client
+
+    // STEP 1: Configure Aptos SDK to connect to localnet
+    // The localnet is already running (started by global-setup.ts)
     const config = new AptosConfig({
       network: Network.LOCAL,
       fullnode: "http://127.0.0.1:8080/v1",
     });
     setAptosInstance(new Aptos(config));
 
-    // STEP 3: Mock window.ethereum (MetaMask provider)
-    // This injects a fake MetaMask provider into the global window object
-    // The provider intercepts wallet RPC calls (eth_requestAccounts, personal_sign, etc.)
-    Object.defineProperty(window, "ethereum", {
-      value: testingUtils.getProvider(),
-      writable: true,
-    });
+    // STEP 2: Setup browser-compatible wallet mock
+    // This injects a fake MetaMask provider into window.ethereum
+    // Unlike eth-testing, this works in real browsers!
+    setupBrowserWalletMock(TEST_ACCOUNT, TEST_PK);
 
-    // STEP 4: Mock window.location
+    // STEP 3: Mock window.location
     // SIWE (Sign-In with Ethereum) messages include the domain/origin
-    // We need to mock window.location so the SIWE library can read it
-    Object.defineProperty(window, "location", {
-      value: {
-        protocol: "http:",
-        host: "localhost:3000",
-        origin: "http://localhost:3000",
-        href: "http://localhost:3000/",
-      },
-      writable: true,
-      configurable: true,
-    });
+    // In Chromium, window.location is already defined and non-configurable
+    // So we just use the existing values (which should work for testing)
+    console.log("[Browser Test] Using existing window.location:", window.location.origin);
 
-    // STEP 5: Setup basic provider behavior
-    // These mocks handle standard MetaMask RPC methods:
-    // - eth_chainId: Returns "0x4" (Rinkeby testnet - not critical for our use case)
-    // - eth_accounts: Returns list of connected accounts
-    // - eth_requestAccounts: Returns accounts when user "connects" wallet
-    testingUtils.mockChainId("0x4");
-    testingUtils.mockAccounts([TEST_ACCOUNT]);
-    testingUtils.mockRequestAccounts([TEST_ACCOUNT]);
-  }, 600000); // 10-minute timeout for localnet startup
-
-  afterAll(async () => {
-    // Cleanup: Stop the Docker container and clean up resources
-    await teardownLocalnet();
-    testingUtils.clearAllMocks();
-  });
-
-  afterEach(() => {
-    // Reset mocks between tests to ensure clean state
-    // This prevents test pollution where one test affects another
-    testingUtils.clearAllMocks();
-    testingUtils.mockChainId("0x4");
-    testingUtils.mockAccounts([TEST_ACCOUNT]);
-  });
+    console.log("[Browser Test] Setup complete");
+  }, 30000); // 30-second timeout for setup
 
   it("should successfully sign and submit a simple APT transfer", async () => {
     /**
@@ -152,30 +136,19 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
     // derivedAddress = sha3_256(ethereumAddress + domain_separator)
     const derivedAddr = await getDerivedAddress(TEST_ACCOUNT);
     const derivedAddrStr = derivedAddr.toString();
-    console.log(`Test Account: ${TEST_ACCOUNT} -> ${derivedAddrStr}`);
+    console.log(`[Browser Test] Test Account: ${TEST_ACCOUNT} -> ${derivedAddrStr}`);
 
     // STEP 2: Fund the derived Aptos account
     // The derived account needs APT (Aptos native coin) to pay for gas fees
     // 100_000_000 Octas = 1 APT (Aptos uses 8 decimals)
-    await fundAccount(derivedAddrStr, 100_000_000); // 1 APT
+    await fundAccountBrowser(derivedAddrStr, 100_000_000); // 1 APT
     // Wait for funding transaction to be indexed by the blockchain
-    await setTimeout(2000);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    // STEP 3: Setup signature interceptor for personal_sign
-    // This is the CRITICAL step for SIWE authentication
-    // When the app calls window.ethereum.request({ method: "personal_sign", ... }),
-    // this mock will intercept it and return a real signature using the Ethereum wallet
-    const wallet = new ethers.Wallet(TEST_PK);
-    testingUtils.lowLevel.mockRequest(
-      "personal_sign",
-      async (params: any[]) => {
-        const [msgHex] = params; // Message is hex-encoded
-        const msgStr = ethers.toUtf8String(msgHex); // Decode to UTF-8 string
-        return await wallet.signMessage(msgStr); // Standard EIP-191 signature
-      },
-    );
-
-    // STEP 4: Submit transaction using SIWE authentication
+    // STEP 3: Submit transaction using SIWE authentication
+    // NOTE: The browser wallet mock (set up in beforeAll) already handles personal_sign
+    // When submitNativeTransaction calls window.ethereum.request({ method: "personal_sign" }),
+    // the mock will automatically sign the message with the Ethereum wallet
     // This tests the complete flow:
     // a. submitNativeTransaction() generates a SIWE message
     // b. Calls window.ethereum.request({ method: "personal_sign" })
@@ -184,7 +157,7 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
     // e. The transaction is submitted to the blockchain
     const recipient =
       "0x0000000000000000000000000000000000000000000000000000000000000001"; // Burn address / Foundation
-    console.log("Submitting transfer...");
+    console.log("[Browser Test] Submitting transfer...");
 
     // Get initial balance of recipient to verify balance change later
     let initialBalance = 0n;
@@ -197,7 +170,7 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
     } catch (e) {
       // Ignore error (account might not exist yet)
     }
-    console.log(`Initial Balance of ${recipient}: ${initialBalance}`);
+    console.log(`[Browser Test] Initial Balance of ${recipient}: ${initialBalance}`);
 
     // Submit the APT transfer transaction
     // This will:
@@ -210,9 +183,9 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
       functionArguments: [recipient, 1000], // Transfer 1000 Octas (0.00001 APT)
     });
 
-    // STEP 5: Verify transaction submission and execution
+    // STEP 4: Verify transaction submission and execution
     const result = await txPromise;
-    console.log("Transaction Submitted:", result.hash);
+    console.log("[Browser Test] Transaction Submitted:", result.hash);
 
     // Verify we got a transaction hash back
     expect(result.hash).toBeDefined();
@@ -222,9 +195,9 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
       transactionHash: result.hash,
     });
     expect(txInfo.success).toBe(true);
-    console.log("Transaction Executed Successfully!");
+    console.log("[Browser Test] Transaction Executed Successfully!");
 
-    // STEP 6: Verify balance change on-chain
+    // STEP 5: Verify balance change on-chain
     // This is the ultimate proof that:
     // - The transaction was submitted correctly
     // - The blockchain accepted the Ethereum signature
@@ -234,29 +207,31 @@ describe.sequential("MetaMask Mock Fidelity - Simple Transfer", () => {
       coinType: "0x1::aptos_coin::AptosCoin",
     });
     const finalBalance = BigInt(finalRes);
-    console.log(`Final Balance of ${recipient}: ${finalBalance}`);
+    console.log(`[Browser Test] Final Balance of ${recipient}: ${finalBalance}`);
 
     // Balance should increase by exactly 1000 Octas
     expect(finalBalance).toBe(initialBalance + 1000n);
-    console.log("Balance verification passed!");
+    console.log("[Browser Test] Balance verification passed!");
 
     /**
      * WHAT THIS TEST PROVES:
-     * 1. Ethereum signatures can authenticate Aptos transactions
+     * 1. Ethereum signatures can authenticate Aptos transactions IN A REAL BROWSER
      * 2. No Aptos wallet is needed - only MetaMask (or any Ethereum wallet)
-     * 3. The SIWE flow works end-to-end (message generation, signing, verification)
+     * 3. The SIWE flow works end-to-end in a browser environment
      * 4. The derived Aptos account is properly controlled by the Ethereum address
      * 5. Transactions execute correctly and balances update as expected
+     * 6. Browser-specific APIs (fetch, window, etc.) work correctly
      *
      * WHY THIS MATTERS:
      * This enables users to interact with Aptos dApps using their existing
-     * Ethereum wallets (MetaMask, Coinbase Wallet, etc.) without needing to:
+     * Ethereum wallets (MetaMask, Coinbase Wallet, etc.) in a real browser
+     * environment, without needing to:
      * - Install a separate Aptos wallet
      * - Manage Aptos private keys
      * - Understand Aptos-specific wallet concepts
      *
-     * They simply sign a message with their Ethereum wallet, and it "just works"
-     * on Aptos blockchain.
+     * They simply sign a message with their Ethereum wallet in the browser,
+     * and it "just works" on Aptos blockchain.
      */
   }, 120000);
 });

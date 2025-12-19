@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import App from "../../src/App";
-import { MockWallet } from "../utils/MockWallet";
+import { MockWallet } from "../browser-utils/MockWallet";
 
 // Random secp256k1 private key for testing
 const TEST_PK =

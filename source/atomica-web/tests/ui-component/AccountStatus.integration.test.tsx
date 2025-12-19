@@ -3,8 +3,8 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { AccountStatus } from "../../src/components/AccountStatus";
-import { setupLocalnet, teardownLocalnet } from "../setup/localnet";
-import { MockWallet } from "../utils/MockWallet";
+import { setupLocalnet, teardownLocalnet } from "../node-utils/localnet";
+import { MockWallet } from "../browser-utils/MockWallet";
 import nodeFetch from "node-fetch";
 import { useTokenBalances } from "../../src/hooks/useTokenBalances";
 

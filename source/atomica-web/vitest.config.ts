@@ -1,28 +1,31 @@
-/// <reference types="vitest" />
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import { playwright } from "@vitest/browser-playwright";
 
-// Unified vitest configuration
-// Runs all tests sequentially to prevent localnet port conflicts
 export default defineConfig({
-  plugins: [react()],
-  test: {
-    globals: true,
-    environment: "happy-dom",
+    plugins: [react()],
+    test: {
+        globals: true,
+        fileParallelism: false,
+        maxConcurrency: 1,
 
-    // Force sequential execution at the file level
-    // This prevents multiple integration tests from starting localnet simultaneously
-    fileParallelism: false,
-    maxConcurrency: 1,
+        // All tests run in browser (Chromium via Playwright)
+        // No more happy-dom - everything is real browser testing
+        browser: {
+            enabled: true,
+            headless: true,
+            provider: playwright(),
+            instances: [
+                {
+                    browser: "chromium",
+                },
+            ],
+        },
 
-    // Include all test files
-    include: ["tests/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
+        // Node.js orchestration runs before tests
+        globalSetup: "./tests/node-utils/global-setup.ts",
 
-    // Exclude node_modules and build artifacts
-    exclude: [
-      "**/node_modules/**",
-      "**/dist/**",
-      "**/.{idea,git,cache,output,temp}/**",
-    ],
-  },
+        // Include all test files
+        include: ["tests/**/*.test.{ts,tsx}"],
+    },
 });

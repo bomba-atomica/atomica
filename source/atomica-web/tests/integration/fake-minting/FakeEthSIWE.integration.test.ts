@@ -6,7 +6,7 @@ import {
   teardownLocalnet,
   fundAccount,
   deployContracts,
-} from "../../setup/localnet";
+} from "../../node-utils/localnet";
 import { getDerivedAddress } from "../../../src/lib/aptos/siwe";
 import { submitNativeTransaction } from "../../../src/lib/aptos/transaction";
 import { ethers } from "ethers";

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { setupLocalnet, teardownLocalnet } from "../../setup/localnet";
+import { setupLocalnet, teardownLocalnet } from "../../node-utils/localnet";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 
 const config = new AptosConfig({
