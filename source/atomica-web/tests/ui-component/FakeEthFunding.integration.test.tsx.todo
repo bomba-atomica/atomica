@@ -1,0 +1,151 @@
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
+import { MockWallet } from "../../test-utils/browser-utils/MockWallet";
+import { commands } from "vitest/browser";
+import {
+  aptos,
+  getDerivedAddress,
+  setAptosInstance,
+} from "../../src/lib/aptos";
+import { Faucet } from "../../src/components/Faucet";
+import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+
+
+
+const DEPLOYER_ADDR =
+  "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
+// Standard Hardhat Account 0 Private Key (for reference, eth-testing simulates the signer)
+const TEST_PK = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+const TEST_ACCOUNT = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Hardhat Account 0
+
+import { vi } from "vitest";
+// Mock the CONTRACT_ADDR to match our localnet deployer
+vi.mock("../../src/lib/aptos", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../src/lib/aptos")>();
+  return {
+    ...actual,
+    CONTRACT_ADDR:
+      "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa",
+  };
+});
+
+describe.sequential("FakeETH Funding Integration", () => {
+  // Setup Mock Wallet
+  const mockWallet = new MockWallet(TEST_PK, 4);
+
+  beforeAll(async () => {
+    console.log("Starting Localnet...");
+    await (commands as any).setupLocalnet();
+
+    // INJECT FETCH-COMPATIBLE APTOS INSTANCE
+    const config = new AptosConfig({
+      network: Network.LOCAL,
+      fullnode: "http://127.0.0.1:8080/v1",
+    });
+    const testAptos = new Aptos(config);
+    setAptosInstance(testAptos);
+    console.log("Injected test-compatible Aptos instance.");
+
+    // Connectivity Check
+    try {
+      const ledger = await aptos.getLedgerInfo();
+      console.log(
+        `[Connectivity check] Connected to chain ID: ${ledger.chain_id}`,
+      );
+    } catch (e: any) {
+      console.error("[Connectivity check] Failed:", e);
+      throw new Error("Could not connect to local node. Aborting test.");
+    }
+
+    // Mock window.ethereum using MockWallet
+    Object.defineProperty(window, "ethereum", {
+      value: mockWallet.getProvider(),
+      writable: true,
+    });
+
+
+  }, 120000);
+
+  afterAll(async () => {
+    console.log("Stopping Localnet...");
+    await (commands as any).teardownLocalnet();
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("should sign SIWE and mint FAKEETH when requested", async () => {
+    const derivedAddr = await getDerivedAddress(TEST_ACCOUNT);
+    const derivedAddrStr = derivedAddr.toString();
+
+    console.log(`Test Account: ${TEST_ACCOUNT} -> ${derivedAddrStr}`);
+
+    // 1. Initial funding for Gas (APT)
+    await (commands as any).fundAccount(derivedAddrStr, 10_0000_0000);
+    console.log("Gas funding initiated.");
+
+    // Wait for gas funding to commit
+    for (let i = 0; i < 20; i++) {
+      try {
+        const balance = await aptos.getAccountResource({
+          accountAddress: derivedAddrStr,
+          resourceType: "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>",
+        });
+        if (balance) {
+          console.log("Gas confirmed.");
+          break;
+        }
+      } catch {
+        // Balance not available yet, retry
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    // 2. Render Faucet
+    render(<Faucet account={TEST_ACCOUNT} />);
+
+    const btn = await waitFor(
+      () => {
+        const button = screen.getByText("Request Test Tokens");
+        expect(button).not.toBeDisabled();
+        return button;
+      },
+      { timeout: 30000 },
+    );
+
+    // 3. Click Request
+    fireEvent.click(btn);
+
+    // 3. Click Request
+    fireEvent.click(btn);
+
+    // 4. Handle MetaMask Signature Request
+    // MockWallet handles personal_sign automatically using the TEST_PK
+
+    // 5. Wait for success message
+    await waitFor(
+      () => {
+        expect(screen.getByText("Tokens Received ✓")).toBeInTheDocument();
+      },
+      { timeout: 60000 },
+    );
+
+    console.log("UI confirmed tokens received.");
+
+    // 5. Verify Balance On-Chain
+    const viewRes = await aptos.view({
+      payload: {
+        function: "0x1::coin::balance",
+        typeArguments: [`${DEPLOYER_ADDR}::FAKEETH::FAKEETH`],
+        functionArguments: [derivedAddrStr],
+      },
+    });
+
+    console.log("FAKEETH Balance via View:", viewRes[0]);
+    // 10 units * 10^8 decimals
+    expect(viewRes[0]).toBe("1000000000");
+  }, 120000);
+});

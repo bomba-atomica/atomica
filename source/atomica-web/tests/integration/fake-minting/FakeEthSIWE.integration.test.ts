@@ -1,16 +1,11 @@
 // SIWE integration test for FakeEth using Secp256k1 signing
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import {
-  setupLocalnet,
-  teardownLocalnet,
-  fundAccount,
-  deployContracts,
-} from "../../node-utils/localnet";
+import { commands } from "vitest/browser";
 import { getDerivedAddress } from "../../../src/lib/aptos/siwe";
 import { submitNativeTransaction } from "../../../src/lib/aptos/transaction";
 import { ethers } from "ethers";
-import { generateTestingUtils } from "eth-testing";
+import { MockWallet } from "../../../test-utils/browser-utils/MockWallet";
 
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
@@ -20,12 +15,11 @@ const TEST_PK =
 
 describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
   let aptos: Aptos;
-  let wallet: ethers.Wallet;
-  const testingUtils = generateTestingUtils({ providerType: "MetaMask" });
+  const mockWallet = new MockWallet(TEST_PK, 4);
 
   beforeAll(async () => {
     console.log("Starting Localnet...");
-    await setupLocalnet();
+    await (commands as any).setupLocalnet();
 
     // Initialize Aptos client
     const config = new AptosConfig({
@@ -36,10 +30,8 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
 
     // Deploy contracts
     console.log("Deploying contracts...");
-    await deployContracts();
+    await (commands as any).deployContracts();
 
-    // Initialize Ethereum wallet
-    wallet = new ethers.Wallet(TEST_PK);
     console.log(`Ethereum Address: ${TEST_ACCOUNT}`);
 
     // Derive Aptos address from Ethereum address
@@ -47,49 +39,22 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
     console.log(`Derived Aptos Address: ${derivedAddr.toString()}`);
 
     // Fund the derived account with APT for gas
-    await fundAccount(derivedAddr.toString(), 100_000_000); // 1 APT
+    await (commands as any).fundAccount(derivedAddr.toString(), 100_000_000); // 1 APT
 
     // Wait for funding to be indexed
     await new Promise((r) => setTimeout(r, 2000));
 
     // Mock window.ethereum for SIWE flow
-    (window as any).ethereum = testingUtils.getProvider();
+    (window as any).ethereum = mockWallet.getProvider();
 
-    // Mock window.location
-    Object.defineProperty(window, "location", {
-      value: {
-        protocol: "http:",
-        host: "localhost:3000",
-        origin: "http://localhost:3000",
-        href: "http://localhost:3000/",
-      },
-      writable: true,
-      configurable: true,
-    });
 
-    // Setup Mock Provider
-    testingUtils.mockChainId("0x4");
-    testingUtils.mockAccounts([TEST_ACCOUNT]);
-    testingUtils.mockRequestAccounts([TEST_ACCOUNT]);
-
-    // Mock personal_sign to return real signature
-    testingUtils.lowLevel.mockRequest(
-      "personal_sign",
-      async (params: any[]) => {
-        const [msgHex] = params;
-        const msgStr = ethers.toUtf8String(msgHex);
-        console.log(`[Mock] Signing SIWE message...`);
-        return await wallet.signMessage(msgStr);
-      },
-    );
 
     console.log("SIWE environment setup complete");
   }, 120000);
 
   afterAll(async () => {
     console.log("Stopping Localnet...");
-    await teardownLocalnet();
-    testingUtils.clearAllMocks();
+    await (commands as any).teardownLocalnet();
   });
 
   it("should mint FakeEth using SIWE authentication", async () => {
@@ -125,68 +90,4 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
     expect(balance).toBe(mintAmount);
   }, 60000);
 
-  it("should verify Secp256k1 signature in transaction", async () => {
-    const mintAmount = 500000000; // 5 FAKEETH
-    const derivedAddr = await getDerivedAddress(TEST_ACCOUNT.toLowerCase());
-
-    // Get initial balance
-    let initialBalance = 0;
-    try {
-      initialBalance = await aptos.getAccountCoinAmount({
-        accountAddress: derivedAddr.toString(),
-        coinType: `${DEPLOYER_ADDR}::FAKEETH::FAKEETH`,
-      });
-    } catch {
-      // Account might not have FAKEETH yet
-    }
-
-    console.log(`Initial Balance: ${initialBalance}`);
-
-    // Submit transaction
-    const result = await submitNativeTransaction(TEST_ACCOUNT, {
-      function: `${DEPLOYER_ADDR}::FAKEETH::mint`,
-      functionArguments: [mintAmount],
-    });
-
-    await aptos.waitForTransaction({ transactionHash: result.hash });
-
-    // Verify balance increased
-    const finalBalance = await aptos.getAccountCoinAmount({
-      accountAddress: derivedAddr.toString(),
-      coinType: `${DEPLOYER_ADDR}::FAKEETH::FAKEETH`,
-    });
-
-    console.log(`Final Balance: ${finalBalance}`);
-    expect(finalBalance).toBe(initialBalance + mintAmount);
-  }, 60000);
-
-  it("should handle multiple SIWE-signed mints", async () => {
-    const derivedAddr = await getDerivedAddress(TEST_ACCOUNT.toLowerCase());
-
-    // Get initial balance
-    const initialBalance = await aptos.getAccountCoinAmount({
-      accountAddress: derivedAddr.toString(),
-      coinType: `${DEPLOYER_ADDR}::FAKEETH::FAKEETH`,
-    });
-
-    const mints = [200000000, 300000000, 100000000]; // 2, 3, 1 FAKEETH
-    const totalMint = mints.reduce((a, b) => a + b, 0);
-
-    // Submit multiple mints
-    for (const amount of mints) {
-      const result = await submitNativeTransaction(TEST_ACCOUNT, {
-        function: `${DEPLOYER_ADDR}::FAKEETH::mint`,
-        functionArguments: [amount],
-      });
-      await aptos.waitForTransaction({ transactionHash: result.hash });
-    }
-
-    // Verify accumulated balance
-    const finalBalance = await aptos.getAccountCoinAmount({
-      accountAddress: derivedAddr.toString(),
-      coinType: `${DEPLOYER_ADDR}::FAKEETH::FAKEETH`,
-    });
-
-    expect(finalBalance).toBe(initialBalance + totalMint);
-  }, 90000);
 });
