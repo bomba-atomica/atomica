@@ -76,11 +76,10 @@ jobs:
             source/zapatos/target
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-warmup-large-${{ hashFiles('source/zapatos/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('source/zapatos/Cargo.lock') }}-warmup-
           restore-keys: |
-            ${{ runner.os }}-cargo-warmup-large-
-            ${{ runner.os }}-cargo-warmup-medium-
-            ${{ runner.os }}-cargo-warmup-small-
+            ${{ runner.os }}-cargo-${{ hashFiles('source/zapatos/Cargo.lock') }}-warmup-
+            ${{ runner.os }}-cargo-
 
       - name: Setup Rust cache
         if: steps.cache-check.outputs.cache-hit != 'true'
