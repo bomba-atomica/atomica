@@ -1,11 +1,10 @@
-// SIWE integration test for FakeEth using Secp256k1 signing
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { commands } from "vitest/browser";
 import { getDerivedAddress } from "../../../src/lib/aptos/siwe";
 import { submitNativeTransaction } from "../../../src/lib/aptos/transaction";
 import { ethers } from "ethers";
-import { MockWallet } from "../../../test-utils/browser-utils/MockWallet";
+import { setupBrowserWalletMock } from "../../../test-utils/browser-utils/wallet-mock";
 
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
@@ -15,7 +14,6 @@ const TEST_PK =
 
 describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
   let aptos: Aptos;
-  const mockWallet = new MockWallet(TEST_PK, 4);
 
   beforeAll(async () => {
     console.log("Starting Localnet...");
@@ -44,10 +42,8 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
     // Wait for funding to be indexed
     await new Promise((r) => setTimeout(r, 2000));
 
-    // Mock window.ethereum for SIWE flow
-    (window as any).ethereum = mockWallet.getProvider();
-
-
+    // Setup browser wallet mock
+    setupBrowserWalletMock(TEST_ACCOUNT, TEST_PK);
 
     console.log("SIWE environment setup complete");
   }, 120000);
@@ -65,7 +61,7 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
 
     // Submit transaction using SIWE flow
     const result = await submitNativeTransaction(TEST_ACCOUNT, {
-      function: `${DEPLOYER_ADDR}::FAKEETH::mint`,
+      function: `${DEPLOYER_ADDR}::fake_eth::mint`,
       functionArguments: [mintAmount],
     });
 
@@ -80,12 +76,15 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
     console.log("Transaction committed:", txInfo.success);
     expect(txInfo.success).toBe(true);
 
-    // Verify balance
-    const balance = await aptos.getAccountCoinAmount({
-      accountAddress: derivedAddr.toString(),
-      coinType: `${DEPLOYER_ADDR}::FAKEETH::FAKEETH`,
+    // Verify balance via View Function (Fungible Asset)
+    const viewRes = await aptos.view({
+      payload: {
+        function: `${DEPLOYER_ADDR}::fake_eth::balance`,
+        functionArguments: [derivedAddr.toString()],
+      },
     });
 
+    const balance = Number(viewRes[0]);
     console.log(`FAKEETH Balance: ${balance}`);
     expect(balance).toBe(mintAmount);
   }, 60000);
