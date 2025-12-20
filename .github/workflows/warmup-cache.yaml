@@ -36,4 +36,4 @@ jobs:
       - name: Build Small Deps
         run: |
           cd source/zapatos
-          cargo build --release -p move-core-types -p move-binary-format
+          cargo build --release -p move-core-types -p aptos-framework
