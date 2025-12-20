@@ -119,7 +119,7 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     // Wait for success (should skip simulation phase)
     await waitFor(
       () => {
-        expect(screen.getByText("Success!")).toBeInTheDocument();
+        expect(screen.getByText("Success")).toBeInTheDocument();
       },
       { timeout: 30000 },
     );
@@ -136,8 +136,6 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     });
     const balance = Number(balanceResult[0]);
 
-    expect(Number(balance)).toBeGreaterThan(0);
-    console.log("Balance verified:", balance);
     expect(Number(balance)).toBeGreaterThan(0);
     console.log("Balance verified:", balance);
   }, 90000);
