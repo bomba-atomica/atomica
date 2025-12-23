@@ -1,0 +1,28 @@
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Docker volumes and runtime data
+docker-testnet/*.blob
+docker-testnet/*.key
+docker-testnet/waypoint.txt
+docker-testnet/genesis/
+docker-testnet/data/
+docker-testnet/logs/
+
+# Test artifacts
+tests/target/
+tests/Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env.local

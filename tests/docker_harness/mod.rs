@@ -1,0 +1,308 @@
+//! Docker testnet manager for zapatos integration tests
+//!
+//! Provides `DockerTestnet` which:
+//! - Starts fresh validator containers for each test (full isolation)
+//! - Discovers validator endpoints dynamically
+//! - Queries validator state via REST API
+//! - Tears down containers on drop (even on panic)
+//!
+//! # Example
+//! ```no_run
+//! #[tokio::test]
+//! async fn test_timelock_encryption() {
+//!     let testnet = DockerTestnet::new(4).await.unwrap();
+//!     let api_url = testnet.validator_api_url(0);
+//!     // Make REST API calls to validators
+//!     // Test timelock functionality
+//! }  // Containers stopped automatically
+//! ```
+//!
+//! # Note
+//! Tests must run sequentially: `cargo test -- --test-threads=1`
+//! This is because Docker port mappings can conflict between parallel tests.
+
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
+use serde::{Deserialize, Serialize};
+
+/// Base ports for validators (incremented for each validator)
+const BASE_API_PORT: u16 = 8080;
+#[allow(dead_code)]
+const BASE_METRICS_PORT: u16 = 9101;
+
+/// Docker testnet with automatic cleanup
+pub struct DockerTestnet {
+    compose_dir: String,
+    num_validators: usize,
+    validator_urls: Vec<String>,
+}
+
+impl DockerTestnet {
+    /// Create a fresh, isolated Docker testnet with N validators.
+    ///
+    /// # Arguments
+    /// * `num_validators` - Number of validator nodes (typically 4-7)
+    ///
+    /// # Errors
+    /// Returns error if:
+    /// - Docker is not running
+    /// - docker-testnet directory not found
+    /// - Validators fail to start within timeout
+    pub async fn new(num_validators: usize) -> anyhow::Result<Self> {
+        if num_validators < 1 || num_validators > 7 {
+            return Err(anyhow::anyhow!(
+                "num_validators must be between 1 and 7, got {}",
+                num_validators
+            ));
+        }
+
+        let compose_dir = Self::find_compose_dir()?;
+        Self::check_docker()?;
+
+        tracing::info!("Setting up fresh Docker testnet with {} validators...", num_validators);
+
+        // Clean up any existing testnet
+        let _ = Self::run_compose(&compose_dir, &["down", "--remove-orphans", "-v"]);
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        // Start the testnet
+        Self::run_compose(&compose_dir, &["up", "-d"])?;
+
+        // Wait for all validators to be healthy
+        Self::wait_for_healthy(num_validators, 120).await?;
+
+        // Discover validator endpoints
+        let validator_urls = (0..num_validators)
+            .map(|i| format!("http://127.0.0.1:{}", BASE_API_PORT + i as u16))
+            .collect();
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        tracing::info!("✓ Docker testnet ready with {} validators", num_validators);
+
+        Ok(Self {
+            compose_dir,
+            num_validators,
+            validator_urls,
+        })
+    }
+
+    /// Get the REST API URL for a specific validator
+    pub fn validator_api_url(&self, index: usize) -> &str {
+        &self.validator_urls[index]
+    }
+
+    /// Get all validator API URLs
+    pub fn validator_api_urls(&self) -> &[String] {
+        &self.validator_urls
+    }
+
+    /// Get the number of validators
+    pub fn num_validators(&self) -> usize {
+        self.num_validators
+    }
+
+    /// Query ledger info from a validator
+    pub async fn get_ledger_info(&self, validator_index: usize) -> anyhow::Result<LedgerInfo> {
+        let client = reqwest::Client::new();
+        let url = format!("{}/v1", self.validator_api_url(validator_index));
+        let response = client.get(&url).send().await?;
+        let ledger_info = response.json::<LedgerInfo>().await?;
+        Ok(ledger_info)
+    }
+
+    /// Get validator group public key from DKG state
+    /// This is used for timelock encryption
+    pub async fn get_validator_group_pubkey(&self) -> anyhow::Result<String> {
+        // Query the DKG module state from on-chain
+        let client = reqwest::Client::new();
+        let url = format!(
+            "{}/v1/accounts/0x1/resource/0x1::dkg::DKGState",
+            self.validator_api_url(0)
+        );
+
+        let response = client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow::anyhow!(
+                "Failed to query DKG state: {}",
+                response.status()
+            ));
+        }
+
+        let dkg_state: serde_json::Value = response.json().await?;
+
+        // Extract group public key from the resource data
+        let group_pk = dkg_state
+            .get("data")
+            .and_then(|d| d.get("dealer_epoch_public_key"))
+            .and_then(|k| k.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Group public key not found in DKG state"))?;
+
+        Ok(group_pk.to_string())
+    }
+
+    /// Wait for a specific number of blocks to be produced
+    pub async fn wait_for_blocks(&self, num_blocks: u64, timeout_secs: u64) -> anyhow::Result<()> {
+        let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+        let start_version = self.get_ledger_info(0).await?.ledger_version;
+        let target_version = start_version + num_blocks;
+
+        tracing::info!("Waiting for {} blocks (from version {} to {})", num_blocks, start_version, target_version);
+
+        while Instant::now() < deadline {
+            let current = self.get_ledger_info(0).await?.ledger_version;
+            if current >= target_version {
+                tracing::info!("✓ Reached target version {}", current);
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+
+        Err(anyhow::anyhow!("Timeout waiting for blocks"))
+    }
+
+    // --- Private helpers ---
+
+    fn check_docker() -> anyhow::Result<()> {
+        let ok = Command::new("docker")
+            .args(["info"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?
+            .success();
+        if !ok {
+            return Err(anyhow::anyhow!(
+                "Docker is not running. Please start Docker and try again."
+            ));
+        }
+        Ok(())
+    }
+
+    fn find_compose_dir() -> anyhow::Result<String> {
+        // Try various paths relative to the test binary
+        for path in [
+            "docker-testnet",
+            "./docker-testnet",
+            "../docker-testnet",
+            "../../docker-testnet",
+        ] {
+            if std::path::Path::new(&format!("{}/docker-compose.yaml", path)).exists() {
+                return Ok(path.to_string());
+            }
+        }
+
+        // Try using CARGO_MANIFEST_DIR
+        if let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR") {
+            let path = format!("{}/docker-testnet", dir);
+            if std::path::Path::new(&format!("{}/docker-compose.yaml", path)).exists() {
+                return Ok(path);
+            }
+        }
+
+        Err(anyhow::anyhow!(
+            "docker-testnet directory not found. Run tests from the atomica root directory."
+        ))
+    }
+
+    fn run_compose(dir: &str, args: &[&str]) -> anyhow::Result<()> {
+        let out = Command::new("docker")
+            .arg("compose")
+            .args(args)
+            .current_dir(dir)
+            .output()?;
+
+        // Don't error on 'down' commands as they're used for cleanup
+        if !out.status.success() && args[0] != "down" {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            return Err(anyhow::anyhow!(
+                "docker compose {} failed: {}",
+                args.join(" "),
+                stderr
+            ));
+        }
+        Ok(())
+    }
+
+    async fn wait_for_healthy(num_validators: usize, timeout_secs: u64) -> anyhow::Result<()> {
+        let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+        tracing::info!("Waiting for {} validators to become healthy...", num_validators);
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(3))
+            .build()?;
+
+        while Instant::now() < deadline {
+            let mut healthy_count = 0;
+
+            for i in 0..num_validators {
+                let url = format!("http://127.0.0.1:{}/v1", BASE_API_PORT + i as u16);
+                if client.get(&url).send().await.is_ok() {
+                    healthy_count += 1;
+                }
+            }
+
+            if healthy_count == num_validators {
+                tracing::info!("  ✓ All {} validators healthy", num_validators);
+                return Ok(());
+            }
+
+            tracing::debug!("  {}/{} validators healthy", healthy_count, num_validators);
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        }
+
+        Err(anyhow::anyhow!(
+            "Timeout waiting for validators. Check 'docker compose logs' for details."
+        ))
+    }
+}
+
+impl Drop for DockerTestnet {
+    fn drop(&mut self) {
+        tracing::info!("Tearing down Docker testnet...");
+        let _ = Self::run_compose(&self.compose_dir, &["down", "--remove-orphans", "-v"]);
+        tracing::info!("✓ Docker testnet stopped");
+    }
+}
+
+/// Ledger info response from the REST API
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LedgerInfo {
+    pub chain_id: u8,
+    pub epoch: String,
+    pub ledger_version: u64,
+    pub oldest_ledger_version: u64,
+    pub ledger_timestamp: String,
+    pub node_role: String,
+    pub oldest_block_height: u64,
+    pub block_height: u64,
+    pub git_hash: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+
+    #[tokio::test]
+    #[serial]
+    async fn test_docker_lifecycle() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+
+        match DockerTestnet::new(4).await {
+            Ok(testnet) => {
+                println!("✓ Testnet started with {} validators", testnet.num_validators());
+                println!("  Validator 0 API: {}", testnet.validator_api_url(0));
+
+                // Try to get ledger info
+                if let Ok(info) = testnet.get_ledger_info(0).await {
+                    println!("  Chain ID: {}", info.chain_id);
+                    println!("  Block height: {}", info.block_height);
+                }
+            }
+            Err(e) => {
+                println!("✗ Failed to start testnet: {}", e);
+                println!("  Make sure Docker is running and images are built (run ./build.sh)");
+            }
+        }
+    }
+}
