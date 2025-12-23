@@ -1,12 +1,7 @@
 // Low-level integration test for FakeEth using Ed25519 signing
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
-import {
-  setupLocalnet,
-  teardownLocalnet,
-  fundAccount,
-  deployContracts,
-} from "../node-utils/localnet";
+import { commands } from "vitest/browser";
 
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
@@ -17,7 +12,7 @@ describe.sequential("FakeEth Integration Test (Ed25519)", () => {
 
   beforeAll(async () => {
     console.log("Starting Localnet...");
-    await setupLocalnet();
+    await commands.setupLocalnet();
 
     // Initialize Aptos client
     const config = new AptosConfig({
@@ -28,7 +23,7 @@ describe.sequential("FakeEth Integration Test (Ed25519)", () => {
 
     // Deploy contracts
     console.log("Deploying contracts...");
-    await deployContracts();
+    await commands.deployContracts();
 
     // Generate Ed25519 test account
     testAccount = Account.generate();
@@ -37,7 +32,7 @@ describe.sequential("FakeEth Integration Test (Ed25519)", () => {
     );
 
     // Fund the test account with APT for gas
-    await fundAccount(testAccount.accountAddress.toString(), 100_000_000); // 1 APT
+    await commands.fundAccount(testAccount.accountAddress.toString(), 100_000_000); // 1 APT
 
     // Wait for funding to be indexed
     await new Promise((r) => setTimeout(r, 2000));
@@ -47,7 +42,7 @@ describe.sequential("FakeEth Integration Test (Ed25519)", () => {
 
   afterAll(async () => {
     console.log("Stopping Localnet...");
-    await teardownLocalnet();
+    await commands.teardownLocalnet();
   });
 
   it("should sign and submit FakeEth mint transaction with Ed25519", async () => {

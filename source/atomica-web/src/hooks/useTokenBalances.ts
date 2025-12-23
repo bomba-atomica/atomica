@@ -47,11 +47,14 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
     try {
       const derived = await getDerivedAddress(ethAddress.toLowerCase());
 
-      // Check if account exists on-chain first
+      // Try to fetch APT balance - this will throw if account doesn't exist
+      let aptBalance;
       try {
-        await aptos.getAccountInfo({ accountAddress: derived });
+        aptBalance = await aptos.getAccountAPTAmount({
+          accountAddress: derived,
+        });
       } catch {
-        // Account invalid/not found - stop here
+        // Account not found or invalid
         setBalances((prev) => ({
           ...prev,
           apt: 0,
@@ -63,10 +66,18 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
         return;
       }
 
-      // Account exists, fetch APT balance
-      const aptBalance = await aptos.getAccountAPTAmount({
-        accountAddress: derived,
-      });
+      // If balance is 0, consider account as not funded/not existing
+      if (aptBalance === 0) {
+        setBalances((prev) => ({
+          ...prev,
+          apt: 0,
+          fakeEth: 0,
+          fakeUsd: 0,
+          loading: false,
+          exists: false,
+        }));
+        return;
+      }
 
       // Check contracts deployment status
       const contractsDeployed = await areContractsDeployed();

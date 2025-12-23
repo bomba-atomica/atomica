@@ -1,10 +1,14 @@
 import { ethers } from "ethers";
 
 export class MockWallet {
+  chainId: string;
   wallet: ethers.Wallet;
 
-  constructor(privateKey: string) {
+  constructor(privateKey: string, chainId: number | string = 31337) {
     this.wallet = new ethers.Wallet(privateKey);
+    // Ensure hex string format
+    this.chainId =
+      typeof chainId === "number" ? `0x${chainId.toString(16)}` : chainId;
   }
 
   get address() {
@@ -36,18 +40,15 @@ export class MockWallet {
             return await this.wallet.signMessage(rawMessage);
           }
           case "eth_chainId":
-            // 31337 is common for local dev/anvil, but we can return whatever.
-            // Aptos doesn't strictly check this for the signature logic itself usually,
-            // but the SIWE message generation might use it.
-            return "0x7a69";
+            return this.chainId;
           case "net_version":
-            return "31337";
+            return parseInt(this.chainId, 16).toString();
           default:
             throw new Error(`Method ${method} not implemented in MockWallet`);
         }
       },
-      on: () => {},
-      removeListener: () => {},
+      on: () => { },
+      removeListener: () => { },
     };
   }
 }

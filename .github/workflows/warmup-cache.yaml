@@ -7,10 +7,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  warmup-small:
-    name: Warmup Small Dependencies
+  warmup:
+    name: Warmup All Dependencies
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 120
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
