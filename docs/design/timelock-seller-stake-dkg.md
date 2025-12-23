@@ -1,59 +1,122 @@
-# Design: Seller-Stake DKG Timelock (Collusion Resistance v2)
+# Design: N-Layer Onion Timelock Encryption
 
-## 1. Project Brief & Pivot
+## 1. Project Brief & Architecture Evolution
+
 **Previous Context:** The "Traitor's Bounty" mechanism (v1) was found to have critical MEV vulnerabilities.
-**New Direction:** Leveraging the natural economic alignment of **Sellers** (who have inventory locked for sale) as a second layer of security.
+**New Direction:** N-layer "Onion" encryption with pluggable key providers for maximum flexibility and security.
 
-**Core Concept:** "The Seller Check"
--   Timelocks are "Onion Encrypted": Layer 1 (Validators) + Layer 2 (Sellers).
--   Decryption requires cooperation from *both* the Validator Set (>67%) AND a subset of Sellers.
--   **Key Innovation:** We set the Seller threshold **low** (e.g., 33% by stake) to prioritize liveness while still forcing attackers to compromise two distinct groups.
+**Core Concept:** "The N-Layer Onion"
+- Timelocks use **N-layer onion encryption** with configurable layer composition
+- Each layer can use independent key providers (Validators, Sellers, Drand, etc.)
+- Decryption requires cooperation from **ALL N layers** in sequential order
+- Layer count, provider types, and ordering are configurable per auction
+- **Key Innovation:** Attackers must compromise ALL layers to decrypt early; adding layers exponentially increases attack difficulty
+
+**Example Configurations:**
+- **Single-Layer**: Validator-only (baseline security)
+- **Dual-Layer (Validator + Seller)**: Requires >67% validators AND >33% seller stake
+- **Dual-Layer (Validator + Drand)**: Requires >67% validators AND Drand beacon reveal
+- **Triple-Layer (Validator + Drand + Seller)**: Requires all three providers
 
 ---
 
-## 2. Architecture
+## 2. N-Layer Onion Architecture
 
-### 2.1 The Onion Lock ("Homogeneous v1.0")
-**Decision:** For v1.0, we use **BLS12-381** for both layers to enable direct code reuse of the robust `aptos-dkg` crate.
+### 2.1 Generalized Multi-Layer Encryption
 
-$$C = Enc_{Validator\_BIBE}(Enc_{Seller\_BLS}(B))$$
+**Abstraction:** Support arbitrary N ≥ 1 encryption layers with pluggable providers
 
-1.  **Validator Layer (Outer):**
-    *   **Scheme:** **BIBE** on BLS12-381.
-    *   **Logic:** Standard validator timelock.
-2.  **Seller Layer (Inner):**
-    *   **Scheme:** **Threshold BLS Encryption** (ElGamal-on-G1).
-    *   **Curve:** **BLS12-381** (Same as validators).
-    *   **Logic:** Sellers perform DKG for $P_{Group}$ using the existing Aptos DKG protocol.
-    *   **UX Note:** Since hardware wallets don't support threshold BLS, sellers generate a ephemeral "Session Key" (one-time app key) derived from their wallet signature to participate in the DKG.
+$$C = Enc_{L_1}(Enc_{L_2}(...Enc_{L_N}(Plaintext)...))$$
 
-**Future Roadmap (v2.0):**
-*   Migration to **Heterogeneous Cryptography** (e.g., BN254 or secp256k1) is planned to eliminate single-curve failure risks.
-*   For v1.0, we prioritize implementation safety (code reuse) over theoretical crypto-diversity.
+Where each layer $L_i$ is provided by an independent key source.
 
-To decrypt:
-1.  **Validators** peel the Outer Layer.
-2.  **Sellers** peel the Inner Layer via threshold decryption.
+**Sequential Decryption:**
+1. Decrypt Layer 1 (outermost) → reveals $C_{layer2}$
+2. Decrypt Layer 2 → reveals $C_{layer3}$
+3. ... Continue for N layers ...
+4. Decrypt Layer N (innermost) → reveals Plaintext
 
-### 2.2 Key Dependency (The "Split-Key" Model)
-**Requirement:** Seller Group key recovery must be **necessarily dependent** on the Validator Timelock.
+**Key Provider Independence:**
+- How each provider generates keys is orthogonal to the onion structure
+- Validators use BIBE/IBE with time-based identity
+- Sellers use threshold DKG with ElGamal
+- Drand uses tlock public randomness beacon
+- Future providers can be added without modifying core framework
 
-**Mechanism: Functional Dependency via Onion Locking**
-We treat the "Decryption Capability" as a single logical key $K_{System}$ split into two interdependent parts:
-$$K_{System} \approx (K_{Validator} \oplus K_{Seller})$$
+### 2.2 Example: Dual-Layer (Validator + Seller)
 
-1.  **Existential Independence:** The Seller Private Key $S_{Group}$ exists mathematically independent of the Validator Key.
-2.  **Functional Dependence:** However, the **utility** of $S_{Group}$ is strict time-dependent.
-    *   The ciphertext $C$ is wrapped in the Validator Layer.
-    *   Even if colluders reconstruct $S_{Group}$ at $T < T_{reveal}$, they lack the input ciphertext for their key.
-    *   They hold a key to a door that is inside a locked vault.
-    *   **Result:** Attempting to "discover the key in advance" yields a useless scalar that cannot decrypt the auction data.
+**Implementation for v1.0:** Use **BLS12-381** for both layers to enable code reuse of the `aptos-dkg` crate.
 
-*Note on PVSS:* Implementing stricter "Existential Dependency" (where $S_{Group}$ cannot even be reconstructed) would require Time-Locked Verifiable Secret Sharing (PVSS). We reject this due to high complexity and liveness risks (verifying encrypted shares). The Functional Dependency provides equivalent security for the application layer.
+$$C = Enc_{Validator\_BIBE}(Enc_{Seller\_BLS}(Bid))$$
 
-### 2.3 Seller Participation (The "Jury")
+1. **Layer 1 - Validator Layer (Outer):**
+   - **Scheme:** BIBE (Boneh-Franklin IBE) on BLS12-381
+   - **Threshold:** >67% of validators
+   - **Logic:** Time-based identity encryption (auction end time)
+   - **Key Generation:** Validators maintain BLS key pairs via consensus
 
-### 2.3 Seller Participation (The "Jury")
+2. **Layer 2 - Seller Layer (Inner):**
+   - **Scheme:** Threshold BLS Encryption (ElGamal on G1)
+   - **Curve:** BLS12-381 (same as validators)
+   - **Threshold:** >33% of seller stake
+   - **Logic:** Sellers perform DKG for group public key
+   - **Key Generation:** Per-auction DKG among sellers
+   - **UX Note:** Sellers use ephemeral "Session Key" derived from wallet signature
+
+### 2.3 Example: Triple-Layer (Validator + Drand + Seller)
+
+$$C = Enc_{Validator}(Enc_{Drand}(Enc_{Seller}(Bid)))$$
+
+1. **Layer 1 - Validator Layer (Outer):** Same as above
+2. **Layer 2 - Drand Layer (Middle):**
+   - **Scheme:** Drand tlock (timelock encryption)
+   - **Logic:** Public randomness beacon at specific round
+   - **Key Generation:** Drand network provides public keys
+   - **Threshold:** n/a (public beacon, deterministic reveal)
+3. **Layer 3 - Seller Layer (Inner):** Same as above
+
+**Security Benefit:** Attacker needs >67% validators AND Drand compromise AND >33% seller stake
+
+### 2.4 Future: Heterogeneous Cryptography (v2.0+)
+- Migration to different curves per layer (e.g., BLS12-381, BN254, secp256k1)
+- Eliminates single-curve failure risks
+- For v1.0, we prioritize implementation safety (code reuse) over crypto-diversity
+
+### 2.5 Layer Dependency (The "Nested Vault" Model)
+
+**Requirement:** Inner layer keys must be **functionally dependent** on outer layers.
+
+**Mechanism: Functional Dependency via Onion Nesting**
+
+For N layers, we treat decryption capability as:
+$$K_{System} = K_1 \circ K_2 \circ ... \circ K_N$$
+
+Where $\circ$ represents functional composition (sequential dependency).
+
+**Key Properties:**
+
+1. **Existential Independence:** Each layer's private key exists mathematically independent
+   - Seller group secret $S_{Seller}$ is independent of validator keys
+   - Drand randomness is independent of both
+
+2. **Functional Dependence:** However, **utility** is strictly ordered
+   - Inner layer keys are useless without outer layer decryption first
+   - Example: Even if attackers reconstruct $S_{Seller}$ early, they lack the input ciphertext
+   - They hold "a key to a door that is inside a locked vault inside another locked vault..."
+   - Adding more layers exponentially increases attack complexity
+
+3. **Sequential Unlocking:**
+   - Cannot skip layers (cryptographically enforced)
+   - Each layer reveals ciphertext for next layer only
+   - Final layer reveals plaintext
+
+**Note on PVSS:** Implementing stricter "Existential Dependency" (where inner keys cannot be reconstructed before outer layers) would require Time-Locked PVSS. We reject this due to complexity and liveness risks. Functional dependency via onion nesting provides equivalent application-layer security.
+
+### 2.6 Layer Provider Participation
+
+**Configurable Per Auction:** Auction creator specifies which layers to use and in what order.
+
+**Example: Seller Layer Participation (When Used)**
 -   **Selection:** Any seller attempting to sell assets in the auction *must* generate a DKG key share as part of their deposit transaction.
 -   **Weighting:** Shares are weighted by the USD value of the assets locked.
     -   *Rationale:* Large sellers have the most to lose if the auction reputation is destroyed by collusion.
@@ -63,23 +126,42 @@ $$K_{System} \approx (K_{Validator} \oplus K_{Seller})$$
 
 ## 3. Security & Game Theory
 
-### 3.1 Collusion Resistance (The "Double Cabal")
-To decrypt early (and front-run the auction), an attacker needs:
-1.  **>67% of Validator Stake:** (Standard BFT breakdown).
-2.  **PLUS >33% of Seller Stake:** The attacker must effectively "bribe" or control one-third of the assets for sale.
+### 3.1 Collusion Resistance (The "N-Way Cabal")
 
-**Why this helps:**
--   **Independent Interest Groups:** Validators want fees. Sellers want high clearing prices. Their incentives to collude are not perfectly aligned.
--   **Increased Complexity:** Coordinating two large, distinct groups off-chain (without leaking) is exponentially harder than coordinating one.
--   **Sybil Resistance:** To become a "Seller" and gain shares, you must lock *real assets* for sale. This is an expensive way to attack (Capital Cost).
+**General Case:** To decrypt early with N layers, an attacker needs:
+- Compromise threshold for Layer 1 AND
+- Compromise threshold for Layer 2 AND
+- ... AND
+- Compromise threshold for Layer N
 
-### 3.2 Liveness Analysis (The "Unhappy Seller" Defense)
-**The concern:** What if Sellers withdraw or refuse to sign causing the auction to fail?
+**Example: Dual-Layer (Validator + Seller)**
+1. **>67% of Validator Stake** (Standard BFT breakdown)
+2. **PLUS >33% of Seller Stake** (Must bribe/control one-third of assets for sale)
 
-**The 33% Solution:**
--   We set the decryption threshold to just **33%** of seller stake.
--   **Meaning:** To *stop* the auction (liveness failure), a cartel of **>67%** of sellers must go offline or refuse to sign.
--   **Result:** Even if a majority (e.g., 60%) of sellers are "unhappy" or malicious/lazy, the remaining honest 40% can successfully decrypt everyone's bids.
+**Example: Triple-Layer (Validator + Drand + Seller)**
+1. **>67% of Validator Stake**
+2. **PLUS Drand Network Compromise** (Requires attacking Drand beacon infrastructure)
+3. **PLUS >33% of Seller Stake**
+
+**Security Benefits:**
+- **Independent Interest Groups:** Each layer has different economic incentives
+  - Validators want fees
+  - Sellers want high clearing prices
+  - Drand is a public good (no direct economic interest in specific auctions)
+- **Exponential Coordination Cost:** Coordinating N distinct groups off-chain without detection is exponentially harder
+- **Sybil Resistance (Seller Layer):** Must lock real assets to gain shares (capital cost)
+- **Attack Surface Diversification:** Different attack vectors required for each layer
+
+### 3.2 Liveness Analysis (Multi-Layer)
+
+**General Principle:** Each layer's threshold balances security vs liveness
+
+**Example: Dual-Layer (Validator + Seller) Liveness**
+
+**The 33% Seller Threshold Solution:**
+- Seller decryption threshold set to just **33%** of stake
+- To *stop* auction (liveness failure), **>67%** of sellers must refuse to sign
+- Even if 60% of sellers are malicious/offline, remaining 40% can decrypt
 
 | Scenario | Validator Threshold | Seller Threshold | Outcome |
 | :--- | :--- | :--- | :--- |
@@ -87,14 +169,34 @@ To decrypt early (and front-run the auction), an attacker needs:
 | **Validator Failure** | <67% Online | 100% Online | ❌ Fail (Chain Halt) |
 | **Seller Failure** | 100% Online | <33% Online | ❌ Fail (Auction Halt) |
 
-**Griefing Mitigation (The "Whale Penalty"):**
-A single seller with >67% stake *could* theoretically block decryption by refusing to sign.
--   **Defense:** We implement **Slashing for Non-Participation**.
--   If the auction fails due to missing seller shares, any seller who failed to submit their valid share **forfeits their Security Fee** (and potentially a portion of their principal deposit, e.g., 5%).
--   This ensures that griefing is not free; it costs at least the posted security bond.
-| **Early Decrypt** | **Colluding (>67%)** | Honest | ✅ **Safe** (Sellers block it) |
-| **Early Decrypt** | Honest | **Colluding (>33%)** | ✅ **Safe** (Validators block it) |
-| **Total Compromise** | **Colluding (>67%)** | **Colluding (>33%)** | ❌ **Broken** (Early Reveal) |
+**Example: Triple-Layer (Validator + Drand + Seller) Liveness**
+
+| Scenario | Validators | Drand | Sellers | Outcome |
+| :--- | :--- | :--- | :--- | :--- |
+| **Normal** | >67% | ✅ Revealed | >33% | ✅ Success |
+| **Drand Delay** | >67% | ⏳ Not Yet | >33% | ⏳ Wait for Drand |
+| **Drand Failure** | >67% | ❌ Failed | >33% | ❌ Auction Halt |
+
+**Griefing Mitigation (Applicable to Seller Layer):**
+- **Defense:** Slashing for non-participation
+- Sellers who fail to submit valid shares forfeit Security Fee + deposit penalty (e.g., 5%)
+- Prevents free griefing attacks
+
+**Layer-Specific Security vs Liveness Trade-offs:**
+
+| Layer Type | Typical Threshold | Security Benefit | Liveness Risk |
+| :--- | :--- | :--- | :--- |
+| Validator | >67% | High (BFT security) | Low (validators incentivized) |
+| Seller | >33% | Medium (capital cost) | Low (low threshold) |
+| Drand | n/a (deterministic) | High (independent infrastructure) | Medium (depends on Drand uptime) |
+
+**Attack Scenarios:**
+
+| **Early Decrypt** | **Validators** | **Sellers** | **Outcome** |
+| :--- | :--- | :--- | :--- |
+| Validator Attack | **Colluding (>67%)** | Honest | ✅ **Safe** (Sellers block) |
+| Seller Attack | Honest | **Colluding (>33%)** | ✅ **Safe** (Validators block) |
+| Total Compromise | **Colluding (>67%)** | **Colluding (>33%)** | ❌ **Broken** (Early Reveal) |
 
 ### 3.3 The "Seller's Dilemma"
 Why would a Seller collude?
