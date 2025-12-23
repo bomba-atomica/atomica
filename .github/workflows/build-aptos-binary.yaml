@@ -16,7 +16,7 @@ on:
 jobs:
   build-aptos:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150
     outputs:
       cache-key: ${{ steps.cache-info.outputs.cache-key }}
       binary-path: ${{ steps.cache-info.outputs.binary-path }}
