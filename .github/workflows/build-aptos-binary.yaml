@@ -73,8 +73,10 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
+          workspaces: "source/zapatos -> ../target"
           shared-key: "zapatos"
           cache-on-failure: true
+          save-if: true
 
       - name: Install build dependencies
         run: |
