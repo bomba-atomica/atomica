@@ -1,9 +1,4 @@
-# Build artifacts
-target/
-**/target/
-*.rdb
-
-# Docker artifacts
+# Docker runtime artifacts (from testnet)
 *.blob
 *.key
 waypoint.txt
@@ -11,9 +6,8 @@ genesis/
 data/
 logs/
 
-# Git (except for zapatos submodule)
+# Git
 .git/
-!source/zapatos/.git/
 
 # IDE
 .vscode/
@@ -21,16 +15,17 @@ logs/
 *.swp
 *.swo
 
-# Documentation
+# Documentation (not needed in image)
 *.md
-!source/zapatos/**/*.md
 
-# Test artifacts
-tests/target/
-
-# Docker compose files (not needed in image)
+# Docker compose and scripts (not needed in image)
 docker-compose*.yaml
 Makefile
+build.sh
 
-# Local config
+# Config files
+.env
 .env.local
+
+# Keep bin/ directory with pre-built binary
+!bin/

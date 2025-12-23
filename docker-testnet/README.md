@@ -24,10 +24,10 @@ This docker testnet simulates a production-like network of 4 validators running 
 
 ```bash
 # Pull image from GitHub Container Registry
-docker pull ghcr.io/OWNER/zapatos-testnet/validator:latest
+docker pull ghcr.io/OWNER/zapatos-bin:latest
 
 # Tag for local use
-docker tag ghcr.io/OWNER/zapatos-testnet/validator:latest zapatos-testnet/validator:latest
+docker tag ghcr.io/OWNER/zapatos-bin:latest zapatos-testnet/validator:latest
 
 # Run tests
 cd tests
@@ -58,18 +58,21 @@ cd docker-testnet
 **Smart Caching:**
 - Checks if an image already exists for the current zapatos commit
 - If yes: Just updates 'latest' tag (~1 second)
-- If no: Builds from source (10-20 minutes)
+- If no: Builds binary and packages in Docker (~10-20 minutes first time)
+- Reuses Rust cargo cache across builds for faster incremental builds
 
 **Build Process:**
-1. Creates a Docker build context with zapatos source
-2. Compiles `aptos-node` binary inside Docker
-3. Creates minimal runtime image (~200MB)
+1. Compiles `aptos-node` binary from zapatos source using cargo
+2. Copies binary into `docker-testnet/bin/`
+3. Builds minimal Docker image (~200MB) with the pre-built binary
 4. Tags with git commit: `zapatos-testnet/validator:<commit>`
+5. Cleans up temporary bin directory
 
 **Build times:**
-- First build: 10-20 minutes
-- Cached rebuilds: < 1 second
-- Docker layer cache: Significantly faster on subsequent builds
+- First build: 10-20 minutes (cargo compiles all dependencies)
+- Incremental builds: 1-3 minutes (cargo cache reused)
+- Same commit rebuild: < 1 second (image cached)
+- Docker build step: ~10 seconds (just packages binary)
 
 ### Push to GitHub Container Registry
 
@@ -131,29 +134,37 @@ Images are automatically built and pushed to GitHub Container Registry on:
 - Manual workflow dispatch
 
 **Workflow: `.github/workflows/build-docker-images.yml`**
-- Builds Docker image from zapatos source
-- Pushes to `ghcr.io/OWNER/zapatos-testnet/validator`
+- Reuses Rust cargo cache from other workflows (shared-key: "zapatos")
+- Builds `aptos-node` binary from zapatos source
+- Packages binary into minimal Docker image
+- Pushes to `ghcr.io/OWNER/zapatos-bin`
 - Tags with zapatos commit SHA and branch name
-- Caches layers for faster builds
 - Skips build if image already exists for that commit
+- Much faster than building in Docker (reuses cached dependencies)
 
 ## Architecture
 
-### Multi-Stage Dockerfile
+### Build Approach
 
-**Stage 1: Builder**
-- Base: `rust:1.75-bullseye`
-- Installs build dependencies (cmake, clang, etc.)
-- Copies zapatos source from context
-- Compiles `aptos-node` binary
-- Extracts git commit metadata
+**Binary Build (Outside Docker):**
+- Compiles `aptos-node` from zapatos source using local/CI Rust toolchain
+- Leverages Rust cargo cache for fast incremental builds
+- Build happens in `source/zapatos/` using `cargo build --release --bin aptos-node`
+- Binary is copied to `docker-testnet/bin/` temporarily
 
-**Stage 2: Runtime**
+**Docker Image (Packaging Only):**
 - Base: `debian:bullseye-slim`
-- Minimal dependencies (ca-certificates, libssl, etc.)
-- Copies only the compiled binary
+- Minimal runtime dependencies (ca-certificates, libssl, etc.)
+- Copies pre-built `aptos-node` binary from bin/
 - Runs as unprivileged `aptos` user
 - ~200MB final image
+- Very fast to build (~10 seconds) since no compilation happens
+
+**Benefits:**
+- Reuses Rust cargo cache across builds (GitHub Actions cache or local)
+- Faster incremental builds (1-3 min vs 10-20 min)
+- Simpler Dockerfile (no multi-stage build complexity)
+- Better cache utilization in CI/CD
 
 ### Network Topology
 
@@ -189,17 +200,18 @@ docker-testnet/
 └── README.md               # This file
 ```
 
-## Advantages Over Old Approach
+## Build Approach Evolution
 
-| Aspect | Old (buildx bake) | New (Dockerfile) |
-|--------|-------------------|------------------|
-| **Build Environment** | Host machine | Consistent Docker environment |
-| **Reproducibility** | Varies by host | Always same build environment |
-| **CI/CD** | Complex setup | Simple `docker build` |
-| **Image Distribution** | Local only | Push to GitHub Container Registry |
-| **Caching** | Cargo cache only | Docker layer cache + cargo cache |
-| **Image Size** | ~1.5GB | ~200MB (multi-stage) |
-| **Dependencies** | Host must have all deps | All deps in Dockerfile |
+| Aspect | Old (Docker buildx bake) | Previous (Multi-stage Docker) | Current (Pre-built binary) |
+|--------|--------------------------|-------------------------------|----------------------------|
+| **Binary Build** | Host machine or Docker | Inside Docker (builder stage) | Outside Docker with cargo |
+| **Caching** | Cargo cache only | Docker layer cache | Rust cargo cache (shared) |
+| **Build Speed** | 10-20 min each time | 10-20 min (Docker build) | 1-3 min (incremental) |
+| **CI Integration** | Complex | Moderate | Simple (reuses existing workflow) |
+| **Image Distribution** | Local only | GitHub Container Registry | GitHub Container Registry |
+| **Image Size** | ~1.5GB | ~200MB | ~200MB |
+| **Cache Sharing** | No | No | Yes (across workflows) |
+| **Reproducibility** | Varies by host | Consistent | Consistent |
 
 ## Development Workflow
 
@@ -225,8 +237,8 @@ cargo test testnet_basic -- --test-threads=1
 
 ```bash
 # Pull latest from CI
-docker pull ghcr.io/OWNER/zapatos-testnet/validator:latest
-docker tag ghcr.io/OWNER/zapatos-testnet/validator:latest zapatos-testnet/validator:latest
+docker pull ghcr.io/OWNER/zapatos-bin:latest
+docker tag ghcr.io/OWNER/zapatos-bin:latest zapatos-testnet/validator:latest
 
 # Run tests immediately (no build needed!)
 cd tests

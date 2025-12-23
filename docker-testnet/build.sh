@@ -1,8 +1,10 @@
 #!/bin/bash
 # Build zapatos validator docker image
 #
-# This script builds a Docker image containing the aptos-node binary
-# compiled from zapatos source in a consistent environment.
+# This script:
+# 1. Builds aptos-node binary from zapatos source using cargo
+# 2. Copies the binary into docker-testnet/bin/
+# 3. Builds a minimal Docker image with the pre-built binary
 #
 # Usage:
 #   ./build.sh                    # Build from local source
@@ -10,7 +12,6 @@
 #   ./build.sh --ref main         # Build specific git ref
 #
 # Environment variables:
-#   ZAPATOS_REPO: Git repository URL (default: use local ../source/zapatos)
 #   PROFILE: Build profile (release or debug, default: release)
 
 set -e
@@ -93,23 +94,50 @@ if docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
 fi
 
 echo ""
-echo "Building Docker image from source..."
-echo "  Image tag: $IMAGE_TAG"
+echo "Step 1: Building aptos-node binary from zapatos source..."
 echo "  Profile: ${PROFILE:-release}"
 echo ""
 
-# Build the image
+# Build aptos-node binary
+cd "$ZAPATOS_ROOT"
+if [ "${PROFILE:-release}" = "release" ]; then
+    cargo build --release --bin aptos-node
+    BINARY_PATH="target/release/aptos-node"
+else
+    cargo build --bin aptos-node
+    BINARY_PATH="target/debug/aptos-node"
+fi
+
+# Verify binary was built
+"$BINARY_PATH" --version
+
+echo ""
+echo "Step 2: Copying binary to docker-testnet/bin/..."
+echo ""
+
+# Create bin directory and copy binary
+mkdir -p "$SCRIPT_DIR/bin"
+cp "$BINARY_PATH" "$SCRIPT_DIR/bin/aptos-node"
+chmod +x "$SCRIPT_DIR/bin/aptos-node"
+
+echo ""
+echo "Step 3: Building Docker image..."
+echo "  Image tag: $IMAGE_TAG"
+echo ""
+
+# Build the Docker image (with bin/ in context)
 cd "$SCRIPT_DIR"
 
 docker build \
-    --build-arg ZAPATOS_REPO=local \
-    --build-arg PROFILE="${PROFILE:-release}" \
     --build-arg BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
     --build-arg GIT_SHA="$GIT_SHA" \
     --tag "$IMAGE_TAG" \
     --tag zapatos-testnet/validator:latest \
     --file Dockerfile \
-    "$ATOMICA_ROOT"
+    .
+
+# Clean up bin directory
+rm -rf "$SCRIPT_DIR/bin"
 
 echo ""
 echo "============================================"
@@ -134,14 +162,14 @@ if [ "$PUSH_IMAGE" = true ]; then
     echo "Pushing to GitHub Container Registry..."
 
     # Tag for GitHub Container Registry
-    GHCR_IMAGE="ghcr.io/OWNER/zapatos-testnet/validator:$GIT_SHA"
+    GHCR_IMAGE="ghcr.io/OWNER/zapatos-bin:$GIT_SHA"
 
     docker tag "$IMAGE_TAG" "$GHCR_IMAGE"
-    docker tag "$IMAGE_TAG" "ghcr.io/OWNER/zapatos-testnet/validator:latest"
+    docker tag "$IMAGE_TAG" "ghcr.io/OWNER/zapatos-bin:latest"
 
     echo "Pushing $GHCR_IMAGE..."
     docker push "$GHCR_IMAGE"
-    docker push "ghcr.io/OWNER/zapatos-testnet/validator:latest"
+    docker push "ghcr.io/OWNER/zapatos-bin:latest"
 
     echo ""
     echo "✓ Images pushed to GitHub Container Registry"
