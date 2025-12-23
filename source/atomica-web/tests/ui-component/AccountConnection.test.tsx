@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import App from "../../src/App";
 import { MockWallet } from "../../test-utils/browser-utils/MockWallet";
 
@@ -13,6 +13,7 @@ describe("Account Connection Flow", () => {
   const originalEthereum = window.ethereum;
 
   afterEach(() => {
+    cleanup(); // Clean up React components first
     window.ethereum = originalEthereum;
     document.body.innerHTML = ""; // Clean up DOM
   });

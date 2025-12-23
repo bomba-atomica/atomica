@@ -79,7 +79,8 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
   });
 
   afterEach(() => {
-    // No cleanup needed - wallet mock persists
+    // Clean up React components to prevent timers from keeping process alive
+    cleanup();
   });
 
   it("should skip simulation and submit FakeEth mint directly", async () => {

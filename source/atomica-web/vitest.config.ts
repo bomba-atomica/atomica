@@ -65,6 +65,13 @@ export default defineConfig({
   plugins: [react()],
   test: {
     /**
+     * GLOBAL TEARDOWN: Ensure all resources are cleaned up
+     * This prevents the "close timed out after 10000ms" error by allowing
+     * async operations and React component cleanup to complete properly.
+     */
+    globalTeardown: "./test-utils/browser-teardown.ts",
+
+    /**
      * SEQUENTIAL EXECUTION: Tests run one at a time
      *
      * WHY? Tests using localnet bind to ports 8080/8081. Running in parallel
