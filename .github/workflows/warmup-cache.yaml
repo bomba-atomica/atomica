@@ -2,13 +2,13 @@
 name: Warmup Rust Cache
 
 on:
-  # push:
-  #   branches: [ci-cache]
+  push:
+    branches: [ci-cache]
   workflow_dispatch:
 
 jobs:
-  warmup:
-    name: Warmup All Dependencies
+  warmup_small:
+    name: Warmup Small Dependencies
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -25,7 +25,7 @@ jobs:
         run: |
           rustup default stable
           rustup update stable
-      - name: Setup Rust Cache (Small)
+      - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "source/zapatos -> ../target"
@@ -33,7 +33,38 @@ jobs:
           cache-on-failure: true
           save-if: true
 
-      - name: Build Small Deps
+      - name: Build Deps
         run: |
           cd source/zapatos
           cargo build --release -p move-core-types -p aptos-framework
+
+  warmup_med:
+    name: Warmup Med Dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libssl-dev pkg-config libclang-dev cmake lld libudev-dev libdw-dev
+      - name: Setup Rust toolchain
+        run: |
+          rustup default stable
+          rustup update stable
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "source/zapatos -> ../target"
+          shared-key: "zapatos"
+          cache-on-failure: true
+          save-if: true
+
+      - name: Build Deps
+        run: |
+          cd source/zapatos
+          cargo build --release -p aptos-node
