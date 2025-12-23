@@ -241,75 +241,250 @@ Layer 3 (Inner): Auction Sellers (ElGamal, >33% stake threshold)
 
 ### Objective
 
-Validate that the existing `aptos-dkg` crate and zapatos validator infrastructure can produce timelock key material and perform encryption/decryption in a real network environment.
+Validate that the existing `aptos-dkg` crate and zapatos validator infrastructure can produce timelock key material and perform encryption/decryption in a real network environment using Docker-based E2E tests.
 
 ### Task Breakdown
 
-#### 1.1 Local Testnet Setup and Validation (Week 1)
+#### 1.1 Docker Build Infrastructure (Week 1)
 
-**Goal**: Run a local zapatos testnet with multiple validators and confirm timelock key material generation
+**Goal**: Set up Docker build system to compile binaries from local zapatos source
 
-**Infrastructure**: Use existing Forge/SwarmBuilder framework (NOT `aptos run-local-testnet`)
+**Strategy**: Reuse zapatos build infrastructure (`docker/builder/`) but build from local source instead of pulling from registries.
 
 **Tasks**:
-- [ ] Create smoke test for multi-validator timelock
-  - Location: `/source/zapatos/testsuite/smoke-test/src/timelock_validator.rs`
-  - Use `SwarmBuilder` to create 4-validator local testnet:
-    ```rust
-    #[tokio::test]
-    async fn test_validator_timelock_generation() {
-        let swarm = SwarmBuilder::new_local(4)
-            .with_aptos()
-            .with_init_genesis_config(Arc::new(|conf| {
-                // Configure shorter timelock intervals for testing
-                conf.consensus_config.enable_validator_txns();
-                // Add timelock-specific config
-            }))
-            .build()
-            .await;
+- [ ] Create `docker-testnet` directory structure
+  - Location: `/source/zapatos/docker-testnet/`
+  - Files to create:
+    - `Makefile` - Build and management commands
+    - `docker-compose.yaml` - Multi-validator testnet definition
+    - `.env` - Image configuration (will use locally-built images)
+    - `validator-config.yaml` - Validator node configuration
+    - `README.md` - Setup and usage instructions
 
-        // Test implementation...
-    }
+- [ ] Create build scripts for test images
+  - Location: `/source/zapatos/docker-testnet/build.sh`
+  - Script responsibilities:
+    ```bash
+    #!/bin/bash
+    # Build validator images from local zapatos source
+    set -e
+
+    echo "Building aptos-node binary from local source..."
+    cd ../
+    docker/builder/docker-bake-rust-all.sh validator
+
+    # Tag for local use
+    docker tag aptos/validator:devnet zapatos-testnet/validator:local
     ```
-  - Run with: `cargo test test_validator_timelock_generation` in `/source/zapatos/testsuite/smoke-test/`
+  - Leverages existing `docker/builder/` infrastructure
+  - Builds `aptos-node` binary with local modifications
+  - Tags images as `zapatos-testnet/validator:local`
 
-- [ ] Validate validator timelock key generation
-  - Confirm validators initialize with BLS key pairs
-  - Query on-chain: Check `0x1::timelock::TimelockState` resource exists
-  - Verify DKG transcript generation (use existing `wait_for_dkg_finish` helper)
-  - Check that validator set publishes group public key
-  - Reference existing tests: `/source/zapatos/testsuite/smoke-test/src/randomness/dkg_with_validator_join_leave.rs`
+- [ ] Create docker-compose configuration for multi-validator testnet
+  - File: `/source/zapatos/docker-testnet/docker-compose.yaml`
+  - Configuration:
+    - 4 validator nodes (validator-0, validator-1, validator-2, validator-3)
+    - Each runs `aptos-node --test` in independent mode
+    - Shared genesis volume for coordination
+    - Exposed ports for API and metrics
+    - Healthchecks for startup synchronization
+  - Example structure:
+    ```yaml
+    version: "3.8"
+    services:
+      validator-0:
+        image: zapatos-testnet/validator:local
+        container_name: zapatos-validator-0
+        command: >
+          /usr/local/bin/aptos-node
+          --test
+          --test-dir /opt/aptos/var
+        ports:
+          - "8080:8080"  # REST API
+        networks:
+          - zapatos-testnet
 
-- [ ] Test basic encryption with validator layer
-  - Get validator group public key from swarm
-  - Use `aptos-dkg` crate to encrypt plaintext (call from Rust test)
-  - Submit encrypted payload on-chain (via Move transaction)
-  - Wait for timelock interval to pass (or manually trigger)
-  - Validators publish decryption shares
-  - Aggregate shares and decrypt ciphertext
-  - Validate: plaintext recovered correctly
+      validator-1:
+        image: zapatos-testnet/validator:local
+        # ... similar config
 
-- [ ] Test threshold boundary conditions (validator layer)
-  - Create swarm with 4 validators
-  - Test: 3 validators provide shares (75% > 67% threshold) → decrypt succeeds
-  - Test: 2 validators provide shares (50% < 67% threshold) → decrypt fails
-  - Use `swarm.validators().take(N)` to control participation
-  - Validate: threshold enforcement works correctly
+      # validator-2, validator-3 ...
+    ```
+
+- [ ] Configure shorter timelock intervals for testing
+  - Modify validator config to use 30-second epochs instead of 1 hour
+  - File: `/source/zapatos/docker-testnet/validator-config.yaml`
+  - Configuration:
+    ```yaml
+    execution:
+      genesis_file_location: "/opt/aptos/var/genesis.blob"
+
+    consensus:
+      # Short epochs for testing timelock rotation
+      round_initial_timeout_ms: 1500
+      quorum_store_poll_count: 10
+
+    # Timelock-specific config
+    timelock:
+      epoch_duration_secs: 30  # 30 seconds instead of 3600
+    ```
 
 **Success Criteria**:
-- ✅ SwarmBuilder creates 4-validator local testnet successfully
-- ✅ Validators generate and publish timelock key material
-- ✅ Encryption → Wait → Decryption flow works end-to-end
-- ✅ Threshold validation enforced (≥67% required)
-- ✅ Smoke test passes: `cargo test test_validator_timelock_generation`
+- ✅ `build.sh` successfully compiles binaries from local zapatos source
+- ✅ Docker images tagged as `zapatos-testnet/validator:local`
+- ✅ `docker-compose up` starts 4 validators successfully
+- ✅ All validators reach healthy state within 60 seconds
+- ✅ REST APIs accessible on ports 8080-8083
+
+**Deliverable**: Docker-based 4-validator testnet running locally-built binaries
+
+---
+
+#### 1.2 Test Harness Implementation (Week 1)
+
+**Goal**: Create Rust test harness to manage Docker testnet lifecycle
+
+**Pattern**: Copy strategy from `/Users/lucas/code/rust/zap/tests/docker_harness/mod.rs`
+
+**Tasks**:
+- [ ] Create test harness module
+  - Location: `/source/zapatos/testsuite/timelock-e2e/tests/docker_harness/mod.rs`
+  - Module responsibilities:
+    - Start/stop Docker containers
+    - Wait for validators to become healthy
+    - Discover validator endpoints and peer IDs
+    - Automatic cleanup on test completion
+  - Key API:
+    ```rust
+    pub struct DockerTestnet {
+        compose_dir: String,
+        validator_urls: Vec<String>,
+    }
+
+    impl DockerTestnet {
+        pub async fn new(num_validators: usize) -> anyhow::Result<Self>;
+        pub fn validator_api_url(&self, index: usize) -> &str;
+        pub async fn wait_for_healthy(&self, timeout_secs: u64) -> anyhow::Result<()>;
+    }
+
+    impl Drop for DockerTestnet {
+        fn drop(&mut self) {
+            // docker-compose down --remove-orphans -v
+        }
+    }
+    ```
+
+- [ ] Implement validator discovery
+  - Parse docker logs to find validator endpoints
+  - Extract BLS public keys from on-chain state
+  - Query `0x1::dkg::DKGState` for group public key
+  - Store validator metadata for test use
+
+- [ ] Add healthcheck helpers
+  - TCP connection tests (API ports)
+  - HTTP GET requests to `/v1` endpoint
+  - DKG state verification (group key published)
+  - Retry logic with exponential backoff
+
+**Success Criteria**:
+- ✅ Test harness starts/stops Docker testnet reliably
+- ✅ Cleanup happens even on test panic
+- ✅ Validator URLs and keys discoverable
+- ✅ Healthchecks accurately detect readiness
+
+**Deliverable**: `DockerTestnet` test harness module
+
+---
+
+#### 1.3 Timelock E2E Test Suite (Week 1-2)
+
+**Goal**: Validate timelock key generation and encryption/decryption using real validator network
+
+**Tasks**:
+- [ ] Create E2E test crate
+  - Location: `/source/zapatos/testsuite/timelock-e2e/`
+  - Crate structure:
+    ```
+    timelock-e2e/
+    ├── Cargo.toml
+    ├── tests/
+    │   ├── docker_harness/
+    │   │   └── mod.rs
+    │   ├── timelock_basic.rs
+    │   ├── timelock_threshold.rs
+    │   └── timelock_rotation.rs
+    └── README.md
+    ```
+
+- [ ] Test: Basic timelock encryption/decryption
+  - File: `tests/timelock_basic.rs`
+  - Test workflow:
+    ```rust
+    #[tokio::test]
+    #[serial]  // Run sequentially to avoid port conflicts
+    async fn test_validator_timelock_basic() {
+        let testnet = DockerTestnet::new(4).await?;
+
+        // 1. Query validator group public key
+        let group_pk = testnet.get_validator_group_pubkey().await?;
+
+        // 2. Encrypt plaintext using IBE
+        let plaintext = b"test bid data";
+        let auction_end_time = current_time() + 30; // 30 seconds
+        let ciphertext = encrypt_ibe(plaintext, &group_pk, auction_end_time)?;
+
+        // 3. Submit encrypted payload on-chain
+        testnet.submit_encrypted_payload(&ciphertext).await?;
+
+        // 4. Wait for timelock to expire
+        sleep(Duration::from_secs(35)).await;
+
+        // 5. Query decryption shares from validators
+        let shares = testnet.get_decryption_shares().await?;
+
+        // 6. Aggregate shares and decrypt
+        let decrypted = aggregate_and_decrypt(&ciphertext, &shares)?;
+
+        // 7. Verify plaintext matches
+        assert_eq!(decrypted, plaintext);
+    }
+    ```
+
+- [ ] Test: Threshold enforcement
+  - File: `tests/timelock_threshold.rs`
+  - Test scenarios:
+    - 3 of 4 validators provide shares (75% > 67%) → decrypt succeeds
+    - 2 of 4 validators provide shares (50% < 67%) → decrypt fails
+    - Manually stop validators to simulate non-participation
+    - Verify threshold requirement enforced
+
+- [ ] Test: Timelock rotation across epochs
+  - File: `tests/timelock_rotation.rs`
+  - Test workflow:
+    - Encrypt payload for epoch N
+    - Wait for epoch N+1 transition (DKG rotation)
+    - Verify epoch N payload still decryptable
+    - Encrypt new payload for epoch N+1
+    - Verify both payloads decrypt with correct keys
+
+**Success Criteria**:
+- ✅ Basic encryption/decryption works end-to-end
+- ✅ Threshold enforcement tested (67% boundary)
+- ✅ Epoch rotation doesn't break previous payloads
+- ✅ Tests pass consistently (no flakiness)
 
 **How to Run**:
 ```bash
-cd /source/zapatos/testsuite/smoke-test
-cargo test test_validator_timelock_generation -- --nocapture
+# Build Docker images first
+cd /source/zapatos/docker-testnet
+./build.sh
+
+# Run E2E tests (sequential, Docker required)
+cd /source/zapatos/testsuite/timelock-e2e
+cargo test -- --test-threads=1 --nocapture
 ```
 
-**Deliverable**: Passing smoke test demonstrating multi-validator timelock encryption/decryption
+**Deliverable**: Passing E2E test suite for validator timelock
 
 ---
 
