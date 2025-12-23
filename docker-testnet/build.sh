@@ -98,46 +98,25 @@ echo "Step 1: Building aptos-node binary from zapatos source..."
 echo "  Profile: ${PROFILE:-release}"
 echo ""
 
-# Build aptos-node binary
-cd "$ZAPATOS_ROOT"
-if [ "${PROFILE:-release}" = "release" ]; then
-    cargo build --release --bin aptos-node
-    BINARY_PATH="target/release/aptos-node"
-else
-    cargo build --bin aptos-node
-    BINARY_PATH="target/debug/aptos-node"
-fi
+# Build the Docker image (using repository root as context)
+cd "$ATOMICA_ROOT"
 
-# Verify binary was built
-"$BINARY_PATH" --version
+# Enable Docker BuildKit for cache mounts
+export DOCKER_BUILDKIT=1
 
-echo ""
-echo "Step 2: Copying binary to docker-testnet/bin/..."
-echo ""
-
-# Create bin directory and copy binary
-mkdir -p "$SCRIPT_DIR/bin"
-cp "$BINARY_PATH" "$SCRIPT_DIR/bin/aptos-node"
-chmod +x "$SCRIPT_DIR/bin/aptos-node"
-
-echo ""
-echo "Step 3: Building Docker image..."
+echo "Step 1: Building Docker image..."
+echo "  This will compile zapatos from source inside a Linux environment."
 echo "  Image tag: $IMAGE_TAG"
 echo ""
-
-# Build the Docker image (with bin/ in context)
-cd "$SCRIPT_DIR"
 
 docker build \
     --build-arg BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
     --build-arg GIT_SHA="$GIT_SHA" \
+    --build-arg PROFILE="${PROFILE:-release}" \
     --tag "$IMAGE_TAG" \
     --tag zapatos-testnet/validator:latest \
-    --file Dockerfile \
+    --file docker-testnet/Dockerfile \
     .
-
-# Clean up bin directory
-rm -rf "$SCRIPT_DIR/bin"
 
 echo ""
 echo "============================================"

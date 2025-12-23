@@ -42,14 +42,15 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/build/zapatos/target,sharing=locked \
     if [ "$PROFILE" = "release" ]; then \
         cargo build --release --bin aptos-node && \
-        cp target/release/aptos-node /build/aptos-node; \
+        cargo build --release --package aptos-faucet-service && \
+        cp target/release/aptos-node /build/aptos-node && \
+        cp target/release/aptos-faucet-service /build/aptos-faucet-service; \
     else \
         cargo build --bin aptos-node && \
-        cp target/debug/aptos-node /build/aptos-node; \
+        cargo build --package aptos-faucet-service && \
+        cp target/debug/aptos-node /build/aptos-node && \
+        cp target/debug/aptos-faucet-service /build/aptos-faucet-service; \
     fi
-
-# Verify binary
-RUN /build/aptos-node --version
 
 # Stage 2: Runtime image (minimal)
 FROM debian:bullseye-slim
@@ -66,11 +67,13 @@ RUN apt-get update && apt-get install -y \
 RUN groupadd -g 6180 aptos && \
     useradd -u 6180 -g aptos -s /bin/bash -m aptos
 
-# Copy pre-built binary from build context
-COPY bin/aptos-node /usr/local/bin/aptos-node
+# Copy binaries from builder stage
+COPY --from=builder /build/aptos-node /usr/local/bin/aptos-node
+COPY --from=builder /build/aptos-faucet-service /usr/local/bin/aptos-faucet-service
 
 # Set permissions
-RUN chmod +x /usr/local/bin/aptos-node
+RUN chmod +x /usr/local/bin/aptos-node && \
+    chmod +x /usr/local/bin/aptos-faucet-service
 
 # Create data directory
 RUN mkdir -p /opt/aptos/var && \

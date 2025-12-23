@@ -1,280 +1,87 @@
 # Zapatos Docker Testnet
 
-A local multi-validator testnet for developing and testing timelock encryption features in zapatos (Atomica's fork of Aptos).
+A local multi-validator testnet for developing and testing features in **zapatos** (Atomica's fork of Aptos). This setup provides a production-like environment using binaries built directly from your local source code.
 
-## Overview
+---
 
-This docker testnet simulates a production-like network of 4 validators running locally using binaries built from the zapatos source code.
+## 🚀 Local Developer Quick Start
 
-**Key Features:**
-- ✅ Dockerfile builds zapatos in consistent environment
-- ✅ Multi-stage build with minimal runtime image
-- ✅ Images tagged with zapatos git commit for traceability
-- ✅ Can pull pre-built images from GitHub Container Registry
-- ✅ CI/CD automatically builds and pushes images
-- ✅ Multi-validator setup (4 validators)
-- ✅ Isolated Docker network with predictable IPs
-- ✅ Exposed REST APIs and metrics endpoints
-- ✅ Automatic genesis generation
-- ✅ Rust test harness for integration testing
+Focus on getting your first image built and running tests with zero manual Docker management.
 
-## Quick Start
+### 1. Build from Source (First Time)
+This script uses a **multi-stage Docker build** to compile the `aptos-node` and `aptos-faucet-service` binaries.
 
-### Option 1: Pull Pre-built Image (Fastest)
-
-```bash
-# Pull image from GitHub Container Registry
-docker pull ghcr.io/OWNER/zapatos-bin:latest
-
-# Tag for local use
-docker tag ghcr.io/OWNER/zapatos-bin:latest zapatos-testnet/validator:latest
-
-# Run tests
-cd tests
-cargo test testnet_basic -- --test-threads=1 --nocapture
-```
-
-### Option 2: Build Locally
-
-```bash
-# Build from local zapatos source
-cd docker-testnet
-./build.sh
-
-# Run tests (Docker handled automatically)
-cd ../tests
-cargo test testnet_basic -- --test-threads=1 --nocapture
-```
-
-## Building Images
-
-### From Local Source
+**Why Docker?** Since you are likely on a Mac or Windows, you cannot simply copy a host-native binary into a Linux container. This script compiles the source code *inside* a Linux container first, ensuring the final binary is compatible with the `debian:bullseye-slim` runtime.
 
 ```bash
 cd docker-testnet
 ./build.sh
 ```
 
-**Smart Caching:**
-- Checks if an image already exists for the current zapatos commit
-- If yes: Just updates 'latest' tag (~1 second)
-- If no: Builds binary and packages in Docker (~10-20 minutes first time)
-- Reuses Rust cargo cache across builds for faster incremental builds
+*   **⏱ First build:** ~10-20 minutes (initial cargo compilation inside Docker)
+*   **⏱ Incremental:** ~1-3 minutes (uses Docker BuildKit cache mounts)
+*   **⏱ Re-tagging:** < 1 second (if no source changes detected)
 
-**Build Process:**
-1. Compiles `aptos-node` binary from zapatos source using cargo
-2. Copies binary into `docker-testnet/bin/`
-3. Builds minimal Docker image (~200MB) with the pre-built binary
-4. Tags with git commit: `zapatos-testnet/validator:<commit>`
-5. Cleans up temporary bin directory
-
-**Build times:**
-- First build: 10-20 minutes (cargo compiles all dependencies)
-- Incremental builds: 1-3 minutes (cargo cache reused)
-- Same commit rebuild: < 1 second (image cached)
-- Docker build step: ~10 seconds (just packages binary)
-
-### Push to GitHub Container Registry
-
-```bash
-# Authenticate with GitHub
-echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
-
-# Build and push
-./build.sh --push
-```
-
-### Build Specific Commit
-
-```bash
-./build.sh --ref main          # Build main branch
-./build.sh --ref v1.2.3        # Build specific tag
-./build.sh --ref abc123        # Build specific commit
-```
-
-## Running Tests
-
-Tests handle Docker automatically - no manual start/stop needed!
+### 2. Run Integration Tests
+The Rust test suite handles the entire Docker lifecycle automatically. It will spin up 4 validators, run the assertions, and tear everything down.
 
 ```bash
 cd tests
 cargo test testnet_basic -- --test-threads=1 --nocapture
 ```
 
-**What happens:**
-1. Test starts → Docker testnet spins up (4 validators)
-2. Test runs → Queries validators via REST API
-3. Test ends → Docker testnet tears down (even on panic)
+> [!IMPORTANT]
+> Tests must run with `--test-threads=1` to avoid port conflicts on the host machine (mapping 8080-8083).
 
-**No manual docker commands required!**
+---
 
-## Manual Testnet (Optional)
+## 🛠 Building the Images
 
-For exploration or debugging:
+The `build.sh` script is the primary entry point for local developers. It ensures that your image is built in a consistent Linux environment.
 
-```bash
-# Start testnet
-make start
+### The Build Process
+1.  **Context:** The script sets the repository root as the build context so Docker can access `source/zapatos`.
+2.  **Caching:** It leverages **Docker BuildKit cache mounts** (`--mount=type=cache`). This means that your `target` directory and cargo registry are persisted across Docker builds, making incremental changes nearly as fast as a local `cargo build`.
+3.  **Cross-Platform:** Because the build happens inside a container, a developer on an Apple Silicon Mac will produce the correct Linux ELF binaries automatically.
 
-# Check status
-make status
+### Build Options
+*   `./build.sh --ref <branch/tag/commit>`: Build from a specific git reference instead of the current state.
+*   `PROFILE=debug ./build.sh`: Build debug binaries (useful for profiling, but produces heavy images).
 
-# View logs
-make logs
+---
 
-# Stop testnet
-make clean
-```
+## 🏗 CI/CD Integration
 
-## GitHub Actions CI/CD
+The `.github/workflows/build-docker-images.yml` workflow uses a "Binary-First" optimization. Since GitHub Actions runners are already Linux-based:
+1.  They compile the binaries directly on the runner host (which is slightly faster than Docker-in-Docker).
+2.  They package those pre-built binaries into the final image.
 
-Images are automatically built and pushed to GitHub Container Registry on:
-- Push to `main` or `timelock-feature` branches
-- Pull requests (build only, no push)
-- Manual workflow dispatch
+*Note: As a local developer on macOS, you should always stick to the `build.sh` path which handles the OS difference for you.*
 
-**Workflow: `.github/workflows/build-docker-images.yml`**
-- Reuses Rust cargo cache from other workflows (shared-key: "zapatos")
-- Builds `aptos-node` binary from zapatos source
-- Packages binary into minimal Docker image
-- Pushes to `ghcr.io/OWNER/zapatos-bin`
-- Tags with zapatos commit SHA and branch name
-- Skips build if image already exists for that commit
-- Much faster than building in Docker (reuses cached dependencies)
+---
 
-## Architecture
+## 🕹 Manual Testnet Management
 
-### Build Approach
-
-**Binary Build (Outside Docker):**
-- Compiles `aptos-node` from zapatos source using local/CI Rust toolchain
-- Leverages Rust cargo cache for fast incremental builds
-- Build happens in `source/zapatos/` using `cargo build --release --bin aptos-node`
-- Binary is copied to `docker-testnet/bin/` temporarily
-
-**Docker Image (Packaging Only):**
-- Base: `debian:bullseye-slim`
-- Minimal runtime dependencies (ca-certificates, libssl, etc.)
-- Copies pre-built `aptos-node` binary from bin/
-- Runs as unprivileged `aptos` user
-- ~200MB final image
-- Very fast to build (~10 seconds) since no compilation happens
-
-**Benefits:**
-- Reuses Rust cargo cache across builds (GitHub Actions cache or local)
-- Faster incremental builds (1-3 min vs 10-20 min)
-- Simpler Dockerfile (no multi-stage build complexity)
-- Better cache utilization in CI/CD
-
-### Network Topology
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Docker Network: zapatos-testnet (172.19.0.0/16)       │
-│                                                          │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │ Validator 0 │  │ Validator 1 │  │ Validator 2 │    │
-│  │ 172.19.0.10 │  │ 172.19.0.11 │  │ 172.19.0.12 │    │
-│  │  :8080 API  │  │  :8081 API  │  │  :8082 API  │    │
-│  └─────────────┘  └─────────────┘  └─────────────┘    │
-│                                                          │
-│  ┌─────────────┐                                        │
-│  │ Validator 3 │                                        │
-│  │ 172.19.0.13 │                                        │
-│  │  :8083 API  │                                        │
-│  └─────────────┘                                        │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Directory Structure
-
-```
-docker-testnet/
-├── Dockerfile               # Multi-stage build
-├── .dockerignore           # Exclude unnecessary files
-├── build.sh                # Local build script
-├── docker-compose.yaml     # 4-validator testnet
-├── Makefile                # Management commands
-├── validator-config.yaml   # Node configuration
-├── .env                    # Image and network config
-└── README.md               # This file
-```
-
-## Build Approach Evolution
-
-| Aspect | Old (Docker buildx bake) | Previous (Multi-stage Docker) | Current (Pre-built binary) |
-|--------|--------------------------|-------------------------------|----------------------------|
-| **Binary Build** | Host machine or Docker | Inside Docker (builder stage) | Outside Docker with cargo |
-| **Caching** | Cargo cache only | Docker layer cache | Rust cargo cache (shared) |
-| **Build Speed** | 10-20 min each time | 10-20 min (Docker build) | 1-3 min (incremental) |
-| **CI Integration** | Complex | Moderate | Simple (reuses existing workflow) |
-| **Image Distribution** | Local only | GitHub Container Registry | GitHub Container Registry |
-| **Image Size** | ~1.5GB | ~200MB | ~200MB |
-| **Cache Sharing** | No | No | Yes (across workflows) |
-| **Reproducibility** | Varies by host | Consistent | Consistent |
-
-## Development Workflow
-
-### Typical Development Cycle
-
-```bash
-# 1. Make changes to zapatos source
-cd source/zapatos
-# ... make changes ...
-
-# 2. Build new image (cached if commit unchanged)
-cd ../../docker-testnet
-./build.sh
-
-# 3. Run tests (Docker automatic)
-cd ../tests
-cargo test testnet_basic -- --test-threads=1
-
-# 4. Iterate
-```
-
-### Using Pre-built Images
-
-```bash
-# Pull latest from CI
-docker pull ghcr.io/OWNER/zapatos-bin:latest
-docker tag ghcr.io/OWNER/zapatos-bin:latest zapatos-testnet/validator:latest
-
-# Run tests immediately (no build needed!)
-cd tests
-cargo test testnet_basic -- --test-threads=1
-```
-
-## Makefile Commands
+If you want to manually explore the testnet or debug a specific node, use the provided `Makefile`:
 
 | Command | Description |
 |---------|-------------|
-| `make help` | Show all available commands |
-| `make start` | Start the validator testnet |
-| `make stop` | Stop testnet (preserves data) |
-| `make restart` | Restart testnet |
-| `make clean` | Stop and remove all containers/volumes |
-| `make status` | Show validator status |
-| `make info` | Show connection information |
-| `make logs` | Show logs from all validators |
-| `make logs-0` | Show logs from validator 0 |
+| `make start` | Start the 4-validator testnet in the background. |
+| `make status` | Check which containers are running and healthy. |
+| `make logs` | Stream logs from all nodes (or `make logs-0` for just the first node). |
+| `make restart` | Quickly restart all validator services. |
+| `make clean` | **Destructive:** Stop testnet and wipe all volumes/data. |
 
-## Troubleshooting
+---
 
-**Image build fails?**
-→ Check zapatos compiles: `cd ../source/zapatos && cargo check`
+## ❓ Troubleshooting
 
-**Can't pull from ghcr.io?**
-→ Repository might be private. Build locally: `./build.sh`
+*   **"Image not found":** Ensure you ran `./build.sh` at least once locally.
+*   **Port 8080 already in use:** You may have a zombie testnet running. Run `make clean` to force a reset.
+*   **"exec format error":** This occurs if you tried to manually copy a Mac binary into the container. Always use `./build.sh` to ensure Linux-compatible binaries.
 
-**Tests fail to start Docker?**
-→ Ensure image exists: `docker images zapatos-testnet/validator`
+---
 
-**Port conflicts?**
-→ Stop other services using ports 8080-8083
-
-## Related Documentation
-
-- [Timelock Implementation Plan](../docs/development/timelock-implementation-plan.md)
-- [Test Harness Documentation](../tests/docker_harness/mod.rs)
-- [GitHub Actions Workflow](../.github/workflows/build-docker-images.yml)
+## Related Links
+*   [Test Harness Source](../tests/docker_harness/mod.rs) - See how the Rust code manages Docker.
+*   [Timelock Implementation Plan](../docs/development/timelock-implementation-plan.md) - Rationale for this testnet.
