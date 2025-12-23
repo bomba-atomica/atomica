@@ -1,6 +1,9 @@
 name: Build and Cache Aptos Binary
 
 on:
+  workflow_dispatch:
+  push:
+    branches: [ci-cache]
   workflow_call:
     outputs:
       cache-key:
