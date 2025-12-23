@@ -30,53 +30,38 @@ cd docker-testnet
 
 The images are tagged with your zapatos git commit, ensuring binaries always match your code.
 
-## Every Time: Start Testnet
+## Every Time: Run Tests
 
-```bash
-make start
-```
-
-⏱ Takes ~30 seconds to start all validators.
-
-### 3. Verify
-
-```bash
-make test-api
-```
-
-You should see successful responses from all 4 validators.
-
-### 4. Use It
-
-REST APIs are now available:
-- Validator 0: http://localhost:8080
-- Validator 1: http://localhost:8081
-- Validator 2: http://localhost:8082
-- Validator 3: http://localhost:8083
-
-Example:
-```bash
-# Get current ledger info
-curl http://localhost:8080/v1 | jq
-
-# Get specific block
-curl http://localhost:8080/v1/blocks/by_height/100 | jq
-```
-
-### 5. Run Tests
+Tests handle Docker automatically - no manual start/stop needed!
 
 ```bash
 cd ../tests
-cargo test -- --test-threads=1 --nocapture
+cargo test testnet_basic -- --test-threads=1 --nocapture
 ```
 
-### 6. Stop
+**What happens:**
+1. ✅ Docker testnet starts (4 validators)
+2. ✅ Tests run against the validators
+3. ✅ Docker testnet stops (automatic cleanup)
+
+⏱ Full test run: ~30-60 seconds
+
+## Manual Testnet (Optional)
+
+Want to explore the testnet manually?
 
 ```bash
-cd ../docker-testnet
-make stop    # Stop (keeps data)
-make clean   # Stop and remove all data
+# Start testnet
+make start
+
+# Use it
+curl http://localhost:8080/v1 | jq
+
+# Stop testnet
+make clean
 ```
+
+But for development, just run the tests - they handle everything!
 
 ## Verify Image Matches Zapatos
 

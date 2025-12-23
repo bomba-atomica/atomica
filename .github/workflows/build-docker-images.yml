@@ -1,0 +1,123 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches:
+      - main
+      - timelock-feature
+    paths:
+      - 'source/zapatos/**'
+      - 'docker-testnet/Dockerfile'
+      - '.github/workflows/build-docker-images.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'source/zapatos/**'
+      - 'docker-testnet/Dockerfile'
+  workflow_dispatch:
+    inputs:
+      zapatos_ref:
+        description: 'Zapatos git ref to build (branch, tag, or commit)'
+        required: false
+        default: 'HEAD'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/zapatos-validator
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get zapatos git commit
+        id: zapatos-commit
+        run: |
+          cd source/zapatos
+          if [ -n "${{ github.event.inputs.zapatos_ref }}" ]; then
+            ZAPATOS_SHA=$(git rev-parse --short "${{ github.event.inputs.zapatos_ref }}")
+          else
+            ZAPATOS_SHA=$(git rev-parse --short HEAD)
+          fi
+          echo "sha=$ZAPATOS_SHA" >> $GITHUB_OUTPUT
+          echo "Zapatos commit: $ZAPATOS_SHA"
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.zapatos-commit.outputs.sha }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+
+      - name: Check if image exists
+        id: check-image
+        run: |
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.zapatos-commit.outputs.sha }}"
+          if docker manifest inspect "$IMAGE_TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Image already exists: $IMAGE_TAG"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Image does not exist, will build: $IMAGE_TAG"
+          fi
+
+      - name: Build and push Docker image
+        if: steps.check-image.outputs.exists == 'false'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker-testnet/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ZAPATOS_REPO=local
+            PROFILE=release
+            BUILD_DATE=${{ steps.meta.outputs.created }}
+            GIT_SHA=${{ steps.zapatos-commit.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image already exists (skip build)
+        if: steps.check-image.outputs.exists == 'true'
+        run: |
+          echo "✓ Image already exists for zapatos commit ${{ steps.zapatos-commit.outputs.sha }}"
+          echo "Skipping build to save CI time"
+
+      - name: Output image tags
+        run: |
+          echo "Built images:"
+          echo "${{ steps.meta.outputs.tags }}" | while read -r tag; do
+            echo "  - $tag"
+          done
+
+      - name: Verify image
+        if: steps.check-image.outputs.exists == 'false' && github.event_name != 'pull_request'
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.zapatos-commit.outputs.sha }}"
+          docker run --rm "$IMAGE" --version

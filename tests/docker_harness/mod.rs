@@ -1,25 +1,46 @@
 //! Docker testnet manager for zapatos integration tests
 //!
-//! Provides `DockerTestnet` which:
-//! - Starts fresh validator containers for each test (full isolation)
-//! - Discovers validator endpoints dynamically
-//! - Queries validator state via REST API
-//! - Tears down containers on drop (even on panic)
+//! ## Automatic Docker Lifecycle Management
 //!
-//! # Example
+//! `DockerTestnet` handles the complete Docker lifecycle:
+//!
+//! 1. **On creation (`new()`):**
+//!    - Cleans up any existing testnet
+//!    - Starts fresh Docker containers (4 validators)
+//!    - Waits for all validators to be healthy
+//!    - Discovers REST API endpoints
+//!
+//! 2. **During test:**
+//!    - Provides API to query validators
+//!    - Access validator endpoints via REST
+//!    - No manual docker commands needed
+//!
+//! 3. **On drop (automatic):**
+//!    - Stops all containers
+//!    - Removes volumes
+//!    - Cleans up network
+//!    - **Works even on panic!**
+//!
+//! ## Example
 //! ```no_run
 //! #[tokio::test]
 //! async fn test_timelock_encryption() {
+//!     // Docker starts here ↓
 //!     let testnet = DockerTestnet::new(4).await.unwrap();
+//!
 //!     let api_url = testnet.validator_api_url(0);
-//!     // Make REST API calls to validators
-//!     // Test timelock functionality
-//! }  // Containers stopped automatically
+//!     // Make REST API calls, test functionality
+//!
+//!     // Docker stops here ↓ (automatic cleanup)
+//! }
 //! ```
 //!
-//! # Note
-//! Tests must run sequentially: `cargo test -- --test-threads=1`
-//! This is because Docker port mappings can conflict between parallel tests.
+//! ## Important Notes
+//!
+//! - Tests must run sequentially: `cargo test -- --test-threads=1`
+//! - Docker port conflicts occur if tests run in parallel
+//! - Build images first: `cd docker-testnet && ./build.sh`
+//! - No manual `docker compose up/down` needed!
 
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};

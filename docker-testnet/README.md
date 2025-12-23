@@ -7,27 +7,48 @@ A local multi-validator testnet for developing and testing timelock encryption f
 This docker testnet simulates a production-like network of 4 validators running locally using binaries built from the zapatos source code.
 
 **Key Features:**
-- ✅ Builds from local zapatos source (in `source/zapatos/`)
+- ✅ Dockerfile builds zapatos in consistent environment
+- ✅ Multi-stage build with minimal runtime image
 - ✅ Images tagged with zapatos git commit for traceability
-- ✅ Ensures binaries match your local zapatos checkout
+- ✅ Can pull pre-built images from GitHub Container Registry
+- ✅ CI/CD automatically builds and pushes images
 - ✅ Multi-validator setup (4 validators)
 - ✅ Isolated Docker network with predictable IPs
 - ✅ Exposed REST APIs and metrics endpoints
 - ✅ Automatic genesis generation
 - ✅ Rust test harness for integration testing
-- ✅ Optional faucet service for funding accounts
 
 ## Quick Start
 
-### Prerequisites
+### Option 1: Pull Pre-built Image (Fastest)
 
-- Docker Desktop (or Docker Engine + Docker Compose)
-- Rust toolchain (for building zapatos)
-- At least 8GB RAM and 20GB disk space
+```bash
+# Pull image from GitHub Container Registry
+docker pull ghcr.io/OWNER/zapatos-testnet/validator:latest
 
-### 1. Build Docker Images
+# Tag for local use
+docker tag ghcr.io/OWNER/zapatos-testnet/validator:latest zapatos-testnet/validator:latest
 
-Build the validator docker image from zapatos source:
+# Run tests
+cd tests
+cargo test testnet_basic -- --test-threads=1 --nocapture
+```
+
+### Option 2: Build Locally
+
+```bash
+# Build from local zapatos source
+cd docker-testnet
+./build.sh
+
+# Run tests (Docker handled automatically)
+cd ../tests
+cargo test testnet_basic -- --test-threads=1 --nocapture
+```
+
+## Building Images
+
+### From Local Source
 
 ```bash
 cd docker-testnet
@@ -35,74 +56,104 @@ cd docker-testnet
 ```
 
 **Smart Caching:**
-- First checks if an image already exists for the current zapatos commit
-- If cached: Updates 'latest' tag and exits (< 1 second)
-- If not: Builds from source using zapatos's docker buildx infrastructure
+- Checks if an image already exists for the current zapatos commit
+- If yes: Just updates 'latest' tag (~1 second)
+- If no: Builds from source (10-20 minutes)
 
 **Build Process:**
-1. Get current zapatos git commit
-2. Check if `zapatos-testnet/validator:<commit>` exists
-3. If exists: Tag as 'latest' and skip build
-4. If not: Compile `aptos-node` and tag with commit + 'latest'
+1. Creates a Docker build context with zapatos source
+2. Compiles `aptos-node` binary inside Docker
+3. Creates minimal runtime image (~200MB)
+4. Tags with git commit: `zapatos-testnet/validator:<commit>`
 
 **Build times:**
 - First build: 10-20 minutes
-- Rebuilding same commit: < 1 second
-- Switching branches: 10-20 minutes (or instant if that commit was built before)
+- Cached rebuilds: < 1 second
+- Docker layer cache: Significantly faster on subsequent builds
 
-The image tag matches your zapatos git commit, ensuring binaries always match your code.
-
-### 2. Start the Testnet
+### Push to GitHub Container Registry
 
 ```bash
-# Using the Makefile (recommended)
-make start
+# Authenticate with GitHub
+echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 
-# Or using docker compose directly
-docker compose up -d
+# Build and push
+./build.sh --push
 ```
 
-The testnet will:
-- Start 4 validator nodes
-- Generate genesis automatically
-- Wait for all validators to sync and become healthy
-- Expose REST APIs on ports 8080-8083
-
-### 3. Verify It's Running
+### Build Specific Commit
 
 ```bash
+./build.sh --ref main          # Build main branch
+./build.sh --ref v1.2.3        # Build specific tag
+./build.sh --ref abc123        # Build specific commit
+```
+
+## Running Tests
+
+Tests handle Docker automatically - no manual start/stop needed!
+
+```bash
+cd tests
+cargo test testnet_basic -- --test-threads=1 --nocapture
+```
+
+**What happens:**
+1. Test starts → Docker testnet spins up (4 validators)
+2. Test runs → Queries validators via REST API
+3. Test ends → Docker testnet tears down (even on panic)
+
+**No manual docker commands required!**
+
+## Manual Testnet (Optional)
+
+For exploration or debugging:
+
+```bash
+# Start testnet
+make start
+
 # Check status
 make status
 
-# Test REST APIs
-make test-api
-
-# View connection info
-make info
-
-# Watch logs
+# View logs
 make logs
-```
 
-You should see:
-```
-Validator 0 API: http://localhost:8080
-Validator 1 API: http://localhost:8081
-Validator 2 API: http://localhost:8082
-Validator 3 API: http://localhost:8083
-```
-
-### 4. Stop the Testnet
-
-```bash
-# Stop (preserves data)
-make stop
-
-# Clean up everything (removes volumes)
+# Stop testnet
 make clean
 ```
 
+## GitHub Actions CI/CD
+
+Images are automatically built and pushed to GitHub Container Registry on:
+- Push to `main` or `timelock-feature` branches
+- Pull requests (build only, no push)
+- Manual workflow dispatch
+
+**Workflow: `.github/workflows/build-docker-images.yml`**
+- Builds Docker image from zapatos source
+- Pushes to `ghcr.io/OWNER/zapatos-testnet/validator`
+- Tags with zapatos commit SHA and branch name
+- Caches layers for faster builds
+- Skips build if image already exists for that commit
+
 ## Architecture
+
+### Multi-Stage Dockerfile
+
+**Stage 1: Builder**
+- Base: `rust:1.75-bullseye`
+- Installs build dependencies (cmake, clang, etc.)
+- Copies zapatos source from context
+- Compiles `aptos-node` binary
+- Extracts git commit metadata
+
+**Stage 2: Runtime**
+- Base: `debian:bullseye-slim`
+- Minimal dependencies (ca-certificates, libssl, etc.)
+- Copies only the compiled binary
+- Runs as unprivileged `aptos` user
+- ~200MB final image
 
 ### Network Topology
 
@@ -116,12 +167,11 @@ make clean
 │  │  :8080 API  │  │  :8081 API  │  │  :8082 API  │    │
 │  └─────────────┘  └─────────────┘  └─────────────┘    │
 │                                                          │
-│  ┌─────────────┐  ┌─────────────┐                      │
-│  │ Validator 3 │  │   Faucet    │                      │
-│  │ 172.19.0.13 │  │ 172.19.0.20 │                      │
-│  │  :8083 API  │  │  :8000 API  │                      │
-│  └─────────────┘  └─────────────┘                      │
-│                                                          │
+│  ┌─────────────┐                                        │
+│  │ Validator 3 │                                        │
+│  │ 172.19.0.13 │                                        │
+│  │  :8083 API  │                                        │
+│  └─────────────┘                                        │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -129,257 +179,66 @@ make clean
 
 ```
 docker-testnet/
-├── build.sh                    # Build zapatos docker images
-├── docker-compose.yaml         # 4-validator testnet config
-├── Makefile                    # Convenience commands
-├── validator-config.yaml       # Validator node config overrides
-├── .env                        # Image and network configuration
-└── README.md                   # This file
+├── Dockerfile               # Multi-stage build
+├── .dockerignore           # Exclude unnecessary files
+├── build.sh                # Local build script
+├── docker-compose.yaml     # 4-validator testnet
+├── Makefile                # Management commands
+├── validator-config.yaml   # Node configuration
+├── .env                    # Image and network config
+└── README.md               # This file
 ```
 
-### Key Differences from Aptos Production Setup
+## Advantages Over Old Approach
 
-| Aspect | Aptos Production | Zapatos Testnet |
-|--------|-----------------|-----------------|
-| **Images** | Pre-built from Docker Hub (`aptoslabs/validator`) | Built from local source (`./build.sh`) |
-| **Image Tags** | Version numbers (e.g., `v1.2.3`) | Git commit from zapatos source |
-| **Validators** | Single validator | 4 validators |
-| **Genesis** | Manual or scripted | Auto-generated in test mode |
-| **Epochs** | 1 hour (3600s) | 30 seconds (for fast testing) |
-| **Purpose** | Running a node | Development and testing |
-| **Traceability** | Official releases | Matches your local code exactly |
-
-## Usage
-
-### Manual Operation
-
-Start and interact with the testnet manually:
-
-```bash
-# Start testnet
-make start
-
-# Query validator 0
-curl http://localhost:8080/v1 | jq
-
-# Get current block height
-curl http://localhost:8080/v1 | jq '.block_height'
-
-# View validator metrics
-curl http://localhost:9101/metrics
-
-# Extract genesis files
-make extract-genesis
-
-# Open shell in validator
-make shell-0
-
-# View logs from specific validator
-make logs-0
-```
-
-### Integration Testing
-
-Use the Rust test harness to programmatically control the testnet:
-
-```rust
-use docker_harness::DockerTestnet;
-
-#[tokio::test]
-async fn test_timelock_encryption() {
-    // Start a 4-validator testnet
-    let testnet = DockerTestnet::new(4).await.unwrap();
-
-    // Query validator state
-    let ledger_info = testnet.get_ledger_info(0).await.unwrap();
-    println!("Block height: {}", ledger_info.block_height);
-
-    // Wait for blocks to be produced
-    testnet.wait_for_blocks(10, 60).await.unwrap();
-
-    // Get DKG group public key for timelock
-    let group_pk = testnet.get_validator_group_pubkey().await.unwrap();
-
-    // Encrypt data, submit transactions, etc...
-
-} // Testnet automatically cleaned up on drop
-```
-
-Run integration tests:
-
-```bash
-cd ../tests
-cargo test -- --test-threads=1 --nocapture
-```
-
-**Note:** Tests must run sequentially (`--test-threads=1`) to avoid Docker port conflicts.
-
-## Configuration
-
-### Changing Number of Validators
-
-Edit `.env`:
-```bash
-NUM_VALIDATORS=7  # Change from 4 to 7
-```
-
-Then update `docker-compose.yaml` to add services `validator-4`, `validator-5`, `validator-6`.
-
-### Modifying Validator Config
-
-Edit `validator-config.yaml` to change:
-- Epoch duration
-- Consensus timeouts
-- API limits
-- Logging levels
-
-Changes take effect on next `make restart`.
-
-### Using Custom Zapatos Branch
-
-The build script uses whatever zapatos source is in `source/zapatos/`. To test a different branch:
-
-```bash
-cd ../source/zapatos
-git checkout my-feature-branch
-cd ../../docker-testnet
-./build.sh  # Rebuild with new code
-make restart
-```
-
-## Troubleshooting
-
-### Docker Images Not Found
-
-**Error:** `Error response from daemon: No such image: zapatos-testnet/validator:local`
-
-**Solution:** Run `./build.sh` to build images from source first.
-
-### Validators Not Starting
-
-**Error:** `Timeout waiting for validators`
-
-**Check:**
-1. Docker has enough resources (8GB RAM minimum)
-2. No port conflicts: `lsof -i :8080-8083`
-3. View logs: `make logs`
-4. Check Docker: `docker ps -a`
-
-### Build Failures
-
-**Error:** Build script fails with compilation errors
-
-**Solutions:**
-- Ensure Rust toolchain is up to date: `rustup update`
-- Check zapatos source is valid: `cd source/zapatos && cargo check`
-- Clean build cache: `cd source/zapatos && cargo clean`
-- Check Docker has enough disk space
-
-### Testnet Running Slowly
-
-**Symptoms:** Slow block production, high CPU usage
-
-**Solutions:**
-- Increase Docker resource limits
-- Reduce number of validators (edit `.env`)
-- Check system resources: `docker stats`
-
-### Integration Tests Failing
-
-**Common Issues:**
-1. **Images not built:** Run `./build.sh` first
-2. **Parallel execution:** Must use `--test-threads=1`
-3. **Stale containers:** Run `make clean` to reset
-4. **Port conflicts:** Stop other services using ports 8080-8083
-
-## Advanced Usage
-
-### Running with Faucet
-
-```bash
-make start-with-faucet
-```
-
-Faucet API: `http://localhost:8000`
-
-### Extracting Genesis for Other Tools
-
-```bash
-make extract-genesis
-# Creates: genesis.blob, waypoint.txt
-```
-
-Use these files to connect external fullnodes or tools.
-
-### Monitoring Metrics
-
-Each validator exposes Prometheus metrics:
-- Validator 0: http://localhost:9101/metrics
-- Validator 1: http://localhost:9102/metrics
-- Validator 2: http://localhost:9103/metrics
-- Validator 3: http://localhost:9104/metrics
-
-### Debugging Inside Containers
-
-```bash
-# Open shell in validator 0
-make shell-0
-
-# Check running processes
-ps aux | grep aptos-node
-
-# View validator data
-ls -la /opt/aptos/var/
-
-# Check network connectivity
-ping validator-1
-```
+| Aspect | Old (buildx bake) | New (Dockerfile) |
+|--------|-------------------|------------------|
+| **Build Environment** | Host machine | Consistent Docker environment |
+| **Reproducibility** | Varies by host | Always same build environment |
+| **CI/CD** | Complex setup | Simple `docker build` |
+| **Image Distribution** | Local only | Push to GitHub Container Registry |
+| **Caching** | Cargo cache only | Docker layer cache + cargo cache |
+| **Image Size** | ~1.5GB | ~200MB (multi-stage) |
+| **Dependencies** | Host must have all deps | All deps in Dockerfile |
 
 ## Development Workflow
 
 ### Typical Development Cycle
 
-1. **Make changes** to zapatos source code
-2. **Rebuild images**: `./build.sh`
-3. **Restart testnet**: `make restart`
-4. **Run tests**: `cd ../tests && cargo test -- --test-threads=1`
-5. **View logs**: `make logs` to debug issues
-6. **Iterate**: Repeat steps 1-5
+```bash
+# 1. Make changes to zapatos source
+cd source/zapatos
+# ... make changes ...
 
-### Testing Timelock Features
+# 2. Build new image (cached if commit unchanged)
+cd ../../docker-testnet
+./build.sh
 
-```rust
-#[tokio::test]
-async fn test_timelock_flow() {
-    let testnet = DockerTestnet::new(4).await.unwrap();
+# 3. Run tests (Docker automatic)
+cd ../tests
+cargo test testnet_basic -- --test-threads=1
 
-    // 1. Get validator group public key
-    let group_pk = testnet.get_validator_group_pubkey().await.unwrap();
-
-    // 2. Encrypt bid using timelock
-    let plaintext = b"secret bid data";
-    let ciphertext = encrypt_timelock(plaintext, &group_pk, auction_end_time);
-
-    // 3. Submit encrypted bid on-chain
-    submit_encrypted_bid(&testnet, &ciphertext).await;
-
-    // 4. Wait for timelock to expire
-    testnet.wait_for_blocks(50, 120).await.unwrap();
-
-    // 5. Validators publish decryption shares
-    // 6. Aggregate shares and decrypt
-    // 7. Verify plaintext matches
-}
+# 4. Iterate
 ```
 
-## Makefile Commands Reference
+### Using Pre-built Images
+
+```bash
+# Pull latest from CI
+docker pull ghcr.io/OWNER/zapatos-testnet/validator:latest
+docker tag ghcr.io/OWNER/zapatos-testnet/validator:latest zapatos-testnet/validator:latest
+
+# Run tests immediately (no build needed!)
+cd tests
+cargo test testnet_basic -- --test-threads=1
+```
+
+## Makefile Commands
 
 | Command | Description |
 |---------|-------------|
 | `make help` | Show all available commands |
-| `make build` | Build docker images from zapatos source |
 | `make start` | Start the validator testnet |
-| `make start-with-faucet` | Start testnet with faucet service |
 | `make stop` | Stop testnet (preserves data) |
 | `make restart` | Restart testnet |
 | `make clean` | Stop and remove all containers/volumes |
@@ -387,30 +246,23 @@ async fn test_timelock_flow() {
 | `make info` | Show connection information |
 | `make logs` | Show logs from all validators |
 | `make logs-0` | Show logs from validator 0 |
-| `make test-api` | Test REST API endpoints |
-| `make extract-genesis` | Extract genesis files |
-| `make shell-0` | Open shell in validator 0 |
-| `make quick-test` | Build, start, and verify |
+
+## Troubleshooting
+
+**Image build fails?**
+→ Check zapatos compiles: `cd ../source/zapatos && cargo check`
+
+**Can't pull from ghcr.io?**
+→ Repository might be private. Build locally: `./build.sh`
+
+**Tests fail to start Docker?**
+→ Ensure image exists: `docker images zapatos-testnet/validator`
+
+**Port conflicts?**
+→ Stop other services using ports 8080-8083
 
 ## Related Documentation
 
 - [Timelock Implementation Plan](../docs/development/timelock-implementation-plan.md)
-- [Zapatos DKG Documentation](../source/zapatos/crates/aptos-dkg/README.md)
-- [Aptos Node Documentation](https://aptos.dev/nodes/validator-node/validators)
-
-## Contributing
-
-When adding features that require testnet changes:
-
-1. Update `docker-compose.yaml` if new services are needed
-2. Update `validator-config.yaml` if config changes are needed
-3. Update `docker_harness/mod.rs` if new test utilities are needed
-4. Update this README with usage examples
-5. Add integration tests in `tests/`
-
-## Support
-
-For issues:
-- Check logs: `make logs`
-- Review [Troubleshooting](#troubleshooting) section
-- Open an issue with logs and environment details
+- [Test Harness Documentation](../tests/docker_harness/mod.rs)
+- [GitHub Actions Workflow](../.github/workflows/build-docker-images.yml)

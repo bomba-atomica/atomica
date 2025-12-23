@@ -1,8 +1,17 @@
 #!/bin/bash
-# Build zapatos validator docker image from local source
+# Build zapatos validator docker image
 #
-# This script uses zapatos's existing docker buildx infrastructure
-# to compile binaries from the local fork and package them into docker images.
+# This script builds a Docker image containing the aptos-node binary
+# compiled from zapatos source in a consistent environment.
+#
+# Usage:
+#   ./build.sh                    # Build from local source
+#   ./build.sh --push             # Build and push to GitHub Container Registry
+#   ./build.sh --ref main         # Build specific git ref
+#
+# Environment variables:
+#   ZAPATOS_REPO: Git repository URL (default: use local ../source/zapatos)
+#   PROFILE: Build profile (release or debug, default: release)
 
 set -e
 
@@ -10,142 +19,138 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ATOMICA_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ZAPATOS_ROOT="$ATOMICA_ROOT/source/zapatos"
 
+# Parse arguments
+PUSH_IMAGE=false
+ZAPATOS_REF=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --push)
+            PUSH_IMAGE=true
+            shift
+            ;;
+        --ref)
+            ZAPATOS_REF="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [--push] [--ref <git-ref>]"
+            exit 1
+            ;;
+    esac
+done
+
 echo "============================================"
-echo "Building Zapatos Testnet Docker Images"
+echo "Building Zapatos Validator Docker Image"
 echo "============================================"
 echo ""
-echo "Atomica root: $ATOMICA_ROOT"
-echo "Zapatos root: $ZAPATOS_ROOT"
-echo ""
 
-# Check that zapatos directory exists
-if [ ! -d "$ZAPATOS_ROOT" ]; then
-    echo "Error: Zapatos source not found at $ZAPATOS_ROOT"
-    echo "Expected directory structure: atomica/source/zapatos/"
-    exit 1
-fi
-
-# Check that docker is running
+# Check Docker is running
 if ! docker info > /dev/null 2>&1; then
     echo "Error: Docker is not running. Please start Docker and try again."
     exit 1
 fi
 
-echo "Step 1: Checking if rebuild is needed..."
+# Check zapatos source exists (for local builds)
+if [ ! -d "$ZAPATOS_ROOT" ]; then
+    echo "Error: Zapatos source not found at $ZAPATOS_ROOT"
+    exit 1
+fi
 
 cd "$ZAPATOS_ROOT"
 
-# Get the git commit from zapatos source
-ZAPATOS_GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-echo "Current zapatos commit: $ZAPATOS_GIT_SHA"
+# Get git commit
+if [ -n "$ZAPATOS_REF" ]; then
+    GIT_SHA=$(git rev-parse --short "$ZAPATOS_REF" 2>/dev/null || echo "unknown")
+    echo "Building git ref: $ZAPATOS_REF (commit: $GIT_SHA)"
+else
+    GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    echo "Building current commit: $GIT_SHA"
+fi
 
-# Check if we already have an image for this commit
-if docker image inspect "zapatos-testnet/validator:$ZAPATOS_GIT_SHA" >/dev/null 2>&1; then
+# Check if image already exists
+IMAGE_TAG="zapatos-testnet/validator:$GIT_SHA"
+if docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
     echo ""
-    echo "✓ Image already exists for commit $ZAPATOS_GIT_SHA"
+    echo "✓ Image already exists: $IMAGE_TAG"
     echo "  Skipping build (no changes detected)"
     echo ""
-    echo "If you want to force rebuild, run:"
-    echo "  docker rmi zapatos-testnet/validator:$ZAPATOS_GIT_SHA"
+    echo "To force rebuild:"
+    echo "  docker rmi $IMAGE_TAG"
     echo "  ./build.sh"
     echo ""
 
-    # Update the 'latest' tag to point to this commit
-    docker tag "zapatos-testnet/validator:$ZAPATOS_GIT_SHA" zapatos-testnet/validator:latest
+    # Update latest tag
+    docker tag "$IMAGE_TAG" zapatos-testnet/validator:latest
+    echo "Tagged zapatos-testnet/validator:latest -> $GIT_SHA"
 
-    echo "Tagged zapatos-testnet/validator:latest -> $ZAPATOS_GIT_SHA"
-    echo ""
-    echo "============================================"
-    echo "Build Complete (cached)!"
-    echo "============================================"
-    echo ""
-    echo "Docker images built from zapatos commit: $ZAPATOS_GIT_SHA"
-    echo ""
-    echo "To start the testnet:"
-    echo "  docker compose up -d"
-    echo ""
-    echo "Or use the Makefile:"
-    echo "  make start"
-    echo ""
+    if [ "$PUSH_IMAGE" = true ]; then
+        echo ""
+        echo "Image already exists, skipping push"
+    fi
+
     exit 0
 fi
 
-echo "  No cached image found for commit $ZAPATOS_GIT_SHA"
-echo "  Building from source (10-20 minutes)..."
+echo ""
+echo "Building Docker image from source..."
+echo "  Image tag: $IMAGE_TAG"
+echo "  Profile: ${PROFILE:-release}"
 echo ""
 
-# Build validator image using zapatos's build infrastructure
-# The 'validator' target builds both the binary and packages it
-export PROFILE="${PROFILE:-release}"
-export FEATURES="${FEATURES:-}"
+# Build the image
+cd "$SCRIPT_DIR"
 
-echo "Building with profile: $PROFILE"
-if [ -n "$FEATURES" ]; then
-    echo "Building with features: $FEATURES"
-fi
-echo ""
-
-# Use zapatos's docker-bake script to build the validator target
-./docker/builder/docker-bake-rust-all.sh validator
-
-echo ""
-echo "Step 2: Tagging image with zapatos git commit..."
-
-# ZAPATOS_GIT_SHA already set in Step 1
-echo "Zapatos git commit: $ZAPATOS_GIT_SHA"
-
-# Find the image that was just built
-# The buildx bake system tags images based on profile and features
-if [ "$PROFILE" = "release" ]; then
-    profile_prefix=""
-else
-    profile_prefix="${PROFILE}_"
-fi
-
-if [ -n "$FEATURES" ]; then
-    NORMALIZED_FEATURES=$(printf "$FEATURES" | sed -e 's/[^a-zA-Z0-9]/_/g')
-    image_tag="${profile_prefix}${NORMALIZED_FEATURES}_${GIT_SHA:-latest}"
-else
-    image_tag="${profile_prefix}${GIT_SHA:-latest}"
-fi
-
-# Tag with zapatos git commit for traceability
-docker tag "aptos/validator:$image_tag" "zapatos-testnet/validator:$ZAPATOS_GIT_SHA" || {
-    echo "Warning: Could not find image with tag $image_tag"
-    echo "Trying to find any recent aptos/validator image..."
-
-    # Fallback: tag the most recent aptos/validator image
-    latest_image=$(docker images "aptos/validator" --format "{{.Repository}}:{{.Tag}}" | head -1)
-    if [ -n "$latest_image" ]; then
-        echo "Using image: $latest_image"
-        docker tag "$latest_image" "zapatos-testnet/validator:$ZAPATOS_GIT_SHA"
-    else
-        echo "Error: No aptos/validator images found. Build may have failed."
-        exit 1
-    fi
-}
-
-# Also tag as 'latest' for convenience
-docker tag "zapatos-testnet/validator:$ZAPATOS_GIT_SHA" zapatos-testnet/validator:latest
-
-echo ""
-echo "Tagged images:"
-echo "  zapatos-testnet/validator:$ZAPATOS_GIT_SHA  (matches zapatos commit)"
-echo "  zapatos-testnet/validator:latest            (convenience tag)"
+docker build \
+    --build-arg ZAPATOS_REPO=local \
+    --build-arg PROFILE="${PROFILE:-release}" \
+    --build-arg BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+    --build-arg GIT_SHA="$GIT_SHA" \
+    --tag "$IMAGE_TAG" \
+    --tag zapatos-testnet/validator:latest \
+    --file Dockerfile \
+    "$ATOMICA_ROOT"
 
 echo ""
 echo "============================================"
 echo "Build Complete!"
 echo "============================================"
 echo ""
-echo "Docker images built from zapatos commit: $ZAPATOS_GIT_SHA"
+echo "Docker images:"
+echo "  zapatos-testnet/validator:$GIT_SHA"
+echo "  zapatos-testnet/validator:latest"
 echo ""
-echo "To verify the image:"
-echo "  docker images zapatos-testnet/validator"
+
+# Verify the image
+echo "Verifying image..."
+docker run --rm "$IMAGE_TAG" --version
+
 echo ""
+echo "✓ Image verified successfully"
+echo ""
+
+# Push to registry if requested
+if [ "$PUSH_IMAGE" = true ]; then
+    echo "Pushing to GitHub Container Registry..."
+
+    # Tag for GitHub Container Registry
+    GHCR_IMAGE="ghcr.io/OWNER/zapatos-testnet/validator:$GIT_SHA"
+
+    docker tag "$IMAGE_TAG" "$GHCR_IMAGE"
+    docker tag "$IMAGE_TAG" "ghcr.io/OWNER/zapatos-testnet/validator:latest"
+
+    echo "Pushing $GHCR_IMAGE..."
+    docker push "$GHCR_IMAGE"
+    docker push "ghcr.io/OWNER/zapatos-testnet/validator:latest"
+
+    echo ""
+    echo "✓ Images pushed to GitHub Container Registry"
+    echo ""
+fi
+
 echo "To start the testnet:"
 echo "  docker compose up -d"
 echo ""
-echo "Or use the Makefile:"
-echo "  make start"
+echo "Or run tests (Docker handled automatically):"
+echo "  cd ../tests && cargo test -- --test-threads=1"
 echo ""

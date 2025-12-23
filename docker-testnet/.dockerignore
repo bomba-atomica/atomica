@@ -1,0 +1,36 @@
+# Build artifacts
+target/
+**/target/
+*.rdb
+
+# Docker artifacts
+*.blob
+*.key
+waypoint.txt
+genesis/
+data/
+logs/
+
+# Git (except for zapatos submodule)
+.git/
+!source/zapatos/.git/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+*.md
+!source/zapatos/**/*.md
+
+# Test artifacts
+tests/target/
+
+# Docker compose files (not needed in image)
+docker-compose*.yaml
+Makefile
+
+# Local config
+.env.local

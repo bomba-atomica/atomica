@@ -1,23 +1,30 @@
 //! Basic integration tests for the zapatos docker testnet
 //!
-//! These tests verify that:
-//! 1. The docker testnet can be started and stopped
-//! 2. Validators are healthy and producing blocks
-//! 3. REST APIs are accessible
+//! These tests automatically start and stop Docker testnet instances.
+//! No manual `docker compose` commands needed!
 //!
-//! # Running tests
+//! What the test harness does:
+//! 1. Creates a fresh Docker testnet (4 validators)
+//! 2. Waits for validators to become healthy
+//! 3. Runs test assertions
+//! 4. Tears down Docker testnet (even on panic/failure)
 //!
-//! First, build the docker images:
+//! # Prerequisites
+//!
+//! Build docker images once:
 //! ```bash
 //! cd docker-testnet
 //! ./build.sh
 //! ```
 //!
-//! Then run tests sequentially (required for Docker):
+//! # Running tests
+//!
+//! Tests must run sequentially (Docker port conflicts):
 //! ```bash
-//! cd tests
 //! cargo test -- --test-threads=1 --nocapture
 //! ```
+//!
+//! Docker lifecycle is handled automatically - just run the tests!
 
 use docker_harness::DockerTestnet;
 use serial_test::serial;
