@@ -14,6 +14,7 @@
     "test:integration": "vitest run tests/integration",
     "test:ui": "vitest run tests/ui-component",
     "test:meta": "vitest run --config vitest.config.nodejs.ts",
+    "test:docker": "vitest run --config vitest.config.nodejs.ts tests/meta/docker-testnet.test.ts",
     "demo": "npx tsx scripts/orchestrator.ts"
   },
   "dependencies": {

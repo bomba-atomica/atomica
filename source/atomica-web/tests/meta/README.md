@@ -72,7 +72,112 @@ These tests follow **clean room testing** principles:
 
 ---
 
-### 2. `faucet-ed25519.test.ts`
+### 2. `docker-testnet.test.ts`
+
+**Purpose**: Docker-based multi-validator testnet validation
+**What it tests**: Verifies a 4-validator Docker testnet can start and make blockchain progress
+
+**Key assertions**:
+
+- Docker is installed and running
+- Docker Compose can start zapatos validator images
+- All 4 validators bind to expected ports (8080-8083)
+- Validators serve API requests correctly
+- Block height increments over time (blockchain making progress)
+- Chain ID is 4 (local testnet)
+- All validators stay in sync (within 10 blocks)
+- Framework account exists with expected resources
+- Epoch and timestamp progress correctly
+
+**Platform behaviors documented**:
+
+- First run: ~1-2 minutes (image download + startup) or ~10-20 minutes (local build)
+- Subsequent runs: ~30 seconds (cached images)
+- Validators auto-generate genesis
+- Epoch duration: 30 seconds (fast testing)
+- Block production rate: ~1-3 blocks/second
+- Validators stay synced within few blocks
+
+**Use this test to**:
+
+- Verify Docker environment is set up correctly
+- Test multi-validator consensus
+- Validate production-like testnet setup
+- Debug Docker networking issues
+- Test blockchain progress
+
+**Requirements**:
+
+- Docker Desktop running
+- Ports 8080-8083 available
+- 8GB RAM minimum
+- **Configuration**: See "Docker Testnet Setup" section below
+
+**Run command**:
+
+```bash
+npm run test:docker
+```
+
+#### Docker Testnet Setup
+
+The docker-testnet test requires configuration before first use. You have two options:
+
+**Option 1: Use Locally-Built Images (Recommended for Development)**
+
+1. Create your environment configuration:
+   ```bash
+   cd source/atomica-web
+   cp .env.example .env
+   ```
+
+2. Build the Docker image (10-20 minutes first time):
+   ```bash
+   cd ../../docker-testnet
+   ./build-local-image.sh
+   ```
+
+3. The `.env` file is already configured for local images (default)
+
+4. Run the test:
+   ```bash
+   cd ../source/atomica-web
+   npm run test:docker
+   ```
+
+**Option 2: Use Pre-Built Images from GitHub Container Registry (GHCR)**
+
+If you have access to the private atomica repository:
+
+1. Create a GitHub Personal Access Token (Classic):
+   - Go to: https://github.com/settings/tokens
+   - Click "Generate new token" → "Generate new token (classic)"
+   - Note: "GHCR access for atomica docker images"
+   - Select scope: `read:packages` (and optionally `repo` if you need repo access)
+   - Click "Generate token" and copy it
+   - **Important**: Fine-grained tokens don't currently support package registry access
+
+2. Update `source/atomica-web/.env`:
+   ```bash
+   # Uncomment and configure:
+   VALIDATOR_IMAGE_REPO=ghcr.io/0o-de-lally/atomica/zapatos-bin
+   IMAGE_TAG=5df0e6d1
+   GHCR_USERNAME=your_github_username
+   GHCR_TOKEN=ghp_YourPersonalAccessTokenHere
+   ```
+
+3. Run the test:
+   ```bash
+   npm run test:docker
+   ```
+
+   The test harness will automatically authenticate with GHCR using your credentials.
+
+**Note**: The `.env` file is gitignored and will not be committed. Each developer manages their own configuration.
+
+---
+
+### 3. `faucet-ed25519.test.ts`
 
 **Purpose**: Ed25519 account funding via faucet
 **What it tests**: The faucet can fund newly generated Ed25519 accounts (traditional Aptos accounts)
@@ -97,7 +202,7 @@ These tests follow **clean room testing** principles:
 
 ---
 
-### 3. `faucet-secp256k1.test.ts`
+### 4. `faucet-secp256k1.test.ts`
 
 **Purpose**: SECP256k1 account funding via faucet
 **What it tests**: The faucet can fund newly generated SECP256k1 accounts (Ethereum-compatible)
@@ -130,7 +235,7 @@ These tests follow **clean room testing** principles:
 
 ---
 
-### 4. `transfer.test.ts`
+### 5. `transfer.test.ts`
 
 **Purpose**: Simple APT transfer between accounts
 **What it tests**: Basic token transfers using `0x1::aptos_account::transfer`
@@ -157,7 +262,7 @@ These tests follow **clean room testing** principles:
 
 ---
 
-### 5. `deploy-contract.test.ts`
+### 6. `deploy-contract.test.ts`
 
 **Purpose**: Move smart contract deployment
 **What it tests**: Compiling and deploying Move modules to the blockchain
@@ -186,7 +291,7 @@ These tests follow **clean room testing** principles:
 
 ---
 
-### 6. `deploy-atomica-contracts.test.ts`
+### 7. `deploy-atomica-contracts.test.ts`
 
 **Purpose**: Atomica contract deployment
 **What it tests**: Deploying the full Atomica contract suite
@@ -205,7 +310,7 @@ These tests follow **clean room testing** principles:
 
 ---
 
-### 7. `secp256k1-account.test.ts`
+### 8. `secp256k1-account.test.ts`
 
 **Purpose**: SECP256k1 Ethereum-compatible account testing
 **What it tests**: Creating and using SECP256k1 accounts (Ethereum-compatible) on Aptos
