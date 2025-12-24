@@ -60,6 +60,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl1.1 \
     libpq5 \
+    libdw1 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
