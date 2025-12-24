@@ -1,13 +1,18 @@
 # Zapatos Local Testnet - Multi-Validator Configuration
 #
-# This compose file sets up a 4-validator testnet using locally-built
-# zapatos binaries from source/zapatos.
+# This compose file sets up a 4-validator testnet using pre-built zapatos
+# binaries from GitHub Container Registry.
 #
-# IMPORTANT: You must build images first!
-#   ./build.sh
+# Default Configuration:
+#   - Uses published image: ghcr.io/0o-de-lally/atomica/zapatos-bin:5df0e6d1
+#   - No build step required - just start the testnet
+#   - Image includes git commit hash for traceability
 #
-# This builds zapatos from source and tags images with the git commit.
-# The testnet uses binaries that match your local zapatos checkout.
+# For Local Development:
+#   If you need to test custom zapatos changes:
+#   1. Run ./build.sh to build from source/zapatos
+#   2. Edit .env to use: VALIDATOR_IMAGE_REPO=zapatos-testnet/validator
+#   3. The testnet will use your locally-built binaries
 #
 # Architecture:
 # - 4 validator nodes
@@ -15,11 +20,10 @@
 # - Exposed REST APIs (8080-8083) and metrics (9101-9104)
 #
 # Usage:
-#   1. Build images: ./build.sh
-#   2. Start testnet: docker compose up -d
-#   3. Check status: docker compose ps
-#   4. View logs: docker compose logs -f validator-0
-#   5. Stop testnet: docker compose down
+#   1. Start testnet: docker compose up -d (or make start)
+#   2. Check status: docker compose ps (or make status)
+#   3. View logs: docker compose logs -f validator-0
+#   4. Stop testnet: docker compose down
 
 version: "3.8"
 

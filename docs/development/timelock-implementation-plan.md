@@ -477,7 +477,7 @@ Validate that the existing `aptos-dkg` crate and zapatos validator infrastructur
 ```bash
 # Build Docker images first
 cd /source/zapatos/docker-testnet
-./build.sh
+./build-local-image.sh
 
 # Run E2E tests (sequential, Docker required)
 cd /source/zapatos/testsuite/timelock-e2e

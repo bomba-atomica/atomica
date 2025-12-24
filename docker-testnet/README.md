@@ -1,87 +1,155 @@
-# Zapatos Docker Testnet
+# Docker Testnet
 
-A local multi-validator testnet for developing and testing features in **zapatos** (Atomica's fork of Aptos). This setup provides a production-like environment using binaries built directly from your local source code.
-
----
-
-## 🚀 Local Developer Quick Start
-
-Focus on getting your first image built and running tests with zero manual Docker management.
+4-validator Docker testnet for atomica development and testing.
 
 ### 1. Build from Source (First Time)
 This script uses a **multi-stage Docker build** to compile the `aptos-node` and `aptos-faucet-service` binaries.
 
-**Why Docker?** Since you are likely on a Mac or Windows, you cannot simply copy a host-native binary into a Linux container. This script compiles the source code *inside* a Linux container first, ensuring the final binary is compatible with the `debian:bullseye-slim` runtime.
+### First Time Setup
+
+```bash
+# 1. Configure credentials
+cd source/atomica-web
+cp .env.example .env
+# Edit .env: Add your GitHub username and Personal Access Token
+
+# 2. Run tests
+npm run test:docker
+```
+
+**First run**: ~1-2 minutes (image download + startup)
+**Subsequent runs**: ~30 seconds
+
+### Accessing the Testnet
+
+Once running, validators are available at:
+- Validator 0: http://localhost:8080
+- Validator 1: http://localhost:8081
+- Validator 2: http://localhost:8082
+- Validator 3: http://localhost:8083
+
+Example queries:
+```bash
+# Get ledger info
+curl http://localhost:8080/v1 | jq
+
+# Get specific block
+curl http://localhost:8080/v1/blocks/by_height/100 | jq
+```
+
+### Creating GitHub Personal Access Token
+
+1. Go to https://github.com/settings/tokens
+2. Click "Generate new token" → "Generate new token (classic)"
+3. Select scope: `read:packages`
+4. Copy token to `source/atomica-web/.env` as `GHCR_TOKEN`
+
+**Note**: Must use "classic" tokens - fine-grained tokens don't support packages.
+
+## Configuration
+
+**Primary config**: `source/atomica-web/.env` (gitignored)
+
+### Option 1: GHCR (Default - Recommended)
+
+Pull pre-built images from GitHub Container Registry.
+
+**Local development**:
+```bash
+# In source/atomica-web/.env:
+VALIDATOR_IMAGE_REPO=ghcr.io/0o-de-lally/atomica/zapatos-bin
+IMAGE_TAG=5df0e6d1
+GHCR_USERNAME=your_github_username
+GHCR_TOKEN=ghp_YourPersonalAccessToken
+```
+
+**CI/CD**:
+```bash
+# In source/atomica-web/.env (no credentials needed):
+VALIDATOR_IMAGE_REPO=ghcr.io/0o-de-lally/atomica/zapatos-bin
+IMAGE_TAG=5df0e6d1
+# GITHUB_TOKEN is automatic in GitHub Actions
+```
+
+### Option 2: Local Build (For Build Debugging Only)
+
+Build from source when debugging the build process itself.
+
+```bash
+# 1. Build image (10-20 min)
+cd docker-testnet
+./build-local-image.sh
+
+# 2. Update source/atomica-web/.env:
+VALIDATOR_IMAGE_REPO=zapatos-testnet/validator
+IMAGE_TAG=latest
+```
+
+## Running Tests
+
+```bash
+cd source/atomica-web
+npm run test:docker
+```
+
+The test harness automatically:
+- Authenticates with GHCR (local) or uses GITHUB_TOKEN (CI)
+- Starts 4 validators on ports 8080-8083
+- Waits for blockchain to be healthy
+- Runs tests
+- Cleans up containers
+
+## Manual Docker Compose Usage
+
+For manual operation (test harness does this automatically):
 
 ```bash
 cd docker-testnet
-./build.sh
+
+# Start
+docker compose up -d
+
+# Check status
+docker compose ps
+
+# View logs
+docker compose logs -f validator-0
+
+# Stop
+docker compose down -v
 ```
 
-*   **⏱ First build:** ~10-20 minutes (initial cargo compilation inside Docker)
-*   **⏱ Incremental:** ~1-3 minutes (uses Docker BuildKit cache mounts)
-*   **⏱ Re-tagging:** < 1 second (if no source changes detected)
+**Note**: Environment variables from `source/atomica-web/.env` are automatically loaded.
 
-### 2. Run Integration Tests
-The Rust test suite handles the entire Docker lifecycle automatically. It will spin up 4 validators, run the assertions, and tear everything down.
+## Architecture
 
-```bash
-cd tests
-cargo test testnet_basic -- --test-threads=1 --nocapture
-```
+- **4 validators**: Multi-validator consensus testing
+- **Ports**: 8080-8083 (REST API), 9101-9104 (metrics)
+- **Network**: Isolated Docker network (172.19.0.0/16)
+- **Epochs**: 30 seconds (fast testing)
+- **Chain ID**: 4 (local testnet)
 
-> [!IMPORTANT]
-> Tests must run with `--test-threads=1` to avoid port conflicts on the host machine (mapping 8080-8083).
+## Troubleshooting
 
----
+**Authentication failed**:
+- Verify token has `read:packages` scope
+- Use classic token (not fine-grained)
+- Check credentials in `source/atomica-web/.env`
 
-## 🛠 Building the Images
+**Image not found**:
+- For GHCR: Check authentication
+- For local: Run `./build-local-image.sh`
 
-The `build.sh` script is the primary entry point for local developers. It ensures that your image is built in a consistent Linux environment.
+**Port conflicts**:
+- Stop other services using ports 8080-8083
+- Run `docker compose down -v` to remove old containers
 
-### The Build Process
-1.  **Context:** The script sets the repository root as the build context so Docker can access `source/zapatos`.
-2.  **Caching:** It leverages **Docker BuildKit cache mounts** (`--mount=type=cache`). This means that your `target` directory and cargo registry are persisted across Docker builds, making incremental changes nearly as fast as a local `cargo build`.
-3.  **Cross-Platform:** Because the build happens inside a container, a developer on an Apple Silicon Mac will produce the correct Linux ELF binaries automatically.
+## Files
 
-### Build Options
-*   `./build.sh --ref <branch/tag/commit>`: Build from a specific git reference instead of the current state.
-*   `PROFILE=debug ./build.sh`: Build debug binaries (useful for profiling, but produces heavy images).
+- `build-local-image.sh` - Build Docker image from local zapatos source
+- `docker-compose.yaml` - 4-validator testnet configuration
+- `validator-config.yaml` - Node configuration overrides
 
----
+## CI/CD Example
 
-## 🏗 CI/CD Integration
-
-The `.github/workflows/build-docker-images.yml` workflow uses a "Binary-First" optimization. Since GitHub Actions runners are already Linux-based:
-1.  They compile the binaries directly on the runner host (which is slightly faster than Docker-in-Docker).
-2.  They package those pre-built binaries into the final image.
-
-*Note: As a local developer on macOS, you should always stick to the `build.sh` path which handles the OS difference for you.*
-
----
-
-## 🕹 Manual Testnet Management
-
-If you want to manually explore the testnet or debug a specific node, use the provided `Makefile`:
-
-| Command | Description |
-|---------|-------------|
-| `make start` | Start the 4-validator testnet in the background. |
-| `make status` | Check which containers are running and healthy. |
-| `make logs` | Stream logs from all nodes (or `make logs-0` for just the first node). |
-| `make restart` | Quickly restart all validator services. |
-| `make clean` | **Destructive:** Stop testnet and wipe all volumes/data. |
-
----
-
-## ❓ Troubleshooting
-
-*   **"Image not found":** Ensure you ran `./build.sh` at least once locally.
-*   **Port 8080 already in use:** You may have a zombie testnet running. Run `make clean` to force a reset.
-*   **"exec format error":** This occurs if you tried to manually copy a Mac binary into the container. Always use `./build.sh` to ensure Linux-compatible binaries.
-
----
-
-## Related Links
-*   [Test Harness Source](../tests/docker_harness/mod.rs) - See how the Rust code manages Docker.
-*   [Timelock Implementation Plan](../docs/development/timelock-implementation-plan.md) - Rationale for this testnet.
+See `.github/workflows/docker-testnet-example.yml` for GitHub Actions workflow.
