@@ -21,6 +21,11 @@ on:
         description: 'Zapatos git ref to build (branch, tag, or commit)'
         required: false
         default: 'HEAD'
+      force_rebuild:
+        description: 'Force rebuild even if image exists'
+        required: false
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -63,6 +68,13 @@ jobs:
           echo "sha=$ZAPATOS_SHA" >> $GITHUB_OUTPUT
           echo "Zapatos commit: $ZAPATOS_SHA"
 
+      - name: Get Dockerfile hash
+        id: dockerfile-hash
+        run: |
+          DOCKERFILE_HASH=$(sha256sum docker-testnet/Dockerfile | cut -c1-8)
+          echo "hash=$DOCKERFILE_HASH" >> $GITHUB_OUTPUT
+          echo "Dockerfile hash: $DOCKERFILE_HASH"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -80,6 +92,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=raw,value=${{ steps.zapatos-commit.outputs.sha }}-${{ steps.dockerfile-hash.outputs.hash }}
             type=raw,value=${{ steps.zapatos-commit.outputs.sha }}
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
@@ -89,8 +102,14 @@ jobs:
       - name: Check if image exists
         id: check-image
         run: |
-          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.zapatos-commit.outputs.sha }}"
-          if docker manifest inspect "$IMAGE_TAG" >/dev/null 2>&1; then
+          # Check for image with both zapatos SHA and Dockerfile hash
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.zapatos-commit.outputs.sha }}-${{ steps.dockerfile-hash.outputs.hash }}"
+
+          # Force rebuild if requested via workflow_dispatch
+          if [ "${{ github.event.inputs.force_rebuild }}" = "true" ]; then
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Force rebuild requested - will build: $IMAGE_TAG"
+          elif docker manifest inspect "$IMAGE_TAG" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
             echo "Image already exists: $IMAGE_TAG"
           else
@@ -116,8 +135,14 @@ jobs:
       - name: Image already exists (skip build)
         if: steps.check-image.outputs.exists == 'true'
         run: |
-          echo "✓ Image already exists for zapatos commit ${{ steps.zapatos-commit.outputs.sha }}"
+          echo "✓ Image already exists:"
+          echo "  Zapatos SHA: ${{ steps.zapatos-commit.outputs.sha }}"
+          echo "  Dockerfile hash: ${{ steps.dockerfile-hash.outputs.hash }}"
+          echo "  Tag: ${{ steps.zapatos-commit.outputs.sha }}-${{ steps.dockerfile-hash.outputs.hash }}"
+          echo ""
           echo "Skipping build to save CI time"
+          echo ""
+          echo "To force rebuild, use workflow_dispatch with force_rebuild=true"
 
       - name: Output image tags
         run: |
@@ -129,5 +154,6 @@ jobs:
       - name: Verify image
         if: steps.check-image.outputs.exists == 'false' && github.event_name != 'pull_request'
         run: |
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.zapatos-commit.outputs.sha }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.zapatos-commit.outputs.sha }}-${{ steps.dockerfile-hash.outputs.hash }}"
+          echo "Verifying image: $IMAGE"
           docker run --rm "$IMAGE" --version

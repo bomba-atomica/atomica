@@ -55,14 +55,23 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # Stage 2: Runtime image (minimal)
 FROM debian:bullseye-slim
 
-# Install runtime dependencies only
+ARG TARGETARCH=amd64
+
+# Install runtime dependencies (matching aptos debian-base + libdw1)
 RUN apt-get update && apt-get install -y \
     ca-certificates \
-    libssl1.1 \
-    libpq5 \
-    libdw1 \
     curl \
+    iproute2 \
+    libpq5 \
+    libssl1.1 \
+    libdw1 \
+    netcat \
+    net-tools \
+    tcpdump \
     && rm -rf /var/lib/apt/lists/*
+
+# Add Tini to make sure the binaries receive proper SIGTERM signals when Docker is shut down
+ADD --chmod=755 https://github.com/krallin/tini/releases/download/v0.19.0/tini-${TARGETARCH} /tini
 
 # Create aptos user
 RUN groupadd -g 6180 aptos && \
@@ -99,6 +108,6 @@ USER aptos
 HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
     CMD curl -f http://localhost:8080/v1 || exit 1
 
-# Default command
-ENTRYPOINT ["/usr/local/bin/aptos-node"]
+# Use Tini as entrypoint for proper signal handling
+ENTRYPOINT ["/tini", "--", "/usr/local/bin/aptos-node"]
 CMD ["--help"]
