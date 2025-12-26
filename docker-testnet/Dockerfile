@@ -41,13 +41,13 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/build/zapatos/target,sharing=locked \
     if [ "$PROFILE" = "release" ]; then \
-        cargo build --release --bin aptos-node && \
-        cargo build --release --package aptos-faucet-service && \
+        cargo build --release --bin aptos-node --features testing && \
+        cargo build --release --package aptos-faucet-service --features testing && \
         cp target/release/aptos-node /build/aptos-node && \
         cp target/release/aptos-faucet-service /build/aptos-faucet-service; \
     else \
-        cargo build --bin aptos-node && \
-        cargo build --package aptos-faucet-service && \
+        cargo build --bin aptos-node --features testing && \
+        cargo build --package aptos-faucet-service --features testing && \
         cp target/debug/aptos-node /build/aptos-node && \
         cp target/debug/aptos-faucet-service /build/aptos-faucet-service; \
     fi
