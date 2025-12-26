@@ -27,6 +27,7 @@ on:
         type: boolean
         default: false
 
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/zapatos-bin
