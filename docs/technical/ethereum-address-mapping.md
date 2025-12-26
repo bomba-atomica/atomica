@@ -75,7 +75,7 @@ We need a system to:
 
 ### Component 1: On-Chain Registry (Move Module)
 
-**Location**: `source/zapatos/sources/address_registry.move`
+**Location**: `source/atomica-aptos/sources/address_registry.move`
 
 **Purpose**: Immutable, verifiable record of address mappings
 

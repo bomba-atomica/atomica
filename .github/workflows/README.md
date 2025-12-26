@@ -6,7 +6,7 @@ This directory contains CI/CD workflows for the Atomica project.
 
 ### `build-aptos-binary.yaml` (Reusable Workflow)
 
-A reusable workflow that builds and caches the `aptos` binary from the `source/zapatos` submodule.
+A reusable workflow that builds and caches the `aptos` binary from the `source/atomica-aptos` submodule.
 
 **Key Features:**
 - Builds aptos binary with `--features testing` flag
@@ -21,7 +21,7 @@ A reusable workflow that builds and caches the `aptos` binary from the `source/z
 
 **Build Command:**
 ```bash
-cd source/zapatos
+cd source/atomica-aptos
 cargo build -p aptos --release --features testing
 ```
 

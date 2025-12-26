@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_ROOT="$SCRIPT_DIR/.."
-ZAPATOS_DIR="$SOURCE_ROOT/zapatos"
+ZAPATOS_DIR="$SOURCE_ROOT/atomica-aptos"
 OUTPUT_DIR="$SOURCE_ROOT/move-framework-fixtures"
 FRAMEWORK_DIR="$ZAPATOS_DIR/aptos-move/framework"
 

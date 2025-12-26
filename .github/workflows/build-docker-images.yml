@@ -6,14 +6,14 @@ on:
       - main
       - docker-infra
     paths:
-      - 'source/zapatos/**'
+      - 'source/atomica-aptos/**'
       - 'docker-testnet/Dockerfile'
       - '.github/workflows/build-docker-images.yml'
   pull_request:
     branches:
       - main
     paths:
-      - 'source/zapatos/**'
+      - 'source/atomica-aptos/**'
       - 'docker-testnet/Dockerfile'
   workflow_dispatch:
     inputs:
@@ -74,7 +74,7 @@ jobs:
       - name: Get zapatos git commit
         id: zapatos-commit
         run: |
-          cd source/zapatos
+          cd source/atomica-aptos
           if [ -n "${{ github.event.inputs.zapatos_ref }}" ]; then
             ZAPATOS_SHA=$(git rev-parse --short "${{ github.event.inputs.zapatos_ref }}")
           else

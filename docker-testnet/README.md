@@ -57,7 +57,7 @@ Pull pre-built images from GitHub Container Registry.
 **Local development**:
 ```bash
 # In source/atomica-web/.env:
-VALIDATOR_IMAGE_REPO=ghcr.io/0o-de-lally/atomica/zapatos-bin
+VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica/zapatos-bin
 IMAGE_TAG=5df0e6d1
 GHCR_USERNAME=your_github_username
 GHCR_TOKEN=ghp_YourPersonalAccessToken
@@ -66,7 +66,7 @@ GHCR_TOKEN=ghp_YourPersonalAccessToken
 **CI/CD**:
 ```bash
 # In source/atomica-web/.env (no credentials needed):
-VALIDATOR_IMAGE_REPO=ghcr.io/0o-de-lally/atomica/zapatos-bin
+VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica/zapatos-bin
 IMAGE_TAG=5df0e6d1
 # GITHUB_TOKEN is automatic in GitHub Actions
 ```

@@ -43,7 +43,7 @@ jobs:
           # GITHUB_TOKEN is automatically used for authentication
           cat > .env << EOF
           # Docker image from GHCR (private registry)
-          VALIDATOR_IMAGE_REPO=ghcr.io/0o-de-lally/atomica/zapatos-bin
+          VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica/zapatos-bin
           IMAGE_TAG=5df0e6d1
 
           # Network configuration

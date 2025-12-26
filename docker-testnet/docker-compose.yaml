@@ -4,13 +4,13 @@
 # binaries from GitHub Container Registry.
 #
 # Default Configuration:
-#   - Uses published image: ghcr.io/0o-de-lally/atomica/zapatos-bin:5df0e6d1
+#   - Uses published image: ghcr.io/bomba-atomica/atomica/zapatos-bin:5df0e6d1
 #   - No build step required - just start the testnet
 #   - Image includes git commit hash for traceability
 #
 # For Local Development:
 #   If you need to test custom zapatos changes:
-#   1. Run ./build.sh to build from source/zapatos
+#   1. Run ./build.sh to build from source/atomica-aptos
 #   2. Edit .env to use: VALIDATOR_IMAGE_REPO=zapatos-testnet/validator
 #   3. The testnet will use your locally-built binaries
 #

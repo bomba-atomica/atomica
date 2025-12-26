@@ -80,7 +80,7 @@ const GENESIS_FRAMEWORK_PATH = resolve("../move-framework-fixtures/testnet.mrb")
 
 ### When modifying genesis.move or other framework code:
 
-1. Edit the Move code in `zapatos/aptos-move/framework/aptos-framework/sources/`
+1. Edit the Move code in `atomica-aptos/aptos-move/framework/aptos-framework/sources/`
 2. Run `./build-framework.sh` from the source root (fast - only rebuilds framework)
 3. Run tests from any project: `cd atomica-web && npx vitest run SimpleTransfer`
 4. Iterate quickly without waiting for full Rust compilation
@@ -88,7 +88,7 @@ const GENESIS_FRAMEWORK_PATH = resolve("../move-framework-fixtures/testnet.mrb")
 ### When modifying Rust code (authenticator.rs, etc.):
 
 1. Edit the Rust code
-2. Rebuild aptos: `cd zapatos && cargo build --bin aptos --features testing`
+2. Rebuild aptos: `cd atomica-aptos && cargo build --bin aptos --features testing`
 3. The framework is already in the `.mrb` file, so no need to rebuild it
 4. Run tests from any project
 
