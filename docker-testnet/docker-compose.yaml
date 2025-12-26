@@ -1,18 +1,21 @@
-# Zapatos Local Testnet - Multi-Validator Configuration
+# Atomica Aptos Local Testnet - Multi-Validator Configuration
 #
-# This compose file sets up a 4-validator testnet using pre-built zapatos
-# binaries from GitHub Container Registry.
+# This compose file sets up a 4-validator testnet using pre-built validator
+# images published by the atomica-aptos repository.
 #
 # Default Configuration:
-#   - Uses published image: ghcr.io/bomba-atomica/atomica/zapatos-bin:5df0e6d1
+#   - Uses published image: ghcr.io/bomba-atomica/atomica-aptos/validator:latest
 #   - No build step required - just start the testnet
-#   - Image includes git commit hash for traceability
+#   - Images are built and published by atomica-aptos CI/CD
+#   - Image tags include git commit hash for traceability
 #
-# For Local Development:
-#   If you need to test custom zapatos changes:
-#   1. Run ./build.sh to build from source/atomica-aptos
-#   2. Edit .env to use: VALIDATOR_IMAGE_REPO=zapatos-testnet/validator
-#   3. The testnet will use your locally-built binaries
+# Image Selection:
+#   You can specify different image versions via environment variables:
+#   - VALIDATOR_IMAGE_REPO: Image repository (default: ghcr.io/bomba-atomica/atomica-aptos/validator)
+#   - IMAGE_TAG: Specific version tag (default: latest)
+#
+#   Example: Use a specific commit version
+#     IMAGE_TAG=abc1234 docker compose up -d
 #
 # Architecture:
 # - 4 validator nodes
@@ -30,8 +33,8 @@ version: "3.8"
 services:
   # Validator 0 (Primary - generates genesis)
   validator-0:
-    image: "${VALIDATOR_IMAGE_REPO:-zapatos-testnet/validator}:${IMAGE_TAG:-local}"
-    container_name: zapatos-validator-0
+    image: "${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}"
+    container_name: atomica-validator-0
     hostname: validator-0
     networks:
       zapatos-testnet:
@@ -68,8 +71,8 @@ services:
 
   # Validator 1
   validator-1:
-    image: "${VALIDATOR_IMAGE_REPO:-zapatos-testnet/validator}:${IMAGE_TAG:-local}"
-    container_name: zapatos-validator-1
+    image: "${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}"
+    container_name: atomica-validator-1
     hostname: validator-1
     depends_on:
       validator-0:
@@ -114,8 +117,8 @@ services:
 
   # Validator 2
   validator-2:
-    image: "${VALIDATOR_IMAGE_REPO:-zapatos-testnet/validator}:${IMAGE_TAG:-local}"
-    container_name: zapatos-validator-2
+    image: "${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}"
+    container_name: atomica-validator-2
     hostname: validator-2
     depends_on:
       validator-0:
@@ -160,8 +163,8 @@ services:
 
   # Validator 3
   validator-3:
-    image: "${VALIDATOR_IMAGE_REPO:-zapatos-testnet/validator}:${IMAGE_TAG:-local}"
-    container_name: zapatos-validator-3
+    image: "${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}"
+    container_name: atomica-validator-3
     hostname: validator-3
     depends_on:
       validator-0:
@@ -206,8 +209,8 @@ services:
 
   # Optional: Faucet service (useful for testing)
   faucet:
-    image: "${VALIDATOR_IMAGE_REPO:-zapatos-testnet/validator}:${IMAGE_TAG:-local}"
-    container_name: zapatos-faucet
+    image: "${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}"
+    container_name: atomica-faucet
     depends_on:
       validator-0:
         condition: service_healthy
@@ -245,7 +248,7 @@ services:
 
 networks:
   zapatos-testnet:
-    name: "${TESTNET_NAME:-zapatos-testnet}"
+    name: "${TESTNET_NAME:-atomica-testnet}"
     driver: bridge
     ipam:
       driver: default
@@ -255,10 +258,10 @@ networks:
 
 volumes:
   zapatos-genesis:
-    name: zapatos-genesis
+    name: atomica-genesis
   zapatos-validator-1-data:
-    name: zapatos-validator-1-data
+    name: atomica-validator-1-data
   zapatos-validator-2-data:
-    name: zapatos-validator-2-data
+    name: atomica-validator-2-data
   zapatos-validator-3-data:
-    name: zapatos-validator-3-data
+    name: atomica-validator-3-data

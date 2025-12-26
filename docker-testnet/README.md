@@ -1,9 +1,8 @@
 # Docker Testnet
 
-4-validator Docker testnet for atomica development and testing.
+4-validator Docker testnet for Atomica development and testing.
 
-### 1. Build from Source (First Time)
-This script uses a **multi-stage Docker build** to compile the `aptos-node` and `aptos-faucet-service` binaries.
+This testnet uses pre-built validator images published by the [atomica-aptos](https://github.com/bomba-atomica/atomica-aptos) repository. Docker images are automatically built and published via GitHub Actions when changes are pushed to atomica-aptos.
 
 ### First Time Setup
 
@@ -50,15 +49,15 @@ curl http://localhost:8080/v1/blocks/by_height/100 | jq
 
 **Primary config**: `source/atomica-web/.env` (gitignored)
 
-### Option 1: GHCR (Default - Recommended)
+### Published Images (Default - Recommended)
 
-Pull pre-built images from GitHub Container Registry.
+Pull pre-built validator images from GitHub Container Registry. Images are automatically published by the atomica-aptos repository.
 
 **Local development**:
 ```bash
 # In source/atomica-web/.env:
-VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica/zapatos-bin
-IMAGE_TAG=5df0e6d1
+VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica-aptos/validator
+IMAGE_TAG=latest  # or specific commit hash like abc1234
 GHCR_USERNAME=your_github_username
 GHCR_TOKEN=ghp_YourPersonalAccessToken
 ```
@@ -66,24 +65,18 @@ GHCR_TOKEN=ghp_YourPersonalAccessToken
 **CI/CD**:
 ```bash
 # In source/atomica-web/.env (no credentials needed):
-VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica/zapatos-bin
-IMAGE_TAG=5df0e6d1
+VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica-aptos/validator
+IMAGE_TAG=latest
 # GITHUB_TOKEN is automatic in GitHub Actions
 ```
 
-### Option 2: Local Build (For Build Debugging Only)
+### Custom Images
 
-Build from source when debugging the build process itself.
-
-```bash
-# 1. Build image (10-20 min)
-cd docker-testnet
-./build-local-image.sh
-
-# 2. Update source/atomica-web/.env:
-VALIDATOR_IMAGE_REPO=zapatos-testnet/validator
-IMAGE_TAG=latest
-```
+If you need to test custom validator changes, you'll need to:
+1. Fork or clone the [atomica-aptos](https://github.com/bomba-atomica/atomica-aptos) repository
+2. Build images locally in that repository using `docker/validator/Dockerfile`
+3. Tag and publish them to your own registry
+4. Update the `VALIDATOR_IMAGE_REPO` and `IMAGE_TAG` in your `.env` file
 
 ## Running Tests
 
@@ -146,9 +139,21 @@ docker compose down -v
 
 ## Files
 
-- `build-local-image.sh` - Build Docker image from local zapatos source
 - `docker-compose.yaml` - 4-validator testnet configuration
 - `validator-config.yaml` - Node configuration overrides
+
+## Building Custom Images
+
+Docker images are built and published by the [atomica-aptos](https://github.com/bomba-atomica/atomica-aptos) repository:
+
+- **Dockerfile**: `docker/validator/Dockerfile` (in atomica-aptos repo)
+- **GitHub Workflow**: `.github/workflows/build-validator-image.yml` (in atomica-aptos repo)
+- **Published to**: `ghcr.io/bomba-atomica/atomica-aptos/validator`
+
+Images are automatically built on:
+- Push to `main` or `dev-atomica` branches
+- Pull requests
+- Manual workflow dispatch
 
 ## CI/CD Example
 
