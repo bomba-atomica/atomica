@@ -1,5 +1,6 @@
 # Atomica Documentation
 
+
 **Atomica enables trustless cross-chain atomic swaps via daily batch auctions with futures delivery.**
 
 ## Quick Start
