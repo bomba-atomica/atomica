@@ -45,16 +45,30 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Check initial disk space
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h
+          echo "=== Largest directories in runner ==="
+          sudo du -h -d 1 / 2>/dev/null | sort -h | tail -20
+
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
-          tool-cache: false
+          tool-cache: true
           android: true
           dotnet: true
           haskell: true
           large-packages: true
-          docker-images: false
+          docker-images: true
           swap-storage: true
+
+      - name: Check disk space after cleanup
+        run: |
+          echo "=== Disk space after cleanup ==="
+          df -h
+          echo "=== Available space on root ==="
+          df -h / | awk 'NR==2 {print "Available: " $4}'
 
       - name: Get zapatos git commit
         id: zapatos-commit
@@ -117,6 +131,14 @@ jobs:
             echo "Image does not exist, will build: $IMAGE_TAG"
           fi
 
+      - name: Check disk space before build
+        if: steps.check-image.outputs.exists == 'false'
+        run: |
+          echo "=== Disk space before Docker build ==="
+          df -h
+          echo "=== Docker system df ==="
+          docker system df
+
       - name: Build and push Docker image
         if: steps.check-image.outputs.exists == 'false'
         uses: docker/build-push-action@v5
@@ -131,6 +153,14 @@ jobs:
             GIT_SHA=${{ steps.zapatos-commit.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Check disk space after build
+        if: steps.check-image.outputs.exists == 'false'
+        run: |
+          echo "=== Disk space after Docker build ==="
+          df -h
+          echo "=== Docker system df ==="
+          docker system df
 
       - name: Image already exists (skip build)
         if: steps.check-image.outputs.exists == 'true'
