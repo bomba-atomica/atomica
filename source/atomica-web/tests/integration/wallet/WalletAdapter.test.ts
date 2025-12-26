@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { setupBrowserWalletMock } from "../../browser-utils/wallet-mock";
+import { setupBrowserWalletMock } from "../../../test-utils/browser-utils/wallet-mock";
 import { ethers } from "ethers";
 
 const TEST_ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"; // Hardhat Account 0

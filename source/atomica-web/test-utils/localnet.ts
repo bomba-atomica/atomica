@@ -6,18 +6,16 @@
  *
  * CRITICAL CONCEPTS:
  *
- * 1. PERSISTENT LOCALNET MODE
- *    - Localnet stays running between tests (not torn down after each test)
- *    - Faster test execution (no restart overhead)
- *    - Tests must use fresh accounts to avoid state conflicts
- *    - See setupLocalnet() for implementation details
+ * 1. CLEAN ROOM ENVIRONMENT
+ *    - Each test suite should ensure a clean environment
+ *    - killZombies() runs before startup to clear any existing processes
+ *    - See setupLocalnet() for details
  *
- * 2. FIXED PORT BINDING
- *    - Port 8080: Aptos node API
- *    - Port 8081: Faucet service
- *    - Only ONE localnet can run at a time
- *    - Tests MUST run sequentially (never in parallel)
- *    - See tests/README.md#sequential-execution-required
+ * 2. DYNAMIC PORT BINDING
+ *    - Localnet automatically finds available ports
+ *    - No fixed port requirement (avoids collisions)
+ *    - Enables reliable parallel test execution
+ *    - See setupLocalnet() logic
  *
  * 3. WEB_DIR PATH (CRITICAL!)
  *    - WEB_DIR = pathResolve(TEST_SETUP_DIR, "..") points to atomica-web/
@@ -33,7 +31,7 @@
  * - fundAccount(address, amount) - Fund account via faucet
  * - deployContracts() - Deploy Atomica contracts
  * - runAptosCmd(args, cwd) - Run Aptos CLI commands
- * - teardownLocalnet() - Stop localnet (usually unused in persistent mode)
+ *
  *
  * USAGE PATTERNS:
  *
@@ -54,11 +52,10 @@
  *    - Browser tests access these via browser commands (RPC)
  *    - See test-utils/browser-commands.ts for RPC wrappers
  *
- * 2. Localnet lifecycle is PERSISTENT
+ * 2. Localnet Lifecycle
  *    - setupLocalnet() starts localnet if not running
- *    - Localnet stays running between tests
- *    - teardownLocalnet() rarely used (persistent mode)
- *    - Tests create fresh accounts instead of resetting state
+ *    - Tests create fresh accounts to avoid state conflicts
+ *
  *
  * 3. Port management is CRITICAL
  *    - killZombies() MUST run before starting localnet
@@ -126,6 +123,7 @@ function registerCleanupHandlers() {
       }
       localnetProcess = null;
     }
+    killZombies();
   };
 
   // Register handlers for various exit scenarios
@@ -190,23 +188,24 @@ const APTOS_BIN = findAptosBinary();
 const WEB_DIR = pathResolve(TEST_SETUP_DIR, "..");
 
 /**
- * Clean up zombie Aptos processes and free ports.
+ * Clean up zombie Aptos processes.
  *
  * This function:
- *   1. Kills all processes matching 'aptos' (pkill -f 'aptos')
- *   2. Waits for ports to be released (8070, 8080, 8081, etc.)
- *   3. Removes stale localnet directory (.aptos/testnet)
+ *   1. Kills specific Aptos processes by name:
+ *      - aptos node
+ *      - aptos move
+ *      - aptos init
+ *   2. Removes stale localnet directory (.aptos/testnet)
  *
  * WHY NEEDED:
  * - Previous test runs may leave localnet processes running
  * - Ports must be free before starting new localnet
  * - Stale state can cause test failures
  *
- * RETRY LOGIC:
- * - Retries for up to 10 seconds
- * - Checks each port with `lsof -ti :PORT`
- * - Kills processes occupying ports
- * - Waits until all ports are free
+ * NOTE: We deliberately avoid port scanning (lsof) because:
+ * - It can be aggressive and kill unrelated processes (accidental collisions)
+ * - It might interfere with IDEs or other tools using similar ports
+ * - Process name matching is safer and sufficient for our needs
  *
  * USAGE:
  *   await killZombies();  // Before setupLocalnet()
@@ -219,47 +218,18 @@ export async function killZombies() {
   try {
     console.log("Cleaning up zombie Aptos processes...");
 
-    // Initial kill attempt
-    await exec("pkill -f 'aptos' || true");
-
-    const ports = [8070, 8080, 8081, 9101, 9102, 50051, 6180, 6181, 7180];
-
-    // Retry loop to ensure ports are free
-    const start = Date.now();
-    while (Date.now() - start < 10000) {
-      // 10s timeout
-      const busyPorts = [];
-      for (const port of ports) {
-        try {
-          const { stdout } = await exec(`lsof -ti :${port} || true`);
-          const pids = stdout
-            .trim()
-            .split("\n")
-            .filter((pid) => pid);
-          if (pids.length > 0) {
-            busyPorts.push(port);
-            for (const pid of pids) {
-              // console.log(`Killing process ${pid} on port ${port}`);
-              await exec(`kill -9 ${pid} || true`);
-            }
-          }
-        } catch {
-          // lsof failed implies port free or error
-        }
-      }
-
-      if (busyPorts.length === 0) {
-        // Double check after a brief pause
-        await new Promise((r) => setTimeout(r, 500));
-        // We could check again but let's assume if 0 found, we are good.
-        // Actually, let's verify cleanliness.
-        // If we found nothing, break.
-        break;
-      }
-
-      console.log(`Waiting for ports ${busyPorts.join(", ")} to free...`);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
+    // Initial kill attempt - targeted to avoid killing IDE or other unrelated processes
+    // We target common Aptos CLI commands used in tests:
+    // - 'aptos node' (localnet)
+    // - 'aptos move' (deployments)
+    // - 'aptos init' (config)
+    // NOTE: We avoid broad "pkill -f 'aptos'" because it can kill IDE extensions or other tools.
+    const killCmds = [
+      "pkill -f 'aptos node'",
+      "pkill -f 'aptos move'",
+      "pkill -f 'aptos init'",
+    ];
+    await Promise.all(killCmds.map((cmd) => exec(`${cmd} || true`)));
 
     // Clean up stale localnet directory
     const LOCAL_TEST_DIR = pathResolve(WEB_DIR, ".aptos/testnet");
@@ -642,17 +612,14 @@ export async function deployContracts() {
  * 4. Registers cleanup handlers for graceful shutdown
  * 5. Sets setupComplete = true
  *
- * PERSISTENT MODE:
- * - Localnet stays running between tests (not torn down)
- * - Faster test execution (~25-30s saved per test)
- * - Tests must use fresh accounts to avoid state conflicts
- * - setupComplete flag prevents duplicate startup
+ * IDEMPOTENCY:
+ * - setupComplete flag prevents duplicate startup within the same process context
+ * - Tests create fresh accounts to avoid state conflicts
  *
  * PORT BINDING:
- * - Port 8080: Aptos node API (fullnode)
- * - Port 8081: Faucet service
- * - Only ONE localnet can run at a time
- * - Tests MUST run sequentially (never parallel)
+ * - Dynamic ports assigned (no fixed 8080/8081)
+ * - Allows parallel test execution (if environment supports it)
+ * - See log output for actual assigned ports
  *
  * READINESS CHECKS:
  * - Polls ports 8080 and 8081 every second

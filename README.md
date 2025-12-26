@@ -1,5 +1,6 @@
 # Atomica Documentation
 
+
 **Atomica enables trustless cross-chain atomic swaps via daily batch auctions with futures delivery.**
 
 ## Quick Start
@@ -17,6 +18,9 @@ atomica/
 ├── Prd.md                    ← Start here (executive summary, 163 lines)
 ├── README.md                 ← This file (navigation guide)
 └── docs/
+    ├── development/          ← Implementation planning & status
+    │   ├── technical-risks.md
+    │   └── timelock-implementation-plan.md
     ├── background/           ← Context & prior art
     │   ├── prior-art.md
     │   └── cow-swap-analysis.md
@@ -39,6 +43,22 @@ atomica/
 ```
 
 ## Document Guide
+
+### 🚧 Development & Implementation
+
+**[Technical Risks](docs/development/technical-risks.md)** ⭐
+- Three major technical risks and current status
+- Risk #1: Ethereum signing of Aptos transactions (✅ DONE)
+- Risk #2: Timelock encryption end-to-end (🟡 IN PROGRESS)
+- Risk #3: Cross-chain transaction verification (⏳ PENDING)
+- Timeline estimates and success criteria
+
+**[Timelock Implementation Plan](docs/development/timelock-implementation-plan.md)** ⭐
+- Comprehensive 7-10 week roadmap for Risk #2
+- Phase 1: zapatos testing and validation (2-3 weeks)
+- Phase 2: atomica-move-contracts integration (3-4 weeks)
+- Phase 3: atomica-web frontend (2-3 weeks)
+- Detailed task breakdown with deliverables
 
 ### 📋 Product Specification
 
@@ -73,11 +93,14 @@ atomica/
 - Phase 3: Hybrid spot + futures (maturity)
 - Phase 4: Market-driven frequency (advanced)
 
-**[Seller-Stake DKG Design](docs/design/timelock-seller-stake-dkg.md)** ⭐
-- **The Dual-Layer "Onion" Timelock**
-- Preventing "Invisible Handshake" collusion
+**[N-Layer Onion Timelock Design](docs/design/timelock-seller-stake-dkg.md)** ⭐
+- **The N-Layer "Onion" Timelock Architecture**
+- Pluggable key providers (Validators, Sellers, Drand, etc.)
+- Example configurations: Dual-layer and Triple-layer
+- Preventing "Invisible Handshake" collusion via multi-layer security
 - Seller participation and incentives (Scuttle Reward)
-- v1.0 Homogeneous Crypto (BLS12-381)
+- Key provider independence (orthogonal key generation)
+- v1.0 Homogeneous Crypto (BLS12-381), v2.0 Heterogeneous roadmap
 
 ### 🔧 Technical Specifications
 
@@ -146,8 +169,8 @@ atomica/
 
 **[Atomica Validator Timelock](docs/decisions/aptos-validator-timelock.md)** ⭐
 - Decision to use Atomica validators for timelock encryption
-- Establishes the **Outer Layer** of the dual-layer security check
-- Leverages Aptos-core infrastructure
+- Establishes the **Outer Layer** (Layer 1) in N-layer onion architecture
+- Leverages Aptos-core BLS12-381 infrastructure
 - Security analysis and implementation plan
 
 **[Bid Validity Simplification](docs/decisions/bid-validity-simplification.md)**
@@ -186,9 +209,8 @@ Novel design combining atomic swaps' trustless cross-chain execution with auctio
 ### Futures Market Model
 Single daily batch auction with delivery 1-3 hours after auction close (not spot market). Embraces cross-chain latency, enabling better MM economics, liquidity concentration, and simpler mechanism. Settlement delay prevents arbitrage/information withholding and provides verification period.
 
-### Sealed Bids via Timelock Encryption
-### Sealed Bids via Dual-Layer Timelock
-Bids are encrypted using a **Dual-Layer "Onion"** scheme. The Outer Layer is locked by the Validator Set, and the Inner Layer is locked by a weighted threshold of Sellers. Decryption requires >67% independent Validators AND >33% Sellers to cooperate. This "Invisible Handshake" defense prevents off-chain collusion and early revealing.
+### Sealed Bids via N-Layer Timelock Encryption
+Bids are encrypted using an **N-Layer "Onion"** scheme with configurable layer composition. Each layer uses independent key providers (Validators, Sellers, Drand, etc.). Decryption requires cooperation from ALL N layers in sequential order. Example: Dual-layer (Validator + Seller) requires >67% Validators AND >33% Sellers. Triple-layer adds Drand beacon for additional security. This architecture prevents off-chain collusion by forcing attackers to compromise multiple independent groups simultaneously.
 
 **Note:** Atomica chain uses Aptos-core as its blockchain software vendor (consensus, BLS cryptography, Move VM) while running as an independent network.
 
@@ -213,10 +235,12 @@ Market makers earn through bid-ask spreads (competitive returns, not excess rent
 4. Ideal Solution Characteristics (requirements)
 
 ### For Engineers
-1. Prd.md (overview)
-2. Cross-Chain Verification (technical architecture)
-3. Timelock Encryption (sealed bid implementation)
-4. Uniform Price Auctions (mechanism details)
+1. **[Technical Risks](docs/development/technical-risks.md)** (current status & priorities)
+2. **[Timelock Implementation Plan](docs/development/timelock-implementation-plan.md)** (next sprint)
+3. Prd.md (overview)
+4. Cross-Chain Verification (technical architecture)
+5. Timelock Encryption (sealed bid implementation)
+6. Uniform Price Auctions (mechanism details)
 
 ### For Economists
 1. CPMM vs Auction Comparison (full economic analysis)
@@ -239,6 +263,12 @@ Atomica prioritizes:
 4. **Market-driven liquidity over protocol subsidies** - Competitive bidding, no tokens
 
 ## Change Log
+
+**2025-12-22 - Development Documentation:**
+- Added Technical Risks tracking document
+- Added Timelock Implementation Plan (7-10 week roadmap)
+- Created docs/development/ directory
+- Updated README with development section
 
 **2025-01-10 - Aggressive Deduplication:**
 - Slimmed PRD from 344 → 163 lines (53% reduction)
@@ -275,5 +305,5 @@ This is design documentation for Atomica. For questions or suggestions:
 
 ---
 
-**Status:** Phase 1 design complete, implementation pending
-**Last Updated:** 2025-01-10
+**Status:** Risk #1 complete, Risk #2 in progress (timelock encryption)
+**Last Updated:** 2025-12-22

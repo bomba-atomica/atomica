@@ -1,9 +1,7 @@
-// @vitest-environment happy-dom
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import "@testing-library/jest-dom";
+import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import App from "../../src/App";
-import { MockWallet } from "../browser-utils/MockWallet";
+import { MockWallet } from "../../test-utils/browser-utils/MockWallet";
 
 // Random secp256k1 private key for testing
 const TEST_PK =
@@ -15,6 +13,7 @@ describe("Account Connection Flow", () => {
   const originalEthereum = window.ethereum;
 
   afterEach(() => {
+    cleanup(); // Clean up React components first
     window.ethereum = originalEthereum;
     document.body.innerHTML = ""; // Clean up DOM
   });
@@ -26,9 +25,10 @@ describe("Account Connection Flow", () => {
     render(<App />);
 
     // We look for "Not Connected" in the AccountStatus component
-    expect(screen.getByText("Not Connected")).toBeInTheDocument();
+    // getByText throws if element is not found, so this is an assertion
+    screen.getByText("Not Connected");
     // And the Connect button
-    expect(screen.getByText("Connect MetaMask")).toBeInTheDocument();
+    screen.getByText("Connect MetaMask");
   });
 
   it("displays address after connecting wallet", async () => {
@@ -41,8 +41,8 @@ describe("Account Connection Flow", () => {
 
     render(<App />);
 
-    // Initally not connected
-    expect(screen.getByText("Not Connected")).toBeInTheDocument();
+    // Initially not connected
+    screen.getByText("Not Connected");
 
     // Click Connect
     const connectBtn = screen.getByText("Connect MetaMask");
@@ -55,15 +55,13 @@ describe("Account Connection Flow", () => {
     const expectedAddressPrefix = mockWallet.address.substring(0, 6);
 
     await waitFor(() => {
-      expect(
-        screen.getByText(new RegExp(expectedAddressPrefix)),
-      ).toBeInTheDocument();
+      screen.getByText(new RegExp(expectedAddressPrefix));
     });
 
     // "Not Connected" should now be gone from the status area,
-    // though "Not Connected" string might appear elsehwere?
+    // though "Not Connected" string might appear elsewhere?
     // In AccountStatus logic: "Not Connected" is replaced by the address.
     // So checking the button is gone is good too.
-    expect(screen.queryByText("Connect MetaMask")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connect MetaMask")).toBeNull();
   });
 });

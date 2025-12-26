@@ -21,20 +21,35 @@ Atomica is a cross-chain sealed-bid auction system enabling trustless, gas-effic
 
 **Sealed Auction Logic**:
 - Fully implemented in Move smart contracts
-- **Sealed reserve prices** from sellers (Onion Encrypted: Validator + Seller Group)
-- **Sealed bids** (quantity + price) from buyers (Onion Encrypted: Validator + Seller Group)
-- Automatic decryption at auction deadline via Validator + Seller threshold signatures
+- **N-Layer Onion Encryption**: Configurable multi-layer encryption for bids and reserve prices
+- **Sealed reserve prices** from sellers (N-layer onion encrypted)
+- **Sealed bids** (quantity + price) from buyers (N-layer onion encrypted)
+- Automatic sequential decryption at auction deadline (outermost → innermost)
 - Produces merkle tree of final account balances upon completion
 - Merkle root hash stored as on-chain state
 - API-accessible state proofs signed by validator BLS signatures
 
-**Dual-Layer Timelock Encryption (Onion)**:
-- **Layer 1 (Outer):** Validator Timelock (BLS12-381 IBE). Decrypts at deadline.
-- **Layer 2 (Inner):** Seller Group Timelock (BLS12-381 Threshold). Decrypts by seller participation.
-- **Security:** Requires collusion of >2/3 Validators AND >1/3 Sellers to decrypt early.
-- **Liveness:** Decryption guaranteed if >67% Validators and >33% Sellers are honest/online.
-- **Griefing Mitigation:** Sellers providing liquidity must participate or face slashing.
-- No interactive reveal phase required.
+**N-Layer Timelock Encryption (Onion)**:
+- **Flexible Architecture**: Support 1 to N encryption layers with pluggable key providers
+- **Layer Independence**: Each layer uses independent key material from different sources
+- **Configurable Order**: Layer composition can change (e.g., Validator-only, Validator+Seller, Validator+Drand+Seller)
+- **Orthogonal Key Generation**: How each provider generates keys is independent of onion structure
+
+**Example Configurations**:
+- **Dual-Layer (Validator + Seller)**:
+  - Layer 1 (Outer): Validator Timelock (BLS12-381 IBE, >67% threshold)
+  - Layer 2 (Inner): Seller Group (BLS12-381 Threshold ElGamal, >33% stake)
+- **Dual-Layer (Validator + Drand)**:
+  - Layer 1 (Outer): Validator Timelock (BLS12-381 IBE, >67% threshold)
+  - Layer 2 (Inner): Drand tlock (public randomness beacon)
+- **Triple-Layer (Validator + Drand + Seller)**:
+  - Layer 1 (Outer): Validator Timelock (>67% threshold)
+  - Layer 2 (Middle): Drand tlock
+  - Layer 3 (Inner): Seller Group (>33% stake)
+
+**Security**: Attackers must compromise ALL N layers to decrypt early
+**Liveness**: Decryption guaranteed if threshold met in each layer
+**No Interactive Reveal**: Automated sequential decryption
 
 **State Proofs**:
 - Validator set changes
@@ -75,14 +90,17 @@ Atomica is a cross-chain sealed-bid auction system enabling trustless, gas-effic
 - Standard wallet workflows (MetaMask, Phantom, etc.)
 
 **Step 2: Sealed Bid Submission on Atomica**
-- Sellers submit sealed reserve prices (tlock encrypted)
-- Bidders submit sealed bids with quantity + price (tlock encrypted)
+- Auction creator configures layer composition (e.g., [Validator, Seller] or [Validator, Drand])
+- Sellers submit sealed reserve prices (N-layer onion encrypted)
+- Bidders submit sealed bids with quantity + price (N-layer onion encrypted)
 - Account abstraction enables Ethereum wallet signatures on Atomica
 - No new accounts or wallets required
 
 **Step 3: Auction Execution on Atomica**
-- Auction deadline reaches → validators publish decryption shares
-- Threshold decryption (e.g., 2/3 validators) reveals all bids and reserves
+- Auction deadline reaches → layer providers publish decryption shares
+- Sequential decryption (outer → inner): Each layer reveals ciphertext for next layer
+- Example (2-layer): Validators decrypt outer → Sellers decrypt inner → Plaintext
+- Example (3-layer): Validators → Drand → Sellers → Plaintext
 - Ausubel auction clearing algorithm executes in Move
 - Final allocations and prices computed
 - Merkle tree of balances generated → merkle root stored on-chain

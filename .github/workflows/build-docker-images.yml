@@ -1,0 +1,190 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches:
+      - main
+      - docker-infra
+    paths:
+      - 'source/zapatos/**'
+      - 'docker-testnet/Dockerfile'
+      - '.github/workflows/build-docker-images.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'source/zapatos/**'
+      - 'docker-testnet/Dockerfile'
+  workflow_dispatch:
+    inputs:
+      zapatos_ref:
+        description: 'Zapatos git ref to build (branch, tag, or commit)'
+        required: false
+        default: 'HEAD'
+      force_rebuild:
+        description: 'Force rebuild even if image exists'
+        required: false
+        type: boolean
+        default: false
+
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/zapatos-bin
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check initial disk space
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h
+          echo "=== Largest directories in runner ==="
+          sudo du -h -d 1 / 2>/dev/null | sort -h | tail -20
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Check disk space after cleanup
+        run: |
+          echo "=== Disk space after cleanup ==="
+          df -h
+          echo "=== Available space on root ==="
+          df -h / | awk 'NR==2 {print "Available: " $4}'
+
+      - name: Get zapatos git commit
+        id: zapatos-commit
+        run: |
+          cd source/zapatos
+          if [ -n "${{ github.event.inputs.zapatos_ref }}" ]; then
+            ZAPATOS_SHA=$(git rev-parse --short "${{ github.event.inputs.zapatos_ref }}")
+          else
+            ZAPATOS_SHA=$(git rev-parse --short HEAD)
+          fi
+          echo "sha=$ZAPATOS_SHA" >> $GITHUB_OUTPUT
+          echo "Zapatos commit: $ZAPATOS_SHA"
+
+      - name: Get Dockerfile hash
+        id: dockerfile-hash
+        run: |
+          DOCKERFILE_HASH=$(sha256sum docker-testnet/Dockerfile | cut -c1-8)
+          echo "hash=$DOCKERFILE_HASH" >> $GITHUB_OUTPUT
+          echo "Dockerfile hash: $DOCKERFILE_HASH"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.zapatos-commit.outputs.sha }}-${{ steps.dockerfile-hash.outputs.hash }}
+            type=raw,value=${{ steps.zapatos-commit.outputs.sha }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+
+      - name: Check if image exists
+        id: check-image
+        run: |
+          # Check for image with both zapatos SHA and Dockerfile hash
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.zapatos-commit.outputs.sha }}-${{ steps.dockerfile-hash.outputs.hash }}"
+
+          # Force rebuild if requested via workflow_dispatch
+          if [ "${{ github.event.inputs.force_rebuild }}" = "true" ]; then
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Force rebuild requested - will build: $IMAGE_TAG"
+          elif docker manifest inspect "$IMAGE_TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Image already exists: $IMAGE_TAG"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Image does not exist, will build: $IMAGE_TAG"
+          fi
+
+      - name: Check disk space before build
+        if: steps.check-image.outputs.exists == 'false'
+        run: |
+          echo "=== Disk space before Docker build ==="
+          df -h
+          echo "=== Docker system df ==="
+          docker system df
+
+      - name: Build and push Docker image
+        if: steps.check-image.outputs.exists == 'false'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker-testnet/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_DATE=${{ steps.meta.outputs.created }}
+            GIT_SHA=${{ steps.zapatos-commit.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Check disk space after build
+        if: steps.check-image.outputs.exists == 'false'
+        run: |
+          echo "=== Disk space after Docker build ==="
+          df -h
+          echo "=== Docker system df ==="
+          docker system df
+
+      - name: Image already exists (skip build)
+        if: steps.check-image.outputs.exists == 'true'
+        run: |
+          echo "✓ Image already exists:"
+          echo "  Zapatos SHA: ${{ steps.zapatos-commit.outputs.sha }}"
+          echo "  Dockerfile hash: ${{ steps.dockerfile-hash.outputs.hash }}"
+          echo "  Tag: ${{ steps.zapatos-commit.outputs.sha }}-${{ steps.dockerfile-hash.outputs.hash }}"
+          echo ""
+          echo "Skipping build to save CI time"
+          echo ""
+          echo "To force rebuild, use workflow_dispatch with force_rebuild=true"
+
+      - name: Output image tags
+        run: |
+          echo "Built images:"
+          echo "${{ steps.meta.outputs.tags }}" | while read -r tag; do
+            echo "  - $tag"
+          done
+
+      - name: Verify image
+        if: steps.check-image.outputs.exists == 'false' && github.event_name != 'pull_request'
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.zapatos-commit.outputs.sha }}-${{ steps.dockerfile-hash.outputs.hash }}"
+          echo "Verifying image: $IMAGE"
+          docker run --rm "$IMAGE" --version
