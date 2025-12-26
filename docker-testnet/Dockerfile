@@ -35,6 +35,11 @@ COPY source/zapatos /build/zapatos
 
 WORKDIR /build/zapatos
 
+# Print the git commit being built
+ARG GIT_SHA
+RUN echo "Building Zapatos from commit: ${GIT_SHA}"
+
+
 # Build with cargo cache mount for fast incremental builds
 ARG PROFILE=release
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
