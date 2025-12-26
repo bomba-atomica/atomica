@@ -40,14 +40,14 @@ ARG GIT_SHA
 RUN echo "Building Zapatos from commit: ${GIT_SHA}"
 
 
-# Build with cargo cache mount for fast incremental builds
+# Build binaries in release mode with cargo cache mount for fast incremental builds
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/build/zapatos/target,sharing=locked \
-    cargo build -p aptos-node --features testing && \
-    cargo build -p aptos-faucet-service && \
+    cargo build --release --bin aptos-node --features testing && \
+    cargo build --release --package aptos-faucet-service && \
     cp target/release/aptos-node /build/aptos-node && \
-    cp target/release/aptos-faucet-service /build/aptos-faucet-service;
+    cp target/release/aptos-faucet-service /build/aptos-faucet-service
 
 # Stage 2: Runtime image (minimal)
 FROM debian:bullseye-slim
