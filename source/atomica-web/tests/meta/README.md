@@ -160,7 +160,7 @@ If you have access to the private atomica repository:
 2. Update `source/atomica-web/.env`:
    ```bash
    # Uncomment and configure:
-   VALIDATOR_IMAGE_REPO=ghcr.io/0o-de-lally/atomica/zapatos-bin
+   VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica/zapatos-bin
    IMAGE_TAG=5df0e6d1
    GHCR_USERNAME=your_github_username
    GHCR_TOKEN=ghp_YourPersonalAccessTokenHere

@@ -4,7 +4,7 @@
 # binaries from GitHub Container Registry.
 #
 # Default Configuration:
-#   - Uses published image: ghcr.io/0o-de-lally/atomica/zapatos-bin:5df0e6d1
+#   - Uses published image: ghcr.io/bomba-atomica/atomica/zapatos-bin:5df0e6d1
 #   - No build step required - just start the testnet
 #   - Image includes git commit hash for traceability
 #

@@ -35,7 +35,7 @@
  *
  * NOTES:
  * - Tests must run sequentially (vitest fileParallelism: false)
- * - Uses pre-built images: ghcr.io/0o-de-lally/atomica/zapatos-bin:5df0e6d1
+ * - Uses pre-built images: ghcr.io/bomba-atomica/atomica/zapatos-bin:5df0e6d1
  * - Validators on ports 8080-8083
  * - Automatic cleanup even on test failure
  */
@@ -155,7 +155,7 @@ async function runCompose(
           errorLines.push(
             "Diagnosis: Unable to pull Docker image from GitHub Container Registry",
             "",
-            "The image ghcr.io/0o-de-lally/atomica/zapatos-bin:5df0e6d1 is private.",
+            "The image ghcr.io/bomba-atomica/atomica/zapatos-bin:5df0e6d1 is private.",
             "",
             "Solutions:",
             "",
@@ -168,7 +168,7 @@ async function runCompose(
             "     - Click 'Generate token' and copy it",
             "     - Important: Fine-grained tokens don't support package registry",
             "  2. Update source/atomica-web/.env:",
-            "     VALIDATOR_IMAGE_REPO=ghcr.io/0o-de-lally/atomica/zapatos-bin",
+            "     VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica/zapatos-bin",
             "     IMAGE_TAG=5df0e6d1",
             "     GHCR_USERNAME=your_github_username",
             "     GHCR_TOKEN=ghp_YourPersonalAccessTokenHere",
