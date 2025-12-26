@@ -4,7 +4,7 @@
 # to ensure binary compatibility with the runtime image.
 # Uses BuildKit cache mounts for fast incremental builds.
 #
-# Build context: repository root (for source/zapatos access)
+# Build context: repository root (for source/atomica-aptos access)
 # Requires: Docker BuildKit enabled (DOCKER_BUILDKIT=1)
 #
 # Build args:
@@ -31,7 +31,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /build
 
 # Copy zapatos source
-COPY source/zapatos /build/zapatos
+COPY source/atomica-aptos /build/zapatos
 
 WORKDIR /build/zapatos
 

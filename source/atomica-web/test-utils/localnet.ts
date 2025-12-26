@@ -709,7 +709,7 @@ export async function setupLocalnet() {
   // For reliability in tests, we can follow orchestrator logic or expected path.
   // Let's assume 'aptos' is in path for now, or use the one we found earlier.
 
-  // Use the locally built aptos binary from zapatos (unified target dir) to ensure latest framework
+  // Use the locally built aptos binary from atomica-aptos (unified target dir) to ensure latest framework
   const aptosBinPath = APTOS_BIN;
 
   // Register cleanup handlers before spawning

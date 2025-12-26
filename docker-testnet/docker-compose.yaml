@@ -10,7 +10,7 @@
 #
 # For Local Development:
 #   If you need to test custom zapatos changes:
-#   1. Run ./build.sh to build from source/zapatos
+#   1. Run ./build.sh to build from source/atomica-aptos
 #   2. Edit .env to use: VALIDATOR_IMAGE_REPO=zapatos-testnet/validator
 #   3. The testnet will use your locally-built binaries
 #

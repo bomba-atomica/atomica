@@ -18,7 +18,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ATOMICA_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ZAPATOS_ROOT="$ATOMICA_ROOT/source/zapatos"
+ZAPATOS_ROOT="$ATOMICA_ROOT/source/atomica-aptos"
 
 # Parse arguments
 PUSH_IMAGE=false

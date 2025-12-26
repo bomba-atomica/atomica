@@ -721,15 +721,15 @@ This is the best of all worlds: automatic, decentralized, and user-friendly.
 ## Technical References
 
 **Aptos/Zapatos Source Code**:
-- **Transaction Validation**: `source/zapatos/aptos-move/framework/aptos-framework/sources/transaction_validation.move`
+- **Transaction Validation**: `source/atomica-aptos/aptos-move/framework/aptos-framework/sources/transaction_validation.move`
   - `fee_payer_script_prologue()` - Gas validation before execution
   - `epilogue_gas_payer_extended()` - Gas deduction after execution
-- **Account Abstraction**: `source/zapatos/aptos-move/framework/aptos-framework/sources/account/account_abstraction.move`
+- **Account Abstraction**: `source/atomica-aptos/aptos-move/framework/aptos-framework/sources/account/account_abstraction.move`
   - `derive_account_address()` - Deterministic address derivation
-- **Ethereum Derivable Account**: `source/zapatos/aptos-move/framework/aptos-framework/sources/account/common_account_abstractions/ethereum_derivable_account.move`
+- **Ethereum Derivable Account**: `source/atomica-aptos/aptos-move/framework/aptos-framework/sources/account/common_account_abstractions/ethereum_derivable_account.move`
   - SIWE message verification
   - ECDSA signature recovery
-- **Authenticators**: `source/zapatos/types/src/transaction/authenticator.rs`
+- **Authenticators**: `source/atomica-aptos/types/src/transaction/authenticator.rs`
   - `TransactionAuthenticator::FeePayer` (lines 93-129)
   - `AbstractAuthenticator` for SIWE
 

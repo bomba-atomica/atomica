@@ -4,7 +4,7 @@
 [submodule "source/diem-prover-halo2/solidity/lib/forge-std"]
 	path = source/diem-prover-halo2/solidity/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
-[submodule "source/zapatos"]
-	path = source/zapatos
+[submodule "source/atomica-aptos"]
+	path = source/atomica-aptos
 	url = https://github.com/bomba-atomica/atomica-aptos.git
 	branch = dev-atomica

@@ -100,7 +100,7 @@ This script:
 ### Method 2: Manual Command
 
 ```bash
-cd /Users/lucas/code/rust/atomica/source/zapatos
+cd /Users/lucas/code/rust/atomica/source/atomica-aptos
 
 # Set Rust logging
 export RUST_LOG=aptos_vm=debug,move_vm_runtime=debug
@@ -112,7 +112,7 @@ cargo run --features testing --bin aptos -- node run-local-testnet --with-faucet
 ### Method 3: Build Once, Run Multiple Times
 
 ```bash
-cd /Users/lucas/code/rust/atomica/source/zapatos
+cd /Users/lucas/code/rust/atomica/source/atomica-aptos
 
 # Build with testing features
 cargo build --release --features testing --bin aptos
@@ -166,7 +166,7 @@ If `debug::print` is not enough and you need to see exactly what the VM is doing
 You must rebuild `aptos` with both `move-vm-runtime/debugging` (for tracing) and `testing` (for `debug::print`):
 
 ```bash
-cd /Users/lucas/code/rust/atomica/source/zapatos
+cd /Users/lucas/code/rust/atomica/source/atomica-aptos
 cargo build -p aptos --features "move-vm-runtime/debugging testing"
 # Binary will be at: target/debug/aptos
 ```
@@ -177,7 +177,7 @@ Set `MOVE_VM_TRACE` to the desired log file path when running the node:
 
 ```bash
 # Ensure you use the binary you just built
-export PATH="/Users/lucas/code/rust/atomica/source/zapatos/target/debug:$PATH"
+export PATH="/Users/lucas/code/rust/atomica/source/atomica-aptos/target/debug:$PATH"
 
 # Run localnet with tracing enabled
 MOVE_VM_TRACE=./logs/vm-trace.log aptos node run-local-testnet --with-faucet --force-restart
@@ -264,7 +264,7 @@ grep "Entry function name" logs/testnet-debug.log -A 1
 
 3. **Verify the framework is rebuilt:**
    ```bash
-   cd /Users/lucas/code/rust/atomica/source/zapatos
+   cd /Users/lucas/code/rust/atomica/source/atomica-aptos
    cargo clean
    cargo build --features testing --bin aptos
    ```
@@ -280,7 +280,7 @@ grep "\[debug\]" logs/full.log > logs/debug-only.log
 ### "Want to remove debug logging"
 
 ```bash
-cd /Users/lucas/code/rust/atomica/source/zapatos
+cd /Users/lucas/code/rust/atomica/source/atomica-aptos
 git checkout aptos-move/framework/aptos-framework/sources/account/common_account_abstractions/ethereum_derivable_account.move
 cargo build --release --bin aptos
 ```

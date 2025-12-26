@@ -41,7 +41,7 @@ The `cross-chain-tester` is a Rust-based test suite designed to orchestrate and 
 - **Crypto**: `k256` or `ethers-signers` for Secp256k1 operations.
 
 ## Structure
-The test suite will be located in `source/cross-chain-tester` or integrated into `source/zapatos/testsuite` depending on dependency constraints. Ideally, it should be a standalone crate in the workspace that depends on `smoke-test` and `ethers`.
+The test suite will be located in `source/cross-chain-tester` or integrated into `source/atomica-aptos/testsuite` depending on dependency constraints. Ideally, it should be a standalone crate in the workspace that depends on `smoke-test` and `ethers`.
 
 ## Usage
 Run via cargo:

@@ -11,10 +11,10 @@ Before running the demo, you need to compile the Aptos release binary.
 > [!WARNING]
 > This step can take a significant amount of time (20+ minutes) as it compiles the entire Aptos node from source with testing features enabled.
 
-Navigate tfrom the root to source/zapatos and run:
+Navigate from the root to source/atomica-aptos and run:
 
 ```bash
-cd ../zapatos
+cd ../atomica-aptos
 cargo b -p aptos --features testing
 ```
 

@@ -9,7 +9,7 @@ const __dirname = dirname(__filename);
 
 // Constants
 const WORKSPACE_ROOT = join(__dirname, "../../.."); // web -> atomica-web -> source -> atomica
-const ZAPATOS_DIR = join(WORKSPACE_ROOT, "source/zapatos");
+const ZAPATOS_DIR = join(WORKSPACE_ROOT, "source/atomica-aptos");
 const CONTRACTS_DIR = join(WORKSPACE_ROOT, "source/atomica-move-contracts");
 const WEB_DIR = join(WORKSPACE_ROOT, "source/atomica-web");
 
