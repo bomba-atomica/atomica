@@ -28,14 +28,14 @@ jobs:
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "source/zapatos -> ../target"
+          workspaces: "source/atomica-aptos -> ../target"
           shared-key: "zapatos"
           cache-on-failure: true
           save-if: true
 
       - name: Build Deps
         run: |
-          cd source/zapatos
+          cd source/atomica-aptos
           cargo build --release -p move-core-types -p aptos-framework
 
   warmup_med:
@@ -60,12 +60,12 @@ jobs:
       - name: Setup Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "source/zapatos -> ../target"
+          workspaces: "source/atomica-aptos -> ../target"
           shared-key: "zapatos"
           cache-on-failure: true
           save-if: true
 
       - name: Build Deps
         run: |
-          cd source/zapatos
+          cd source/atomica-aptos
           cargo build --release -p aptos-node

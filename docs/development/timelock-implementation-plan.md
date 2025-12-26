@@ -144,7 +144,7 @@ Layer 3 (Inner): Auction Sellers (ElGamal, >33% stake threshold)
 
 #### Completed Infrastructure
 
-**Location**: `/source/zapatos/crates/aptos-dkg/`
+**Location**: `/source/atomica-aptos/crates/aptos-dkg/`
 
 ✅ **DKG Implementation** (`src/pvss/`):
 - `weighted/mod.rs` - Weighted threshold DKG
@@ -164,7 +164,7 @@ Layer 3 (Inner): Auction Sellers (ElGamal, >33% stake threshold)
 - Decryption: `M = V ⊕ H(e(d_ID, U))`
 - Uses `blstrs` for pairing operations
 
-✅ **Move Integration** (`/source/zapatos/aptos-move/framework/aptos-framework/sources/`):
+✅ **Move Integration** (`/source/atomica-aptos/aptos-move/framework/aptos-framework/sources/`):
 - `dkg.move` - On-chain DKG state management
 - `timelock.move` - Timelock interval rotation
 - `aptos-stdlib/sources/cryptography/bls12381.move` - BLS signature primitives
@@ -253,7 +253,7 @@ Validate that the existing `aptos-dkg` crate and zapatos validator infrastructur
 
 **Tasks**:
 - [ ] Create `docker-testnet` directory structure
-  - Location: `/source/zapatos/docker-testnet/`
+  - Location: `/source/atomica-aptos/docker-testnet/`
   - Files to create:
     - `Makefile` - Build and management commands
     - `docker-compose.yaml` - Multi-validator testnet definition
@@ -262,7 +262,7 @@ Validate that the existing `aptos-dkg` crate and zapatos validator infrastructur
     - `README.md` - Setup and usage instructions
 
 - [ ] Create build scripts for test images
-  - Location: `/source/zapatos/docker-testnet/build.sh`
+  - Location: `/source/atomica-aptos/docker-testnet/build.sh`
   - Script responsibilities:
     ```bash
     #!/bin/bash
@@ -281,7 +281,7 @@ Validate that the existing `aptos-dkg` crate and zapatos validator infrastructur
   - Tags images as `zapatos-testnet/validator:local`
 
 - [ ] Create docker-compose configuration for multi-validator testnet
-  - File: `/source/zapatos/docker-testnet/docker-compose.yaml`
+  - File: `/source/atomica-aptos/docker-testnet/docker-compose.yaml`
   - Configuration:
     - 4 validator nodes (validator-0, validator-1, validator-2, validator-3)
     - Each runs `aptos-node --test` in independent mode
@@ -313,7 +313,7 @@ Validate that the existing `aptos-dkg` crate and zapatos validator infrastructur
 
 - [ ] Configure shorter timelock intervals for testing
   - Modify validator config to use 30-second epochs instead of 1 hour
-  - File: `/source/zapatos/docker-testnet/validator-config.yaml`
+  - File: `/source/atomica-aptos/docker-testnet/validator-config.yaml`
   - Configuration:
     ```yaml
     execution:
@@ -348,7 +348,7 @@ Validate that the existing `aptos-dkg` crate and zapatos validator infrastructur
 
 **Tasks**:
 - [ ] Create test harness module
-  - Location: `/source/zapatos/testsuite/timelock-e2e/tests/docker_harness/mod.rs`
+  - Location: `/source/atomica-aptos/testsuite/timelock-e2e/tests/docker_harness/mod.rs`
   - Module responsibilities:
     - Start/stop Docker containers
     - Wait for validators to become healthy
@@ -402,7 +402,7 @@ Validate that the existing `aptos-dkg` crate and zapatos validator infrastructur
 
 **Tasks**:
 - [ ] Create E2E test crate
-  - Location: `/source/zapatos/testsuite/timelock-e2e/`
+  - Location: `/source/atomica-aptos/testsuite/timelock-e2e/`
   - Crate structure:
     ```
     timelock-e2e/
@@ -476,11 +476,11 @@ Validate that the existing `aptos-dkg` crate and zapatos validator infrastructur
 **How to Run**:
 ```bash
 # Build Docker images first
-cd /source/zapatos/docker-testnet
-./build.sh
+cd /source/atomica-aptos/docker-testnet
+./build-local-image.sh
 
 # Run E2E tests (sequential, Docker required)
-cd /source/zapatos/testsuite/timelock-e2e
+cd /source/atomica-aptos/testsuite/timelock-e2e
 cargo test -- --test-threads=1 --nocapture
 ```
 
@@ -494,7 +494,7 @@ cargo test -- --test-threads=1 --nocapture
 
 **Tasks**:
 - [ ] Create `onion_encryption` module
-  - Location: `/source/zapatos/crates/aptos-dkg/src/onion/mod.rs`
+  - Location: `/source/atomica-aptos/crates/aptos-dkg/src/onion/mod.rs`
   - Core abstraction:
     ```rust
     // Pluggable key provider trait
@@ -540,7 +540,7 @@ cargo test -- --test-threads=1 --nocapture
   - Add `to_bytes()` / `from_bytes()` for on-chain storage
 
 - [ ] Write unit tests for N-layer encryption
-  - File: `/source/zapatos/crates/aptos-dkg/tests/onion_encryption.rs`
+  - File: `/source/atomica-aptos/crates/aptos-dkg/tests/onion_encryption.rs`
   - Test cases:
     - Encrypt → Decrypt (1 layer, 2 layers, 3 layers)
     - Decrypt partial layers (should not reveal plaintext)
@@ -565,7 +565,7 @@ cargo test -- --test-threads=1 --nocapture
 
 **Tasks**:
 - [ ] Create smoke test for dual-layer encryption
-  - File: `/source/zapatos/testsuite/smoke-test/src/timelock_dual_layer.rs`
+  - File: `/source/atomica-aptos/testsuite/smoke-test/src/timelock_dual_layer.rs`
   - Set up SwarmBuilder with 4 validators
   - Simulate seller DKG in Rust test code (3-5 mock sellers using `aptos-dkg` crate)
   - Encrypt: Plaintext → Seller layer → Validator layer → Onion ciphertext
@@ -600,7 +600,7 @@ cargo test -- --test-threads=1 --nocapture
 
 **How to Run**:
 ```bash
-cd /source/zapatos/testsuite/smoke-test
+cd /source/atomica-aptos/testsuite/smoke-test
 cargo test test_dual_layer_timelock -- --nocapture
 ```
 
@@ -652,17 +652,17 @@ cargo test test_dual_layer_timelock -- --nocapture
 
 **Tasks**:
 - [ ] Write API documentation for N-layer encryption
-  - Location: `/source/zapatos/crates/aptos-dkg/README.md`
+  - Location: `/source/atomica-aptos/crates/aptos-dkg/README.md`
   - Include: Architecture diagram, usage examples, layer provider guide
   - Document: How to add new layer providers
 
 - [ ] Create end-to-end example
-  - File: `/source/zapatos/crates/aptos-dkg/examples/auction_encryption.rs`
+  - File: `/source/atomica-aptos/crates/aptos-dkg/examples/auction_encryption.rs`
   - Demonstrate: Full auction flow with N-layer encryption/decryption
   - Show: Different layer configurations (1-layer, 2-layer, 3-layer)
 
 - [ ] Document local testnet setup
-  - Location: `/source/zapatos/testsuite/smoke-test/README.md`
+  - Location: `/source/atomica-aptos/testsuite/smoke-test/README.md`
   - Include: Step-by-step setup instructions
   - Document: How to run timelock encryption tests
   - Troubleshooting guide for common issues
@@ -966,7 +966,7 @@ Implement core auction contract with N-layer encryption support: define encrypti
   - Alternative: Off-chain decryption with on-chain proof verification
 
 - [ ] Add native Move function for decryption
-  - Location: `/source/zapatos/aptos-move/framework/aptos-stdlib/sources/cryptography/onion_decrypt.move`
+  - Location: `/source/atomica-aptos/aptos-move/framework/aptos-stdlib/sources/cryptography/onion_decrypt.move`
   - Native function:
     ```move
     module aptos_std::onion_decrypt {
@@ -978,7 +978,7 @@ Implement core auction contract with N-layer encryption support: define encrypti
         ): vector<u8>;
     }
     ```
-  - Rust implementation: `/source/zapatos/aptos-move/framework/aptos-stdlib/sources/cryptography/natives/onion_decrypt.rs`
+  - Rust implementation: `/source/atomica-aptos/aptos-move/framework/aptos-stdlib/sources/cryptography/natives/onion_decrypt.rs`
   - Calls `aptos-dkg` crate's `decrypt_layer()` sequentially
 
 - [ ] Implement plaintext parsing
@@ -1069,12 +1069,12 @@ Build client-side encryption library and UI for bid submission.
 
 **Tasks**:
 - [ ] Create WASM build configuration
-  - Location: `/source/zapatos/crates/aptos-dkg-wasm/`
+  - Location: `/source/atomica-aptos/crates/aptos-dkg-wasm/`
   - Setup: `wasm-pack` build pipeline
   - Target: Web browsers (not Node.js)
 
 - [ ] Create WASM bindings
-  - File: `/source/zapatos/crates/aptos-dkg-wasm/src/lib.rs`
+  - File: `/source/atomica-aptos/crates/aptos-dkg-wasm/src/lib.rs`
   - Expose functions:
     ```rust
     #[wasm_bindgen]
@@ -1443,7 +1443,7 @@ Build client-side encryption library and UI for bid submission.
 ### zapatos Repository
 
 ```
-source/zapatos/
+source/atomica-aptos/
 ├── crates/aptos-dkg/
 │   ├── src/
 │   │   ├── dual_layer/

@@ -44,7 +44,7 @@ Enable users to sign Aptos/Move transactions using their Ethereum wallets (MetaM
 
 - `/docs/technical/ethereum-wallet-atomica-bridge.md` - Full specification
 - `/docs/technical/account-abstraction.md` - Implementation details
-- `/source/zapatos/aptos-move/framework/aptos-stdlib/sources/cryptography/secp256k1.move` - Signature verification
+- `/source/atomica-aptos/aptos-move/framework/aptos-stdlib/sources/cryptography/secp256k1.move` - Signature verification
 
 ### Remaining Work
 
@@ -97,19 +97,19 @@ Implement N-layer "Onion" timelock encryption for sealed bids and reserve prices
 ### Work Completed in zapatos
 
 ✅ **BLS12-381 DKG Infrastructure**:
-- `/source/zapatos/crates/aptos-dkg/` - Full DKG implementation
+- `/source/atomica-aptos/crates/aptos-dkg/` - Full DKG implementation
   - PVSS (Publicly Verifiable Secret Sharing)
   - Weighted threshold schemes
   - Range proofs for secret validation
   - ElGamal encryption on BLS12-381
 
 ✅ **Move Smart Contract Primitives**:
-- `/source/zapatos/aptos-move/framework/aptos-framework/sources/dkg.move` - DKG state management
-- `/source/zapatos/aptos-move/framework/aptos-framework/sources/timelock.move` - Timelock rotation logic
+- `/source/atomica-aptos/aptos-move/framework/aptos-framework/sources/dkg.move` - DKG state management
+- `/source/atomica-aptos/aptos-move/framework/aptos-framework/sources/timelock.move` - Timelock rotation logic
 - BLS signature aggregation support
 
 ✅ **Proof of Concept**:
-- `/source/zapatos/crates/aptos-dkg/tests/tlock_poc.rs` - IBE encryption/decryption demo
+- `/source/atomica-aptos/crates/aptos-dkg/tests/tlock_poc.rs` - IBE encryption/decryption demo
 - Demonstrates Boneh-Franklin IBE on BLS12-381
 - Shows pairing-based encryption working correctly
 

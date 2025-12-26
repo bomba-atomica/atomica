@@ -16,7 +16,7 @@ on:
 jobs:
   build-aptos:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150
     outputs:
       cache-key: ${{ steps.cache-info.outputs.cache-key }}
       binary-path: ${{ steps.cache-info.outputs.binary-path }}
@@ -42,7 +42,7 @@ jobs:
       - name: Get zapatos commit hash
         id: zapatos-commit
         run: |
-          cd source/zapatos
+          cd source/atomica-aptos
           ZAPATOS_HASH=$(git rev-parse HEAD)
           echo "hash=$ZAPATOS_HASH" >> $GITHUB_OUTPUT
           echo "Zapatos commit: $ZAPATOS_HASH"
@@ -73,7 +73,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "source/zapatos -> ../target"
+          workspaces: "source/atomica-aptos -> ../target"
           shared-key: "zapatos"
           cache-on-failure: true
           save-if: true
@@ -87,7 +87,7 @@ jobs:
         env:
           RUSTC_WRAPPER: ""
         run: |
-          cd source/zapatos
+          cd source/atomica-aptos
           echo "Building aptos binary from zapatos commit: ${{ steps.zapatos-commit.outputs.hash }}"
           cargo build -p aptos --release --features testing
 

@@ -4,7 +4,7 @@
 [submodule "source/diem-prover-halo2/solidity/lib/forge-std"]
 	path = source/diem-prover-halo2/solidity/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
-[submodule "source/zapatos"]
-	path = source/zapatos
-	url = https://github.com/0LNetworkCommunity/zapatos.git
-	branch = tlock-poc-1.38.5
+[submodule "source/atomica-aptos"]
+	path = source/atomica-aptos
+	url = https://github.com/bomba-atomica/atomica-aptos.git
+	branch = dev-atomica

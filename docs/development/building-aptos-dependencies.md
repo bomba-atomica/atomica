@@ -4,7 +4,7 @@ This guide explains how to build the `aptos` CLI and related dependencies from t
 
 ## Why Build from Source?
 
-The standard `aptos` CLI binary comes with a pre-compiled Move framework bundle (Release Bundle) embedded within it. When we modify the Move framework source files in `source/zapatos/aptos-move/framework`, the standard binary will not be aware of these changes.
+The standard `aptos` CLI binary comes with a pre-compiled Move framework bundle (Release Bundle) embedded within it. When we modify the Move framework source files in `source/atomica-aptos/aptos-move/framework`, the standard binary will not be aware of these changes.
 
 To test changes to the framework locally (e.g., verifying signature schemes in `ethereum_derivable_account.move`), we must rebuild the `aptos` executable. This rebuild triggers the generation of a new "Head" release bundle (`head.mrb`) from the local source files and embeds it into the new binary.
 

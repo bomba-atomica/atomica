@@ -1,0 +1,10 @@
+# Docker volumes and runtime data
+*.blob
+*.key
+waypoint.txt
+genesis/
+data/
+logs/
+
+# Environment overrides
+.env.local
