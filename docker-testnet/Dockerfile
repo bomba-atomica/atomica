@@ -47,8 +47,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/build/zapatos/target,sharing=locked \
     if [ "$PROFILE" = "release" ]; then \
         cargo build --release --bin aptos-node --features testing && \
-        cargo build --release --package aptos-faucet-service --features testing && \
-        cp target/release/aptos-node /build/aptos-node && \
         cp target/release/aptos-faucet-service /build/aptos-faucet-service; \
     else \
         cargo build --bin aptos-node --features testing && \
@@ -70,9 +68,6 @@ RUN apt-get update && apt-get install -y \
     libpq5 \
     libssl1.1 \
     libdw1 \
-    netcat \
-    net-tools \
-    tcpdump \
     && rm -rf /var/lib/apt/lists/*
 
 # Add Tini to make sure the binaries receive proper SIGTERM signals when Docker is shut down
