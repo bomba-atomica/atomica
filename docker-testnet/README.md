@@ -74,7 +74,7 @@ IMAGE_TAG=latest
 
 If you need to test custom validator changes, you'll need to:
 1. Fork or clone the [atomica-aptos](https://github.com/bomba-atomica/atomica-aptos) repository
-2. Build images locally in that repository using `docker/validator/Dockerfile`
+2. Build images locally in that repository using `atomica/docker/Dockerfile`
 3. Tag and publish them to your own registry
 4. Update the `VALIDATOR_IMAGE_REPO` and `IMAGE_TAG` in your `.env` file
 
@@ -146,7 +146,7 @@ docker compose down -v
 
 Docker images are built and published by the [atomica-aptos](https://github.com/bomba-atomica/atomica-aptos) repository:
 
-- **Dockerfile**: `docker/validator/Dockerfile` (in atomica-aptos repo)
+- **Dockerfile**: `atomica/docker/Dockerfile` (in atomica-aptos repo)
 - **GitHub Workflow**: `.github/workflows/build-validator-image.yml` (in atomica-aptos repo)
 - **Published to**: `ghcr.io/bomba-atomica/atomica-aptos/validator`
 
