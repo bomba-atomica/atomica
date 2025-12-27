@@ -7,4 +7,4 @@
 [submodule "source/atomica-aptos"]
 	path = source/atomica-aptos
 	url = https://github.com/bomba-atomica/atomica-aptos.git
-	branch = dev-atomica
+	branch = implement-ibe-1.38.5
