@@ -1,13 +1,31 @@
 import { spawn } from "child_process";
-import { resolve as pathResolve, dirname, join } from "path";
-import { existsSync, readFileSync } from "fs";
+import { resolve as pathResolve } from "path";
+import { existsSync, readFileSync, cpSync, mkdirSync } from "fs";
 import * as dotenv from "dotenv";
+import { generateGenesis } from "./genesis";
 
 /** Base API port for validators (incremented for each validator) */
 const BASE_API_PORT = 8080;
 
+/** Base validator network port for inter-validator communication */
+const BASE_VALIDATOR_PORT = 6180;
+
 /** Docker binary path - assumed to be in PATH or standard location */
 const DOCKER_BIN = "docker";
+
+/** Debug logging - controlled by DEBUG_TESTNET env var */
+const DEBUG = process.env.DEBUG_TESTNET === "1" || process.env.DEBUG_TESTNET === "true";
+
+function debug(message: string, data?: Record<string, unknown>): void {
+    if (DEBUG) {
+        const timestamp = new Date().toISOString();
+        if (data) {
+            console.log(`[DEBUG ${timestamp}] ${message}`, JSON.stringify(data, null, 2));
+        } else {
+            console.log(`[DEBUG ${timestamp}] ${message}`);
+        }
+    }
+}
 
 /**
  * Load environment variables
@@ -65,8 +83,11 @@ export class DockerTestnet {
         }
 
         const composeDir = DockerTestnet.findComposeDir();
+        debug("Found compose directory", { composeDir });
+        
         try {
             await DockerTestnet.ensureDockerRunning();
+            debug("Docker daemon is running");
         } catch (error: any) {
             // Rethrow with a clean message if possible, or just let it bubble up
             throw new Error(`Prerequisite check failed: ${error.message}`);
@@ -74,6 +95,7 @@ export class DockerTestnet {
 
         // Load environment variables
         const envVars = loadEnvVariables();
+        debug("Loaded environment variables", { keys: Object.keys(envVars) });
 
         console.log(
             `Setting up fresh Docker testnet with ${numValidators} validators...`,
@@ -82,6 +104,30 @@ export class DockerTestnet {
         // Clean up any existing testnet
         await DockerTestnet.runCompose(["down", "--remove-orphans", "-v"], composeDir, envVars);
         await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // Generate genesis and validator configs
+        const workspaceDir = pathResolve(composeDir, "..", "genesis-workspace");
+        const genesisArtifactsDir = pathResolve(composeDir, "genesis-artifacts");
+        const validatorsDir = pathResolve(composeDir, "validators");
+
+        await generateGenesis({
+            numValidators,
+            chainId: 4,
+            workspaceDir,
+        });
+
+        // Copy genesis artifacts to config directory
+        const outputDir = pathResolve(workspaceDir, "output");
+        mkdirSync(genesisArtifactsDir, { recursive: true });
+        cpSync(outputDir, genesisArtifactsDir, { recursive: true });
+
+        // Copy validator configs and identities to config directory
+        mkdirSync(validatorsDir, { recursive: true });
+        for (let i = 0; i < numValidators; i++) {
+            const validatorSrcDir = pathResolve(workspaceDir, `validator-${i}`);
+            const validatorDstDir = pathResolve(validatorsDir, `validator-${i}`);
+            cpSync(validatorSrcDir, validatorDstDir, { recursive: true });
+        }
 
         // Start the testnet
         // Use 5 minute timeout for 'up' command (image pull can be slow)
@@ -190,23 +236,27 @@ export class DockerTestnet {
         timeoutSecs: number = 60,
     ): Promise<void> {
         const deadline = Date.now() + timeoutSecs * 1000;
-        const startVersion = parseInt(
-            (await this.getLedgerInfo(0)).ledger_version,
-            10,
-        );
-        const targetVersion = startVersion + numBlocks;
+        const startInfo = await this.getLedgerInfo(0);
+        const startHeight = parseInt(startInfo.block_height, 10);
+        const targetHeight = startHeight + numBlocks;
 
         console.log(
-            `  Waiting for ${numBlocks} blocks (from version ${startVersion} to ${targetVersion})`,
+            `  Waiting for ${numBlocks} blocks (from height ${startHeight} to ${targetHeight})`,
         );
 
         while (Date.now() < deadline) {
-            const currentVersion = parseInt(
-                (await this.getLedgerInfo(0)).ledger_version,
-                10,
-            );
-            if (currentVersion >= targetVersion) {
-                console.log(`  ✓ Reached target version ${currentVersion}`);
+            const currentInfo = await this.getLedgerInfo(0);
+            const currentHeight = parseInt(currentInfo.block_height, 10);
+            
+            debug(`Block progress: ${currentHeight}/${targetHeight}`, {
+                current_height: currentHeight,
+                target_height: targetHeight,
+                current_version: currentInfo.ledger_version,
+                epoch: currentInfo.epoch,
+            });
+            
+            if (currentHeight >= targetHeight) {
+                console.log(`  ✓ Reached target height ${currentHeight}`);
                 return;
             }
             await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -334,6 +384,7 @@ async function waitForHealthy(
 
     while (Date.now() < deadline) {
         let healthyCount = 0;
+        const statuses: string[] = [];
 
         for (let i = 0; i < numValidators; i++) {
             const url = `http://127.0.0.1:${BASE_API_PORT + i}/v1`;
@@ -341,15 +392,23 @@ async function waitForHealthy(
                 const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
                 if (response.ok) {
                     healthyCount++;
+                    const data = await response.json() as LedgerInfo;
+                    statuses.push(`V${i}:epoch${data.epoch},blk${data.block_height}`);
+                    debug(`Validator ${i} healthy`, { epoch: data.epoch, block_height: data.block_height });
+                } else {
+                    statuses.push(`V${i}:HTTP${response.status}`);
                 }
-            } catch {
+            } catch (e: any) {
+                statuses.push(`V${i}:ERR`);
                 // Validator not ready yet
             }
         }
 
         if (healthyCount === numValidators) {
-            console.log(`  ✓ All ${numValidators} validators healthy`);
+            console.log(`  ✓ All ${numValidators} validators healthy [${statuses.join(", ")}]`);
             return;
+        } else {
+            debug(`Health check: ${healthyCount}/${numValidators} healthy [${statuses.join(", ")}]`);
         }
 
         await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -358,4 +417,172 @@ async function waitForHealthy(
     throw new Error(
         "Timeout waiting for validators. Check 'docker compose logs' for details.",
     );
+}
+
+/**
+ * Network probe result for a single validator
+ */
+export interface ProbeResult {
+    validatorIndex: number;
+    containerName: string;
+    ipAddress: string;
+    apiPort: number;
+    validatorPort: number;
+    metricsPort: number;
+    apiReachable: boolean;
+    apiResponse?: LedgerInfo;
+    apiError?: string;
+    portScans: {
+        port: number;
+        name: string;
+        reachable: boolean;
+        error?: string;
+    }[];
+}
+
+/**
+ * Probe all validators in a testnet for connectivity and health
+ * 
+ * This function is useful for debugging network issues. It checks:
+ * - REST API endpoints (8080-808X)
+ * - Validator network ports (6180)
+ * - Metrics ports (9101-910X)
+ * - Container network connectivity
+ * 
+ * Usage:
+ *   DEBUG_TESTNET=1 node -e "require('./dist/index.js').probeTestnet(4)"
+ */
+export async function probeTestnet(numValidators: number = 4): Promise<ProbeResult[]> {
+    console.log(`\n=== Probing ${numValidators} validators ===\n`);
+    
+    const results: ProbeResult[] = [];
+    
+    for (let i = 0; i < numValidators; i++) {
+        const containerName = `atomica-validator-${i}`;
+        const ipAddress = `172.19.0.${10 + i}`;
+        const apiPort = BASE_API_PORT + i;
+        const validatorPort = BASE_VALIDATOR_PORT;
+        const metricsPort = 9101 + i;
+        
+        console.log(`\nProbing validator-${i} (${containerName}):`);
+        
+        const result: ProbeResult = {
+            validatorIndex: i,
+            containerName,
+            ipAddress,
+            apiPort,
+            validatorPort,
+            metricsPort,
+            apiReachable: false,
+            portScans: [],
+        };
+        
+        // Check REST API
+        const apiUrl = `http://127.0.0.1:${apiPort}/v1`;
+        console.log(`  Testing REST API: ${apiUrl}`);
+        try {
+            const response = await fetch(apiUrl, { signal: AbortSignal.timeout(5000) });
+            if (response.ok) {
+                result.apiReachable = true;
+                result.apiResponse = await response.json() as LedgerInfo;
+                console.log(`    ✓ API reachable - Epoch: ${result.apiResponse.epoch}, Block: ${result.apiResponse.block_height}`);
+            } else {
+                result.apiError = `HTTP ${response.status}`;
+                console.log(`    ✗ API returned: ${response.status}`);
+            }
+        } catch (error: any) {
+            result.apiError = error.message;
+            console.log(`    ✗ API unreachable: ${error.message}`);
+        }
+        
+        // Scan important ports (from host perspective)
+        const portsToScan = [
+            { port: apiPort, name: "REST API" },
+            { port: metricsPort, name: "Metrics" },
+        ];
+        
+        for (const { port, name } of portsToScan) {
+            console.log(`  Testing ${name} port: ${port}`);
+            try {
+                const testUrl = `http://127.0.0.1:${port}`;
+                const response = await fetch(testUrl, { 
+                    signal: AbortSignal.timeout(2000),
+                    method: 'HEAD',
+                });
+                result.portScans.push({
+                    port,
+                    name,
+                    reachable: true,
+                });
+                console.log(`    ✓ Port ${port} (${name}) reachable`);
+            } catch (error: any) {
+                result.portScans.push({
+                    port,
+                    name,
+                    reachable: false,
+                    error: error.message,
+                });
+                console.log(`    ✗ Port ${port} (${name}) unreachable: ${error.message}`);
+            }
+        }
+        
+        // Check container networking (requires docker exec)
+        console.log(`  Checking container internal networking...`);
+        try {
+            const { spawn } = await import("child_process");
+            const pingOther = spawn("docker", [
+                "exec",
+                containerName,
+                "sh",
+                "-c",
+                `curl -s -m 2 http://172.19.0.${10 + ((i + 1) % numValidators)}:8080/v1 | head -c 50 || echo FAIL`
+            ]);
+            
+            let output = "";
+            pingOther.stdout?.on("data", (d) => output += d.toString());
+            
+            await new Promise<void>((resolve) => {
+                pingOther.on("close", () => resolve());
+                setTimeout(() => {
+                    pingOther.kill();
+                    resolve();
+                }, 3000);
+            });
+            
+            if (output.includes("chain_id")) {
+                console.log(`    ✓ Container can reach other validators`);
+            } else {
+                console.log(`    ✗ Container cannot reach other validators`);
+            }
+        } catch (error: any) {
+            console.log(`    ? Could not test container networking: ${error.message}`);
+        }
+        
+        results.push(result);
+    }
+    
+    // Summary
+    console.log(`\n=== Probe Summary ===`);
+    const healthyValidators = results.filter(r => r.apiReachable).length;
+    console.log(`Healthy validators: ${healthyValidators}/${numValidators}`);
+    
+    if (healthyValidators > 0 && results[0].apiResponse) {
+        const epochs = new Set(results.filter(r => r.apiResponse).map(r => r.apiResponse!.epoch));
+        const blocks = new Set(results.filter(r => r.apiResponse).map(r => r.apiResponse!.block_height));
+        
+        if (epochs.size === 1) {
+            console.log(`All validators in epoch: ${[...epochs][0]}`);
+        } else {
+            console.log(`WARNING: Validators in different epochs: ${[...epochs].join(", ")}`);
+        }
+        
+        if (blocks.size === 1) {
+            console.log(`All validators at block: ${[...blocks][0]}`);
+        } else {
+            console.log(`Validators at blocks: ${[...blocks].join(", ")} (minor differences OK)`);
+        }
+    }
+    
+    console.log(`\n`);
+    return results;
 }

@@ -59,3 +59,36 @@ export declare class DockerTestnet {
     private static runCompose;
     static ensureDockerRunning(): Promise<void>;
 }
+/**
+ * Network probe result for a single validator
+ */
+export interface ProbeResult {
+    validatorIndex: number;
+    containerName: string;
+    ipAddress: string;
+    apiPort: number;
+    validatorPort: number;
+    metricsPort: number;
+    apiReachable: boolean;
+    apiResponse?: LedgerInfo;
+    apiError?: string;
+    portScans: {
+        port: number;
+        name: string;
+        reachable: boolean;
+        error?: string;
+    }[];
+}
+/**
+ * Probe all validators in a testnet for connectivity and health
+ *
+ * This function is useful for debugging network issues. It checks:
+ * - REST API endpoints (8080-808X)
+ * - Validator network ports (6180)
+ * - Metrics ports (9101-910X)
+ * - Container network connectivity
+ *
+ * Usage:
+ *   DEBUG_TESTNET=1 node -e "require('./dist/index.js').probeTestnet(4)"
+ */
+export declare function probeTestnet(numValidators?: number): Promise<ProbeResult[]>;
