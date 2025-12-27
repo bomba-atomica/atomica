@@ -33,7 +33,7 @@ version: "3.8"
 services:
   # Validator 0 (Primary - generates genesis)
   validator-0:
-    image: "${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}"
+    image: "${VALIDATOR_IMAGE_REPO:-aptoslabs/validator}:${IMAGE_TAG:-devnet}"
     container_name: atomica-validator-0
     hostname: validator-0
     networks:
@@ -71,7 +71,7 @@ services:
 
   # Validator 1
   validator-1:
-    image: "${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}"
+    image: "${VALIDATOR_IMAGE_REPO:-aptoslabs/validator}:${IMAGE_TAG:-devnet}"
     container_name: atomica-validator-1
     hostname: validator-1
     depends_on:
@@ -117,7 +117,7 @@ services:
 
   # Validator 2
   validator-2:
-    image: "${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}"
+    image: "${VALIDATOR_IMAGE_REPO:-aptoslabs/validator}:${IMAGE_TAG:-devnet}"
     container_name: atomica-validator-2
     hostname: validator-2
     depends_on:
@@ -163,7 +163,7 @@ services:
 
   # Validator 3
   validator-3:
-    image: "${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}"
+    image: "${VALIDATOR_IMAGE_REPO:-aptoslabs/validator}:${IMAGE_TAG:-devnet}"
     container_name: atomica-validator-3
     hostname: validator-3
     depends_on:
@@ -209,7 +209,7 @@ services:
 
   # Optional: Faucet service (useful for testing)
   faucet:
-    image: "${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}"
+    image: "${VALIDATOR_IMAGE_REPO:-aptoslabs/validator}:${IMAGE_TAG:-devnet}"
     container_name: atomica-faucet
     depends_on:
       validator-0:

@@ -23,6 +23,8 @@
 //!
 //! ## Example
 //! ```no_run
+//! use atomica_docker_testnet::DockerTestnet;
+//! 
 //! #[tokio::test]
 //! async fn test_timelock_encryption() {
 //!     // Docker starts here ↓
@@ -39,7 +41,7 @@
 //!
 //! - Tests must run sequentially: `cargo test -- --test-threads=1`
 //! - Docker port conflicts occur if tests run in parallel
-//! - Build images first: `cd docker-testnet && ./build.sh`
+//! - Build images first: `cd source/docker-testnet/config && ./build.sh`
 //! - No manual `docker compose up/down` needed!
 
 use std::process::{Command, Stdio};
@@ -200,28 +202,34 @@ impl DockerTestnet {
     }
 
     fn find_compose_dir() -> anyhow::Result<String> {
-        // Try various paths relative to the test binary
-        for path in [
-            "docker-testnet",
-            "./docker-testnet",
-            "../docker-testnet",
-            "../../docker-testnet",
-        ] {
+        // Strategy: search for 'source/docker-testnet/config/docker-compose.yaml'
+        // or '../config/docker-compose.yaml' relative to the crate root.
+        
+        let candidates = vec![
+            "source/docker-testnet/config",
+            "../config",
+            "../../config", // if in sub-dir of test
+            "docker-testnet/config", // if running from source/
+        ];
+
+        for path in &candidates {
             if std::path::Path::new(&format!("{}/docker-compose.yaml", path)).exists() {
+                // If it's a relative path, resolve it relative to current dir or ensure it's usable.
+                // But docker compose command accepts a path.
                 return Ok(path.to_string());
             }
         }
 
-        // Try using CARGO_MANIFEST_DIR
+        // Try using CARGO_MANIFEST_DIR to locate it relative to this crate
         if let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR") {
-            let path = format!("{}/docker-testnet", dir);
-            if std::path::Path::new(&format!("{}/docker-compose.yaml", path)).exists() {
+            let path = format!("{}/../config", dir);
+             if std::path::Path::new(&format!("{}/docker-compose.yaml", path)).exists() {
                 return Ok(path);
             }
         }
 
         Err(anyhow::anyhow!(
-            "docker-testnet directory not found. Run tests from the atomica root directory."
+            "docker-testnet config directory not found. Please ensure source/docker-testnet/config/docker-compose.yaml exists."
         ))
     }
 
@@ -279,6 +287,10 @@ impl DockerTestnet {
 
 impl Drop for DockerTestnet {
     fn drop(&mut self) {
+        if std::thread::panicking() {
+            // If panicking, we might want to leave containers up for debugging?
+            // For now, respect the requirement "Works even on panic!" which implies cleanup.
+        }
         tracing::info!("Tearing down Docker testnet...");
         let _ = Self::run_compose(&self.compose_dir, &["down", "--remove-orphans", "-v"]);
         tracing::info!("✓ Docker testnet stopped");
@@ -309,6 +321,7 @@ mod tests {
     async fn test_docker_lifecycle() {
         let _ = tracing_subscriber::fmt().with_test_writer().try_init();
 
+        // Note: this test requires docker to be running and images to be available
         match DockerTestnet::new(4).await {
             Ok(testnet) => {
                 println!("✓ Testnet started with {} validators", testnet.num_validators());
@@ -322,7 +335,8 @@ mod tests {
             }
             Err(e) => {
                 println!("✗ Failed to start testnet: {}", e);
-                println!("  Make sure Docker is running and images are built (run ./build.sh)");
+                // We don't want to fail CI if docker isn't available, but for local dev it's useful to know
+                // panic!("Failed: {}", e); 
             }
         }
     }
