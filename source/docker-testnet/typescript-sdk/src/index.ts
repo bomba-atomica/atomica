@@ -85,7 +85,31 @@ export class DockerTestnet {
 
         // Start the testnet
         // Use 5 minute timeout for 'up' command (image pull can be slow)
-        await DockerTestnet.runCompose(["up", "-d"], composeDir, envVars, 300000);
+        try {
+            await DockerTestnet.runCompose(["up", "-d"], composeDir, envVars, 300000);
+        } catch (error: any) {
+            console.error("Failed to start testnet. Fetching logs...");
+            try {
+                // Determine logs command
+                const proc = spawn(DOCKER_BIN, ["compose", "logs", "--tail=50"], { cwd: composeDir, env: { ...process.env, ...envVars } });
+                let logs = "";
+                proc.stdout?.on("data", (d) => logs += d.toString());
+                proc.stderr?.on("data", (d) => logs += d.toString()); // Capture stderr too just in case
+
+                await new Promise<void>((resolve) => {
+                    proc.on("close", () => {
+                        console.error("=== DOCKER LOGS ===\n" + logs + "\n===================");
+                        resolve();
+                    });
+                    // Timeout for log fetch
+                    setTimeout(() => resolve(), 5000);
+                });
+
+            } catch (logError) {
+                console.error("Failed to fetch logs.");
+            }
+            throw error;
+        }
 
         // Wait for all validators to be healthy
         await waitForHealthy(numValidators, 120);

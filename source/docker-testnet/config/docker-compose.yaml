@@ -28,7 +28,7 @@
 #   3. View logs: docker compose logs -f validator-0
 #   4. Stop testnet: docker compose down
 
-version: "3.8"
+
 
 services:
   # Validator 0 (Primary - generates genesis)
