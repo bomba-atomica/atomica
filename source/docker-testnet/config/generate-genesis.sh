@@ -1,35 +1,15 @@
 #!/bin/bash
-#
-# Genesis generation script for multi-validator Aptos testnet
-# This script runs inside a Docker container with the aptos CLI available
-#
-# Usage: ./generate-genesis.sh <num_validators> <chain_id> <base_ip>
-#
-# Arguments:
-#   num_validators: Number of validators to generate (1-7)
-#   chain_id: Chain ID for the network (e.g., 4)
-#   base_ip: Base IP for validators (e.g., 172.19.0.10 means validators get .10, .11, etc.)
-#
-# Output structure in /workspace:
-#   /workspace/output/genesis.blob
-#   /workspace/output/waypoint.txt
-#   /workspace/validator-{0,1,...}/
-#       validator-identity.yaml
-#       node-config.yaml
-#
+# Generate Aptos genesis for Docker testnet
+set -e
 
-set -euo pipefail
-
-# Enable debug mode if DEBUG_TESTNET is set
-if [ "${DEBUG_TESTNET:-}" = "1" ] || [ "${DEBUG_TESTNET:-}" = "true" ]; then
+# Enable debug mode if DEBUG is set
+if [ -n "$DEBUG" ]; then
     set -x
-    DEBUG=1
-else
-    DEBUG=0
 fi
 
+# Debug logging helper
 debug() {
-    if [ "$DEBUG" = "1" ]; then
+    if [ -n "$DEBUG" ]; then
         echo "[DEBUG $(date -Iseconds)] $*" >&2
     fi
 }
@@ -38,14 +18,13 @@ NUM_VALIDATORS="${1:-4}"
 CHAIN_ID="${2:-4}"
 BASE_IP="${3:-172.19.0.10}"
 STAKE_AMOUNT="100000000000000"  # 1M APT in octas
-ROOT_KEY="D04470F43AB6AEAA4EB616B72128881EEF77346F2075FFE68E14BA7DEBD8095E"
 
 WORKSPACE="/workspace"
 cd "$WORKSPACE"
 
-debug "Genesis generation started with NUM_VALIDATORS=$NUM_VALIDATORS CHAIN_ID=$CHAIN_ID BASE_IP=$BASE_IP"
+debug "Generating genesis for $NUM_VALIDATORS validators (chain_id=$CHAIN_ID, base_ip=$BASE_IP)"
 
-echo "=== Generating genesis for ${NUM_VALIDATORS} validators (chain_id=${CHAIN_ID}) ==="
+echo "=== Generating genesis for $NUM_VALIDATORS validators (chain_id=$CHAIN_ID) ==="
 
 # Parse base IP to get the base octets and starting number
 IFS='.' read -r ip1 ip2 ip3 ip4 <<< "$BASE_IP"
@@ -60,11 +39,28 @@ for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
     fi
 done
 
-# Step 1: Generate layout template and customize it
-echo "Step 1/6: Generating layout..."
+# Step 1: Generate root account keys (for test-only faucet)
+echo "Step 1/7: Generating root account keys..."
+mkdir -p "root-account"
+aptos genesis generate-keys --output-dir "root-account" --assume-yes
+
+# Extract root public key for layout.yaml
+ROOT_PUBLIC_KEY=$(grep "account_public_key:" root-account/public-keys.yaml | awk '{print $2}' | tr -d '"')
+debug "Root account public key: $ROOT_PUBLIC_KEY"
+
+# Step 2: Generate validator keys
+echo "Step 2/7: Generating validator keys..."
+for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
+    username="validator-${i}"
+    mkdir -p "$username"
+    aptos genesis generate-keys --output-dir "$username" --assume-yes
+done
+
+# Step 3: Create layout.yaml with generated root key
+echo "Step 3/7: Creating layout.yaml..."
 cat > layout.yaml << EOF
 ---
-root_key: "${ROOT_KEY}"
+root_key: "${ROOT_PUBLIC_KEY}"
 users: [${USERNAMES}]
 chain_id: ${CHAIN_ID}
 allow_new_validators: false
@@ -72,7 +68,7 @@ epoch_duration_secs: 7200
 is_test: true
 min_stake: 100000000000000
 min_voting_threshold: 100000000000000
-max_stake: 10000000000000000
+max_stake: 100000000000000000
 recurring_lockup_duration_secs: 86400
 required_proposer_stake: 100000000000000
 rewards_apy_percentage: 10
@@ -82,26 +78,18 @@ employee_vesting_start: 1663456089
 employee_vesting_period_duration: 5184000
 EOF
 
-# Step 2: Generate keys for each validator
-echo "Step 2/6: Generating validator keys..."
-for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
-    username="validator-${i}"
-    mkdir -p "$username"
-    aptos genesis generate-keys --output-dir "$username" --assume-yes
-done
-
-# Step 3: Set validator configurations
-echo "Step 3/6: Setting validator configurations..."
+# Step 4: Set validator configurations
+echo "Step 4/7: Setting validator configurations..."
 mkdir -p genesis-repo
 
 for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
     username="validator-${i}"
     validator_ip="${ip1}.${ip2}.${ip3}.$((ip4 + i))"
-    
+
     debug "Setting configuration for $username at IP $validator_ip"
-    
+
     mkdir -p "genesis-repo/${username}"
-    
+
     aptos genesis set-validator-configuration \
         --username "$username" \
         --owner-public-identity-file "${username}/public-keys.yaml" \
@@ -110,26 +98,26 @@ for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
         --stake-amount "$STAKE_AMOUNT" \
         --commission-percentage 0 \
         --local-repository-dir genesis-repo
-        
+
     debug "Configured $username with validator-host=${validator_ip}:6180"
 done
 
-# Step 4: Copy layout to genesis repo and find framework
-echo "Step 4/6: Setting up genesis repository..."
+# Step 5: Copy layout to genesis repo and find framework
+echo "Step 5/7: Setting up genesis repository..."
 cp layout.yaml genesis-repo/
 
 # Find and copy framework.mrb
 FRAMEWORK_PATHS=(
     "/aptos-framework/move/head.mrb"
-    "/opt/aptos/framework/framework.mrb"
-    "/aptos/framework.mrb"
+    "/opt/aptos/framework/head.mrb"
+    "/usr/local/share/aptos/framework/head.mrb"
 )
 
 FRAMEWORK_FOUND=false
-for fpath in "${FRAMEWORK_PATHS[@]}"; do
-    if [ -f "$fpath" ]; then
-        echo "  Found framework at: $fpath"
-        cp "$fpath" genesis-repo/framework.mrb
+for path in "${FRAMEWORK_PATHS[@]}"; do
+    if [ -f "$path" ]; then
+        debug "Found framework at: $path"
+        cp "$path" genesis-repo/framework.mrb
         FRAMEWORK_FOUND=true
         break
     fi
@@ -140,46 +128,36 @@ if [ "$FRAMEWORK_FOUND" = false ]; then
     exit 1
 fi
 
-# Step 5: Setup git structure (required by aptos genesis)
-echo "Step 5/6: Finalizing genesis repository..."
+# Step 6: Setup git structure (required by aptos genesis)
+echo "Step 6/7: Finalizing genesis repository..."
 aptos genesis setup-git \
     --layout-file layout.yaml \
     --local-repository-dir genesis-repo
 
-# Step 6: Generate genesis blob and waypoint
-echo "Step 6/6: Generating genesis.blob and waypoint..."
+# Step 7: Generate genesis blob and waypoint
+echo "Step 7/7: Generating genesis.blob and waypoint..."
 mkdir -p output
 aptos genesis generate-genesis \
     --local-repository-dir genesis-repo \
     --output-dir output
 
-# Step 7: Create node configs for each validator
+# Save root account keys for TypeScript SDK faucet
+cp root-account/private-keys.yaml output/root-account-private-keys.yaml
+echo "Root account keys saved to output/root-account-private-keys.yaml"
+
+# Create node configs for each validator
 echo "Creating node configurations..."
 for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
     username="validator-${i}"
-    
+
     debug "Creating node config for $username with listen_address=/ip4/0.0.0.0/tcp/6180"
-    
-    cat > "${username}/node-config.yaml" << 'NODECONFIG'
+
+    cat > "output/${username}.yaml" << EOF
 base:
   role: "validator"
   data_dir: "/opt/aptos/data"
   waypoint:
     from_file: "/opt/aptos/genesis/waypoint.txt"
-
-consensus:
-  safety_rules:
-    service:
-      type: "local"
-    backend:
-      type: "on_disk_storage"
-      path: "/opt/aptos/data/safety-data.json"
-      namespace: ~
-    initial_safety_rules_config:
-      from_file:
-        waypoint:
-          from_file: "/opt/aptos/genesis/waypoint.txt"
-        identity_blob_path: "/opt/aptos/identity/validator-identity.yaml"
 
 execution:
   genesis_file_location: "/opt/aptos/genesis/genesis.blob"
@@ -188,33 +166,20 @@ validator_network:
   discovery_method: "onchain"
   listen_address: "/ip4/0.0.0.0/tcp/6180"
   mutual_authentication: true
-  network_id: "validator"
   identity:
     type: "from_file"
     path: "/opt/aptos/identity/validator-identity.yaml"
 
+full_node_networks: []
+
 api:
   enabled: true
   address: "0.0.0.0:8080"
+EOF
 
-inspection_service:
-  address: "0.0.0.0"
-  port: 9101
-
-logger:
-  level: INFO
-NODECONFIG
-
-    debug "Created node config for $username - config includes validator_network.listen_address"
+    debug "Created config for $username"
 done
 
-echo ""
 echo "=== Genesis generation complete! ==="
-echo "  Genesis blob: ${WORKSPACE}/output/genesis.blob"
-echo "  Waypoint:     ${WORKSPACE}/output/waypoint.txt"
-echo "  Validators:   ${NUM_VALIDATORS}"
-
-# Print waypoint for convenience
-echo ""
 echo "Waypoint:"
 cat output/waypoint.txt

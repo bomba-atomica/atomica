@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import { resolve as pathResolve } from "path";
 import { existsSync, readFileSync, cpSync, mkdirSync } from "fs";
 import * as dotenv from "dotenv";
+import { AptosAccount, HexString, AptosClient, CoinClient } from "aptos";
 import { generateGenesis } from "./genesis";
 
 /** Base API port for validators (incremented for each validator) */
@@ -206,6 +207,187 @@ export class DockerTestnet {
      */
     getNumValidators(): number {
         return this.numValidators;
+    }
+
+    /**
+     * Get a validator account that was funded at genesis
+     */
+    async getValidatorAccount(index: number): Promise<AptosAccount> {
+        if (index < 0 || index >= this.numValidators) {
+            throw new Error(
+                `Validator index ${index} out of range (0-${this.numValidators - 1})`,
+            );
+        }
+
+        const identityPath = pathResolve(
+            this.composeDir,
+            "validators",
+            `validator-${index}`,
+            "private-keys.yaml"
+        );
+
+        if (!existsSync(identityPath)) {
+            throw new Error(`Validator identity file not found: ${identityPath}`);
+        }
+
+        const content = readFileSync(identityPath, "utf-8");
+        const addrMatch = content.match(/account_address:\s*([a-fA-F0-9]+)/);
+        const keyMatch = content.match(/account_private_key:\s*"0x([a-fA-F0-9]+)"/);
+
+        if (!addrMatch || !keyMatch) {
+            throw new Error(`Failed to parse validator identity from ${identityPath}`);
+        }
+
+        const address = "0x" + addrMatch[1];
+        const privateKey = HexString.ensure(keyMatch[1]).toUint8Array();
+
+        return new AptosAccount(privateKey, address);
+    }
+
+    /**
+     * Get the faucet account for test-only minting operations
+     *
+     * ⚠️ WARNING: This is a TEST-ONLY approach! ⚠️
+     * The Core Resources account (0xA550C18) does NOT exist on production mainnet.
+     * This is used purely for local testing convenience.
+     *
+     * In test mode (is_test: true), this account:
+     * - Has u64::MAX octas (~18.4M APT) for gas fees
+     * - Has minting capability for AptosCoin
+     * - Can delegate minting capability to other accounts
+     */
+    getFaucetAccount(): AptosAccount {
+        // Read root account private key from genesis artifacts
+        const rootKeysPath = pathResolve(
+            this.composeDir,
+            "genesis-artifacts",
+            "root-account-private-keys.yaml"
+        );
+
+        if (!existsSync(rootKeysPath)) {
+            throw new Error(`Root account keys file not found: ${rootKeysPath}`);
+        }
+
+        const content = readFileSync(rootKeysPath, "utf-8");
+        const keyMatch = content.match(/account_private_key:\s*"0x([a-fA-F0-9]+)"/);
+
+        if (!keyMatch) {
+            throw new Error(`Failed to parse root account private key from ${rootKeysPath}`);
+        }
+
+        const privateKey = HexString.ensure(keyMatch[1]).toUint8Array();
+
+        // IMPORTANT: The Core Resources account is ALWAYS at address 0xA550C18 (hardcoded in Move.toml)
+        // At genesis, its auth key is rotated to match the root_key from layout.yaml
+        // So we use the hardcoded address with our generated private key
+        const coreResourcesAddress = "0x00000000000000000000000000000000000000000000000000000000A550C18";
+        return new AptosAccount(privateKey, coreResourcesAddress);
+    }
+
+    /**
+     * @deprecated Use getFaucetAccount() instead
+     */
+    getRootAccount(): AptosAccount {
+        return this.getFaucetAccount();
+    }
+
+    /**
+     * Bootstrap validators with unlocked funds for faucet operations
+     *
+     * ⚠️ TEST-ONLY: Uses root account to mint funds ⚠️
+     *
+     * This gives validators unlocked funds so they can act as faucets.
+     * Uses aptos_coin::mint which is only available when is_test: true.
+     * In production, validators would have unlocked funds from staking rewards.
+     *
+     * @param amountPerValidator - Amount of unlocked APT (in octas) to give each validator
+     */
+    async bootstrapValidators(amountPerValidator: bigint = 100_000_000_000_000n): Promise<void> {
+        console.log(`Bootstrapping ${this.numValidators} validators with unlocked funds...`);
+        console.log(`⚠️  Using test-only faucet account with minting capability`);
+
+        const faucetAccount = this.getFaucetAccount();
+        const client = new AptosClient(this.validatorApiUrl(0));
+
+        for (let i = 0; i < this.numValidators; i++) {
+            const validator = await this.getValidatorAccount(i);
+            const validatorAddr = validator.address().hex();
+
+            console.log(`  Minting ${amountPerValidator} octas for validator ${i} (${validatorAddr.slice(0, 10)}...)`);
+
+            try {
+                // Use aptos_account::transfer which creates CoinStore if it doesn't exist
+                // This is simpler than mint() which requires CoinStore to already exist
+                // We transfer from the faucet account which has u64::MAX balance
+                const transferPayload = {
+                    type: "entry_function_payload",
+                    function: "0x1::aptos_account::transfer",
+                    type_arguments: [],
+                    arguments: [validatorAddr, amountPerValidator.toString()],
+                };
+
+                const transferTxn = await client.generateTransaction(faucetAccount.address(), transferPayload);
+                const signedTransferTxn = await client.signTransaction(faucetAccount, transferTxn);
+                const transferPending = await client.submitTransaction(signedTransferTxn);
+                await client.waitForTransaction(transferPending.hash);
+
+                debug(`Validator ${i} funded via transfer from faucet`, {
+                    address: validatorAddr,
+                    amount: amountPerValidator.toString(),
+                    txn: transferPending.hash,
+                });
+            } catch (error: any) {
+                console.error(`  ✗ Failed to fund validator ${i}: ${error.message}`);
+                throw error;
+            }
+        }
+
+        console.log(`✓ All validators bootstrapped with minted funds`);
+    }
+
+    /**
+     * Fund a new account using the faucet (Core Resources account)
+     *
+     * ⚠️ TEST-ONLY: Uses Core Resources account (0xA550C18) which only exists in test mode
+     *
+     * This creates and funds new accounts for testing.
+     * Uses aptos_account::transfer which automatically creates the account's CoinStore if needed.
+     *
+     * @param address - Address to fund (account will be created if it doesn't exist)
+     * @param amount - Amount in octas to fund
+     * @returns Transaction hash
+     */
+    async faucet(address: string | HexString, amount: bigint = 100_000_000n): Promise<string> {
+        const faucetAccount = this.getFaucetAccount();
+        const client = new AptosClient(this.validatorApiUrl(0));
+
+        const targetAddr = typeof address === 'string' ? address : address.hex();
+        debug(`Faucet funding ${targetAddr} with ${amount} octas`);
+
+        try {
+            // Use aptos_account::transfer which creates the account if it doesn't exist
+            const transferPayload = {
+                type: "entry_function_payload",
+                function: "0x1::aptos_account::transfer",
+                type_arguments: [],
+                arguments: [targetAddr, amount.toString()],
+            };
+
+            const transferTxn = await client.generateTransaction(faucetAccount.address(), transferPayload);
+            const signedTransferTxn = await client.signTransaction(faucetAccount, transferTxn);
+            const transferPending = await client.submitTransaction(signedTransferTxn);
+            await client.waitForTransaction(transferPending.hash);
+
+            debug(`Faucet transfer complete`, {
+                to: targetAddr,
+                amount: amount.toString(),
+                txn: transferPending.hash,
+            });
+
+            return transferPending.hash;
+        } catch (error: any) {
+            throw new Error(`Faucet transfer failed: ${error.message}`);
+        }
     }
 
     /**
