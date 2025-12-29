@@ -26,7 +26,7 @@
 //!
 //! Docker lifecycle is handled automatically - just run the tests!
 
-use docker_harness::DockerTestnet;
+use atomica_docker_testnet::DockerTestnet;
 use serial_test::serial;
 
 #[tokio::test]

@@ -12,6 +12,11 @@ docker-testnet/genesis/
 docker-testnet/data/
 docker-testnet/logs/
 
+# Docker testnet runtime artifacts
+source/docker-testnet/genesis-workspace/
+source/docker-testnet/config/validators/
+source/docker-testnet/config/genesis-artifacts/
+
 # Test artifacts
 tests/target/
 tests/Cargo.lock
