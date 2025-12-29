@@ -23,8 +23,22 @@ export declare class DockerTestnet {
     private constructor();
     /**
      * Create a fresh, isolated Docker testnet with N validators
+     *
+     * @param numValidators Number of validators (1-7)
+     * @param options Optional configuration
+     * @returns DockerTestnet instance
+     *
+     * @example
+     * // Use published image (default)
+     * const testnet = await DockerTestnet.new(4);
+     *
+     * // Use locally built image
+     * await DockerTestnet.buildLocalImage();
+     * const testnet = await DockerTestnet.new(4, { useLocalImage: true });
      */
-    static new(numValidators: number): Promise<DockerTestnet>;
+    static new(numValidators: number, options?: {
+        useLocalImage?: boolean;
+    }): Promise<DockerTestnet>;
     /**
      * Tear down the testnet and clean up all resources
      */
@@ -105,6 +119,35 @@ export declare class DockerTestnet {
     private static findComposeDir;
     private static runCompose;
     static ensureDockerRunning(): Promise<void>;
+    /**
+     * Build Atomica Aptos validator image locally from source
+     *
+     * This builds the Docker image from ./source/atomica-aptos using sccache
+     * for fast incremental builds. The sccache data is persisted in a Docker
+     * volume so subsequent builds are much faster.
+     *
+     * @param options Build options
+     * @returns Promise that resolves when build completes
+     *
+     * @example
+     * // Basic build
+     * await DockerTestnet.buildLocalImage();
+     *
+     * // Custom build
+     * await DockerTestnet.buildLocalImage({
+     *   profile: 'debug',
+     *   cleanSccache: true,
+     *   showStats: true
+     * });
+     */
+    static buildLocalImage(options?: {
+        profile?: "release" | "debug";
+        features?: string;
+        tag?: string;
+        noCache?: boolean;
+        cleanSccache?: boolean;
+        showStats?: boolean;
+    }): Promise<void>;
 }
 /**
  * Network probe result for a single validator

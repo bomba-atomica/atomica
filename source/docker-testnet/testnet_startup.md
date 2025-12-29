@@ -193,6 +193,39 @@ consensus_private_key: "0x..."
 network_private_key: "0x..."  # Used for Noise handshake
 ```
 
+## Production-Like Account Funding
+
+The testnet now implements a **production-like faucet system**:
+
+### Approach
+
+1. **Genesis Phase**: Validators get staked (locked) funds only
+2. **Bootstrap Phase**: Root account transfers unlocked funds to validators (ONE TIME)
+3. **Runtime Phase**: Validators fund new accounts via standard transfers
+
+### Why This Design?
+
+- **Production Parity**: Mimics mainnet where validators have unlocked funds from rewards
+- **No Magic Accounts**: Root account (0xA550C18) only used for initial bootstrap
+- **Standard Transfers**: All runtime operations use account-to-account transfers
+- **Identical Behavior**: Test code works identically on mainnet
+
+### API Usage
+
+```typescript
+// Start testnet
+const testnet = await DockerTestnet.new(4);
+
+// Bootstrap validators with unlocked funds (ONE TIME)
+await testnet.bootstrapValidators();
+
+// Use production-like faucet
+const newAccount = new AptosAccount();
+await testnet.faucet(newAccount.address(), 100_000_000n);
+```
+
+See **[typescript-sdk/FAUCET.md](typescript-sdk/FAUCET.md)** for complete documentation.
+
 ## Debugging Checklist
 
 - [ ] `listen_address` in validator_network section
@@ -202,6 +235,7 @@ network_private_key: "0x..."  # Used for Noise handshake
 - [ ] Identity files match what's in genesis
 - [ ] Network connectivity between containers (ping test)
 - [ ] No firewall blocking container-to-container traffic
+- [ ] Validators bootstrapped with unlocked funds (for faucet functionality)
 
 ## Next Steps
 

@@ -122,6 +122,17 @@ docker compose down -v
 - **Epochs**: 30 seconds (fast testing)
 - **Chain ID**: 4 (local testnet)
 
+### Production-Like Account Funding
+
+The testnet includes a **production-like faucet** that avoids magic accounts:
+
+- Validators receive unlocked funds at bootstrap (simulating staking rewards)
+- New accounts funded via validator transfers (not minting)
+- No reliance on Core Resources (0xA550C18) during runtime
+- Test code behaves identically to production mainnet
+
+See **[typescript-sdk/FAUCET.md](../typescript-sdk/FAUCET.md)** for complete documentation.
+
 ## Troubleshooting
 
 **Authentication failed**:

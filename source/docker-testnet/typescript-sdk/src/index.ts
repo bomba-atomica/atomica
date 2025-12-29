@@ -75,8 +75,25 @@ export class DockerTestnet {
 
     /**
      * Create a fresh, isolated Docker testnet with N validators
+     *
+     * @param numValidators Number of validators (1-7)
+     * @param options Optional configuration
+     * @returns DockerTestnet instance
+     *
+     * @example
+     * // Use published image (default)
+     * const testnet = await DockerTestnet.new(4);
+     *
+     * // Use locally built image
+     * await DockerTestnet.buildLocalImage();
+     * const testnet = await DockerTestnet.new(4, { useLocalImage: true });
      */
-    static async new(numValidators: number): Promise<DockerTestnet> {
+    static async new(
+        numValidators: number,
+        options?: {
+            useLocalImage?: boolean;
+        },
+    ): Promise<DockerTestnet> {
         if (numValidators < 1 || numValidators > 7) {
             throw new Error(
                 `numValidators must be between 1 and 7, got ${numValidators}`,
@@ -85,7 +102,7 @@ export class DockerTestnet {
 
         const composeDir = DockerTestnet.findComposeDir();
         debug("Found compose directory", { composeDir });
-        
+
         try {
             await DockerTestnet.ensureDockerRunning();
             debug("Docker daemon is running");
@@ -96,6 +113,13 @@ export class DockerTestnet {
 
         // Load environment variables
         const envVars = loadEnvVariables();
+
+        // Set USE_LOCAL_IMAGE if requested
+        if (options?.useLocalImage || process.env.USE_LOCAL_IMAGE === "1") {
+            envVars.USE_LOCAL_IMAGE = "1";
+            console.log("Using locally built image: atomica-validator:local");
+        }
+
         debug("Loaded environment variables", { keys: Object.keys(envVars) });
 
         console.log(
@@ -549,6 +573,91 @@ export class DockerTestnet {
                 } else {
                     reject(new Error(`Failed to check Docker status: ${err.message}`));
                 }
+            });
+        });
+    }
+
+    /**
+     * Build Atomica Aptos validator image locally from source
+     *
+     * This builds the Docker image from ../atomica-aptos using BuildKit cache
+     * for fast incremental builds. The cache is persisted by Docker BuildKit
+     * so subsequent builds are much faster.
+     *
+     * @param options Build options
+     * @returns Promise that resolves when build completes
+     *
+     * @example
+     * // Basic build
+     * await DockerTestnet.buildLocalImage();
+     *
+     * // Custom build
+     * await DockerTestnet.buildLocalImage({
+     *   profile: 'debug',
+     *   noCache: true
+     * });
+     */
+    public static async buildLocalImage(options?: {
+        profile?: "release" | "debug";
+        features?: string;
+        tag?: string;
+        noCache?: boolean;
+    }): Promise<void> {
+        const composeDir = DockerTestnet.findComposeDir();
+        // Build script is now in atomica-aptos/atomica/docker/
+        const buildScript = pathResolve(
+            composeDir,
+            "../atomica-aptos/atomica/docker/build-local-image.sh"
+        );
+
+        if (!existsSync(buildScript)) {
+            throw new Error(
+                `Build script not found: ${buildScript}\n` +
+                `Make sure atomica-aptos repository is checked out at the correct location.`
+            );
+        }
+
+        const args: string[] = [];
+
+        if (options?.profile) {
+            args.push("--profile", options.profile);
+        }
+        if (options?.features) {
+            args.push("--features", options.features);
+        }
+        if (options?.tag) {
+            args.push("--tag", options.tag);
+        }
+        if (options?.noCache) {
+            args.push("--no-cache");
+        }
+
+        console.log("Building local Atomica Aptos validator image...");
+        if (options?.noCache) {
+            console.log("  (ignoring BuildKit cache - build will take longer)");
+        }
+
+        return new Promise((resolve, reject) => {
+            const proc = spawn(buildScript, args, {
+                stdio: "inherit",
+                cwd: composeDir,
+                env: {
+                    ...process.env,
+                    DOCKER_BUILDKIT: "1",
+                },
+            });
+
+            proc.on("close", (code) => {
+                if (code === 0) {
+                    console.log("✓ Local image build complete");
+                    resolve();
+                } else {
+                    reject(new Error(`Build failed with exit code ${code}`));
+                }
+            });
+
+            proc.on("error", (err: any) => {
+                reject(new Error(`Failed to run build script: ${err.message}`));
             });
         });
     }

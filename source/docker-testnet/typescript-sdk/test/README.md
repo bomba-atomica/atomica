@@ -1,6 +1,27 @@
-# Testnet Verification Tests
+# Testnet Test Suite
 
-This test suite verifies the Docker testnet functionality with comprehensive cleanup handling.
+This test suite verifies the Docker testnet functionality including production-like faucet operations and comprehensive cleanup handling.
+
+## Test Files
+
+### `faucet.test.ts` - Production-Like Faucet ⭐
+
+Tests the production-like faucet system that mimics mainnet behavior:
+
+**Test Coverage:**
+- Validator bootstrap with unlocked funds
+- Single account funding via faucet
+- Multiple account funding (load test)
+- Balance verification
+- Production parity validation
+
+**Key Feature:** Uses validator transfers (not minting) to fund new accounts, exactly like production.
+
+See **[../FAUCET.md](../FAUCET.md)** for faucet documentation.
+
+### `probe_validators.ts` / `probe_accounts.ts` - Network Probes
+
+Debug utilities for checking validator connectivity and account states.
 
 ## Test Coverage
 
@@ -62,12 +83,45 @@ If setup fails (`testnet` is undefined), the hook:
 npm run build
 npm test
 
+# Run specific test file
+npx bun test test/faucet.test.ts
+
 # With debug logging
 DEBUG_TESTNET=1 npm test
 
 # Verbose output
 npm test -- --verbose
 ```
+
+## Faucet Tests
+
+The faucet test suite demonstrates production-like account funding:
+
+```typescript
+// test/faucet.test.ts
+
+describe("Production-Like Faucet", () => {
+    beforeAll(async () => {
+        testnet = await DockerTestnet.new(2);
+
+        // Bootstrap validators with unlocked funds (ONE TIME)
+        await testnet.bootstrapValidators(1_000_000_000_000n);
+    });
+
+    test("fund new account via faucet", async () => {
+        const newAccount = new AptosAccount();
+
+        // Use production-like faucet (validator transfer)
+        await testnet.faucet(newAccount.address(), 100_000_000n);
+
+        // Verify balance
+        const balance = await coinClient.checkBalance(newAccount.address());
+        expect(balance).toBe(100_000_000n);
+    });
+});
+```
+
+**Why This Matters:** The faucet uses standard transfers from validators, not privileged minting. Your test code works identically on mainnet!
 
 ## Manual Cleanup
 

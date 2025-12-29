@@ -46,12 +46,27 @@
 
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
+use std::path::PathBuf;
+use std::fs;
 use serde::{Deserialize, Serialize};
 
 /// Base ports for validators (incremented for each validator)
 const BASE_API_PORT: u16 = 8080;
 #[allow(dead_code)]
 const BASE_METRICS_PORT: u16 = 9101;
+
+/// Build options for local Docker image
+#[derive(Debug, Clone, Default)]
+pub struct BuildOptions {
+    /// Build profile: "release" or "debug" (default: "release")
+    pub profile: Option<String>,
+    /// Cargo features to enable (default: "testing")
+    pub features: Option<String>,
+    /// Image tag (default: "local")
+    pub tag: Option<String>,
+    /// Disable Docker BuildKit cache
+    pub no_cache: bool,
+}
 
 /// Docker testnet with automatic cleanup
 pub struct DockerTestnet {
@@ -65,13 +80,29 @@ impl DockerTestnet {
     ///
     /// # Arguments
     /// * `num_validators` - Number of validator nodes (typically 4-7)
+    /// * `use_local_image` - If true, use locally built image instead of published one
     ///
     /// # Errors
     /// Returns error if:
     /// - Docker is not running
     /// - docker-testnet directory not found
     /// - Validators fail to start within timeout
-    pub async fn new(num_validators: usize) -> anyhow::Result<Self> {
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use atomica_docker_testnet::DockerTestnet;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     // Use published image (default)
+    ///     let testnet = DockerTestnet::new(4, false).await.unwrap();
+    ///
+    ///     // Use locally built image
+    ///     DockerTestnet::build_local_image(None).await.unwrap();
+    ///     let testnet = DockerTestnet::new(4, true).await.unwrap();
+    /// }
+    /// ```
+    pub async fn new(num_validators: usize, use_local_image: bool) -> anyhow::Result<Self> {
         if num_validators < 1 || num_validators > 7 {
             return Err(anyhow::anyhow!(
                 "num_validators must be between 1 and 7, got {}",
@@ -84,12 +115,16 @@ impl DockerTestnet {
 
         tracing::info!("Setting up fresh Docker testnet with {} validators...", num_validators);
 
+        if use_local_image {
+            tracing::info!("Using locally built image: atomica-validator:local");
+        }
+
         // Clean up any existing testnet
-        let _ = Self::run_compose(&compose_dir, &["down", "--remove-orphans", "-v"]);
+        let _ = Self::run_compose_with_env(&compose_dir, &["down", "--remove-orphans", "-v"], use_local_image);
         tokio::time::sleep(Duration::from_secs(2)).await;
 
         // Start the testnet
-        Self::run_compose(&compose_dir, &["up", "-d"])?;
+        Self::run_compose_with_env(&compose_dir, &["up", "-d"], use_local_image)?;
 
         // Wait for all validators to be healthy
         Self::wait_for_healthy(num_validators, 120).await?;
@@ -184,6 +219,139 @@ impl DockerTestnet {
         Err(anyhow::anyhow!("Timeout waiting for blocks"))
     }
 
+    /// Get validator account information from genesis artifacts
+    ///
+    /// ⚠️ NOTE: Reads keys from Docker container storage - does NOT generate them!
+    ///
+    /// This reads the validator's private key from:
+    /// `validators/validator-{index}/private-keys.yaml`
+    ///
+    /// The keys are generated during genesis and stored in the Docker testnet config.
+    pub fn get_validator_account(&self, index: usize) -> anyhow::Result<AccountInfo> {
+        if index >= self.num_validators {
+            return Err(anyhow::anyhow!(
+                "Validator index {} out of range (only {} validators)",
+                index,
+                self.num_validators
+            ));
+        }
+
+        let path = PathBuf::from(&self.compose_dir)
+            .join("validators")
+            .join(format!("validator-{}", index))
+            .join("private-keys.yaml");
+
+        if !path.exists() {
+            return Err(anyhow::anyhow!(
+                "Validator keys file not found: {:?}",
+                path
+            ));
+        }
+
+        AccountInfo::from_yaml_file(&path)
+    }
+
+    /// Get root/faucet account information from genesis artifacts
+    ///
+    /// ⚠️ NOTE: Reads keys from Docker container storage - does NOT generate them!
+    ///
+    /// This reads the root account's private key from:
+    /// `genesis-artifacts/root-account-private-keys.yaml`
+    ///
+    /// The root account key is generated during genesis and its auth key
+    /// is rotated to control the Core Resources account (0xA550C18) which
+    /// has minting capabilities in test mode.
+    pub fn get_faucet_account(&self) -> anyhow::Result<AccountInfo> {
+        let path = PathBuf::from(&self.compose_dir)
+            .join("genesis-artifacts")
+            .join("root-account-private-keys.yaml");
+
+        if !path.exists() {
+            return Err(anyhow::anyhow!(
+                "Root account keys file not found: {:?}",
+                path
+            ));
+        }
+
+        AccountInfo::from_yaml_file(&path)
+    }
+
+    /// Build Atomica Aptos validator image locally from source
+    ///
+    /// This builds the Docker image from ../atomica-aptos using BuildKit cache
+    /// for fast incremental builds. The cache is persisted by Docker BuildKit
+    /// so subsequent builds are much faster.
+    ///
+    /// # Arguments
+    /// * `options` - Optional build configuration
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use atomica_docker_testnet::{DockerTestnet, BuildOptions};
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     // Basic build
+    ///     DockerTestnet::build_local_image(None).await.unwrap();
+    ///
+    ///     // Custom build
+    ///     DockerTestnet::build_local_image(Some(BuildOptions {
+    ///         profile: Some("debug".to_string()),
+    ///         no_cache: true,
+    ///         ..Default::default()
+    ///     })).await.unwrap();
+    /// }
+    /// ```
+    pub async fn build_local_image(options: Option<BuildOptions>) -> anyhow::Result<()> {
+        let compose_dir = Self::find_compose_dir()?;
+        // Build script is now in atomica-aptos/atomica/docker/
+        let build_script = format!("{}/../../atomica-aptos/atomica/docker/build-local-image.sh", compose_dir);
+
+        if !PathBuf::from(&build_script).exists() {
+            return Err(anyhow::anyhow!(
+                "Build script not found: {}\nMake sure atomica-aptos repository is checked out at the correct location.",
+                build_script
+            ));
+        }
+
+        let opts = options.unwrap_or_default();
+        let mut args = Vec::new();
+
+        if let Some(profile) = opts.profile {
+            args.push("--profile".to_string());
+            args.push(profile);
+        }
+        if let Some(features) = opts.features {
+            args.push("--features".to_string());
+            args.push(features);
+        }
+        if let Some(tag) = opts.tag {
+            args.push("--tag".to_string());
+            args.push(tag);
+        }
+        if opts.no_cache {
+            args.push("--no-cache".to_string());
+        }
+
+        tracing::info!("Building local Atomica Aptos validator image...");
+        if opts.no_cache {
+            tracing::info!("  (ignoring BuildKit cache - build will take longer)");
+        }
+
+        let status = Command::new(&build_script)
+            .args(&args)
+            .current_dir(&compose_dir)
+            .env("DOCKER_BUILDKIT", "1")
+            .status()?;
+
+        if !status.success() {
+            return Err(anyhow::anyhow!("Build failed with exit code {:?}", status.code()));
+        }
+
+        tracing::info!("✓ Local image build complete");
+        Ok(())
+    }
+
     // --- Private helpers ---
 
     fn check_docker() -> anyhow::Result<()> {
@@ -234,11 +402,19 @@ impl DockerTestnet {
     }
 
     fn run_compose(dir: &str, args: &[&str]) -> anyhow::Result<()> {
-        let out = Command::new("docker")
-            .arg("compose")
-            .args(args)
-            .current_dir(dir)
-            .output()?;
+        Self::run_compose_with_env(dir, args, false)
+    }
+
+    fn run_compose_with_env(dir: &str, args: &[&str], use_local_image: bool) -> anyhow::Result<()> {
+        let mut cmd = Command::new("docker");
+        cmd.arg("compose").args(args).current_dir(dir);
+
+        // Set environment variable if using local image
+        if use_local_image {
+            cmd.env("USE_LOCAL_IMAGE", "1");
+        }
+
+        let out = cmd.output()?;
 
         // Don't error on 'down' commands as they're used for cleanup
         if !out.status.success() && args[0] != "down" {
@@ -302,13 +478,67 @@ impl Drop for DockerTestnet {
 pub struct LedgerInfo {
     pub chain_id: u8,
     pub epoch: String,
+    #[serde(deserialize_with = "deserialize_string_to_u64")]
     pub ledger_version: u64,
+    #[serde(deserialize_with = "deserialize_string_to_u64")]
     pub oldest_ledger_version: u64,
     pub ledger_timestamp: String,
     pub node_role: String,
+    #[serde(deserialize_with = "deserialize_string_to_u64")]
     pub oldest_block_height: u64,
+    #[serde(deserialize_with = "deserialize_string_to_u64")]
     pub block_height: u64,
     pub git_hash: Option<String>,
+}
+
+/// Custom deserializer to convert string to u64
+fn deserialize_string_to_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    s.parse::<u64>().map_err(serde::de::Error::custom)
+}
+
+/// Account information read from genesis artifacts or validator configs
+///
+/// ⚠️ NOTE: Keys are read from Docker container storage, NOT generated!
+/// - Validator keys: read from `validators/validator-{i}/private-keys.yaml`
+/// - Root/Faucet keys: read from `genesis-artifacts/root-account-private-keys.yaml`
+#[derive(Debug, Clone)]
+pub struct AccountInfo {
+    /// Account address (hex string without 0x prefix)
+    pub address: String,
+    /// Account private key (hex string with 0x prefix)
+    pub private_key: String,
+}
+
+impl AccountInfo {
+    /// Parse account info from a YAML file (e.g., private-keys.yaml)
+    fn from_yaml_file(path: &PathBuf) -> anyhow::Result<Self> {
+        let content = fs::read_to_string(path)?;
+
+        // Parse using regex (same approach as TypeScript SDK)
+        let addr_re = regex::Regex::new(r"account_address:\s*([a-fA-F0-9]+)")?;
+        let key_re = regex::Regex::new(r#"account_private_key:\s*"(0x[a-fA-F0-9]+)""#)?;
+
+        let address = addr_re
+            .captures(&content)
+            .and_then(|c| c.get(1))
+            .map(|m| m.as_str().to_string())
+            .ok_or_else(|| anyhow::anyhow!("Failed to parse account_address from {:?}", path))?;
+
+        let private_key = key_re
+            .captures(&content)
+            .and_then(|c| c.get(1))
+            .map(|m| m.as_str().to_string())
+            .ok_or_else(|| anyhow::anyhow!("Failed to parse account_private_key from {:?}", path))?;
+
+        Ok(AccountInfo {
+            address,
+            private_key,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -322,7 +552,7 @@ mod tests {
         let _ = tracing_subscriber::fmt().with_test_writer().try_init();
 
         // Note: this test requires docker to be running and images to be available
-        match DockerTestnet::new(4).await {
+        match DockerTestnet::new(4, false).await {
             Ok(testnet) => {
                 println!("✓ Testnet started with {} validators", testnet.num_validators());
                 println!("  Validator 0 API: {}", testnet.validator_api_url(0));
@@ -336,7 +566,49 @@ mod tests {
             Err(e) => {
                 println!("✗ Failed to start testnet: {}", e);
                 // We don't want to fail CI if docker isn't available, but for local dev it's useful to know
-                // panic!("Failed: {}", e); 
+                // panic!("Failed: {}", e);
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_read_keys_from_storage() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+
+        // This test verifies that both Rust and TypeScript SDKs read keys from storage
+        // rather than generating them
+
+        match DockerTestnet::new(2, false).await {
+            Ok(testnet) => {
+                println!("✓ Testnet started");
+
+                // Test reading validator account from storage
+                match testnet.get_validator_account(0) {
+                    Ok(validator) => {
+                        println!("✓ Validator 0 account read from storage:");
+                        println!("  Address: 0x{}", validator.address);
+                        println!("  Private key: {} (from validators/validator-0/private-keys.yaml)",
+                                 &validator.private_key[..20]);
+                    }
+                    Err(e) => println!("✗ Failed to read validator 0: {}", e),
+                }
+
+                // Test reading faucet account from storage
+                match testnet.get_faucet_account() {
+                    Ok(faucet) => {
+                        println!("✓ Faucet account read from storage:");
+                        println!("  Address: 0x{}", faucet.address);
+                        println!("  Private key: {} (from genesis-artifacts/root-account-private-keys.yaml)",
+                                 &faucet.private_key[..20]);
+                    }
+                    Err(e) => println!("✗ Failed to read faucet account: {}", e),
+                }
+
+                println!("\n✓ Rust SDK reads keys from Docker container storage (does NOT generate keys)");
+            }
+            Err(e) => {
+                println!("✗ Failed to start testnet: {}", e);
             }
         }
     }

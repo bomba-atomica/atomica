@@ -6,6 +6,5 @@ api:
   address: "0.0.0.0:8080"
 
 logger:
-  level: info
-  json_format: true
+  level: INFO
 
