@@ -1,0 +1,71 @@
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { DockerTestnet } from "../src/index";
+import { AptosAccount, AptosClient } from "aptos";
+import {
+    registerCleanupHandlers,
+    setGlobalTestnet,
+    initializeTestnet,
+    performCleanup,
+    waitForNetworkStabilization,
+} from "./helpers/testnet-lifecycle";
+
+// Register cleanup handlers once at module load
+registerCleanupHandlers();
+
+describe("Faucet Funding", () => {
+    let testnet: DockerTestnet;
+    let client: AptosClient;
+    const NUM_VALIDATORS = 2;
+
+    beforeAll(async () => {
+        testnet = await initializeTestnet(NUM_VALIDATORS);
+        client = new AptosClient(testnet.validatorApiUrl(0));
+        await waitForNetworkStabilization(testnet);
+    }, 300000); // 5 min timeout for setup
+
+    afterAll(async () => {
+        await performCleanup("Faucet funding tests completed");
+        setGlobalTestnet(undefined);
+    });
+
+    test.skip("can fund a new account using faucet", async () => {
+        expect(testnet).toBeDefined();
+
+        // Create a new account
+        const newAccount = new AptosAccount();
+        const amount = 100_000_000n; // 1 APT
+
+        console.log(`Using faucet to fund ${newAccount.address().hex().slice(0, 10)}...`);
+
+        // Use the faucet to create and fund the account
+        const txnHash = await testnet.faucet(newAccount.address(), amount);
+        console.log(`✓ Faucet transaction: ${txnHash}`);
+
+        // Verify the account was created
+        const account = await client.getAccount(newAccount.address());
+        expect(account).toBeDefined();
+        expect(account.sequence_number).toBe("0");
+        console.log(`✓ Account created successfully`);
+    }, 120000);
+
+    test.skip("faucet can fund multiple accounts", async () => {
+        expect(testnet).toBeDefined();
+
+        const numAccounts = 3;
+        const amount = 25_000_000n; // 0.25 APT each
+
+        console.log(`Funding ${numAccounts} accounts via faucet...`);
+
+        for (let i = 0; i < numAccounts; i++) {
+            const newAccount = new AptosAccount();
+            const txnHash = await testnet.faucet(newAccount.address(), amount);
+
+            // Verify account was created
+            const account = await client.getAccount(newAccount.address());
+            expect(account).toBeDefined();
+            console.log(`  ✓ Account ${i + 1} funded: ${newAccount.address().hex().slice(0, 10)}... (txn: ${txnHash.slice(0, 10)}...)`);
+        }
+
+        console.log(`✓ All ${numAccounts} accounts funded successfully`);
+    }, 180000);
+});
