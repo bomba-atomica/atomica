@@ -160,7 +160,7 @@ class DockerTestnet {
                     setTimeout(() => resolve(), 5000);
                 });
             }
-            catch (logError) {
+            catch (_logError) {
                 console.error("Failed to fetch logs.");
             }
             throw error;
@@ -514,7 +514,7 @@ async function waitForHealthy(numValidators, timeoutSecs) {
                     statuses.push(`V${i}:HTTP${response.status}`);
                 }
             }
-            catch (e) {
+            catch (_e) {
                 statuses.push(`V${i}:ERR`);
                 // Validator not ready yet
             }
@@ -590,7 +590,7 @@ async function probeTestnet(numValidators = 4) {
             console.log(`  Testing ${name} port: ${port}`);
             try {
                 const testUrl = `http://127.0.0.1:${port}`;
-                const response = await fetch(testUrl, {
+                await fetch(testUrl, {
                     signal: AbortSignal.timeout(2000),
                     method: "HEAD",
                 });

@@ -176,7 +176,7 @@ export async function waitForNetworkStabilization(testnet: DockerTestnet): Promi
     await new Promise((resolve) => setTimeout(resolve, 10000));
     try {
         await testnet.waitForBlocks(1, 60);
-    } catch (e) {
+    } catch (_e) {
         console.warn("Timed out waiting for block 1, continuing anyway...");
     }
 }

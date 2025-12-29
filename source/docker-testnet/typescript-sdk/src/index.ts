@@ -1,4 +1,4 @@
-import { AptosAccount, AptosClient, CoinClient, HexString } from "aptos";
+import { AptosAccount, AptosClient, HexString } from "aptos";
 import { spawn } from "child_process";
 import * as dotenv from "dotenv";
 import { cpSync, existsSync, mkdirSync, readFileSync } from "fs";
@@ -160,7 +160,7 @@ export class DockerTestnet {
                     // Timeout for log fetch
                     setTimeout(() => resolve(), 5000);
                 });
-            } catch (logError) {
+            } catch (_logError) {
                 console.error("Failed to fetch logs.");
             }
             throw error;
@@ -608,7 +608,7 @@ async function waitForHealthy(numValidators: number, timeoutSecs: number): Promi
                 } else {
                     statuses.push(`V${i}:HTTP${response.status}`);
                 }
-            } catch (e: any) {
+            } catch (_e: any) {
                 statuses.push(`V${i}:ERR`);
                 // Validator not ready yet
             }
@@ -717,7 +717,7 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
             console.log(`  Testing ${name} port: ${port}`);
             try {
                 const testUrl = `http://127.0.0.1:${port}`;
-                const response = await fetch(testUrl, {
+                await fetch(testUrl, {
                     signal: AbortSignal.timeout(2000),
                     method: "HEAD",
                 });
