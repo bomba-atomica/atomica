@@ -1,18 +1,37 @@
-# Zapatos Local Testnet - Multi-Validator Configuration
+# Atomica Aptos Local Testnet - Multi-Validator Configuration
 #
-# This compose file sets up a 4-validator testnet using pre-built zapatos
-# binaries from GitHub Container Registry.
+# This compose file sets up a 4-validator testnet using validator images.
 #
-# Default Configuration:
-#   - Uses published image: ghcr.io/bomba-atomica/atomica/zapatos-bin:5df0e6d1
-#   - No build step required - just start the testnet
-#   - Image includes git commit hash for traceability
+# Image Options:
+#   1. Published images (default):
+#      - Uses: ghcr.io/bomba-atomica/atomica-aptos/validator:latest
+#      - No build required, just start the testnet
+#      - Built and published by atomica-aptos CI/CD
 #
-# For Local Development:
-#   If you need to test custom zapatos changes:
-#   1. Run ./build.sh to build from source/atomica-aptos
-#   2. Edit .env to use: VALIDATOR_IMAGE_REPO=zapatos-testnet/validator
-#   3. The testnet will use your locally-built binaries
+#   2. Local build from source:
+#      - First build: ./build-local-image.sh
+#      - Then set: IMAGE_NAME=atomica-validator:local
+#      - Uses: atomica-validator:local
+#      - Faster iteration with sccache
+#
+# Environment Variables:
+#   - IMAGE_NAME: Full image name to use (overrides all other settings)
+#   - VALIDATOR_IMAGE_REPO: Image repository (default: ghcr.io/bomba-atomica/atomica-aptos/validator)
+#   - IMAGE_TAG: Image tag (default: latest)
+#
+# Examples:
+#   # Use published image (default)
+#   docker compose up -d
+#
+#   # Use local build
+#   ./build-local-image.sh
+#   IMAGE_NAME=atomica-validator:local docker compose up -d
+#
+#   # Use specific published version
+#   IMAGE_TAG=abc1234 docker compose up -d
+#
+#   # Use custom repository
+#   VALIDATOR_IMAGE_REPO=myrepo/validator IMAGE_TAG=v1.0.0 docker compose up -d
 #
 # Architecture:
 # - 4 validator nodes
@@ -20,34 +39,40 @@
 # - Exposed REST APIs (8080-8083) and metrics (9101-9104)
 #
 # Usage:
-#   1. Start testnet: docker compose up -d (or make start)
-#   2. Check status: docker compose ps (or make status)
+#   1. Start testnet: docker compose up -d
+#   2. Check status: docker compose ps
 #   3. View logs: docker compose logs -f validator-0
 #   4. Stop testnet: docker compose down
 
-version: "3.8"
+
 
 services:
-  # Validator 0 (Primary - generates genesis)
+  # Validator 0
   validator-0:
-    image: "${VALIDATOR_IMAGE_REPO:-zapatos-testnet/validator}:${IMAGE_TAG:-local}"
-    container_name: zapatos-validator-0
+    image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
+    container_name: atomica-validator-0
     hostname: validator-0
     networks:
       zapatos-testnet:
         ipv4_address: 172.19.0.10
     volumes:
-      - type: volume
-        source: zapatos-genesis
-        target: /opt/aptos/var
       - type: bind
-        source: ./validator-config.yaml
-        target: /opt/aptos/config.yaml
+        source: ./genesis-artifacts
+        target: /opt/aptos/genesis
+        read_only: true
+      - type: bind
+        source: ./validators/validator-0
+        target: /opt/aptos/identity
+        read_only: true
+      - type: volume
+        source: zapatos-validator-0-data
+        target: /opt/aptos/data
+      - type: bind
+        source: ./validators/validator-0/node-config.yaml
+        target: /opt/aptos/etc/node-config.yaml
     command: >
       /usr/local/bin/aptos-node
-      --test
-      --test-dir /opt/aptos/var/
-      --test-config-override /opt/aptos/config.yaml
+      -f /opt/aptos/etc/node-config.yaml
     ports:
       - "8080:8080"  # REST API
       - "9101:9101"  # Metrics
@@ -68,8 +93,8 @@ services:
 
   # Validator 1
   validator-1:
-    image: "${VALIDATOR_IMAGE_REPO:-zapatos-testnet/validator}:${IMAGE_TAG:-local}"
-    container_name: zapatos-validator-1
+    image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
+    container_name: atomica-validator-1
     hostname: validator-1
     depends_on:
       validator-0:
@@ -78,28 +103,23 @@ services:
       zapatos-testnet:
         ipv4_address: 172.19.0.11
     volumes:
-      - type: volume
-        source: zapatos-genesis
-        target: /opt/aptos/var
+      - type: bind
+        source: ./genesis-artifacts
+        target: /opt/aptos/genesis
+        read_only: true
+      - type: bind
+        source: ./validators/validator-1
+        target: /opt/aptos/identity
         read_only: true
       - type: volume
         source: zapatos-validator-1-data
         target: /opt/aptos/data
       - type: bind
-        source: ./validator-config.yaml
-        target: /opt/aptos/config.yaml
+        source: ./validators/validator-1/node-config.yaml
+        target: /opt/aptos/etc/node-config.yaml
     command: >
-      /bin/bash -c "
-      echo 'Waiting for genesis from validator-0...';
-      while [ ! -f /opt/aptos/var/genesis.blob ]; do
-        sleep 2;
-      done;
-      echo 'Genesis found, starting validator-1...';
       /usr/local/bin/aptos-node
-      --test
-      --test-dir /opt/aptos/data/
-      --test-config-override /opt/aptos/config.yaml
-      "
+      -f /opt/aptos/etc/node-config.yaml
     ports:
       - "8081:8080"  # REST API
       - "9102:9101"  # Metrics
@@ -114,8 +134,8 @@ services:
 
   # Validator 2
   validator-2:
-    image: "${VALIDATOR_IMAGE_REPO:-zapatos-testnet/validator}:${IMAGE_TAG:-local}"
-    container_name: zapatos-validator-2
+    image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
+    container_name: atomica-validator-2
     hostname: validator-2
     depends_on:
       validator-0:
@@ -124,28 +144,23 @@ services:
       zapatos-testnet:
         ipv4_address: 172.19.0.12
     volumes:
-      - type: volume
-        source: zapatos-genesis
-        target: /opt/aptos/var
+      - type: bind
+        source: ./genesis-artifacts
+        target: /opt/aptos/genesis
+        read_only: true
+      - type: bind
+        source: ./validators/validator-2
+        target: /opt/aptos/identity
         read_only: true
       - type: volume
         source: zapatos-validator-2-data
         target: /opt/aptos/data
       - type: bind
-        source: ./validator-config.yaml
-        target: /opt/aptos/config.yaml
+        source: ./validators/validator-2/node-config.yaml
+        target: /opt/aptos/etc/node-config.yaml
     command: >
-      /bin/bash -c "
-      echo 'Waiting for genesis from validator-0...';
-      while [ ! -f /opt/aptos/var/genesis.blob ]; do
-        sleep 2;
-      done;
-      echo 'Genesis found, starting validator-2...';
       /usr/local/bin/aptos-node
-      --test
-      --test-dir /opt/aptos/data/
-      --test-config-override /opt/aptos/config.yaml
-      "
+      -f /opt/aptos/etc/node-config.yaml
     ports:
       - "8082:8080"  # REST API
       - "9103:9101"  # Metrics
@@ -160,8 +175,8 @@ services:
 
   # Validator 3
   validator-3:
-    image: "${VALIDATOR_IMAGE_REPO:-zapatos-testnet/validator}:${IMAGE_TAG:-local}"
-    container_name: zapatos-validator-3
+    image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
+    container_name: atomica-validator-3
     hostname: validator-3
     depends_on:
       validator-0:
@@ -170,28 +185,23 @@ services:
       zapatos-testnet:
         ipv4_address: 172.19.0.13
     volumes:
-      - type: volume
-        source: zapatos-genesis
-        target: /opt/aptos/var
+      - type: bind
+        source: ./genesis-artifacts
+        target: /opt/aptos/genesis
+        read_only: true
+      - type: bind
+        source: ./validators/validator-3
+        target: /opt/aptos/identity
         read_only: true
       - type: volume
         source: zapatos-validator-3-data
         target: /opt/aptos/data
       - type: bind
-        source: ./validator-config.yaml
-        target: /opt/aptos/config.yaml
+        source: ./validators/validator-3/node-config.yaml
+        target: /opt/aptos/etc/node-config.yaml
     command: >
-      /bin/bash -c "
-      echo 'Waiting for genesis from validator-0...';
-      while [ ! -f /opt/aptos/var/genesis.blob ]; do
-        sleep 2;
-      done;
-      echo 'Genesis found, starting validator-3...';
       /usr/local/bin/aptos-node
-      --test
-      --test-dir /opt/aptos/data/
-      --test-config-override /opt/aptos/config.yaml
-      "
+      -f /opt/aptos/etc/node-config.yaml
     ports:
       - "8083:8080"  # REST API
       - "9104:9101"  # Metrics
@@ -206,8 +216,8 @@ services:
 
   # Optional: Faucet service (useful for testing)
   faucet:
-    image: "${VALIDATOR_IMAGE_REPO:-zapatos-testnet/validator}:${IMAGE_TAG:-local}"
-    container_name: zapatos-faucet
+    image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
+    container_name: atomica-faucet
     depends_on:
       validator-0:
         condition: service_healthy
@@ -245,7 +255,7 @@ services:
 
 networks:
   zapatos-testnet:
-    name: "${TESTNET_NAME:-zapatos-testnet}"
+    name: "${TESTNET_NAME:-atomica-testnet}"
     driver: bridge
     ipam:
       driver: default
@@ -254,11 +264,11 @@ networks:
           gateway: "${GATEWAY:-172.19.0.1}"
 
 volumes:
-  zapatos-genesis:
-    name: zapatos-genesis
+  zapatos-validator-0-data:
+    name: atomica-validator-0-data
   zapatos-validator-1-data:
-    name: zapatos-validator-1-data
+    name: atomica-validator-1-data
   zapatos-validator-2-data:
-    name: zapatos-validator-2-data
+    name: atomica-validator-2-data
   zapatos-validator-3-data:
-    name: zapatos-validator-3-data
+    name: atomica-validator-3-data

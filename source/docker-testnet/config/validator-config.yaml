@@ -1,0 +1,10 @@
+# Validator node configuration override for local testnet
+# Minimal config to ensure compatibility with aptoslabs/validator:devnet
+
+api:
+  enabled: true
+  address: "0.0.0.0:8080"
+
+logger:
+  level: INFO
+
