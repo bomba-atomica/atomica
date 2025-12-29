@@ -80,7 +80,7 @@ These tests follow **clean room testing** principles:
 **Key assertions**:
 
 - Docker is installed and running
-- Docker Compose can start zapatos validator images
+- Docker Compose can start atomica validator images
 - All 4 validators bind to expected ports (8080-8083)
 - Validators serve API requests correctly
 - Block height increments over time (blockchain making progress)
@@ -160,7 +160,7 @@ If you have access to the private atomica repository:
 2. Update `source/atomica-web/.env`:
    ```bash
    # Uncomment and configure:
-   VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica/zapatos-bin
+   VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica-aptos/validator
    IMAGE_TAG=5df0e6d1
    GHCR_USERNAME=your_github_username
    GHCR_TOKEN=ghp_YourPersonalAccessTokenHere

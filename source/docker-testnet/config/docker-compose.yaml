@@ -53,7 +53,7 @@ services:
     container_name: atomica-validator-0
     hostname: validator-0
     networks:
-      zapatos-testnet:
+      atomica-testnet:
         ipv4_address: 172.19.0.10
     volumes:
       - type: bind
@@ -65,7 +65,7 @@ services:
         target: /opt/aptos/identity
         read_only: true
       - type: volume
-        source: zapatos-validator-0-data
+        source: atomica-validator-0-data
         target: /opt/aptos/data
       - type: bind
         source: ./validators/validator-0/node-config.yaml
@@ -100,7 +100,7 @@ services:
       validator-0:
         condition: service_healthy
     networks:
-      zapatos-testnet:
+      atomica-testnet:
         ipv4_address: 172.19.0.11
     volumes:
       - type: bind
@@ -112,7 +112,7 @@ services:
         target: /opt/aptos/identity
         read_only: true
       - type: volume
-        source: zapatos-validator-1-data
+        source: atomica-validator-1-data
         target: /opt/aptos/data
       - type: bind
         source: ./validators/validator-1/node-config.yaml
@@ -141,7 +141,7 @@ services:
       validator-0:
         condition: service_healthy
     networks:
-      zapatos-testnet:
+      atomica-testnet:
         ipv4_address: 172.19.0.12
     volumes:
       - type: bind
@@ -153,7 +153,7 @@ services:
         target: /opt/aptos/identity
         read_only: true
       - type: volume
-        source: zapatos-validator-2-data
+        source: atomica-validator-2-data
         target: /opt/aptos/data
       - type: bind
         source: ./validators/validator-2/node-config.yaml
@@ -182,7 +182,7 @@ services:
       validator-0:
         condition: service_healthy
     networks:
-      zapatos-testnet:
+      atomica-testnet:
         ipv4_address: 172.19.0.13
     volumes:
       - type: bind
@@ -194,7 +194,7 @@ services:
         target: /opt/aptos/identity
         read_only: true
       - type: volume
-        source: zapatos-validator-3-data
+        source: atomica-validator-3-data
         target: /opt/aptos/data
       - type: bind
         source: ./validators/validator-3/node-config.yaml
@@ -222,11 +222,11 @@ services:
       validator-0:
         condition: service_healthy
     networks:
-      zapatos-testnet:
+      atomica-testnet:
         ipv4_address: 172.19.0.20
     volumes:
       - type: volume
-        source: zapatos-genesis
+        source: atomica-genesis
         target: /opt/aptos/var
         read_only: true
     command:
@@ -254,7 +254,7 @@ services:
       - with-faucet
 
 networks:
-  zapatos-testnet:
+  atomica-testnet:
     name: "${TESTNET_NAME:-atomica-testnet}"
     driver: bridge
     ipam:
@@ -264,11 +264,11 @@ networks:
           gateway: "${GATEWAY:-172.19.0.1}"
 
 volumes:
-  zapatos-validator-0-data:
+  atomica-validator-0-data:
     name: atomica-validator-0-data
-  zapatos-validator-1-data:
+  atomica-validator-1-data:
     name: atomica-validator-1-data
-  zapatos-validator-2-data:
+  atomica-validator-2-data:
     name: atomica-validator-2-data
-  zapatos-validator-3-data:
+  atomica-validator-3-data:
     name: atomica-validator-3-data

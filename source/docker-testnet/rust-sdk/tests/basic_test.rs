@@ -1,4 +1,4 @@
-//! Basic integration tests for the zapatos docker testnet
+//! Basic integration tests for the atomica docker testnet
 //!
 //! These tests automatically start and stop Docker testnet instances.
 //! No manual `docker compose` commands needed!

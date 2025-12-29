@@ -35,7 +35,7 @@
  *
  * NOTES:
  * - Tests must run sequentially (vitest fileParallelism: false)
- * - Uses pre-built images: ghcr.io/bomba-atomica/atomica/zapatos-bin:5df0e6d1
+ * - Uses pre-built images: ghcr.io/bomba-atomica/atomica-aptos/validator:latest
  * - Validators on ports 8080-8083
  * - Automatic cleanup even on test failure
  */
@@ -155,7 +155,7 @@ async function runCompose(
           errorLines.push(
             "Diagnosis: Unable to pull Docker image from GitHub Container Registry",
             "",
-            "The image ghcr.io/bomba-atomica/atomica/zapatos-bin:5df0e6d1 is private.",
+            "The image ghcr.io/bomba-atomica/atomica-aptos/validator:latest is private.",
             "",
             "Solutions:",
             "",
@@ -168,7 +168,7 @@ async function runCompose(
             "     - Click 'Generate token' and copy it",
             "     - Important: Fine-grained tokens don't support package registry",
             "  2. Update source/atomica-web/.env:",
-            "     VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica/zapatos-bin",
+            "     VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica-aptos/validator",
             "     IMAGE_TAG=5df0e6d1",
             "     GHCR_USERNAME=your_github_username",
             "     GHCR_TOKEN=ghp_YourPersonalAccessTokenHere",
@@ -180,7 +180,7 @@ async function runCompose(
             "  2. Build the image (10-20 minutes first time):",
             "     ./build-local-image.sh",
             "  3. Update docker-testnet/.env to use local image:",
-            "     VALIDATOR_IMAGE_REPO=zapatos-testnet/validator",
+            "     VALIDATOR_IMAGE_REPO=atomica-validator",
             "     IMAGE_TAG=latest",
             "  4. Run the test again",
             "",
@@ -204,7 +204,7 @@ async function runCompose(
             "     ./build-local-image.sh",
             "",
             "  2. Your atomica-web/.env is already configured for local images:",
-            "     VALIDATOR_IMAGE_REPO=zapatos-testnet/validator",
+            "     VALIDATOR_IMAGE_REPO=atomica-validator",
             "     IMAGE_TAG=latest",
             "",
             "  3. Run the test again:",
@@ -261,7 +261,7 @@ async function checkImageAvailability(): Promise<{
   }
 
   // Use docker-compose defaults if still not found
-  if (!imageRepo) imageRepo = "zapatos-testnet/validator";
+  if (!imageRepo) imageRepo = "atomica-validator";
   if (!imageTag) imageTag = "local";
 
   const fullImage = `${imageRepo}:${imageTag}`;

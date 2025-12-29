@@ -1,4 +1,4 @@
-//! Docker testnet manager for zapatos integration tests
+//! Docker testnet manager for atomica integration tests
 //!
 //! ## Automatic Docker Lifecycle Management
 //!

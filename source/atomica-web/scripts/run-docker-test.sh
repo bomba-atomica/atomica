@@ -2,7 +2,7 @@
 # Run Docker Testnet Test
 #
 # This script:
-# 1. Pulls the zapatos Docker image (if not cached)
+# 1. Pulls the atomica-aptos Docker image (if not cached)
 # 2. Runs the meta test that verifies blockchain progress
 #
 # Usage: ./scripts/run-docker-test.sh
@@ -22,7 +22,7 @@ echo "✓ Docker is running"
 echo ""
 
 # Pull the image if not present
-IMAGE="ghcr.io/bomba-atomica/atomica/zapatos-bin:5df0e6d1"
+IMAGE="ghcr.io/bomba-atomica/atomica-aptos/validator:latest"
 
 if docker image inspect "$IMAGE" > /dev/null 2>&1; then
   echo "✓ Image already cached: $IMAGE"
