@@ -10,7 +10,6 @@ import { resolve as pathResolve } from "path";
  */
 
 const DOCKER_BIN = "docker";
-const TOOLS_IMAGE = "aptoslabs/tools:devnet"; // Image with aptos CLI
 
 /** Debug logging - controlled by DEBUG_TESTNET env var */
 const DEBUG = process.env.DEBUG_TESTNET === "1" || process.env.DEBUG_TESTNET === "true";
@@ -53,7 +52,7 @@ export async function generateGenesis(config: GenesisConfig): Promise<void> {
     // Find the config directory containing the genesis script
     const configDir = pathResolve(workspaceDir, "..", "config");
     const scriptPath = pathResolve(configDir, "generate-genesis.sh");
-    
+
     if (!existsSync(scriptPath)) {
         throw new Error(`Genesis script not found at: ${scriptPath}`);
     }
@@ -79,28 +78,61 @@ interface ScriptConfig {
 }
 
 /**
- * Run the genesis generation script inside Docker
+ * Run the genesis generation script inside Docker container
+ * This ensures the aptos CLI version matches the Move framework version
  */
 function runGenesisScript(config: ScriptConfig): Promise<void> {
     const { workspaceDir, scriptPath, numValidators, chainId, baseIp } = config;
 
     return new Promise((resolve, reject) => {
-        // Mount both the workspace and the script
+        console.log(`  Running genesis script in Docker container...`);
+
+        // Get the validator image name from environment or use default
+        const validatorImage = process.env.IMAGE_NAME ||
+            `${process.env.VALIDATOR_IMAGE_REPO || "ghcr.io/bomba-atomica/atomica-aptos/validator"}:${process.env.IMAGE_TAG || "latest"}`;
+
+        // Find the framework.mrb file - try multiple possible locations relative to workspaceDir
+        const possiblePaths = [
+            pathResolve(workspaceDir, "..", "..", "..", "move-framework-fixtures", "head.mrb"),
+            pathResolve(workspaceDir, "..", "..", "move-framework-fixtures", "head.mrb"),
+            pathResolve(process.cwd(), "..", "move-framework-fixtures", "head.mrb"),
+            "/Users/lucas/code/rust/atomica-docker-infra/source/move-framework-fixtures/head.mrb"
+        ];
+
+        let frameworkPath = "";
+        for (const p of possiblePaths) {
+            if (existsSync(p)) {
+                frameworkPath = p;
+                break;
+            }
+        }
+
+        if (!frameworkPath) {
+            reject(new Error(`Framework file not found. Tried: ${possiblePaths.join(", ")}`));
+            return;
+        }
+
+        debug("Using framework at: " + frameworkPath);
+        debug("Using validator image: " + validatorImage);
+
+        // Run the script inside Docker container with the same image that will run validators
+        // This ensures aptos CLI version matches the Move framework version
         const dockerArgs = [
             "run",
             "--rm",
             "-v", `${workspaceDir}:/workspace`,
-            "-v", `${scriptPath}:/scripts/generate-genesis.sh:ro`,
+            "-v", `${scriptPath}:/genesis-script.sh:ro`,
+            "-v", `${frameworkPath}:/framework.mrb:ro`,
             "-w", "/workspace",
-            TOOLS_IMAGE,
-            "/bin/bash",
-            "/scripts/generate-genesis.sh",
+            "--entrypoint", "/bin/bash",
+            validatorImage,
+            "/genesis-script.sh",
             numValidators.toString(),
             chainId.toString(),
-            baseIp,
+            baseIp
         ];
 
-        console.log(`  Running genesis script in Docker container...`);
+        debug("Starting docker run with args:", { dockerArgs });
 
         const proc = spawn(DOCKER_BIN, dockerArgs, {
             stdio: ["ignore", "pipe", "pipe"],
@@ -112,15 +144,29 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         proc.stdout?.on("data", (data) => {
             const text = data.toString();
             stdout += text;
-            // Print progress lines
+
+            // Print output to console so the user knows what's happening
             for (const line of text.split("\n")) {
-                if (line.startsWith("Step") || line.startsWith("===") || line.startsWith("Waypoint:")) {
-                    console.log(`  ${line}`);
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+
+                if (DEBUG) {
+                    console.log(`  [STDOUT] ${trimmed}`);
+                } else {
+                    console.log(`  ${trimmed}`);
                 }
             }
         });
 
-        proc.stderr?.on("data", (data) => (stderr += data.toString()));
+        proc.stderr?.on("data", (data) => {
+            const text = data.toString();
+            stderr += text;
+            if (DEBUG) {
+                for (const line of text.split("\n")) {
+                    if (line.trim()) console.log(`  [STDERR] ${line}`);
+                }
+            }
+        });
 
         proc.on("close", (code) => {
             if (code === 0) {
@@ -135,15 +181,8 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         });
 
         proc.on("error", (err: any) => {
-            if (err.code === "ENOENT") {
-                reject(
-                    new Error(
-                        `Docker not found. Please install Docker.`
-                    )
-                );
-            } else {
-                reject(new Error(`Failed to run genesis script: ${err.message}`));
-            }
+            reject(new Error(`Failed to run genesis script in Docker: ${err.message}`));
         });
     });
 }
+

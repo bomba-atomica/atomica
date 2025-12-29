@@ -83,10 +83,6 @@ export class DockerTestnet {
      * @example
      * // Use published image (default)
      * const testnet = await DockerTestnet.new(4);
-     *
-     * // Use locally built image
-     * await DockerTestnet.buildLocalImage();
-     * const testnet = await DockerTestnet.new(4, { useLocalImage: true });
      */
     static async new(
         numValidators: number,
@@ -159,7 +155,7 @@ export class DockerTestnet {
             console.error("Failed to start testnet. Fetching logs...");
             try {
                 // Determine logs command
-                const proc = spawn(DOCKER_BIN, ["compose", "logs", "--tail=50"], { cwd: composeDir, env: { ...process.env, ...envVars } });
+                const proc = spawn(DOCKER_BIN, ["compose", "logs", "--tail=200"], { cwd: composeDir, env: { ...process.env, ...envVars } });
                 let logs = "";
                 proc.stdout?.on("data", (d) => logs += d.toString());
                 proc.stderr?.on("data", (d) => logs += d.toString()); // Capture stderr too just in case

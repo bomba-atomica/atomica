@@ -19,7 +19,7 @@ CHAIN_ID="${2:-4}"
 BASE_IP="${3:-172.19.0.10}"
 STAKE_AMOUNT="100000000000000"  # 1M APT in octas
 
-WORKSPACE="/workspace"
+WORKSPACE="${WORKSPACE:-/workspace}"
 cd "$WORKSPACE"
 
 debug "Generating genesis for $NUM_VALIDATORS validators (chain_id=$CHAIN_ID, base_ip=$BASE_IP)"
@@ -58,7 +58,7 @@ done
 
 # Step 3: Create layout.yaml with generated root key
 echo "Step 3/7: Creating layout.yaml..."
-cat > layout.yaml << EOF
+cat > layout.yaml <<EOF
 ---
 root_key: "${ROOT_PUBLIC_KEY}"
 users: [${USERNAMES}]
@@ -74,8 +74,6 @@ required_proposer_stake: 100000000000000
 rewards_apy_percentage: 10
 voting_duration_secs: 43200
 voting_power_increase_limit: 20
-employee_vesting_start: 1663456089
-employee_vesting_period_duration: 5184000
 EOF
 
 # Step 4: Set validator configurations
@@ -107,7 +105,9 @@ echo "Step 5/7: Setting up genesis repository..."
 cp layout.yaml genesis-repo/
 
 # Find and copy framework.mrb
+# Priority: /framework.mrb (mounted by Docker) > standard paths > git repo search
 FRAMEWORK_PATHS=(
+    "/framework.mrb"
     "/aptos-framework/move/head.mrb"
     "/opt/aptos/framework/head.mrb"
     "/usr/local/share/aptos/framework/head.mrb"
@@ -122,6 +122,20 @@ for path in "${FRAMEWORK_PATHS[@]}"; do
         break
     fi
 done
+
+# Fallback: search repository for any .mrb file
+if [ "$FRAMEWORK_FOUND" = false ]; then
+    debug "Searching repository for .mrb files"
+    REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+    if [ -n "$REPO_ROOT" ]; then
+        FOUND=$(find "$REPO_ROOT" -type f -name "*.mrb" | head -n 1)
+        if [ -n "$FOUND" ]; then
+            debug "Found fallback framework at: $FOUND"
+            cp "$FOUND" genesis-repo/framework.mrb
+            FRAMEWORK_FOUND=true
+        fi
+    fi
+fi
 
 if [ "$FRAMEWORK_FOUND" = false ]; then
     echo "ERROR: Could not find framework.mrb in any known location"
@@ -146,21 +160,35 @@ cp root-account/private-keys.yaml output/root-account-private-keys.yaml
 echo "Root account keys saved to output/root-account-private-keys.yaml"
 
 # Create node configs for each validator
+# These are placed in each validator's directory and will be copied to /opt/aptos/var/etc/node-config.yaml
 echo "Creating node configurations..."
 for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
     username="validator-${i}"
 
-    debug "Creating node config for $username with listen_address=/ip4/0.0.0.0/tcp/6180"
+    debug "Creating node config for $username in ${username}/node-config.yaml"
 
-    cat > "output/${username}.yaml" << EOF
+    cat > "${username}/node-config.yaml" << EOF
 base:
   role: "validator"
-  data_dir: "/opt/aptos/data"
+  data_dir: "/opt/aptos/var/data"
   waypoint:
-    from_file: "/opt/aptos/genesis/waypoint.txt"
+    from_file: "/opt/aptos/var/genesis/waypoint.txt"
 
 execution:
-  genesis_file_location: "/opt/aptos/genesis/genesis.blob"
+  genesis_file_location: "/opt/aptos/var/genesis/genesis.blob"
+
+consensus:
+  safety_rules:
+    service:
+      type: "local"
+    backend:
+      type: "on_disk_storage"
+      path: "/opt/aptos/var/data/safety-rules.bin"
+    initial_safety_rules_config:
+      from_file:
+        identity_blob_path: "/opt/aptos/var/identity/validator-identity.yaml"
+        waypoint:
+          from_file: "/opt/aptos/var/genesis/waypoint.txt"
 
 validator_network:
   discovery_method: "onchain"
@@ -168,7 +196,7 @@ validator_network:
   mutual_authentication: true
   identity:
     type: "from_file"
-    path: "/opt/aptos/identity/validator-identity.yaml"
+    path: "/opt/aptos/var/identity/validator-identity.yaml"
 
 full_node_networks: []
 

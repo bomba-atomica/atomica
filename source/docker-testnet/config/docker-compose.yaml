@@ -25,26 +25,27 @@ services:
     image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
     container_name: atomica-validator-0
     hostname: validator-0
+    user: root
     networks:
       atomica-testnet:
         ipv4_address: 172.19.0.10
     volumes:
       - type: bind
         source: ./genesis-artifacts
-        target: /opt/aptos/genesis
+        target: /opt/aptos/var/genesis
         read_only: true
       - type: bind
         source: ./validators/validator-0
-        target: /opt/aptos/identity
+        target: /opt/aptos/var/identity
         read_only: true
       - type: volume
         source: atomica-validator-0-data
-        target: /opt/aptos/data
+        target: /opt/aptos/var/data
       - type: bind
         source: ./validators/validator-0/node-config.yaml
-        target: /opt/aptos/etc/node-config.yaml
+        target: /opt/aptos/var/etc/node-config.yaml
     command: >
-      -f /opt/aptos/etc/node-config.yaml
+      -f /opt/aptos/var/etc/node-config.yaml
     ports:
       - "8080:8080"  # REST API
       - "9101:9101"  # Metrics
@@ -68,6 +69,7 @@ services:
     image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
     container_name: atomica-validator-1
     hostname: validator-1
+    user: root
     depends_on:
       validator-0:
         condition: service_healthy
@@ -77,20 +79,20 @@ services:
     volumes:
       - type: bind
         source: ./genesis-artifacts
-        target: /opt/aptos/genesis
+        target: /opt/aptos/var/genesis
         read_only: true
       - type: bind
         source: ./validators/validator-1
-        target: /opt/aptos/identity
+        target: /opt/aptos/var/identity
         read_only: true
       - type: volume
         source: atomica-validator-1-data
-        target: /opt/aptos/data
+        target: /opt/aptos/var/data
       - type: bind
         source: ./validators/validator-1/node-config.yaml
-        target: /opt/aptos/etc/node-config.yaml
+        target: /opt/aptos/var/etc/node-config.yaml
     command: >
-      -f /opt/aptos/etc/node-config.yaml
+      -f /opt/aptos/var/etc/node-config.yaml
     ports:
       - "8081:8080"  # REST API
       - "9102:9101"  # Metrics
@@ -108,6 +110,7 @@ services:
     image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
     container_name: atomica-validator-2
     hostname: validator-2
+    user: root
     depends_on:
       validator-0:
         condition: service_healthy
@@ -117,20 +120,20 @@ services:
     volumes:
       - type: bind
         source: ./genesis-artifacts
-        target: /opt/aptos/genesis
+        target: /opt/aptos/var/genesis
         read_only: true
       - type: bind
         source: ./validators/validator-2
-        target: /opt/aptos/identity
+        target: /opt/aptos/var/identity
         read_only: true
       - type: volume
         source: atomica-validator-2-data
-        target: /opt/aptos/data
+        target: /opt/aptos/var/data
       - type: bind
         source: ./validators/validator-2/node-config.yaml
-        target: /opt/aptos/etc/node-config.yaml
+        target: /opt/aptos/var/etc/node-config.yaml
     command: >
-      -f /opt/aptos/etc/node-config.yaml
+      -f /opt/aptos/var/etc/node-config.yaml
     ports:
       - "8082:8080"  # REST API
       - "9103:9101"  # Metrics
@@ -148,6 +151,7 @@ services:
     image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
     container_name: atomica-validator-3
     hostname: validator-3
+    user: root
     depends_on:
       validator-0:
         condition: service_healthy
@@ -157,20 +161,20 @@ services:
     volumes:
       - type: bind
         source: ./genesis-artifacts
-        target: /opt/aptos/genesis
+        target: /opt/aptos/var/genesis
         read_only: true
       - type: bind
         source: ./validators/validator-3
-        target: /opt/aptos/identity
+        target: /opt/aptos/var/identity
         read_only: true
       - type: volume
         source: atomica-validator-3-data
-        target: /opt/aptos/data
+        target: /opt/aptos/var/data
       - type: bind
         source: ./validators/validator-3/node-config.yaml
-        target: /opt/aptos/etc/node-config.yaml
+        target: /opt/aptos/var/etc/node-config.yaml
     command: >
-      -f /opt/aptos/etc/node-config.yaml
+      -f /opt/aptos/var/etc/node-config.yaml
     ports:
       - "8083:8080"  # REST API
       - "9104:9101"  # Metrics
