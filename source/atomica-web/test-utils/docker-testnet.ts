@@ -51,7 +51,7 @@ import { existsSync, readFileSync } from "fs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const WEB_DIR = pathResolve(__dirname, "..");
-const DOCKER_TESTNET_DIR = pathResolve(WEB_DIR, "../../docker-testnet");
+const DOCKER_TESTNET_DIR = pathResolve(WEB_DIR, "../docker-testnet/config");
 
 /** Base API port for validators (incremented for each validator) */
 const BASE_API_PORT = 8080;
@@ -788,7 +788,7 @@ export class DockerTestnet {
     // Try various paths relative to the web directory
     const candidates = [
       DOCKER_TESTNET_DIR,
-      pathResolve(WEB_DIR, "../../docker-testnet"),
+      pathResolve(WEB_DIR, "../docker-testnet/config"),
       pathResolve(WEB_DIR, "../../../docker-testnet"),
     ];
 
