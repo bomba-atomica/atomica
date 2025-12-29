@@ -57,7 +57,7 @@ const DOCKER_TESTNET_DIR = pathResolve(WEB_DIR, "../docker-testnet/config");
 const BASE_API_PORT = 8080;
 
 /** Docker binary path */
-const DOCKER_BIN = "/usr/local/bin/docker";
+const DOCKER_BIN = "docker";
 
 /**
  * Load environment variables from atomica-web/.env file
@@ -128,11 +128,11 @@ async function runCompose(
     }, timeoutMs);
 
     proc.stdout?.on("data", (data) => {
-      stdout += data.toString();
+      process.stdout.write(data); stdout += data.toString();
     });
 
     proc.stderr?.on("data", (data) => {
-      stderr += data.toString();
+      process.stderr.write(data); stderr += data.toString();
     });
 
     proc.on("close", (code) => {
@@ -261,8 +261,8 @@ async function checkImageAvailability(): Promise<{
   }
 
   // Use docker-compose defaults if still not found
-  if (!imageRepo) imageRepo = "atomica-validator";
-  if (!imageTag) imageTag = "local";
+  if (!imageRepo) imageRepo = "ghcr.io/bomba-atomica/atomica-aptos/validator";
+  if (!imageTag) imageTag = "latest";
 
   const fullImage = `${imageRepo}:${imageTag}`;
 
@@ -341,11 +341,11 @@ async function authenticateGHCR(envVars: Record<string, string>): Promise<void> 
       let stderr = "";
 
       proc.stdout?.on("data", (data) => {
-        stdout += data.toString();
+        process.stdout.write(data); stdout += data.toString();
       });
 
       proc.stderr?.on("data", (data) => {
-        stderr += data.toString();
+        process.stderr.write(data); stderr += data.toString();
       });
 
       // Write GITHUB_TOKEN to stdin
@@ -392,11 +392,11 @@ async function authenticateGHCR(envVars: Record<string, string>): Promise<void> 
     let stderr = "";
 
     proc.stdout?.on("data", (data) => {
-      stdout += data.toString();
+      process.stdout.write(data); stdout += data.toString();
     });
 
     proc.stderr?.on("data", (data) => {
-      stderr += data.toString();
+      process.stderr.write(data); stderr += data.toString();
     });
 
     // Write token to stdin
@@ -459,11 +459,11 @@ async function checkDocker(): Promise<void> {
     });
 
     proc.stdout?.on("data", (data) => {
-      stdout += data.toString();
+      process.stdout.write(data); stdout += data.toString();
     });
 
     proc.stderr?.on("data", (data) => {
-      stderr += data.toString();
+      process.stderr.write(data); stderr += data.toString();
     });
 
     proc.on("close", (code) => {

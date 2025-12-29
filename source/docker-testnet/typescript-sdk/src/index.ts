@@ -90,8 +90,8 @@ export class DockerTestnet {
      */
     static async new(
         numValidators: number,
-        options?: {
-            useLocalImage?: boolean;
+        _options?: {
+            // Options reserved for future use
         },
     ): Promise<DockerTestnet> {
         if (numValidators < 1 || numValidators > 7) {
@@ -114,11 +114,8 @@ export class DockerTestnet {
         // Load environment variables
         const envVars = loadEnvVariables();
 
-        // Set USE_LOCAL_IMAGE if requested
-        if (options?.useLocalImage || process.env.USE_LOCAL_IMAGE === "1") {
-            envVars.USE_LOCAL_IMAGE = "1";
-            console.log("Using locally built image: atomica-validator:local");
-        }
+        // Enforce project name to avoid random naming
+        envVars.COMPOSE_PROJECT_NAME = "atomica-testnet";
 
         debug("Loaded environment variables", { keys: Object.keys(envVars) });
 
@@ -453,14 +450,14 @@ export class DockerTestnet {
         while (Date.now() < deadline) {
             const currentInfo = await this.getLedgerInfo(0);
             const currentHeight = parseInt(currentInfo.block_height, 10);
-            
+
             debug(`Block progress: ${currentHeight}/${targetHeight}`, {
                 current_height: currentHeight,
                 target_height: targetHeight,
                 current_version: currentInfo.ledger_version,
                 epoch: currentInfo.epoch,
             });
-            
+
             if (currentHeight >= targetHeight) {
                 console.log(`  ✓ Reached target height ${currentHeight}`);
                 return;
@@ -577,90 +574,7 @@ export class DockerTestnet {
         });
     }
 
-    /**
-     * Build Atomica Aptos validator image locally from source
-     *
-     * This builds the Docker image from ../atomica-aptos using BuildKit cache
-     * for fast incremental builds. The cache is persisted by Docker BuildKit
-     * so subsequent builds are much faster.
-     *
-     * @param options Build options
-     * @returns Promise that resolves when build completes
-     *
-     * @example
-     * // Basic build
-     * await DockerTestnet.buildLocalImage();
-     *
-     * // Custom build
-     * await DockerTestnet.buildLocalImage({
-     *   profile: 'debug',
-     *   noCache: true
-     * });
-     */
-    public static async buildLocalImage(options?: {
-        profile?: "release" | "debug";
-        features?: string;
-        tag?: string;
-        noCache?: boolean;
-    }): Promise<void> {
-        const composeDir = DockerTestnet.findComposeDir();
-        // Build script is now in atomica-aptos/atomica/docker/
-        const buildScript = pathResolve(
-            composeDir,
-            "../atomica-aptos/atomica/docker/build-local-image.sh"
-        );
 
-        if (!existsSync(buildScript)) {
-            throw new Error(
-                `Build script not found: ${buildScript}\n` +
-                `Make sure atomica-aptos repository is checked out at the correct location.`
-            );
-        }
-
-        const args: string[] = [];
-
-        if (options?.profile) {
-            args.push("--profile", options.profile);
-        }
-        if (options?.features) {
-            args.push("--features", options.features);
-        }
-        if (options?.tag) {
-            args.push("--tag", options.tag);
-        }
-        if (options?.noCache) {
-            args.push("--no-cache");
-        }
-
-        console.log("Building local Atomica Aptos validator image...");
-        if (options?.noCache) {
-            console.log("  (ignoring BuildKit cache - build will take longer)");
-        }
-
-        return new Promise((resolve, reject) => {
-            const proc = spawn(buildScript, args, {
-                stdio: "inherit",
-                cwd: composeDir,
-                env: {
-                    ...process.env,
-                    DOCKER_BUILDKIT: "1",
-                },
-            });
-
-            proc.on("close", (code) => {
-                if (code === 0) {
-                    console.log("✓ Local image build complete");
-                    resolve();
-                } else {
-                    reject(new Error(`Build failed with exit code ${code}`));
-                }
-            });
-
-            proc.on("error", (err: any) => {
-                reject(new Error(`Failed to run build script: ${err.message}`));
-            });
-        });
-    }
 }
 
 /**
@@ -745,18 +659,18 @@ export interface ProbeResult {
  */
 export async function probeTestnet(numValidators: number = 4): Promise<ProbeResult[]> {
     console.log(`\n=== Probing ${numValidators} validators ===\n`);
-    
+
     const results: ProbeResult[] = [];
-    
+
     for (let i = 0; i < numValidators; i++) {
         const containerName = `atomica-validator-${i}`;
         const ipAddress = `172.19.0.${10 + i}`;
         const apiPort = BASE_API_PORT + i;
         const validatorPort = BASE_VALIDATOR_PORT;
         const metricsPort = 9101 + i;
-        
+
         console.log(`\nProbing validator-${i} (${containerName}):`);
-        
+
         const result: ProbeResult = {
             validatorIndex: i,
             containerName,
@@ -767,7 +681,7 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
             apiReachable: false,
             portScans: [],
         };
-        
+
         // Check REST API
         const apiUrl = `http://127.0.0.1:${apiPort}/v1`;
         console.log(`  Testing REST API: ${apiUrl}`);
@@ -785,18 +699,18 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
             result.apiError = error.message;
             console.log(`    ✗ API unreachable: ${error.message}`);
         }
-        
+
         // Scan important ports (from host perspective)
         const portsToScan = [
             { port: apiPort, name: "REST API" },
             { port: metricsPort, name: "Metrics" },
         ];
-        
+
         for (const { port, name } of portsToScan) {
             console.log(`  Testing ${name} port: ${port}`);
             try {
                 const testUrl = `http://127.0.0.1:${port}`;
-                const response = await fetch(testUrl, { 
+                const response = await fetch(testUrl, {
                     signal: AbortSignal.timeout(2000),
                     method: 'HEAD',
                 });
@@ -816,7 +730,7 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
                 console.log(`    ✗ Port ${port} (${name}) unreachable: ${error.message}`);
             }
         }
-        
+
         // Check container networking (requires docker exec)
         console.log(`  Checking container internal networking...`);
         try {
@@ -828,10 +742,10 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
                 "-c",
                 `curl -s -m 2 http://172.19.0.${10 + ((i + 1) % numValidators)}:8080/v1 | head -c 50 || echo FAIL`
             ]);
-            
+
             let output = "";
             pingOther.stdout?.on("data", (d) => output += d.toString());
-            
+
             await new Promise<void>((resolve) => {
                 pingOther.on("close", () => resolve());
                 setTimeout(() => {
@@ -839,7 +753,7 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
                     resolve();
                 }, 3000);
             });
-            
+
             if (output.includes("chain_id")) {
                 console.log(`    ✓ Container can reach other validators`);
             } else {
@@ -848,32 +762,32 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
         } catch (error: any) {
             console.log(`    ? Could not test container networking: ${error.message}`);
         }
-        
+
         results.push(result);
     }
-    
+
     // Summary
     console.log(`\n=== Probe Summary ===`);
     const healthyValidators = results.filter(r => r.apiReachable).length;
     console.log(`Healthy validators: ${healthyValidators}/${numValidators}`);
-    
+
     if (healthyValidators > 0 && results[0].apiResponse) {
         const epochs = new Set(results.filter(r => r.apiResponse).map(r => r.apiResponse!.epoch));
         const blocks = new Set(results.filter(r => r.apiResponse).map(r => r.apiResponse!.block_height));
-        
+
         if (epochs.size === 1) {
             console.log(`All validators in epoch: ${[...epochs][0]}`);
         } else {
             console.log(`WARNING: Validators in different epochs: ${[...epochs].join(", ")}`);
         }
-        
+
         if (blocks.size === 1) {
             console.log(`All validators at block: ${[...blocks][0]}`);
         } else {
             console.log(`Validators at blocks: ${[...blocks].join(", ")} (minor differences OK)`);
         }
     }
-    
+
     console.log(`\n`);
     return results;
 }

@@ -1,37 +1,10 @@
 # Atomica Aptos Local Testnet - Multi-Validator Configuration
 #
-# This compose file sets up a 4-validator testnet using validator images.
+# This compose file sets up a single-node or multi-node testnet using validator images.
 #
-# Image Options:
-#   1. Published images (default):
-#      - Uses: ghcr.io/bomba-atomica/atomica-aptos/validator:latest
-#      - No build required, just start the testnet
-#      - Built and published by atomica-aptos CI/CD
-#
-#   2. Local build from source:
-#      - First build: ./build-local-image.sh
-#      - Then set: IMAGE_NAME=atomica-validator:local
-#      - Uses: atomica-validator:local
-#      - Faster iteration with sccache
-#
-# Environment Variables:
-#   - IMAGE_NAME: Full image name to use (overrides all other settings)
-#   - VALIDATOR_IMAGE_REPO: Image repository (default: ghcr.io/bomba-atomica/atomica-aptos/validator)
-#   - IMAGE_TAG: Image tag (default: latest)
-#
-# Examples:
-#   # Use published image (default)
-#   docker compose up -d
-#
-#   # Use local build
-#   ./build-local-image.sh
-#   IMAGE_NAME=atomica-validator:local docker compose up -d
-#
-#   # Use specific published version
-#   IMAGE_TAG=abc1234 docker compose up -d
-#
-#   # Use custom repository
-#   VALIDATOR_IMAGE_REPO=myrepo/validator IMAGE_TAG=v1.0.0 docker compose up -d
+# Image Configuration:
+#   - Defaults to ghcr.io/bomba-atomica/atomica-aptos/validator:latest
+#   - Override with IMAGE_NAME environment variable
 #
 # Architecture:
 # - 4 validator nodes
@@ -71,7 +44,6 @@ services:
         source: ./validators/validator-0/node-config.yaml
         target: /opt/aptos/etc/node-config.yaml
     command: >
-      /usr/local/bin/aptos-node
       -f /opt/aptos/etc/node-config.yaml
     ports:
       - "8080:8080"  # REST API
@@ -118,7 +90,6 @@ services:
         source: ./validators/validator-1/node-config.yaml
         target: /opt/aptos/etc/node-config.yaml
     command: >
-      /usr/local/bin/aptos-node
       -f /opt/aptos/etc/node-config.yaml
     ports:
       - "8081:8080"  # REST API
@@ -159,7 +130,6 @@ services:
         source: ./validators/validator-2/node-config.yaml
         target: /opt/aptos/etc/node-config.yaml
     command: >
-      /usr/local/bin/aptos-node
       -f /opt/aptos/etc/node-config.yaml
     ports:
       - "8082:8080"  # REST API
@@ -200,7 +170,6 @@ services:
         source: ./validators/validator-3/node-config.yaml
         target: /opt/aptos/etc/node-config.yaml
     command: >
-      /usr/local/bin/aptos-node
       -f /opt/aptos/etc/node-config.yaml
     ports:
       - "8083:8080"  # REST API

@@ -98,7 +98,7 @@ class DockerTestnet {
      * await DockerTestnet.buildLocalImage();
      * const testnet = await DockerTestnet.new(4, { useLocalImage: true });
      */
-    static async new(numValidators, options) {
+    static async new(numValidators, _options) {
         if (numValidators < 1 || numValidators > 7) {
             throw new Error(`numValidators must be between 1 and 7, got ${numValidators}`);
         }
@@ -114,11 +114,8 @@ class DockerTestnet {
         }
         // Load environment variables
         const envVars = loadEnvVariables();
-        // Set USE_LOCAL_IMAGE if requested
-        if (options?.useLocalImage || process.env.USE_LOCAL_IMAGE === "1") {
-            envVars.USE_LOCAL_IMAGE = "1";
-            console.log("Using locally built image: atomica-validator:local");
-        }
+        // Enforce project name to avoid random naming
+        envVars.COMPOSE_PROJECT_NAME = "atomica-testnet";
         debug("Loaded environment variables", { keys: Object.keys(envVars) });
         console.log(`Setting up fresh Docker testnet with ${numValidators} validators...`);
         // Clean up any existing testnet
@@ -489,79 +486,6 @@ class DockerTestnet {
                 else {
                     reject(new Error(`Failed to check Docker status: ${err.message}`));
                 }
-            });
-        });
-    }
-    /**
-     * Build Atomica Aptos validator image locally from source
-     *
-     * This builds the Docker image from ./source/atomica-aptos using sccache
-     * for fast incremental builds. The sccache data is persisted in a Docker
-     * volume so subsequent builds are much faster.
-     *
-     * @param options Build options
-     * @returns Promise that resolves when build completes
-     *
-     * @example
-     * // Basic build
-     * await DockerTestnet.buildLocalImage();
-     *
-     * // Custom build
-     * await DockerTestnet.buildLocalImage({
-     *   profile: 'debug',
-     *   cleanSccache: true,
-     *   showStats: true
-     * });
-     */
-    static async buildLocalImage(options) {
-        const composeDir = DockerTestnet.findComposeDir();
-        const buildScript = (0, path_1.resolve)(composeDir, "build-local-image.sh");
-        if (!(0, fs_1.existsSync)(buildScript)) {
-            throw new Error(`Build script not found: ${buildScript}`);
-        }
-        const args = [];
-        if (options?.profile) {
-            args.push("--profile", options.profile);
-        }
-        if (options?.features) {
-            args.push("--features", options.features);
-        }
-        if (options?.tag) {
-            args.push("--tag", options.tag);
-        }
-        if (options?.noCache) {
-            args.push("--no-cache");
-        }
-        if (options?.cleanSccache) {
-            args.push("--clean-sccache");
-        }
-        if (options?.showStats) {
-            args.push("--stats");
-        }
-        console.log("Building local Atomica Aptos validator image...");
-        if (options?.cleanSccache) {
-            console.log("  (cleaning sccache - first build will be slower)");
-        }
-        return new Promise((resolve, reject) => {
-            const proc = (0, child_process_1.spawn)(buildScript, args, {
-                stdio: "inherit",
-                cwd: composeDir,
-                env: {
-                    ...process.env,
-                    DOCKER_BUILDKIT: "1",
-                },
-            });
-            proc.on("close", (code) => {
-                if (code === 0) {
-                    console.log("✓ Local image build complete");
-                    resolve();
-                }
-                else {
-                    reject(new Error(`Build failed with exit code ${code}`));
-                }
-            });
-            proc.on("error", (err) => {
-                reject(new Error(`Failed to run build script: ${err.message}`));
             });
         });
     }
