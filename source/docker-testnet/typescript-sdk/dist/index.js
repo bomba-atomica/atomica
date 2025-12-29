@@ -328,23 +328,30 @@ class DockerTestnet {
         const targetAddr = typeof address === "string" ? address : address.hex();
         debug(`Faucet funding ${targetAddr} with ${amount} octas`);
         try {
-            // Use aptos_account::transfer which creates the account if it doesn't exist
-            const transferPayload = {
-                type: "entry_function_payload",
-                function: "0x1::aptos_account::transfer",
-                type_arguments: [],
-                arguments: [targetAddr, amount.toString()],
-            };
-            const transferTxn = await client.generateTransaction(faucetAccount.address(), transferPayload);
-            const signedTransferTxn = await client.signTransaction(faucetAccount, transferTxn);
-            const transferPending = await client.submitTransaction(signedTransferTxn);
-            await client.waitForTransaction(transferPending.hash);
+            // Manually build transaction without using SDK helpers that require indexer
+            // Build the entry function payload for aptos_account::transfer
+            const entryFunctionPayload = new aptos_1.TxnBuilderTypes.TransactionPayloadEntryFunction(aptos_1.TxnBuilderTypes.EntryFunction.natural("0x1::aptos_account", "transfer", [], [
+                aptos_1.BCS.bcsToBytes(aptos_1.TxnBuilderTypes.AccountAddress.fromHex(targetAddr)),
+                aptos_1.BCS.bcsSerializeUint64(amount),
+            ]));
+            // Get account info for sequence number
+            const accountInfo = await client.getAccount(faucetAccount.address());
+            const chainId = await client.getChainId();
+            // Build raw transaction
+            const rawTxn = new aptos_1.TxnBuilderTypes.RawTransaction(aptos_1.TxnBuilderTypes.AccountAddress.fromHex(faucetAccount.address()), BigInt(accountInfo.sequence_number), entryFunctionPayload, BigInt(10000), // max gas
+            BigInt(100), // gas price
+            BigInt(Math.floor(Date.now() / 1000) + 600), // expiration (10 min from now)
+            new aptos_1.TxnBuilderTypes.ChainId(chainId));
+            // Sign and submit
+            const signedTxn = await client.signTransaction(faucetAccount, rawTxn);
+            const txnResponse = await client.submitTransaction(signedTxn);
+            await client.waitForTransaction(txnResponse.hash);
             debug(`Faucet transfer complete`, {
                 to: targetAddr,
                 amount: amount.toString(),
-                txn: transferPending.hash,
+                txn: txnResponse.hash,
             });
-            return transferPending.hash;
+            return txnResponse.hash;
         }
         catch (error) {
             throw new Error(`Faucet transfer failed: ${error.message}`);
