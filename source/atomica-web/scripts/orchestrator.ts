@@ -16,7 +16,15 @@ const WEB_DIR = join(WORKSPACE_ROOT, "source/atomica-web");
 // Ensure atomica-aptos repo is cloned
 if (!existsSync(ZAPATOS_DIR)) {
   console.log("📦 Cloning atomica-aptos repository...");
-  await runCommand("git", ["clone", "https://github.com/bomba-atomica/atomica-aptos.git", ZAPATOS_DIR], WORKSPACE_ROOT);
+  await runCommand(
+    "git",
+    [
+      "clone",
+      "https://github.com/bomba-atomica/atomica-aptos.git",
+      ZAPATOS_DIR,
+    ],
+    WORKSPACE_ROOT,
+  );
   await runCommand("git", ["checkout", "dev-atomica"], ZAPATOS_DIR);
 }
 
