@@ -15,7 +15,6 @@ import { resolve as pathResolve } from "path";
 const config = new AptosConfig({
   network: Network.CUSTOM,
   fullnode: "http://127.0.0.1:8080/v1",
-  faucet: "http://127.0.0.1:8081",
 });
 const aptos = new Aptos(config);
 
@@ -51,7 +50,10 @@ describe.sequential("Atomica Contract Deployment", () => {
 
     // Path to atomica-move-contracts (absolute path required by Docker SDK)
     // Assuming structure: source/atomica-web and source/atomica-move-contracts are siblings
-    const CONTRACTS_DIR = pathResolve(process.cwd(), "../atomica-move-contracts");
+    const CONTRACTS_DIR = pathResolve(
+      process.cwd(),
+      "../atomica-move-contracts",
+    );
     console.log(`Contracts directory: ${CONTRACTS_DIR}`);
 
     // Publish the atomica-move-contracts package using Docker SDK

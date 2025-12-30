@@ -23,7 +23,6 @@ describe.sequential("AccountStatus Integration", () => {
     const config = new AptosConfig({
       network: Network.LOCAL,
       fullnode: "http://127.0.0.1:8080/v1",
-      faucet: "http://127.0.0.1:8081",
     });
     setAptosInstance(new Aptos(config));
   }, 120000);

@@ -15,8 +15,9 @@ export async function teardown() {
   // Tear down the Docker testnet if it's running
   try {
     await teardownLocalnet();
-  } catch (error: any) {
-    console.error("[Global Teardown] Failed to cleanup testnet:", error.message);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[Global Teardown] Failed to cleanup testnet:", message);
   }
 
   console.log("[Global Teardown] Complete");

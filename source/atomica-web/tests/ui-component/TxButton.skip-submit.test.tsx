@@ -51,7 +51,6 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     const config = new AptosConfig({
       network: Network.LOCAL,
       fullnode: "http://127.0.0.1:8080/v1",
-      faucet: "http://127.0.0.1:8081",
     });
     aptos = new Aptos(config);
     setAptosInstance(aptos);
