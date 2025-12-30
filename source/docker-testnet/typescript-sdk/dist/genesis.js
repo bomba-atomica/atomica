@@ -11,9 +11,8 @@ const path_1 = require("path");
  * all genesis artifacts, avoiding complex orchestration from TypeScript.
  */
 const DOCKER_BIN = "docker";
-const TOOLS_IMAGE = "aptoslabs/tools:devnet"; // Image with aptos CLI
-/** Debug logging - controlled by DEBUG_TESTNET env var */
-const DEBUG = process.env.DEBUG_TESTNET === "1" || process.env.DEBUG_TESTNET === "true";
+/** Debug logging - controlled by ATOMICA_DEBUG_TESTNET env var */
+const DEBUG = process.env.ATOMICA_DEBUG_TESTNET === "1" || process.env.ATOMICA_DEBUG_TESTNET === "true";
 function debug(message, data) {
     if (DEBUG) {
         const timestamp = new Date().toISOString();
@@ -56,26 +55,66 @@ async function generateGenesis(config) {
     console.log(`Genesis generation complete!`);
 }
 /**
- * Run the genesis generation script inside Docker
+ * Run the genesis generation script inside Docker container
+ * This ensures the aptos CLI version matches the Move framework version
  */
 function runGenesisScript(config) {
     const { workspaceDir, scriptPath, numValidators, chainId, baseIp } = config;
     return new Promise((resolve, reject) => {
-        // Mount both the workspace and the script
+        console.log(`  Running genesis script in Docker container...`);
+        // Get the validator image name from environment or use default
+        const validatorImage = process.env.IMAGE_NAME ||
+            `${process.env.VALIDATOR_IMAGE_REPO || "ghcr.io/bomba-atomica/atomica-aptos/validator"}:${process.env.IMAGE_TAG || "latest"}`;
+        // Find the framework.mrb file - try multiple possible locations relative to workspaceDir
+        const possiblePaths = [
+            (0, path_1.resolve)(workspaceDir, "..", "..", "..", "move-framework-fixtures", "head.mrb"),
+            (0, path_1.resolve)(workspaceDir, "..", "..", "move-framework-fixtures", "head.mrb"),
+            (0, path_1.resolve)(process.cwd(), "..", "move-framework-fixtures", "head.mrb"),
+            "/Users/lucas/code/rust/atomica-docker-infra/source/move-framework-fixtures/head.mrb",
+        ];
+        let frameworkPath = "";
+        for (const p of possiblePaths) {
+            if ((0, fs_1.existsSync)(p)) {
+                frameworkPath = p;
+                break;
+            }
+        }
+        if (!frameworkPath) {
+            reject(new Error(`Framework file not found. Tried: ${possiblePaths.join(", ")}`));
+            return;
+        }
+        debug("Using framework at: " + frameworkPath);
+        debug("Using validator image: " + validatorImage);
+        // Run the script inside Docker container with the same image that will run validators
+        // This ensures aptos CLI version matches the Move framework version
         const dockerArgs = [
             "run",
             "--rm",
-            "-v", `${workspaceDir}:/workspace`,
-            "-v", `${scriptPath}:/scripts/generate-genesis.sh:ro`,
-            "-w", "/workspace",
-            TOOLS_IMAGE,
+            "-v",
+            `${workspaceDir}:/workspace`,
+            "-v",
+            `${scriptPath}:/genesis-script.sh:ro`,
+            "-v",
+            `${frameworkPath}:/framework.mrb:ro`,
+            "-w",
+            "/workspace",
+            "--entrypoint",
             "/bin/bash",
-            "/scripts/generate-genesis.sh",
-            numValidators.toString(),
-            chainId.toString(),
-            baseIp,
         ];
-        console.log(`  Running genesis script in Docker container...`);
+        // Run as current user to avoid permission issues with bind mounts
+        if (process.platform !== "win32" &&
+            typeof process.getuid === "function" &&
+            typeof process.getgid === "function") {
+            dockerArgs.push("--user", `${process.getuid()}:${process.getgid()}`);
+        }
+        // Set HOME to a writable location (important when running as non-root)
+        dockerArgs.push("-e", "HOME=/tmp");
+        // Pass ATOMICA_DEBUG_TESTNET to container if set
+        if (process.env.ATOMICA_DEBUG_TESTNET) {
+            dockerArgs.push("-e", `ATOMICA_DEBUG_TESTNET=${process.env.ATOMICA_DEBUG_TESTNET}`);
+        }
+        dockerArgs.push(validatorImage, "/genesis-script.sh", numValidators.toString(), chainId.toString(), baseIp);
+        debug("Starting docker run with args:", { dockerArgs });
         const proc = (0, child_process_1.spawn)(DOCKER_BIN, dockerArgs, {
             stdio: ["ignore", "pipe", "pipe"],
         });
@@ -84,14 +123,60 @@ function runGenesisScript(config) {
         proc.stdout?.on("data", (data) => {
             const text = data.toString();
             stdout += text;
-            // Print progress lines
+            // Print output to console so the user knows what's happening
+            // Filter out verbose output that's not useful for users
+            let inJsonBlock = false;
             for (const line of text.split("\n")) {
-                if (line.startsWith("Step") || line.startsWith("===") || line.startsWith("Waypoint:")) {
-                    console.log(`  ${line}`);
+                const trimmed = line.trim();
+                if (!trimmed)
+                    continue;
+                // Skip "Missing CF:" warnings (expected during genesis initialization)
+                if (trimmed.includes("Missing CF:")) {
+                    if (DEBUG) {
+                        console.log(`  [STDOUT] ${trimmed}`);
+                    }
+                    continue;
+                }
+                // Filter out verbose JSON output blocks from aptos CLI
+                // These show file lists that aren't useful during normal operation
+                if (trimmed === "{") {
+                    inJsonBlock = true;
+                }
+                if (inJsonBlock) {
+                    if (DEBUG) {
+                        console.log(`  [STDOUT] ${trimmed}`);
+                    }
+                    if (trimmed === "}") {
+                        inJsonBlock = false;
+                    }
+                    continue;
+                }
+                // Skip verbose file path messages
+                if (trimmed.startsWith("Root account keys saved to") ||
+                    trimmed.startsWith("Creating node configurations")) {
+                    if (DEBUG) {
+                        console.log(`  [STDOUT] ${trimmed}`);
+                    }
+                    continue;
+                }
+                if (DEBUG) {
+                    console.log(`  [STDOUT] ${trimmed}`);
+                }
+                else {
+                    console.log(`  ${trimmed}`);
                 }
             }
         });
-        proc.stderr?.on("data", (data) => (stderr += data.toString()));
+        proc.stderr?.on("data", (data) => {
+            const text = data.toString();
+            stderr += text;
+            if (DEBUG) {
+                for (const line of text.split("\n")) {
+                    if (line.trim())
+                        console.log(`  [STDERR] ${line}`);
+                }
+            }
+        });
         proc.on("close", (code) => {
             if (code === 0) {
                 resolve();
@@ -101,12 +186,7 @@ function runGenesisScript(config) {
             }
         });
         proc.on("error", (err) => {
-            if (err.code === "ENOENT") {
-                reject(new Error(`Docker not found. Please install Docker.`));
-            }
-            else {
-                reject(new Error(`Failed to run genesis script: ${err.message}`));
-            }
+            reject(new Error(`Failed to run genesis script in Docker: ${err.message}`));
         });
     });
 }

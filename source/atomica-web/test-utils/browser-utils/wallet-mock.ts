@@ -4,12 +4,21 @@
  */
 
 interface EthereumProvider {
-  request: (args: { method: string; params?: any[] }) => Promise<any>;
-  on: (event: string, handler: (...args: any[]) => void) => void;
-  removeListener: (event: string, handler: (...args: any[]) => void) => void;
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  on: (event: string, handler: (...args: unknown[]) => void) => void;
+  removeListener: (
+    event: string,
+    handler: (...args: unknown[]) => void,
+  ) => void;
   isMetaMask: boolean;
   selectedAddress: string | null;
   chainId: string;
+}
+
+declare global {
+  interface Window {
+    ethereum: EthereumProvider;
+  }
 }
 
 export function setupBrowserWalletMock(
@@ -20,27 +29,28 @@ export function setupBrowserWalletMock(
   const chainId = "0x4"; // Rinkeby
 
   // Simple event emitter for browser
-  const eventHandlers: Map<string, Set<(...args: any[]) => void>> = new Map();
+  const eventHandlers: Map<
+    string,
+    Set<(...args: unknown[]) => void>
+  > = new Map();
 
   const provider: EthereumProvider = {
     isMetaMask: true,
     selectedAddress: testAccount,
     chainId,
 
-    on(event: string, handler: (...args: any[]) => void) {
+    on(event: string, handler: (...args: unknown[]) => void) {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, new Set());
       }
       eventHandlers.get(event)!.add(handler);
     },
 
-    removeListener(event: string, handler: (...args: any[]) => void) {
+    removeListener(event: string, handler: (...args: unknown[]) => void) {
       eventHandlers.get(event)?.delete(handler);
     },
 
-    async request(args: { method: string; params?: any[] }) {
-      console.log("[Browser Wallet Mock] Request:", args.method, args.params);
-
+    async request(args: { method: string; params?: unknown[] }) {
       switch (args.method) {
         case "eth_requestAccounts":
         case "eth_accounts":
@@ -50,7 +60,8 @@ export function setupBrowserWalletMock(
           return chainId;
 
         case "personal_sign": {
-          const [message] = args.params || [];
+          const params = args.params || [];
+          const message = params[0] as string;
           if (!message) {
             throw new Error("Message is required for personal_sign");
           }
@@ -69,12 +80,7 @@ export function setupBrowserWalletMock(
             messageStr = message;
           }
 
-          console.log(
-            "[Browser Wallet Mock] Signing message:",
-            messageStr.substring(0, 100),
-          );
           const signature = await wallet.signMessage(messageStr);
-          console.log("[Browser Wallet Mock] Signature:", signature);
           return signature;
         }
 
@@ -85,16 +91,13 @@ export function setupBrowserWalletMock(
           return "0x0";
 
         default:
-          console.warn("[Browser Wallet Mock] Unhandled method:", args.method);
           throw new Error(`Unhandled method: ${args.method}`);
       }
     },
   };
 
   // Inject into window
-  (window as any).ethereum = provider;
-
-  console.log("[Browser Wallet Mock] Initialized with account:", testAccount);
+  window.ethereum = provider;
 
   return provider;
 }

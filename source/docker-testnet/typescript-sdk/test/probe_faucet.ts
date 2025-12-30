@@ -1,5 +1,5 @@
-import { DockerTestnet } from "../src/index";
 import { AptosAccount, AptosClient } from "aptos";
+import { DockerTestnet } from "../src/index";
 
 async function main() {
     console.log("Starting testnet...");
@@ -15,7 +15,7 @@ async function main() {
         try {
             const faucetBalance = await client.getAccountResource(
                 faucetAccount.address(),
-                "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>"
+                "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>",
             );
             console.log("Faucet CoinStore:", faucetBalance);
         } catch (e: any) {
@@ -63,14 +63,13 @@ async function main() {
         try {
             const balance = await client.getAccountResource(
                 newAccount.address(),
-                "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>"
+                "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>",
             );
             console.log("\n✓ New account CoinStore created!");
             console.log("Balance data:", JSON.stringify(balance.data, null, 2));
         } catch (e: any) {
             console.log("\n✗ Failed to get new account CoinStore:", e.message);
         }
-
     } finally {
         await testnet.teardown();
     }

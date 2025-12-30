@@ -10,7 +10,6 @@ import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 const config = new AptosConfig({
   network: Network.CUSTOM,
   fullnode: "http://127.0.0.1:8080/v1",
-  faucet: "http://127.0.0.1:8081",
 });
 const aptos = new Aptos(config);
 
@@ -24,46 +23,32 @@ describe.sequential("Ed25519 Faucet Funding", () => {
   });
 
   it("should fund an Ed25519 account via faucet", async () => {
-    console.log("Starting faucet test...");
     const alice = Account.generate();
-    console.log(`Generated account: ${alice.accountAddress.toString()}`);
 
     // Verify account balance is 0 before funding
     const initialBalance = await aptos.getAccountAPTAmount({
       accountAddress: alice.accountAddress,
     });
-    console.log(`Initial balance: ${initialBalance} (should be 0)`);
     expect(initialBalance).toBe(0);
 
-    const faucetResponse = await fundAccount(alice.accountAddress.toString());
-    console.log("Funding request completed. Response:", faucetResponse);
+    const txnHash = await fundAccount(alice.accountAddress.toString());
 
-    // Faucet returns array of txn hashes e.g. ["0x..."]
-    const txnHashes = JSON.parse(faucetResponse);
-    const txnHash = txnHashes[0];
-    console.log(`Waiting for faucet txn: ${txnHash}`);
-
-    const txnRes = await aptos.waitForTransaction({ transactionHash: txnHash });
-    console.log("Faucet txn confirmed! Success:", (txnRes as any).success);
+    await aptos.waitForTransaction({ transactionHash: txnHash });
 
     // Wait for it to be indexed/available on node
     let balance = 0;
     for (let i = 0; i < 20; i++) {
-      console.log(`Checking balance attempt ${i + 1}...`);
       await new Promise((r) => setTimeout(r, 1000));
       try {
         balance = await aptos.getAccountAPTAmount({
           accountAddress: alice.accountAddress,
         });
-        console.log(`Current balance: ${balance}`);
         if (balance >= 100_000_000) break;
-      } catch (e: any) {
-        console.log(`Balance check error (attempt ${i + 1}):`, e.message);
+      } catch {
         // Ignore errors while waiting for indexer/node
       }
     }
 
-    console.log(`Final balance: ${balance}, expected: 100000000`);
     expect(balance).toBe(100_000_000);
   }, 60000); // 60s timeout
 });

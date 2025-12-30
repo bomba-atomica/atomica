@@ -32,7 +32,10 @@ describe.sequential("FakeEth Integration Test (Ed25519)", () => {
     );
 
     // Fund the test account with APT for gas
-    await commands.fundAccount(testAccount.accountAddress.toString(), 100_000_000); // 1 APT
+    await commands.fundAccount(
+      testAccount.accountAddress.toString(),
+      100_000_000,
+    ); // 1 APT
 
     // Wait for funding to be indexed
     await new Promise((r) => setTimeout(r, 2000));

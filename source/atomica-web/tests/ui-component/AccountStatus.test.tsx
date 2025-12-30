@@ -23,7 +23,6 @@ describe.sequential("AccountStatus Integration", () => {
     const config = new AptosConfig({
       network: Network.LOCAL,
       fullnode: "http://127.0.0.1:8080/v1",
-      faucet: "http://127.0.0.1:8081",
     });
     setAptosInstance(new Aptos(config));
   }, 120000);
@@ -83,7 +82,9 @@ describe.sequential("AccountStatus Integration", () => {
 
       // Step 2: Fund the account via faucet
       const { getDerivedAddress } = await import("../../src/lib/aptos");
-      const derivedAddr = await getDerivedAddress(mockWallet.address.toLowerCase());
+      const derivedAddr = await getDerivedAddress(
+        mockWallet.address.toLowerCase(),
+      );
       const fundedAddress = derivedAddr.toString();
 
       console.log(`Funding account: ${fundedAddress}`);

@@ -58,7 +58,6 @@ import {
   teardownLocalnetCommand,
   deployContractsCommand,
   fundAccountCommand,
-  runAptosCmdCommand,
 } from "./test-utils/browser-commands";
 
 export default defineConfig({
@@ -223,7 +222,6 @@ export default defineConfig({
         teardownLocalnet: teardownLocalnetCommand,
         deployContracts: deployContractsCommand,
         fundAccount: fundAccountCommand,
-        runAptosCmd: runAptosCmdCommand,
       },
     },
 

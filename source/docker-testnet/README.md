@@ -27,6 +27,7 @@ await testnet.teardown();
 **No magic accounts, no minting privileges during runtime.**
 
 This testnet emulates production mainnet:
+
 - Validators have unlocked funds (simulating staking rewards)
 - New accounts funded via **validator transfers** (not minting)
 - Root account (0xA550C18) used **only** for initial bootstrap
@@ -44,6 +45,7 @@ This testnet emulates production mainnet:
 ### ✅ TypeScript SDK
 
 Simple, ergonomic API for testnet management:
+
 - Start/stop testnets programmatically
 - Production-like faucet
 - Block production verification
@@ -70,14 +72,6 @@ Simple, ergonomic API for testnet management:
   - Faucet tests
   - Network probes
   - Cleanup handling
-
-### Technical Details
-
-- **[testnet_startup.md](testnet_startup.md)** - Startup analysis and debugging
-  - Network connectivity
-  - Genesis generation
-  - Configuration details
-  - Faucet approach
 
 ## Architecture
 
@@ -113,7 +107,6 @@ Runtime Phase:
 ```
 docker-testnet/
 ├── README.md                    # This file
-├── testnet_startup.md           # Startup analysis
 ├── config/
 │   ├── README.md                # Docker configuration
 │   ├── docker-compose.yaml      # 4-validator setup
@@ -139,25 +132,25 @@ import { DockerTestnet } from "@atomica/docker-testnet";
 import { AptosAccount } from "aptos";
 
 describe("My Aptos Tests", () => {
-    let testnet: DockerTestnet;
+  let testnet: DockerTestnet;
 
-    beforeAll(async () => {
-        testnet = await DockerTestnet.new(4);
-        await testnet.bootstrapValidators();
-    });
+  beforeAll(async () => {
+    testnet = await DockerTestnet.new(4);
+    await testnet.bootstrapValidators();
+  });
 
-    afterAll(async () => {
-        await testnet.teardown();
-    });
+  afterAll(async () => {
+    await testnet.teardown();
+  });
 
-    test("fund and use account", async () => {
-        const account = new AptosAccount();
+  test("fund and use account", async () => {
+    const account = new AptosAccount();
 
-        // Production-like funding
-        await testnet.faucet(account.address(), 100_000_000n);
+    // Production-like funding
+    await testnet.faucet(account.address(), 100_000_000n);
 
-        // ... your test logic ...
-    });
+    // ... your test logic ...
+  });
 });
 ```
 
@@ -168,11 +161,7 @@ describe("My Aptos Tests", () => {
 const validator0 = await testnet.getValidatorAccount(0);
 
 // Use for custom operations
-const txn = await coinClient.transfer(
-    validator0,
-    recipientAddress,
-    amount
-);
+const txn = await coinClient.transfer(validator0, recipientAddress, amount);
 ```
 
 ### Network Verification
@@ -186,39 +175,15 @@ const info = await testnet.getLedgerInfo(0);
 console.log(`Epoch: ${info.epoch}, Block: ${info.block_height}`);
 ```
 
-## Why Production-Like Funding?
-
-### Traditional Testnet Approach ❌
-
-```typescript
-// Uses magic account with minting privileges
-const faucet = new FaucetClient("http://faucet:8080");
-await faucet.fundAccount(address, amount);
-// ^ This doesn't exist on mainnet!
-```
-
-**Problem:** Your code works on testnet but might fail on mainnet.
-
-### Our Approach ✅
-
-```typescript
-// Uses validator transfers (standard operations)
-await testnet.faucet(address, amount);
-// Internally: validator.transfer(address, amount)
-// ^ This works identically on mainnet!
-```
-
-**Benefit:** Production parity. Your test code works on mainnet.
-
 ## Comparison to Production
 
-| Aspect | Production Mainnet | Docker Testnet |
-|--------|-------------------|----------------|
-| Validators | Earn unlocked rewards | Bootstrap transfer (unlocked) |
-| New accounts | Funded by transfers | Funded by validator transfers |
-| Minting | None (after genesis) | None (after bootstrap) |
-| Magic accounts | Don't exist | Only for bootstrap |
-| Code behavior | Standard transfers | **Identical** standard transfers |
+| Aspect         | Production Mainnet    | Docker Testnet                   |
+| -------------- | --------------------- | -------------------------------- |
+| Validators     | Earn unlocked rewards | Bootstrap transfer (unlocked)    |
+| New accounts   | Funded by transfers   | Funded by validator transfers    |
+| Minting        | None (after genesis)  | None (after bootstrap)           |
+| Magic accounts | Don't exist           | Only for bootstrap               |
+| Code behavior  | Standard transfers    | **Identical** standard transfers |
 
 ## Installation
 
@@ -238,7 +203,7 @@ npm test
 npx bun test test/faucet.test.ts
 
 # With debug logging
-DEBUG_TESTNET=1 npm test
+ATOMICA_DEBUG_TESTNET=1 npm test
 ```
 
 ## Manual Docker Operation
@@ -258,6 +223,37 @@ docker compose down -v
 
 ## Troubleshooting
 
+### Debug Logging
+
+Enable verbose debug logging with environment variable:
+
+```bash
+ATOMICA_DEBUG_TESTNET=1 npm test
+```
+
+This enables:
+
+- Genesis generation debug logs
+- Docker compose operation logs
+- Network discovery logs
+- Configuration file verification logs
+
+### Manual Verification Commands
+
+```bash
+# Check all validator status
+for port in 8080 8081 8082 8083; do
+    echo "=== Validator on port $port ==="
+    curl -s http://127.0.0.1:$port/v1 | jq '{epoch,block_height,node_role}'
+done
+
+# Check validator logs for connectivity
+docker compose logs --tail=50 validator-0 | grep -i "connect\|error\|peer"
+
+# Check container networking
+docker exec atomica-validator-0 curl -s http://172.19.0.11:8080/v1
+```
+
 ### Port Conflicts
 
 ```bash
@@ -270,13 +266,12 @@ lsof -i :8080-8083
 
 ### Validators Not Syncing
 
-```bash
-# Check logs
-docker compose logs validator-0
+If validators report `Epoch: 0` and `Block Height: 0` for >30s, or you see "Connection Refused" errors in logs:
 
-# Enable debug mode
-DEBUG_TESTNET=1 npm test
-```
+1. **Check Logs**: `docker compose logs validator-0`
+2. **Verify Config**: Ensure `listen_address` is set to `/ip4/0.0.0.0/tcp/6180` in the generated `node-config.yaml`.
+   - _Note: This was a known startup issue fixed by ensuring the genesis generator correctly sets this field._
+3. **Check Firewall**: Ensure no firewall is blocking container-to-container traffic on port 6180.
 
 ### Cleanup Failed
 
@@ -289,17 +284,14 @@ docker compose down -v --remove-orphans
 docker rm -f $(docker ps -aq --filter name=atomica)
 ```
 
-## Key Concepts
+## Required Ports
 
-**Genesis:** Initial blockchain state with validators and staked funds.
-
-**Bootstrap:** One-time setup giving validators unlocked funds (simulates rewards).
-
-**Faucet:** Production-like account funding via validator transfers.
-
-**Validator Account:** Account with both staked (locked) and unlocked funds.
-
-**Root Account (0xA550C18):** Core Resources account, only for bootstrap.
+| Port | Protocol  | Purpose                | Listen Address |
+| ---- | --------- | ---------------------- | -------------- |
+| 8080 | TCP/HTTP  | REST API               | 0.0.0.0:8080   |
+| 6180 | TCP/Noise | Validator-to-Validator | 0.0.0.0:6180   |
+| 6181 | TCP/Noise | VFN Network (optional) | 0.0.0.0:6181   |
+| 9101 | TCP/HTTP  | Metrics/Prometheus     | 0.0.0.0:9101   |
 
 ## Contributing
 
@@ -307,13 +299,8 @@ When making changes:
 
 1. Update relevant documentation
 2. Run tests: `npm test`
-3. Test with debug logging: `DEBUG_TESTNET=1 npm test`
+3. Test with debug logging: `ATOMICA_DEBUG_TESTNET=1 npm test`
 4. Verify cleanup: No orphaned containers after tests
-
-## Related Projects
-
-- **[atomica-aptos](https://github.com/bomba-atomica/atomica-aptos)** - Aptos core with Atomica modifications
-- Validator Docker images built from atomica-aptos
 
 ## License
 

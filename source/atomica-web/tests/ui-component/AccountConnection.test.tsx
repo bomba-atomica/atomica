@@ -1,5 +1,11 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  cleanup,
+} from "@testing-library/react";
 import App from "../../src/App";
 import { MockWallet } from "../../test-utils/browser-utils/MockWallet";
 

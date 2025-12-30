@@ -721,15 +721,15 @@ This is the best of all worlds: automatic, decentralized, and user-friendly.
 ## Technical References
 
 **Aptos/Zapatos Source Code**:
-- **Transaction Validation**: `source/atomica-aptos/aptos-move/framework/aptos-framework/sources/transaction_validation.move`
+- **Transaction Validation**: [`atomica-aptos/aptos-move/framework/aptos-framework/sources/transaction_validation.move`](https://github.com/bomba-atomica/atomica-aptos/blob/dev-atomica/aptos-move/framework/aptos-framework/sources/transaction_validation.move)
   - `fee_payer_script_prologue()` - Gas validation before execution
   - `epilogue_gas_payer_extended()` - Gas deduction after execution
-- **Account Abstraction**: `source/atomica-aptos/aptos-move/framework/aptos-framework/sources/account/account_abstraction.move`
+- **Account Abstraction**: [`atomica-aptos/aptos-move/framework/aptos-framework/sources/account/account_abstraction.move`](https://github.com/bomba-atomica/atomica-aptos/blob/dev-atomica/aptos-move/framework/aptos-framework/sources/account/account_abstraction.move)
   - `derive_account_address()` - Deterministic address derivation
-- **Ethereum Derivable Account**: `source/atomica-aptos/aptos-move/framework/aptos-framework/sources/account/common_account_abstractions/ethereum_derivable_account.move`
+- **Ethereum Derivable Account**: [`atomica-aptos/aptos-move/framework/aptos-framework/sources/account/common_account_abstractions/ethereum_derivable_account.move`](https://github.com/bomba-atomica/atomica-aptos/blob/dev-atomica/aptos-move/framework/aptos-framework/sources/account/common_account_abstractions/ethereum_derivable_account.move)
   - SIWE message verification
   - ECDSA signature recovery
-- **Authenticators**: `source/atomica-aptos/types/src/transaction/authenticator.rs`
+- **Authenticators**: [`atomica-aptos/types/src/transaction/authenticator.rs`](https://github.com/bomba-atomica/atomica-aptos/blob/dev-atomica/types/src/transaction/authenticator.rs)
   - `TransactionAuthenticator::FeePayer` (lines 93-129)
   - `AbstractAuthenticator` for SIWE
 

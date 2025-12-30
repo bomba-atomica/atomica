@@ -80,7 +80,7 @@ These tests follow **clean room testing** principles:
 **Key assertions**:
 
 - Docker is installed and running
-- Docker Compose can start zapatos validator images
+- Docker Compose can start atomica validator images
 - All 4 validators bind to expected ports (8080-8083)
 - Validators serve API requests correctly
 - Block height increments over time (blockchain making progress)
@@ -126,12 +126,14 @@ The docker-testnet test requires configuration before first use. You have two op
 **Option 1: Use Locally-Built Images (Recommended for Development)**
 
 1. Create your environment configuration:
+
    ```bash
    cd source/atomica-web
    cp .env.example .env
    ```
 
 2. Build the Docker image (10-20 minutes first time):
+
    ```bash
    cd ../../docker-testnet
    ./build-local-image.sh
@@ -158,15 +160,17 @@ If you have access to the private atomica repository:
    - **Important**: Fine-grained tokens don't currently support package registry access
 
 2. Update `source/atomica-web/.env`:
+
    ```bash
    # Uncomment and configure:
-   VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica/zapatos-bin
+   VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica-aptos/validator
    IMAGE_TAG=5df0e6d1
    GHCR_USERNAME=your_github_username
    GHCR_TOKEN=ghp_YourPersonalAccessTokenHere
    ```
 
 3. Run the test:
+
    ```bash
    npm run test:docker
    ```

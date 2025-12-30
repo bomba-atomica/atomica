@@ -11,10 +11,11 @@ Before running the demo, you need to compile the Aptos release binary.
 > [!WARNING]
 > This step can take a significant amount of time (20+ minutes) as it compiles the entire Aptos node from source with testing features enabled.
 
-Navigate from the root to source/atomica-aptos and run:
+Clone the atomica-aptos repository and build the aptos binary:
 
 ```bash
-cd ../atomica-aptos
+git clone https://github.com/bomba-atomica/atomica-aptos.git
+cd atomica-aptos
 cargo b -p aptos --features testing
 ```
 
@@ -37,6 +38,31 @@ npm install && npm run demo
 ```
 
 The web application will be available at `http://localhost:4173/`.
+
+## Environment Variables
+
+### Naming Convention
+
+All Atomica-specific environment variables **must** be prefixed with `ATOMICA_`:
+
+- ✅ `ATOMICA_DEBUG=1`
+- ✅ `ATOMICA_LOG_LEVEL=verbose`
+- ✅ `ATOMICA_NUM_VALIDATORS=4`
+- ❌ `DEBUG=1` (too generic)
+- ❌ `NUM_VALIDATORS=4` (missing prefix)
+
+**Rationale**: This prevents naming conflicts with third-party libraries and system variables, making it clear which variables belong to Atomica.
+
+### Available Variables
+
+Currently used environment variables:
+
+- `NUM_VALIDATORS` - Number of validators for Docker testnet (default: 2)
+  - **Note**: This should be renamed to `ATOMICA_NUM_VALIDATORS` in a future update
+
+Testnet debugging:
+
+- `ATOMICA_DEBUG_TESTNET` - Enable verbose logging in docker-testnet SDK (values: `1`, `true`)
 
 ## Troubleshooting
 
