@@ -47,6 +47,11 @@ jobs:
           cd source/atomica-web
           npm install
 
+      - name: Install Playwright browsers
+        run: |
+          cd source/atomica-web
+          npx playwright install --with-deps
+
       - name: Run TypeScript tests with Vitest
         run: |
           cd source/atomica-web
