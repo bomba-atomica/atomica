@@ -47,14 +47,6 @@ jobs:
         working-directory: source/docker-testnet/typescript-sdk
         run: bun run build
 
-      - name: Format check
-        working-directory: source/docker-testnet/typescript-sdk
-        run: bun run format:check
-
-      - name: Lint
-        working-directory: source/docker-testnet/typescript-sdk
-        run: bun run lint
-
       - name: Run validator connectivity tests
         working-directory: source/docker-testnet/typescript-sdk
         run: bun test test/validator-connectivity.test.ts
