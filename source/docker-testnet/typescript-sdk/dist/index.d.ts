@@ -20,6 +20,8 @@ export declare class DockerTestnet {
     private composeDir;
     private numValidators;
     private validatorUrls;
+    private faucetLock;
+    private cleanupHandlersRegistered;
     private constructor();
     /**
      * Create a fresh, isolated Docker testnet with N validators
@@ -31,18 +33,24 @@ export declare class DockerTestnet {
      * @example
      * // Use published image (default)
      * const testnet = await DockerTestnet.new(4);
-     *
-     * // Use locally built image
-     * await DockerTestnet.buildLocalImage();
-     * const testnet = await DockerTestnet.new(4, { useLocalImage: true });
      */
-    static new(numValidators: number, options?: {
-        useLocalImage?: boolean;
-    }): Promise<DockerTestnet>;
+    static new(numValidators: number, _options?: {}): Promise<DockerTestnet>;
     /**
      * Tear down the testnet and clean up all resources
      */
     teardown(): Promise<void>;
+    /**
+     * Register cleanup handlers for process signals and exit.
+     * This ensures Docker containers are stopped when the process exits or is interrupted.
+     *
+     * Handlers are automatically registered when testnet is created via DockerTestnet.new()
+     * and unregistered after teardown() completes.
+     */
+    private registerCleanupHandlers;
+    /**
+     * Unregister cleanup handlers after teardown
+     */
+    private unregisterCleanupHandlers;
     /**
      * Get the REST API URL for a specific validator
      */
@@ -114,40 +122,61 @@ export declare class DockerTestnet {
      */
     waitForBlocks(numBlocks: number, timeoutSecs?: number): Promise<void>;
     /**
+     * Deploy Move contracts using aptos CLI from within the validator container.
+     *
+     * This method copies the contract directory into the validator container,
+     * compiles and publishes the contracts using the aptos binary inside the container,
+     * then runs any initialization functions.
+     *
+     * @param options Deployment options
+     * @returns Promise resolving when deployment completes
+     *
+     * @example
+     * await testnet.deployContracts({
+     *   contractsDir: "/path/to/contracts",
+     *   deployerPrivateKey: "0x123...",
+     *   namedAddresses: { atomica: "default" },
+     *   initFunctions: [
+     *     { functionId: "default::registry::initialize", args: ["hex:0123"] },
+     *     { functionId: "default::fake_eth::initialize", args: [] },
+     *   ],
+     * });
+     */
+    deployContracts(options: {
+        contractsDir: string;
+        deployerPrivateKey: string;
+        deployerAddress?: string;
+        namedAddresses?: Record<string, string>;
+        initFunctions?: Array<{
+            functionId: string;
+            args: string[];
+        }>;
+        fundAmount?: bigint;
+    }): Promise<void>;
+    /**
+     * Execute a command on the host system.
+     *
+     * @param bin Binary to execute (e.g., "aptos")
+     * @param args Command arguments
+     * @returns Promise resolving to { stdout, stderr }
+     * @private
+     */
+    private execCommand;
+    /**
+     * Execute a command inside a validator container.
+     *
+     * @param containerName Container name (e.g., "atomica-validator-0")
+     * @param command Command to execute
+     * @returns Promise resolving to { stdout, stderr }
+     * @private
+     */
+    private execInContainer;
+    /**
      * Find the docker-testnet directory
      */
     private static findComposeDir;
     private static runCompose;
     static ensureDockerRunning(): Promise<void>;
-    /**
-     * Build Atomica Aptos validator image locally from source
-     *
-     * This builds the Docker image from ./source/atomica-aptos using sccache
-     * for fast incremental builds. The sccache data is persisted in a Docker
-     * volume so subsequent builds are much faster.
-     *
-     * @param options Build options
-     * @returns Promise that resolves when build completes
-     *
-     * @example
-     * // Basic build
-     * await DockerTestnet.buildLocalImage();
-     *
-     * // Custom build
-     * await DockerTestnet.buildLocalImage({
-     *   profile: 'debug',
-     *   cleanSccache: true,
-     *   showStats: true
-     * });
-     */
-    static buildLocalImage(options?: {
-        profile?: "release" | "debug";
-        features?: string;
-        tag?: string;
-        noCache?: boolean;
-        cleanSccache?: boolean;
-        showStats?: boolean;
-    }): Promise<void>;
 }
 /**
  * Network probe result for a single validator

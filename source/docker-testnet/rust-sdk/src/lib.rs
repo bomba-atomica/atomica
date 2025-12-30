@@ -1,4 +1,4 @@
-//! Docker testnet manager for zapatos integration tests
+//! Docker testnet manager for atomica integration tests
 //!
 //! ## Automatic Docker Lifecycle Management
 //!
@@ -41,7 +41,6 @@
 //!
 //! - Tests must run sequentially: `cargo test -- --test-threads=1`
 //! - Docker port conflicts occur if tests run in parallel
-//! - Build images first: `cd source/docker-testnet/config && ./build.sh`
 //! - No manual `docker compose up/down` needed!
 
 use std::process::{Command, Stdio};
@@ -55,19 +54,6 @@ const BASE_API_PORT: u16 = 8080;
 #[allow(dead_code)]
 const BASE_METRICS_PORT: u16 = 9101;
 
-/// Build options for local Docker image
-#[derive(Debug, Clone, Default)]
-pub struct BuildOptions {
-    /// Build profile: "release" or "debug" (default: "release")
-    pub profile: Option<String>,
-    /// Cargo features to enable (default: "testing")
-    pub features: Option<String>,
-    /// Image tag (default: "local")
-    pub tag: Option<String>,
-    /// Disable Docker BuildKit cache
-    pub no_cache: bool,
-}
-
 /// Docker testnet with automatic cleanup
 pub struct DockerTestnet {
     compose_dir: String,
@@ -80,7 +66,6 @@ impl DockerTestnet {
     ///
     /// # Arguments
     /// * `num_validators` - Number of validator nodes (typically 4-7)
-    /// * `use_local_image` - If true, use locally built image instead of published one
     ///
     /// # Errors
     /// Returns error if:
@@ -95,14 +80,10 @@ impl DockerTestnet {
     /// #[tokio::main]
     /// async fn main() {
     ///     // Use published image (default)
-    ///     let testnet = DockerTestnet::new(4, false).await.unwrap();
-    ///
-    ///     // Use locally built image
-    ///     DockerTestnet::build_local_image(None).await.unwrap();
-    ///     let testnet = DockerTestnet::new(4, true).await.unwrap();
+    ///     let testnet = DockerTestnet::new(4).await.unwrap();
     /// }
     /// ```
-    pub async fn new(num_validators: usize, use_local_image: bool) -> anyhow::Result<Self> {
+    pub async fn new(num_validators: usize) -> anyhow::Result<Self> {
         if num_validators < 1 || num_validators > 7 {
             return Err(anyhow::anyhow!(
                 "num_validators must be between 1 and 7, got {}",
@@ -115,16 +96,12 @@ impl DockerTestnet {
 
         tracing::info!("Setting up fresh Docker testnet with {} validators...", num_validators);
 
-        if use_local_image {
-            tracing::info!("Using locally built image: atomica-validator:local");
-        }
-
         // Clean up any existing testnet
-        let _ = Self::run_compose_with_env(&compose_dir, &["down", "--remove-orphans", "-v"], use_local_image);
+        let _ = Self::run_compose(&compose_dir, &["down", "--remove-orphans", "-v"]);
         tokio::time::sleep(Duration::from_secs(2)).await;
 
         // Start the testnet
-        Self::run_compose_with_env(&compose_dir, &["up", "-d"], use_local_image)?;
+        Self::run_compose(&compose_dir, &["up", "-d"])?;
 
         // Wait for all validators to be healthy
         Self::wait_for_healthy(num_validators, 120).await?;
@@ -276,82 +253,6 @@ impl DockerTestnet {
         AccountInfo::from_yaml_file(&path)
     }
 
-    /// Build Atomica Aptos validator image locally from source
-    ///
-    /// This builds the Docker image from ../atomica-aptos using BuildKit cache
-    /// for fast incremental builds. The cache is persisted by Docker BuildKit
-    /// so subsequent builds are much faster.
-    ///
-    /// # Arguments
-    /// * `options` - Optional build configuration
-    ///
-    /// # Examples
-    /// ```no_run
-    /// use atomica_docker_testnet::{DockerTestnet, BuildOptions};
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     // Basic build
-    ///     DockerTestnet::build_local_image(None).await.unwrap();
-    ///
-    ///     // Custom build
-    ///     DockerTestnet::build_local_image(Some(BuildOptions {
-    ///         profile: Some("debug".to_string()),
-    ///         no_cache: true,
-    ///         ..Default::default()
-    ///     })).await.unwrap();
-    /// }
-    /// ```
-    pub async fn build_local_image(options: Option<BuildOptions>) -> anyhow::Result<()> {
-        let compose_dir = Self::find_compose_dir()?;
-        // Build script is now in atomica-aptos/atomica/docker/
-        let build_script = format!("{}/../../atomica-aptos/atomica/docker/build-local-image.sh", compose_dir);
-
-        if !PathBuf::from(&build_script).exists() {
-            return Err(anyhow::anyhow!(
-                "Build script not found: {}\nMake sure atomica-aptos repository is checked out at the correct location.",
-                build_script
-            ));
-        }
-
-        let opts = options.unwrap_or_default();
-        let mut args = Vec::new();
-
-        if let Some(profile) = opts.profile {
-            args.push("--profile".to_string());
-            args.push(profile);
-        }
-        if let Some(features) = opts.features {
-            args.push("--features".to_string());
-            args.push(features);
-        }
-        if let Some(tag) = opts.tag {
-            args.push("--tag".to_string());
-            args.push(tag);
-        }
-        if opts.no_cache {
-            args.push("--no-cache".to_string());
-        }
-
-        tracing::info!("Building local Atomica Aptos validator image...");
-        if opts.no_cache {
-            tracing::info!("  (ignoring BuildKit cache - build will take longer)");
-        }
-
-        let status = Command::new(&build_script)
-            .args(&args)
-            .current_dir(&compose_dir)
-            .env("DOCKER_BUILDKIT", "1")
-            .status()?;
-
-        if !status.success() {
-            return Err(anyhow::anyhow!("Build failed with exit code {:?}", status.code()));
-        }
-
-        tracing::info!("✓ Local image build complete");
-        Ok(())
-    }
-
     // --- Private helpers ---
 
     fn check_docker() -> anyhow::Result<()> {
@@ -402,17 +303,8 @@ impl DockerTestnet {
     }
 
     fn run_compose(dir: &str, args: &[&str]) -> anyhow::Result<()> {
-        Self::run_compose_with_env(dir, args, false)
-    }
-
-    fn run_compose_with_env(dir: &str, args: &[&str], use_local_image: bool) -> anyhow::Result<()> {
         let mut cmd = Command::new("docker");
         cmd.arg("compose").args(args).current_dir(dir);
-
-        // Set environment variable if using local image
-        if use_local_image {
-            cmd.env("USE_LOCAL_IMAGE", "1");
-        }
 
         let out = cmd.output()?;
 
@@ -552,7 +444,7 @@ mod tests {
         let _ = tracing_subscriber::fmt().with_test_writer().try_init();
 
         // Note: this test requires docker to be running and images to be available
-        match DockerTestnet::new(4, false).await {
+        match DockerTestnet::new(4).await {
             Ok(testnet) => {
                 println!("✓ Testnet started with {} validators", testnet.num_validators());
                 println!("  Validator 0 API: {}", testnet.validator_api_url(0));
@@ -579,7 +471,7 @@ mod tests {
         // This test verifies that both Rust and TypeScript SDKs read keys from storage
         // rather than generating them
 
-        match DockerTestnet::new(2, false).await {
+        match DockerTestnet::new(2).await {
             Ok(testnet) => {
                 println!("✓ Testnet started");
 

@@ -1,26 +1,27 @@
-# Atomica Aptos Local Testnet - Multi-Validator Configuration
+# Atomica Aptos Local Testnet - Simplified with Inline Genesis
 #
-# This compose file sets up a single-node or multi-node testnet using validator images.
+# Each validator generates genesis deterministically on startup
 #
 # Image Configuration:
 #   - Defaults to ghcr.io/bomba-atomica/atomica-aptos/validator:latest
 #   - Override with IMAGE_NAME environment variable
 #
 # Architecture:
-# - 4 validator nodes
-# - Shared genesis volume for coordination
-# - Exposed REST APIs (8080-8083) and metrics (9101-9104)
+# - 4 validator nodes with inline genesis generation
+# - Shared genesis volume (writable - first validator to start generates it)
+# - No separate genesis generation step needed
+# - Node configs generated from template
 #
 # Usage:
-#   1. Start testnet: docker compose up -d
-#   2. Check status: docker compose ps
-#   3. View logs: docker compose logs -f validator-0
-#   4. Stop testnet: docker compose down
+#   1. Start testnet: docker compose -f docker-compose-inline-genesis.yaml up -d
+#   2. Check status: docker compose -f docker-compose-inline-genesis.yaml ps
+#   3. View logs: docker compose -f docker-compose-inline-genesis.yaml logs -f validator-0
+#   4. Stop testnet: docker compose -f docker-compose-inline-genesis.yaml down
 
 name: atomica-testnet
 
 services:
-  # Validator 0
+  # Validator 0 - Primary (starts first, generates genesis)
   validator-0:
     image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
     container_name: atomica-validator-0
@@ -31,9 +32,20 @@ services:
         ipv4_address: 172.19.0.10
     volumes:
       - type: bind
-        source: ./genesis-artifacts
-        target: /opt/aptos/var/genesis
+        source: ./validator-entrypoint.sh
+        target: /opt/aptos/entrypoint.sh
         read_only: true
+      - type: bind
+        source: ./node-config.template.yaml
+        target: /opt/aptos/config/node-config.template.yaml
+        read_only: true
+      - type: bind
+        source: ./genesis-artifacts
+        target: /opt/aptos/genesis-artifacts
+        read_only: true
+      - type: volume
+        source: atomica-genesis-shared
+        target: /opt/aptos/var/genesis
       - type: bind
         source: ./validators/validator-0
         target: /opt/aptos/var/identity
@@ -41,19 +53,15 @@ services:
       - type: volume
         source: atomica-validator-0-data
         target: /opt/aptos/var/data
-      - type: bind
-        source: ./validators/validator-0/node-config.yaml
-        target: /opt/aptos/var/etc/node-config.yaml
-    command: >
-      -f /opt/aptos/var/etc/node-config.yaml
+    entrypoint: ["/bin/bash", "/opt/aptos/entrypoint.sh"]
     ports:
       - "8080:8080"  # REST API
       - "9101:9101"  # Metrics
     expose:
-      - 8080  # REST API
-      - 9101  # Metrics
-      - 6180  # Validator network
-      - 6181  # VFN network
+      - 8080
+      - 9101
+      - 6180
+      - 6181
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/v1 || exit 1"]
       interval: 10s
@@ -61,6 +69,9 @@ services:
       retries: 10
       start_period: 30s
     environment:
+      - VALIDATOR_INDEX=0
+      - NUM_VALIDATORS=${NUM_VALIDATORS:-2}
+      - CHAIN_ID=4
       - RUST_LOG=info
       - RUST_BACKTRACE=1
 
@@ -78,9 +89,20 @@ services:
         ipv4_address: 172.19.0.11
     volumes:
       - type: bind
-        source: ./genesis-artifacts
-        target: /opt/aptos/var/genesis
+        source: ./validator-entrypoint.sh
+        target: /opt/aptos/entrypoint.sh
         read_only: true
+      - type: bind
+        source: ./node-config.template.yaml
+        target: /opt/aptos/config/node-config.template.yaml
+        read_only: true
+      - type: bind
+        source: ./genesis-artifacts
+        target: /opt/aptos/genesis-artifacts
+        read_only: true
+      - type: volume
+        source: atomica-genesis-shared
+        target: /opt/aptos/var/genesis
       - type: bind
         source: ./validators/validator-1
         target: /opt/aptos/var/identity
@@ -88,11 +110,7 @@ services:
       - type: volume
         source: atomica-validator-1-data
         target: /opt/aptos/var/data
-      - type: bind
-        source: ./validators/validator-1/node-config.yaml
-        target: /opt/aptos/var/etc/node-config.yaml
-    command: >
-      -f /opt/aptos/var/etc/node-config.yaml
+    entrypoint: ["/bin/bash", "/opt/aptos/entrypoint.sh"]
     ports:
       - "8081:8080"  # REST API
       - "9102:9101"  # Metrics
@@ -102,6 +120,9 @@ services:
       - 6180
       - 6181
     environment:
+      - VALIDATOR_INDEX=1
+      - NUM_VALIDATORS=${NUM_VALIDATORS:-2}
+      - CHAIN_ID=4
       - RUST_LOG=info
       - RUST_BACKTRACE=1
 
@@ -119,9 +140,20 @@ services:
         ipv4_address: 172.19.0.12
     volumes:
       - type: bind
-        source: ./genesis-artifacts
-        target: /opt/aptos/var/genesis
+        source: ./validator-entrypoint.sh
+        target: /opt/aptos/entrypoint.sh
         read_only: true
+      - type: bind
+        source: ./node-config.template.yaml
+        target: /opt/aptos/config/node-config.template.yaml
+        read_only: true
+      - type: bind
+        source: ./genesis-artifacts
+        target: /opt/aptos/genesis-artifacts
+        read_only: true
+      - type: volume
+        source: atomica-genesis-shared
+        target: /opt/aptos/var/genesis
       - type: bind
         source: ./validators/validator-2
         target: /opt/aptos/var/identity
@@ -129,11 +161,7 @@ services:
       - type: volume
         source: atomica-validator-2-data
         target: /opt/aptos/var/data
-      - type: bind
-        source: ./validators/validator-2/node-config.yaml
-        target: /opt/aptos/var/etc/node-config.yaml
-    command: >
-      -f /opt/aptos/var/etc/node-config.yaml
+    entrypoint: ["/bin/bash", "/opt/aptos/entrypoint.sh"]
     ports:
       - "8082:8080"  # REST API
       - "9103:9101"  # Metrics
@@ -143,6 +171,9 @@ services:
       - 6180
       - 6181
     environment:
+      - VALIDATOR_INDEX=2
+      - NUM_VALIDATORS=4
+      - CHAIN_ID=4
       - RUST_LOG=info
       - RUST_BACKTRACE=1
 
@@ -160,9 +191,20 @@ services:
         ipv4_address: 172.19.0.13
     volumes:
       - type: bind
-        source: ./genesis-artifacts
-        target: /opt/aptos/var/genesis
+        source: ./validator-entrypoint.sh
+        target: /opt/aptos/entrypoint.sh
         read_only: true
+      - type: bind
+        source: ./node-config.template.yaml
+        target: /opt/aptos/config/node-config.template.yaml
+        read_only: true
+      - type: bind
+        source: ./genesis-artifacts
+        target: /opt/aptos/genesis-artifacts
+        read_only: true
+      - type: volume
+        source: atomica-genesis-shared
+        target: /opt/aptos/var/genesis
       - type: bind
         source: ./validators/validator-3
         target: /opt/aptos/var/identity
@@ -170,11 +212,7 @@ services:
       - type: volume
         source: atomica-validator-3-data
         target: /opt/aptos/var/data
-      - type: bind
-        source: ./validators/validator-3/node-config.yaml
-        target: /opt/aptos/var/etc/node-config.yaml
-    command: >
-      -f /opt/aptos/var/etc/node-config.yaml
+    entrypoint: ["/bin/bash", "/opt/aptos/entrypoint.sh"]
     ports:
       - "8083:8080"  # REST API
       - "9104:9101"  # Metrics
@@ -184,47 +222,11 @@ services:
       - 6180
       - 6181
     environment:
+      - VALIDATOR_INDEX=3
+      - NUM_VALIDATORS=4
+      - CHAIN_ID=4
       - RUST_LOG=info
       - RUST_BACKTRACE=1
-
-  # Optional: Faucet service (useful for testing)
-  faucet:
-    image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
-    container_name: atomica-faucet
-    depends_on:
-      validator-0:
-        condition: service_healthy
-    networks:
-      atomica-testnet:
-        ipv4_address: 172.19.0.20
-    volumes:
-      - type: volume
-        source: atomica-genesis
-        target: /opt/aptos/var
-        read_only: true
-    command:
-      - /bin/bash
-      - -c
-      - |
-        echo 'Waiting for validator mint.key...'
-        for i in {1..30}; do
-          if [[ -s /opt/aptos/var/mint.key ]]; then
-            echo 'Found mint.key, starting faucet...'
-            sleep 2
-            exec /usr/local/bin/aptos-faucet-service run-simple \
-              --key-file-path /opt/aptos/var/mint.key \
-              --chain-id TESTING \
-              --node-url http://172.19.0.10:8080
-          fi
-          sleep 2
-        done
-        echo 'ERROR: Validator did not generate mint.key'
-        exit 1
-    ports:
-      - "8000:8081"  # Faucet service
-    restart: unless-stopped
-    profiles:
-      - with-faucet
 
 networks:
   atomica-testnet:
@@ -237,6 +239,8 @@ networks:
           gateway: 172.19.0.1
 
 volumes:
+  atomica-genesis-shared:
+    name: atomica-genesis-shared
   atomica-validator-0-data:
     name: atomica-validator-0-data
   atomica-validator-1-data:

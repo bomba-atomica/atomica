@@ -1,9 +1,10 @@
+import { AptosAccount, AptosClient, HexString, TxnBuilderTypes, BCS } from "aptos";
 import { spawn } from "child_process";
-import { resolve as pathResolve } from "path";
-import { existsSync, readFileSync, cpSync, mkdirSync } from "fs";
 import * as dotenv from "dotenv";
-import { AptosAccount, HexString, AptosClient, CoinClient } from "aptos";
+import { cpSync, existsSync, mkdirSync, readFileSync } from "fs";
+import { resolve as pathResolve } from "path";
 import { generateGenesis } from "./genesis";
+import { findAptosBinary } from "./findAptosBinary";
 
 /** Base API port for validators (incremented for each validator) */
 const BASE_API_PORT = 8080;
@@ -13,6 +14,17 @@ const BASE_VALIDATOR_PORT = 6180;
 
 /** Docker binary path - assumed to be in PATH or standard location */
 const DOCKER_BIN = "docker";
+
+/** Aptos CLI binary path - lazily initialized to avoid unnecessary lookups */
+let APTOS_BIN: string | null = null;
+
+/** Get the aptos binary path, finding it on first use */
+function getAptosBinary(): string {
+    if (APTOS_BIN === null) {
+        APTOS_BIN = findAptosBinary();
+    }
+    return APTOS_BIN;
+}
 
 /** Debug logging - controlled by DEBUG_TESTNET env var */
 const DEBUG = process.env.DEBUG_TESTNET === "1" || process.env.DEBUG_TESTNET === "true";
@@ -62,12 +74,10 @@ export class DockerTestnet {
     private composeDir: string;
     private numValidators: number;
     private validatorUrls: string[];
+    private faucetLock: Promise<unknown> = Promise.resolve();
+    private cleanupHandlersRegistered: boolean = false;
 
-    private constructor(
-        composeDir: string,
-        numValidators: number,
-        validatorUrls: string[],
-    ) {
+    private constructor(composeDir: string, numValidators: number, validatorUrls: string[]) {
         this.composeDir = composeDir;
         this.numValidators = numValidators;
         this.validatorUrls = validatorUrls;
@@ -83,21 +93,15 @@ export class DockerTestnet {
      * @example
      * // Use published image (default)
      * const testnet = await DockerTestnet.new(4);
-     *
-     * // Use locally built image
-     * await DockerTestnet.buildLocalImage();
-     * const testnet = await DockerTestnet.new(4, { useLocalImage: true });
      */
     static async new(
         numValidators: number,
-        options?: {
-            useLocalImage?: boolean;
+        _options?: {
+            // Options reserved for future use
         },
     ): Promise<DockerTestnet> {
         if (numValidators < 1 || numValidators > 7) {
-            throw new Error(
-                `numValidators must be between 1 and 7, got ${numValidators}`,
-            );
+            throw new Error(`numValidators must be between 1 and 7, got ${numValidators}`);
         }
 
         const composeDir = DockerTestnet.findComposeDir();
@@ -114,17 +118,9 @@ export class DockerTestnet {
         // Load environment variables
         const envVars = loadEnvVariables();
 
-        // Set USE_LOCAL_IMAGE if requested
-        if (options?.useLocalImage || process.env.USE_LOCAL_IMAGE === "1") {
-            envVars.USE_LOCAL_IMAGE = "1";
-            console.log("Using locally built image: atomica-validator:local");
-        }
-
         debug("Loaded environment variables", { keys: Object.keys(envVars) });
 
-        console.log(
-            `Setting up fresh Docker testnet with ${numValidators} validators...`,
-        );
+        console.log(`Setting up fresh Docker testnet with ${numValidators} validators...`);
 
         // Clean up any existing testnet
         await DockerTestnet.runCompose(["down", "--remove-orphans", "-v"], composeDir, envVars);
@@ -156,16 +152,29 @@ export class DockerTestnet {
 
         // Start the testnet
         // Use 5 minute timeout for 'up' command (image pull can be slow)
+        // Only start the requested number of validators
+        const validatorServices = [];
+        for (let i = 0; i < numValidators; i++) {
+            validatorServices.push(`validator-${i}`);
+        }
         try {
-            await DockerTestnet.runCompose(["up", "-d"], composeDir, envVars, 300000);
+            await DockerTestnet.runCompose(
+                ["up", "-d", ...validatorServices],
+                composeDir,
+                envVars,
+                300000,
+            );
         } catch (error: any) {
             console.error("Failed to start testnet. Fetching logs...");
             try {
                 // Determine logs command
-                const proc = spawn(DOCKER_BIN, ["compose", "logs", "--tail=50"], { cwd: composeDir, env: { ...process.env, ...envVars } });
+                const proc = spawn(DOCKER_BIN, ["compose", "logs", "--tail=200"], {
+                    cwd: composeDir,
+                    env: { ...process.env, ...envVars },
+                });
                 let logs = "";
-                proc.stdout?.on("data", (d) => logs += d.toString());
-                proc.stderr?.on("data", (d) => logs += d.toString()); // Capture stderr too just in case
+                proc.stdout?.on("data", (d) => (logs += d.toString()));
+                proc.stderr?.on("data", (d) => (logs += d.toString())); // Capture stderr too just in case
 
                 await new Promise<void>((resolve) => {
                     proc.on("close", () => {
@@ -175,8 +184,7 @@ export class DockerTestnet {
                     // Timeout for log fetch
                     setTimeout(() => resolve(), 5000);
                 });
-
-            } catch (logError) {
+            } catch (_logError) {
                 console.error("Failed to fetch logs.");
             }
             throw error;
@@ -194,7 +202,12 @@ export class DockerTestnet {
         await new Promise((resolve) => setTimeout(resolve, 2000));
         console.log(`✓ Docker testnet ready with ${numValidators} validators`);
 
-        return new DockerTestnet(composeDir, numValidators, validatorUrls);
+        const testnet = new DockerTestnet(composeDir, numValidators, validatorUrls);
+
+        // Register cleanup handlers to ensure teardown on process exit/interrupt
+        testnet.registerCleanupHandlers();
+
+        return testnet;
     }
 
     /**
@@ -203,8 +216,79 @@ export class DockerTestnet {
     async teardown(): Promise<void> {
         console.log("Tearing down Docker testnet...");
         const envVars = loadEnvVariables();
-        await DockerTestnet.runCompose(["down", "--remove-orphans", "-v"], this.composeDir, envVars);
+        await DockerTestnet.runCompose(
+            ["down", "--remove-orphans", "-v"],
+            this.composeDir,
+            envVars,
+        );
         console.log("✓ Docker testnet stopped");
+
+        // Unregister cleanup handlers after successful teardown
+        this.unregisterCleanupHandlers();
+    }
+
+    /**
+     * Register cleanup handlers for process signals and exit.
+     * This ensures Docker containers are stopped when the process exits or is interrupted.
+     *
+     * Handlers are automatically registered when testnet is created via DockerTestnet.new()
+     * and unregistered after teardown() completes.
+     */
+    private registerCleanupHandlers(): void {
+        if (this.cleanupHandlersRegistered) {
+            return;
+        }
+        this.cleanupHandlersRegistered = true;
+
+        const handleCleanup = async (signal: string): Promise<void> => {
+            console.log(`\n[${signal}] Cleaning up Docker testnet...`);
+            try {
+                await this.teardown();
+                console.log(`[${signal}] ✓ Docker testnet cleaned up`);
+            } catch (error: any) {
+                console.error(`[${signal}] Failed to cleanup testnet:`, error.message);
+            }
+        };
+
+        // Store bound handlers so we can remove them later
+        (this as any)._signalHandlers = {
+            SIGINT: async () => {
+                await handleCleanup("SIGINT");
+                process.exit(130); // 128 + 2 (SIGINT)
+            },
+            SIGTERM: async () => {
+                await handleCleanup("SIGTERM");
+                process.exit(143); // 128 + 15 (SIGTERM)
+            },
+            beforeExit: async () => {
+                await handleCleanup("beforeExit");
+            },
+        };
+
+        // Register signal handlers
+        process.on("SIGINT", (this as any)._signalHandlers.SIGINT);
+        process.on("SIGTERM", (this as any)._signalHandlers.SIGTERM);
+        process.on("beforeExit", (this as any)._signalHandlers.beforeExit);
+
+        debug("Cleanup handlers registered for SIGINT, SIGTERM, and beforeExit");
+    }
+
+    /**
+     * Unregister cleanup handlers after teardown
+     */
+    private unregisterCleanupHandlers(): void {
+        if (!this.cleanupHandlersRegistered || !(this as any)._signalHandlers) {
+            return;
+        }
+
+        process.off("SIGINT", (this as any)._signalHandlers.SIGINT);
+        process.off("SIGTERM", (this as any)._signalHandlers.SIGTERM);
+        process.off("beforeExit", (this as any)._signalHandlers.beforeExit);
+
+        delete (this as any)._signalHandlers;
+        this.cleanupHandlersRegistered = false;
+
+        debug("Cleanup handlers unregistered");
     }
 
     /**
@@ -212,9 +296,7 @@ export class DockerTestnet {
      */
     validatorApiUrl(index: number): string {
         if (index < 0 || index >= this.numValidators) {
-            throw new Error(
-                `Validator index ${index} out of range (0-${this.numValidators - 1})`,
-            );
+            throw new Error(`Validator index ${index} out of range (0-${this.numValidators - 1})`);
         }
         return this.validatorUrls[index];
     }
@@ -238,16 +320,14 @@ export class DockerTestnet {
      */
     async getValidatorAccount(index: number): Promise<AptosAccount> {
         if (index < 0 || index >= this.numValidators) {
-            throw new Error(
-                `Validator index ${index} out of range (0-${this.numValidators - 1})`,
-            );
+            throw new Error(`Validator index ${index} out of range (0-${this.numValidators - 1})`);
         }
 
         const identityPath = pathResolve(
             this.composeDir,
             "validators",
             `validator-${index}`,
-            "private-keys.yaml"
+            "private-keys.yaml",
         );
 
         if (!existsSync(identityPath)) {
@@ -285,7 +365,7 @@ export class DockerTestnet {
         const rootKeysPath = pathResolve(
             this.composeDir,
             "genesis-artifacts",
-            "root-account-private-keys.yaml"
+            "root-account-private-keys.yaml",
         );
 
         if (!existsSync(rootKeysPath)) {
@@ -304,7 +384,8 @@ export class DockerTestnet {
         // IMPORTANT: The Core Resources account is ALWAYS at address 0xA550C18 (hardcoded in Move.toml)
         // At genesis, its auth key is rotated to match the root_key from layout.yaml
         // So we use the hardcoded address with our generated private key
-        const coreResourcesAddress = "0x00000000000000000000000000000000000000000000000000000000A550C18";
+        const coreResourcesAddress =
+            "0x00000000000000000000000000000000000000000000000000000000A550C18";
         return new AptosAccount(privateKey, coreResourcesAddress);
     }
 
@@ -337,7 +418,9 @@ export class DockerTestnet {
             const validator = await this.getValidatorAccount(i);
             const validatorAddr = validator.address().hex();
 
-            console.log(`  Minting ${amountPerValidator} octas for validator ${i} (${validatorAddr.slice(0, 10)}...)`);
+            console.log(
+                `  Minting ${amountPerValidator} octas for validator ${i} (${validatorAddr.slice(0, 10)}...)`,
+            );
 
             try {
                 // Use aptos_account::transfer which creates CoinStore if it doesn't exist
@@ -350,7 +433,10 @@ export class DockerTestnet {
                     arguments: [validatorAddr, amountPerValidator.toString()],
                 };
 
-                const transferTxn = await client.generateTransaction(faucetAccount.address(), transferPayload);
+                const transferTxn = await client.generateTransaction(
+                    faucetAccount.address(),
+                    transferPayload,
+                );
                 const signedTransferTxn = await client.signTransaction(faucetAccount, transferTxn);
                 const transferPending = await client.submitTransaction(signedTransferTxn);
                 await client.waitForTransaction(transferPending.hash);
@@ -382,36 +468,109 @@ export class DockerTestnet {
      * @returns Transaction hash
      */
     async faucet(address: string | HexString, amount: bigint = 100_000_000n): Promise<string> {
-        const faucetAccount = this.getFaucetAccount();
-        const client = new AptosClient(this.validatorApiUrl(0));
+        // Wait for previous faucet operation to complete (serialization)
+        await this.faucetLock;
 
-        const targetAddr = typeof address === 'string' ? address : address.hex();
-        debug(`Faucet funding ${targetAddr} with ${amount} octas`);
+        // Create the current faucet operation
+        const currentOperation = (async () => {
+            const faucetAccount = this.getFaucetAccount();
+            const client = new AptosClient(this.validatorApiUrl(0));
 
-        try {
-            // Use aptos_account::transfer which creates the account if it doesn't exist
-            const transferPayload = {
-                type: "entry_function_payload",
-                function: "0x1::aptos_account::transfer",
-                type_arguments: [],
-                arguments: [targetAddr, amount.toString()],
-            };
+            const targetAddr = typeof address === "string" ? address : address.hex();
+            debug(`Faucet funding ${targetAddr} with ${amount} octas`);
 
-            const transferTxn = await client.generateTransaction(faucetAccount.address(), transferPayload);
-            const signedTransferTxn = await client.signTransaction(faucetAccount, transferTxn);
-            const transferPending = await client.submitTransaction(signedTransferTxn);
-            await client.waitForTransaction(transferPending.hash);
+            try {
+                // Manually build transaction without using SDK helpers that require indexer
+                // Build the entry function payload for aptos_account::transfer
+                const entryFunctionPayload = new TxnBuilderTypes.TransactionPayloadEntryFunction(
+                    TxnBuilderTypes.EntryFunction.natural(
+                        "0x1::aptos_account",
+                        "transfer",
+                        [],
+                        [
+                            BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex(targetAddr)),
+                            BCS.bcsSerializeUint64(amount),
+                        ],
+                    ),
+                );
 
-            debug(`Faucet transfer complete`, {
-                to: targetAddr,
-                amount: amount.toString(),
-                txn: transferPending.hash,
-            });
+                // Get account info for sequence number
+                const accountInfo = await client.getAccount(faucetAccount.address());
+                const chainId = await client.getChainId();
 
-            return transferPending.hash;
-        } catch (error: any) {
-            throw new Error(`Faucet transfer failed: ${error.message}`);
-        }
+                // Build raw transaction
+                const rawTxn = new TxnBuilderTypes.RawTransaction(
+                    TxnBuilderTypes.AccountAddress.fromHex(faucetAccount.address()),
+                    BigInt(accountInfo.sequence_number),
+                    entryFunctionPayload,
+                    BigInt(10000), // max gas
+                    BigInt(100), // gas price
+                    BigInt(Math.floor(Date.now() / 1000) + 600), // expiration (10 min from now)
+                    new TxnBuilderTypes.ChainId(chainId),
+                );
+
+                // Sign and submit
+                const signedTxn = await client.signTransaction(faucetAccount, rawTxn);
+                const txnResponse = await client.submitTransaction(signedTxn);
+
+                // Wait for transaction with extended timeout (60 seconds instead of default 20)
+                await client.waitForTransaction(txnResponse.hash, { timeoutSecs: 60 });
+
+                // Poll for balance using view function to ensure state is queryable
+                const maxRetries = 40; // Increased from 20
+                const retryDelayMs = 1000; // Increased from 500ms to 1s
+                let retries = 0;
+
+                while (retries < maxRetries) {
+                    try {
+                        // Call coin::balance view function (works for both CoinStore and fungible assets)
+                        const result = await client.view({
+                            function: "0x1::coin::balance",
+                            type_arguments: ["0x1::aptos_coin::AptosCoin"],
+                            arguments: [targetAddr],
+                        });
+
+                        if (result && result.length > 0 && BigInt(result[0] as string) >= amount) {
+                            break; // Balance confirmed, state is queryable
+                        }
+
+                        retries++;
+                        if (retries < maxRetries) {
+                            await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+                        }
+                    } catch (e: any) {
+                        retries++;
+                        if (retries < maxRetries) {
+                            await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+                        } else {
+                            // Last retry failed - log warning but continue
+                            debug(`Warning: Could not confirm balance after ${retries} retries`, {
+                                targetAddr,
+                                error: e.message,
+                            });
+                            break;
+                        }
+                    }
+                }
+
+                debug(`Faucet transfer complete`, {
+                    to: targetAddr,
+                    amount: amount.toString(),
+                    txn: txnResponse.hash,
+                    retriesNeeded: retries,
+                });
+
+                return txnResponse.hash;
+            } catch (error: any) {
+                throw new Error(`Faucet transfer failed: ${error.message}`);
+            }
+        })();
+
+        // Update lock to wait for this operation (catch errors so they don't block the queue)
+        this.faucetLock = currentOperation.catch(() => {});
+
+        // Return the actual result (which may throw)
+        return currentOperation;
     }
 
     /**
@@ -437,10 +596,7 @@ export class DockerTestnet {
     /**
      * Wait for a specific number of blocks to be produced
      */
-    async waitForBlocks(
-        numBlocks: number,
-        timeoutSecs: number = 60,
-    ): Promise<void> {
+    async waitForBlocks(numBlocks: number, timeoutSecs: number = 60): Promise<void> {
         const deadline = Date.now() + timeoutSecs * 1000;
         const startInfo = await this.getLedgerInfo(0);
         const startHeight = parseInt(startInfo.block_height, 10);
@@ -453,14 +609,14 @@ export class DockerTestnet {
         while (Date.now() < deadline) {
             const currentInfo = await this.getLedgerInfo(0);
             const currentHeight = parseInt(currentInfo.block_height, 10);
-            
+
             debug(`Block progress: ${currentHeight}/${targetHeight}`, {
                 current_height: currentHeight,
                 target_height: targetHeight,
                 current_version: currentInfo.ledger_version,
                 epoch: currentInfo.epoch,
             });
-            
+
             if (currentHeight >= targetHeight) {
                 console.log(`  ✓ Reached target height ${currentHeight}`);
                 return;
@@ -469,6 +625,215 @@ export class DockerTestnet {
         }
 
         throw new Error("Timeout waiting for blocks");
+    }
+
+    /**
+     * Deploy Move contracts using aptos CLI from within the validator container.
+     *
+     * This method copies the contract directory into the validator container,
+     * compiles and publishes the contracts using the aptos binary inside the container,
+     * then runs any initialization functions.
+     *
+     * @param options Deployment options
+     * @returns Promise resolving when deployment completes
+     *
+     * @example
+     * await testnet.deployContracts({
+     *   contractsDir: "/path/to/contracts",
+     *   deployerPrivateKey: "0x123...",
+     *   namedAddresses: { atomica: "default" },
+     *   initFunctions: [
+     *     { functionId: "default::registry::initialize", args: ["hex:0123"] },
+     *     { functionId: "default::fake_eth::initialize", args: [] },
+     *   ],
+     * });
+     */
+    async deployContracts(options: {
+        contractsDir: string;
+        deployerPrivateKey: string;
+        deployerAddress?: string;
+        namedAddresses?: Record<string, string>;
+        initFunctions?: Array<{ functionId: string; args: string[] }>;
+        fundAmount?: bigint;
+    }): Promise<void> {
+        const {
+            contractsDir,
+            deployerPrivateKey,
+            deployerAddress,
+            namedAddresses = {},
+            initFunctions = [],
+            fundAmount = 10_000_000_000n, // 100 APT default
+        } = options;
+
+        console.log("Deploying contracts using host aptos CLI...");
+
+        // Derive deployer address if not provided
+        let deployer = deployerAddress;
+        if (!deployer) {
+            const account = new AptosAccount(Buffer.from(deployerPrivateKey.slice(2), "hex"));
+            deployer = account.address().hex();
+        }
+
+        console.log(`Deploying contracts to address: ${deployer}`);
+
+        // Fund deployer account
+        if (fundAmount > 0n) {
+            console.log(`Funding deployer account ${deployer}...`);
+            await this.faucet(deployer, fundAmount);
+
+            // Wait for funding to settle
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+
+        // Build named addresses argument
+        const namedAddressesArg = Object.entries(namedAddresses)
+            .map(([key, value]) => `${key}=${value}`)
+            .join(",");
+
+        // Publish contracts using aptos CLI with private key (no profile needed!)
+        console.log("Publishing contracts from host...");
+        const publishArgs = [
+            "move",
+            "publish",
+            "--package-dir",
+            contractsDir,
+            "--named-addresses",
+            namedAddressesArg,
+            "--private-key",
+            deployerPrivateKey,
+            "--url",
+            `http://127.0.0.1:${BASE_API_PORT}`,
+            "--skip-fetch-latest-git-deps", // Skip downloading git dependencies
+            "--assume-yes",
+        ];
+
+        const result = await this.execCommand(getAptosBinary(), publishArgs);
+        console.log("Publish result stdout:", result.stdout.trim());
+        if (result.stderr.trim()) {
+            console.log("Publish result stderr:", result.stderr.trim());
+        }
+
+        // Run initialization functions
+        for (const initFunc of initFunctions) {
+            console.log(`Initializing ${initFunc.functionId}...`);
+            const args = [
+                "move",
+                "run",
+                "--function-id",
+                initFunc.functionId,
+                "--private-key",
+                deployerPrivateKey,
+                "--url",
+                `http://127.0.0.1:${BASE_API_PORT}`,
+                "--assume-yes",
+            ];
+
+            if (initFunc.args.length > 0) {
+                args.push("--args", ...initFunc.args);
+            }
+
+            await this.execCommand(getAptosBinary(), args);
+        }
+
+        // Wait for deployment to be fully indexed
+        console.log("Waiting for deployment to be indexed...");
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+
+        console.log("✓ Contracts deployed successfully");
+    }
+
+    /**
+     * Execute a command on the host system.
+     *
+     * @param bin Binary to execute (e.g., "aptos")
+     * @param args Command arguments
+     * @returns Promise resolving to { stdout, stderr }
+     * @private
+     */
+    private async execCommand(
+        bin: string,
+        args: string[],
+    ): Promise<{ stdout: string; stderr: string }> {
+        return new Promise((resolve, reject) => {
+            let stdout = "";
+            let stderr = "";
+
+            const proc = spawn(bin, args);
+
+            proc.stdout?.on("data", (d) => {
+                const s = d.toString();
+                stdout += s;
+                if (DEBUG) process.stdout.write(s);
+            });
+
+            proc.stderr?.on("data", (d) => {
+                const s = d.toString();
+                stderr += s;
+                if (DEBUG) process.stderr.write(s);
+            });
+
+            proc.on("close", (code) => {
+                if (code === 0) {
+                    resolve({ stdout, stderr });
+                } else {
+                    reject(
+                        new Error(
+                            `Command failed (exit ${code}): ${bin} ${args.join(" ")}\n${stderr}`,
+                        ),
+                    );
+                }
+            });
+
+            proc.on("error", (err) => {
+                reject(new Error(`Failed to execute ${bin}: ${err.message}`));
+            });
+        });
+    }
+
+    /**
+     * Execute a command inside a validator container.
+     *
+     * @param containerName Container name (e.g., "atomica-validator-0")
+     * @param command Command to execute
+     * @returns Promise resolving to { stdout, stderr }
+     * @private
+     */
+    private async execInContainer(
+        containerName: string,
+        command: string[],
+    ): Promise<{ stdout: string; stderr: string }> {
+        return new Promise((resolve, reject) => {
+            let stdout = "";
+            let stderr = "";
+
+            const proc = spawn(DOCKER_BIN, ["exec", containerName, ...command]);
+
+            proc.stdout?.on("data", (d) => {
+                const s = d.toString();
+                stdout += s;
+                if (DEBUG) process.stdout.write(s);
+            });
+
+            proc.stderr?.on("data", (d) => {
+                const s = d.toString();
+                stderr += s;
+                if (DEBUG) process.stderr.write(s);
+            });
+
+            proc.on("close", (code) => {
+                if (code === 0) {
+                    resolve({ stdout, stderr });
+                } else {
+                    reject(
+                        new Error(
+                            `Command failed in container (exit ${code}): ${command.join(" ")}\n${stderr}`,
+                        ),
+                    );
+                }
+            });
+
+            proc.on("error", reject);
+        });
     }
 
     /**
@@ -483,7 +848,7 @@ export class DockerTestnet {
         const candidates = [
             pathResolve(__dirname, "../../config"), // relative to dist/ or src/
             pathResolve(process.cwd(), "source/docker-testnet/config"),
-            pathResolve(process.cwd(), "docker-testnet/config")
+            pathResolve(process.cwd(), "docker-testnet/config"),
         ];
 
         for (const path of candidates) {
@@ -494,14 +859,16 @@ export class DockerTestnet {
 
         // Explicit check for when installed as node_module (TODO: improve this)
 
-        throw new Error("Could not find docker-testnet/config directory containing docker-compose.yaml");
+        throw new Error(
+            "Could not find docker-testnet/config directory containing docker-compose.yaml",
+        );
     }
     /* Internal helper to run compose */
     private static async runCompose(
         args: string[],
         cwd: string,
         envVars: Record<string, string>,
-        timeoutMs: number = 60000
+        timeoutMs: number = 60000,
     ): Promise<void> {
         return new Promise((resolve, reject) => {
             const env = { ...process.env, ...envVars };
@@ -523,13 +890,17 @@ export class DockerTestnet {
                     if (args[0] === "down") {
                         resolve();
                     } else {
-                        reject(new Error(`docker compose ${args.join(" ")} timed out after ${timeoutMs}ms`));
+                        reject(
+                            new Error(
+                                `docker compose ${args.join(" ")} timed out after ${timeoutMs}ms`,
+                            ),
+                        );
                     }
                 }
             }, timeoutMs);
 
-            proc.stdout?.on("data", (data) => stdout += data.toString());
-            proc.stderr?.on("data", (data) => stderr += data.toString());
+            proc.stdout?.on("data", (data) => (stdout += data.toString()));
+            proc.stderr?.on("data", (data) => (stderr += data.toString()));
 
             proc.on("close", (code) => {
                 if (finished) return;
@@ -539,7 +910,11 @@ export class DockerTestnet {
                 if (code === 0 || args[0] === "down") {
                     resolve();
                 } else {
-                    reject(new Error(`docker compose ${args.join(" ")} failed (exit ${code}):\n${stderr}`));
+                    reject(
+                        new Error(
+                            `docker compose ${args.join(" ")} failed (exit ${code}):\n${stderr}`,
+                        ),
+                    );
                 }
             });
 
@@ -563,7 +938,11 @@ export class DockerTestnet {
                 if (code === 0) {
                     resolve();
                 } else {
-                    reject(new Error("Docker Daemon is not running. Please start Docker and try again."));
+                    reject(
+                        new Error(
+                            "Docker Daemon is not running. Please start Docker and try again.",
+                        ),
+                    );
                 }
             });
 
@@ -576,100 +955,12 @@ export class DockerTestnet {
             });
         });
     }
-
-    /**
-     * Build Atomica Aptos validator image locally from source
-     *
-     * This builds the Docker image from ../atomica-aptos using BuildKit cache
-     * for fast incremental builds. The cache is persisted by Docker BuildKit
-     * so subsequent builds are much faster.
-     *
-     * @param options Build options
-     * @returns Promise that resolves when build completes
-     *
-     * @example
-     * // Basic build
-     * await DockerTestnet.buildLocalImage();
-     *
-     * // Custom build
-     * await DockerTestnet.buildLocalImage({
-     *   profile: 'debug',
-     *   noCache: true
-     * });
-     */
-    public static async buildLocalImage(options?: {
-        profile?: "release" | "debug";
-        features?: string;
-        tag?: string;
-        noCache?: boolean;
-    }): Promise<void> {
-        const composeDir = DockerTestnet.findComposeDir();
-        // Build script is now in atomica-aptos/atomica/docker/
-        const buildScript = pathResolve(
-            composeDir,
-            "../atomica-aptos/atomica/docker/build-local-image.sh"
-        );
-
-        if (!existsSync(buildScript)) {
-            throw new Error(
-                `Build script not found: ${buildScript}\n` +
-                `Make sure atomica-aptos repository is checked out at the correct location.`
-            );
-        }
-
-        const args: string[] = [];
-
-        if (options?.profile) {
-            args.push("--profile", options.profile);
-        }
-        if (options?.features) {
-            args.push("--features", options.features);
-        }
-        if (options?.tag) {
-            args.push("--tag", options.tag);
-        }
-        if (options?.noCache) {
-            args.push("--no-cache");
-        }
-
-        console.log("Building local Atomica Aptos validator image...");
-        if (options?.noCache) {
-            console.log("  (ignoring BuildKit cache - build will take longer)");
-        }
-
-        return new Promise((resolve, reject) => {
-            const proc = spawn(buildScript, args, {
-                stdio: "inherit",
-                cwd: composeDir,
-                env: {
-                    ...process.env,
-                    DOCKER_BUILDKIT: "1",
-                },
-            });
-
-            proc.on("close", (code) => {
-                if (code === 0) {
-                    console.log("✓ Local image build complete");
-                    resolve();
-                } else {
-                    reject(new Error(`Build failed with exit code ${code}`));
-                }
-            });
-
-            proc.on("error", (err: any) => {
-                reject(new Error(`Failed to run build script: ${err.message}`));
-            });
-        });
-    }
 }
 
 /**
  * Wait for all validators to become healthy
  */
-async function waitForHealthy(
-    numValidators: number,
-    timeoutSecs: number,
-): Promise<void> {
+async function waitForHealthy(numValidators: number, timeoutSecs: number): Promise<void> {
     const deadline = Date.now() + timeoutSecs * 1000;
     console.log(`  Waiting for ${numValidators} validators to become healthy...`);
 
@@ -683,13 +974,16 @@ async function waitForHealthy(
                 const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
                 if (response.ok) {
                     healthyCount++;
-                    const data = await response.json() as LedgerInfo;
+                    const data = (await response.json()) as LedgerInfo;
                     statuses.push(`V${i}:epoch${data.epoch},blk${data.block_height}`);
-                    debug(`Validator ${i} healthy`, { epoch: data.epoch, block_height: data.block_height });
+                    debug(`Validator ${i} healthy`, {
+                        epoch: data.epoch,
+                        block_height: data.block_height,
+                    });
                 } else {
                     statuses.push(`V${i}:HTTP${response.status}`);
                 }
-            } catch (e: any) {
+            } catch (_e: any) {
                 statuses.push(`V${i}:ERR`);
                 // Validator not ready yet
             }
@@ -699,15 +993,15 @@ async function waitForHealthy(
             console.log(`  ✓ All ${numValidators} validators healthy [${statuses.join(", ")}]`);
             return;
         } else {
-            debug(`Health check: ${healthyCount}/${numValidators} healthy [${statuses.join(", ")}]`);
+            debug(
+                `Health check: ${healthyCount}/${numValidators} healthy [${statuses.join(", ")}]`,
+            );
         }
 
         await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
-    throw new Error(
-        "Timeout waiting for validators. Check 'docker compose logs' for details.",
-    );
+    throw new Error("Timeout waiting for validators. Check 'docker compose logs' for details.");
 }
 
 /**
@@ -733,30 +1027,30 @@ export interface ProbeResult {
 
 /**
  * Probe all validators in a testnet for connectivity and health
- * 
+ *
  * This function is useful for debugging network issues. It checks:
  * - REST API endpoints (8080-808X)
  * - Validator network ports (6180)
  * - Metrics ports (9101-910X)
  * - Container network connectivity
- * 
+ *
  * Usage:
  *   DEBUG_TESTNET=1 node -e "require('./dist/index.js').probeTestnet(4)"
  */
 export async function probeTestnet(numValidators: number = 4): Promise<ProbeResult[]> {
     console.log(`\n=== Probing ${numValidators} validators ===\n`);
-    
+
     const results: ProbeResult[] = [];
-    
+
     for (let i = 0; i < numValidators; i++) {
         const containerName = `atomica-validator-${i}`;
         const ipAddress = `172.19.0.${10 + i}`;
         const apiPort = BASE_API_PORT + i;
         const validatorPort = BASE_VALIDATOR_PORT;
         const metricsPort = 9101 + i;
-        
+
         console.log(`\nProbing validator-${i} (${containerName}):`);
-        
+
         const result: ProbeResult = {
             validatorIndex: i,
             containerName,
@@ -767,7 +1061,7 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
             apiReachable: false,
             portScans: [],
         };
-        
+
         // Check REST API
         const apiUrl = `http://127.0.0.1:${apiPort}/v1`;
         console.log(`  Testing REST API: ${apiUrl}`);
@@ -775,8 +1069,10 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
             const response = await fetch(apiUrl, { signal: AbortSignal.timeout(5000) });
             if (response.ok) {
                 result.apiReachable = true;
-                result.apiResponse = await response.json() as LedgerInfo;
-                console.log(`    ✓ API reachable - Epoch: ${result.apiResponse.epoch}, Block: ${result.apiResponse.block_height}`);
+                result.apiResponse = (await response.json()) as LedgerInfo;
+                console.log(
+                    `    ✓ API reachable - Epoch: ${result.apiResponse.epoch}, Block: ${result.apiResponse.block_height}`,
+                );
             } else {
                 result.apiError = `HTTP ${response.status}`;
                 console.log(`    ✗ API returned: ${response.status}`);
@@ -785,20 +1081,20 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
             result.apiError = error.message;
             console.log(`    ✗ API unreachable: ${error.message}`);
         }
-        
+
         // Scan important ports (from host perspective)
         const portsToScan = [
             { port: apiPort, name: "REST API" },
             { port: metricsPort, name: "Metrics" },
         ];
-        
+
         for (const { port, name } of portsToScan) {
             console.log(`  Testing ${name} port: ${port}`);
             try {
                 const testUrl = `http://127.0.0.1:${port}`;
-                const response = await fetch(testUrl, { 
+                await fetch(testUrl, {
                     signal: AbortSignal.timeout(2000),
-                    method: 'HEAD',
+                    method: "HEAD",
                 });
                 result.portScans.push({
                     port,
@@ -816,7 +1112,7 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
                 console.log(`    ✗ Port ${port} (${name}) unreachable: ${error.message}`);
             }
         }
-        
+
         // Check container networking (requires docker exec)
         console.log(`  Checking container internal networking...`);
         try {
@@ -826,12 +1122,12 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
                 containerName,
                 "sh",
                 "-c",
-                `curl -s -m 2 http://172.19.0.${10 + ((i + 1) % numValidators)}:8080/v1 | head -c 50 || echo FAIL`
+                `curl -s -m 2 http://172.19.0.${10 + ((i + 1) % numValidators)}:8080/v1 | head -c 50 || echo FAIL`,
             ]);
-            
+
             let output = "";
-            pingOther.stdout?.on("data", (d) => output += d.toString());
-            
+            pingOther.stdout?.on("data", (d) => (output += d.toString()));
+
             await new Promise<void>((resolve) => {
                 pingOther.on("close", () => resolve());
                 setTimeout(() => {
@@ -839,7 +1135,7 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
                     resolve();
                 }, 3000);
             });
-            
+
             if (output.includes("chain_id")) {
                 console.log(`    ✓ Container can reach other validators`);
             } else {
@@ -848,32 +1144,36 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
         } catch (error: any) {
             console.log(`    ? Could not test container networking: ${error.message}`);
         }
-        
+
         results.push(result);
     }
-    
+
     // Summary
     console.log(`\n=== Probe Summary ===`);
-    const healthyValidators = results.filter(r => r.apiReachable).length;
+    const healthyValidators = results.filter((r) => r.apiReachable).length;
     console.log(`Healthy validators: ${healthyValidators}/${numValidators}`);
-    
+
     if (healthyValidators > 0 && results[0].apiResponse) {
-        const epochs = new Set(results.filter(r => r.apiResponse).map(r => r.apiResponse!.epoch));
-        const blocks = new Set(results.filter(r => r.apiResponse).map(r => r.apiResponse!.block_height));
-        
+        const epochs = new Set(
+            results.filter((r) => r.apiResponse).map((r) => r.apiResponse!.epoch),
+        );
+        const blocks = new Set(
+            results.filter((r) => r.apiResponse).map((r) => r.apiResponse!.block_height),
+        );
+
         if (epochs.size === 1) {
             console.log(`All validators in epoch: ${[...epochs][0]}`);
         } else {
             console.log(`WARNING: Validators in different epochs: ${[...epochs].join(", ")}`);
         }
-        
+
         if (blocks.size === 1) {
             console.log(`All validators at block: ${[...blocks][0]}`);
         } else {
             console.log(`Validators at blocks: ${[...blocks].join(", ")} (minor differences OK)`);
         }
     }
-    
+
     console.log(`\n`);
     return results;
 }

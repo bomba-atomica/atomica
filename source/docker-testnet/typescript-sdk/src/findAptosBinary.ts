@@ -1,7 +1,7 @@
 /**
  * Find Aptos CLI Binary
  *
- * Locates the Aptos CLI binary for running commands in tests.
+ * Locates the Aptos CLI binary for running commands in Docker SDK.
  * Checks multiple locations and returns the most recently modified binary.
  *
  * SEARCH LOCATIONS (in order checked):
@@ -24,8 +24,8 @@
  *   const APTOS_BIN = findAptosBinary();
  *   // APTOS_BIN now contains path to binary
  *
- * IMPORTANT FOR AI AGENTS:
- * - Called once at module load in test-utils/localnet.ts
+ * IMPORTANT:
+ * - Called once at module load in index.ts
  * - Throws if no binary found (fail fast)
  * - Skips node_modules binaries (npm wrapper scripts)
  * - Prefers workspace build over global install
@@ -34,14 +34,11 @@
  * - "aptos binary not found" → Build with: `cargo build -p aptos`
  * - Or install globally: `cargo install --git https://github.com/aptos-labs/aptos-core aptos`
  * - Check logs to see which binary was selected
- *
- * See: test-utils/localnet.ts where this is used
  */
 
-import { existsSync, statSync } from "node:fs";
-import { join, resolve as pathResolve, dirname } from "node:path";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { existsSync, statSync } from "fs";
+import { join, resolve as pathResolve, dirname } from "path";
+import { spawnSync } from "child_process";
 
 interface BinaryCandidate {
   path: string;
@@ -58,9 +55,11 @@ export function findAptosBinary(): string {
   const candidates: BinaryCandidate[] = [];
 
   // Determine workspace root (atomica/source directory)
-  const currentDir = dirname(fileURLToPath(import.meta.url)); // atomica-web/tests/utils
-  const webDir = pathResolve(currentDir, "../.."); // atomica-web
-  const sourceDir = pathResolve(webDir, ".."); // source
+  // Docker SDK is at: source/docker-testnet/typescript-sdk/src
+  const currentDir = __dirname; // typescript-sdk/src
+  const sdkDir = pathResolve(currentDir, ".."); // typescript-sdk
+  const dockerTestnetDir = pathResolve(sdkDir, ".."); // docker-testnet
+  const sourceDir = pathResolve(dockerTestnetDir, ".."); // source
 
   // Check source/target/release/aptos
   const releasePath = join(sourceDir, "target/release/aptos");

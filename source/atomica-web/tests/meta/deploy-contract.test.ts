@@ -2,9 +2,10 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import {
   setupLocalnet,
   fundAccount,
-  runAptosCmd,
+  getTestnet,
 } from "../../test-utils/localnet";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
+import { resolve as pathResolve } from "path";
 
 /**
  * Test: Move Contract Deployment
@@ -14,7 +15,6 @@ import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 const config = new AptosConfig({
   network: Network.CUSTOM,
   fullnode: "http://127.0.0.1:8080/v1",
-  faucet: "http://127.0.0.1:8081",
 });
 const aptos = new Aptos(config);
 
@@ -55,28 +55,21 @@ describe.sequential("Move Contract Deployment", () => {
     console.log(`Deployer balance after funding: ${fundedBalance}`);
     expect(fundedBalance).toBe(1_000_000_000);
 
-    // Path to noop contract (relative to project root, resolved by Node server)
-    const NOOP_DIR = "tests/fixtures/noop";
+    // Path to noop contract (absolute path required by Docker SDK)
+    const NOOP_DIR = pathResolve(process.cwd(), "tests/fixtures/noop");
     console.log(`Noop contract directory: ${NOOP_DIR}`);
 
-    // Compile and publish the noop module directly without aptos init
+    // Compile and publish the noop module using Docker SDK
     console.log("Publishing noop module...");
 
-    // Run aptos CLI to publish the contract
-    await runAptosCmd(
-      [
-        "move",
-        "publish",
-        "--named-addresses",
-        `noop=${deployer.accountAddress.toString()}`,
-        "--private-key",
-        deployer.privateKey.toString(),
-        "--url",
-        "http://127.0.0.1:8080",
-        "--assume-yes",
-      ],
-      NOOP_DIR,
-    );
+    const testnet = getTestnet();
+    await testnet.deployContracts({
+      contractsDir: NOOP_DIR,
+      deployerPrivateKey: deployer.privateKey.toString(),
+      deployerAddress: deployer.accountAddress.toString(),
+      namedAddresses: { noop: deployer.accountAddress.toString() },
+      fundAmount: 0n, // Already funded above
+    });
 
     // Check if module exists on-chain
     console.log("Verifying module deployment...");

@@ -174,7 +174,7 @@ async function main() {
       "move",
       "publish",
       "--named-addresses",
-      "atomica=default",
+      `atomica=${DEPLOYER_ADDR}`,
       "--profile",
       "default",
       "--assume-yes",

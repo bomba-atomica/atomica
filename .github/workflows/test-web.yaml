@@ -8,14 +8,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  setup-aptos:
-    name: Setup Aptos Binary
-    uses: ./.github/workflows/build-aptos-binary.yaml
-
   test-web:
     name: Web Tests (${{ matrix.type }})
     runs-on: ubuntu-latest
-    needs: setup-aptos
+    permissions:
+      packages: read
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -26,34 +24,54 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Restore aptos binary from cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ needs.setup-aptos.outputs.binary-path }}
-          key: ${{ needs.setup-aptos.outputs.cache-key }}
-          fail-on-cache-miss: true
-
-      - name: Add aptos to PATH
+      - name: Build Docker Testnet SDK
         run: |
-          mkdir -p $HOME/.local/bin
-          cp ${{ needs.setup-aptos.outputs.binary-path }} $HOME/.local/bin/aptos
-          chmod +x $HOME/.local/bin/aptos
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Verify aptos binary
-        run: |
-          which aptos
-          aptos --version
+          cd source/docker-testnet/typescript-sdk
+          npm install
+          npm run build
 
       - name: Install dependencies
         run: |
           cd source/atomica-web
           npm install
+
+      - name: Install Playwright browsers
+        run: |
+          cd source/atomica-web
+          npx playwright install --with-deps
+
+      - name: Install Aptos CLI
+        if: matrix.type == 'meta' || matrix.type == 'integration' || matrix.type == 'ui'
+        run: |
+          # Download aptos binary from atomica-aptos releases
+          APTOS_VERSION="binary-fac20096d4"
+          # Extract hash from version tag (format: binary-HASH)
+          APTOS_HASH="${APTOS_VERSION#binary-}"
+          APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
+          APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
+
+          echo "Downloading aptos binary from ${APTOS_URL}..."
+          curl -L -o /tmp/aptos "${APTOS_URL}"
+
+          echo "Installing aptos binary to /usr/local/bin/aptos..."
+          chmod +x /tmp/aptos
+          sudo mv /tmp/aptos /usr/local/bin/aptos
+
+          echo "Verifying aptos installation..."
+          aptos --version
+          which aptos
 
       - name: Run TypeScript tests with Vitest
         run: |

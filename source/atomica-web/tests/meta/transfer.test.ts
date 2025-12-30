@@ -10,7 +10,6 @@ import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 const config = new AptosConfig({
   network: Network.CUSTOM,
   fullnode: "http://127.0.0.1:8080/v1",
-  faucet: "http://127.0.0.1:8081",
 });
 const aptos = new Aptos(config);
 

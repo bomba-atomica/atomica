@@ -12,7 +12,13 @@
  * with a live Aptos localnet via the `commands` bridge.
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  cleanup,
+} from "@testing-library/react";
 import { commands } from "vitest/browser";
 import { setupBrowserWalletMock } from "../../test-utils/browser-utils/wallet-mock";
 import { TxButton } from "../../src/components/TxButton";
@@ -45,7 +51,6 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     const config = new AptosConfig({
       network: Network.LOCAL,
       fullnode: "http://127.0.0.1:8080/v1",
-      faucet: "http://127.0.0.1:8081",
     });
     aptos = new Aptos(config);
     setAptosInstance(aptos);
@@ -140,5 +145,4 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     expect(Number(balance)).toBeGreaterThan(0);
     console.log("Balance verified:", balance);
   }, 90000);
-
 });

@@ -16,7 +16,7 @@ if (isNaN(numValidators) || numValidators < 1 || numValidators > 7) {
 }
 (0, index_1.probeTestnet)(numValidators)
     .then((results) => {
-    const exitCode = results.every(r => r.apiReachable) ? 0 : 1;
+    const exitCode = results.every((r) => r.apiReachable) ? 0 : 1;
     process.exit(exitCode);
 })
     .catch((error) => {

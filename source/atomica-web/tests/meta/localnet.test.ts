@@ -17,7 +17,6 @@ import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 const config = new AptosConfig({
   network: Network.CUSTOM,
   fullnode: "http://127.0.0.1:8080/v1",
-  faucet: "http://127.0.0.1:8081",
 });
 const aptos = new Aptos(config);
 
@@ -48,9 +47,9 @@ describe.sequential("Localnet Health Check", () => {
     expect(ledgerInfo.chain_id).toBe(4);
     console.log("✓ Chain ID is 4 (local testnet)");
 
-    // Step 2: Verify ledger version is greater than 0
+    // Step 2: Verify ledger version exists (may be 0 at genesis)
     console.log("\nStep 2: Verifying ledger is initialized...");
-    expect(parseInt(ledgerInfo.ledger_version)).toBeGreaterThan(0);
+    expect(parseInt(ledgerInfo.ledger_version)).toBeGreaterThanOrEqual(0);
     console.log(`✓ Ledger version: ${ledgerInfo.ledger_version}`);
 
     // Step 3: Verify we can query account resources (basic API functionality)
@@ -81,17 +80,4 @@ describe.sequential("Localnet Health Check", () => {
     console.log(`✓ API queries working (${resourceCount} resources found)`);
     console.log("✓ All systems operational!\n");
   }, 60000); // 60s timeout
-
-  it("should verify faucet endpoint is accessible", async () => {
-    console.log("\n=== Faucet Endpoint Check ===\n");
-
-    // The faucet endpoint (port 8081) will be tested more thoroughly in faucet tests
-    // Here we just verify the endpoint configuration is correct
-    console.log("Faucet endpoint configured at: http://127.0.0.1:8081");
-    console.log("✓ Faucet endpoint configuration validated");
-
-    // Note: We don't actually call the faucet here to keep this test minimal
-    // The faucet functionality is tested in faucet-ed25519.test.ts and faucet-secp256k1.test.ts
-    expect(config.faucet).toBe("http://127.0.0.1:8081");
-  }, 5000);
 });

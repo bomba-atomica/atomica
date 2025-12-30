@@ -19,9 +19,11 @@
   },
   "dependencies": {
     "@aptos-labs/ts-sdk": "^5.2.0",
+    "@atomica/docker-testnet": "file:../docker-testnet/typescript-sdk",
     "@heroicons/react": "^2.2.0",
     "@noble/bls12-381": "^1.4.0",
     "@tailwindcss/postcss": "^4.1.18",
+    "aptos": "^1.22.1",
     "autoprefixer": "^10.4.22",
     "ethers": "^6.16.0",
     "postcss": "^8.5.6",

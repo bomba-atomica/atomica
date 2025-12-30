@@ -57,30 +57,6 @@ import {
 } from "../../../src/lib/aptos";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 
-/**
- * Browser-compatible faucet funding function
- * Uses native fetch which is available in browser test environment
- */
-async function fundAccountBrowser(address: string, amount: number) {
-  console.log(`[Browser fundAccount] Requesting ${amount} for ${address}...`);
-
-  const response = await fetch(
-    `http://127.0.0.1:8081/mint?amount=${amount}&address=${address}`,
-    { method: "POST" },
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `Faucet funding failed with status: ${response.status} ${response.statusText}`,
-    );
-  }
-
-  console.log(`[Browser fundAccount] Response status: ${response.status}`);
-  const body = await response.json();
-  console.log(`[Browser fundAccount] Response body: ${JSON.stringify(body)}`);
-  return body;
-}
-
 const TEST_ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"; // Hardhat Account 0
 const TEST_PK =
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
@@ -99,7 +75,6 @@ describe.sequential(
       const config = new AptosConfig({
         network: Network.LOCAL,
         fullnode: "http://127.0.0.1:8080/v1",
-        faucet: "http://127.0.0.1:8081",
       });
       setAptosInstance(new Aptos(config));
 
@@ -132,7 +107,8 @@ describe.sequential(
       // STEP 2: Fund the derived Aptos account
       // The derived account needs APT (Aptos native coin) to pay for gas fees
       // 100_000_000 Octas = 1 APT (Aptos uses 8 decimals)
-      await fundAccountBrowser(derivedAddrStr, 100_000_000); // 1 APT
+      // Uses production-like funding via Core Resources account (not HTTP faucet)
+      await commands.fundAccount(derivedAddrStr, 100_000_000); // 1 APT
       // Wait for funding transaction to be indexed by the blockchain
       await new Promise((resolve) => setTimeout(resolve, 2000));
 

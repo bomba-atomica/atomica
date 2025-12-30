@@ -3,7 +3,6 @@ import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { commands } from "vitest/browser";
 import { getDerivedAddress } from "../../../src/lib/aptos/siwe";
 import { submitNativeTransaction } from "../../../src/lib/aptos/transaction";
-import { ethers } from "ethers";
 import { setupBrowserWalletMock } from "../../../test-utils/browser-utils/wallet-mock";
 
 const DEPLOYER_ADDR =
@@ -88,5 +87,4 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
     console.log(`FAKEETH Balance: ${balance}`);
     expect(balance).toBe(mintAmount);
   }, 60000);
-
 });

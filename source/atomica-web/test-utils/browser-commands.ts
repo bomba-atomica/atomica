@@ -106,7 +106,6 @@ import {
   deployContracts,
   fundAccount,
   // killZombies, // Unused - setupLocalnet handles cleanup internally
-  runAptosCmd,
 } from "./localnet";
 
 /**
@@ -122,10 +121,6 @@ declare module "vitest/browser" {
       address: string,
       amount?: number,
     ): Promise<{ success: boolean; txHash: string }>;
-    runAptosCmd(
-      args: string[],
-      cwd?: string,
-    ): Promise<{ stdout: string; stderr: string }>;
   }
 }
 
@@ -243,42 +238,4 @@ export const fundAccountCommand: BrowserCommand<
   const result = await fundAccount(address, amount);
   console.log("[Browser Command] Account funded");
   return { success: true, txHash: result };
-};
-
-/**
- * Run an Aptos CLI command.
- *
- * WHAT IT DOES:
- * - Calls runAptosCmd() from ./localnet.ts
- * - Spawns Aptos CLI process with given args
- * - Returns stdout and stderr
- *
- * USAGE (from browser tests):
- *   import { commands } from 'vitest/browser';
- *   const result = await commands.runAptosCmd([
- *     "move", "compile",
- *     "--package-dir", "/path/to/contract"
- *   ]);
- *   console.log(result.stdout);
- *
- * IMPORTANT:
- * - Default cwd: WEB_DIR (atomica-web/)
- * - Relative paths resolve from cwd
- * - Always use --assume-yes (no prompts)
- *
- * @param _context - Vitest browser context (unused)
- * @param args - Aptos CLI arguments
- * @param cwd - Working directory (optional, defaults to WEB_DIR)
- * @returns Promise resolving to { stdout: string, stderr: string }
- * @throws Error if command fails
- *
- * See: test-utils/localnet.ts#runAptosCmd for implementation
- * See: test-utils/localnet.ts#WEB_DIR for path information
- */
-export const runAptosCmdCommand: BrowserCommand<
-  [args: string[], cwd?: string]
-> = async (_context, args: string[], cwd?: string) => {
-  console.log(`[Browser Command] Running aptos ${args.join(" ")}...`);
-  const result = await runAptosCmd(args, cwd);
-  return result;
 };

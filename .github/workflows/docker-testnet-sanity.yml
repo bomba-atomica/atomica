@@ -1,0 +1,73 @@
+name: Docker Testnet Sanity Tests
+
+on:
+  push:
+    branches:
+      - main
+      - local-testnet-with-docker
+    paths:
+      - 'source/docker-testnet/**'
+      - '.github/workflows/docker-testnet-sanity.yml'
+  pull_request:
+    paths:
+      - 'source/docker-testnet/**'
+      - '.github/workflows/docker-testnet-sanity.yml'
+
+jobs:
+  test:
+    name: Sanity Test Docker Testnet
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      packages: read
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: source/docker-testnet/typescript-sdk
+        run: bun install
+
+      - name: Build SDK
+        working-directory: source/docker-testnet/typescript-sdk
+        run: bun run build
+
+      - name: Run validator connectivity tests
+        working-directory: source/docker-testnet/typescript-sdk
+        run: bun test test/validator-connectivity.test.ts
+        timeout-minutes: 10
+
+      - name: Run block production tests
+        working-directory: source/docker-testnet/typescript-sdk
+        run: bun test test/block-production.test.ts
+        timeout-minutes: 10
+
+      - name: Run validator sync tests
+        working-directory: source/docker-testnet/typescript-sdk
+        run: bun test test/validator-sync.test.ts
+        timeout-minutes: 10
+
+      - name: Cleanup Docker on failure
+        if: failure()
+        working-directory: source/docker-testnet/config
+        run: docker compose down -v --remove-orphans || true
+
+      - name: Show Docker logs on failure
+        if: failure()
+        working-directory: source/docker-testnet/config
+        run: docker compose logs --tail=100 || true
