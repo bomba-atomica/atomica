@@ -6,7 +6,10 @@
 interface EthereumProvider {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
   on: (event: string, handler: (...args: unknown[]) => void) => void;
-  removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
+  removeListener: (
+    event: string,
+    handler: (...args: unknown[]) => void,
+  ) => void;
   isMetaMask: boolean;
   selectedAddress: string | null;
   chainId: string;
@@ -26,8 +29,10 @@ export function setupBrowserWalletMock(
   const chainId = "0x4"; // Rinkeby
 
   // Simple event emitter for browser
-  const eventHandlers: Map<string, Set<(...args: unknown[]) => void>> =
-    new Map();
+  const eventHandlers: Map<
+    string,
+    Set<(...args: unknown[]) => void>
+  > = new Map();
 
   const provider: EthereumProvider = {
     isMetaMask: true,
