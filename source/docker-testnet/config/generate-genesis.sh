@@ -2,20 +2,20 @@
 # Generate Aptos genesis for Docker testnet
 set -e
 
-# Enable debug mode if ATOMICA_DEBUG is set
-if [ -n "$ATOMICA_DEBUG" ]; then
+# Enable debug mode if ATOMICA_DEBUG_TESTNET is set
+if [ -n "$ATOMICA_DEBUG_TESTNET" ]; then
     set -x
 fi
 
 # Debug logging helper
 debug() {
-    if [ -n "$ATOMICA_DEBUG" ]; then
+    if [ -n "$ATOMICA_DEBUG_TESTNET" ]; then
         echo "[DEBUG $(date -Iseconds)] $*" >&2
     fi
 }
 
 # Redirect verbose aptos CLI output unless debugging
-if [ -z "$ATOMICA_DEBUG" ]; then
+if [ -z "$ATOMICA_DEBUG_TESTNET" ]; then
     APTOS_OUTPUT="/dev/null"
 else
     APTOS_OUTPUT="/dev/stdout"

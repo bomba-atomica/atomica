@@ -208,6 +208,6 @@ export interface ProbeResult {
  * - Container network connectivity
  *
  * Usage:
- *   DEBUG_TESTNET=1 node -e "require('./dist/index.js').probeTestnet(4)"
+ *   ATOMICA_DEBUG_TESTNET=1 node -e "require('./dist/index.js').probeTestnet(4)"
  */
 export declare function probeTestnet(numValidators?: number): Promise<ProbeResult[]>;

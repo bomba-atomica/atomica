@@ -11,8 +11,8 @@ const path_1 = require("path");
  * all genesis artifacts, avoiding complex orchestration from TypeScript.
  */
 const DOCKER_BIN = "docker";
-/** Debug logging - controlled by DEBUG_TESTNET env var */
-const DEBUG = process.env.DEBUG_TESTNET === "1" || process.env.DEBUG_TESTNET === "true";
+/** Debug logging - controlled by ATOMICA_DEBUG_TESTNET env var */
+const DEBUG = process.env.ATOMICA_DEBUG_TESTNET === "1" || process.env.ATOMICA_DEBUG_TESTNET === "true";
 function debug(message, data) {
     if (DEBUG) {
         const timestamp = new Date().toISOString();
@@ -109,6 +109,10 @@ function runGenesisScript(config) {
         }
         // Set HOME to a writable location (important when running as non-root)
         dockerArgs.push("-e", "HOME=/tmp");
+        // Pass ATOMICA_DEBUG_TESTNET to container if set
+        if (process.env.ATOMICA_DEBUG_TESTNET) {
+            dockerArgs.push("-e", `ATOMICA_DEBUG_TESTNET=${process.env.ATOMICA_DEBUG_TESTNET}`);
+        }
         dockerArgs.push(validatorImage, "/genesis-script.sh", numValidators.toString(), chainId.toString(), baseIp);
         debug("Starting docker run with args:", { dockerArgs });
         const proc = (0, child_process_1.spawn)(DOCKER_BIN, dockerArgs, {

@@ -59,9 +59,9 @@ Currently used environment variables:
 - `NUM_VALIDATORS` - Number of validators for Docker testnet (default: 2)
   - **Note**: This should be renamed to `ATOMICA_NUM_VALIDATORS` in a future update
 
-Third-party library variables (not controlled by Atomica):
+Testnet debugging:
 
-- `DEBUG_TESTNET` - Enable verbose logging in docker-testnet SDK (values: `1`, `true`)
+- `ATOMICA_DEBUG_TESTNET` - Enable verbose logging in docker-testnet SDK (values: `1`, `true`)
 
 ## Troubleshooting
 

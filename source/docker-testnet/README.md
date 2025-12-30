@@ -203,7 +203,7 @@ npm test
 npx bun test test/faucet.test.ts
 
 # With debug logging
-ATOMICA_DEBUG=1 npm test
+ATOMICA_DEBUG_TESTNET=1 npm test
 ```
 
 ## Manual Docker Operation
@@ -228,7 +228,7 @@ docker compose down -v
 Enable verbose debug logging with environment variable:
 
 ```bash
-ATOMICA_DEBUG=1 npm test
+ATOMICA_DEBUG_TESTNET=1 npm test
 ```
 
 This enables:
@@ -299,7 +299,7 @@ When making changes:
 
 1. Update relevant documentation
 2. Run tests: `npm test`
-3. Test with debug logging: `ATOMICA_DEBUG=1 npm test`
+3. Test with debug logging: `ATOMICA_DEBUG_TESTNET=1 npm test`
 4. Verify cleanup: No orphaned containers after tests
 
 ## License

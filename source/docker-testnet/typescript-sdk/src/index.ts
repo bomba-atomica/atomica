@@ -26,8 +26,9 @@ function getAptosBinary(): string {
     return APTOS_BIN;
 }
 
-/** Debug logging - controlled by ATOMICA_DEBUG env var */
-const DEBUG = process.env.ATOMICA_DEBUG === "1" || process.env.ATOMICA_DEBUG === "true";
+/** Debug logging - controlled by ATOMICA_DEBUG_TESTNET env var */
+const DEBUG =
+    process.env.ATOMICA_DEBUG_TESTNET === "1" || process.env.ATOMICA_DEBUG_TESTNET === "true";
 
 function debug(message: string, data?: Record<string, unknown>): void {
     if (DEBUG) {
@@ -1035,7 +1036,7 @@ export interface ProbeResult {
  * - Container network connectivity
  *
  * Usage:
- *   ATOMICA_DEBUG=1 node -e "require('./dist/index.js').probeTestnet(4)"
+ *   ATOMICA_DEBUG_TESTNET=1 node -e "require('./dist/index.js').probeTestnet(4)"
  */
 export async function probeTestnet(numValidators: number = 4): Promise<ProbeResult[]> {
     console.log(`\n=== Probing ${numValidators} validators ===\n`);

@@ -11,8 +11,9 @@ import { resolve as pathResolve } from "path";
 
 const DOCKER_BIN = "docker";
 
-/** Debug logging - controlled by ATOMICA_DEBUG env var */
-const DEBUG = process.env.ATOMICA_DEBUG === "1" || process.env.ATOMICA_DEBUG === "true";
+/** Debug logging - controlled by ATOMICA_DEBUG_TESTNET env var */
+const DEBUG =
+    process.env.ATOMICA_DEBUG_TESTNET === "1" || process.env.ATOMICA_DEBUG_TESTNET === "true";
 
 function debug(message: string, data?: Record<string, unknown>): void {
     if (DEBUG) {
@@ -145,9 +146,9 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         // Set HOME to a writable location (important when running as non-root)
         dockerArgs.push("-e", "HOME=/tmp");
 
-        // Pass ATOMICA_DEBUG to container if set
-        if (process.env.ATOMICA_DEBUG) {
-            dockerArgs.push("-e", `ATOMICA_DEBUG=${process.env.ATOMICA_DEBUG}`);
+        // Pass ATOMICA_DEBUG_TESTNET to container if set
+        if (process.env.ATOMICA_DEBUG_TESTNET) {
+            dockerArgs.push("-e", `ATOMICA_DEBUG_TESTNET=${process.env.ATOMICA_DEBUG_TESTNET}`);
         }
 
         dockerArgs.push(
@@ -204,8 +205,10 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
                 }
 
                 // Skip verbose file path messages
-                if (trimmed.startsWith("Root account keys saved to") ||
-                    trimmed.startsWith("Creating node configurations")) {
+                if (
+                    trimmed.startsWith("Root account keys saved to") ||
+                    trimmed.startsWith("Creating node configurations")
+                ) {
                     if (DEBUG) {
                         console.log(`  [STDOUT] ${trimmed}`);
                     }
