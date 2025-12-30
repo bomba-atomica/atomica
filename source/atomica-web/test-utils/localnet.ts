@@ -120,7 +120,9 @@ export async function setupLocalnet(): Promise<void> {
 
   // Read NUM_VALIDATORS from environment, default to 2
   const numValidators = parseInt(process.env.NUM_VALIDATORS || "2", 10);
-  console.log(`Starting Docker-based localnet (${numValidators} validators)...`);
+  console.log(
+    `Starting Docker-based localnet (${numValidators} validators)...`,
+  );
 
   // Create testnet with configured number of validators
   testnet = await DockerTestnet.new(numValidators);
@@ -219,18 +221,18 @@ export async function deployContracts(): Promise<void> {
     contractsDir: CONTRACTS_DIR,
     deployerPrivateKey: DEPLOYER_PK,
     deployerAddress: DEPLOYER_ADDR,
-    namedAddresses: { atomica: "default" },
+    namedAddresses: { atomica: DEPLOYER_ADDR },
     initFunctions: [
       {
-        functionId: "default::registry::initialize",
+        functionId: `${DEPLOYER_ADDR}::registry::initialize`,
         args: ["hex:0123456789abcdef"],
       },
       {
-        functionId: "default::fake_eth::initialize",
+        functionId: `${DEPLOYER_ADDR}::fake_eth::initialize`,
         args: [],
       },
       {
-        functionId: "default::fake_usd::initialize",
+        functionId: `${DEPLOYER_ADDR}::fake_usd::initialize`,
         args: [],
       },
     ],
