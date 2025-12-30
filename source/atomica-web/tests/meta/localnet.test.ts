@@ -80,17 +80,4 @@ describe.sequential("Localnet Health Check", () => {
     console.log(`✓ API queries working (${resourceCount} resources found)`);
     console.log("✓ All systems operational!\n");
   }, 60000); // 60s timeout
-
-  it("should verify faucet endpoint is accessible", async () => {
-    console.log("\n=== Faucet Endpoint Check ===\n");
-
-    // The faucet endpoint (port 8081) will be tested more thoroughly in faucet tests
-    // Here we just verify the endpoint configuration is correct
-    console.log("Faucet endpoint configured at: http://127.0.0.1:8081");
-    console.log("✓ Faucet endpoint configuration validated");
-
-    // Note: We don't actually call the faucet here to keep this test minimal
-    // The faucet functionality is tested in faucet-ed25519.test.ts and faucet-secp256k1.test.ts
-    expect(config.faucet).toBe("http://127.0.0.1:8081");
-  }, 5000);
 });
