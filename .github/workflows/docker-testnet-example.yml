@@ -24,6 +24,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -43,8 +50,8 @@ jobs:
           # GITHUB_TOKEN is automatically used for authentication
           cat > .env << EOF
           # Docker image from GHCR (private registry)
-          VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica/zapatos-bin
-          IMAGE_TAG=5df0e6d1
+          VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica-aptos/validator
+          IMAGE_TAG=latest
 
           # Network configuration
           TESTNET_NAME=zapatos-testnet
@@ -62,7 +69,7 @@ jobs:
 
       - name: Cleanup Docker resources
         if: always()
-        working-directory: docker-testnet
+        working-directory: source/docker-testnet/config
         run: |
           docker compose down --remove-orphans -v || true
 
