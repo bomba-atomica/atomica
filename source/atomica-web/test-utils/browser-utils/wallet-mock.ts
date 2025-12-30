@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Browser-compatible MetaMask wallet mock
  * This runs in the actual browser context and provides window.ethereum
