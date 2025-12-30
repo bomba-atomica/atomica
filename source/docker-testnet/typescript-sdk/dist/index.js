@@ -48,8 +48,15 @@ const BASE_API_PORT = 8080;
 const BASE_VALIDATOR_PORT = 6180;
 /** Docker binary path - assumed to be in PATH or standard location */
 const DOCKER_BIN = "docker";
-/** Aptos CLI binary path - found using findAptosBinary() to avoid wrapper scripts */
-const APTOS_BIN = (0, findAptosBinary_1.findAptosBinary)();
+/** Aptos CLI binary path - lazily initialized to avoid unnecessary lookups */
+let APTOS_BIN = null;
+/** Get the aptos binary path, finding it on first use */
+function getAptosBinary() {
+    if (APTOS_BIN === null) {
+        APTOS_BIN = (0, findAptosBinary_1.findAptosBinary)();
+    }
+    return APTOS_BIN;
+}
 /** Debug logging - controlled by DEBUG_TESTNET env var */
 const DEBUG = process.env.DEBUG_TESTNET === "1" || process.env.DEBUG_TESTNET === "true";
 function debug(message, data) {
@@ -515,7 +522,7 @@ class DockerTestnet {
             "--skip-fetch-latest-git-deps", // Skip downloading git dependencies
             "--assume-yes",
         ];
-        const result = await this.execCommand(APTOS_BIN, publishArgs);
+        const result = await this.execCommand(getAptosBinary(), publishArgs);
         console.log("Publish result stdout:", result.stdout.trim());
         if (result.stderr.trim()) {
             console.log("Publish result stderr:", result.stderr.trim());
@@ -537,7 +544,7 @@ class DockerTestnet {
             if (initFunc.args.length > 0) {
                 args.push("--args", ...initFunc.args);
             }
-            await this.execCommand(APTOS_BIN, args);
+            await this.execCommand(getAptosBinary(), args);
         }
         // Wait for deployment to be fully indexed
         console.log("Waiting for deployment to be indexed...");

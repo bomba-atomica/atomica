@@ -15,8 +15,16 @@ const BASE_VALIDATOR_PORT = 6180;
 /** Docker binary path - assumed to be in PATH or standard location */
 const DOCKER_BIN = "docker";
 
-/** Aptos CLI binary path - found using findAptosBinary() to avoid wrapper scripts */
-const APTOS_BIN = findAptosBinary();
+/** Aptos CLI binary path - lazily initialized to avoid unnecessary lookups */
+let APTOS_BIN: string | null = null;
+
+/** Get the aptos binary path, finding it on first use */
+function getAptosBinary(): string {
+    if (APTOS_BIN === null) {
+        APTOS_BIN = findAptosBinary();
+    }
+    return APTOS_BIN;
+}
 
 /** Debug logging - controlled by DEBUG_TESTNET env var */
 const DEBUG = process.env.DEBUG_TESTNET === "1" || process.env.DEBUG_TESTNET === "true";
@@ -626,7 +634,7 @@ export class DockerTestnet {
             "--assume-yes",
         ];
 
-        const result = await this.execCommand(APTOS_BIN, publishArgs);
+        const result = await this.execCommand(getAptosBinary(), publishArgs);
         console.log("Publish result stdout:", result.stdout.trim());
         if (result.stderr.trim()) {
             console.log("Publish result stderr:", result.stderr.trim());
@@ -651,7 +659,7 @@ export class DockerTestnet {
                 args.push("--args", ...initFunc.args);
             }
 
-            await this.execCommand(APTOS_BIN, args);
+            await this.execCommand(getAptosBinary(), args);
         }
 
         // Wait for deployment to be fully indexed
