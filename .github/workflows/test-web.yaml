@@ -57,7 +57,9 @@ jobs:
         run: |
           # Download aptos binary from atomica-aptos releases
           APTOS_VERSION="binary-fac20096d4"
-          APTOS_BINARY_NAME="aptos-fac20096d4"
+          # Extract hash from version tag (format: binary-HASH)
+          APTOS_HASH="${APTOS_VERSION#binary-}"
+          APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
           APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
 
           echo "Downloading aptos binary from ${APTOS_URL}..."
