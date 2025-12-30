@@ -6,10 +6,10 @@ services:
     image: ethereum/client-go:v1.13.14
     container_name: eth-execution
     command:
-      - --dev
-      - --dev.period=1
+      - --datadir=/root/testnet
+      - --networkid=12345
       - --http
-      - --http.api=eth,net,web3,debug
+      - --http.api=eth,net,web3,debug,engine
       - --http.addr=0.0.0.0
       - --http.port=8545
       - --http.vhosts=*
@@ -18,7 +18,11 @@ services:
       - --authrpc.port=8551
       - --authrpc.vhosts=*
       - --authrpc.jwtsecret=/root/jwtsecret
+      - --allow-insecure-unlock
+      - --nodiscover
+      - --syncmode=full
     volumes:
+      - ./testnet:/root/testnet
       - ./jwtsecret:/root/jwtsecret
     ports:
       - "8545:8545"

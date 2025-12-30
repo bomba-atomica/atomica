@@ -1,0 +1,16 @@
+FROM rust:1.81-bullseye as builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y cmake clang libclang-dev protobuf-compiler
+
+# Install lcli
+# We clone lighthouse to get lcli
+RUN git clone --branch v5.1.0 https://github.com/sigp/lighthouse.git
+WORKDIR /lighthouse
+# Build lcli
+RUN cargo install --path lcli --locked
+
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /usr/local/cargo/bin/lcli /usr/local/bin/lcli
+ENTRYPOINT ["lcli"]
