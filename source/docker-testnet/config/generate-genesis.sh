@@ -203,6 +203,10 @@ full_node_networks: []
 api:
   enabled: true
   address: "0.0.0.0:8080"
+
+storage:
+  rocksdb_configs:
+    enable_storage_sharding: false
 EOF
 
     debug "Created config for $username"
