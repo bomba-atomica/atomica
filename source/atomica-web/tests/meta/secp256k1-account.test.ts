@@ -8,6 +8,8 @@ import {
   SingleKeyAccount,
   Secp256k1PrivateKey,
   SigningSchemeInput,
+  PrivateKey,
+  PrivateKeyVariants,
 } from "@aptos-labs/ts-sdk";
 
 /**
@@ -171,8 +173,14 @@ describe.sequential("SECP256k1 Account Creation and Usage", () => {
     const ethereumPrivateKeyHex =
       "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
 
+    // Format as AIP-80 compliant to avoid SDK warnings
+    const aip80PrivateKey = PrivateKey.formatPrivateKey(
+      ethereumPrivateKeyHex,
+      PrivateKeyVariants.Secp256k1,
+    );
+
     // Create Aptos account using the Ethereum private key
-    const aptosPrivateKey = new Secp256k1PrivateKey(ethereumPrivateKeyHex);
+    const aptosPrivateKey = new Secp256k1PrivateKey(aip80PrivateKey);
     const aptosAccount = new SingleKeyAccount({ privateKey: aptosPrivateKey });
 
     // Verify the account works

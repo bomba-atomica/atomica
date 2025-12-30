@@ -7,6 +7,8 @@ import {
   SingleKeyAccount,
   Secp256k1PrivateKey,
   SigningSchemeInput,
+  PrivateKey,
+  PrivateKeyVariants,
 } from "@aptos-labs/ts-sdk";
 
 /**
@@ -70,7 +72,13 @@ describe.sequential("SECP256k1 Account Faucet Funding", () => {
     const ethereumPrivateKeyHex =
       "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
 
-    const aptosPrivateKey = new Secp256k1PrivateKey(ethereumPrivateKeyHex);
+    // Format as AIP-80 compliant to avoid SDK warnings
+    const aip80PrivateKey = PrivateKey.formatPrivateKey(
+      ethereumPrivateKeyHex,
+      PrivateKeyVariants.Secp256k1,
+    );
+
+    const aptosPrivateKey = new Secp256k1PrivateKey(aip80PrivateKey);
     const aptosAccount = new SingleKeyAccount({ privateKey: aptosPrivateKey });
 
     // Step 2: Verify initial balance is 0
