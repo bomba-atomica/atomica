@@ -167,9 +167,18 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
             stdout += text;
 
             // Print output to console so the user knows what's happening
+            // Filter out verbose "Missing CF" warnings from Aptos storage layer
             for (const line of text.split("\n")) {
                 const trimmed = line.trim();
                 if (!trimmed) continue;
+
+                // Skip "Missing CF:" warnings (expected during genesis initialization)
+                if (trimmed.includes("Missing CF:")) {
+                    if (DEBUG) {
+                        console.log(`  [STDOUT] ${trimmed}`);
+                    }
+                    continue;
+                }
 
                 if (DEBUG) {
                     console.log(`  [STDOUT] ${trimmed}`);
