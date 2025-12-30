@@ -2,17 +2,24 @@
 # Generate Aptos genesis for Docker testnet
 set -e
 
-# Enable debug mode if DEBUG is set
-if [ -n "$DEBUG" ]; then
+# Enable debug mode if ATOMICA_DEBUG is set
+if [ -n "$ATOMICA_DEBUG" ]; then
     set -x
 fi
 
 # Debug logging helper
 debug() {
-    if [ -n "$DEBUG" ]; then
+    if [ -n "$ATOMICA_DEBUG" ]; then
         echo "[DEBUG $(date -Iseconds)] $*" >&2
     fi
 }
+
+# Redirect verbose aptos CLI output unless debugging
+if [ -z "$ATOMICA_DEBUG" ]; then
+    APTOS_OUTPUT="/dev/null"
+else
+    APTOS_OUTPUT="/dev/stdout"
+fi
 
 NUM_VALIDATORS="${1:-4}"
 CHAIN_ID="${2:-4}"
@@ -42,7 +49,7 @@ done
 # Step 1: Generate root account keys (for test-only faucet)
 echo "Step 1/7: Generating root account keys..."
 mkdir -p "root-account"
-aptos genesis generate-keys --output-dir "root-account" --assume-yes
+aptos genesis generate-keys --output-dir "root-account" --assume-yes > "$APTOS_OUTPUT"
 
 # Extract root public key for layout.yaml
 ROOT_PUBLIC_KEY=$(grep "account_public_key:" root-account/public-keys.yaml | awk '{print $2}' | tr -d '"')
@@ -53,7 +60,7 @@ echo "Step 2/7: Generating validator keys..."
 for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
     username="validator-${i}"
     mkdir -p "$username"
-    aptos genesis generate-keys --output-dir "$username" --assume-yes
+    aptos genesis generate-keys --output-dir "$username" --assume-yes > "$APTOS_OUTPUT"
 done
 
 # Step 3: Create layout.yaml with generated root key
@@ -95,7 +102,7 @@ for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
         --full-node-host "${validator_ip}:6182" \
         --stake-amount "$STAKE_AMOUNT" \
         --commission-percentage 0 \
-        --local-repository-dir genesis-repo
+        --local-repository-dir genesis-repo > "$APTOS_OUTPUT"
 
     debug "Configured $username with validator-host=${validator_ip}:6180"
 done
@@ -146,22 +153,20 @@ fi
 echo "Step 6/7: Finalizing genesis repository..."
 aptos genesis setup-git \
     --layout-file layout.yaml \
-    --local-repository-dir genesis-repo
+    --local-repository-dir genesis-repo > "$APTOS_OUTPUT"
 
 # Step 7: Generate genesis blob and waypoint
 echo "Step 7/7: Generating genesis.blob and waypoint..."
 mkdir -p output
 aptos genesis generate-genesis \
     --local-repository-dir genesis-repo \
-    --output-dir output
+    --output-dir output > "$APTOS_OUTPUT"
 
 # Save root account keys for TypeScript SDK faucet
 cp root-account/private-keys.yaml output/root-account-private-keys.yaml
-echo "Root account keys saved to output/root-account-private-keys.yaml"
 
 # Create node configs for each validator
 # These are placed in each validator's directory and will be copied to /opt/aptos/var/etc/node-config.yaml
-echo "Creating node configurations..."
 for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
     username="validator-${i}"
 

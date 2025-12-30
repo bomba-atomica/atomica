@@ -103,7 +103,7 @@ The SDK includes a comprehensive test suite verifying the faucet, network connec
 npm test
 
 # Run with debug logging (highly recommended for troubleshooting)
-DEBUG_TESTNET=1 npm test
+ATOMICA_DEBUG=1 npm test
 
 # Run a specific test file
 npx bun test test/faucet.test.ts
@@ -145,7 +145,7 @@ lsof -i :8080-8086
 If validators report `Epoch: 0` and `Block Height: 0` for >30s:
 
 1. Check logs: `docker compose logs validator-0`
-2. Ensure `DEBUG_TESTNET=1` shows successful peer connections.
+2. Ensure `ATOMICA_DEBUG=1` shows successful peer connections.
 3. Verify your machine has enough resources (Docker CPU/RAM).
 
 ## Architecture

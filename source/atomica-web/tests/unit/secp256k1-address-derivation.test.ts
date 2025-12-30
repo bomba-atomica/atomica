@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { ethers } from "ethers";
-import { Secp256k1PrivateKey, SingleKeyAccount, PrivateKey } from "@aptos-labs/ts-sdk";
+import {
+  Secp256k1PrivateKey,
+  SingleKeyAccount,
+  PrivateKey,
+} from "@aptos-labs/ts-sdk";
 
 /**
  * DIDACTIC UNIT TESTS: SECP256k1 Address Derivation
@@ -31,7 +35,10 @@ describe("SECP256k1 Address Derivation: Ethereum vs Aptos", () => {
     "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
 
   // AIP-80 compliant format for Aptos (silences SDK warning)
-  const testPrivateKeyAIP80 = PrivateKey.formatPrivateKey(testPrivateKeyHex, "secp256k1");
+  const testPrivateKeyAIP80 = PrivateKey.formatPrivateKey(
+    testPrivateKeyHex,
+    "secp256k1",
+  );
 
   describe("Ethereum Address Derivation (Keccak-256)", () => {
     it("should derive Ethereum address from private key using ethers.js", () => {
