@@ -125,6 +125,7 @@ export async function setupLocalnet(): Promise<void> {
   );
 
   // Create testnet with configured number of validators
+  // Note: DockerTestnet.new() automatically registers cleanup handlers
   testnet = await DockerTestnet.new(numValidators);
 
   console.log("✓ Localnet ready");

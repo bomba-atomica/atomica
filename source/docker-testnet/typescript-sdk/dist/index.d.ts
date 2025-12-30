@@ -21,6 +21,7 @@ export declare class DockerTestnet {
     private numValidators;
     private validatorUrls;
     private faucetLock;
+    private cleanupHandlersRegistered;
     private constructor();
     /**
      * Create a fresh, isolated Docker testnet with N validators
@@ -38,6 +39,18 @@ export declare class DockerTestnet {
      * Tear down the testnet and clean up all resources
      */
     teardown(): Promise<void>;
+    /**
+     * Register cleanup handlers for process signals and exit.
+     * This ensures Docker containers are stopped when the process exits or is interrupted.
+     *
+     * Handlers are automatically registered when testnet is created via DockerTestnet.new()
+     * and unregistered after teardown() completes.
+     */
+    private registerCleanupHandlers;
+    /**
+     * Unregister cleanup handlers after teardown
+     */
+    private unregisterCleanupHandlers;
     /**
      * Get the REST API URL for a specific validator
      */

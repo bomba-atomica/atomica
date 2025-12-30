@@ -75,6 +75,7 @@ export class DockerTestnet {
     private numValidators: number;
     private validatorUrls: string[];
     private faucetLock: Promise<unknown> = Promise.resolve();
+    private cleanupHandlersRegistered: boolean = false;
 
     private constructor(composeDir: string, numValidators: number, validatorUrls: string[]) {
         this.composeDir = composeDir;
@@ -201,7 +202,12 @@ export class DockerTestnet {
         await new Promise((resolve) => setTimeout(resolve, 2000));
         console.log(`✓ Docker testnet ready with ${numValidators} validators`);
 
-        return new DockerTestnet(composeDir, numValidators, validatorUrls);
+        const testnet = new DockerTestnet(composeDir, numValidators, validatorUrls);
+
+        // Register cleanup handlers to ensure teardown on process exit/interrupt
+        testnet.registerCleanupHandlers();
+
+        return testnet;
     }
 
     /**
@@ -216,6 +222,73 @@ export class DockerTestnet {
             envVars,
         );
         console.log("✓ Docker testnet stopped");
+
+        // Unregister cleanup handlers after successful teardown
+        this.unregisterCleanupHandlers();
+    }
+
+    /**
+     * Register cleanup handlers for process signals and exit.
+     * This ensures Docker containers are stopped when the process exits or is interrupted.
+     *
+     * Handlers are automatically registered when testnet is created via DockerTestnet.new()
+     * and unregistered after teardown() completes.
+     */
+    private registerCleanupHandlers(): void {
+        if (this.cleanupHandlersRegistered) {
+            return;
+        }
+        this.cleanupHandlersRegistered = true;
+
+        const handleCleanup = async (signal: string): Promise<void> => {
+            console.log(`\n[${signal}] Cleaning up Docker testnet...`);
+            try {
+                await this.teardown();
+                console.log(`[${signal}] ✓ Docker testnet cleaned up`);
+            } catch (error: any) {
+                console.error(`[${signal}] Failed to cleanup testnet:`, error.message);
+            }
+        };
+
+        // Store bound handlers so we can remove them later
+        (this as any)._signalHandlers = {
+            SIGINT: async () => {
+                await handleCleanup("SIGINT");
+                process.exit(130); // 128 + 2 (SIGINT)
+            },
+            SIGTERM: async () => {
+                await handleCleanup("SIGTERM");
+                process.exit(143); // 128 + 15 (SIGTERM)
+            },
+            beforeExit: async () => {
+                await handleCleanup("beforeExit");
+            },
+        };
+
+        // Register signal handlers
+        process.on("SIGINT", (this as any)._signalHandlers.SIGINT);
+        process.on("SIGTERM", (this as any)._signalHandlers.SIGTERM);
+        process.on("beforeExit", (this as any)._signalHandlers.beforeExit);
+
+        debug("Cleanup handlers registered for SIGINT, SIGTERM, and beforeExit");
+    }
+
+    /**
+     * Unregister cleanup handlers after teardown
+     */
+    private unregisterCleanupHandlers(): void {
+        if (!this.cleanupHandlersRegistered || !(this as any)._signalHandlers) {
+            return;
+        }
+
+        process.off("SIGINT", (this as any)._signalHandlers.SIGINT);
+        process.off("SIGTERM", (this as any)._signalHandlers.SIGTERM);
+        process.off("beforeExit", (this as any)._signalHandlers.beforeExit);
+
+        delete (this as any)._signalHandlers;
+        this.cleanupHandlersRegistered = false;
+
+        debug("Cleanup handlers unregistered");
     }
 
     /**

@@ -89,6 +89,7 @@ class DockerTestnet {
     numValidators;
     validatorUrls;
     faucetLock = Promise.resolve();
+    cleanupHandlersRegistered = false;
     constructor(composeDir, numValidators, validatorUrls) {
         this.composeDir = composeDir;
         this.numValidators = numValidators;
@@ -190,7 +191,10 @@ class DockerTestnet {
         }
         await new Promise((resolve) => setTimeout(resolve, 2000));
         console.log(`✓ Docker testnet ready with ${numValidators} validators`);
-        return new DockerTestnet(composeDir, numValidators, validatorUrls);
+        const testnet = new DockerTestnet(composeDir, numValidators, validatorUrls);
+        // Register cleanup handlers to ensure teardown on process exit/interrupt
+        testnet.registerCleanupHandlers();
+        return testnet;
     }
     /**
      * Tear down the testnet and clean up all resources
@@ -200,6 +204,64 @@ class DockerTestnet {
         const envVars = loadEnvVariables();
         await DockerTestnet.runCompose(["down", "--remove-orphans", "-v"], this.composeDir, envVars);
         console.log("✓ Docker testnet stopped");
+        // Unregister cleanup handlers after successful teardown
+        this.unregisterCleanupHandlers();
+    }
+    /**
+     * Register cleanup handlers for process signals and exit.
+     * This ensures Docker containers are stopped when the process exits or is interrupted.
+     *
+     * Handlers are automatically registered when testnet is created via DockerTestnet.new()
+     * and unregistered after teardown() completes.
+     */
+    registerCleanupHandlers() {
+        if (this.cleanupHandlersRegistered) {
+            return;
+        }
+        this.cleanupHandlersRegistered = true;
+        const handleCleanup = async (signal) => {
+            console.log(`\n[${signal}] Cleaning up Docker testnet...`);
+            try {
+                await this.teardown();
+                console.log(`[${signal}] ✓ Docker testnet cleaned up`);
+            }
+            catch (error) {
+                console.error(`[${signal}] Failed to cleanup testnet:`, error.message);
+            }
+        };
+        // Store bound handlers so we can remove them later
+        this._signalHandlers = {
+            SIGINT: async () => {
+                await handleCleanup("SIGINT");
+                process.exit(130); // 128 + 2 (SIGINT)
+            },
+            SIGTERM: async () => {
+                await handleCleanup("SIGTERM");
+                process.exit(143); // 128 + 15 (SIGTERM)
+            },
+            beforeExit: async () => {
+                await handleCleanup("beforeExit");
+            },
+        };
+        // Register signal handlers
+        process.on("SIGINT", this._signalHandlers.SIGINT);
+        process.on("SIGTERM", this._signalHandlers.SIGTERM);
+        process.on("beforeExit", this._signalHandlers.beforeExit);
+        debug("Cleanup handlers registered for SIGINT, SIGTERM, and beforeExit");
+    }
+    /**
+     * Unregister cleanup handlers after teardown
+     */
+    unregisterCleanupHandlers() {
+        if (!this.cleanupHandlersRegistered || !this._signalHandlers) {
+            return;
+        }
+        process.off("SIGINT", this._signalHandlers.SIGINT);
+        process.off("SIGTERM", this._signalHandlers.SIGTERM);
+        process.off("beforeExit", this._signalHandlers.beforeExit);
+        delete this._signalHandlers;
+        this.cleanupHandlersRegistered = false;
+        debug("Cleanup handlers unregistered");
     }
     /**
      * Get the REST API URL for a specific validator
