@@ -133,13 +133,14 @@ describe("Faucet Mechanism", () => {
             expect(accountInfo).toBeDefined();
             expect(accountInfo.sequence_number).toBe("0");
 
-            const coinResource = await client.getAccountResource(
-                newAccount.address(),
-                "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>",
-            );
-            expect(coinResource).toBeDefined();
+            // Get balance using view function (faucet already polled for availability)
+            const result = await client.view({
+                function: "0x1::coin::balance",
+                type_arguments: ["0x1::aptos_coin::AptosCoin"],
+                arguments: [newAccount.address().hex()],
+            });
 
-            const balance = BigInt((coinResource.data as any).coin.value);
+            const balance = BigInt(result[0] as string);
             expect(balance).toBe(amount);
         }
 
@@ -157,12 +158,13 @@ describe("Faucet Mechanism", () => {
         console.log(`\nFunding account with initial ${initialAmount} octas...`);
         await testnet.faucet(account.address(), initialAmount);
 
-        // Verify initial balance
-        let coinResource = await client.getAccountResource(
-            account.address(),
-            "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>",
-        );
-        let balance = BigInt((coinResource.data as any).coin.value);
+        // Verify initial balance using view function (faucet already polled for availability)
+        let result = await client.view({
+            function: "0x1::coin::balance",
+            type_arguments: ["0x1::aptos_coin::AptosCoin"],
+            arguments: [account.address().hex()],
+        });
+        let balance = BigInt(result[0] as string);
         expect(balance).toBe(initialAmount);
         console.log(`✓ Initial balance: ${balance} octas`);
 
@@ -171,11 +173,12 @@ describe("Faucet Mechanism", () => {
         await testnet.faucet(account.address(), additionalAmount);
 
         // Verify new balance
-        coinResource = await client.getAccountResource(
-            account.address(),
-            "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>",
-        );
-        balance = BigInt((coinResource.data as any).coin.value);
+        result = await client.view({
+            function: "0x1::coin::balance",
+            type_arguments: ["0x1::aptos_coin::AptosCoin"],
+            arguments: [account.address().hex()],
+        });
+        balance = BigInt(result[0] as string);
 
         const expectedBalance = initialAmount + additionalAmount;
         expect(balance).toBe(expectedBalance);

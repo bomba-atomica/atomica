@@ -26,6 +26,7 @@ npx tsx scripts/probe.ts 4
 ```
 
 The probe tool checks:
+
 - REST API endpoints (http://127.0.0.1:8080-8083/v1)
 - Metrics endpoints (http://127.0.0.1:9101-9104)
 - Validator synchronization (epoch, block height)
@@ -42,8 +43,9 @@ DEBUG_TESTNET=1 node your-script.js
 ```
 
 This enables:
+
 - Genesis generation debug logs
-- Docker compose operation logs  
+- Docker compose operation logs
 - Network discovery logs
 - Configuration file verification logs
 
@@ -118,10 +120,11 @@ validator_network:
 ### Reference Config (CORRECT)
 
 From `atomica-aptos/config/src/config/test_data/validator.yaml`:
+
 ```yaml
 validator_network:
   discovery_method: "onchain"
-  listen_address: "/ip4/0.0.0.0/tcp/6180"  # <-- REQUIRED!
+  listen_address: "/ip4/0.0.0.0/tcp/6180" # <-- REQUIRED!
   mutual_authentication: true
   identity:
     type: "from_file"
@@ -131,6 +134,7 @@ validator_network:
 ## Fix Required
 
 In `genesis.ts`, the `createValidatorNodeConfig()` function must add:
+
 ```yaml
 validator_network:
   listen_address: "/ip4/0.0.0.0/tcp/6180"
@@ -160,21 +164,23 @@ validator_network:
 
 ## Required Ports
 
-| Port | Protocol | Purpose                    | Listen Address      |
-|------|----------|----------------------------|---------------------|
-| 8080 | TCP/HTTP | REST API                   | 0.0.0.0:8080        |
-| 6180 | TCP/Noise| Validator-to-Validator     | 0.0.0.0:6180        |
-| 6181 | TCP/Noise| VFN Network (optional)     | 0.0.0.0:6181        |
-| 9101 | TCP/HTTP | Metrics/Prometheus         | 0.0.0.0:9101        |
+| Port | Protocol  | Purpose                | Listen Address |
+| ---- | --------- | ---------------------- | -------------- |
+| 8080 | TCP/HTTP  | REST API               | 0.0.0.0:8080   |
+| 6180 | TCP/Noise | Validator-to-Validator | 0.0.0.0:6180   |
+| 6181 | TCP/Noise | VFN Network (optional) | 0.0.0.0:6181   |
+| 9101 | TCP/HTTP  | Metrics/Prometheus     | 0.0.0.0:9101   |
 
 ## Network Address Format
 
 Aptos uses multiaddresses with Noise IK encryption:
+
 ```
 /ip4/<host>/tcp/<port>/noise-ik/<x25519_pubkey>/handshake/<version>
 ```
 
 Example:
+
 ```
 /ip4/172.19.0.10/tcp/6180/noise-ik/0x383146fadb.../handshake/0
 ```
@@ -182,15 +188,17 @@ Example:
 ## Identity Files
 
 Each validator needs:
+
 - `validator-identity.yaml` - Contains private keys for authentication
 - `public-keys.yaml` - Public keys registered in genesis
 
 Format of `validator-identity.yaml`:
+
 ```yaml
 account_address: 6111e15cf15636e53691104920c42d2cdb7d06a73ef382c50521d86b387b3a93
 account_private_key: "0x..."
 consensus_private_key: "0x..."
-network_private_key: "0x..."  # Used for Noise handshake
+network_private_key: "0x..." # Used for Noise handshake
 ```
 
 ## Production-Like Account Funding
@@ -224,7 +232,7 @@ const newAccount = new AptosAccount();
 await testnet.faucet(newAccount.address(), 100_000_000n);
 ```
 
-See **[typescript-sdk/FAUCET.md](typescript-sdk/FAUCET.md)** for complete documentation.
+See **[typescript-sdk/README.md](typescript-sdk/README.md)** for complete documentation.
 
 ## Debugging Checklist
 

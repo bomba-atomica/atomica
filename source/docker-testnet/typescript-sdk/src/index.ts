@@ -413,10 +413,48 @@ export class DockerTestnet {
             const txnResponse = await client.submitTransaction(signedTxn);
             await client.waitForTransaction(txnResponse.hash);
 
+            // Poll for balance using view function to ensure state is queryable
+            const maxRetries = 20;
+            const retryDelayMs = 500;
+            let retries = 0;
+
+            while (retries < maxRetries) {
+                try {
+                    // Call coin::balance view function (works for both CoinStore and fungible assets)
+                    const result = await client.view({
+                        function: "0x1::coin::balance",
+                        type_arguments: ["0x1::aptos_coin::AptosCoin"],
+                        arguments: [targetAddr],
+                    });
+
+                    if (result && result.length > 0 && BigInt(result[0] as string) >= amount) {
+                        break; // Balance confirmed, state is queryable
+                    }
+
+                    retries++;
+                    if (retries < maxRetries) {
+                        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+                    }
+                } catch (e: any) {
+                    retries++;
+                    if (retries < maxRetries) {
+                        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+                    } else {
+                        // Last retry failed - log warning but continue
+                        debug(`Warning: Could not confirm balance after ${retries} retries`, {
+                            targetAddr,
+                            error: e.message,
+                        });
+                        break;
+                    }
+                }
+            }
+
             debug(`Faucet transfer complete`, {
                 to: targetAddr,
                 amount: amount.toString(),
                 txn: txnResponse.hash,
+                retriesNeeded: retries,
             });
 
             return txnResponse.hash;
