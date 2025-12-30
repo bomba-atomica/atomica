@@ -120,13 +120,36 @@ function runGenesisScript(config) {
             const text = data.toString();
             stdout += text;
             // Print output to console so the user knows what's happening
-            // Filter out verbose "Missing CF" warnings from Aptos storage layer
+            // Filter out verbose output that's not useful for users
+            let inJsonBlock = false;
             for (const line of text.split("\n")) {
                 const trimmed = line.trim();
                 if (!trimmed)
                     continue;
                 // Skip "Missing CF:" warnings (expected during genesis initialization)
                 if (trimmed.includes("Missing CF:")) {
+                    if (DEBUG) {
+                        console.log(`  [STDOUT] ${trimmed}`);
+                    }
+                    continue;
+                }
+                // Filter out verbose JSON output blocks from aptos CLI
+                // These show file lists that aren't useful during normal operation
+                if (trimmed === "{") {
+                    inJsonBlock = true;
+                }
+                if (inJsonBlock) {
+                    if (DEBUG) {
+                        console.log(`  [STDOUT] ${trimmed}`);
+                    }
+                    if (trimmed === "}") {
+                        inJsonBlock = false;
+                    }
+                    continue;
+                }
+                // Skip verbose file path messages
+                if (trimmed.startsWith("Root account keys saved to") ||
+                    trimmed.startsWith("Creating node configurations")) {
                     if (DEBUG) {
                         console.log(`  [STDOUT] ${trimmed}`);
                     }
