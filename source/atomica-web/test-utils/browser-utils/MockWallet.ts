@@ -47,8 +47,8 @@ export class MockWallet {
             throw new Error(`Method ${method} not implemented in MockWallet`);
         }
       },
-      on: () => { },
-      removeListener: () => { },
+      on: () => {},
+      removeListener: () => {},
     };
   }
 }

@@ -83,7 +83,9 @@ describe.sequential("AccountStatus Integration", () => {
 
       // Step 2: Fund the account via faucet
       const { getDerivedAddress } = await import("../../src/lib/aptos");
-      const derivedAddr = await getDerivedAddress(mockWallet.address.toLowerCase());
+      const derivedAddr = await getDerivedAddress(
+        mockWallet.address.toLowerCase(),
+      );
       const fundedAddress = derivedAddr.toString();
 
       console.log(`Funding account: ${fundedAddress}`);

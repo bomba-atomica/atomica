@@ -108,6 +108,47 @@ export declare class DockerTestnet {
      */
     waitForBlocks(numBlocks: number, timeoutSecs?: number): Promise<void>;
     /**
+     * Deploy Move contracts using aptos CLI from within the validator container.
+     *
+     * This method copies the contract directory into the validator container,
+     * compiles and publishes the contracts using the aptos binary inside the container,
+     * then runs any initialization functions.
+     *
+     * @param options Deployment options
+     * @returns Promise resolving when deployment completes
+     *
+     * @example
+     * await testnet.deployContracts({
+     *   contractsDir: "/path/to/contracts",
+     *   deployerPrivateKey: "0x123...",
+     *   namedAddresses: { atomica: "default" },
+     *   initFunctions: [
+     *     { functionId: "default::registry::initialize", args: ["hex:0123"] },
+     *     { functionId: "default::fake_eth::initialize", args: [] },
+     *   ],
+     * });
+     */
+    deployContracts(options: {
+        contractsDir: string;
+        deployerPrivateKey: string;
+        deployerAddress?: string;
+        namedAddresses?: Record<string, string>;
+        initFunctions?: Array<{
+            functionId: string;
+            args: string[];
+        }>;
+        fundAmount?: bigint;
+    }): Promise<void>;
+    /**
+     * Execute a command inside a validator container.
+     *
+     * @param containerName Container name (e.g., "atomica-validator-0")
+     * @param command Command to execute
+     * @returns Promise resolving to { stdout, stderr }
+     * @private
+     */
+    private execInContainer;
+    /**
      * Find the docker-testnet directory
      */
     private static findComposeDir;

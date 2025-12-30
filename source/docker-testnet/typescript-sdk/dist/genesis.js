@@ -100,12 +100,16 @@ function runGenesisScript(config) {
             "/workspace",
             "--entrypoint",
             "/bin/bash",
-            validatorImage,
-            "/genesis-script.sh",
-            numValidators.toString(),
-            chainId.toString(),
-            baseIp,
         ];
+        // Run as current user to avoid permission issues with bind mounts
+        if (process.platform !== "win32" &&
+            typeof process.getuid === "function" &&
+            typeof process.getgid === "function") {
+            dockerArgs.push("--user", `${process.getuid()}:${process.getgid()}`);
+        }
+        // Set HOME to a writable location (important when running as non-root)
+        dockerArgs.push("-e", "HOME=/tmp");
+        dockerArgs.push(validatorImage, "/genesis-script.sh", numValidators.toString(), chainId.toString(), baseIp);
         debug("Starting docker run with args:", { dockerArgs });
         const proc = (0, child_process_1.spawn)(DOCKER_BIN, dockerArgs, {
             stdio: ["ignore", "pipe", "pipe"],

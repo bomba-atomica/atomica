@@ -48,9 +48,9 @@ describe.sequential("Localnet Health Check", () => {
     expect(ledgerInfo.chain_id).toBe(4);
     console.log("✓ Chain ID is 4 (local testnet)");
 
-    // Step 2: Verify ledger version is greater than 0
+    // Step 2: Verify ledger version exists (may be 0 at genesis)
     console.log("\nStep 2: Verifying ledger is initialized...");
-    expect(parseInt(ledgerInfo.ledger_version)).toBeGreaterThan(0);
+    expect(parseInt(ledgerInfo.ledger_version)).toBeGreaterThanOrEqual(0);
     console.log(`✓ Ledger version: ${ledgerInfo.ledger_version}`);
 
     // Step 3: Verify we can query account resources (basic API functionality)

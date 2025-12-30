@@ -239,8 +239,6 @@ export async function deployContracts(): Promise<void> {
   contractsDeployed = true;
 }
 
-
-
 /**
  * Tear down the localnet and clean up all resources.
  *

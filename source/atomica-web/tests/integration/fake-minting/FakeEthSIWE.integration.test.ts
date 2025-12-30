@@ -88,5 +88,4 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
     console.log(`FAKEETH Balance: ${balance}`);
     expect(balance).toBe(mintAmount);
   }, 60000);
-
 });

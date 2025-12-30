@@ -12,7 +12,13 @@
  * with a live Aptos localnet via the `commands` bridge.
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  cleanup,
+} from "@testing-library/react";
 import { commands } from "vitest/browser";
 import { setupBrowserWalletMock } from "../../test-utils/browser-utils/wallet-mock";
 import { TxButton } from "../../src/components/TxButton";
@@ -140,5 +146,4 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     expect(Number(balance)).toBeGreaterThan(0);
     console.log("Balance verified:", balance);
   }, 90000);
-
 });

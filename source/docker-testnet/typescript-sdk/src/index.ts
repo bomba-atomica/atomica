@@ -411,11 +411,13 @@ export class DockerTestnet {
             // Sign and submit
             const signedTxn = await client.signTransaction(faucetAccount, rawTxn);
             const txnResponse = await client.submitTransaction(signedTxn);
-            await client.waitForTransaction(txnResponse.hash);
+
+            // Wait for transaction with extended timeout (60 seconds instead of default 20)
+            await client.waitForTransaction(txnResponse.hash, { timeoutSecs: 60 });
 
             // Poll for balance using view function to ensure state is queryable
-            const maxRetries = 20;
-            const retryDelayMs = 500;
+            const maxRetries = 40; // Increased from 20
+            const retryDelayMs = 1000; // Increased from 500ms to 1s
             let retries = 0;
 
             while (retries < maxRetries) {
@@ -515,6 +517,192 @@ export class DockerTestnet {
         }
 
         throw new Error("Timeout waiting for blocks");
+    }
+
+    /**
+     * Deploy Move contracts using aptos CLI from within the validator container.
+     *
+     * This method copies the contract directory into the validator container,
+     * compiles and publishes the contracts using the aptos binary inside the container,
+     * then runs any initialization functions.
+     *
+     * @param options Deployment options
+     * @returns Promise resolving when deployment completes
+     *
+     * @example
+     * await testnet.deployContracts({
+     *   contractsDir: "/path/to/contracts",
+     *   deployerPrivateKey: "0x123...",
+     *   namedAddresses: { atomica: "default" },
+     *   initFunctions: [
+     *     { functionId: "default::registry::initialize", args: ["hex:0123"] },
+     *     { functionId: "default::fake_eth::initialize", args: [] },
+     *   ],
+     * });
+     */
+    async deployContracts(options: {
+        contractsDir: string;
+        deployerPrivateKey: string;
+        deployerAddress?: string;
+        namedAddresses?: Record<string, string>;
+        initFunctions?: Array<{ functionId: string; args: string[] }>;
+        fundAmount?: bigint;
+    }): Promise<void> {
+        const {
+            contractsDir,
+            deployerPrivateKey,
+            deployerAddress,
+            namedAddresses = {},
+            initFunctions = [],
+            fundAmount = 10_000_000_000n, // 100 APT default
+        } = options;
+
+        console.log("Deploying contracts via Docker container...");
+
+        // Derive deployer address if not provided
+        let deployer = deployerAddress;
+        if (!deployer) {
+            const account = new AptosAccount(Buffer.from(deployerPrivateKey.slice(2), "hex"));
+            deployer = account.address().hex();
+        }
+
+        // Fund deployer account
+        console.log(`Funding deployer account ${deployer}...`);
+        await this.faucet(deployer, fundAmount);
+
+        // Wait for funding to settle
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // Copy contracts directory into container
+        const containerName = `atomica-validator-0`;
+        const containerContractsPath = "/tmp/contracts";
+
+        console.log(`Copying contracts to container ${containerName}:${containerContractsPath}...`);
+        await new Promise<void>((resolve, reject) => {
+            const proc = spawn(DOCKER_BIN, [
+                "cp",
+                contractsDir,
+                `${containerName}:${containerContractsPath}`,
+            ]);
+
+            let stderr = "";
+            proc.stderr?.on("data", (d) => (stderr += d.toString()));
+
+            proc.on("close", (code) => {
+                if (code === 0) {
+                    resolve();
+                } else {
+                    reject(new Error(`Failed to copy contracts: ${stderr}`));
+                }
+            });
+
+            proc.on("error", reject);
+        });
+
+        // Initialize aptos CLI profile inside container
+        console.log("Initializing aptos CLI profile in container...");
+        await this.execInContainer(containerName, [
+            "aptos",
+            "init",
+            "--network",
+            "custom",
+            "--rest-url",
+            "http://127.0.0.1:8080",
+            "--profile",
+            "default",
+            "--private-key",
+            deployerPrivateKey,
+            "--assume-yes",
+        ]);
+
+        // Build named addresses argument
+        const namedAddressesArg = Object.entries(namedAddresses)
+            .map(([key, value]) => `${key}=${value}`)
+            .join(",");
+
+        // Publish contracts
+        console.log("Publishing contracts from container...");
+        await this.execInContainer(containerName, [
+            "aptos",
+            "move",
+            "publish",
+            "--package-dir",
+            containerContractsPath,
+            "--named-addresses",
+            namedAddressesArg || "atomica=default",
+            "--profile",
+            "default",
+            "--assume-yes",
+        ]);
+
+        // Run initialization functions
+        for (const initFunc of initFunctions) {
+            console.log(`Initializing ${initFunc.functionId}...`);
+            const args = [
+                "aptos",
+                "move",
+                "run",
+                "--function-id",
+                initFunc.functionId,
+                "--profile",
+                "default",
+                "--assume-yes",
+            ];
+
+            if (initFunc.args.length > 0) {
+                args.push("--args", ...initFunc.args);
+            }
+
+            await this.execInContainer(containerName, args);
+        }
+
+        console.log("✓ Contracts deployed successfully");
+    }
+
+    /**
+     * Execute a command inside a validator container.
+     *
+     * @param containerName Container name (e.g., "atomica-validator-0")
+     * @param command Command to execute
+     * @returns Promise resolving to { stdout, stderr }
+     * @private
+     */
+    private async execInContainer(
+        containerName: string,
+        command: string[],
+    ): Promise<{ stdout: string; stderr: string }> {
+        return new Promise((resolve, reject) => {
+            let stdout = "";
+            let stderr = "";
+
+            const proc = spawn(DOCKER_BIN, ["exec", containerName, ...command]);
+
+            proc.stdout?.on("data", (d) => {
+                const s = d.toString();
+                stdout += s;
+                if (DEBUG) process.stdout.write(s);
+            });
+
+            proc.stderr?.on("data", (d) => {
+                const s = d.toString();
+                stderr += s;
+                if (DEBUG) process.stderr.write(s);
+            });
+
+            proc.on("close", (code) => {
+                if (code === 0) {
+                    resolve({ stdout, stderr });
+                } else {
+                    reject(
+                        new Error(
+                            `Command failed in container (exit ${code}): ${command.join(" ")}\n${stderr}`,
+                        ),
+                    );
+                }
+            });
+
+            proc.on("error", reject);
+        });
     }
 
     /**
