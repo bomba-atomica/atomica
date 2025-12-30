@@ -114,21 +114,16 @@ const CONTRACTS_DIR = pathResolve(WEB_DIR, "../atomica-move-contracts");
 export async function setupLocalnet(): Promise<void> {
   // Guard against double setup
   if (setupComplete && testnet) {
-    console.log("[setupLocalnet] Already running, skipping setup");
     return;
   }
 
   // Read NUM_VALIDATORS from environment, default to 2
   const numValidators = parseInt(process.env.NUM_VALIDATORS || "2", 10);
-  console.log(
-    `Starting Docker-based localnet (${numValidators} validators)...`,
-  );
 
   // Create testnet with configured number of validators
   // Note: DockerTestnet.new() automatically registers cleanup handlers
   testnet = await DockerTestnet.new(numValidators);
 
-  console.log("✓ Localnet ready");
   setupComplete = true;
 }
 
@@ -168,12 +163,9 @@ export async function fundAccount(
     throw new Error("Localnet not running. Call setupLocalnet() first.");
   }
 
-  console.log(`[fundAccount] Funding ${address} with ${amount} octas...`);
-
   // Convert number to bigint for SDK
   const txHash = await testnet.faucet(address, BigInt(amount));
 
-  console.log(`[fundAccount] Success: ${txHash}`);
   return txHash;
 }
 
@@ -211,11 +203,8 @@ export async function deployContracts(): Promise<void> {
 
   // Guard against double deployment
   if (contractsDeployed) {
-    console.log("[deployContracts] Already deployed, skipping");
     return;
   }
-
-  console.log("Deploying Contracts using Docker container...");
 
   // Use SDK's deployContracts method - it uses aptos CLI from inside the container!
   await testnet.deployContracts({
@@ -240,7 +229,6 @@ export async function deployContracts(): Promise<void> {
     fundAmount: 10_000_000_000n, // 100 APT
   });
 
-  console.log("✓ Contracts Deployed!");
   contractsDeployed = true;
 }
 
@@ -259,18 +247,14 @@ export async function deployContracts(): Promise<void> {
  */
 export async function teardownLocalnet(): Promise<void> {
   if (!testnet) {
-    console.log("[teardownLocalnet] No testnet running");
     return;
   }
 
-  console.log("Tearing down localnet...");
   await testnet.teardown();
 
   testnet = null;
   setupComplete = false;
   contractsDeployed = false;
-
-  console.log("✓ Localnet torn down");
 }
 
 /**

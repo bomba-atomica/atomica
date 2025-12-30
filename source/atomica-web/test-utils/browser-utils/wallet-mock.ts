@@ -51,8 +51,6 @@ export function setupBrowserWalletMock(
     },
 
     async request(args: { method: string; params?: unknown[] }) {
-      console.log("[Browser Wallet Mock] Request:", args.method, args.params);
-
       switch (args.method) {
         case "eth_requestAccounts":
         case "eth_accounts":
@@ -82,12 +80,7 @@ export function setupBrowserWalletMock(
             messageStr = message;
           }
 
-          console.log(
-            "[Browser Wallet Mock] Signing message:",
-            messageStr.substring(0, 100),
-          );
           const signature = await wallet.signMessage(messageStr);
-          console.log("[Browser Wallet Mock] Signature:", signature);
           return signature;
         }
 
@@ -98,7 +91,6 @@ export function setupBrowserWalletMock(
           return "0x0";
 
         default:
-          console.warn("[Browser Wallet Mock] Unhandled method:", args.method);
           throw new Error(`Unhandled method: ${args.method}`);
       }
     },
@@ -106,8 +98,6 @@ export function setupBrowserWalletMock(
 
   // Inject into window
   window.ethereum = provider;
-
-  console.log("[Browser Wallet Mock] Initialized with account:", testAccount);
 
   return provider;
 }
