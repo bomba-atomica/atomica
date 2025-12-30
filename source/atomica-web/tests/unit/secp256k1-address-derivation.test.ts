@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ethers } from "ethers";
-import { Secp256k1PrivateKey, SingleKeyAccount } from "@aptos-labs/ts-sdk";
+import { Secp256k1PrivateKey, SingleKeyAccount, PrivateKey } from "@aptos-labs/ts-sdk";
 
 /**
  * DIDACTIC UNIT TESTS: SECP256k1 Address Derivation
@@ -26,9 +26,12 @@ import { Secp256k1PrivateKey, SingleKeyAccount } from "@aptos-labs/ts-sdk";
  */
 
 describe("SECP256k1 Address Derivation: Ethereum vs Aptos", () => {
-  // Test fixture: A known SECP256k1 private key
+  // Test fixture: A known SECP256k1 private key (raw hex format for Ethereum)
   const testPrivateKeyHex =
     "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+
+  // AIP-80 compliant format for Aptos (silences SDK warning)
+  const testPrivateKeyAIP80 = PrivateKey.formatPrivateKey(testPrivateKeyHex, "secp256k1");
 
   describe("Ethereum Address Derivation (Keccak-256)", () => {
     it("should derive Ethereum address from private key using ethers.js", () => {
@@ -92,8 +95,9 @@ describe("SECP256k1 Address Derivation: Ethereum vs Aptos", () => {
       /*
        * Step 1: Create Aptos account from same private key
        * Uses the same SECP256k1 private key as Ethereum
+       * Note: Using AIP-80 compliant format to avoid SDK warnings
        */
-      const aptosPrivateKey = new Secp256k1PrivateKey(testPrivateKeyHex);
+      const aptosPrivateKey = new Secp256k1PrivateKey(testPrivateKeyAIP80);
       const aptosAccount = new SingleKeyAccount({
         privateKey: aptosPrivateKey,
       });
@@ -153,7 +157,7 @@ describe("SECP256k1 Address Derivation: Ethereum vs Aptos", () => {
       const ethAddress = ethWallet.address;
 
       // Aptos account
-      const aptosPrivateKey = new Secp256k1PrivateKey(testPrivateKeyHex);
+      const aptosPrivateKey = new Secp256k1PrivateKey(testPrivateKeyAIP80);
       const aptosAccount = new SingleKeyAccount({
         privateKey: aptosPrivateKey,
       });
@@ -188,7 +192,7 @@ describe("SECP256k1 Address Derivation: Ethereum vs Aptos", () => {
        * ETH address ↔ Aptos address.
        */
       const ethWallet = new ethers.Wallet(testPrivateKeyHex);
-      const aptosPrivateKey = new Secp256k1PrivateKey(testPrivateKeyHex);
+      const aptosPrivateKey = new Secp256k1PrivateKey(testPrivateKeyAIP80);
       const aptosAccount = new SingleKeyAccount({
         privateKey: aptosPrivateKey,
       });
@@ -207,7 +211,7 @@ describe("SECP256k1 Address Derivation: Ethereum vs Aptos", () => {
       const ethPublicKeyBytes = ethers.getBytes(ethPublicKey);
 
       // Aptos public key
-      const aptosPrivateKey = new Secp256k1PrivateKey(testPrivateKeyHex);
+      const aptosPrivateKey = new Secp256k1PrivateKey(testPrivateKeyAIP80);
       const aptosAccount = new SingleKeyAccount({
         privateKey: aptosPrivateKey,
       });
@@ -257,7 +261,7 @@ describe("SECP256k1 Address Derivation: Ethereum vs Aptos", () => {
 
       // Test with both libraries
       const ethWallet = new ethers.Wallet(testPrivateKeyHex);
-      const aptosPrivateKey = new Secp256k1PrivateKey(testPrivateKeyHex);
+      const aptosPrivateKey = new Secp256k1PrivateKey(testPrivateKeyAIP80);
       const aptosAccount = new SingleKeyAccount({
         privateKey: aptosPrivateKey,
       });
@@ -289,7 +293,7 @@ describe("SECP256k1 Address Derivation: Ethereum vs Aptos", () => {
        */
 
       // Aptos signature
-      const aptosPrivateKey = new Secp256k1PrivateKey(testPrivateKeyHex);
+      const aptosPrivateKey = new Secp256k1PrivateKey(testPrivateKeyAIP80);
       const aptosAccount = new SingleKeyAccount({
         privateKey: aptosPrivateKey,
       });
@@ -326,7 +330,7 @@ describe("SECP256k1 Address Derivation: Ethereum vs Aptos", () => {
        * → Display both addresses to users
        */
       const ethWallet = new ethers.Wallet(testPrivateKeyHex);
-      const aptosPrivateKey = new Secp256k1PrivateKey(testPrivateKeyHex);
+      const aptosPrivateKey = new Secp256k1PrivateKey(testPrivateKeyAIP80);
       const aptosAccount = new SingleKeyAccount({
         privateKey: aptosPrivateKey,
       });
