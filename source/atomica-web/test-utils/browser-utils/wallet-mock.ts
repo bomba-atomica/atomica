@@ -1,16 +1,21 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Browser-compatible MetaMask wallet mock
  * This runs in the actual browser context and provides window.ethereum
  */
 
 interface EthereumProvider {
-  request: (args: { method: string; params?: any[] }) => Promise<any>;
-  on: (event: string, handler: (...args: any[]) => void) => void;
-  removeListener: (event: string, handler: (...args: any[]) => void) => void;
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  on: (event: string, handler: (...args: unknown[]) => void) => void;
+  removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
   isMetaMask: boolean;
   selectedAddress: string | null;
   chainId: string;
+}
+
+declare global {
+  interface Window {
+    ethereum: EthereumProvider;
+  }
 }
 
 export function setupBrowserWalletMock(
@@ -21,25 +26,26 @@ export function setupBrowserWalletMock(
   const chainId = "0x4"; // Rinkeby
 
   // Simple event emitter for browser
-  const eventHandlers: Map<string, Set<(...args: any[]) => void>> = new Map();
+  const eventHandlers: Map<string, Set<(...args: unknown[]) => void>> =
+    new Map();
 
   const provider: EthereumProvider = {
     isMetaMask: true,
     selectedAddress: testAccount,
     chainId,
 
-    on(event: string, handler: (...args: any[]) => void) {
+    on(event: string, handler: (...args: unknown[]) => void) {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, new Set());
       }
       eventHandlers.get(event)!.add(handler);
     },
 
-    removeListener(event: string, handler: (...args: any[]) => void) {
+    removeListener(event: string, handler: (...args: unknown[]) => void) {
       eventHandlers.get(event)?.delete(handler);
     },
 
-    async request(args: { method: string; params?: any[] }) {
+    async request(args: { method: string; params?: unknown[] }) {
       console.log("[Browser Wallet Mock] Request:", args.method, args.params);
 
       switch (args.method) {
@@ -51,7 +57,8 @@ export function setupBrowserWalletMock(
           return chainId;
 
         case "personal_sign": {
-          const [message] = args.params || [];
+          const params = args.params || [];
+          const message = params[0] as string;
           if (!message) {
             throw new Error("Message is required for personal_sign");
           }
@@ -93,7 +100,7 @@ export function setupBrowserWalletMock(
   };
 
   // Inject into window
-  (window as any).ethereum = provider;
+  window.ethereum = provider;
 
   console.log("[Browser Wallet Mock] Initialized with account:", testAccount);
 

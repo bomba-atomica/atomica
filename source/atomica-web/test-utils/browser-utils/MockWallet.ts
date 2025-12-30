@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ethers } from "ethers";
 
 export class MockWallet {
@@ -26,7 +25,7 @@ export class MockWallet {
         params,
       }: {
         method: string;
-        params: any[];
+        params: unknown[];
       }) => {
         // console.log(`[MockWallet] handling ${method}`, params);
         switch (method) {
@@ -37,7 +36,7 @@ export class MockWallet {
             // Params: [message, address]
             // ethers jsonRpcSigner sends the message as a hex string.
             // We need to decode it to bytes so wallet.signMessage treats it correctly (and adds prefix).
-            const rawMessage = ethers.getBytes(params[0]);
+            const rawMessage = ethers.getBytes(params[0] as string);
             return await this.wallet.signMessage(rawMessage);
           }
           case "eth_chainId":
