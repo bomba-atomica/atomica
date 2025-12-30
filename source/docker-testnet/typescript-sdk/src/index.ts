@@ -62,6 +62,7 @@ export class DockerTestnet {
     private composeDir: string;
     private numValidators: number;
     private validatorUrls: string[];
+    private faucetLock: Promise<unknown> = Promise.resolve();
 
     private constructor(composeDir: string, numValidators: number, validatorUrls: string[]) {
         this.composeDir = composeDir;
@@ -138,8 +139,13 @@ export class DockerTestnet {
 
         // Start the testnet
         // Use 5 minute timeout for 'up' command (image pull can be slow)
+        // Only start the requested number of validators
+        const validatorServices = [];
+        for (let i = 0; i < numValidators; i++) {
+            validatorServices.push(`validator-${i}`);
+        }
         try {
-            await DockerTestnet.runCompose(["up", "-d"], composeDir, envVars, 300000);
+            await DockerTestnet.runCompose(["up", "-d", ...validatorServices], composeDir, envVars, 300000);
         } catch (error: any) {
             console.error("Failed to start testnet. Fetching logs...");
             try {
@@ -372,13 +378,18 @@ export class DockerTestnet {
      * @returns Transaction hash
      */
     async faucet(address: string | HexString, amount: bigint = 100_000_000n): Promise<string> {
-        const faucetAccount = this.getFaucetAccount();
-        const client = new AptosClient(this.validatorApiUrl(0));
+        // Wait for previous faucet operation to complete (serialization)
+        await this.faucetLock;
 
-        const targetAddr = typeof address === "string" ? address : address.hex();
-        debug(`Faucet funding ${targetAddr} with ${amount} octas`);
+        // Create the current faucet operation
+        const currentOperation = (async () => {
+            const faucetAccount = this.getFaucetAccount();
+            const client = new AptosClient(this.validatorApiUrl(0));
 
-        try {
+            const targetAddr = typeof address === "string" ? address : address.hex();
+            debug(`Faucet funding ${targetAddr} with ${amount} octas`);
+
+            try {
             // Manually build transaction without using SDK helpers that require indexer
             // Build the entry function payload for aptos_account::transfer
             const entryFunctionPayload = new TxnBuilderTypes.TransactionPayloadEntryFunction(
@@ -463,6 +474,13 @@ export class DockerTestnet {
         } catch (error: any) {
             throw new Error(`Faucet transfer failed: ${error.message}`);
         }
+        })();
+
+        // Update lock to wait for this operation (catch errors so they don't block the queue)
+        this.faucetLock = currentOperation.catch(() => {});
+
+        // Return the actual result (which may throw)
+        return currentOperation;
     }
 
     /**

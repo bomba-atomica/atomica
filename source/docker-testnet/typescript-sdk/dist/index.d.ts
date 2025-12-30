@@ -20,6 +20,7 @@ export declare class DockerTestnet {
     private composeDir;
     private numValidators;
     private validatorUrls;
+    private faucetLock;
     private constructor();
     /**
      * Create a fresh, isolated Docker testnet with N validators

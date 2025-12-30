@@ -78,6 +78,7 @@ class DockerTestnet {
     composeDir;
     numValidators;
     validatorUrls;
+    faucetLock = Promise.resolve();
     constructor(composeDir, numValidators, validatorUrls) {
         this.composeDir = composeDir;
         this.numValidators = numValidators;
@@ -137,8 +138,13 @@ class DockerTestnet {
         }
         // Start the testnet
         // Use 5 minute timeout for 'up' command (image pull can be slow)
+        // Only start the requested number of validators
+        const validatorServices = [];
+        for (let i = 0; i < numValidators; i++) {
+            validatorServices.push(`validator-${i}`);
+        }
         try {
-            await DockerTestnet.runCompose(["up", "-d"], composeDir, envVars, 300000);
+            await DockerTestnet.runCompose(["up", "-d", ...validatorServices], composeDir, envVars, 300000);
         }
         catch (error) {
             console.error("Failed to start testnet. Fetching logs...");
@@ -323,76 +329,85 @@ class DockerTestnet {
      * @returns Transaction hash
      */
     async faucet(address, amount = 100000000n) {
-        const faucetAccount = this.getFaucetAccount();
-        const client = new aptos_1.AptosClient(this.validatorApiUrl(0));
-        const targetAddr = typeof address === "string" ? address : address.hex();
-        debug(`Faucet funding ${targetAddr} with ${amount} octas`);
-        try {
-            // Manually build transaction without using SDK helpers that require indexer
-            // Build the entry function payload for aptos_account::transfer
-            const entryFunctionPayload = new aptos_1.TxnBuilderTypes.TransactionPayloadEntryFunction(aptos_1.TxnBuilderTypes.EntryFunction.natural("0x1::aptos_account", "transfer", [], [
-                aptos_1.BCS.bcsToBytes(aptos_1.TxnBuilderTypes.AccountAddress.fromHex(targetAddr)),
-                aptos_1.BCS.bcsSerializeUint64(amount),
-            ]));
-            // Get account info for sequence number
-            const accountInfo = await client.getAccount(faucetAccount.address());
-            const chainId = await client.getChainId();
-            // Build raw transaction
-            const rawTxn = new aptos_1.TxnBuilderTypes.RawTransaction(aptos_1.TxnBuilderTypes.AccountAddress.fromHex(faucetAccount.address()), BigInt(accountInfo.sequence_number), entryFunctionPayload, BigInt(10000), // max gas
-            BigInt(100), // gas price
-            BigInt(Math.floor(Date.now() / 1000) + 600), // expiration (10 min from now)
-            new aptos_1.TxnBuilderTypes.ChainId(chainId));
-            // Sign and submit
-            const signedTxn = await client.signTransaction(faucetAccount, rawTxn);
-            const txnResponse = await client.submitTransaction(signedTxn);
-            // Wait for transaction with extended timeout (60 seconds instead of default 20)
-            await client.waitForTransaction(txnResponse.hash, { timeoutSecs: 60 });
-            // Poll for balance using view function to ensure state is queryable
-            const maxRetries = 40; // Increased from 20
-            const retryDelayMs = 1000; // Increased from 500ms to 1s
-            let retries = 0;
-            while (retries < maxRetries) {
-                try {
-                    // Call coin::balance view function (works for both CoinStore and fungible assets)
-                    const result = await client.view({
-                        function: "0x1::coin::balance",
-                        type_arguments: ["0x1::aptos_coin::AptosCoin"],
-                        arguments: [targetAddr],
-                    });
-                    if (result && result.length > 0 && BigInt(result[0]) >= amount) {
-                        break; // Balance confirmed, state is queryable
-                    }
-                    retries++;
-                    if (retries < maxRetries) {
-                        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-                    }
-                }
-                catch (e) {
-                    retries++;
-                    if (retries < maxRetries) {
-                        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-                    }
-                    else {
-                        // Last retry failed - log warning but continue
-                        debug(`Warning: Could not confirm balance after ${retries} retries`, {
-                            targetAddr,
-                            error: e.message,
+        // Wait for previous faucet operation to complete (serialization)
+        await this.faucetLock;
+        // Create the current faucet operation
+        const currentOperation = (async () => {
+            const faucetAccount = this.getFaucetAccount();
+            const client = new aptos_1.AptosClient(this.validatorApiUrl(0));
+            const targetAddr = typeof address === "string" ? address : address.hex();
+            debug(`Faucet funding ${targetAddr} with ${amount} octas`);
+            try {
+                // Manually build transaction without using SDK helpers that require indexer
+                // Build the entry function payload for aptos_account::transfer
+                const entryFunctionPayload = new aptos_1.TxnBuilderTypes.TransactionPayloadEntryFunction(aptos_1.TxnBuilderTypes.EntryFunction.natural("0x1::aptos_account", "transfer", [], [
+                    aptos_1.BCS.bcsToBytes(aptos_1.TxnBuilderTypes.AccountAddress.fromHex(targetAddr)),
+                    aptos_1.BCS.bcsSerializeUint64(amount),
+                ]));
+                // Get account info for sequence number
+                const accountInfo = await client.getAccount(faucetAccount.address());
+                const chainId = await client.getChainId();
+                // Build raw transaction
+                const rawTxn = new aptos_1.TxnBuilderTypes.RawTransaction(aptos_1.TxnBuilderTypes.AccountAddress.fromHex(faucetAccount.address()), BigInt(accountInfo.sequence_number), entryFunctionPayload, BigInt(10000), // max gas
+                BigInt(100), // gas price
+                BigInt(Math.floor(Date.now() / 1000) + 600), // expiration (10 min from now)
+                new aptos_1.TxnBuilderTypes.ChainId(chainId));
+                // Sign and submit
+                const signedTxn = await client.signTransaction(faucetAccount, rawTxn);
+                const txnResponse = await client.submitTransaction(signedTxn);
+                // Wait for transaction with extended timeout (60 seconds instead of default 20)
+                await client.waitForTransaction(txnResponse.hash, { timeoutSecs: 60 });
+                // Poll for balance using view function to ensure state is queryable
+                const maxRetries = 40; // Increased from 20
+                const retryDelayMs = 1000; // Increased from 500ms to 1s
+                let retries = 0;
+                while (retries < maxRetries) {
+                    try {
+                        // Call coin::balance view function (works for both CoinStore and fungible assets)
+                        const result = await client.view({
+                            function: "0x1::coin::balance",
+                            type_arguments: ["0x1::aptos_coin::AptosCoin"],
+                            arguments: [targetAddr],
                         });
-                        break;
+                        if (result && result.length > 0 && BigInt(result[0]) >= amount) {
+                            break; // Balance confirmed, state is queryable
+                        }
+                        retries++;
+                        if (retries < maxRetries) {
+                            await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+                        }
+                    }
+                    catch (e) {
+                        retries++;
+                        if (retries < maxRetries) {
+                            await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+                        }
+                        else {
+                            // Last retry failed - log warning but continue
+                            debug(`Warning: Could not confirm balance after ${retries} retries`, {
+                                targetAddr,
+                                error: e.message,
+                            });
+                            break;
+                        }
                     }
                 }
+                debug(`Faucet transfer complete`, {
+                    to: targetAddr,
+                    amount: amount.toString(),
+                    txn: txnResponse.hash,
+                    retriesNeeded: retries,
+                });
+                return txnResponse.hash;
             }
-            debug(`Faucet transfer complete`, {
-                to: targetAddr,
-                amount: amount.toString(),
-                txn: txnResponse.hash,
-                retriesNeeded: retries,
-            });
-            return txnResponse.hash;
-        }
-        catch (error) {
-            throw new Error(`Faucet transfer failed: ${error.message}`);
-        }
+            catch (error) {
+                throw new Error(`Faucet transfer failed: ${error.message}`);
+            }
+        })();
+        // Update lock to wait for this operation (catch errors so they don't block the queue)
+        this.faucetLock = currentOperation.catch(() => { });
+        // Return the actual result (which may throw)
+        return currentOperation;
     }
     /**
      * Query ledger info from a validator

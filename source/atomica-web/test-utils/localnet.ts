@@ -118,10 +118,12 @@ export async function setupLocalnet(): Promise<void> {
     return;
   }
 
-  console.log("Starting Docker-based localnet (1 validator)...");
+  // Read NUM_VALIDATORS from environment, default to 2
+  const numValidators = parseInt(process.env.NUM_VALIDATORS || "2", 10);
+  console.log(`Starting Docker-based localnet (${numValidators} validators)...`);
 
-  // Create a single-validator testnet
-  testnet = await DockerTestnet.new(1);
+  // Create testnet with configured number of validators
+  testnet = await DockerTestnet.new(numValidators);
 
   console.log("✓ Localnet ready");
   setupComplete = true;
