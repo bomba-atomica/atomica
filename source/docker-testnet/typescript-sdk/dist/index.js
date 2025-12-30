@@ -41,12 +41,15 @@ const dotenv = __importStar(require("dotenv"));
 const fs_1 = require("fs");
 const path_1 = require("path");
 const genesis_1 = require("./genesis");
+const findAptosBinary_1 = require("./findAptosBinary");
 /** Base API port for validators (incremented for each validator) */
 const BASE_API_PORT = 8080;
 /** Base validator network port for inter-validator communication */
 const BASE_VALIDATOR_PORT = 6180;
 /** Docker binary path - assumed to be in PATH or standard location */
 const DOCKER_BIN = "docker";
+/** Aptos CLI binary path - found using findAptosBinary() to avoid wrapper scripts */
+const APTOS_BIN = (0, findAptosBinary_1.findAptosBinary)();
 /** Debug logging - controlled by DEBUG_TESTNET env var */
 const DEBUG = process.env.DEBUG_TESTNET === "1" || process.env.DEBUG_TESTNET === "true";
 function debug(message, data) {
@@ -477,92 +480,107 @@ class DockerTestnet {
     async deployContracts(options) {
         const { contractsDir, deployerPrivateKey, deployerAddress, namedAddresses = {}, initFunctions = [], fundAmount = 10000000000n, // 100 APT default
          } = options;
-        console.log("Deploying contracts via Docker container...");
+        console.log("Deploying contracts using host aptos CLI...");
         // Derive deployer address if not provided
         let deployer = deployerAddress;
         if (!deployer) {
             const account = new aptos_1.AptosAccount(Buffer.from(deployerPrivateKey.slice(2), "hex"));
             deployer = account.address().hex();
         }
+        console.log(`Deploying contracts to address: ${deployer}`);
         // Fund deployer account
-        console.log(`Funding deployer account ${deployer}...`);
-        await this.faucet(deployer, fundAmount);
-        // Wait for funding to settle
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        // Copy contracts directory into container
-        const containerName = `atomica-validator-0`;
-        const containerContractsPath = "/tmp/contracts";
-        console.log(`Copying contracts to container ${containerName}:${containerContractsPath}...`);
-        await new Promise((resolve, reject) => {
-            const proc = (0, child_process_1.spawn)(DOCKER_BIN, [
-                "cp",
-                contractsDir,
-                `${containerName}:${containerContractsPath}`,
-            ]);
-            let stderr = "";
-            proc.stderr?.on("data", (d) => (stderr += d.toString()));
-            proc.on("close", (code) => {
-                if (code === 0) {
-                    resolve();
-                }
-                else {
-                    reject(new Error(`Failed to copy contracts: ${stderr}`));
-                }
-            });
-            proc.on("error", reject);
-        });
-        // Initialize aptos CLI profile inside container
-        console.log("Initializing aptos CLI profile in container...");
-        await this.execInContainer(containerName, [
-            "aptos",
-            "init",
-            "--network",
-            "custom",
-            "--rest-url",
-            "http://127.0.0.1:8080",
-            "--profile",
-            "default",
-            "--private-key",
-            deployerPrivateKey,
-            "--assume-yes",
-        ]);
+        if (fundAmount > 0n) {
+            console.log(`Funding deployer account ${deployer}...`);
+            await this.faucet(deployer, fundAmount);
+            // Wait for funding to settle
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
         // Build named addresses argument
         const namedAddressesArg = Object.entries(namedAddresses)
             .map(([key, value]) => `${key}=${value}`)
             .join(",");
-        // Publish contracts
-        console.log("Publishing contracts from container...");
-        await this.execInContainer(containerName, [
-            "aptos",
+        // Publish contracts using aptos CLI with private key (no profile needed!)
+        console.log("Publishing contracts from host...");
+        const publishArgs = [
             "move",
             "publish",
             "--package-dir",
-            containerContractsPath,
+            contractsDir,
             "--named-addresses",
-            namedAddressesArg || "atomica=default",
-            "--profile",
-            "default",
+            namedAddressesArg,
+            "--private-key",
+            deployerPrivateKey,
+            "--url",
+            `http://127.0.0.1:${BASE_API_PORT}`,
+            "--skip-fetch-latest-git-deps", // Skip downloading git dependencies
             "--assume-yes",
-        ]);
+        ];
+        const result = await this.execCommand(APTOS_BIN, publishArgs);
+        console.log("Publish result stdout:", result.stdout.trim());
+        if (result.stderr.trim()) {
+            console.log("Publish result stderr:", result.stderr.trim());
+        }
         // Run initialization functions
         for (const initFunc of initFunctions) {
             console.log(`Initializing ${initFunc.functionId}...`);
             const args = [
-                "aptos",
                 "move",
                 "run",
                 "--function-id",
                 initFunc.functionId,
-                "--profile",
-                "default",
+                "--private-key",
+                deployerPrivateKey,
+                "--url",
+                `http://127.0.0.1:${BASE_API_PORT}`,
                 "--assume-yes",
             ];
             if (initFunc.args.length > 0) {
                 args.push("--args", ...initFunc.args);
             }
-            await this.execInContainer(containerName, args);
+            await this.execCommand(APTOS_BIN, args);
         }
+        // Wait for deployment to be fully indexed
+        console.log("Waiting for deployment to be indexed...");
+        await new Promise((resolve) => setTimeout(resolve, 3000));
         console.log("✓ Contracts deployed successfully");
+    }
+    /**
+     * Execute a command on the host system.
+     *
+     * @param bin Binary to execute (e.g., "aptos")
+     * @param args Command arguments
+     * @returns Promise resolving to { stdout, stderr }
+     * @private
+     */
+    async execCommand(bin, args) {
+        return new Promise((resolve, reject) => {
+            let stdout = "";
+            let stderr = "";
+            const proc = (0, child_process_1.spawn)(bin, args);
+            proc.stdout?.on("data", (d) => {
+                const s = d.toString();
+                stdout += s;
+                if (DEBUG)
+                    process.stdout.write(s);
+            });
+            proc.stderr?.on("data", (d) => {
+                const s = d.toString();
+                stderr += s;
+                if (DEBUG)
+                    process.stderr.write(s);
+            });
+            proc.on("close", (code) => {
+                if (code === 0) {
+                    resolve({ stdout, stderr });
+                }
+                else {
+                    reject(new Error(`Command failed (exit ${code}): ${bin} ${args.join(" ")}\n${stderr}`));
+                }
+            });
+            proc.on("error", (err) => {
+                reject(new Error(`Failed to execute ${bin}: ${err.message}`));
+            });
+        });
     }
     /**
      * Execute a command inside a validator container.

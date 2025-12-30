@@ -52,6 +52,24 @@ jobs:
           cd source/atomica-web
           npx playwright install --with-deps
 
+      - name: Install Aptos CLI
+        if: matrix.type == 'meta'
+        run: |
+          # Download aptos binary from atomica-aptos releases
+          APTOS_VERSION="binary-fac20096d4"
+          APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/aptos-Ubuntu-22.04-x86_64"
+
+          echo "Downloading aptos binary from ${APTOS_URL}..."
+          curl -L -o /tmp/aptos "${APTOS_URL}"
+
+          echo "Installing aptos binary to /usr/local/bin/aptos..."
+          chmod +x /tmp/aptos
+          sudo mv /tmp/aptos /usr/local/bin/aptos
+
+          echo "Verifying aptos installation..."
+          aptos --version
+          which aptos
+
       - name: Run TypeScript tests with Vitest
         run: |
           cd source/atomica-web

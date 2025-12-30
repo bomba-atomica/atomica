@@ -35,13 +35,8 @@ describe.sequential("Ed25519 Faucet Funding", () => {
     console.log(`Initial balance: ${initialBalance} (should be 0)`);
     expect(initialBalance).toBe(0);
 
-    const faucetResponse = await fundAccount(alice.accountAddress.toString());
-    console.log("Funding request completed. Response:", faucetResponse);
-
-    // Faucet returns array of txn hashes e.g. ["0x..."]
-    const txnHashes = JSON.parse(faucetResponse);
-    const txnHash = txnHashes[0];
-    console.log(`Waiting for faucet txn: ${txnHash}`);
+    const txnHash = await fundAccount(alice.accountAddress.toString());
+    console.log("Funding request completed. Transaction hash:", txnHash);
 
     const txnRes = await aptos.waitForTransaction({ transactionHash: txnHash });
     console.log("Faucet txn confirmed! Success:", (txnRes as any).success);

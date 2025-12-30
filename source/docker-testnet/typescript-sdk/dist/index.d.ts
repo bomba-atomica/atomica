@@ -141,6 +141,15 @@ export declare class DockerTestnet {
         fundAmount?: bigint;
     }): Promise<void>;
     /**
+     * Execute a command on the host system.
+     *
+     * @param bin Binary to execute (e.g., "aptos")
+     * @param args Command arguments
+     * @returns Promise resolving to { stdout, stderr }
+     * @private
+     */
+    private execCommand;
+    /**
      * Execute a command inside a validator container.
      *
      * @param containerName Container name (e.g., "atomica-validator-0")

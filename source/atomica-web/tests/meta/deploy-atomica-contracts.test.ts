@@ -2,9 +2,10 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import {
   setupLocalnet,
   fundAccount,
-  runAptosCmd,
+  getTestnet,
 } from "../../test-utils/localnet";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
+import { resolve as pathResolve } from "path";
 
 /**
  * Test: Atomica Contract Deployment
@@ -48,26 +49,35 @@ describe.sequential("Atomica Contract Deployment", () => {
     console.log(`Deployer balance after funding: ${fundedBalance}`);
     expect(fundedBalance).toBe(1_000_000_000);
 
-    // Path to atomica-move-contracts relative to project root (WEB_DIR)
+    // Path to atomica-move-contracts (absolute path required by Docker SDK)
     // Assuming structure: source/atomica-web and source/atomica-move-contracts are siblings
-    const CONTRACTS_DIR = "../atomica-move-contracts";
+    const CONTRACTS_DIR = pathResolve(process.cwd(), "../atomica-move-contracts");
     console.log(`Contracts directory: ${CONTRACTS_DIR}`);
 
-    // Publish the atomica-move-contracts package
+    // Publish the atomica-move-contracts package using Docker SDK
     console.log("Publishing atomica contracts...");
-    await runAptosCmd([
-      "move",
-      "publish",
-      "--package-dir",
-      CONTRACTS_DIR,
-      "--named-addresses",
-      `atomica=${deployer.accountAddress.toString()}`,
-      "--private-key",
-      deployer.privateKey.toString(),
-      "--url",
-      "http://127.0.0.1:8080",
-      "--assume-yes",
-    ]);
+    const testnet = getTestnet();
+    await testnet.deployContracts({
+      contractsDir: CONTRACTS_DIR,
+      deployerPrivateKey: deployer.privateKey.toString(),
+      deployerAddress: deployer.accountAddress.toString(),
+      namedAddresses: { atomica: deployer.accountAddress.toString() },
+      initFunctions: [
+        {
+          functionId: `${deployer.accountAddress.toString()}::registry::initialize`,
+          args: ["hex:0123456789abcdef"],
+        },
+        {
+          functionId: `${deployer.accountAddress.toString()}::fake_eth::initialize`,
+          args: [],
+        },
+        {
+          functionId: `${deployer.accountAddress.toString()}::fake_usd::initialize`,
+          args: [],
+        },
+      ],
+      fundAmount: 0n, // Already funded above
+    });
 
     // Wait for deployment to be indexed
     await new Promise((r) => setTimeout(r, 2000));
