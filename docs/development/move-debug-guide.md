@@ -100,7 +100,9 @@ This script:
 ### Method 2: Manual Command
 
 ```bash
-cd /Users/lucas/code/rust/atomica/source/atomica-aptos
+# Clone the atomica-aptos repo
+git clone https://github.com/bomba-atomica/atomica-aptos.git
+cd atomica-aptos
 
 # Set Rust logging
 export RUST_LOG=aptos_vm=debug,move_vm_runtime=debug
@@ -112,7 +114,9 @@ cargo run --features testing --bin aptos -- node run-local-testnet --with-faucet
 ### Method 3: Build Once, Run Multiple Times
 
 ```bash
-cd /Users/lucas/code/rust/atomica/source/atomica-aptos
+# Clone the atomica-aptos repo (if not already cloned)
+git clone https://github.com/bomba-atomica/atomica-aptos.git
+cd atomica-aptos
 
 # Build with testing features
 cargo build --release --features testing --bin aptos
@@ -166,7 +170,9 @@ If `debug::print` is not enough and you need to see exactly what the VM is doing
 You must rebuild `aptos` with both `move-vm-runtime/debugging` (for tracing) and `testing` (for `debug::print`):
 
 ```bash
-cd /Users/lucas/code/rust/atomica/source/atomica-aptos
+# Clone the atomica-aptos repo (if not already cloned)
+git clone https://github.com/bomba-atomica/atomica-aptos.git
+cd atomica-aptos
 cargo build -p aptos --features "move-vm-runtime/debugging testing"
 # Binary will be at: target/debug/aptos
 ```
@@ -264,7 +270,8 @@ grep "Entry function name" logs/testnet-debug.log -A 1
 
 3. **Verify the framework is rebuilt:**
    ```bash
-   cd /Users/lucas/code/rust/atomica/source/atomica-aptos
+   # In the atomica-aptos repo directory
+   cd atomica-aptos
    cargo clean
    cargo build --features testing --bin aptos
    ```
@@ -280,7 +287,8 @@ grep "\[debug\]" logs/full.log > logs/debug-only.log
 ### "Want to remove debug logging"
 
 ```bash
-cd /Users/lucas/code/rust/atomica/source/atomica-aptos
+# In the atomica-aptos repo directory
+cd atomica-aptos
 git checkout aptos-move/framework/aptos-framework/sources/account/common_account_abstractions/ethereum_derivable_account.move
 cargo build --release --bin aptos
 ```

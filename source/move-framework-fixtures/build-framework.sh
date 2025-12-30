@@ -9,6 +9,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_ROOT="$SCRIPT_DIR/.."
 ZAPATOS_DIR="$SOURCE_ROOT/atomica-aptos"
 OUTPUT_DIR="$SOURCE_ROOT/move-framework-fixtures"
+
+# Clone atomica-aptos repo if it doesn't exist
+if [ ! -d "$ZAPATOS_DIR" ]; then
+  echo "Cloning atomica-aptos repository..."
+  git clone https://github.com/bomba-atomica/atomica-aptos.git "$ZAPATOS_DIR"
+  cd "$ZAPATOS_DIR"
+  git checkout dev-atomica
+  cd "$SCRIPT_DIR"
+fi
+
 FRAMEWORK_DIR="$ZAPATOS_DIR/aptos-move/framework"
 
 # Compute hash of all .move files in the framework
