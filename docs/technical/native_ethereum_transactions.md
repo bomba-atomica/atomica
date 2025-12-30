@@ -149,6 +149,6 @@ Browser → Sign SIWE → Submit to Zapatos RPC → Validators Verify → Execut
     - Existing users with balance: Direct P2P (Option #3)
 
 ## References
-*   `source/atomica-aptos/aptos-move/framework/aptos-framework/sources/account/common_account_abstractions/ethereum_derivable_account.move`
-*   `source/atomica-aptos/types/src/transaction/authenticator.rs`
+*   [`atomica-aptos/aptos-move/framework/aptos-framework/sources/account/common_account_abstractions/ethereum_derivable_account.move`](https://github.com/bomba-atomica/atomica-aptos/blob/dev-atomica/aptos-move/framework/aptos-framework/sources/account/common_account_abstractions/ethereum_derivable_account.move)
+*   [`atomica-aptos/types/src/transaction/authenticator.rs`](https://github.com/bomba-atomica/atomica-aptos/blob/dev-atomica/types/src/transaction/authenticator.rs)
 *   EIP-4361 (SIWE): https://eips.ethereum.org/EIPS/eip-4361

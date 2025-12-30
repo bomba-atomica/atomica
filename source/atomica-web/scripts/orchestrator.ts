@@ -13,6 +13,13 @@ const ZAPATOS_DIR = join(WORKSPACE_ROOT, "source/atomica-aptos");
 const CONTRACTS_DIR = join(WORKSPACE_ROOT, "source/atomica-move-contracts");
 const WEB_DIR = join(WORKSPACE_ROOT, "source/atomica-web");
 
+// Ensure atomica-aptos repo is cloned
+if (!existsSync(ZAPATOS_DIR)) {
+  console.log("📦 Cloning atomica-aptos repository...");
+  await runCommand("git", ["clone", "https://github.com/bomba-atomica/atomica-aptos.git", ZAPATOS_DIR], WORKSPACE_ROOT);
+  await runCommand("git", ["checkout", "dev-atomica"], ZAPATOS_DIR);
+}
+
 const DEPLOYER_PK =
   "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
 const DEPLOYER_ADDR =

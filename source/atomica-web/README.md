@@ -11,10 +11,11 @@ Before running the demo, you need to compile the Aptos release binary.
 > [!WARNING]
 > This step can take a significant amount of time (20+ minutes) as it compiles the entire Aptos node from source with testing features enabled.
 
-Navigate from the root to source/atomica-aptos and run:
+Clone the atomica-aptos repository and build the aptos binary:
 
 ```bash
-cd ../atomica-aptos
+git clone https://github.com/bomba-atomica/atomica-aptos.git
+cd atomica-aptos
 cargo b -p aptos --features testing
 ```
 
