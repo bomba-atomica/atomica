@@ -44,7 +44,6 @@ export async function ibeEncrypt(
   // e(MPK, ID)^r = e(r*MPK, ID)
   const rMpk = mpkPoint.multiply(BigInt(ethers.hexlify(r)));
   const gid = pairing(rMpk, idPoint); // Returns Fp12
-  console.log("GID computed for encryption:", gid);
 
   // 6. Hash gid to bytes
   // Placeholder serialization
