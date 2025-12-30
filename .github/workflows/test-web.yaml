@@ -53,7 +53,7 @@ jobs:
           npx playwright install --with-deps
 
       - name: Install Aptos CLI
-        if: matrix.type == 'meta'
+        if: matrix.type == 'meta' || matrix.type == 'integration' || matrix.type == 'ui'
         run: |
           # Download aptos binary from atomica-aptos releases
           APTOS_VERSION="binary-fac20096d4"
