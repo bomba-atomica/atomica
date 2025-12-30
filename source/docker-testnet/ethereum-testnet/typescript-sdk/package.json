@@ -1,0 +1,19 @@
+{
+    "name": "@atomica/ethereum-docker-testnet",
+    "version": "0.1.0",
+    "description": "Local Ethereum multi-validator testnet for Atomica",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "test": "bun test",
+        "clean": "rm -rf dist"
+    },
+    "dependencies": {
+        "dotenv": "^16.3.1"
+    },
+    "devDependencies": {
+        "typescript": "^5.2.2",
+        "@types/node": "^20.8.2"
+    }
+}

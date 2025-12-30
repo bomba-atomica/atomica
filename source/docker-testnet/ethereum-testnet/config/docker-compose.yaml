@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # 1. Execution Layer (Geth)
+  geth:
+    image: ethereum/client-go:v1.13.14
+    container_name: eth-execution
+    command:
+      - --dev
+      - --dev.period=1
+      - --http
+      - --http.api=eth,net,web3,debug
+      - --http.addr=0.0.0.0
+      - --http.port=8545
+      - --http.vhosts=*
+      - --http.corsdomain=*
+      - --authrpc.addr=0.0.0.0
+      - --authrpc.port=8551
+      - --authrpc.vhosts=*
+      - --authrpc.jwtsecret=/root/jwtsecret
+    volumes:
+      - ./jwtsecret:/root/jwtsecret
+    ports:
+      - "8545:8545"
+      - "8551:8551"
+
+  # 2. Consensus Layer (Lighthouse Beacon Node)
+  beacon:
+    image: sigp/lighthouse:v5.1.0
+    container_name: eth-beacon
+    depends_on:
+      - geth
+    command:
+      - lighthouse
+      - beacon_node
+      - --debug-level=info
+      - --datadir=/root/beacon-data
+      - --testnet-dir=/root/testnet
+      - --execution-endpoint=http://geth:8551
+      - --execution-jwt=/root/jwtsecret
+      - --http
+      - --http-address=0.0.0.0
+      - --http-port=5052
+      - --metrics
+      - --metrics-address=0.0.0.0
+      - --metrics-port=5054
+      - --disable-deposit-contract-sync
+      - --slashing-protection-kind=do-not-use
+    volumes:
+      - ./testnet:/root/testnet
+      - ./jwtsecret:/root/jwtsecret
+    ports:
+      - "5052:5052"
+      - "5054:5054"
+
+  # 3. Validator Client (Lighthouse)
+  validator:
+    image: sigp/lighthouse:v5.1.0
+    container_name: eth-validator
+    depends_on:
+      - beacon
+    command:
+      - lighthouse
+      - validator_client
+      - --debug-level=info
+      - --testnet-dir=/root/testnet
+      - --beacon-nodes=http://beacon:5052
+      - --datadir=/root/validator-data
+      - --init-slashing-protection
+    volumes:
+      - ./testnet:/root/testnet
+      - ./validator_keys:/root/validator_keys
