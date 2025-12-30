@@ -13,6 +13,7 @@
 - ✅ Import from `../../test-utils/localnet` for Node.js meta tests
 - ✅ Wait for transactions with `aptos.waitForTransaction()` before assertions
 - ✅ Add 1-2 second delays after funding for indexing: `await new Promise(r => setTimeout(r, 1000))`
+- ✅ Prefix all Atomica environment variables with `ATOMICA_*` (e.g., `ATOMICA_DEBUG`, `ATOMICA_LOG_LEVEL`)
 
 **DON'T:**
 
@@ -23,6 +24,7 @@
 - ❌ Don't expect instant balance updates - allow time for indexing
 - ❌ Don't create README.md files unless explicitly asked
 - ❌ Don't use relative paths in `runAptosCmd` without understanding `cwd` parameter
+- ❌ Don't create environment variables without the `ATOMICA_` prefix
 
 ---
 

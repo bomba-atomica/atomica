@@ -42,16 +42,13 @@ export async function prepareNativeTransaction(
   const checksummedAddress = ethAddress.toLowerCase();
   const senderAddress = await getDerivedAddress(checksummedAddress);
 
-  // Check if account exists (logging only)
+  // Check if account exists (silent - only needed for validation)
   try {
-    const accountInfo = await aptos.getAccountInfo({
+    await aptos.getAccountInfo({
       accountAddress: senderAddress,
     });
-    console.log("=== Account Info ===");
-    console.log("  Account exists: true");
-    console.log("  Sequence number:", accountInfo.sequence_number);
   } catch {
-    console.warn("Account may not exist yet (will be created on first tx)");
+    // Account doesn't exist yet - it will be created on first transaction
   }
 
   // 1. Build Transaction
@@ -123,7 +120,7 @@ export async function prepareNativeTransaction(
   const signatureBytes = ethers.getBytes(signature);
   const ethAddressBytes = new TextEncoder().encode(checksummedAddress);
 
-  // DEBUG LOGGING START
+  // Build debug state for error handling
   const siweBytes = new TextEncoder().encode(siwe);
   const debugState = {
     ethAddress: checksummedAddress,
@@ -143,15 +140,6 @@ export async function prepareNativeTransaction(
     origin: window.location.origin,
     networkName: networkName,
   };
-  console.log(
-    "PrepareTransaction Debug:",
-    JSON.stringify(
-      debugState,
-      (_k, v) => (typeof v === "bigint" ? v.toString() : v),
-      2,
-    ),
-  );
-  // DEBUG LOGGING END
 
   // Build the SIWE abstract signature (scheme, issuedAt, signature)
   const abstractSignature = serializeSIWEAbstractSignature(
@@ -185,20 +173,15 @@ export async function prepareNativeTransaction(
 export async function simulateNativeTransaction(
   preparedTx: PreparedTransaction,
 ) {
-  console.log("\n=== Simulating Transaction ===");
   try {
     const [simulationResult] = await aptos.transaction.simulate.simple({
       transaction: preparedTx.transaction,
       senderAuthenticator: preparedTx.auth,
     } as Parameters<typeof aptos.transaction.simulate.simple>[0]);
 
-    console.log("Simulation Result:");
-    console.log("  Success:", simulationResult.success);
-    console.log("  VM Status:", simulationResult.vm_status);
-    console.log("  Gas used:", simulationResult.gas_used);
-
     if (!simulationResult.success) {
-      console.error("❌ Simulation failed!");
+      console.error("Transaction simulation failed");
+      console.error("VM Status:", simulationResult.vm_status);
       console.error(
         "Full simulation result:",
         JSON.stringify(simulationResult, null, 2),
@@ -208,7 +191,7 @@ export async function simulateNativeTransaction(
   } catch (simError: unknown) {
     const errorMessage =
       simError instanceof Error ? simError.message : String(simError);
-    console.error("❌ Simulation error:", errorMessage);
+    console.error("Simulation error:", errorMessage);
     throw simError;
   }
 }
@@ -216,28 +199,12 @@ export async function simulateNativeTransaction(
 export async function submitPreparedTransaction(
   preparedTx: PreparedTransaction,
 ) {
-  const { transaction, auth, senderAddress, debugState, payload } = preparedTx;
+  const { transaction, auth, debugState } = preparedTx;
   try {
-    console.log("\n=== Submitting Transaction ===");
-    console.log(
-      "Transaction payload:",
-      JSON.stringify(
-        payload,
-        (_key, value) => {
-          return typeof value === "bigint" ? value.toString() : value;
-        },
-        2,
-      ),
-    );
-    console.log("Sender address:", senderAddress.toString());
-
     const pendingTx = await aptos.transaction.submit.simple({
       transaction,
       senderAuthenticator: auth,
     });
-
-    console.log("\n⏳ Transaction submitted, waiting for execution...");
-    console.log("Transaction hash:", pendingTx.hash);
 
     // Wait for the transaction to be executed and check if it succeeded
     const executedTx = await aptos.waitForTransaction({
@@ -245,17 +212,14 @@ export async function submitPreparedTransaction(
     });
 
     if (!executedTx.success) {
-      console.error("\n❌ Transaction execution failed!");
+      console.error("Transaction execution failed");
       console.error("VM Status:", executedTx.vm_status);
       throw new Error(`Transaction failed: ${executedTx.vm_status}`);
     }
 
-    console.log("\n✅ Transaction executed successfully!");
-    console.log("Transaction hash:", pendingTx.hash);
-
     return pendingTx;
   } catch (e: unknown) {
-    console.error("\n❌ Submission Failed");
+    console.error("Transaction submission failed");
     const errorMessage = e instanceof Error ? e.message : String(e);
     const errorStack = e instanceof Error ? e.stack : undefined;
     console.error("Error message:", errorMessage);
@@ -265,13 +229,15 @@ export async function submitPreparedTransaction(
     console.error("\n=== Debug State on Failure ===");
     console.error(JSON.stringify(debugState, null, 2));
 
-    if (e.response) {
+    if (typeof e === "object" && e !== null && "response" in e) {
       console.error("\n=== Response Details ===");
-      console.error("Status:", e.response.status);
-      console.error("Status Text:", e.response.statusText);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = (e as any).response;
+      console.error("Status:", response.status);
+      console.error("Status Text:", response.statusText);
 
       try {
-        const responseText = await e.response.text();
+        const responseText = await response.text();
         console.error("Response Body:", responseText);
 
         try {

@@ -23,13 +23,9 @@ describe.sequential("Simple APT Transfer", () => {
   });
 
   it("should perform a simple transfer", async () => {
-    console.log("Starting transfer test...");
-
     // Generate two accounts
     const alice = Account.generate();
     const bob = Account.generate();
-    console.log(`Alice: ${alice.accountAddress.toString()}`);
-    console.log(`Bob: ${bob.accountAddress.toString()}`);
 
     // Verify both accounts start with 0 balance
     const aliceInitialBalance = await aptos.getAccountAPTAmount({
@@ -38,13 +34,10 @@ describe.sequential("Simple APT Transfer", () => {
     const bobInitialBalance = await aptos.getAccountAPTAmount({
       accountAddress: bob.accountAddress,
     });
-    console.log(`Alice initial balance: ${aliceInitialBalance}`);
-    console.log(`Bob initial balance: ${bobInitialBalance}`);
     expect(aliceInitialBalance).toBe(0);
     expect(bobInitialBalance).toBe(0);
 
     // Fund Alice with 1 billion octas (10 APT)
-    console.log("Funding Alice...");
     await fundAccount(alice.accountAddress.toString(), 1_000_000_000);
 
     // Wait a moment for the funding to be indexed
@@ -54,11 +47,9 @@ describe.sequential("Simple APT Transfer", () => {
     const aliceFundedBalance = await aptos.getAccountAPTAmount({
       accountAddress: alice.accountAddress,
     });
-    console.log(`Alice balance after funding: ${aliceFundedBalance}`);
     expect(aliceFundedBalance).toBe(1_000_000_000);
 
     // Build transfer transaction
-    console.log("Building transfer transaction...");
     const txn = await aptos.transaction.build.simple({
       sender: alice.accountAddress,
       data: {
@@ -68,19 +59,15 @@ describe.sequential("Simple APT Transfer", () => {
     });
 
     // Sign and submit transaction
-    console.log("Signing and submitting transaction...");
     const pendingTxn = await aptos.signAndSubmitTransaction({
       signer: alice,
       transaction: txn,
     });
-    console.log(`Transaction hash: ${pendingTxn.hash}`);
 
     // Wait for transaction confirmation
-    console.log("Waiting for transaction confirmation...");
     const response = await aptos.waitForTransaction({
       transactionHash: pendingTxn.hash,
     });
-    console.log(`Transaction success: ${response.success}`);
     expect(response.success).toBe(true);
 
     // Check final balances
@@ -90,8 +77,6 @@ describe.sequential("Simple APT Transfer", () => {
     const bobFinalBalance = await aptos.getAccountAPTAmount({
       accountAddress: bob.accountAddress,
     });
-    console.log(`Alice final balance: ${aliceFinalBalance}`);
-    console.log(`Bob final balance: ${bobFinalBalance}`);
 
     // Bob should have exactly 100 octas
     expect(bobFinalBalance).toBe(100);
@@ -100,7 +85,6 @@ describe.sequential("Simple APT Transfer", () => {
     // Gas fees include account creation cost since Bob didn't exist
     // Typical gas for account creation transfer: ~100,000 octas
     const gasPaid = 1_000_000_000 - aliceFinalBalance - 100;
-    console.log(`Gas fees paid: ${gasPaid} octas`);
 
     expect(aliceFinalBalance).toBeLessThan(1_000_000_000);
     expect(aliceFinalBalance).toBeGreaterThan(999_800_000); // Allow for gas fees + account creation

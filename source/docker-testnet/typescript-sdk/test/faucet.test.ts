@@ -88,23 +88,16 @@ describe("Faucet Mechanism", () => {
         expect(accountInfo.sequence_number).toBe("0");
         console.log(`✓ Account created with sequence number: ${accountInfo.sequence_number}`);
 
-        // Verify the account has the correct balance
-        try {
-            const coinResource = await client.getAccountResource(
-                newAddr,
-                "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>",
-            );
+        // Verify the account has the correct balance using view function
+        const result = await client.view({
+            function: "0x1::coin::balance",
+            type_arguments: ["0x1::aptos_coin::AptosCoin"],
+            arguments: [newAddr],
+        });
 
-            expect(coinResource).toBeDefined();
-            const balance = BigInt((coinResource.data as any).coin.value);
-            expect(balance).toBe(amount);
-            console.log(`✓ Account balance verified: ${balance} octas`);
-        } catch (error: any) {
-            console.log(`⚠ CoinStore not found, but account was created. Error: ${error.message}`);
-            console.log(
-                "This is expected in test mode - aptos_account::transfer creates the account.",
-            );
-        }
+        const balance = BigInt(result[0] as string);
+        expect(balance).toBe(amount);
+        console.log(`✓ Account balance verified: ${balance} octas`);
 
         console.log("✓ Faucet funding test passed!");
     }, 120000); // 2 min timeout

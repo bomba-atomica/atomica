@@ -148,10 +148,8 @@ declare module "vitest/browser" {
  * See: tests/README.md#browser-commands for architecture
  */
 export const setupLocalnetCommand: BrowserCommand<[]> = async () => {
-  console.log("[Browser Command] Starting localnet...");
   // setupLocalnet internally calls killZombies to ensure ports are free
   await setupLocalnet();
-  console.log("[Browser Command] Localnet started");
   return { success: true };
 };
 
@@ -168,7 +166,6 @@ export const setupLocalnetCommand: BrowserCommand<[]> = async () => {
  * @returns Promise resolving to { success: true }
  */
 export const teardownLocalnetCommand: BrowserCommand<[]> = async () => {
-  console.log("[Browser Command] Teardown requested");
   // Only teardown if this is the last test file running
   // In persistent mode, we skip teardown between individual test files
   // but still need to cleanup when all tests are done
@@ -199,9 +196,7 @@ export const teardownLocalnetCommand: BrowserCommand<[]> = async () => {
  * See: test-utils/localnet.ts#deployContracts for implementation
  */
 export const deployContractsCommand: BrowserCommand<[]> = async () => {
-  console.log("[Browser Command] Deploying contracts...");
   await deployContracts();
-  console.log("[Browser Command] Contracts deployed");
   return { success: true };
 };
 
@@ -234,8 +229,6 @@ export const deployContractsCommand: BrowserCommand<[]> = async () => {
 export const fundAccountCommand: BrowserCommand<
   [address: string, amount?: number]
 > = async (_context, address: string, amount: number = 100_000_000) => {
-  console.log(`[Browser Command] Funding ${address} with ${amount}...`);
   const result = await fundAccount(address, amount);
-  console.log("[Browser Command] Account funded");
   return { success: true, txHash: result };
 };

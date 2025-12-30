@@ -57,8 +57,8 @@ function getAptosBinary() {
     }
     return APTOS_BIN;
 }
-/** Debug logging - controlled by DEBUG_TESTNET env var */
-const DEBUG = process.env.DEBUG_TESTNET === "1" || process.env.DEBUG_TESTNET === "true";
+/** Debug logging - controlled by ATOMICA_DEBUG_TESTNET env var */
+const DEBUG = process.env.ATOMICA_DEBUG_TESTNET === "1" || process.env.ATOMICA_DEBUG_TESTNET === "true";
 function debug(message, data) {
     if (DEBUG) {
         const timestamp = new Date().toISOString();
@@ -833,7 +833,7 @@ async function waitForHealthy(numValidators, timeoutSecs) {
  * - Container network connectivity
  *
  * Usage:
- *   DEBUG_TESTNET=1 node -e "require('./dist/index.js').probeTestnet(4)"
+ *   ATOMICA_DEBUG_TESTNET=1 node -e "require('./dist/index.js').probeTestnet(4)"
  */
 async function probeTestnet(numValidators = 4) {
     console.log(`\n=== Probing ${numValidators} validators ===\n`);

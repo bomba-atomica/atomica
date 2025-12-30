@@ -28,14 +28,10 @@ describe.sequential("Atomica Contract Deployment", () => {
   });
 
   it("should deploy atomica contracts and verify modules exist", async () => {
-    console.log("Starting Atomica contract deployment test...");
-
     // Generate deployer account
     const deployer = Account.generate();
-    console.log(`Deployer address: ${deployer.accountAddress.toString()}`);
 
     // Fund deployer with 10 APT
-    console.log("Funding deployer...");
     await fundAccount(deployer.accountAddress.toString(), 1_000_000_000);
 
     // Wait for funding to be indexed
@@ -45,7 +41,6 @@ describe.sequential("Atomica Contract Deployment", () => {
     const fundedBalance = await aptos.getAccountAPTAmount({
       accountAddress: deployer.accountAddress,
     });
-    console.log(`Deployer balance after funding: ${fundedBalance}`);
     expect(fundedBalance).toBe(1_000_000_000);
 
     // Path to atomica-move-contracts (absolute path required by Docker SDK)
@@ -54,10 +49,8 @@ describe.sequential("Atomica Contract Deployment", () => {
       process.cwd(),
       "../atomica-move-contracts",
     );
-    console.log(`Contracts directory: ${CONTRACTS_DIR}`);
 
     // Publish the atomica-move-contracts package using Docker SDK
-    console.log("Publishing atomica contracts...");
     const testnet = getTestnet();
     await testnet.deployContracts({
       contractsDir: CONTRACTS_DIR,
@@ -85,15 +78,9 @@ describe.sequential("Atomica Contract Deployment", () => {
     await new Promise((r) => setTimeout(r, 2000));
 
     // Check if modules exist on-chain
-    console.log("Verifying module deployment...");
     const modules = await aptos.getAccountModules({
       accountAddress: deployer.accountAddress,
     });
-    console.log(`Found ${modules.length} module(s) at deployer address`);
-
-    // Log all module names
-    const moduleNames = modules.map((m) => m.abi?.name || "unknown");
-    console.log(`Module names: ${moduleNames.join(", ")}`);
 
     // Verify expected modules exist
     const expectedModules = ["registry", "fake_eth", "fake_usd"];
@@ -104,7 +91,6 @@ describe.sequential("Atomica Contract Deployment", () => {
         module,
         `Module ${expectedModule} should be deployed`,
       ).toBeDefined();
-      console.log(`✓ Module '${expectedModule}' found`);
     }
 
     // Verify registry module has expected functions
@@ -114,7 +100,6 @@ describe.sequential("Atomica Contract Deployment", () => {
         (f) => f.name === "initialize",
       ),
     ).toBe(true);
-    console.log("✓ Registry module has expected functions");
 
     // Verify fake_eth module has expected functions
     const fakeEthModule = modules.find((m) => m.abi?.name === "fake_eth");
@@ -123,7 +108,6 @@ describe.sequential("Atomica Contract Deployment", () => {
         (f) => f.name === "initialize",
       ),
     ).toBe(true);
-    console.log("✓ fake_eth module has expected functions");
 
     // Verify fake_usd module has expected functions
     const fakeUsdModule = modules.find((m) => m.abi?.name === "fake_usd");
@@ -132,21 +116,14 @@ describe.sequential("Atomica Contract Deployment", () => {
         (f) => f.name === "initialize",
       ),
     ).toBe(true);
-    console.log("✓ fake_usd module has expected functions");
 
     // Check deployer's final balance
     const finalBalance = await aptos.getAccountAPTAmount({
       accountAddress: deployer.accountAddress,
     });
-    console.log(`Deployer final balance: ${finalBalance}`);
     const gasUsed = 1_000_000_000 - finalBalance;
-    console.log(`Gas used for deployment: ${gasUsed} octas`);
 
     expect(finalBalance).toBeLessThan(1_000_000_000);
     expect(gasUsed).toBeGreaterThan(0);
-
-    console.log(
-      "\n✅ All Atomica contracts deployed and verified successfully!",
-    );
   }, 180000);
 });

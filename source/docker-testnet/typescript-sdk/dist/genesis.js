@@ -11,8 +11,8 @@ const path_1 = require("path");
  * all genesis artifacts, avoiding complex orchestration from TypeScript.
  */
 const DOCKER_BIN = "docker";
-/** Debug logging - controlled by DEBUG_TESTNET env var */
-const DEBUG = process.env.DEBUG_TESTNET === "1" || process.env.DEBUG_TESTNET === "true";
+/** Debug logging - controlled by ATOMICA_DEBUG_TESTNET env var */
+const DEBUG = process.env.ATOMICA_DEBUG_TESTNET === "1" || process.env.ATOMICA_DEBUG_TESTNET === "true";
 function debug(message, data) {
     if (DEBUG) {
         const timestamp = new Date().toISOString();
@@ -109,6 +109,10 @@ function runGenesisScript(config) {
         }
         // Set HOME to a writable location (important when running as non-root)
         dockerArgs.push("-e", "HOME=/tmp");
+        // Pass ATOMICA_DEBUG_TESTNET to container if set
+        if (process.env.ATOMICA_DEBUG_TESTNET) {
+            dockerArgs.push("-e", `ATOMICA_DEBUG_TESTNET=${process.env.ATOMICA_DEBUG_TESTNET}`);
+        }
         dockerArgs.push(validatorImage, "/genesis-script.sh", numValidators.toString(), chainId.toString(), baseIp);
         debug("Starting docker run with args:", { dockerArgs });
         const proc = (0, child_process_1.spawn)(DOCKER_BIN, dockerArgs, {
@@ -120,10 +124,41 @@ function runGenesisScript(config) {
             const text = data.toString();
             stdout += text;
             // Print output to console so the user knows what's happening
+            // Filter out verbose output that's not useful for users
+            let inJsonBlock = false;
             for (const line of text.split("\n")) {
                 const trimmed = line.trim();
                 if (!trimmed)
                     continue;
+                // Skip "Missing CF:" warnings (expected during genesis initialization)
+                if (trimmed.includes("Missing CF:")) {
+                    if (DEBUG) {
+                        console.log(`  [STDOUT] ${trimmed}`);
+                    }
+                    continue;
+                }
+                // Filter out verbose JSON output blocks from aptos CLI
+                // These show file lists that aren't useful during normal operation
+                if (trimmed === "{") {
+                    inJsonBlock = true;
+                }
+                if (inJsonBlock) {
+                    if (DEBUG) {
+                        console.log(`  [STDOUT] ${trimmed}`);
+                    }
+                    if (trimmed === "}") {
+                        inJsonBlock = false;
+                    }
+                    continue;
+                }
+                // Skip verbose file path messages
+                if (trimmed.startsWith("Root account keys saved to") ||
+                    trimmed.startsWith("Creating node configurations")) {
+                    if (DEBUG) {
+                        console.log(`  [STDOUT] ${trimmed}`);
+                    }
+                    continue;
+                }
                 if (DEBUG) {
                     console.log(`  [STDOUT] ${trimmed}`);
                 }
