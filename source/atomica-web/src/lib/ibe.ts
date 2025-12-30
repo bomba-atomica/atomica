@@ -46,7 +46,10 @@ export async function ibeEncrypt(
   const gid = pairing(rMpk, idPoint); // Returns Fp12
 
   // 6. Hash gid to bytes
-  // Placeholder serialization
+  // TODO: Implement proper key derivation from gid instead of simple XOR
+  // For now, we compute gid but use a placeholder encryption
+  void gid; // Acknowledge computed but not yet used in encryption
+
   const uBytes = uPoint.toRawBytes(true); // Compressed
 
   const vBytes = new Uint8Array(messageBytes.length);
