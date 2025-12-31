@@ -9,6 +9,24 @@ The system consists of two layers:
 1.  **Move Layer (On-Chain)**: Manages the lifecycle of keys, triggers key generation, and stores revealed keys.
 2.  **Rust Layer (Validator Node)**: Listens to on-chain events to perform off-chain cryptography (DKG) and submit results.
 
+### 2.0 IBE Cryptography Architecture
+
+**Key Design Decision**: IBE operations are implemented in Rust, not Move.
+
+| Operation | Where | Implementation |
+|-----------|-------|----------------|
+| **IBE Encrypt** | Client-side (off-chain) | Rust: `aptos_dkg::ibe::ibe_encrypt()` |
+| **IBE Decrypt** | Client-side OR on-chain | Rust native function: `aptos_std::ibe::decrypt()` |
+
+**Rationale**:
+- **Encryption is ALWAYS client-side**: Users encrypt their bids/data locally before submitting 
+  ciphertexts to the chain. There is no use case for on-chain encryption.
+- **Decryption uses a Rust native function**: The Move VM calls into Rust code (passthrough opcode) 
+  for cryptographic operations. This is primarily used for **key verification** - proving that a 
+  revealed decryption key correctly decrypts a ciphertext (e.g., for auction dispute resolution).
+- Complex BLS12-381 pairing operations exceed Move's computational limits and are more efficiently 
+  implemented in native Rust.
+
 ### 2.1 The "Heartbeat" Flow
 We implement a recurring 1-hour "Epoch" (distinct from the Aptos consensus epoch).
 
