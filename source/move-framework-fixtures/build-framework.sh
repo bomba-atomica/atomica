@@ -56,7 +56,7 @@ cd "$FRAMEWORK_DIR"
 # TODO: do release bundles have all the debugging for trace and error maps?
 echo "Building framework (this will take a few minutes)..."
 
-cargo run -p aptos-framework --features testing -- release --target head
+aptos-framework release --target head
 
 # Move the generated file to our fixtures directory with hash-based name
 mv head.mrb "$OUTPUT_FILE"
