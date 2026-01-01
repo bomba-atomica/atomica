@@ -1,76 +1,118 @@
 version: '3.8'
 
 services:
-  # 1. Execution Layer (Geth)
+  # 1. Execution Layer (Geth) - PoS mode
   geth:
     image: ethereum/client-go:v1.13.14
     container_name: eth-execution
     command:
-      - --datadir=/root/testnet
-      - --networkid=12345
+      - --datadir=/data
+      - --networkid=32382
       - --http
-      - --http.api=eth,net,web3,debug,engine
+      - --http.api=eth,net,web3,debug,engine,txpool
       - --http.addr=0.0.0.0
       - --http.port=8545
       - --http.vhosts=*
       - --http.corsdomain=*
+      - --ws
+      - --ws.api=eth,net,web3,debug,engine
+      - --ws.addr=0.0.0.0
+      - --ws.port=8546
+      - --ws.origins=*
       - --authrpc.addr=0.0.0.0
       - --authrpc.port=8551
       - --authrpc.vhosts=*
-      - --authrpc.jwtsecret=/root/jwtsecret
-      - --allow-insecure-unlock
+      - --authrpc.jwtsecret=/secrets/jwtsecret
       - --nodiscover
       - --syncmode=full
+      - --gcmode=archive
+      - --maxpeers=0
     volumes:
-      - ./testnet:/root/testnet
-      - ./jwtsecret:/root/jwtsecret
+      - ./testnet:/data
+      - ./jwtsecret:/secrets/jwtsecret:ro
     ports:
       - "8545:8545"
+      - "8546:8546"
       - "8551:8551"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8545"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
 
   # 2. Consensus Layer (Lighthouse Beacon Node)
   beacon:
     image: sigp/lighthouse:v5.1.0
     container_name: eth-beacon
     depends_on:
-      - geth
+      geth:
+        condition: service_healthy
     command:
       - lighthouse
       - beacon_node
       - --debug-level=info
-      - --datadir=/root/beacon-data
-      - --testnet-dir=/root/testnet
+      - --datadir=/data/beacon
+      - --testnet-dir=/testnet
       - --execution-endpoint=http://geth:8551
-      - --execution-jwt=/root/jwtsecret
+      - --execution-jwt=/secrets/jwtsecret
       - --http
       - --http-address=0.0.0.0
       - --http-port=5052
+      - --http-allow-origin=*
       - --metrics
       - --metrics-address=0.0.0.0
       - --metrics-port=5054
       - --disable-deposit-contract-sync
-      - --slashing-protection-kind=do-not-use
+      - --allow-insecure-genesis-sync
+      - --disable-peer-scoring
+      - --target-peers=0
+      - --subscribe-all-subnets
+      - --import-all-attestations
     volumes:
-      - ./testnet:/root/testnet
-      - ./jwtsecret:/root/jwtsecret
+      - ./testnet:/testnet:ro
+      - ./jwtsecret:/secrets/jwtsecret:ro
+      - beacon-data:/data
     ports:
       - "5052:5052"
       - "5054:5054"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:5052/eth/v1/node/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
 
   # 3. Validator Client (Lighthouse)
   validator:
     image: sigp/lighthouse:v5.1.0
     container_name: eth-validator
     depends_on:
-      - beacon
+      beacon:
+        condition: service_healthy
     command:
       - lighthouse
       - validator_client
       - --debug-level=info
-      - --testnet-dir=/root/testnet
+      - --testnet-dir=/testnet
       - --beacon-nodes=http://beacon:5052
-      - --datadir=/root/validator-data
+      - --datadir=/data/validator
+      - --validators-dir=/validator_keys/node_1/validators
+      - --secrets-dir=/validator_keys/node_1/secrets
       - --init-slashing-protection
+      - --suggested-fee-recipient=0x8943545177806ED17B9F23F0a21ee5948eCaa776
+      - --graffiti=atomica-testnet
     volumes:
-      - ./testnet:/root/testnet
-      - ./validator_keys:/root/validator_keys
+      - ./testnet:/testnet:ro
+      - ./validator_keys:/validator_keys:ro
+      - validator-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:5062/lighthouse/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+volumes:
+  beacon-data:
+  validator-data:

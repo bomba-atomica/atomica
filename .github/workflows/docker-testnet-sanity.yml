@@ -1,23 +1,23 @@
-name: Docker Testnet Sanity Tests
+name: Ethereum Docker Testnet Tests
 
 on:
   push:
     branches:
       - main
-      - local-testnet-with-docker
+      - ethereum-docker
     paths:
-      - 'source/docker-testnet/**'
+      - 'source/docker-testnet/ethereum-testnet/**'
       - '.github/workflows/docker-testnet-sanity.yml'
   pull_request:
     paths:
-      - 'source/docker-testnet/**'
+      - 'source/docker-testnet/ethereum-testnet/**'
       - '.github/workflows/docker-testnet-sanity.yml'
 
 jobs:
   test:
-    name: Sanity Test Docker Testnet
+    name: Ethereum PoS Testnet Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     permissions:
       packages: read
@@ -39,35 +39,41 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install dependencies
-        working-directory: source/docker-testnet/typescript-sdk
+      - name: Install SDK dependencies
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
         run: bun install
 
       - name: Build SDK
-        working-directory: source/docker-testnet/typescript-sdk
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
         run: bun run build
 
       - name: Run validator connectivity tests
-        working-directory: source/docker-testnet/typescript-sdk
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
         run: bun test test/validator-connectivity.test.ts
         timeout-minutes: 10
 
       - name: Run block production tests
-        working-directory: source/docker-testnet/typescript-sdk
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
         run: bun test test/block-production.test.ts
         timeout-minutes: 10
 
-      - name: Run validator sync tests
-        working-directory: source/docker-testnet/typescript-sdk
-        run: bun test test/validator-sync.test.ts
+      - name: Run state proof tests
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: bun test test/state-proofs.test.ts
         timeout-minutes: 10
 
       - name: Cleanup Docker on failure
         if: failure()
-        working-directory: source/docker-testnet/config
+        working-directory: source/docker-testnet/ethereum-testnet/config
         run: docker compose down -v --remove-orphans || true
 
       - name: Show Docker logs on failure
         if: failure()
-        working-directory: source/docker-testnet/config
-        run: docker compose logs --tail=100 || true
+        working-directory: source/docker-testnet/ethereum-testnet/config
+        run: |
+          echo "=== Geth logs ==="
+          docker compose logs geth --tail=50 || true
+          echo "=== Beacon logs ==="
+          docker compose logs beacon --tail=50 || true
+          echo "=== Validator logs ==="
+          docker compose logs validator --tail=50 || true

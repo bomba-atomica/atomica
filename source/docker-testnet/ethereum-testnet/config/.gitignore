@@ -1,0 +1,11 @@
+# Generated testnet artifacts
+testnet/
+validator_keys/
+jwtsecret
+
+# Build artifacts
+*.log
+
+# Docker volumes (if bind mounted)
+beacon-data/
+validator-data/
