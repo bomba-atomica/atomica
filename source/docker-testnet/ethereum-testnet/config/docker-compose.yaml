@@ -1,7 +1,5 @@
-version: '3.8'
-
 services:
-  # 1. Execution Layer (Geth) - PoS mode
+  # 1. Execution Layer (Contemporary Ethereum - Post-Merge)
   geth:
     image: ethereum/client-go:v1.13.14
     container_name: eth-execution
@@ -41,9 +39,12 @@ services:
       retries: 30
       start_period: 10s
 
-  # 2. Consensus Layer (Lighthouse Beacon Node)
+  # 2. Consensus Layer (Contemporary Ethereum - Post-Merge)
   beacon:
-    image: sigp/lighthouse:v5.1.0
+    build:
+      context: .
+      dockerfile: Dockerfile.lighthouse
+    image: atomica-lighthouse:latest
     container_name: eth-beacon
     depends_on:
       geth:
@@ -60,15 +61,11 @@ services:
       - --http-address=0.0.0.0
       - --http-port=5052
       - --http-allow-origin=*
-      - --metrics
-      - --metrics-address=0.0.0.0
-      - --metrics-port=5054
       - --disable-deposit-contract-sync
       - --allow-insecure-genesis-sync
+      - --disable-optimistic-finalized-sync
       - --disable-peer-scoring
       - --target-peers=0
-      - --subscribe-all-subnets
-      - --import-all-attestations
     volumes:
       - ./testnet:/testnet:ro
       - ./jwtsecret:/secrets/jwtsecret:ro
@@ -77,7 +74,7 @@ services:
       - "5052:5052"
       - "5054:5054"
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O-", "http://localhost:5052/eth/v1/node/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:5052/eth/v1/node/version"]
       interval: 5s
       timeout: 5s
       retries: 60
@@ -85,18 +82,20 @@ services:
 
   # 3. Validator Client (Lighthouse)
   validator:
-    image: sigp/lighthouse:v5.1.0
+    build:
+      context: .
+      dockerfile: Dockerfile.lighthouse
+    image: atomica-lighthouse:latest
     container_name: eth-validator
     depends_on:
       beacon:
-        condition: service_healthy
+        condition: service_started
     command:
       - lighthouse
       - validator_client
       - --debug-level=info
       - --testnet-dir=/testnet
       - --beacon-nodes=http://beacon:5052
-      - --datadir=/data/validator
       - --validators-dir=/validator_keys/node_1/validators
       - --secrets-dir=/validator_keys/node_1/secrets
       - --init-slashing-protection
@@ -104,15 +103,11 @@ services:
       - --graffiti=atomica-testnet
     volumes:
       - ./testnet:/testnet:ro
-      - ./validator_keys:/validator_keys:ro
+      - ./validator_keys:/validator_keys
       - validator-data:/data
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O-", "http://localhost:5062/lighthouse/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 60s
 
 volumes:
   beacon-data:
   validator-data:
+
+

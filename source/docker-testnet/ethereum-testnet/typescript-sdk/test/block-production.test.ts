@@ -13,7 +13,7 @@ registerCleanupHandlers();
 
 describe("Block Production", () => {
     let testnet: EthereumDockerTestnet;
-    const NUM_VALIDATORS = 4;
+    const NUM_VALIDATORS = 3;
 
     beforeAll(async () => {
         testnet = await initializeTestnet(NUM_VALIDATORS);

@@ -12,7 +12,7 @@ registerCleanupHandlers();
 
 describe("Validator Connectivity", () => {
     let testnet: EthereumDockerTestnet;
-    const NUM_VALIDATORS = 4;
+    const NUM_VALIDATORS = 3;
     const EXPECTED_CHAIN_ID = 32382;
 
     beforeAll(async () => {

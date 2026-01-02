@@ -31,8 +31,8 @@ if [ ! -f "$JWT_SECRET" ]; then
     openssl rand -hex 32 > "$JWT_SECRET"
 fi
 
-# 2. Define Genesis Timestamp (now + 30s buffer for setup)
-GENESIS_TIME=$(($(date +%s) + 30))
+# 2. Define Genesis Timestamp (now - 30s so we're past genesis)
+GENESIS_TIME=$(($(date +%s) - 30))
 echo "Genesis Time: $GENESIS_TIME ($(date -r $GENESIS_TIME 2>/dev/null || date -d @$GENESIS_TIME))"
 
 # 3. Pre-funded test accounts (deterministic for reproducible testing)
@@ -162,6 +162,7 @@ docker run --rm \
   --capella-fork-epoch 0 \
   --deneb-fork-epoch 0 \
   --eth1-id "$CHAIN_ID" \
+  --eth1-block-hash 0x0000000000000000000000000000000000000000000000000000000000000000 \
   --eth1-follow-distance 1 \
   --seconds-per-slot "$SECONDS_PER_SLOT" \
   --seconds-per-eth1-block 14 \

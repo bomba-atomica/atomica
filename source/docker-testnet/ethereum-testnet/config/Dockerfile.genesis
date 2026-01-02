@@ -1,16 +1,36 @@
-FROM rust:1.81-bullseye as builder
+# Build lcli from source - required for genesis generation
+# lcli is not included in Lighthouse release binaries
+#
+# This is a multi-stage build that compiles lcli from the Lighthouse repo.
+# Build time: ~10-15 minutes on first build, cached thereafter.
+#
+# To rebuild after changes: docker rmi atomica-lcli:latest
+
+# Use Rust 1.79 to avoid API change in Rust 1.80.0 that breaks the `time` crate
+FROM rust:1.79-bullseye AS builder
+
+ARG LIGHTHOUSE_VERSION=v5.1.0
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y cmake clang libclang-dev protobuf-compiler
+RUN apt-get update && apt-get install -y \
+    cmake \
+    clang \
+    libclang-dev \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install lcli
-# We clone lighthouse to get lcli
-RUN git clone --branch v5.1.0 https://github.com/sigp/lighthouse.git
-WORKDIR /lighthouse
-# Build lcli
-RUN cargo install --path lcli --locked
+# Clone lighthouse and build only lcli (faster than full build)
+WORKDIR /build
+RUN git clone --depth 1 --branch ${LIGHTHOUSE_VERSION} https://github.com/sigp/lighthouse.git
 
+WORKDIR /build/lighthouse
+RUN cargo build --release --package lcli
+
+# Runtime image
 FROM ubuntu:24.04
+
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /usr/local/cargo/bin/lcli /usr/local/bin/lcli
+
+COPY --from=builder /build/lighthouse/target/release/lcli /usr/local/bin/lcli
+
 ENTRYPOINT ["lcli"]
