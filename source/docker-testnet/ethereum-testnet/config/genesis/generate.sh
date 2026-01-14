@@ -21,20 +21,6 @@ mkdir -p $VALIDATOR_KEYS_DIR
 
 echo "🧬 Generating Artifacts..."
 
-# Set Genesis Timestamp to NOW
-# We rely on the GENESIS_DELAY=0 environment variable in docker-compose.yaml 
-# to be picked up by the generator's internal envsubst.
-DELAY=0
-NOW=$(($(date +%s) + $DELAY))
-export EL_CL_GENESIS_TIMESTAMP=$NOW
-export GENESIS_TIMESTAMP=$NOW
-
-echo "🕒 Genesis Timestamp set to: $NOW (NOW + $DELAY seconds)"
-
-# Create values.env for python tools (the generator entrypoint sources this)
-mkdir -p /config
-python3 -c 'import os; print("\n".join([f"{k}=\"{v}\"" for k,v in os.environ.items()]))' > /config/values.env
-
 # EL Genesis
 /work/entrypoint.sh el
 
