@@ -4,21 +4,25 @@ This document describes how to build, run, and debug a faithful Post-Merge Ether
 
 ## Architecture Overview
 
-The testnet is designed for **maximum reliability** in a single-node development environment using a **Single Setup Service Pattern**.
+The testnet is designed for **maximum reliability** in a single-node development environment using a **Self-Initializing Node Pattern**.
 
 ### Core Clients
-- **Execution Layer (EL)**: Geth (`ethereum/client-go:v1.13.14`)
-- **Consensus Layer (CL)**: Lighthouse (`sigp/lighthouse:v5.3.0`)
-- **Validator Layer**: 4 isolated Lighthouse Validator containers.
+- **Execution Layer (EL)**: Official Geth (`ethereum/client-go:v1.13.14`)
+- **Consensus Layer (CL)**: Official Lighthouse (`sigp/lighthouse:v5.3.0`)
+- **Validator Layer**: 4 isolated Official Lighthouse containers.
 
 ### The Init Sequence
 Before the chain starts, a single ephemeral service prepares the shared Docker volume (`testnet-data`):
 
-1.  **`setup`**: Runs `generate.sh` in a custom image containing all tools. 
-    - Generates EL `genesis.json` and CL `genesis.ssz`.
-    - Generates and imports 4 unique validator keystores.
-    - Initializes the Geth database via `geth init`.
-    - Orchestrates the **Genesis Timestamp** (+30s buffer) to prevent sync deadlocks.
+1.  **`setup`**: Runs `generate.sh` to generate the common "source of truth":
+    - EL `genesis.json` and CL `genesis.ssz`.
+    - 4 unique validator keys organized into indexed folders (`/data/node-keys/1..4/`).
+    - The shared `jwtsecret`.
+
+2.  **Runtime Nodes (Geth & Validators)**: 
+    Each node type uses its official binary to perform its own disk preparation on first boot:
+    - **Geth**: Runs `geth init` if it detects an empty database.
+    - **Validators**: Run `lighthouse account validator import` if they detect missing keystores, pulling from their assigned index in `node-keys`.
 
 ---
 
@@ -51,13 +55,9 @@ All state is persisted in the `testnet-data` Docker volume, organized as follows
 /data (testnet-data volume)
 ├── geth/                  # Geth database and genesis.json
 ├── beacon-config/         # CL config.yaml, genesis.ssz, deploy_block.txt
-├── beacon-data/           # Lighthouse beacon node database
-├── validator-1/           # Keystores and slashing protection for Val 1
-├── validator-2/           # Keystores and slashing protection for Val 2
-├── validator-3/           # Keystores and slashing protection for Val 3
-├── validator-4/           # Keystores and slashing protection for Val 4
-├── validator_keys/        # Raw generated keys and passwords
-├── import_keys.sh         # Generated import orchestration script
+├── node-keys/             # Raw keys indexed 1-4 for the validator nodes
+├── validator-1/           # Lighthouse-encrypted wallet for Val 1
+├── ...
 └── jwtsecret              # shared 32-byte hex secret
 ```
 
@@ -114,3 +114,9 @@ Lighthouse requires Geth to report as "fully synced" before it will accept its p
 | `Bad Request` (Duties) | Fork version or config mismatch. | Wipe volumes and rebuild. |
 | `InsufficientPeers` (Beacon) | Solo network behavior. | Ignore; normal for devnets. |
 | `Waiting for genesis` | Chain hasn't started yet. | Check `date` vs `genesis_time`. |
+
+---
+
+## Roadmap & Future Improvements
+
+- [ ] **Native Artifact Generation**: Replace the dependency on `ethpandaops/ethereum-genesis-generator` by implementing the `genesis.json` and `genesis.ssz` generation logic directly (likely using Geth's genesis utils and Lighthouse's `lcli` or a custom Go/Rust tool). This would allow for a 100% "from scratch" setup without external tool dependencies.
