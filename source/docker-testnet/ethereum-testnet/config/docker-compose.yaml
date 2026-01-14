@@ -13,7 +13,6 @@ services:
       
       # Merge Config
       - TERMINAL_TOTAL_DIFFICULTY=0
-      - EL_CL_GENESIS_TIMESTAMP=10
       
       # Consensus Config (All forks active at epoch 0)
       - ALTAIR_FORK_EPOCH=0

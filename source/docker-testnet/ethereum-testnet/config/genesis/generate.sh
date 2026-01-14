@@ -12,6 +12,8 @@ JWT_SECRET_PATH="$SHARED_ROOT/jwtsecret"
 
 # Clean shared volume
 rm -rf $SHARED_ROOT/*
+# Clean ephemeral /data volume (if inherited from base image)
+rm -rf /data/*
 
 mkdir -p $GETH_DIR
 mkdir -p $BEACON_CONFIG_DIR
@@ -19,18 +21,41 @@ mkdir -p $VALIDATOR_KEYS_DIR
 
 echo "🧬 Generating Artifacts..."
 
-# Create values.env from environment variables
+# Set Genesis Timestamp to Now + 60s
+export EL_CL_GENESIS_TIMESTAMP=$(($(date +%s) + 60))
+export GENESIS_TIMESTAMP=$EL_CL_GENESIS_TIMESTAMP
+
+# Create values.env from environment variables safely (quoting values with spaces)
 mkdir -p /config
-env > /config/values.env
+python3 -c 'import os; print("\n".join([f"{k}=\"{v}\"" for k,v in os.environ.items()]))' > /config/values.env
+echo "📄 values.env content:"
+cat /config/values.env
 
 # EL Genesis
-/entrypoint.sh el
+/work/entrypoint.sh el
+
+# CL Genesis - Requires EL genesis.json to be in place!
+/work/entrypoint.sh cl
+
+echo "📂 Debugging Metadata contents:"
+ls -la /data/metadata/
+
+# Now move artifacts to final locations
+# EL Genesis
 mv /data/metadata/genesis.json $GETH_DIR/genesis.json
 
-# CL Genesis
-/entrypoint.sh cl
-mv /data/metadata/genesis.ssz $BEACON_CONFIG_DIR/genesis.ssz
-mv /data/metadata/config.yaml $BEACON_CONFIG_DIR/config.yaml
+# CL Genesis - Copy ALL metadata (config.yaml, genesis.ssz, deploy_block.txt, etc.)
+cp -r /data/metadata/* $BEACON_CONFIG_DIR/
+
+# Rename deposit_contract_block.txt to deploy_block.txt if needed by Lighthouse
+if [ -f "$BEACON_CONFIG_DIR/deposit_contract_block.txt" ]; then
+    cp "$BEACON_CONFIG_DIR/deposit_contract_block.txt" "$BEACON_CONFIG_DIR/deploy_block.txt"
+else 
+    echo "0" > "$BEACON_CONFIG_DIR/deploy_block.txt"
+fi
+
+echo "📂 Content of Beacon Config Dir:"
+ls -la $BEACON_CONFIG_DIR/
 
 echo "🔑 Creating JWT Secret..."
 openssl rand -hex 32 | tr -d "\n" > $JWT_SECRET_PATH

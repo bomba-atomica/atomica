@@ -1,7 +1,7 @@
 FROM ethpandaops/ethereum-genesis-generator:5.2.2
 
-# Install dependencies (Alpine based)
-RUN apk add --no-cache bash openssl
+# Install dependencies (Debian based)
+RUN apt-get update && apt-get install -y bash openssl && rm -rf /var/lib/apt/lists/*
 
 
 COPY generate.sh /generate.sh
