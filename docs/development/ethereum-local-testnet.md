@@ -4,23 +4,42 @@ This document describes how to build, run, and debug a faithful Post-Merge Ether
 
 ## Architecture Overview
 
-The testnet is designed for **maximum reliability** in a single-node development environment using a **Multi-Service Init Pattern**.
+The testnet is designed for **maximum reliability** in a single-node development environment using a **Single Setup Service Pattern**.
 
 ### Core Clients
 - **Execution Layer (EL)**: Geth (`ethereum/client-go:v1.13.14`)
 - **Consensus Layer (CL)**: Lighthouse (`sigp/lighthouse:v5.3.0`)
 - **Validator Layer**: 4 isolated Lighthouse Validator containers.
 
-### The Init Pipeline
-Before the chain starts, three ephemeral services prepare a shared Docker volume (`testnet-data`):
+### The Init Sequence
+Before the chain starts, a single ephemeral service prepares the shared Docker volume (`testnet-data`):
 
-1.  **`genesis`**: Runs `generate.sh`. 
+1.  **`setup`**: Runs `generate.sh` in a custom image containing all tools. 
     - Generates EL `genesis.json` and CL `genesis.ssz`.
-    - Generates 4 unique validator keystores using a mnemonic.
-    - Creates the `jwtsecret` for Engine API auth.
+    - Generates and imports 4 unique validator keystores.
+    - Initializes the Geth database via `geth init`.
     - Orchestrates the **Genesis Timestamp** (+30s buffer) to prevent sync deadlocks.
-2.  **`geth-init`**: Uses the official Geth image to initialize the EL database.
-3.  **`validator-import`**: Uses the Lighthouse image to import the generated keys into separate directories (`/data/validator-1`, etc.).
+
+---
+
+## Conceptual Model: Understanding the Layers
+
+The post-merge Ethereum stack is split into three distinct specialized layers. Understanding their 1:N relationship is key to debugging.
+
+### 1. Execution Layer (Geth) — "The Engine"
+- **Role**: Manages the EVM, smart contracts, account balances, and transaction mempool.
+- **Independence**: Cannot produce a block on its own; waits for instructions from the Consensus Layer via the Engine API.
+
+### 2. Consensus Layer (Beacon Node) — "The Brain"
+- **Role**: Handles P2P networking, fork-choice (voting on the "correct" chain), and tracking validator duties.
+- **Independence**: Does not understand smart contracts; asks Geth to "validate" the transactions inside a block.
+
+### 3. Validator Client (Signers) — "The Keys"
+- **Role**: A secure signing service. It holds the private keys and asks the Beacon Node: *"Is it my turn? What do I sign?"*
+- **Scaling (1:N)**: In production (e.g., Coinbase), a single cluster of Beacon/Execution nodes can host **thousands** of validator keys.
+
+### Why this Devnet has 4 Validator Containers?
+In our `docker-compose.yaml`, we use **1 Geth** and **1 Beacon Node** for efficiency, but **4 Validator Containers** to simulate a distributed network. This allows us to observe how the protocol distributes duties and sync-committee slots across distinct identities without the resource overhead of 4 full nodes.
 
 ---
 

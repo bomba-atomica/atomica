@@ -1,10 +1,10 @@
 services:
-  # 1. Generate Artifacts (Genesis JSON, Keys, Configs)
-  genesis:
+  # 1. Setup Service (Generates Artifacts, Initializes Geth, Imports Keys)
+  setup:
     build:
       context: ./genesis
     volumes:
-      - testnet-data:/shared
+      - testnet-data:/data
     environment:
       # Network ID
       - CHAIN_ID=32382
@@ -29,33 +29,13 @@ services:
       - EL_AND_CL_MNEMONIC=giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete
     entrypoint: ["/bin/bash", "/generate.sh"]
 
-  # 2. Initialize Geth Datadir (Uses official Geth image)
-  geth-init:
-    image: ethereum/client-go:v1.13.14
-    depends_on:
-      genesis:
-        condition: service_completed_successfully
-    volumes:
-      - testnet-data:/data
-    command: init --datadir=/data/geth /data/geth/genesis.json
-
-  # 3. Import Validator Keys (Uses official Lighthouse image)
-  validator-import:
-    image: sigp/lighthouse:v5.3.0
-    depends_on:
-      genesis:
-        condition: service_completed_successfully
-    volumes:
-      - testnet-data:/data
-    entrypoint: ["/bin/sh", "/data/import_keys.sh"]
-
   # 4. Main Execution Client
   geth:
     image: ethereum/client-go:v1.13.14
     container_name: eth-execution
     restart: unless-stopped
     depends_on:
-      geth-init:
+      setup:
         condition: service_completed_successfully
     command:
       - --datadir=/data/geth
@@ -134,7 +114,7 @@ services:
     depends_on:
       beacon:
         condition: service_started
-      validator-import:
+      setup:
         condition: service_completed_successfully
     command:
       - lighthouse
@@ -156,7 +136,7 @@ services:
     depends_on:
       beacon:
         condition: service_started
-      validator-import:
+      setup:
         condition: service_completed_successfully
     command:
       - lighthouse
@@ -178,7 +158,7 @@ services:
     depends_on:
       beacon:
         condition: service_started
-      validator-import:
+      setup:
         condition: service_completed_successfully
     command:
       - lighthouse
@@ -200,7 +180,7 @@ services:
     depends_on:
       beacon:
         condition: service_started
-      validator-import:
+      setup:
         condition: service_completed_successfully
     command:
       - lighthouse

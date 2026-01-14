@@ -4,7 +4,7 @@ set -e
 echo "🚀 Starting Genesis Artifact Generation..."
 
 # Define paths in the shared volume
-SHARED_ROOT="/shared"
+SHARED_ROOT="/data"
 GETH_DIR="$SHARED_ROOT/geth"
 BEACON_CONFIG_DIR="$SHARED_ROOT/beacon-config"
 VALIDATOR_KEYS_DIR="$SHARED_ROOT/validator_keys"
@@ -81,34 +81,30 @@ eth2-val-tools keystores \
 mkdir -p $VALIDATOR_KEYS_DIR/raw_keys
 cp -r /keys/out/* $VALIDATOR_KEYS_DIR/raw_keys/
 
-echo "� Creating Import Script for Validator Service..."
-# We create this script here so the 'validator-import' container (which has lighthouse)
-# can just execute it.
-cat <<EOF > $SHARED_ROOT/import_keys.sh
-#!/bin/sh
-set -e
+echo "✅ Artifact Generation Complete."
+
+echo "🏗️ Initializing Geth..."
+geth init --datadir=$GETH_DIR $GETH_DIR/genesis.json
+
 echo "📥 Importing Validators into separate directories..."
-
 i=1
-for key in /data/validator_keys/raw_keys/teku-keys/*.json; do
-    filename=\$(basename "\$key")
-    pubkey="\${filename%.json}"
-    secret="/data/validator_keys/raw_keys/teku-secrets/\${pubkey}.txt"
+for key in $VALIDATOR_KEYS_DIR/raw_keys/teku-keys/*.json; do
+    filename=$(basename "$key")
+    pubkey="${filename%.json}"
+    secret="$VALIDATOR_KEYS_DIR/raw_keys/teku-secrets/${pubkey}.txt"
     
-    val_dir="/data/validator-\$i"
-    mkdir -p "\$val_dir"
+    val_dir="$SHARED_ROOT/validator-$i"
+    mkdir -p "$val_dir"
 
-    echo "Importing \$pubkey into \$val_dir"
-    lighthouse account validator import \\
-        --datadir "\$val_dir" \\
-        --keystore "\$key" \\
-        --password-file "\$secret" \\
-        --testnet-dir /data/beacon-config \\
+    echo "Importing $pubkey into $val_dir"
+    lighthouse account validator import \
+        --datadir "$val_dir" \
+        --keystore "$key" \
+        --password-file "$secret" \
+        --testnet-dir $BEACON_CONFIG_DIR \
         --reuse-password
     
-    i=\$((i + 1))
+    i=$((i + 1))
 done
-EOF
-chmod +x $SHARED_ROOT/import_keys.sh
 
-echo "✅ Artifact Generation Complete."
+echo "🎉 All Setup Complete."
