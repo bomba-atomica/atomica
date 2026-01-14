@@ -10,9 +10,11 @@ This document instructs an agent to **build, validate, and debug** a faithful **
 
 The goal is **production-like behavior**, not convenience abstractions.
 
-> [!TIP]
 > **Authoritative reference implementation:** `source/docker-testnet/ethereum-testnet/`
 > This document explains *how to reproduce and reason about that setup*, not reinvent it.
+
+> [!WARNING]
+> This document describes a delicate setup. **Fork schedule coherence** (matching EL timestamps, CL epochs, and genesis fork versions) is the critical invariant. If these drift, the network will not produce blocks.
 
 ---
 
@@ -69,15 +71,11 @@ openssl rand -hex 32 | tr -d "\n" > jwtsecret
 > [!IMPORTANT]
 > The JWT secret must be exactly 64 hex characters with **no trailing newline**.
 
-**Failure modes:**
-- JWT mismatch → Engine API auth errors
-- Missing JWT → Geth logs "unauthorized engine request"
-
 ---
 
 ## Step 2 — Genesis Configuration (`values.env`)
 
-The `ethpandaops/ethereum-genesis-generator` uses a `values.env` file:
+The `ethpandaops/ethereum-genesis-generator` uses a `values.env` file. Key invariants:
 
 ```bash
 # Network ID
@@ -89,242 +87,79 @@ CL_NETWORK_ID=32382
 TERMINAL_TOTAL_DIFFICULTY=0
 EL_CL_GENESIS_TIMESTAMP=10  # delay in seconds from now
 
-# Validators
-NUMBER_OF_VALIDATORS=8
-EL_AND_CL_MNEMONIC="your mnemonic here"
-
-# Consensus Config
-SECONDS_PER_SLOT=12
+# Consensus Config (All forks active at epoch 0)
 ALTAIR_FORK_EPOCH=0
 BELLATRIX_FORK_EPOCH=0
 CAPELLA_FORK_EPOCH=0
 DENEB_FORK_EPOCH=0
-ELECTRA_FORK_EPOCH=100000000  # Future fork
-FULU_FORK_EPOCH=100000000     # Future fork
 
 # Genesis config
 MIN_GENESIS_ACTIVE_VALIDATOR_COUNT=8
-GENESIS_FORK_VERSION=0x00000001
+GENESIS_FORK_VERSION=0x00000001 # Critical: Must match Lighthouse's expected fork version for the network ID
 ```
 
 ---
 
 ## Step 3 — Genesis Generation
 
-Use `ethpandaops/ethereum-genesis-generator`. This avoids subtle mismatches between EL genesis, CL config, validator deposits, and fork activation parameters.
+Use `ethpandaops/ethereum-genesis-generator` to ensure **joint coherence** between EL and CL artifacts.
 
 ### Generate EL Genesis
-
 ```bash
-docker run --rm \
-  -v "$(pwd)/values.env:/config/values.env" \
-  -v "$(pwd)/testnet:/data" \
-  ethpandaops/ethereum-genesis-generator:5.2.2 \
-  el
+docker run --rm -v "$(pwd)/values.env:/config/values.env" -v "$(pwd)/testnet:/data" \
+  ethpandaops/ethereum-genesis-generator:5.2.2 el
 ```
 
 ### Generate CL Genesis
-
 ```bash
-docker run --rm \
-  -v "$(pwd)/values.env:/config/values.env" \
-  -v "$(pwd)/testnet:/data" \
-  ethpandaops/ethereum-genesis-generator:5.2.2 \
-  cl
+docker run --rm -v "$(pwd)/values.env:/config/values.env" -v "$(pwd)/testnet:/data" \
+  ethpandaops/ethereum-genesis-generator:5.2.2 cl
 ```
-
-**Output artifacts:**
-- `testnet/metadata/genesis.json` — EL genesis
-- `testnet/metadata/genesis.ssz` — CL genesis state
-- `testnet/metadata/config.yaml` — CL configuration
 
 ---
 
 ## Step 4 — Initialize Geth Datadir
 
-Geth requires a **one-time init** before running:
-
 ```bash
-docker run --rm \
-  -v "$(pwd)/testnet/geth:/data" \
-  ethereum/client-go:v1.16.8 \
-  init /data/genesis.json
+docker run --rm -v "$(pwd)/testnet/geth:/data" ethereum/client-go:v1.13.14 \
+  init --datadir=/data /data/genesis.json
 ```
-
-> [!NOTE]
-> Lighthouse does **not** require a separate init step. It reads `--testnet-dir` on startup.
 
 ---
 
 ## Step 5 — Generate and Import Validator Keys
 
 ### Generate Keys
-
 ```bash
-docker run --rm \
-  --entrypoint eth2-val-tools \
+docker run --rm --entrypoint eth2-val-tools \
   -v "$(pwd)/testnet/validator_keys:/keys" \
   ethpandaops/ethereum-genesis-generator:5.2.2 \
-  keystores \
-  --insecure \
-  --out-loc="/keys/out" \
-  --source-mnemonic="your mnemonic here" \
-  --source-min=0 \
-  --source-max=8
+  keystores --insecure --out-loc="/keys/out" --source-min=0 --source-max=8 \
+  --source-mnemonic="your mnemonic here"
 ```
 
 ### Import to Lighthouse
-
 ```bash
 lighthouse account validator import \
   --datadir /data \
   --keystore "path/to/keystore.json" \
   --password-file "path/to/password.txt" \
-  --network mainnet \
+  --testnet-dir /testnet \
   --reuse-password
 ```
 
 > [!CAUTION]
-> Without validators, slots advance but **no blocks are proposed**. Geth remains at block 0 forever.
+> Do **NOT** use `--network mainnet`. Use `--testnet-dir`.
 
 ---
 
-## Step 6 — Docker Compose (Complete Working Example)
+## Step 6 — Docker Compose (Canonical)
 
-Based on the atomica reference implementation:
+Refer to the reference implementation. **Crucial Volume Mounts:**
 
-```yaml
-services:
-  geth:
-    image: ethereum/client-go:v1.16.8
-    container_name: eth-execution
-    command:
-      - --datadir=/data
-      - --networkid=32382
-      - --http
-      - --http.api=eth,net,web3,debug,engine,txpool
-      - --http.addr=0.0.0.0
-      - --http.port=8545
-      - --http.vhosts=*
-      - --http.corsdomain=*
-      - --ws
-      - --ws.api=eth,net,web3,debug,engine
-      - --ws.addr=0.0.0.0
-      - --ws.port=8546
-      - --ws.origins=*
-      - --authrpc.addr=0.0.0.0
-      - --authrpc.port=8551
-      - --authrpc.vhosts=*
-      - --authrpc.jwtsecret=/secrets/jwtsecret
-      - --nodiscover
-      - --syncmode=full
-      - --gcmode=archive
-      - --maxpeers=0
-    volumes:
-      - ./testnet/geth:/data
-      - ./jwtsecret:/secrets/jwtsecret:ro
-    ports:
-      - "8545:8545"
-      - "8546:8546"
-      - "8551:8551"
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8545"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-      start_period: 10s
-
-  beacon:
-    image: sigp/lighthouse:latest
-    container_name: eth-beacon
-    depends_on:
-      geth:
-        condition: service_healthy
-    command:
-      - lighthouse
-      - beacon_node
-      - --debug-level=info
-      - --datadir=/data/beacon
-      - --testnet-dir=/testnet
-      - --execution-endpoint=http://geth:8551
-      - --execution-jwt=/secrets/jwtsecret
-      - --http
-      - --http-address=0.0.0.0
-      - --http-port=5052
-      - --http-allow-origin=*
-      - --suggested-fee-recipient=0x0000000000000000000000000000000000000000
-      - --execution-timeout-multiplier=5
-      - --disable-deposit-contract-sync
-      - --allow-insecure-genesis-sync
-      - --disable-peer-scoring
-      - --target-peers=0
-    volumes:
-      - ./testnet/beacon:/testnet
-      - ./jwtsecret:/secrets/jwtsecret:ro
-      - beacon-data:/data
-    ports:
-      - "5052:5052"
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:5052/eth/v1/node/version"]
-      interval: 5s
-      timeout: 5s
-      retries: 60
-      start_period: 30s
-
-  validator:
-    image: sigp/lighthouse:latest
-    container_name: eth-validator
-    depends_on:
-      beacon:
-        condition: service_started
-    command:
-      - lighthouse
-      - validator_client
-      - --debug-level=info
-      - --testnet-dir=/testnet
-      - --beacon-nodes=http://beacon:5052
-      - --datadir=/data
-      - --init-slashing-protection
-      - --suggested-fee-recipient=0x0000000000000000000000000000000000000000
-      - --graffiti=localnet
-    volumes:
-      - ./testnet/beacon:/testnet
-      - ./testnet/validator_keys/lighthouse-data:/data
-
-volumes:
-  beacon-data:
-```
-
-### Geth Flags Reference
-
-| Flag | Purpose |
-|------|---------|
-| `--authrpc.jwtsecret` | Path to JWT secret for Engine API |
-| `--authrpc.addr=0.0.0.0` | Accept Engine API from other containers |
-| `--http.api=...,engine,...` | Enable Engine API on HTTP (for debugging) |
-| `--nodiscover` | Disable peer discovery (isolated network) |
-| `--syncmode=full` | Full sync mode |
-| `--gcmode=archive` | Keep all historical state |
-| `--maxpeers=0` | No external peers |
-
-### Lighthouse Beacon Flags Reference
-
-| Flag | Purpose |
-|------|---------|
-| `--testnet-dir` | Directory containing `genesis.ssz` and `config.yaml` |
-| `--execution-endpoint` | URL to Geth's Engine API (port 8551) |
-| `--execution-jwt` | Path to shared JWT secret |
-| `--disable-deposit-contract-sync` | Skip deposit contract sync (local network) |
-| `--allow-insecure-genesis-sync` | Required for local testnets |
-| `--target-peers=0` | No external peers |
-
-### Lighthouse Validator Flags Reference
-
-| Flag | Purpose |
-|------|---------|
-| `--testnet-dir` | Must match beacon's testnet-dir |
-| `--beacon-nodes` | URL to beacon node HTTP API (port 5052) |
-| `--init-slashing-protection` | Initialize slashing protection DB |
+*   **Beacon:** `- ./testnet/beacon:/testnet:ro` (Root of testnet dir must contain `genesis.ssz` and `config.yaml`)
+*   **Validator:** `- ./testnet/beacon:/testnet:ro` (Must match beacon's mount)
+*   **JWT:** `- ./jwtsecret:/secrets/jwtsecret:ro` (Must match Geth's mount)
 
 ---
 
@@ -335,105 +170,80 @@ docker compose up -d
 docker compose logs -f
 ```
 
-Health checks ensure proper startup order:
-1. Geth starts and becomes healthy (HTTP responds)
-2. Beacon starts after Geth is healthy
-3. Validator starts after beacon is started
+---
+
+## Step 8 — Validation & Success Criteria
+
+Running `curl` checks is meaningless unless you interpret the results against **Hard Success Criteria**.
+
+### Minimal Success Criteria (All Must Be True)
+
+| Check | Command | Success Condition |
+| :--- | :--- | :--- |
+| **Blocks Increasing** | `curl -d '{"method":"eth_blockNumber"...}' localhost:8545` | Result > 0 and increasing |
+| **Slots Increasing** | `curl localhost:5052/eth/v1/beacon/headers/head` | Slot number increasing |
+| **Engine Sync** | `Lighthouse Logs` | ✅ `Execution engine online` |
+| **Consensus** | `Lighthouse Logs` | ✅ `Block received` |
+| **Proposing** | `Validator Logs` | ✅ `Successfully published block` |
 
 ---
 
-## Step 8 — Validation Checklist
+# 🌳 Troubleshooting: Binary Decision Tree
 
-### Execution Layer
+**Use this mechanically. Do not guess.**
 
-```bash
-curl -X POST localhost:8545 \
-  -H "Content-Type: application/json" \
-  --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
-```
+### 1️⃣ Beacon Log: `Execution endpoint ... connected ... not yet synced`
+➡️ **ROOT CAUSE: Fork Schedule Incoherence** (Not connectivity)
+*   **Check:** Do `shanghaiTime` (EL) and `CAPELLA_FORK_EPOCH` (CL) align at genesis?
+*   **Check:** Does `GENESIS_FORK_VERSION` match `config.yaml`?
+*   **Fix:** Regenerate **both** genesis files from `values.env`. **Wipe all volumes.**
 
-Block number **must increase** over time.
+### 2️⃣ Beacon Log: `Waiting for genesis`
+➡️ **ROOT CAUSE: Time Coherence Failure**
+*   **Check:** Is `GENESIS_TIME` in the future?
+*   **Check:** Docker host clock drift?
+*   **Fix:** Regenerate genesis with timestamp `Now + 60s`.
 
-### Beacon Node
+### 3️⃣ Geth Log: `Post-merge network, but no beacon client seen`
+➡️ **ROOT CAUSE: Engine API Auth Failure**
+*   **Check:** Is Geth listening on port 8551 (`authrpc`)?
+*   **Check:** Are JWT secrets byte-for-byte identical?
+*   **Fix:** Remount JWT secret. Ensure no trailing newlines.
 
-```bash
-curl localhost:5052/eth/v1/node/syncing
-```
-
-Expected: `{"data":{"is_syncing":false}}`
-
-### Head Slot
-
-```bash
-curl localhost:5052/eth/v1/beacon/headers/head
-```
-
-Slot number **must increase** over time.
-
----
-
-## Log Signals
-
-### Geth
-
-| Log Message | Meaning |
-|-------------|---------|
-| ✅ `Forkchoice updated` | Engine API working |
-| ✅ `Imported new potential chain segment` | Blocks being produced |
-| ❌ `Waiting for beacon client` | CL not connected |
-| ❌ `no beacon client seen` | Engine API not receiving calls |
-
-### Lighthouse Beacon
-
-| Log Message | Meaning |
-|-------------|---------|
-| ✅ `Slot advanced` | Time progressing |
-| ✅ `Block received` | Blocks being produced |
-| ✅ `Execution engine online` | Connected to Geth |
-| ❌ `Execution endpoint unavailable` | Cannot reach Geth |
-
-### Lighthouse Validator
-
-| Log Message | Meaning |
-|-------------|---------|
-| ✅ `Successfully published block` | Validator proposing |
-| ✅ `Successfully published attestation` | Validator attesting |
-| ❌ `Beacon node is syncing` | Must wait for sync |
+### 4️⃣ Slots Advance, Head Slot > 0, Block Number = 0
+➡️ **ROOT CAUSE: Validator Failure**
+*   **Check:** Is validator container running?
+*   **Check:** `Awaiting activation`? (Wait for epoch 1).
+*   **Check:** Were keys imported with `--testnet-dir`?
 
 ---
 
-## Known Failure Modes
+# 🚨 “This Breaks Block Production” Matrix
 
-| Symptom | Root Cause | Solution |
-|---------|------------|----------|
-| Slots advance, no blocks | Validator not running or keys not imported | Check `lighthouse-data` directory |
-| Geth block stuck at 0 | Beacon not connected | Verify `--execution-endpoint` URL |
-| Engine auth errors | JWT mismatch | Ensure same file mounted to both |
-| Forkchoice spam | Genesis mismatch | Regenerate both EL and CL genesis |
-| "Waiting for genesis" | Genesis time in past | Regenerate with future timestamp |
+If **any** row below is true, the network **will not** produce blocks.
 
----
-
-## Success Criteria (Hard)
-
-The network is **valid** if and only if:
-
-- [ ] Block number increases (check `eth_blockNumber`)
-- [ ] Slot number increases (check `/eth/v1/beacon/headers/head`)
-- [ ] Geth logs show `Forkchoice updated`
-- [ ] Beacon logs show `Block received`
-- [ ] Validator logs show `Successfully published block`
-
-If any criterion fails, the network is **not functional**.
+| Domain | Condition | Symptom | Why? |
+| :--- | :--- | :--- | :--- |
+| **Genesis** | EL fork timestamps ≠ CL fork epochs | Beacon: `not yet synced` | Invariant violation. |
+| **Genesis** | Genesis timestamp mismatch | Beacon: `Waiting for genesis` | Wall-clock incoherence. |
+| **Wiring** | JWT mismatch | Geth: `unauthorized` | Engine calls rejected. |
+| **Wiring** | Wrong Engine Port (8545 vs 8551) | Beacon: `endpoint unavailable` | Wrong API (RPC vs Engine). |
+| **Validator** | Keys not imported | Slots advance, empty blocks | No proposer. |
+| **Validator** | `--network mainnet` used | Validator errors | Schema mismatch. |
 
 ---
 
-## Source of Truth
+# 🔒 Minimal Invariant Checklist (Deep Debugging)
 
-When in doubt, defer to:
+Lighthouse enforces these **hard guards**. If any fail, it halts block production.
 
-```
-source/docker-testnet/ethereum-testnet/
-```
+1.  **Genesis Coherence:** CL genesis root == derived EL block 0 hash.
+2.  **Fork Schedule:** At Slot 0, `CL active forks == EL active forks`.
+3.  **Engine Safety:** JWT matches + Engine API enabled (`--authrpc`).
+4.  **Persistence:** Changing genesis **requires** full datadir wipe. Lighthouse trusts disk state over config.
 
-This document explains **why** that setup works, not how to invent a new one.
+---
+
+## One-Line Agent Rule
+
+> **If Lighthouse says “execution endpoint is not yet synced”, assume fork-schedule or genesis incoherence — not connectivity.**

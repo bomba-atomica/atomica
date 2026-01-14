@@ -1,10 +1,65 @@
 services:
-  # 1. Execution Layer (Contemporary Ethereum - Post-Merge)
+  # 1. Generate Artifacts (Genesis JSON, Keys, Configs)
+  genesis:
+    build:
+      context: ./genesis
+    volumes:
+      - testnet-data:/shared
+    environment:
+      # Network ID
+      - CHAIN_ID=32382
+      - EL_NETWORK_ID=32382
+      - CL_NETWORK_ID=32382
+      
+      # Merge Config
+      - TERMINAL_TOTAL_DIFFICULTY=0
+      - EL_CL_GENESIS_TIMESTAMP=10
+      
+      # Consensus Config (All forks active at epoch 0)
+      - ALTAIR_FORK_EPOCH=0
+      - BELLATRIX_FORK_EPOCH=0
+      - CAPELLA_FORK_EPOCH=0
+      - DENEB_FORK_EPOCH=0
+      - ELECTRA_FORK_EPOCH=100000000
+      - FULU_FORK_EPOCH=100000000
+      
+      # Genesis Config
+      - MIN_GENESIS_ACTIVE_VALIDATOR_COUNT=8
+      - GENESIS_FORK_VERSION=0x00000001
+      - NUMBER_OF_VALIDATORS=8
+      - EL_AND_CL_MNEMONIC=giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete
+    entrypoint: ["/bin/bash", "/generate.sh"]
+
+  # 2. Initialize Geth Datadir (Uses official Geth image)
+  geth-init:
+    image: ethereum/client-go:v1.13.14
+    depends_on:
+      genesis:
+        condition: service_completed_successfully
+    volumes:
+      - testnet-data:/data
+    command: init --datadir=/data/geth /data/geth/genesis.json
+
+  # 3. Import Validator Keys (Uses official Lighthouse image)
+  validator-import:
+    image: sigp/lighthouse:v5.1.0
+    depends_on:
+      genesis:
+        condition: service_completed_successfully
+    volumes:
+      - testnet-data:/data
+    entrypoint: ["/bin/sh", "/data/import_keys.sh"]
+
+  # 4. Main Execution Client
   geth:
-    image: ethereum/client-go:v1.16.8
+    image: ethereum/client-go:v1.13.14
     container_name: eth-execution
+    restart: unless-stopped
+    depends_on:
+      geth-init:
+        condition: service_completed_successfully
     command:
-      - --datadir=/data
+      - --datadir=/data/geth
       - --networkid=32382
       - --http
       - --http.api=eth,net,web3,debug,engine,txpool
@@ -20,14 +75,13 @@ services:
       - --authrpc.addr=0.0.0.0
       - --authrpc.port=8551
       - --authrpc.vhosts=*
-      - --authrpc.jwtsecret=/secrets/jwtsecret
+      - --authrpc.jwtsecret=/data/jwtsecret
       - --nodiscover
       - --syncmode=full
       - --gcmode=archive
       - --maxpeers=0
     volumes:
-      - ../testnet/geth:/data
-      - ../jwtsecret:/secrets/jwtsecret:ro
+      - testnet-data:/data
     ports:
       - "8545:8545"
       - "8546:8546"
@@ -39,13 +93,11 @@ services:
       retries: 30
       start_period: 10s
 
-  # 2. Consensus Layer (Contemporary Ethereum - Post-Merge)
+  # 5. Main Beacon Node
   beacon:
-    build:
-      context: .
-      dockerfile: Dockerfile.lighthouse
-    image: atomica-lighthouse:latest
+    image: sigp/lighthouse:v5.1.0
     container_name: eth-beacon
+    restart: unless-stopped
     depends_on:
       geth:
         condition: service_healthy
@@ -53,27 +105,24 @@ services:
       - lighthouse
       - beacon_node
       - --debug-level=info
-      - --datadir=/data/beacon
-      - --testnet-dir=/testnet
+      - --datadir=/data/beacon-data
+      - --testnet-dir=/data/beacon-config
       - --execution-endpoint=http://geth:8551
-      - --execution-jwt=/secrets/jwtsecret
+      - --execution-jwt=/data/jwtsecret
       - --http
       - --http-address=0.0.0.0
       - --http-port=5052
       - --http-allow-origin=*
-      - --suggested-fee-recipient=0x8943545177806ED17B9F23F0a21ee5948eCaa776
+      - --suggested-fee-recipient=0x0000000000000000000000000000000000000000
       - --execution-timeout-multiplier=5
       - --disable-deposit-contract-sync
       - --allow-insecure-genesis-sync
       - --disable-peer-scoring
       - --target-peers=0
     volumes:
-      - ../testnet/beacon:/testnet
-      - ../jwtsecret:/secrets/jwtsecret:ro
-      - beacon-data:/data
+      - testnet-data:/data
     ports:
       - "5052:5052"
-      - "5054:5054"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:5052/eth/v1/node/version"]
       interval: 5s
@@ -81,32 +130,28 @@ services:
       retries: 60
       start_period: 30s
 
-  # 3. Validator Client (Lighthouse)
+  # 6. Main Validator Client
   validator:
-    build:
-      context: .
-      dockerfile: Dockerfile.lighthouse
-    image: atomica-lighthouse:latest
+    image: sigp/lighthouse:v5.1.0
     container_name: eth-validator
+    restart: unless-stopped
     depends_on:
       beacon:
-        condition: service_started
+        condition: service_healthy
+      validator-import:
+        condition: service_completed_successfully
     command:
       - lighthouse
       - validator_client
       - --debug-level=info
-      - --testnet-dir=/testnet
+      - --testnet-dir=/data/beacon-config
       - --beacon-nodes=http://beacon:5052
       - --datadir=/data
       - --init-slashing-protection
-      - --suggested-fee-recipient=0x8943545177806ED17B9F23F0a21ee5948eCaa776
-      - --graffiti=atomica-testnet
+      - --suggested-fee-recipient=0x0000000000000000000000000000000000000000
+      - --graffiti=localnet
     volumes:
-      - ../testnet/beacon:/testnet
-      - ../testnet/validator_keys/lighthouse-data:/data
+      - testnet-data:/data
 
 volumes:
-  beacon-data:
-  validator-data:
-
-
+  testnet-data:
