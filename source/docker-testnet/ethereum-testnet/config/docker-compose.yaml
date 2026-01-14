@@ -1,3 +1,4 @@
+name: ethereum-testnet
 services:
   # 1. Setup Service (Generates Artifacts, Initializes Geth, Imports Keys)
   setup:
@@ -37,29 +38,15 @@ services:
     depends_on:
       setup:
         condition: service_completed_successfully
+    entrypoint: []
     command:
-      - --datadir=/data/geth
-      - --networkid=32382
-      - --http
-      - --http.api=eth,net,web3,debug,engine,txpool
-      - --http.addr=0.0.0.0
-      - --http.port=8545
-      - --http.vhosts=*
-      - --http.corsdomain=*
-      - --ws
-      - --ws.api=eth,net,web3,debug,engine
-      - --ws.addr=0.0.0.0
-      - --ws.port=8546
-      - --ws.origins=*
-      - --authrpc.addr=0.0.0.0
-      - --authrpc.port=8551
-      - --authrpc.vhosts=*
-      - --authrpc.jwtsecret=/data/jwtsecret
-      - --nodiscover
-      - --syncmode=full
-      - --gcmode=archive
-      - --maxpeers=0
-      - --txlookuplimit=0
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -d /data/geth/geth/chaindata ]; then
+          geth init --datadir=/data/geth /data/geth/genesis.json
+        fi
+        exec geth --datadir=/data/geth --networkid=32382 --http --http.api=eth,net,web3,debug,engine,txpool --http.addr=0.0.0.0 --http.port=8545 --http.vhosts=* --http.corsdomain=* --ws --ws.api=eth,net,web3,debug,engine --ws.addr=0.0.0.0 --ws.port=8546 --ws.origins=* --authrpc.addr=0.0.0.0 --authrpc.port=8551 --authrpc.vhosts=* --authrpc.jwtsecret=/data/jwtsecret --nodiscover --syncmode=full --gcmode=archive --maxpeers=0 --txlookuplimit=0
     volumes:
       - testnet-data:/data
     ports:
@@ -117,15 +104,13 @@ services:
       setup:
         condition: service_completed_successfully
     command:
-      - lighthouse
-      - validator_client
-      - --debug-level=info
-      - --testnet-dir=/data/beacon-config
-      - --beacon-nodes=http://beacon:5052
-      - --datadir=/data/validator-1
-      - --init-slashing-protection
-      - --suggested-fee-recipient=0x0000000000000000000000000000000000000000
-      - --graffiti=val-1
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -d /data/validator-1/validators ]; then
+          lighthouse account validator import --datadir=/data/validator-1 --keystore=/data/node-keys/1/keystore.json --password-file=/data/node-keys/1/password.txt --testnet-dir=/data/beacon-config --reuse-password
+        fi
+        exec lighthouse validator_client --debug-level=info --testnet-dir=/data/beacon-config --beacon-nodes=http://beacon:5052 --datadir=/data/validator-1 --init-slashing-protection --suggested-fee-recipient=0x0000000000000000000000000000000000000000 --graffiti=val-1
     volumes:
       - testnet-data:/data
 
@@ -139,15 +124,13 @@ services:
       setup:
         condition: service_completed_successfully
     command:
-      - lighthouse
-      - validator_client
-      - --debug-level=info
-      - --testnet-dir=/data/beacon-config
-      - --beacon-nodes=http://beacon:5052
-      - --datadir=/data/validator-2
-      - --init-slashing-protection
-      - --suggested-fee-recipient=0x0000000000000000000000000000000000000000
-      - --graffiti=val-2
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -d /data/validator-2/validators ]; then
+          lighthouse account validator import --datadir=/data/validator-2 --keystore=/data/node-keys/2/keystore.json --password-file=/data/node-keys/2/password.txt --testnet-dir=/data/beacon-config --reuse-password
+        fi
+        exec lighthouse validator_client --debug-level=info --testnet-dir=/data/beacon-config --beacon-nodes=http://beacon:5052 --datadir=/data/validator-2 --init-slashing-protection --suggested-fee-recipient=0x0000000000000000000000000000000000000000 --graffiti=val-2
     volumes:
       - testnet-data:/data
 
@@ -161,15 +144,13 @@ services:
       setup:
         condition: service_completed_successfully
     command:
-      - lighthouse
-      - validator_client
-      - --debug-level=info
-      - --testnet-dir=/data/beacon-config
-      - --beacon-nodes=http://beacon:5052
-      - --datadir=/data/validator-3
-      - --init-slashing-protection
-      - --suggested-fee-recipient=0x0000000000000000000000000000000000000000
-      - --graffiti=val-3
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -d /data/validator-3/validators ]; then
+          lighthouse account validator import --datadir=/data/validator-3 --keystore=/data/node-keys/3/keystore.json --password-file=/data/node-keys/3/password.txt --testnet-dir=/data/beacon-config --reuse-password
+        fi
+        exec lighthouse validator_client --debug-level=info --testnet-dir=/data/beacon-config --beacon-nodes=http://beacon:5052 --datadir=/data/validator-3 --init-slashing-protection --suggested-fee-recipient=0x0000000000000000000000000000000000000000 --graffiti=val-3
     volumes:
       - testnet-data:/data
 
@@ -183,15 +164,13 @@ services:
       setup:
         condition: service_completed_successfully
     command:
-      - lighthouse
-      - validator_client
-      - --debug-level=info
-      - --testnet-dir=/data/beacon-config
-      - --beacon-nodes=http://beacon:5052
-      - --datadir=/data/validator-4
-      - --init-slashing-protection
-      - --suggested-fee-recipient=0x0000000000000000000000000000000000000000
-      - --graffiti=val-4
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -d /data/validator-4/validators ]; then
+          lighthouse account validator import --datadir=/data/validator-4 --keystore=/data/node-keys/4/keystore.json --password-file=/data/node-keys/4/password.txt --testnet-dir=/data/beacon-config --reuse-password
+        fi
+        exec lighthouse validator_client --debug-level=info --testnet-dir=/data/beacon-config --beacon-nodes=http://beacon:5052 --datadir=/data/validator-4 --init-slashing-protection --suggested-fee-recipient=0x0000000000000000000000000000000000000000 --graffiti=val-4
     volumes:
       - testnet-data:/data
 
