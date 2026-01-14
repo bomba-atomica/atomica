@@ -13,10 +13,20 @@ registerCleanupHandlers();
 
 describe("Block Production", () => {
     let testnet: EthereumDockerTestnet;
-    const NUM_VALIDATORS = 3;
+    const NUM_VALIDATORS = 8;
 
     beforeAll(async () => {
         testnet = await initializeTestnet(NUM_VALIDATORS);
+
+        // Manual kickstart to break single-node deadlock
+        console.log("Running manual kickstart...");
+        const proc = Bun.spawn(["bun", "scripts/kickstart.ts"], {
+            cwd: process.cwd(),
+            stdout: "inherit",
+            stderr: "inherit"
+        });
+        await proc.exited;
+
         await waitForNetworkStabilization(testnet);
     }, 300000); // 5 min timeout for setup
 
@@ -38,7 +48,7 @@ describe("Block Production", () => {
 
     test("should have valid block structure", async () => {
         const block = await testnet.getBlock("latest");
-        
+
         console.log(`Block number: ${parseInt(block.number, 16)}`);
         console.log(`Block hash: ${block.hash}`);
         console.log(`Parent hash: ${block.parentHash}`);
@@ -52,10 +62,10 @@ describe("Block Production", () => {
 
     test("should have beacon blocks with execution payloads", async () => {
         const beaconBlock = await testnet.getBeaconBlock("head");
-        
+
         const slot = beaconBlock.message.slot;
         const executionPayload = beaconBlock.message.body.execution_payload;
-        
+
         console.log(`Beacon slot: ${slot}`);
         console.log(`Execution block number: ${executionPayload?.block_number}`);
         console.log(`Execution state root: ${executionPayload?.state_root}`);
@@ -71,7 +81,7 @@ describe("Block Production", () => {
         // Get the latest beacon block
         const beaconBlock = await testnet.getBeaconBlock("head");
         const executionPayload = beaconBlock.message.body.execution_payload;
-        
+
         if (!executionPayload) {
             console.log("Skipping: No execution payload in beacon block");
             return;

@@ -13,7 +13,7 @@ registerCleanupHandlers();
 
 describe("State Proofs (eth_getProof)", () => {
     let testnet: EthereumDockerTestnet;
-    const NUM_VALIDATORS = 3;
+    const NUM_VALIDATORS = 8;
 
     beforeAll(async () => {
         testnet = await initializeTestnet(NUM_VALIDATORS);
@@ -43,7 +43,7 @@ describe("State Proofs (eth_getProof)", () => {
         expect(proof.address.toLowerCase()).toBe(testAddress.toLowerCase());
         expect(proof.accountProof).toBeInstanceOf(Array);
         expect(proof.accountProof.length).toBeGreaterThan(0);
-        
+
         // Each proof node should be a hex string
         for (const node of proof.accountProof) {
             expect(node).toMatch(/^0x[a-fA-F0-9]+$/);
@@ -65,7 +65,7 @@ describe("State Proofs (eth_getProof)", () => {
         // Should still return a valid proof structure
         expect(proof.address.toLowerCase()).toBe(emptyAddress.toLowerCase());
         expect(proof.accountProof).toBeInstanceOf(Array);
-        
+
         // Balance should be zero
         expect(BigInt(proof.balance)).toBe(BigInt(0));
     });

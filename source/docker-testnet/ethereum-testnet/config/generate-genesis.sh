@@ -1,190 +1,131 @@
 #!/bin/bash
-# Generate Ethereum genesis for local PoS testnet (mainnet-like)
-# This creates a proper Beacon Chain genesis with validators, NOT Clique PoA
 set -e
 
-NUM_VALIDATORS="${1:-4}"
-CHAIN_ID="${2:-32382}"  # Unique testnet chain ID
-OUTPUT_DIR="./testnet"
-VALIDATOR_DIR="./validator_keys"
-JWT_SECRET="./jwtsecret"
+OUTPUT_DIR="testnet"
+NUM_VALIDATORS=8
+cd "$(dirname "$0")"
 
-# Mainnet-like timing (can adjust for faster local testing)
-SECONDS_PER_SLOT=12
-SLOTS_PER_EPOCH=32
+# Clean previous data
+rm -rf ../$OUTPUT_DIR
+mkdir -p ../$OUTPUT_DIR
 
-echo "=== Ethereum PoS Testnet Genesis Generator ==="
-echo "Validators: $NUM_VALIDATORS"
-echo "Chain ID: $CHAIN_ID"
-echo "Seconds per slot: $SECONDS_PER_SLOT"
-echo ""
+# Set Genesis Timestamp to now + 60s
+NOW=$(date +%s)
+GENESIS_TIMESTAMP=$((NOW + 60))
+echo "Setting GENESIS_TIMESTAMP to $GENESIS_TIMESTAMP"
 
-# Clean up previous runs
-rm -rf "$OUTPUT_DIR"
-rm -rf "$VALIDATOR_DIR"
-mkdir -p "$OUTPUT_DIR"
-mkdir -p "$VALIDATOR_DIR"
+# Create temp values.env with timestamp
+cp values.env values.env.tmp
+echo "GENESIS_TIMESTAMP=$GENESIS_TIMESTAMP" >> values.env.tmp
 
-# 1. Generate JWT secret for EL/CL communication
-if [ ! -f "$JWT_SECRET" ]; then
-    echo "Generating JWT secret..."
-    openssl rand -hex 32 > "$JWT_SECRET"
+# Run the generator in steps to allow patching
+echo "Generating EL genesis..."
+docker run --rm \
+  -v "$(pwd)/values.env.tmp:/config/values.env" \
+  -v "$(pwd)/../$OUTPUT_DIR:/data" \
+  ethpandaops/ethereum-genesis-generator:5.2.2 \
+  el
+
+# Geth v1.16.8+ natively supports the genesis format from the generator
+# No patching required
+
+
+echo "Generating CL genesis..."
+docker run --rm \
+  -v "$(pwd)/values.env.tmp:/config/values.env" \
+  -v "$(pwd)/../$OUTPUT_DIR:/data" \
+  ethpandaops/ethereum-genesis-generator:5.2.2 \
+  cl
+
+# Cleanup temp file
+rm values.env.tmp
+
+echo "Genesis generation complete."
+
+# Re-organize output for our docker-compose structure
+echo "Restructuring output for docker-compose..."
+
+mkdir -p ../$OUTPUT_DIR/geth
+mkdir -p ../$OUTPUT_DIR/beacon
+mkdir -p ../$OUTPUT_DIR/validator_keys
+
+# Move EL genesis
+# Found in metadata/genesis.json
+if [ -f "../$OUTPUT_DIR/metadata/genesis.json" ]; then
+    cp ../$OUTPUT_DIR/metadata/genesis.json ../$OUTPUT_DIR/geth/genesis.json
+else
+    echo "Error: EL genesis.json not found in metadata"
+    ls -R ../$OUTPUT_DIR
+    exit 1
 fi
 
-# 2. Define Genesis Timestamp (now - 30s so we're past genesis)
-GENESIS_TIME=$(($(date +%s) - 30))
-echo "Genesis Time: $GENESIS_TIME ($(date -r $GENESIS_TIME 2>/dev/null || date -d @$GENESIS_TIME))"
-
-# 3. Pre-funded test accounts (deterministic for reproducible testing)
-# These are insecure keys - ONLY for local testing
-TEST_ACCOUNTS=(
-    "0x8943545177806ED17B9F23F0a21ee5948eCaa776:1000000000000000000000"  # 1000 ETH
-    "0x71bE63f3384f5fb98995898A86B02Fb2426c5788:1000000000000000000000"  # 1000 ETH
-    "0xFABB0ac9d68B0B445fB7357272Ff202C5651694a:1000000000000000000000"  # 1000 ETH
-    "0x1CBd3b2770909D4e10f157cABC84C7264073C9Ec:1000000000000000000000"  # 1000 ETH
-)
-
-# Build alloc JSON
-ALLOC_JSON=""
-for account in "${TEST_ACCOUNTS[@]}"; do
-    ADDR="${account%%:*}"
-    BALANCE="${account##*:}"
-    if [ -n "$ALLOC_JSON" ]; then
-        ALLOC_JSON="$ALLOC_JSON,"
-    fi
-    ALLOC_JSON="$ALLOC_JSON\"$ADDR\": { \"balance\": \"$BALANCE\" }"
-done
-
-# 4. Create Geth genesis.json (PoS / The Merge ready)
-# Key: NO clique config, terminalTotalDifficulty=0 means PoS from genesis
-echo "Creating Geth genesis.json (PoS from genesis)..."
-cat > "$OUTPUT_DIR/genesis.json" <<EOF
-{
-  "config": {
-    "chainId": $CHAIN_ID,
-    "homesteadBlock": 0,
-    "eip150Block": 0,
-    "eip155Block": 0,
-    "eip158Block": 0,
-    "byzantiumBlock": 0,
-    "constantinopleBlock": 0,
-    "petersburgBlock": 0,
-    "istanbulBlock": 0,
-    "muirGlacierBlock": 0,
-    "berlinBlock": 0,
-    "londonBlock": 0,
-    "arrowGlacierBlock": 0,
-    "grayGlacierBlock": 0,
-    "mergeNetsplitBlock": 0,
-    "shanghaiTime": 0,
-    "cancunTime": 0,
-    "terminalTotalDifficulty": 0,
-    "terminalTotalDifficultyPassed": true
-  },
-  "nonce": "0x0",
-  "timestamp": "$(printf '0x%x' $GENESIS_TIME)",
-  "extraData": "0x",
-  "gasLimit": "0x1c9c380",
-  "difficulty": "0x1",
-  "mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-  "coinbase": "0x0000000000000000000000000000000000000000",
-  "alloc": {
-    $ALLOC_JSON
-  }
-}
-EOF
-
-# 5. Check if lcli image exists, if not build it
-if ! docker image inspect atomica-lcli:latest > /dev/null 2>&1; then
-    echo "Building atomica-lcli image (this may take a while on first run)..."
-    docker build -t atomica-lcli:latest -f Dockerfile.genesis .
+# Move CL genesis
+# Found in metadata/genesis.ssz
+if [ -f "../$OUTPUT_DIR/metadata/genesis.ssz" ]; then
+    cp ../$OUTPUT_DIR/metadata/genesis.ssz ../$OUTPUT_DIR/beacon/genesis.ssz
+else
+    echo "Error: CL genesis.ssz not found in metadata"
+    ls -R ../$OUTPUT_DIR
+    exit 1
 fi
 
-# 6. Initialize Geth datadir
+# Initialize Geth
 echo "Initializing Geth datadir..."
 docker run --rm \
-  -v "$(pwd)/$OUTPUT_DIR:/data" \
-  ethereum/client-go:v1.13.14 \
-  init --datadir /data /data/genesis.json
+  -v "$(pwd)/../$OUTPUT_DIR/geth:/data" \
+  ethereum/client-go:v1.16.8 \
+  init /data/genesis.json
 
-# 7. Generate validator keys using lcli
-echo "Generating $NUM_VALIDATORS validator keys..."
+# Create jwtsecret
+openssl rand -hex 32 | tr -d "\n" > ../jwtsecret
+
+# Keys loop
+echo "Generating Validator Keys..."
 docker run --rm \
-  -v "$(pwd)/$VALIDATOR_DIR:/validator_keys" \
-  atomica-lcli:latest \
-  insecure-validators \
-  --count "$NUM_VALIDATORS" \
-  --base-dir /validator_keys \
-  --node-count 1
+  --entrypoint eth2-val-tools \
+  -v "$(pwd)/../$OUTPUT_DIR/validator_keys:/keys" \
+  ethpandaops/ethereum-genesis-generator:5.2.2 \
+  keystores \
+  --insecure \
+  --out-loc="/keys/out" \
+  --source-mnemonic="giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete" \
+  --source-min=0 \
+  --source-max="$NUM_VALIDATORS"
 
-# 8. Extract validator pubkeys for reference
-echo "Extracting validator public keys..."
-docker run --rm \
-  -v "$(pwd)/$VALIDATOR_DIR:/validator_keys" \
-  --entrypoint /bin/sh \
-  atomica-lcli:latest \
-  -c 'find /validator_keys -name "voting-keystore.json" -exec cat {} \; 2>/dev/null | grep -o "\"pubkey\":\"[^\"]*\"" | cut -d\" -f4' \
-  > "$VALIDATOR_DIR/pubkeys.txt" 2>/dev/null || true
-
-# Convert to JSON array
-if [ -s "$VALIDATOR_DIR/pubkeys.txt" ]; then
-    echo "[" > "$VALIDATOR_DIR/pubkeys.json"
-    first=true
-    while read -r pubkey; do
-        if [ -n "$pubkey" ]; then
-            if [ "$first" = true ]; then
-                first=false
-            else
-                echo "," >> "$VALIDATOR_DIR/pubkeys.json"
-            fi
-            echo "  \"$pubkey\"" >> "$VALIDATOR_DIR/pubkeys.json"
-        fi
-    done < "$VALIDATOR_DIR/pubkeys.txt"
-    echo "]" >> "$VALIDATOR_DIR/pubkeys.json"
-fi
-
-# 9. Generate Beacon Chain genesis state
-echo "Generating Beacon Chain genesis..."
-docker run --rm \
-  -v "$(pwd)/$OUTPUT_DIR:/testnet" \
-  -v "$(pwd)/$VALIDATOR_DIR:/validator_keys" \
-  atomica-lcli:latest \
-  new-testnet \
-  --spec mainnet \
-  --deposit-contract-address 0x4242424242424242424242424242424242424242 \
-  --testnet-dir /testnet \
-  --min-genesis-active-validator-count "$NUM_VALIDATORS" \
-  --min-genesis-time "$GENESIS_TIME" \
-  --genesis-delay 0 \
-  --genesis-fork-version 0x00000000 \
-  --altair-fork-epoch 0 \
-  --bellatrix-fork-epoch 0 \
-  --capella-fork-epoch 0 \
-  --deneb-fork-epoch 0 \
-  --eth1-id "$CHAIN_ID" \
-  --eth1-block-hash 0x0000000000000000000000000000000000000000000000000000000000000000 \
-  --eth1-follow-distance 1 \
-  --seconds-per-slot "$SECONDS_PER_SLOT" \
-  --seconds-per-eth1-block 14 \
-  --validator-count "$NUM_VALIDATORS" \
-  --interop-genesis-state \
-  --force
-
-# 10. Create deploy_block.txt (genesis block = 0)
-echo "0" > "$OUTPUT_DIR/deploy_block.txt"
-
-# 11. Summary
-echo ""
-echo "=== Genesis Generation Complete ==="
-echo "Execution Layer genesis: $OUTPUT_DIR/genesis.json"
-echo "Beacon Chain config:     $OUTPUT_DIR/config.yaml"
-echo "Genesis state:           $OUTPUT_DIR/genesis.ssz"
-echo "Validator keys:          $VALIDATOR_DIR/"
-echo "JWT secret:              $JWT_SECRET"
-echo ""
-echo "Test accounts (1000 ETH each):"
-for account in "${TEST_ACCOUNTS[@]}"; do
-    echo "  ${account%%:*}"
+echo "Importing keys to Lighthouse format..."
+# Create persistent data dir for validator client
+mkdir -p ../$OUTPUT_DIR/validator_keys/lighthouse-data
+# Create import script
+cat <<EOF > ../$OUTPUT_DIR/import_keys.sh
+#!/bin/sh
+for key in /keys/out/teku-keys/*.json; do
+    filename=\$(basename "\$key")
+    pubkey="\${filename%.json}"
+    secret="/keys/out/teku-secrets/\${pubkey}.txt"
+    echo "Importing \$pubkey"
+    lighthouse account validator import \\
+        --datadir /data \\
+        --keystore "\$key" \\
+        --password-file "\$secret" \\
+        --network mainnet \\
+        --reuse-password
 done
-echo ""
-echo "To start the testnet: docker compose up -d"
+EOF
+chmod +x ../$OUTPUT_DIR/import_keys.sh
+
+# Run import
+docker run --rm \
+  -v "$(pwd)/../$OUTPUT_DIR/validator_keys:/keys" \
+  -v "$(pwd)/../$OUTPUT_DIR/validator_keys/lighthouse-data:/data" \
+  -v "$(pwd)/../$OUTPUT_DIR/import_keys.sh:/import_keys.sh" \
+  atomica-lighthouse:latest \
+  /bin/sh /import_keys.sh
+
+# Create deploy_block.txt
+echo "0" > ../$OUTPUT_DIR/beacon/deploy_block.txt
+# Copy missing config files
+cp ../$OUTPUT_DIR/metadata/config.yaml ../$OUTPUT_DIR/beacon/config.yaml
+cp ../$OUTPUT_DIR/metadata/deposit_contract.txt ../$OUTPUT_DIR/beacon/deposit_contract.txt
+cp ../$OUTPUT_DIR/metadata/deposit_contract_block.txt ../$OUTPUT_DIR/beacon/deposit_contract_block.txt
+
+echo "Setup complete. Data in ../$OUTPUT_DIR"

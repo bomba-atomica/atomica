@@ -1,0 +1,14 @@
+# Generated testnet artifacts
+testnet/
+validator_keys/
+jwtsecret
+import-keys.sh
+*.env
+*.env.tmp
+
+# Build and runtime artifacts
+*.log
+beacon-data/
+validator-data/
+node_modules/
+bun.lock

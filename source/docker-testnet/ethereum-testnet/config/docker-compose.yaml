@@ -1,7 +1,7 @@
 services:
   # 1. Execution Layer (Contemporary Ethereum - Post-Merge)
   geth:
-    image: ethereum/client-go:v1.13.14
+    image: ethereum/client-go:v1.16.8
     container_name: eth-execution
     command:
       - --datadir=/data
@@ -26,8 +26,8 @@ services:
       - --gcmode=archive
       - --maxpeers=0
     volumes:
-      - ./testnet:/data
-      - ./jwtsecret:/secrets/jwtsecret:ro
+      - ../testnet/geth:/data
+      - ../jwtsecret:/secrets/jwtsecret:ro
     ports:
       - "8545:8545"
       - "8546:8546"
@@ -61,14 +61,15 @@ services:
       - --http-address=0.0.0.0
       - --http-port=5052
       - --http-allow-origin=*
+      - --suggested-fee-recipient=0x8943545177806ED17B9F23F0a21ee5948eCaa776
+      - --execution-timeout-multiplier=5
       - --disable-deposit-contract-sync
       - --allow-insecure-genesis-sync
-      - --disable-optimistic-finalized-sync
       - --disable-peer-scoring
       - --target-peers=0
     volumes:
-      - ./testnet:/testnet:ro
-      - ./jwtsecret:/secrets/jwtsecret:ro
+      - ../testnet/beacon:/testnet
+      - ../jwtsecret:/secrets/jwtsecret:ro
       - beacon-data:/data
     ports:
       - "5052:5052"
@@ -96,15 +97,13 @@ services:
       - --debug-level=info
       - --testnet-dir=/testnet
       - --beacon-nodes=http://beacon:5052
-      - --validators-dir=/validator_keys/node_1/validators
-      - --secrets-dir=/validator_keys/node_1/secrets
+      - --datadir=/data
       - --init-slashing-protection
       - --suggested-fee-recipient=0x8943545177806ED17B9F23F0a21ee5948eCaa776
       - --graffiti=atomica-testnet
     volumes:
-      - ./testnet:/testnet:ro
-      - ./validator_keys:/validator_keys
-      - validator-data:/data
+      - ../testnet/beacon:/testnet
+      - ../testnet/validator_keys/lighthouse-data:/data
 
 volumes:
   beacon-data:
