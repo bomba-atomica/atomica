@@ -21,11 +21,16 @@ mkdir -p $VALIDATOR_KEYS_DIR
 
 echo "🧬 Generating Artifacts..."
 
-# Set Genesis Timestamp to Now + 60s
-export EL_CL_GENESIS_TIMESTAMP=$(($(date +%s) + 60))
-export GENESIS_TIMESTAMP=$EL_CL_GENESIS_TIMESTAMP
+# Set Genesis Timestamp to NOW + 120s to ensure all containers start before genesis
+# This prevents the "syncing" deadlock where BN thinks it's behind because we missed Slot 0 during startup.
+DELAY=30
+NOW=$(($(date +%s) + $DELAY))
+export EL_CL_GENESIS_TIMESTAMP=$NOW
+export GENESIS_TIMESTAMP=$NOW
 
-# Create values.env from environment variables safely (quoting values with spaces)
+echo "🕒 Genesis Timestamp set to: $NOW (NOW + $DELAY seconds)"
+
+# Create values.env for python tools
 mkdir -p /config
 python3 -c 'import os; print("\n".join([f"{k}=\"{v}\"" for k,v in os.environ.items()]))' > /config/values.env
 echo "📄 values.env content:"
@@ -36,6 +41,10 @@ cat /config/values.env
 
 # CL Genesis - Requires EL genesis.json to be in place!
 /work/entrypoint.sh cl
+
+# Patch config.yaml to set MIN_GENESIS_TIME to our explicit timestamp
+# This ensures validators don't get confused by '0'
+sed -i "s/MIN_GENESIS_TIME: 0/MIN_GENESIS_TIME: $NOW/g" /data/metadata/config.yaml
 
 echo "📂 Debugging Metadata contents:"
 ls -la /data/metadata/
@@ -66,7 +75,7 @@ eth2-val-tools keystores \
   --out-loc="/keys/out" \
   --source-mnemonic="giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete" \
   --source-min=0 \
-  --source-max=8
+  --source-max=$NUMBER_OF_VALIDATORS
 
 # Move raw keys to shared volume so the import container can see them
 mkdir -p $VALIDATOR_KEYS_DIR/raw_keys
@@ -78,21 +87,26 @@ echo "� Creating Import Script for Validator Service..."
 cat <<EOF > $SHARED_ROOT/import_keys.sh
 #!/bin/sh
 set -e
-echo "📥 Importing Validators..."
-mkdir -p /data/validator_keys/lighthouse-data
+echo "📥 Importing Validators into separate directories..."
 
+i=1
 for key in /data/validator_keys/raw_keys/teku-keys/*.json; do
     filename=\$(basename "\$key")
     pubkey="\${filename%.json}"
     secret="/data/validator_keys/raw_keys/teku-secrets/\${pubkey}.txt"
     
-    echo "Importing \$pubkey"
+    val_dir="/data/validator-\$i"
+    mkdir -p "\$val_dir"
+
+    echo "Importing \$pubkey into \$val_dir"
     lighthouse account validator import \\
-        --datadir /data \\
+        --datadir "\$val_dir" \\
         --keystore "\$key" \\
         --password-file "\$secret" \\
         --testnet-dir /data/beacon-config \\
         --reuse-password
+    
+    i=\$((i + 1))
 done
 EOF
 chmod +x $SHARED_ROOT/import_keys.sh

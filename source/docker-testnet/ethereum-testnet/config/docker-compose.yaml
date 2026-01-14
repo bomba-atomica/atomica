@@ -23,9 +23,9 @@ services:
       - FULU_FORK_EPOCH=100000000
       
       # Genesis Config
-      - MIN_GENESIS_ACTIVE_VALIDATOR_COUNT=8
+      - MIN_GENESIS_ACTIVE_VALIDATOR_COUNT=4
       - GENESIS_FORK_VERSION=0x00000001
-      - NUMBER_OF_VALIDATORS=8
+      - NUMBER_OF_VALIDATORS=4
       - EL_AND_CL_MNEMONIC=giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete
     entrypoint: ["/bin/bash", "/generate.sh"]
 
@@ -41,7 +41,7 @@ services:
 
   # 3. Import Validator Keys (Uses official Lighthouse image)
   validator-import:
-    image: sigp/lighthouse:v5.1.0
+    image: sigp/lighthouse:v5.3.0
     depends_on:
       genesis:
         condition: service_completed_successfully
@@ -79,6 +79,7 @@ services:
       - --syncmode=full
       - --gcmode=archive
       - --maxpeers=0
+      - --txlookuplimit=0
     volumes:
       - testnet-data:/data
     ports:
@@ -94,7 +95,7 @@ services:
 
   # 5. Main Beacon Node
   beacon:
-    image: sigp/lighthouse:v5.1.0
+    image: sigp/lighthouse:v5.3.0
     container_name: eth-beacon
     restart: unless-stopped
     depends_on:
@@ -114,29 +115,25 @@ services:
       - --http-allow-origin=*
       - --suggested-fee-recipient=0x0000000000000000000000000000000000000000
       - --execution-timeout-multiplier=5
-      - --disable-deposit-contract-sync
       - --allow-insecure-genesis-sync
       - --disable-peer-scoring
       - --target-peers=0
+      - --staking
+      - --subscribe-all-subnets
+      - --always-prepare-payload
     volumes:
       - testnet-data:/data
     ports:
       - "5052:5052"
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:5052/eth/v1/node/version"]
-      interval: 5s
-      timeout: 5s
-      retries: 60
-      start_period: 30s
 
-  # 6. Main Validator Client
-  validator:
-    image: sigp/lighthouse:v5.1.0
-    container_name: eth-validator
+  # 6. Main Validator Clients
+  validator-1:
+    image: sigp/lighthouse:v5.3.0
+    container_name: eth-validator-1
     restart: unless-stopped
     depends_on:
       beacon:
-        condition: service_healthy
+        condition: service_started
       validator-import:
         condition: service_completed_successfully
     command:
@@ -145,10 +142,76 @@ services:
       - --debug-level=info
       - --testnet-dir=/data/beacon-config
       - --beacon-nodes=http://beacon:5052
-      - --datadir=/data
+      - --datadir=/data/validator-1
       - --init-slashing-protection
       - --suggested-fee-recipient=0x0000000000000000000000000000000000000000
-      - --graffiti=localnet
+      - --graffiti=val-1
+    volumes:
+      - testnet-data:/data
+
+  validator-2:
+    image: sigp/lighthouse:v5.3.0
+    container_name: eth-validator-2
+    restart: unless-stopped
+    depends_on:
+      beacon:
+        condition: service_started
+      validator-import:
+        condition: service_completed_successfully
+    command:
+      - lighthouse
+      - validator_client
+      - --debug-level=info
+      - --testnet-dir=/data/beacon-config
+      - --beacon-nodes=http://beacon:5052
+      - --datadir=/data/validator-2
+      - --init-slashing-protection
+      - --suggested-fee-recipient=0x0000000000000000000000000000000000000000
+      - --graffiti=val-2
+    volumes:
+      - testnet-data:/data
+
+  validator-3:
+    image: sigp/lighthouse:v5.3.0
+    container_name: eth-validator-3
+    restart: unless-stopped
+    depends_on:
+      beacon:
+        condition: service_started
+      validator-import:
+        condition: service_completed_successfully
+    command:
+      - lighthouse
+      - validator_client
+      - --debug-level=info
+      - --testnet-dir=/data/beacon-config
+      - --beacon-nodes=http://beacon:5052
+      - --datadir=/data/validator-3
+      - --init-slashing-protection
+      - --suggested-fee-recipient=0x0000000000000000000000000000000000000000
+      - --graffiti=val-3
+    volumes:
+      - testnet-data:/data
+
+  validator-4:
+    image: sigp/lighthouse:v5.3.0
+    container_name: eth-validator-4
+    restart: unless-stopped
+    depends_on:
+      beacon:
+        condition: service_started
+      validator-import:
+        condition: service_completed_successfully
+    command:
+      - lighthouse
+      - validator_client
+      - --debug-level=info
+      - --testnet-dir=/data/beacon-config
+      - --beacon-nodes=http://beacon:5052
+      - --datadir=/data/validator-4
+      - --init-slashing-protection
+      - --suggested-fee-recipient=0x0000000000000000000000000000000000000000
+      - --graffiti=val-4
     volumes:
       - testnet-data:/data
 
