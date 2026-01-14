@@ -26,6 +26,7 @@ services:
       # Genesis Config
       - MIN_GENESIS_ACTIVE_VALIDATOR_COUNT=4
       - GENESIS_FORK_VERSION=0x00000001
+      - GENESIS_DELAY=0
       - NUMBER_OF_VALIDATORS=4
       - EL_AND_CL_MNEMONIC=giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete
     entrypoint: ["/bin/bash", "/generate.sh"]
