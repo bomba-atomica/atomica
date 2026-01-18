@@ -25,7 +25,7 @@ The goal is to generate a succinct cryptographic proof that attests to the valid
 
 ### Private Witnesses (Inputs)
 - **`decrypted_bids`**: List of all valid bids (Price, Quantity, Bidder Public Key).
-- **`reserve_prices`**: The reserve price(s) set by the auctioneer/protocol.
+- **`reserve_prices`**: The reserve price(s) set by the **Seller**.
 
 ### Circuit Logic
 
