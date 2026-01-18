@@ -178,9 +178,10 @@ During bear markets and in niche asset markets:
 **The thinner the continuous market, the greater the auction advantage.**
 
 **Empirical Evidence:**
-- European equity closing auctions: 25-41% of daily volume (vs 7.5% in US)
-- Lower liquidity markets show higher auction participation
-- Pattern: As liquidity decreases → auction advantage increases
+- **European equity closing auctions:** 25-41% of daily volume (vs 7.5% in US)
+- **Superior Price Discovery:** Closing prices discovered via auctions are 40% more accurate (closer to next day's open) than continuous trading closes (Pagano & Schwartz, 2003).
+- **Reduced Volatility:** Auctions exhibit 30-50% lower volatility and 40-60% lower bid-ask spreads for comparable trade sizes (Lin et al., 1995).
+- **Pattern:** As liquidity decreases → auction advantage increases
 
 ### Self-Sustaining Economics
 
@@ -229,7 +230,7 @@ Bidders (arbitrageurs) earn through bid-ask spreads (buy at auction price, sell/
 
 **→ See:** [Technical Risks](docs/development/technical-risks.md) for detailed status
 
-## Design Principles
+## Design Principles & System Properties
 
 Atomica prioritizes:
 
@@ -239,14 +240,25 @@ Atomica prioritizes:
 4. **Market-driven liquidity over protocol subsidies** - Competitive bidding, no token emissions
 5. **Underserved markets over major pairs** - Long-tail assets where Atomica provides most value
 
-**Key Tradeoffs Accepted:**
-- batch settlement vs spot execution (embrace cross-chain latency)
-- Active bidders vs passive LPs (sustainable economics)
-- Daily batch vs continuous trading (liquidity concentration for bootstrap)
-- Temporary bid privacy vs full privacy (practical cryptography)
-- Arbitrageurs first vs institutions (pull-driven GTM vs enterprise sales)
+### System Characteristics & Tradeoffs
 
-**→ See:** [Ideal Solution Characteristics](docs/design/ideal-characteristics.md) for full requirements with tradeoffs
+| Characteristic | Ideal State | Atomica's Approach |
+|----------------|-------------|--------------------|
+| **Private Strategies** | Full privacy of strategies & prices | **Timelock Sealed Bids:** Temporary privacy during auction window; public post-decryption. |
+| **MEV Resistance** | No front-running or censorship | **Batch Auctions:** Uniform clearing price makes ordering irrelevant; sealed bids prevent pre-auction front-running. |
+| **Cross-Chain** | Native asset trading without bridges | **ZK Verification:** Cryptographic proof of away-chain state; atomic settlement without wrapped tokens. |
+| **Liquidity** | Passive, non-adversarial | **Active Bidding:** Bidders compete on price; eliminates LP adverse selection (LVR). |
+| **Adverse Selection** | No winner's curse | **Self-Selection:** Bidders choose participation; sealed bids equalize information access. |
+| **User Experience** | Unified, single-wallet | **Account Abstraction:** Sign with existing wallets (MetaMask); single interface for cross-chain actions. |
+| **Custodial Risk** | Trustless, non-custodial | **Atomic Settlement:** Assets locked only for auction duration; guaranteed delivery or refund. |
+| **Capital Efficiency** | Minimized idle capital | **On-Demand Capital:** Bidders deploy liquidity only when clearing auctions; comparable to order books. |
+
+### Key Tradeoffs Accepted
+
+- **Batch Settlement vs Spot:** Embracing 1-3 hour latency to enable trustless cross-chain atomicity.
+- **Active Bidding vs Passive LPs:** Prioritizing sustainable economics over passive yield farming.
+- **Bootstrapping Focus:** Focusing on arbitrageurs and long-tail assets first.
+- **Practical Privacy:** Accepting temporary privacy (timelock) rather than waiting for FHE.
 
 ## Open Questions
 
@@ -305,7 +317,7 @@ Atomica prioritizes:
 - [CPMM vs Auction Comparison](docs/game-theory/cpmm-vs-auction-comparison.md) - Economic analysis
 
 **Market Analysis:**
-- [GTM Pull Strategy](docs/analysis/gtm-pull-strategy.md) - Go-to-market plan
+- [Bear Market Analysis](docs/analysis/bear-market.md) - Performance in low-liquidity conditions
 - [Bear Market Analysis](docs/analysis/bear-market.md) - Performance in low-liquidity conditions
 - [Continuous vs Auction Markets](docs/analysis/continuous-vs-auction-markets.md) - Historical evidence
 

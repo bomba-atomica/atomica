@@ -1,9 +1,9 @@
-> ⚠️ **HISTORICAL STRATEGY**
+> ⚠️ **STRATEGIC CONSIDERATIONS**
 >
-> This document describes a "Pull-Driven" GTM strategy that is not currently being pursued.
-> It is preserved for analysis and historical context only.
+> This document outlines potential GTM strategies and considerations.
+> It is not a finalized plan but a collection of ideas and analysis.
 
-# Atomica Go-to-Market Strategy: Pull-Driven Approach
+# Go-to-Market Considerations
 
 ## Executive Summary
 
