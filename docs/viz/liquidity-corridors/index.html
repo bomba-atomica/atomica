@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atomica Liquidity Corridors</title>
+    <!-- D3 Core -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- D3 Geo Projections (Robinson) -->
+    <script src="https://d3js.org/d3-geo-projection.v4.min.js"></script>
+    <!-- TopoJSON -->
+    <script src="https://unpkg.com/topojson-client@3"></script>
+    <style>
+        body {
+            margin: 0;
+            background-color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            z-index: 100;
+            min-width: 250px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        input[type="range"] {
+            width: 100%;
+        }
+
+        .value-display {
+            font-size: 12px;
+            color: #7f8c8d;
+            text-align: right;
+        }
+
+        #map-container {
+            width: 95vw;
+            height: 90vh;
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .coastline {
+            fill: none;
+            stroke: #2c3e50;
+            stroke-width: 0.5px;
+        }
+
+        .sphere {
+            fill: #ffffff;
+            stroke: none;
+        }
+
+        .corridor-blue {
+            fill: #3498db;
+            fill-opacity: 0.3;
+            filter: url(#blur);
+        }
+
+        .corridor-green {
+            fill: #27ae60;
+            fill-opacity: 0.3;
+            filter: url(#blur);
+        }
+
+        .label {
+            font-size: 12px;
+            fill: #2c3e50;
+            text-anchor: middle;
+        }
+
+        .label-small {
+            font-size: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="controls">
+        <div class="control-group">
+            <label>Western Daily (UTC)</label>
+            <input type="range" id="western-time" min="0" max="23.75" step="0.25" value="16.25">
+            <div class="value-display" id="western-time-display">16:15 UTC</div>
+        </div>
+        <div class="control-group">
+            <label>Eastern Daily (UTC)</label>
+            <input type="range" id="eastern-time" min="0" max="23.75" step="0.25" value="7.75">
+            <div class="value-display" id="eastern-time-display">07:45 UTC</div>
+        </div>
+        <div class="control-group">
+            <label>Time of Year (Day)</label>
+            <input type="range" id="day-of-year" min="1" max="365" step="1" value="172">
+            <div class="value-display" id="day-of-year-display">Summer Solstice (Day 172)</div>
+        </div>
+    </div>
+    <div id="map-container"></div>
+
+    <script>
+        const width = 1200;
+        const height = 600;
+
+        const svg = d3.select("#map-container")
+            .append("svg")
+            .attr("viewBox", `0 0 ${width} ${height}`)
+            .attr("preserveAspectRatio", "xMidYMid meet");
+
+        const defs = svg.append("defs");
+        defs.append("filter")
+            .attr("id", "blur")
+            .append("feGaussianBlur")
+            .attr("stdDeviation", 10);
+
+        const projection = d3.geoRobinson()
+            .scale(180)
+            .translate([width / 2, height / 2]);
+
+        const path = d3.geoPath().projection(projection);
+
+        function formatTime(decimalHours) {
+            const h = Math.floor(decimalHours);
+            const m = Math.round((decimalHours - h) * 60);
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} UTC`;
+        }
+
+        function getDayName(day) {
+            if (day >= 170 && day <= 174) return "Summer Solstice";
+            if (day >= 353 && day <= 357) return "Winter Solstice";
+            if (day >= 78 && day <= 82) return "Spring Equinox";
+            if (day >= 263 && day <= 267) return "Autumn Equinox";
+            return `Day ${day}`;
+        }
+
+        // Generate longitude band polygons
+        function generateBand(lonStart, lonEnd, step = 5) {
+            const points = [];
+            // Handle wrapping across 180°
+            let effectiveLonEnd = lonEnd;
+            if (effectiveLonEnd < lonStart) {
+                effectiveLonEnd += 360;
+            }
+
+            for (let lon = lonStart; lon <= effectiveLonEnd; lon += step) points.push([lon > 180 ? lon - 360 : lon, 90]);
+            points.push([effectiveLonEnd > 180 ? effectiveLonEnd - 360 : effectiveLonEnd, 90]);
+            for (let lat = 90; lat >= -90; lat -= step) points.push([effectiveLonEnd > 180 ? effectiveLonEnd - 360 : effectiveLonEnd, lat]);
+            points.push([effectiveLonEnd > 180 ? effectiveLonEnd - 360 : effectiveLonEnd, -90]);
+            for (let lon = effectiveLonEnd; lon >= lonStart; lon -= step) points.push([lon > 180 ? lon - 360 : lon, -90]);
+            points.push([lonStart, -90]);
+            for (let lat = -90; lat <= 90; lat += step) points.push([lonStart, lat]);
+            points.push([lonStart, 90]);
+
+            return { type: "Feature", geometry: { type: "Polygon", coordinates: [points] } };
+        }
+
+        function getDSTShift(lon, day) {
+            // Refined Regional DST Model
+            // US/Americas: 2nd Sunday March (~Day 69) to 1st Sunday Nov (~Day 307)
+            const isAmericasDST = day >= 69 && day <= 307;
+            // UK/Europe: Last Sunday March (~Day 90) to Last Sunday Oct (~Day 300)
+            const isEuropeDST = day >= 90 && day <= 300;
+
+            // Americas (approx SF to Atlantic mid-ocean)
+            if (lon <= -45 && lon >= -140) {
+                return isAmericasDST ? 1 : 0;
+            }
+            // UK/Europe/W. Africa (bridge zone)
+            if (lon > -45 && lon < 45) {
+                return isEuropeDST ? 1 : 0;
+            }
+            // Asia, Dubai, Japan - No DST (Dubai is 55, Tokyo is 139)
+            return 0;
+        }
+
+        function calculateBoundaries(utcTime, day) {
+            // Find longitude where UTCTime corresponds to 8am/6pm local time.
+            // Lon = (LocalTime - UTCTime - DST) * 15
+
+            // Start Edge (8am)
+            const lon8am_guess = (8 - utcTime) * 15;
+            const dst8am = getDSTShift(lon8am_guess > 180 ? lon8am_guess - 360 : lon8am_guess, day);
+            let lonStart = (8 - utcTime - dst8am) * 15;
+
+            // End Edge (6pm)
+            const lonEnd_guess = (18 - utcTime) * 15;
+            const dstEnd = getDSTShift(lonEnd_guess > 180 ? lonEnd_guess - 360 : lonEnd_guess, day);
+            let lonEnd = (18 - utcTime - dstEnd) * 15;
+
+            // Normalize to [-180, 180]
+            while (lonStart > 180) lonStart -= 360;
+            while (lonStart < -180) lonStart += 360;
+            while (lonEnd > 180) lonEnd -= 360;
+            while (lonEnd < -180) lonEnd += 360;
+
+            return { lonStart, lonEnd };
+        }
+
+        let worldData, landData;
+
+        async function init() {
+            try {
+                worldData = await d3.json("https://unpkg.com/world-atlas@2.0.2/countries-110m.json");
+                landData = topojson.feature(worldData, worldData.objects.land);
+                update();
+            } catch (error) {
+                console.error("Error loading map data:", error);
+            }
+        }
+
+        function update() {
+            const westernUTC = +document.getElementById('western-time').value;
+            const easternUTC = +document.getElementById('eastern-time').value;
+            const dayOfYear = +document.getElementById('day-of-year').value;
+
+            document.getElementById('western-time-display').innerText = formatTime(westernUTC);
+            document.getElementById('eastern-time-display').innerText = formatTime(easternUTC);
+            document.getElementById('day-of-year-display').innerText = `${getDayName(dayOfYear)} (${dayOfYear})`;
+
+            const corridors = [
+                {
+                    name: 'Atlantic Bridge',
+                    ...calculateBoundaries(westernUTC, dayOfYear),
+                    colorClass: 'corridor-green',
+                    time: formatTime(westernUTC),
+                    hubs: 'SF → NY → LON'
+                },
+                {
+                    name: 'Euro-Asia Bridge',
+                    ...calculateBoundaries(easternUTC, dayOfYear),
+                    colorClass: 'corridor-blue',
+                    time: formatTime(easternUTC),
+                    hubs: 'LON → DXB → TYO'
+                }
+            ];
+
+            svg.selectAll(".map-content").remove();
+            const g = svg.append("g").attr("class", "map-content");
+
+            // Background sphere
+            g.append("path")
+                .datum({ type: "Sphere" })
+                .attr("class", "sphere")
+                .attr("d", path);
+
+            // Coastlines
+            g.append("path")
+                .datum(landData)
+                .attr("class", "coastline")
+                .attr("d", path);
+
+            // Corridors
+            corridors.forEach(c => {
+                const band = generateBand(c.lonStart, c.lonEnd);
+                g.append("path")
+                    .datum(band)
+                    .attr("class", c.colorClass)
+                    .attr("d", path);
+
+                let span = c.lonEnd - c.lonStart;
+                if (span < 0) span += 360;
+                let midLon = c.lonStart + span / 2;
+                while (midLon > 180) midLon -= 360;
+                while (midLon < -180) midLon += 360;
+
+                const centroid = projection([midLon, -20]);
+                if (centroid) {
+                    const labelGroup = g.append("g")
+                        .attr("transform", `translate(${centroid[0]}, ${centroid[1]})`);
+
+                    labelGroup.append("text")
+                        .attr("class", "label")
+                        .attr("dy", "0")
+                        .style("font-weight", "bold")
+                        .text(c.name);
+
+                    labelGroup.append("text")
+                        .attr("class", "label")
+                        .attr("dy", "1.2em")
+                        .text(c.time);
+
+                    labelGroup.append("text")
+                        .attr("class", "label label-small")
+                        .attr("dy", "2.4em")
+                        .text(c.hubs);
+                }
+            });
+        }
+
+        document.getElementById('western-time').oninput = update;
+        document.getElementById('eastern-time').oninput = update;
+        document.getElementById('day-of-year').oninput = update;
+
+        init();
+    </script>
+</body>
+
+</html>

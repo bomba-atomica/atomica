@@ -13,32 +13,66 @@ Atomica operates two daily batch auctions strategically timed as "Global Bridges
 
 ---
 
-## 1. Western Daily: The Atlantic Bridge (16:15 UTC)
+## 1. Quality of Life (QoL) Metrics
+
+To ensure high participation, we analyze timing through two distinct Quality of Life lenses:
+
+### 1.1 Seller Operationalization (High Overhead)
+- **The Buffer**: "Auction Start" is the deadline for sellers to sign lock transactions.
+- **Requirement**: Sellers often need **2 hours of lead time** before the start to coordinate multisigs and operationalize the trade. 
+- **QoL Failure**: A deadline at 8:15 AM local time implies a coordination window starting at 6:15 AM—a "Poor" QoL for most humans.
+
+### 1.2 Bidder Flexibility (Low Overhead)
+- **The Window**: Bidders can submit at any point during the auction window or pre-plan bids up to 24h in advance.
+- **QoL Success**: Bidders are desk-independent. As long as the auction window exists during their daytime (for manual oversight) or they have lead time to set automated parameters, QoL is "Good."
+
+---
+
+## 2. Western Daily: The Atlantic Bridge (16:15 UTC)
 
 ### Strategic Goal
 To capture the high-volume overlap of the New York morning institutional flow and the European afternoon peak, while anchoring to the desk arrival of San Francisco teams.
 
-### Hub Status at 16:15 UTC
-- **San Francisco (8:15 AM PT):** Professional desk arrival. First tactical window of the day.
+### Hub Status at 16:15 UTC (Standard Time)
+- **San Francisco (8:15 AM PT):** 
+    - **Institutional**: Professional desk arrival. First tactical window of the day.
+    - **"SF Degenerate"**: Poor QoL. With an 11:00 AM wake-up preference, the 8:15 AM deadline (requiring 6:15 AM prep) creates a real-world coordination friction.
 - **New York (11:15 AM ET):** Institutional peak morning flow. Deepest volume window for US-based desks.
 - **London/Frankfurt (4:15 PM GMT / 5:15 PM CET):** High-activity afternoon session. Desks are still fully staffed and active.
 
 ---
 
-## 2. Eastern Daily: The Euro-Asia Bridge (07:45 UTC)
+## 3. Eastern Daily: The Euro-Asia Bridge (07:45 UTC)
 
 ### Strategic Goal
 To bridge the European morning arrival with the "Closing Cross" liquidity of the Tokyo and Pan-Asian sessions.
 
-### Hub Status at 07:45 UTC
-- **Tokyo (4:45 PM JST):** Closing session. Market-makers and desks are squaring positions for the daily close.
+### Hub Status at 07:45 UTC (Standard Time)
+- **Tokyo (4:45 PM JST):** Closing session. Market-makers and desks are squaring positions for the daily close. **Ideal QoL.**
 - **Singapore/Hong Kong (3:45 PM SGT/HKT):** Afternoon session peak.
-- **London/Frankfurt (7:45 AM GMT / 8:45 AM CET):** Desk arrival. This captures the first "at-desk" coordination of the European morning.
+- **London/Frankfurt (7:45 AM GMT / 8:45 AM CET):** Desk arrival. High friction for sellers needing 2h prep (5:45 AM GMT start).
 - **Dubai (11:45 AM GST):** Mid-day peak activity.
 
 ---
 
-## 3. Support for Professional Participation
+## 4. Trader Archetypes & Coordination Issues
+
+Real-world coordination is governed by trader archetypes rather than just timezone math.
+
+| Archetype | Active Hours | QoL Constraint |
+| :--- | :--- | :--- |
+| **Institutional** | 09:00 – 18:00 | Require standard business hours for compliance & multisig. |
+| **SF Degenerate** | 11:00 – 03:00 | "Don't get out of bed early." High friction for morning deadlines. |
+
+### The "Atlantic Gap" Critique
+While the **Western Daily (16:15 UTC)** is perfectly centered on NY/London, it creates a significant burden for **SF-based Sellers**:
+1. Items can be listed 24h in advance.
+2. However, the final signature deadline (8:15 AM local) forces an "early rise" for multisig signers.
+3. Bidders face no such constraint as they can bid throughout the previous 24h or during their local daytime afternoon.
+
+---
+
+## 5. Support for Professional Participation
 
 Atomica's timing focuses on **Professional Liquidity Events**. By 07:45 and 16:15 local time, desks in London and SF are generally staffed, daily briefings are complete, and multi-sig signers are available to coordinate trades. 
 
@@ -51,7 +85,7 @@ Similarly, the 4:45 PM JST window in Tokyo captures the final burst of activity 
 
 ---
 
-## 4. Uncovered Windows
+## 6. Uncovered Windows
 
 The primary gaps remain:
 - **US Market Close (21:00 UTC):** Occurs 4.5 hours after the Western Daily auction. (Low crypto-native institutional priority).
@@ -59,23 +93,18 @@ The primary gaps remain:
 
 ---
 
-## 5. Seasonal Performance & Daylight Saving Impact
+## 7. Seasonal Performance & Daylight Saving Impact
 
 Atomica maintains a **Fixed UTC** schedule. While this causes a 1-hour shift in local time for Western hubs, it ensures permanent stability for non-DST hubs like Tokyo, Singapore, and Dubai.
 
 ### Local Time Performance (07:45 & 16:15 UTC)
 
-| Hub | Winter Local | Summer Local | Analysis |
+| Hub | Winter Local | Summer Local | QoL Analysis |
 | :--- | :--- | :--- | :--- |
-| **Tokyo** | **4:45 PM** | **4:45 PM** | **Permanent Anchor.** Constant closing cross coverage. |
-| **London** | **7:45 AM** | **8:45 AM** | **Improved.** Summer arrival (8:45 AM) allows better desk readiness. |
-| **New York** | **11:15 AM**| **12:15 PM**| **High Liquidity.** Remains in the peak US institutional window. |
-| **SF** | **8:15 AM** | **9:15 AM** | **Improved.** Reduces morning coordination friction for multi-sig. |
-
-### Why Fixed UTC Wins:
-1. **Network Regularity:** Avoids biannual "drift weeks" where US/UK DST dates diverge, preventing settlement confusion.
-2. **Institutional Sync:** Professional traders in Asia (who do not use DST) are not forced to follow Western seasonal shifts.
-3. **Smart Contract Simplicity:** Eliminates the need for complex DST-aware logic in time-lock encryption or settlement triggers.
+| **Tokyo** | **4:45 PM** | **4:45 PM** | **Permanent Anchor.** Constant closing cross coverage. Perfect QoL. |
+| **London** | **7:45 AM** | **8:45 AM** | **Friction.** Summer arrival (8:45 AM) reduces prep friction vs Winter (7:45 AM). |
+| **New York** | **11:15 AM**| **12:15 PM**| **High Liquidity.** Ideally suited for both Institutional and Degen archetypes. |
+| **SF** | **8:15 AM** | **9:15 AM** | **Friction.** Winter (8:15 AM) is a major "Degen" coordination blocker. |
 
 ---
 
