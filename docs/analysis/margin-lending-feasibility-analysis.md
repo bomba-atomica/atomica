@@ -140,7 +140,7 @@ The `???` step is **selling ETH for USDC on external market**, which:
 2. User auctions USDC for ETH
 3. Auction clears at 0.0005 ETH/USDC ($2,000/ETH)
 4. **Atomic transaction:**
-   - User receives 50 ETH from MMs
+   - User receives 50 ETH from Bidders
    - Calculate repayment: 100,000 USDC × 0.0005 = 50 ETH principal
    - Interest: 150 USDC × 0.0005 = 0.075 ETH
    - User sends 50.075 ETH to LP Alice
@@ -150,7 +150,7 @@ The `???` step is **selling ETH for USDC on external market**, which:
 
 **Why Mode 2 is more feasible:**
 - User borrows USDC, locks it in auction
-- User receives ETH from winning MMs
+- User receives ETH from winning Bidders
 - User repays LP in ETH (same asset just received)
 - **No external market dependency within atomic transaction**
 
@@ -372,7 +372,7 @@ Flash loans work for:
 **Why:**
 - Math assumes 0.15% per transaction × many transactions per day
 - But transactions are NOT atomic (settlement gap)
-- Real lending period is 24-48 hours (futures delivery model)
+- Real lending period is 24-48 hours (batch settlement model)
 - Realistic APY: 0.15% per 24 hours = 54.75% APY (still good, but not 400%)
 
 **Correction:**
@@ -524,7 +524,7 @@ T=48h:  bidder repays LP $199K + $298.50 interest = $199,298.50
 - ✅ Interest rate: 0.15% per 24 hours = ~55% APY
 - ✅ Collateralized with Open Libra tokens
 - ✅ Low default risk (short duration + overcollateralization)
-- ✅ Economically viable for both LPs and MMs
+- ✅ Economically viable for both LPs and Bidders
 
 **Capital Efficiency Benefits:**
 - ✅ bidders can bid with 10x leverage (vs. requiring full capital)

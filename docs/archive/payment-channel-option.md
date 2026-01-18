@@ -1,3 +1,11 @@
+> ⚠️ **DEPRECATED DOCUMENT**
+>
+> This document is archived for historical reference only.
+> It may contain outdated information, abandoned ideas, or incorrect statements.
+> Do NOT use this document as a source of truth.
+>
+> **Canonical sources:** See [PRD.md](/PRD.md) and [README.md](/README.md)
+
 # Payment Channel Implementation Analysis for Atomic Auctions
 
 ## Executive Summary
@@ -72,7 +80,7 @@ Payment channel implementation of Atomic Auctions is **technically possible** bu
 #### Option 1: Multi-Party Channel Factories
 
 **Design:**
-- Auctioneer opens channels with N market makers
+- Seller opens channels with N Bidders
 - Each auction happens off-chain via signed messages from all participants
 - Winning bidder's channel state updates to reflect transfer
 - Periodic on-chain settlement to close auctions
@@ -81,12 +89,12 @@ Payment channel implementation of Atomic Auctions is **technically possible** bu
 ```
 Channel Setup (On-Chain):
 - User locks 100 ETH on Ethereum (Away chain)
-- N market makers each lock USDC on Solana (Home chain)
+- N Bidders each lock USDC on Solana (Home chain)
 - Multi-signature contracts on both chains
 
 Auction Execution (Off-Chain):
-- Auctioneer broadcasts: "Selling 100 ETH, reserve $1,950"
-- Market makers sign bids: MM1 → "40 ETH @ $2,000", MM2 → "60 ETH @ $1,980"
+- Seller broadcasts: "Selling 100 ETH, reserve $1,950"
+- Bidders sign bids: MM1 → "40 ETH @ $2,000", MM2 → "60 ETH @ $1,980"
 - Auction clears at uniform price off-chain
 - Winner signs state update acknowledging obligation
 - All parties sign new channel state
@@ -99,8 +107,8 @@ Settlement (On-Chain):
 
 **Why This Is Problematic:**
 
-1. **Capital Lock-Up:** Auctioneer must open channels with ALL potential bidders in advance
-   - If 100 market makers exist, need 100 separate channels
+1. **Capital Lock-Up:** Seller must open channels with ALL potential bidders in advance
+   - If 100 Bidders exist, need 100 separate channels
    - Each channel requires locked funds (capital inefficiency)
    - Channels must be rebalanced frequently
 
@@ -118,22 +126,22 @@ Settlement (On-Chain):
 #### Option 2: Virtual Channels with Routing
 
 **Design:**
-- Auctioneer doesn't need direct channels with all market makers
+- Seller doesn't need direct channels with all Bidders
 - Uses intermediary routing nodes (like Lightning Network)
 - Bids routed through network, settlement flows back
 
 **Implementation Requirements:**
 ```
 Network Topology:
-- Auctioneer ↔ Hub1 ↔ MM1, MM2, MM3
-- Auctioneer ↔ Hub2 ↔ MM4, MM5
-- Market makers don't need direct channels with auctioneer
+- Seller ↔ Hub1 ↔ MM1, MM2, MM3
+- Seller ↔ Hub2 ↔ MM4, MM5
+- Bidders don't need direct channels with auctioneer
 
 Auction Flow:
-1. Auctioneer announces auction via routing network
-2. MMs submit bids through their hub connections
+1. Seller announces auction via routing network
+2. Bidders submit bids through their hub connections
 3. Auction clears off-chain
-4. Payment routes through network: MM → Hub → Auctioneer
+4. Payment routes through network: MM → Hub → Seller
 ```
 
 **Why This Is Problematic:**
@@ -157,20 +165,20 @@ Auction Flow:
 
 **Design:**
 - Use Hash Time-Locked Contracts for cross-chain atomicity
-- Market maker locks USDC on Solana, reveals secret if auctioneer locks ETH on Ethereum
+- Bidder locks USDC on Solana, reveals secret if auctioneer locks ETH on Ethereum
 - Traditional atomic swap mechanism
 
 **Implementation Requirements:**
 ```
 Phase 1: Commitment
-- Auctioneer locks 100 ETH on Ethereum with HTLC (secret hash H)
+- Seller locks 100 ETH on Ethereum with HTLC (secret hash H)
 - Winning MM locks 199,000 USDC on Solana with same hash H
 - Both have 24-hour timeout windows
 
 Phase 2: Reveal
-- Auctioneer reveals secret S (where H = hash(S))
+- Seller reveals secret S (where H = hash(S))
 - MM claims ETH on Ethereum using S
-- Auctioneer claims USDC on Solana using S
+- Seller claims USDC on Solana using S
 
 Phase 3: Timeout (if failure)
 - After 24 hours, parties reclaim locked funds
@@ -180,7 +188,7 @@ Phase 3: Timeout (if failure)
 
 1. **Long Timeout Periods:** 24+ hours required for security
    - Capital locked for entire period
-   - Poor capital efficiency for market makers
+   - Poor capital efficiency for Bidders
    - Current design settles in 10-20 minutes
 
 2. **Not Really a Payment Channel:** This is just atomic swaps
@@ -232,13 +240,13 @@ Only **enhanced privacy** is a clear win, but this conflicts with the uniform pr
 **1. Capital Inefficiency (Fatal Flaw)**
 
 **Current Design:**
-- Market makers bring capital only when bidding on specific auctions
+- Bidders bring capital only when bidding on specific auctions
 - No pre-commitment or locked funds
 - Capital can be reused immediately across different auctioneers
 - Flash loan model enables 10-20x leverage (see liquidity-provision.md)
 
 **Payment Channel Design:**
-- Market makers must lock funds in channels with specific auctioneers
+- Bidders must lock funds in channels with specific auctioneers
 - Funds unavailable for other opportunities
 - Must maintain channels with ALL potential auctioneers (100s of channels)
 - Channel rebalancing adds complexity and cost
@@ -266,7 +274,7 @@ Payment Channel Design:
 **2. Auction Mechanism Incompatibility (Fatal Flaw)**
 
 **Current Design:**
-- N market makers compete in uniform price auction
+- N Bidders compete in uniform price auction
 - Bids aggregated, sorted, clearing price determined algorithmically
 - All bidders pay same clearing price
 - Game-theoretically sound (see shill-bidding-analysis.md)
@@ -328,11 +336,11 @@ Payment Channel Design: 100 auctions via HTLCs
 **Current Design:**
 - Open market: any MM can bid on any auction
 - No pre-commitment required
-- Market makers discover auctions dynamically
+- Bidders discover auctions dynamically
 - Competitive bidding from all participants
 
 **Payment Channel Design:**
-- MMs can only bid on auctions from users they have channels with
+- Bidders can only bid on auctions from users they have channels with
 - Opening new channel requires on-chain transaction (defeats purpose)
 - Routing through hubs introduces:
   - Fees (reducing MM profitability)
@@ -345,12 +353,12 @@ Scenario: New user wants to auction 100 ETH
 
 Current Design:
 - Announces auction on Home chain
-- All 100 market makers can bid
+- All 100 Bidders can bid
 - Competitive pricing (tight spreads)
 
 Payment Channel Design:
 - New user has no existing channels
-- Must wait to establish channels with MMs (on-chain txs)
+- Must wait to establish channels with Bidders (on-chain txs)
 - OR route through hub (fees + centralization)
 - Reduces competition, worse prices for user
 ```
@@ -360,15 +368,15 @@ Payment Channel Design:
 **5. Liveness Requirements (Significant Disadvantage)**
 
 **Current Design:**
-- Market makers run "always-online bid automators" (see PRD:450)
+- Bidders run "always-online bid automators" (see PRD:450)
 - These are lightweight processes that can bid automatically
-- Auctioneer submits auction and walks away
+- Seller submits auction and walks away
 - Settlement happens automatically via ZK proofs
 
 **Payment Channel Design:**
-- Both auctioneer AND all participating MMs must be online simultaneously
+- Both auctioneer AND all participating Bidders must be online simultaneously
 - If any party goes offline, their channel is unavailable
-- Reduces effective competition (some MMs unreachable)
+- Reduces effective competition (some Bidders unreachable)
 - Poor user experience (must coordinate availability)
 
 **Verdict:** Payment channels introduce **unacceptable liveness requirements** incompatible with passive auction participation.
@@ -377,7 +385,7 @@ Payment Channel Design:
 
 **Current Design:**
 - Flash loan P2P lending enables 10-20x leverage (see liquidity-provision.md)
-- Market makers borrow, win auction, repay in single atomic transaction
+- Bidders borrow, win auction, repay in single atomic transaction
 - Dramatically lowers capital requirements ($20K → $200K bidding power)
 - Compresses spreads through increased competition
 
@@ -385,11 +393,11 @@ Payment Channel Design:
 - No equivalent to flash loans in payment channels
 - Funds must be pre-locked in channels (no borrowing)
 - Margin lending would require separate channels with LPs
-- Complexity explodes (MM ↔ LP channel + LP ↔ Auctioneer channel + routing)
+- Complexity explodes (MM ↔ LP channel + LP ↔ Seller channel + routing)
 
 **Example:**
 ```
-Current Design: Market Maker with $20K
+Current Design: Bidder with $20K
 
 - Deposits $20K Open Libra collateral
 - Borrows $180K from LP per auction
@@ -402,7 +410,7 @@ Payment Channel Design:
 - Must lock $200K in channels upfront (10x more capital)
 - OR build complex multi-party channel network:
   - MM ↔ LP channel (borrow funds)
-  - LP ↔ Auctioneer channel (route payment)
+  - LP ↔ Seller channel (route payment)
   - Requires 3-party state updates
   - Exponentially more complex
 ```
@@ -417,7 +425,7 @@ Payment Channel Design:
 | **Settlement Speed** | 10-20 minutes (ZK proof generation) | 24+ hours (HTLC timeouts) | **ZK Design (96x faster)** |
 | **Cost Per Auction** | $0.08 (batched ZK proofs) | $1-10 (channel operations + routing) | **ZK Design (12-125x cheaper)** |
 | **Auction Mechanism** | Native support (on-chain uniform price) | Incompatible (requires workarounds) | **ZK Design (fundamental)** |
-| **Competition** | Open (any MM can bid) | Fragmented (only channeled MMs) | **ZK Design** |
+| **Competition** | Open (any MM can bid) | Fragmented (only channeled Bidders) | **ZK Design** |
 | **Leverage Support** | Native (flash loan P2P lending) | Not practical (would need complex routing) | **ZK Design** |
 | **Liveness** | Passive (bid automators) | Active (all parties online) | **ZK Design** |
 | **Privacy** | Public auctions (intentional for game theory) | Private updates | **Payment Channels** |
@@ -430,17 +438,17 @@ Payment Channel Design:
 
 ### Hybrid: Payment Channels for High-Frequency Users
 
-**Idea:** Offer payment channel option for users who auction frequently with same market makers.
+**Idea:** Offer payment channel option for users who auction frequently with same Bidders.
 
 **Example:**
-- Alice auctions 100 ETH every day to the same 5 market makers
-- Opens channels with those 5 MMs
+- Alice auctions 100 ETH every day to the same 5 Bidders
+- Opens channels with those 5 Bidders
 - Runs auctions off-chain, settles weekly on-chain
 
 **Analysis:**
 - **Pros:** Lower costs for high-frequency users
 - **Cons:**
-  - Fragments liquidity (channel MMs vs. open market MMs)
+  - Fragments liquidity (channel Bidders vs. open market Bidders)
   - Reduces competition (only 5 bidders vs. 100)
   - Complex to maintain dual system
   - Niche use case (most users won't auction daily)
@@ -452,7 +460,7 @@ Payment Channel Design:
 **Idea:** Use state channels just for collecting bids, settle auction on-chain.
 
 **Example:**
-- MMs open state channels with auction contract
+- Bidders open state channels with auction contract
 - Submit bids off-chain (lower cost, privacy)
 - Auction clears on-chain using submitted bids
 - Settlement via current ZK mechanism

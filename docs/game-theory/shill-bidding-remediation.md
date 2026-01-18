@@ -14,7 +14,7 @@ References to "ZK proofs of bid validity" in this document are now **deprecated*
 
 ## 1. Introduction & Context
 
-Atomica implements trustless cross-chain atomic swaps via daily batch auctions with futures delivery. Bidders submit sealed bids to acquire locked user assets, with settlement occurring 12-24 hours post-auction. The auction uses a uniform price mechanism where all winning bidders pay the same clearing price.
+Atomica implements trustless cross-chain atomic swaps via daily batch auctions with batch settlement. Bidders submit sealed bids to acquire locked user assets, with settlement occurring 12-24 hours post-auction. The auction uses a uniform price mechanism where all winning bidders pay the same clearing price.
 
 ### Why Shill Bidding Matters
 
@@ -157,7 +157,7 @@ Atomica employs a multi-layered defense architecture combining economic, cryptog
 - **Defense**: Increases attack cost, enables bidder response time
 
 **Settlement Delay (12-24 hours):**
-- Futures delivery model reduces inventory risk premium
+- batch settlement model reduces inventory risk premium
 - Bidders can hedge positions post-auction
 - Reduces urgency-driven bidding behavior
 - **Defense**: Dampens price volatility manipulation incentives
@@ -682,9 +682,9 @@ The defense mechanisms rely on several assumptions. If these are violated, addit
 - **Residual Risk**: Medium, inherent to cross-chain transparency, but does not enable profitable manipulation attacks
 
 **Futures Settlement Model (By Design, Not a Limitation):**
-- 12-24hr delay between auction close and settlement is intentional - this is a futures auction
+- 12-24hr delay between auction close and settlement is intentional - this is a batch auction
 - Users explicitly bid for future delivery, not spot settlement
-- Bidders price bids with settlement delay in mind (futures pricing)
+- Bidders price bids with settlement delay in mind (auction pricing)
 - **Benefits**:
   - Enables bidders to hedge positions on external markets post-auction
   - Reduces inventory risk premium compared to instant settlement
@@ -898,7 +898,7 @@ Atomica's auction architecture achieves robust manipulation resistance through *
 - **Judgment**: Post-reveal publication provides sufficient audit trail
 
 **Settlement Delay vs. Capital Efficiency:**
-- 12-24hr futures delivery reduces immediate liquidity
+- 12-24hr batch settlement reduces immediate liquidity
 - **Judgment**: Enables bidder hedging, reduces manipulation incentives
 
 **Gas Costs vs. Participation:**

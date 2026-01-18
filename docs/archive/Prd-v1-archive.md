@@ -1,3 +1,11 @@
+> ⚠️ **DEPRECATED DOCUMENT**
+>
+> This document is archived for historical reference only.
+> It may contain outdated information, abandoned ideas, or incorrect statements.
+> Do NOT use this document as a source of truth.
+>
+> **Canonical sources:** See [PRD.md](/PRD.md) and [README.md](/README.md)
+
 # Atomica Product Requirements Document
 
 ## Prior Art: Decentralized Exchanges
@@ -16,7 +24,7 @@
 - Achieved superior capital efficiency compared to CPMMs through price-specific liquidity provision
 - Provided better price discovery through order matching
 
-**Constant Product Market Makers (CPMMs)**
+**Constant Product Bidders (CPMMs)**
 - Popularized by Uniswap (2018) using the x*y=k formula, though Bancor (2017) launched the first AMM
 - Eliminated need for order matching and direct counterparty interaction
 - Automated liquidity provision through pooled assets
@@ -47,7 +55,7 @@
 - High gas costs for frequent on-chain operations (order placement, cancellation, updates)
 - Liquidity fragmentation across multiple order books and on-chain latency slower than centralized exchanges
 
-**Constant Product Market Makers**
+**Constant Product Bidders**
 - Impermanent loss for liquidity providers
 - Adverse selection through Loss-Versus-Rebalancing (LVR)—LPs constantly trade at stale prices against informed arbitrageurs, with fees often insufficient to compensate
 - Poor capital efficiency (liquidity spread across entire price curve in v2)
@@ -261,13 +269,13 @@ CoW Swap successfully addresses MEV resistance and adverse selection for matched
 
 ## Atomic Auctions: A Novel Design Space
 
-CoW Swap demonstrates a powerful insight: **single-sided auctions** where market makers (termed "solvers") compete to clear user orders can provide MEV protection and capital efficiency without requiring passive liquidity providers. This competitive auction mechanism successfully aligns incentives while avoiding the adverse selection problems that plague AMMs.
+CoW Swap demonstrates a powerful insight: **single-sided auctions** where Bidders (termed "solvers") compete to clear user orders can provide MEV protection and capital efficiency without requiring passive liquidity providers. This competitive auction mechanism successfully aligns incentives while avoiding the adverse selection problems that plague AMMs.
 
 However, CoW Swap's single-chain limitation reveals an unexplored design space: what if we could combine the best properties of atomic swaps with the auction clearing mechanisms that make CoW Swap successful?
 
 ### The Atomic Auction Paradigm
 
-We propose **Atomic Auctions** as a super-set design that extends the auction-based clearing model to native cross-chain exchanges. Atomic Auctions preserve the key advantages of both atomic swaps and order book markets while introducing competitive market maker dynamics.
+We propose **Atomic Auctions** as a super-set design that extends the auction-based clearing model to native cross-chain exchanges. Atomic Auctions preserve the key advantages of both atomic swaps and order book markets while introducing competitive Bidder dynamics.
 
 **Core Properties:**
 
@@ -281,15 +289,15 @@ We propose **Atomic Auctions** as a super-set design that extends the auction-ba
 **Capital Efficiency (from DCLOBs)**
 - Capital is only locked for the specific assets being traded
 - No requirement to provide liquidity across entire price curves
-- Market makers bring their own capital only when clearing specific auctions
+- Bidders bring their own capital only when clearing specific auctions
 - No compensation required for inactive liquidity providers sitting idle
 - Capital efficiency comparable to traditional order books without on-chain escrow risks
 
 **Auction-Based Price Discovery (from CoW Swap)**
-- Competitive market makers bid to clear user orders
-- Single-sided auction mechanism where users specify desired trades and market makers compete on price
-- Market maker competition drives prices toward true market rates
-- Eliminates systematic adverse selection since market makers actively choose which auctions to bid on
+- Competitive Bidders bid to clear user orders
+- Single-sided auction mechanism where users specify desired trades and Bidders compete on price
+- Bidder competition drives prices toward true market rates
+- Eliminates systematic adverse selection since Bidders actively choose which auctions to bid on
 
 **Cross-Chain Native Execution**
 - Atomic settlement across chains without bridges or wrapped tokens
@@ -299,7 +307,7 @@ We propose **Atomic Auctions** as a super-set design that extends the auction-ba
 
 ### Key Advantages Over Prior Art
 
-Unlike atomic swaps, Atomic Auctions do not require finding a direct counterparty with complementary needs—professional market makers provide liquidity through competitive bidding. Unlike DCLOBs, no on-chain escrow is needed since atomic settlement guarantees prevent counterparty risk. Unlike bridges, no wrapped tokens or custodians are introduced. And unlike AMMs, no passive LPs suffer from adverse selection since market makers actively evaluate and bid on specific opportunities.
+Unlike atomic swaps, Atomic Auctions do not require finding a direct counterparty with complementary needs—professional Bidders provide liquidity through competitive bidding. Unlike DCLOBs, no on-chain escrow is needed since atomic settlement guarantees prevent counterparty risk. Unlike bridges, no wrapped tokens or custodians are introduced. And unlike AMMs, no passive LPs suffer from adverse selection since Bidders actively evaluate and bid on specific opportunities.
 
 The Atomic Auction design space represents a novel synthesis: leveraging game theory and auction mechanisms to enable trustless cross-chain exchange with capital efficiency comparable to centralized order books, but without their custody risks or geographic limitations.
 
@@ -309,11 +317,11 @@ This proposal naturally raises two fundamental questions that must be addressed:
 
 **1. Is this technically possible?**
 
-Given the technology limitations documented earlier—commit-reveal schemes requiring high interactivity, ZK proofs needing trusted operators, homomorphic encryption requiring decryption keys—how can Atomic Auctions achieve cross-chain atomic settlement with competitive auctions? The challenge is coordinating atomic execution across chains while enabling market maker competition without introducing trusted intermediaries or vulnerabilities to strategic manipulation.
+Given the technology limitations documented earlier—commit-reveal schemes requiring high interactivity, ZK proofs needing trusted operators, homomorphic encryption requiring decryption keys—how can Atomic Auctions achieve cross-chain atomic settlement with competitive auctions? The challenge is coordinating atomic execution across chains while enabling Bidder competition without introducing trusted intermediaries or vulnerabilities to strategic manipulation.
 
 **2. Is this game theoretically sound?**
 
-Will market makers actually participate in these auctions? What prevents them from colluding or manipulating the mechanism? How do we ensure users receive competitive prices? Can the auction design handle thin markets where few market makers are active? Are there perverse incentives that could cause the system to fail under certain conditions?
+Will Bidders actually participate in these auctions? What prevents them from colluding or manipulating the mechanism? How do we ensure users receive competitive prices? Can the auction design handle thin markets where few Bidders are active? Are there perverse incentives that could cause the system to fail under certain conditions?
 
 The following sections address these questions by detailing the technical mechanisms that enable Atomic Auctions and analyzing the game-theoretic properties that ensure their robustness.
 
@@ -382,13 +390,13 @@ The second critical question is whether we can design an auction mechanism that 
 
 The auction operates as follows:
 
-**Auctioneer (Away Chain User)**
+**Seller (Away Chain User)**
 - User on Away chain (e.g., Ethereum) initiates auction to sell a quantity of their native asset (e.g., ETH)
 - Assets are locked in temporary escrow (via HTLC or similar mechanism) on the Away chain
 - Escrow is released at auction conclusion based on settlement outcome
 
-**Bidders (Home Chain Market Makers)**
-- Professional market makers on Home chain bid for units of the Away chain asset
+**Bidders (Home Chain Bidders)**
+- Professional Bidders on Home chain bid for units of the Away chain asset
 - Bidders use unlocked balances from ordinary wallets—no capital lock-up required until auction clears
 - Each bidder submits bids specifying quantity and price for units they wish to purchase
 
@@ -399,7 +407,7 @@ The auction operates as follows:
 - This uniform pricing is the key distinguishing feature
 
 **Example:**
-- Auctioneer sells 100 ETH units
+- Seller sells 100 ETH units
 - Bidder A: 40 units @ $2,000
 - Bidder B: 30 units @ $1,980
 - Bidder C: 40 units @ $1,950
@@ -454,14 +462,14 @@ We propose four complementary mitigations:
 - Creates more competitive bidding environment
 
 **3. Reserve Price with Commit-Reveal**
-- Auctioneer can set a reserve price (minimum acceptable clearing price) using commit-reveal scheme
+- Seller can set a reserve price (minimum acceptable clearing price) using commit-reveal scheme
 - During auction setup, auctioneer commits to a hash of their reserve price
 - Auction proceeds normally with this commitment on-chain
 - **Default behavior**: If auctioneer does nothing, escrow releases and auction settles normally
 - **Active rejection**: If clearing price < reserve, auctioneer must actively submit proof (reveal) that auction failed to meet reserve, triggering fund return
 - This prevents strategic reserve price manipulation after seeing bids
 
-**4. Reserve Price Cost (Auctioneer Penalty)**
+**4. Reserve Price Cost (Seller Penalty)**
 - Exercising the reserve price rejection incurs a cost to the auctioneer: **5% of (reserve price × volume)**
 - Note: The fee is calculated on the reserve price, not the final auction clearing price
 - This creates an incentive to lower the reserve price (making auctions more attractive to bidders) to reduce insurance costs
@@ -476,7 +484,7 @@ This design achieves several desirable properties:
 
 **Incentive Compatibility**
 - Bidders are incentivized to bid near their true valuation (uniform price protects them from winner's curse)
-- Auctioneers are incentivized to set realistic reserves (penalty for rejection)
+- Sellers are incentivized to set realistic reserves (penalty for rejection)
 - No advantage to strategic delay or last-minute manipulation (no bid lowering + reserve cost)
 
 **Sybil Resistance**
@@ -485,9 +493,9 @@ This design achieves several desirable properties:
 
 **Collusion Resistance**
 - Bidders cannot profitably collude to lower clearing price (no bid lowering policy)
-- Auctioneer cannot collude with bidders to manipulate reserve (commit-reveal with default release)
+- Seller cannot collude with bidders to manipulate reserve (commit-reveal with default release)
 
-**Market Maker Participation**
+**Bidder Participation**
 - No capital lock-up until auction clears (low opportunity cost)
 - Competitive auction ensures market-rate pricing (no adverse selection)
 - Always-online automators lower barriers to entry
@@ -496,9 +504,9 @@ This auction design enables Atomic Auctions to function effectively in a partial
 
 For detailed game-theoretic analysis of shill bidding attacks and their mitigations, see [Shill Bidding: Formal Analysis](shill-bidding-analysis.md).
 
-## Bootstrapping Strategy: Daily Futures Market Model
+## Bootstrapping Strategy: Daily batch auction model
 
-The previous section outlined the general auction mechanism for Atomic Auctions. However, for initial launch and liquidity bootstrapping, we propose a **simplified futures market model** that addresses cold-start challenges and sets clearer user expectations.
+The previous section outlined the general auction mechanism for Atomic Auctions. However, for initial launch and liquidity bootstrapping, we propose a **simplified batch auction model** that addresses cold-start challenges and sets clearer user expectations.
 
 ### Core Insight: Embrace Latency, Don't Fight It
 
@@ -508,20 +516,20 @@ Cross-chain atomic swaps inherently require coordination time and settlement del
 
 ### Daily Batch Auction Architecture (Initial Launch)
 
-**Single Daily Auction per Trading Pair:**
+**twice-daily batch auction per Trading Pair:**
 
-For the bootstrapping phase, Atomica will launch with **one unified batch auction per day** for each trading pair (e.g., ETH/LIBRA, BTC/LIBRA, USDC/LIBRA).
+For the bootstrapping phase, Atomica will launch with **one unified batch auction per day** for each trading pair (e.g., ETH/ATOMICA, BTC/ATOMICA, USDC/ATOMICA).
 
 **Structure:**
-- **Auctioneers (Sellers):** All users holding the quote asset (e.g., USDC on Ethereum) who want to purchase the base asset (e.g., LIBRA)
-- **Bidders (Market Makers):** All holders of the base asset (LIBRA on home chain) submit sealed bids
+- **Sellers (Sellers):** All users holding the quote asset (e.g., USDC on Ethereum) who want to purchase the base asset (e.g., ATOMICA)
+- **Bidders (Bidders):** All holders of the base asset (ATOMICA on home chain) submit sealed bids
 - **Batch Aggregation:** Many small sellers' orders aggregate into one large batch, creating critical mass
 - **No Reserve Prices:** Eliminates complexity and aligns all participants' interests in auction clearing
 - **Settlement Delay:** Assets delivered X hours after auction close (e.g., 6-24 hours)
 
 **Example Flow:**
 1. **08:00 UTC - Bid Window Opens:** Users on Ethereum can lock USDC and initiate auction participation
-2. **08:00-12:00 UTC - Bid Submission:** Market makers on home chain submit encrypted sealed bids for LIBRA
+2. **08:00-12:00 UTC - Bid Submission:** Bidders on home chain submit encrypted sealed bids for ATOMICA
 3. **12:00 UTC - Auction Close & Automatic Decryption:** Drand timelock automatically decrypts all bids (no reveal phase)
 4. **12:00 UTC - Clearing Price Determination:** Uniform price auction clears at lowest qualifying bid
 5. **18:00 UTC - Settlement:** Assets delivered to all participants (6 hours after close)
@@ -529,20 +537,20 @@ For the bootstrapping phase, Atomica will launch with **one unified batch auctio
 ### Why This Approach for Bootstrapping
 
 **Liquidity Concentration:**
-- Single daily auction aggregates all volume into one event
+- twice-daily batch auction aggregates all volume into one event
 - Many small users create meaningful total volume together
-- Reduces chicken-and-egg problem: market makers see critical mass
+- Reduces chicken-and-egg problem: Bidders see critical mass
 - More attractive than many small auctions throughout the day
 
-**Market Maker Advantages:**
+**Bidder Advantages:**
 - **Predictable Schedule:** Known auction time enables automated participation
-- **Hedging Opportunities:** Settlement delay allows MMs to hedge on other markets
-- **Futures Pricing:** Can price in expected risk over settlement period (may result in tighter spreads)
+- **Hedging Opportunities:** Settlement delay allows Bidders to hedge on other markets
+- **auction pricing:** Can price in expected risk over settlement period (may result in tighter spreads)
 - **Higher Volume per Auction:** Single large auction worth infrastructure investment
 
 **User Experience Benefits:**
 - **Clear Expectations:** Users know they're buying futures for next-day delivery, not spot
-- **Simpler Mental Model:** One auction per day is easy to understand
+- **Simpler Mental Model:** two auctions per day is easy to understand
 - **Better Pricing:** Reduced MM risk premium through hedging may result in better rates than spot
 - **Predictable Timing:** Know exactly when to participate
 
@@ -560,7 +568,7 @@ For the daily batch futures model to work effectively, **sealed bid privacy is e
 
 Without reserve prices to protect sellers, sealed bids become the primary defense against manipulation:
 
-1. **Prevents Shill Bidding:** Without ability to observe bids, market makers cannot strategically lower bids at last second
+1. **Prevents Shill Bidding:** Without ability to observe bids, Bidders cannot strategically lower bids at last second
 2. **Eliminates Timing Games:** No advantage to bidding early vs. late (all bids decrypt simultaneously)
 3. **Fair Information Structure:** All bidders compete on equal footing without information asymmetry
 4. **Winner's Curse Mitigation:** Bidders cannot game the uniform clearing price by observing competitors
@@ -599,14 +607,14 @@ As documented in `timelock-bids.md`, this approach is **practical and implementa
 The settlement delay after auction close is a key design parameter with tradeoffs:
 
 **Short Delay (6-12 hours):**
-- ✅ Lower inventory risk for market makers
+- ✅ Lower inventory risk for Bidders
 - ✅ Better for users wanting quick delivery
 - ✅ Closer to spot market pricing
-- ❌ Less time for market makers to hedge
+- ❌ Less time for Bidders to hedge
 - ❌ May result in wider spreads
 
 **Medium Delay (24 hours):**
-- ✅ Full day for market makers to manage positions
+- ✅ Full day for Bidders to manage positions
 - ✅ May result in tighter spreads due to better hedging
 - ✅ Clear "next-day delivery" mental model
 - ❌ Longer wait for users
@@ -614,19 +622,19 @@ The settlement delay after auction close is a key design parameter with tradeoff
 
 **Long Delay (48+ hours):**
 - ✅ True futures market dynamics
-- ✅ Maximum hedging flexibility for MMs
+- ✅ Maximum hedging flexibility for Bidders
 - ✅ Potentially best pricing for users
 - ❌ Significant wait time may frustrate users
 - ❌ More price risk over delay period
 
-**Recommended for Launch:** **12-24 hour settlement delay** balances user expectations with market maker risk management, while maintaining the futures market framing.
+**Recommended for Launch:** **12-24 hour settlement delay** balances user expectations with Bidder risk management, while maintaining the futures market framing.
 
 ### Evolution Path
 
 The daily futures model is optimized for **bootstrapping liquidity**. As volume grows, the protocol can evolve:
 
-**Phase 1 (Launch):** Single daily batch auction with sealed bids, futures delivery
-- Focus: Build critical mass, establish market maker relationships
+**Phase 1 (Launch):** Single daily batch auction with sealed bids, batch settlement
+- Focus: Build critical mass, establish Bidder relationships
 - Goal: Demonstrate economic viability without subsidies
 
 **Phase 2 (Growth):** Multiple daily auctions at different times
@@ -636,7 +644,7 @@ The daily futures model is optimized for **bootstrapping liquidity**. As volume 
 
 **Phase 3 (Maturity):** Hybrid spot + futures options
 - Offer premium spot auctions (shorter settlement) for users willing to pay higher spreads
-- Maintain futures auctions for best pricing
+- Maintain batch auctions for best pricing
 - Introduce more sophisticated products (limit orders, etc.)
 
 **Phase 4 (Advanced):** Market-driven auction frequency
@@ -646,19 +654,19 @@ The daily futures model is optimized for **bootstrapping liquidity**. As volume 
 
 ### Why Start with Futures Model
 
-The futures market model is optimal for launch because it:
+The batch auction model is optimal for launch because it:
 
 1. **Aligns with Reality:** Cross-chain coordination has inherent latency—embrace it
 2. **Maximizes Liquidity:** Single auction creates critical mass from day one
 3. **Simplifies Mechanism:** No reserve prices = simpler, less attack surface
 4. **Enables Fair Discovery:** Mandatory sealed bids prevent manipulation
-5. **Sustainable Economics:** Self-compensating market makers through futures pricing
-6. **Clear UX:** Users know what to expect (futures delivery)
+5. **Sustainable Economics:** Self-compensating Bidders through auction pricing
+6. **Clear UX:** Users know what to expect (batch settlement)
 7. **Better Pricing:** Reduced MM risk premium benefits users
 
 Starting with a complex multi-auction spot model would fragment liquidity and make bootstrapping significantly harder. The futures model provides a clear, implementable path to achieving economic sustainability and user adoption.
 
-For detailed analysis comparing CPMM, spot auctions, and futures market models, see [CPMM vs Auction: Comprehensive Comparison](cpmm-vs-auction.md).
+For detailed analysis comparing CPMM, spot auctions, and batch auction models, see [CPMM vs Auction: Comprehensive Comparison](cpmm-vs-auction.md).
 
 ## Open Questions
 

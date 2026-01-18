@@ -129,7 +129,7 @@ Ideally, all information would remain private to maximize game-theoretic fairnes
 | Native Cross-Chain | ✓ Full | ZK proofs of away-chain state |
 | Passive LPs | ✗ Different Model | Active bidders (intentional choice) |
 | No Adverse Selection | ✓ Strong | Self-selection + sealed bids |
-| Unified UX | ✓ Partial | Single interface, futures delivery model |
+| Unified UX | ✓ Partial | Single interface, batch settlement model |
 | No Custodial Risk | ✓ Full | Cryptographic proofs, atomic settlement |
 | Capital Efficiency | ✓ High | Active deployment only |
 | Illiquidity Protection | ✓ Competitive Bidding<br>✓ Future: Reserves | Daily batch creates critical mass; reserve prices for large orders (potential future) |
@@ -144,9 +144,9 @@ Atomica prioritizes:
 
 This leads to deliberate choices:
 - Active bidder participation instead of passive LPs (sustainable economics)
-- Futures delivery model instead of spot trading (embraces cross-chain latency)
+- batch settlement model instead of spot trading (embraces cross-chain latency)
 - Sealed bid auctions instead of continuous trading (fairness and MEV resistance)
-- Single daily auction for launch instead of many small auctions (liquidity concentration)
+- twice-daily batch auction for launch instead of many small auctions (liquidity concentration)
 
 ## Related Documents
 

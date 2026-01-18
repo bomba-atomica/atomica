@@ -37,7 +37,7 @@ Cross-chain asset exchange compounds risks from bridges and DEX mechanics:
 
 **→ See:** [Prior Art: Decentralized Exchanges](docs/background/prior-art.md) for detailed analysis
 
-## Solution: Atomic Auctions with Futures Delivery
+## Solution: Atomic Auctions with batch settlement
 
 Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined with auction-based competitive price discovery.
 
@@ -57,7 +57,7 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
   - **Western Auction:** 12:00 PM New York (17:00 UTC)
   - **Eastern Auction:** 12:00 PM Tokyo (03:00 UTC)
 - All trading pairs clear **simultaneously** within each auction
-- **Sellers (Auctioneers):** Users with quote assets wanting base assets
+- **Sellers (Sellers):** Users with quote assets wanting base assets
 - **Bidders:** Base asset holders submit sealed bids
 - No reserve prices at launch (relies on competitive bidding in large batch)
 - Settlement: 1-3 hours post-auction
@@ -154,7 +154,7 @@ Equities trade on scheduled hours with opening/closing auctions. Bonds clear via
 
 **The Cost of 24/7:**
 - Liquidity fragmented across every hour of every day
-- Market makers must quote continuously or be adversely selected
+- Bidders must quote continuously or be adversely selected
 - Thin orderbooks at off-peak hours enable manipulation
 - MEV bots exploit every transaction, every block
 - No canonical reference price—just noisy continuous feeds
@@ -184,7 +184,7 @@ During bear markets and in niche asset markets:
 
 ### Self-Sustaining Economics
 
-Bidders (arbitrageurs) earn through bid-ask spreads (buy at auction price, sell/hedge on external exchanges). Futures pricing enables known settlement time for proper hedging.
+Bidders (arbitrageurs) earn through bid-ask spreads (buy at auction price, sell/hedge on external exchanges). auction pricing enables known settlement time for proper hedging.
 
 **Why 1-3 Hour Settlement Works:**
 1. Prevents arbitrage around bid/delivery timing
@@ -240,7 +240,7 @@ Atomica prioritizes:
 5. **Underserved markets over major pairs** - Long-tail assets where Atomica provides most value
 
 **Key Tradeoffs Accepted:**
-- Futures delivery vs spot execution (embrace cross-chain latency)
+- batch settlement vs spot execution (embrace cross-chain latency)
 - Active bidders vs passive LPs (sustainable economics)
 - Daily batch vs continuous trading (liquidity concentration for bootstrap)
 - Temporary bid privacy vs full privacy (practical cryptography)
@@ -279,7 +279,7 @@ Atomica prioritizes:
 - 500-2,000 active users
 - $5M-50M/day in volume
 - 30-50+ bidders per auction
-- Professional market makers showing inbound interest
+- Professional Bidders showing inbound interest
 - 1-2 major wallet/aggregator integrations
 
 ## Documentation Map

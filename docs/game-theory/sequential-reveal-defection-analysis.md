@@ -147,7 +147,7 @@ Payoff(reveal | observed_bids) ≥ -D
 
 #### Optimal Deposit Analysis
 
-**Auctioneer's Objective**: Set D high enough to prevent strategic defection.
+**Seller's Objective**: Set D high enough to prevent strategic defection.
 
 **Bidder's Constraint**: D must be low enough to justify participation.
 
@@ -258,7 +258,7 @@ Simultaneous reveal eliminates the sequential sub-game entirely, collapsing a mu
 
 #### 5. "Credible, Truthful, and Two-Round (Optimal) Auctions"
 
-**Problem**: Auctioneers or bidders can choose not to reveal certain bids.
+**Problem**: Sellers or bidders can choose not to reveal certain bids.
 
 **Solution**: "Fine all bidders who conceal their bids to disincentivize this deviation."
 
@@ -313,7 +313,7 @@ Recursively anticipate all later players' optimal strategies.
 
 From an information economics standpoint, sequential reveal creates a **principal-agent problem** with moral hazard:
 
-**Principal**: Auctioneer (wants all bids revealed honestly)
+**Principal**: Seller (wants all bids revealed honestly)
 **Agents**: Bidders (have private information and option to defect)
 
 **Moral Hazard**: Agents can take hidden action (defect) that harms principal but benefits agent.
@@ -485,7 +485,7 @@ Commit(a) + Commit(b) = Commit(a + b)
 **Attack Steps**:
 
 1. Honest bidder commits to bid B
-2. Auctioneer and malicious bidder collude
+2. Seller and malicious bidder collude
 3. They create commitment that appears valid but is actually manipulated using homomorphic properties
 4. During reveal, they can selectively "open" commitments in ways that disadvantage honest bidder
 

@@ -8,7 +8,7 @@
 2. **Cross-chain execution requires trusted bridges** — $2B+ lost to bridge exploits (2021-2024); wrapped tokens introduce custodial and depegging risk
 3. **No canonical reference price** — Unlike equities (NYSE close) or gold (LBMA fixing), crypto lacks an authoritative batch-cleared benchmark
 4. **MEV extraction is unavoidable in transparent mempools** — Front-running, sandwich attacks, and arbitrage extraction cost users $600M+ annually
-5. **Continuous market makers face Loss-Versus-Rebalancing** — LPs systematically lose to informed traders; fees rarely compensate for adverse selection
+5. **Continuous Bidders face Loss-Versus-Rebalancing** — LPs systematically lose to informed traders; fees rarely compensate for adverse selection
 6. **Large trades suffer significant price impact** — Fragmented liquidity across time means institutional-size orders move markets against themselves
 
 ## Quick Start

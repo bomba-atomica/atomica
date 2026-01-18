@@ -24,7 +24,7 @@
 
 ### III. Current Continuous Prediction Market Mechanisms
 - Order book markets (Polymarket, Kalshi)
-- Automated market makers (Augur, Omen)
+- Automated Bidders (Augur, Omen)
 - Hybrid approaches
 - Strengths and weaknesses in low-liquidity scenarios
 
@@ -41,14 +41,14 @@
 - Comparison to continuous markets
 
 ### VI. Impact Analysis: Liquidity and Market Making
-- Market maker incentives under batch auctions
+- Bidder incentives under batch auctions
 - Temporal liquidity fragmentation
 - Bid-ask spread dynamics
 - Volume concentration effects
 
 ### VII. Impact Analysis: Participant Welfare
 - Informed traders (information holders)
-- Market makers / liquidity providers
+- Bidders / liquidity providers
 - Hedgers (those with exposure to outcome)
 - Noise traders / recreational participants
 - Overall welfare analysis
@@ -116,7 +116,7 @@ Prediction markets exist to aggregate dispersed information across many particip
 
 3. **Sufficient Participation Diversity**
    - Need both informed traders (hold private information) and noise traders (provide liquidity)
-   - Market makers bridge the two, providing continuous liquidity
+   - Bidders bridge the two, providing continuous liquidity
    - Homogeneous participants lead to thin markets and poor aggregation
 
 ### B. Liquidity Provision Mechanisms
@@ -128,12 +128,12 @@ Without liquidity, informed traders cannot profitably trade on information → p
 
 1. **Order Book Markets**
    - Limit order book with bid-ask spread
-   - Market makers post standing orders
+   - Bidders post standing orders
    - Traders can take liquidity immediately (market orders) or provide liquidity (limit orders)
    - **Challenge**: In low-liquidity markets, spreads widen dramatically
 
-2. **Automated Market Makers (AMM)**
-   - Constant function market makers (CPMM): x * y = k (Uniswap analog)
+2. **Automated Bidders (AMM)**
+   - Constant function Bidders (CPMM): x * y = k (Uniswap analog)
    - Logarithmic market scoring rules (LMSR): subsidized liquidity provider
    - **Advantage**: Always quotable price, never "empty" orderbook
    - **Challenge**: Impermanent loss for LPs, large trades have price impact
@@ -167,7 +167,7 @@ Without liquidity, informed traders cannot profitably trade on information → p
    - Profit by trading when market price differs from their belief
    - **Key requirement**: Must be able to trade profitably; if spreads too wide or liquidity insufficient, information not incorporated
 
-2. **Market Makers / Liquidity Providers**
+2. **Bidders / Liquidity Providers**
    - Provide standing liquidity by quoting bid-ask spread
    - Earn spread but face adverse selection risk (informed traders pick them off)
    - **Key requirement**: Spread must compensate for adverse selection + inventory risk
@@ -222,7 +222,7 @@ Without liquidity, informed traders cannot profitably trade on information → p
    - Prices update continuously, reflecting latest consensus
 
 2. **Flexible Liquidity Provision**
-   - Market makers can adjust quotes dynamically based on inventory, risk
+   - Bidders can adjust quotes dynamically based on inventory, risk
    - Tighten spreads when confident, widen when uncertain
    - Can withdraw liquidity entirely during extreme uncertainty
 
@@ -234,29 +234,29 @@ Without liquidity, informed traders cannot profitably trade on information → p
 **Weaknesses:**
 
 1. **Low-Liquidity Market Failure**
-   - **Chicken-and-egg**: No market makers without volume, no volume without market makers
+   - **Chicken-and-egg**: No Bidders without volume, no volume without Bidders
    - Spreads widen to 5-20% in niche markets (e.g., "Will X minor event happen?")
-   - **Adverse selection spiral**: Wide spreads → only very informed traders participate → market makers lose money → spreads widen further
+   - **Adverse selection spiral**: Wide spreads → only very informed traders participate → Bidders lose money → spreads widen further
    - Many prediction markets have <$1,000 daily volume
 
 2. **Front-Running and MEV**
    - On-chain prediction markets (Polymarket on Polygon) vulnerable to front-running
-   - Market makers can be picked off by informed traders who see pending orders
+   - Bidders can be picked off by informed traders who see pending orders
    - Creates additional adverse selection cost → wider spreads
 
-3. **Market Maker Inventory Risk**
-   - Market makers must hold inventory of both YES and NO shares
+3. **Bidder Inventory Risk**
+   - Bidders must hold inventory of both YES and NO shares
    - Large one-sided trades create inventory imbalance
    - Must offload inventory at worse prices or hold until event resolution
    - In illiquid markets, inventory risk prohibitive → no market making
 
-### B. Automated Market Makers (Augur, Omen)
+### B. Automated Bidders (Augur, Omen)
 
 **Structure:**
 - Constant function determines price based on current share ratio
 - Common functions:
   - **CPMM** (x * y = k): Used by some DeFi prediction markets
-  - **LMSR** (Logarithmic Market Scoring Rule): Hanson's market maker, subsidizes liquidity
+  - **LMSR** (Logarithmic Market Scoring Rule): Hanson's Bidder, subsidizes liquidity
 
 **LMSR Specifically:**
 - Subsidy parameter 'b' determines maximum loss the AMM can incur
@@ -300,14 +300,14 @@ Without liquidity, informed traders cannot profitably trade on information → p
 4. **Static Liquidity Provision**
    - AMM cannot dynamically adjust to changing uncertainty
    - Provides same liquidity at all times, even when inappropriate
-   - Cannot "step away" during high-uncertainty periods like human market makers can
+   - Cannot "step away" during high-uncertainty periods like human Bidders can
 
 ### C. Hybrid Approaches
 
 **Polymarket's Model:**
 - Order book for primary liquidity
 - AMM (CLOB-AMM hybrid) as backstop
-- Market makers incentivized with fee rebates
+- Bidders incentivized with fee rebates
 - **Result**: Relatively tight spreads (~1-3%) on popular markets, but still wide (>10%) on long-tail
 
 **Observed Performance:**
@@ -383,11 +383,11 @@ Without liquidity, informed traders cannot profitably trade on information → p
 - Auction: Information incorporated at next auction clearing (up to 24 hour delay)
 
 **Adverse Selection:**
-- Continuous: Sequential trading creates adverse selection (market makers picked off)
+- Continuous: Sequential trading creates adverse selection (Bidders picked off)
 - Auction: Simultaneous revelation eliminates sequential adverse selection
 
 **Liquidity Provision:**
-- Continuous: Market makers post standing orders, continuously adjust
+- Continuous: Bidders post standing orders, continuously adjust
 - Auction: All participants submit orders once per day, no continuous liquidity
 
 **Price Discovery:**
@@ -428,7 +428,7 @@ Markets aggregate information through trading. Informed traders buy when price <
 **Positive Effects (Adverse Selection Mitigation):**
 
 1. **Elimination of Sequential Adverse Selection**
-   - Continuous markets: Informed traders "pick off" market makers → market makers widen spreads → harder for marginal information to be profitable
+   - Continuous markets: Informed traders "pick off" Bidders → Bidders widen spreads → harder for marginal information to be profitable
    - Auctions: All orders revealed simultaneously → no picking off → tighter effective spreads
    - **Net effect**: Lower-quality information might be more profitably traded in auctions
 
@@ -491,7 +491,7 @@ As prediction market event approaches, information becomes more time-sensitive:
 
 ## VI. Impact Analysis: Liquidity and Market Making
 
-### A. Market Maker Incentives Under Batch Auctions
+### A. Bidder Incentives Under Batch Auctions
 
 **Continuous Market Market Making:**
 - Post standing bid-ask spread
@@ -507,26 +507,26 @@ As prediction market event approaches, information becomes more time-sensitive:
 **Implications:**
 
 1. **Elimination of Adverse Selection Premium**
-   - Continuous market makers widen spreads to compensate for being picked off
+   - Continuous Bidders widen spreads to compensate for being picked off
    - In low-liquidity markets, this can be 10-30% of spread
    - Batch auctions: All orders revealed simultaneously → no picking off
-   - **Result**: Market makers can submit tighter quotes (lower bid-ask spread)
+   - **Result**: Bidders can submit tighter quotes (lower bid-ask spread)
 
 2. **Changed Profit Model**
    - Continuous: Earn spread (difference between bid and ask)
    - Auction: Earn profit by providing liquidity at prices slightly better than clearing price
-   - **Example**: If clearing price = $0.60, market maker who bid $0.58 and asked $0.62 earns nothing if filled at $0.60
-   - **But**: Market maker who bid $0.59 and clearing price = $0.60 "wins" by buying cheaper than equilibrium
+   - **Example**: If clearing price = $0.60, Bidder who bid $0.58 and asked $0.62 earns nothing if filled at $0.60
+   - **But**: Bidder who bid $0.59 and clearing price = $0.60 "wins" by buying cheaper than equilibrium
 
 3. **Inventory Management**
    - Continuous: Can adjust quotes continuously to manage inventory
    - Auction: Must hold inventory for up to 24 hours until next auction
-   - **Implication**: Inventory risk higher → market makers demand higher returns
+   - **Implication**: Inventory risk higher → Bidders demand higher returns
 
 4. **Reduced Frequency of Trading**
    - Continuous: Can trade anytime, adjust dynamically
    - Auction: One opportunity per day
-   - **Implication**: Less opportunity for market makers to profit from spread, but also less time spent monitoring
+   - **Implication**: Less opportunity for Bidders to profit from spread, but also less time spent monitoring
 
 **Testable Hypothesis H3:** *Effective bid-ask spreads (measured from auction clearing prices) will be 30-50% tighter than continuous market spreads in low-liquidity prediction markets (<$10k daily volume), due to adverse selection elimination dominating inventory risk increase.*
 
@@ -588,7 +588,7 @@ As prediction market event approaches, information becomes more time-sensitive:
 **Potential Positive Feedback Loop:**
 
 1. **Initial state**: Low-liquidity continuous market, wide spreads (15%)
-2. **Switch to auction**: Adverse selection eliminated → market makers submit tighter quotes
+2. **Switch to auction**: Adverse selection eliminated → Bidders submit tighter quotes
 3. **Tighter spreads**: More participants willing to trade (lower cost)
 4. **More participants**: Each auction has more liquidity → even tighter clearing spreads
 5. **Positive feedback**: Liquidity begets liquidity within auction framework
@@ -653,15 +653,15 @@ Whether auctions help or hurt depends on starting liquidity:
 
 **Confidence**: High. This directly follows from information timing mechanics.
 
-### B. Market Makers / Liquidity Providers
+### B. Bidders / Liquidity Providers
 
 **Welfare Impact: POSITIVE (in low-liquidity markets)**
 
 **Positive Effects:**
 
 1. **Adverse Selection Elimination**
-   - Continuous markets: Market makers constantly picked off by informed traders
-   - **2008 financial crisis analog**: Market makers withdrew from corporate bonds because adverse selection too severe
+   - Continuous markets: Bidders constantly picked off by informed traders
+   - **2008 financial crisis analog**: Bidders withdrew from corporate bonds because adverse selection too severe
    - Auctions: Simultaneous revelation means no picking off
    - **Benefit**: Can provide liquidity without fear of being exploited
    - **Magnitude**: In thin markets, adverse selection is primary cost; elimination is huge benefit
@@ -672,9 +672,9 @@ Whether auctions help or hurt depends on starting liquidity:
    - **Benefit**: Lower operational costs, part-time market making feasible
 
 3. **Reduced Competition from HFT**
-   - Continuous: HFT firms can provide liquidity faster, pushing out slower market makers
+   - Continuous: HFT firms can provide liquidity faster, pushing out slower Bidders
    - Auction: Speed irrelevant, only price matters
-   - **Benefit**: Levels playing field between professional and amateur market makers
+   - **Benefit**: Levels playing field between professional and amateur Bidders
 
 **Negative Effects:**
 
@@ -700,7 +700,7 @@ Whether auctions help or hurt depends on starting liquidity:
 - **Medium-liquidity markets** ($5k-$50k daily volume): **MILDLY POSITIVE** (adverse selection reduction balances inventory risk)
 - **High-liquidity markets** (>$50k daily volume): **NEGATIVE** (continuous market advantages dominate)
 
-**Testable Hypothesis H7:** *Market maker profitability (return per unit capital) will be 50-200% higher in auction-based low-liquidity prediction markets compared to continuous markets, driven primarily by adverse selection elimination.*
+**Testable Hypothesis H7:** *Bidder profitability (return per unit capital) will be 50-200% higher in auction-based low-liquidity prediction markets compared to continuous markets, driven primarily by adverse selection elimination.*
 
 **Confidence**: High. This is well-established in market microstructure theory.
 
@@ -799,7 +799,7 @@ Noise traders trade for entertainment, education, or irrational reasons (not bas
 **Utilitarian Welfare (Sum of All Participants):**
 
 **Winners:**
-- Market makers in low-liquidity markets (huge benefit from adverse selection elimination)
+- Bidders in low-liquidity markets (huge benefit from adverse selection elimination)
 - Informed traders with slow-decaying information (benefit from lower costs)
 - Some large-position traders (benefit from price impact reduction)
 
@@ -820,7 +820,7 @@ Noise traders trade for entertainment, education, or irrational reasons (not bas
 - **Current state**: Marginally functional—spreads acceptable but not great
 - **Auction state**: Different trade-offs—tighter spreads but less flexibility
 - **Net welfare**: **SMALL POSITIVE to NEUTRAL**
-- **Intuition**: Redistribution from hedgers (lose flexibility) to market makers (gain adverse selection protection)
+- **Intuition**: Redistribution from hedgers (lose flexibility) to Bidders (gain adverse selection protection)
 
 **High-Liquidity Markets (>$50k daily volume):**
 - **Current state**: Well-functioning—tight spreads, deep liquidity, rapid information incorporation
@@ -920,10 +920,10 @@ Based on continuous market data:
 **Continuous Market Failure Pathologies:**
 
 1. **Adverse Selection Death Spiral**
-   - Market makers post wide spreads due to adverse selection fear
+   - Bidders post wide spreads due to adverse selection fear
    - Wide spreads → only very informed traders participate
-   - Market makers lose money → widen spreads further
-   - Eventually: Market maker exit → no liquidity at all
+   - Bidders lose money → widen spreads further
+   - Eventually: Bidder exit → no liquidity at all
 
 2. **Temporal Fragmentation**
    - Low participation means liquidity arrives randomly
@@ -1106,7 +1106,7 @@ Based on continuous market data:
 - **Prediction market analog**: Community prediction (will local event happen?), distributed expertise aggregation
 
 **5. High Adverse Selection Environment**
-- **Characteristic**: Informed traders have significant edge over market makers
+- **Characteristic**: Informed traders have significant edge over Bidders
 - **Mechanism**: Continuous market spreads widen prohibitively; auction eliminates sequential adverse selection
 - **Prediction market analog**: Markets where insiders (e.g., politicians, corporate executives) have major information advantages
 
@@ -1146,10 +1146,10 @@ Based on continuous market data:
    - Benefit from fairness, simplicity
    - **Result**: Auction spreads tighten, informed traders can trade profitably
 
-2. **Part-time market makers**
+2. **Part-time Bidders**
    - Don't have resources for 24/7 monitoring
    - Benefit from once-daily participation model
-   - **Result**: More market maker participation, tighter spreads
+   - **Result**: More Bidder participation, tighter spreads
 
 3. **Large informed traders with slow-decaying information**
    - Benefit from price impact reduction
@@ -1232,18 +1232,18 @@ Based on continuous market data:
 
 1. **Sufficient Volume** (>$50k daily)
    - Spread revenue exceeds adverse selection + inventory costs
-   - Professional market makers can operate profitably
+   - Professional Bidders can operate profitably
    - **Result**: Tight spreads (<3%), deep liquidity
 
 2. **Predictable Flow**
    - Consistent two-way trading throughout day
-   - Market makers can manage inventory dynamically
+   - Bidders can manage inventory dynamically
    - **Result**: Stable, continuous liquidity provision
 
 3. **Low Adverse Selection**
    - Information not heavily concentrated in few hands
    - Most traders are noise/hedgers, not informed
-   - **Result**: Market makers don't need wide spreads to protect against adverse selection
+   - **Result**: Bidders don't need wide spreads to protect against adverse selection
 
 4. **Efficient Inventory Management**
    - Active secondary markets for hedging inventory
@@ -1255,11 +1255,11 @@ Based on continuous market data:
 1. **High Volatility Near Event**
    - Prices move 10-20% per day as event approaches
    - 24-hour inventory hold period too risky
-   - **Result**: Market makers demand wide spreads or exit entirely
+   - **Result**: Bidders demand wide spreads or exit entirely
 
 2. **One-Sided Flow**
    - Strong directional trading (e.g., favorite winning sports match)
-   - Market makers end up with large inventory of losing side
+   - Bidders end up with large inventory of losing side
    - Continuous: Can adjust quotes dynamically
    - Auction: Stuck until next clearing
    - **Result**: Auction market making unprofitable
@@ -1314,7 +1314,7 @@ Based on continuous market data:
 | H4 | Auctions increase effective liquidity 2-5x in <$1k volume markets | High | Positive for auctions |
 | H5 | Critical liquidity threshold exists at ~$5k-$10k daily volume | Moderate | Mixed (depends on volume) |
 | H6 | Fundamental-info traders outperform in auctions; news traders underperform | High | Mixed (trader-dependent) |
-| H7 | Market maker profitability 50-200% higher in auction low-liquidity markets | High | Positive for auctions |
+| H7 | Bidder profitability 50-200% higher in auction low-liquidity markets | High | Positive for auctions |
 | H8 | Hedging volume declines 40-70% in auction markets | Very High | Negative for auctions |
 | H9 | Noise trader participation declines 20-40% in auction markets | Moderate | Negative for auctions |
 | H10 | Social welfare increases 30-100% in <$5k markets, decreases 10-30% in >$50k markets | Moderate-High | Volume-dependent |
@@ -1332,9 +1332,9 @@ Based on continuous market data:
 - **Confidence**: Very High
 - **Importance**: Critical for determining when to use auctions vs continuous
 
-**H7: Market Maker Profitability in Low Liquidity**
-- **Prediction**: Market makers will achieve 50-200% higher returns per capital in auction-based low-liquidity markets
-- **Measurement**: Compare market maker P&L in auction vs continuous markets <$5k volume
+**H7: Bidder Profitability in Low Liquidity**
+- **Prediction**: Bidders will achieve 50-200% higher returns per capital in auction-based low-liquidity markets
+- **Measurement**: Compare Bidder P&L in auction vs continuous markets <$5k volume
 - **Confidence**: High
 - **Importance**: Determines whether auctions can actually attract liquidity provision
 
@@ -1474,7 +1474,7 @@ Based on continuous market data:
 ### B. Participant-Specific Conclusions
 
 **Big Winners from Auctions:**
-1. **Market makers in thin markets**: Adverse selection elimination allows profitable liquidity provision where impossible before (50-200% return improvement)
+1. **Bidders in thin markets**: Adverse selection elimination allows profitable liquidity provision where impossible before (50-200% return improvement)
 2. **Large traders with fundamental information**: Price impact reduction and lower adverse selection costs (5-15% execution cost savings)
 3. **Communities with distributed information**: Simultaneous aggregation superior to sequential revelation (better collective predictions)
 
@@ -1559,7 +1559,7 @@ Based on continuous market data:
 
 **Positive Impact (Dominant):**
 - Enables functional markets in low-liquidity domains where continuous markets fail (~70% of prediction markets by count)
-- Eliminates adverse selection, primary barrier to market maker participation
+- Eliminates adverse selection, primary barrier to Bidder participation
 - Fairer mechanism attracts wider participation
 - Creates new possibilities for long-tail prediction markets
 
@@ -1597,7 +1597,7 @@ If prediction market platforms adopted volume-stratified mechanism choice (aucti
    - Theory of information aggregation in prediction markets
 
 6. **Hanson, R. (2003)**. "Combinatorial Information Market Design." *Information Systems Frontiers*, 5(1), 107-119.
-   - Design of automated market makers for prediction markets
+   - Design of automated Bidders for prediction markets
 
 7. **Wolfers, J., & Zitzewitz, E. (2004)**. "Prediction Markets." *Journal of Economic Perspectives*, 18(2), 107-126.
    - Survey of prediction market theory and applications

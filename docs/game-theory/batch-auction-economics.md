@@ -1,6 +1,6 @@
-# Futures Market Model for Atomic Auctions
+# batch auction model for Atomic Auctions
 
-This document explains why Atomica uses a futures market model rather than spot trading for cross-chain atomic swaps, and details the daily batch auction architecture.
+This document explains why Atomica uses a batch auction model rather than spot trading for cross-chain atomic swaps, and details the daily batch auction architecture.
 
 ## Core Insight: Embrace Latency, Don't Fight It
 
@@ -17,7 +17,7 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 ### Benefits
 
 **1. Price Smoothing**
-- Futures pricing naturally reduces sensitivity to momentary price spikes
+- auction pricing naturally reduces sensitivity to momentary price spikes
 - Bidders price in expected value over settlement window
 - Less volatility-driven slippage compared to spot markets
 
@@ -28,7 +28,7 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 - Lower risk = tighter spreads = better pricing for users
 
 **3. Liquidity Concentration**
-- Single daily auction aggregates all volume into critical mass
+- twice-daily batch auction aggregates all volume into critical mass
 - Many small users create meaningful total volume together
 - More attractive to bidders than fragmented small auctions
 - Solves chicken-and-egg bootstrapping problem
@@ -50,17 +50,17 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 - Arbitrage opportunities with short windows
 - Users needing same-day settlement
 
-**Potential Future Enhancement:** Premium spot auctions (shorter settlement) for users willing to pay wider spreads. Futures auctions maintain best pricing.
+**Potential Future Enhancement:** Premium spot auctions (shorter settlement) for users willing to pay wider spreads. batch auctions maintain best pricing.
 
 ## Daily Batch Auction Architecture
 
 ### Structure
 
-**One unified batch auction per day** per trading pair (e.g., ETH/LIBRA, BTC/LIBRA, USDC/LIBRA)
+**One unified batch auction per day** per trading pair (e.g., ETH/ATOMICA, BTC/ATOMICA, USDC/ATOMICA)
 
 **Participants:**
-- **Auctioneers (Sellers):** Users holding quote asset (e.g., USDC on Ethereum) wanting to purchase base asset (e.g., LIBRA)
-- **Bidders:** Holders of base asset (LIBRA on home chain) submit sealed bids
+- **Sellers (Sellers):** Users holding quote asset (e.g., USDC on Ethereum) wanting to purchase base asset (e.g., ATOMICA)
+- **Bidders:** Holders of base asset (ATOMICA on home chain) submit sealed bids
 
 **Key Parameters:**
 - **No reserve prices** at launch (relies on competitive bidding in large batch)
@@ -75,7 +75,7 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
   └─ Auction contract on home chain becomes active
 
 08:00-12:00 UTC - Bid Submission Window
-  └─ Bidders on home chain submit encrypted sealed bids for LIBRA
+  └─ Bidders on home chain submit encrypted sealed bids for ATOMICA
   └─ Economic deposits prevent spam bids (returned if valid, slashed if malformed)
   └─ Bids remain cryptographically sealed via Dual-Layer Timelock (Validator + Seller)
  
@@ -94,11 +94,11 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 13:00 UTC - Settlement (1 hour after close)
   └─ Assets delivered to all participants atomically
   └─ Native assets on both chains (no wrapped tokens)
-  └─ Bidders transfer LIBRA to users
+  └─ Bidders transfer ATOMICA to users
   └─ Users' locked USDC released to bidders
 ```
 
-### Why Single Daily Auction?
+### Why twice-daily batch auction?
 
 **Liquidity Bootstrapping:**
 - Aggregates many small users into meaningful total volume
@@ -111,9 +111,9 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 - Predictable daily rhythm for risk management
 
 **User Experience:**
-- Simple mental model (one auction per day, like a farmers market)
+- Simple mental model (two auctions per day, like a farmers market)
 - Predictable timing for planning transactions
-- Clear expectations (futures delivery, not spot)
+- Clear expectations (batch settlement, not spot)
 
 **Protocol Advantages:**
 - Lower coordination overhead (one settlement vs. many)
@@ -212,7 +212,7 @@ Atomica launches with **1-3 hour** settlement delay, which can be adjusted based
 
 1. **Auctions consistently clear** - Every daily auction has sufficient bidder participation
 2. **Competitive pricing** - Spreads comparable to spot exchanges + reasonable futures premium
-3. **User adoption** - Growing volume indicating users accept futures delivery model
+3. **User adoption** - Growing volume indicating users accept batch settlement model
 4. **Bidder profitability** - Bidders remain profitable and expand participation
 5. **No gaming** - No manipulation or strategic behavior undermining mechanism
 

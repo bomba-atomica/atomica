@@ -74,7 +74,7 @@ Some behaviors waste the time and opportunity cost of honest participants:
 
 **Griefing:** Submitting bids with no intention to settle, forcing auction failures and wasting bidder effort.
 
-**Unrealistic reserves:** Auctioneers setting reserve prices far above market clearing price, causing auction rejection after bidders have committed time and capital.
+**Unrealistic reserves:** Sellers setting reserve prices far above market clearing price, causing auction rejection after bidders have committed time and capital.
 
 **Strategic delays:** Parties who could settle but intentionally delay, imposing opportunity costs on counterparties.
 
@@ -215,7 +215,7 @@ The US Treasury system validates our fee philosophy: subsidizing deal-makers wit
 ### Potential Future Mechanisms
 
 **Reserve price penalty (if reserves are added):**
-- Auctioneer pays 5% of (reserve price × volume) if rejecting auction
+- Seller pays 5% of (reserve price × volume) if rejecting auction
 - Fee distributed pro-rata to qualifying bidders
 - Incentivizes realistic reserve setting without requiring external subsidy
 
@@ -242,7 +242,7 @@ This fee philosophy achieves several desirable properties:
 ### Incentive Compatibility
 
 - **Honest bidding incentivized:** No advantage to manipulation when deal-makers are compensated for deal-breaker costs
-- **Realistic reserves:** Auctioneers set reserves carefully to avoid insurance penalties
+- **Realistic reserves:** Sellers set reserves carefully to avoid insurance penalties
 - **Settlement reliability:** Griefing penalties ensure commitment to settle
 
 ### Independence & Security
@@ -289,7 +289,7 @@ By following these principles, Atomica creates auction venues that maximize pric
 - [Uniform Price Auctions](uniform-price-auctions.md) - Core auction mechanism design
 - [Shill Bidding Remediation](shill-bidding-remediation.md) - Defense against manipulation
 - [Shill Bidding Analysis](shill-bidding-analysis.md) - Formal game-theoretic analysis
-- [CPMM vs Auction Comparison](cpmm-vs-auction-comparison.md) - Why auctions over automated market makers
+- [CPMM vs Auction Comparison](cpmm-vs-auction-comparison.md) - Why auctions over automated Bidders
 
 ## References
 

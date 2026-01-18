@@ -19,7 +19,7 @@
 **Why 17:00 UTC is optimal:**
 - Captures peak addressable volume window (12:00-20:00 UTC = 49% of daily volume)
 - Aligns with DAO coordination needs (US East Coast business hours)
-- Maximizes professional bidder participation (market maker business hours)
+- Maximizes professional bidder participation (Bidder business hours)
 - Traditional markets still open (robust price discovery)
 
 ---
@@ -118,7 +118,7 @@ Based on global crypto trading patterns, CEX volume data, and professional tradi
 
 ---
 
-### 4. DeFi-Native Institutions (crypto-native hedge funds, market makers)
+### 4. DeFi-Native Institutions (crypto-native hedge funds, Bidders)
 
 **Daily Volume: $20-30B** (15-20% of spot market)
 
@@ -190,7 +190,7 @@ Based on global crypto trading patterns, CEX volume data, and professional tradi
 
 ---
 
-### 7. Professional Market Makers (liquidity providers)
+### 7. Professional Bidders (liquidity providers)
 
 **Daily Volume: $20-30B** (15-20% of spot market)
 
@@ -283,21 +283,21 @@ Based on Atomica's target segments (DAOs, DeFi institutions, retail whales, arbi
 - ✅ Captures both European and US professional traders
 - ✅ Within traditional business hours for both regions
 - ✅ DeFi institutions most active during this window
-- ✅ Market makers providing liquidity during peak hours
+- ✅ Bidders providing liquidity during peak hours
 
 ---
 
-### 3. Market Maker Participation (Critical for Competitive Pricing)
+### 3. Bidder Participation (Critical for Competitive Pricing)
 
 **17:00 UTC = Peak liquidity provision window**
 
-**Why market makers prefer this time:**
+**Why Bidders prefer this time:**
 - ✅ High CEX order book depth (reference pricing available)
 - ✅ Traditional markets still open (US equities open until 21:00 UTC)
 - ✅ Forex markets highly active (stable stablecoin pricing)
 - ✅ Can hedge positions on multiple venues simultaneously
 
-**Professional bidders (market makers) operate during business hours:**
+**Professional bidders (Bidders) operate during business hours:**
 - Most active: 08:00-20:00 UTC
 - Peak activity: 12:00-18:00 UTC
 - **17:00 UTC = within peak bidder activity window**
@@ -509,7 +509,7 @@ auctionTime = 17:00 UTC; // Done.
 - ❌ Middle of night for Asian participants
 - ❌ After US market close (21:00 UTC = 4:00 PM EST close time)
 - ❌ Only 6% of addressable volume (20:00-24:00 UTC window)
-- ❌ Market makers less active (after business hours)
+- ❌ Bidders less active (after business hours)
 
 **Verdict:** Misses European and Asian markets, lower bidder participation
 
@@ -527,7 +527,7 @@ auctionTime = 17:00 UTC; // Done.
 
 **17:00 UTC is optimal because:**
 - Highest DAO coordination score (US-centric)
-- Highest bidder participation score (market makers most active)
+- Highest bidder participation score (Bidders most active)
 - Within peak volume window (12:00-20:00 UTC)
 - Best balance across all criteria
 
@@ -544,7 +544,7 @@ auctionTime = 17:00 UTC; // Done.
 
 **Rationale:**
 1. **DAO coordination:** Perfect for US-based DAOs (majority of market)
-2. **Bidder participation:** Market makers most active during this window
+2. **Bidder participation:** Bidders most active during this window
 3. **Liquidity:** Within peak global volume window (12:00-20:00 UTC)
 4. **Simplicity:** No DST confusion, blockchain-native
 5. **Psychology:** "Noon" in US winter timezone (easy to remember)
@@ -629,7 +629,7 @@ Your local time: November 15, 2025 at 12:00 PM EST
 - [Market Volume by Participant Category](./market-volume-by-participant-category.md) - Addressable market analysis
 - [GTM Pull Strategy](./gtm-pull-strategy.md) - Go-to-market strategy for individual arbitrageurs
 - [Product Design v0](../design/product-design-v0.md) - Atomica auction mechanism design
-- [Futures Market Model](../design/futures-market-model.md) - Why futures delivery works
+- [batch auction model](../design/futures-market-model.md) - Why batch settlement works
 
 ---
 

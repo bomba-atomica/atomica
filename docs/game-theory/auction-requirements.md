@@ -2,7 +2,7 @@
 
 ## Document Purpose
 
-This document establishes the fundamental requirements for Atomica's blockchain auction format, starting from first principles rather than assumptions. While we've explored specific auction mechanisms (uniform price, sealed bids, futures delivery), this document steps back to examine:
+This document establishes the fundamental requirements for Atomica's blockchain auction format, starting from first principles rather than assumptions. While we've explored specific auction mechanisms (uniform price, sealed bids, batch settlement), this document steps back to examine:
 
 1. **What attacks are possible on blockchain auctions?** - Understanding the threat model
 2. **What properties must an auction have to resist these attacks?** - Deriving requirements from threats
@@ -665,7 +665,7 @@ t=close-1s: Attacker lowers bid to 50 units @ $1,900
 - Concentrates all liquidity at one time
 - Creates critical mass for price discovery
 - Predictable schedule enables bidder preparation
-- Futures delivery model (settlement delay) justifies wait time
+- batch settlement model (settlement delay) justifies wait time
 
 **Metrics**:
 - Average bid depth per auction
@@ -731,7 +731,7 @@ t=close-1s: Attacker lowers bid to 50 units @ $1,900
 
 ### R12: Bidder Compensation Sustainability
 
-**Requirement**: Mechanism must economically sustain liquidity providers (bidders/market makers) without external subsidies.
+**Requirement**: Mechanism must economically sustain liquidity providers (bidders/Bidders) without external subsidies.
 
 **Why Critical**: Without sustainable compensation, rational liquidity providers exit → market fails.
 
@@ -1196,7 +1196,7 @@ Excluded seller gets deposit back, can try next auction
 
 **Resolution**:
 - Accept batch windows (daily auctions) for high capital efficiency
-- Futures delivery model sets user expectations correctly
+- batch settlement model sets user expectations correctly
 
 **Tradeoffs Accepted**:
 - Users must wait for daily auction (not instant swaps)
@@ -1288,7 +1288,7 @@ Excluded seller gets deposit back, can try next auction
 - All winners pay uniform clearing price (lowest qualifying bid)
 - Sealed bids via timelock encryption
 - Daily batch auction (single large auction per day)
-- Futures delivery (settlement delay after auction)
+- batch settlement (settlement delay after auction)
 
 **Rationale**:
 1. **Meets critical requirements**: MEV resistance, sustainable economics, manipulation resistance
@@ -1300,7 +1300,7 @@ Excluded seller gets deposit back, can try next auction
 - Drand timelock encryption for sealed bids (docs/technical/timelock-bids.md)
 - Economic deposits prevent spam (post-decryption validation)
 - No bid lowering rule (smart contract enforcement)
-- Single daily auction (liquidity concentration)
+- twice-daily batch auction (liquidity concentration)
 - No reserve prices for launch (rely on competitive bidding)
 
 ---
@@ -1357,7 +1357,7 @@ Excluded seller gets deposit back, can try next auction
 **❌ Multiple Small Auctions (at Launch)**
 - Fragments liquidity
 - Hard to bootstrap bidder participation
-- Single daily auction creates critical mass
+- twice-daily batch auction creates critical mass
 
 ---
 

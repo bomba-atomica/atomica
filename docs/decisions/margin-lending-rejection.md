@@ -69,7 +69,7 @@ A "flash loan-style P2P lending" system where:
 
 ### Problem 3: No Profit Mechanism During Auction
 
-**Claim:** "MMs can profit from auction spreads to pay loan interest"
+**Claim:** "Bidders can profit from auction spreads to pay loan interest"
 
 **Reality:**
 - Atomica uses uniform price auctions
@@ -210,7 +210,7 @@ Settlement transaction:
 - Requires same-asset repayment (or atomic swap in settlement)
 
 **Why we can't have this:**
-- Atomica uses futures delivery model (12-24 hour delay)
+- Atomica uses batch settlement model (12-24 hour delay)
 - Cross-chain makes instant settlement impossible
 - Fundamental architecture decision
 

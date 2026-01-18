@@ -265,10 +265,10 @@ In repeated games with perfect monitoring, collusion can be sustained via trigge
 
 Even if collusion were somehow sustained, the reserve price mechanism provides a backstop:
 
-**Auctioneer's Optimal Strategy**:
+**Seller's Optimal Strategy**:
 
 If clearing price p* is suspiciously low (e.g., $1,900 when market price is $2,000):
-- Auctioneer rejects auction by revealing reserve price R > p*
+- Seller rejects auction by revealing reserve price R > p*
 - Pays 5% penalty on auction value
 
 **Break-Even Analysis**:
@@ -279,10 +279,10 @@ Auction value: $200,000 (100 ETH @ $2,000 true value)
 If clearing price p* = $1,900:
   Loss from accepting: ($2,000 - $1,900) × 100 = $10,000
   Cost of rejecting: $10,000
-  Auctioneer is indifferent
+  Seller is indifferent
 
 If clearing price p* < $1,900:
-  Auctioneer strictly prefers to reject
+  Seller strictly prefers to reject
 ```
 
 **Effect on Collusion**:
@@ -359,7 +359,7 @@ The combination of:
 1. Uniform price auction mechanism
 2. No bid lowering policy
 3. Reserve price with commit-reveal
-4. Auctioneer penalty for rejection
+4. Seller penalty for rejection
 5. Anonymous, open-entry market structure
 
 Creates an **incentive-compatible** auction system where:

@@ -28,7 +28,7 @@ If bids become visible as the auction progresses (or before it closes), maliciou
 **Normal Expected Outcome (if auction closed now):**
 - Only 50 units would clear
 - Clearing price = $1,950
-- Auctioneer sells only half their inventory at market price
+- Seller sells only half their inventory at market price
 
 **Malicious Actor's Strategy:**
 1. Observe that 50 units remain unbid
@@ -41,7 +41,7 @@ If bids become visible as the auction progresses (or before it closes), maliciou
 - Bidder A gets 40 units for free (saved $80,000)
 - Bidder B gets 10 units for free (saved $19,500)
 - Malicious actor gets 50 units for free
-- **Auctioneer receives $0 for 100 units**
+- **Seller receives $0 for 100 units**
 
 ### Why This Works
 
@@ -62,7 +62,7 @@ The uniform price auction mechanism sets the clearing price at the **lowest winn
 - Windfall benefit (units for free instead of market price)
 - Creates perverse incentive for collusion or tacit coordination
 
-**For the Auctioneer:**
+**For the Seller:**
 - Catastrophic loss (entire inventory given away for free)
 - Auction mechanism becomes completely unreliable
 

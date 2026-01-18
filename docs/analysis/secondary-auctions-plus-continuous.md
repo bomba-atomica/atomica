@@ -567,7 +567,7 @@ European markets show **significantly higher auction participation** than US mar
 
 3. **Institutional Behavior**: Passive funds and institutional investors concentrate trades at close for benchmarking. In lower liquidity markets, this concentration is more pronounced relative to continuous volume.
 
-4. **Market Maker Economics**: Thin markets have wider spreads and less competitive market making. Auctions provide alternative execution venue with better pricing for larger orders.
+4. **Bidder Economics**: Thin markets have wider spreads and less competitive market making. Auctions provide alternative execution venue with better pricing for larger orders.
 
 5. **Rebalancing Concentration**: Index rebalances and portfolio adjustments create predictable liquidity events. Lower liquidity markets see even higher auction concentration during these events (e.g., 54% Euronext rebalancing days).
 
@@ -668,7 +668,7 @@ This dual-market structure is relevant for:
 1. **Market Microstructure**: Understanding optimal trading venue design
 2. **Algorithmic Trading**: Strategies spanning auction and continuous venues
 3. **Price Discovery**: Role of periodic batching vs. continuous information incorporation
-4. **Liquidity Provision**: Market maker strategies across dual venues
+4. **Liquidity Provision**: Bidder strategies across dual venues
 5. **Regulatory Design**: When to mandate auctions vs. allow continuous trading
 6. **Blockchain/DeFi**: Applying lessons to decentralized exchange design
 

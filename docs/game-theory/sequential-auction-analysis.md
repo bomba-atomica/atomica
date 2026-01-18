@@ -117,19 +117,19 @@ For each auction in order:
 ### Example
 
 ```
-Alice has 100,000 LIBRA balance
+Alice has 100,000 ATOMICA balance
 
 Alice submits bids:
-- DOGE: 5,000 LIBRA  (small market)
-- SOL:  40,000 LIBRA (mid market)
-- BTC:  60,000 LIBRA (big market)
-- ETH:  50,000 LIBRA (big market)
-Total: 155,000 LIBRA (55% over-budget)
+- DOGE: 5,000 ATOMICA  (small market)
+- SOL:  40,000 ATOMICA (mid market)
+- BTC:  60,000 ATOMICA (big market)
+- ETH:  50,000 ATOMICA (big market)
+Total: 155,000 ATOMICA (55% over-budget)
 
 Phase 3: Fee Collection
 - Over-budget: 155k - 100k = 55k (55%)
-- Fee: 3% × 100k = 3,000 LIBRA
-- Net budget: 97,000 LIBRA
+- Fee: 3% × 100k = 3,000 ATOMICA
+- Net budget: 97,000 ATOMICA
 
 Phase 4: Sequential Clearing
 Auction 1 (DOGE): Alice wins, pays 5,000  → Net: 92,000 remaining
@@ -140,7 +140,7 @@ Auction 4 (ETH):  Alice wins, needs 50,000 → FORFEITED (only 52k left)
 Result:
 - Alice receives: DOGE + SOL (small/mid markets)
 - Alice forfeits: BTC + ETH (ran out of budget)
-- Protocol earns: 3,000 LIBRA fee
+- Protocol earns: 3,000 ATOMICA fee
 - Next bidders win BTC and ETH
 ```
 
@@ -279,12 +279,12 @@ If auctions run **sequentially** (ETH auction 12:00-12:06, then BTC 12:06-12:12,
 
 ```
 Auction 1 (ETH):
-- Alice bids 100k, wins → Receives ETH, spent all LIBRA
-- Bob bids 98k, loses → Still has 100k LIBRA
+- Alice bids 100k, wins → Receives ETH, spent all ATOMICA
+- Bob bids 98k, loses → Still has 100k ATOMICA
 
 Auction 2 (BTC):
-- Alice: Cannot participate (has 0 LIBRA, only ETH)
-- Bob: Can bid full 100k LIBRA
+- Alice: Cannot participate (has 0 ATOMICA, only ETH)
+- Bob: Can bid full 100k ATOMICA
 
 Result: Sequential losers have advantage in later auctions
 ```
@@ -671,10 +671,10 @@ fn calculate_uniform_clearing_price(bids: &Vec<Bid>) -> Result<u128, Error> {
 Attacker goal: Inflate BTC clearing price
 
 Attacker bids:
-- DOGE: 10,000 LIBRA (Priority 1, will consume budget)
-- BTC:  100,000 LIBRA (very high bid, will forfeit)
+- DOGE: 10,000 ATOMICA (Priority 1, will consume budget)
+- BTC:  100,000 ATOMICA (very high bid, will forfeit)
 
-Budget: 10,000 LIBRA
+Budget: 10,000 ATOMICA
 
 Settlement:
 1. DOGE clears: Attacker pays 10k (budget exhausted)
@@ -691,14 +691,14 @@ If attacker is selling BTC: Profits from higher clearing price
 **How it works**:
 ```
 Attacker bids 110k total, has 10k budget (1000% over-budget)
-Fee: 5% × 10k = 500 LIBRA (collected upfront)
+Fee: 5% × 10k = 500 ATOMICA (collected upfront)
 
 For attack to be profitable:
-- Attacker must manipulate price enough to gain >500 LIBRA
+- Attacker must manipulate price enough to gain >500 ATOMICA
 - With competitive auctions, price impact likely small (<1%)
 - Attack becomes unprofitable
 
-If fee = 10%: Need >1,000 LIBRA profit → most attacks fail
+If fee = 10%: Need >1,000 ATOMICA profit → most attacks fail
 ```
 
 **Fee Structure Recommendation**:
@@ -763,7 +763,7 @@ Goals:
 - Identify griefing attacks in practice
 
 Setup:
-- Deploy to testnet with real LIBRA tokens
+- Deploy to testnet with real ATOMICA tokens
 - Offer rewards for finding vulnerabilities
 - Run for 4-8 weeks before mainnet
 ```
@@ -783,7 +783,7 @@ Tasks:
 
 ### Launch Strategy
 
-**Phase 1: Single Daily Auction (Months 1-2)**
+**Phase 1: twice-daily batch auction (Months 1-2)**
 ```
 Scope:
 - One asset per day (ETH Monday, BTC Tuesday, etc.)
@@ -957,9 +957,9 @@ For completeness, other high-level designs considered but not recommended.
 
 **Design**:
 ```
-Day 1: ETH/LIBRA auction (single asset)
-Day 2: BTC/LIBRA auction (single asset)
-Day 3: SOL/LIBRA auction (single asset)
+Day 1: ETH/ATOMICA auction (single asset)
+Day 2: BTC/ATOMICA auction (single asset)
+Day 3: SOL/ATOMICA auction (single asset)
 ```
 
 **Pros**: Each auction isolated, no strategic games, simple UX
@@ -972,14 +972,14 @@ Day 3: SOL/LIBRA auction (single asset)
 
 **Design**:
 ```
-Monday:    ETH/LIBRA
-Tuesday:   BTC/LIBRA
-Wednesday: SOL/LIBRA
-Thursday:  MATIC/LIBRA
-Friday:    ETH/LIBRA (repeats)
+Monday:    ETH/ATOMICA
+Tuesday:   BTC/ATOMICA
+Wednesday: SOL/ATOMICA
+Thursday:  MATIC/ATOMICA
+Friday:    ETH/ATOMICA (repeats)
 ```
 
-**Pros**: Single daily auction (simple), each asset gets regular liquidity, no gaming
+**Pros**: twice-daily batch auction (simple), each asset gets regular liquidity, no gaming
 **Cons**: Must wait for specific day to trade specific asset
 **Verdict**: Simple and fair, but limited throughput.
 

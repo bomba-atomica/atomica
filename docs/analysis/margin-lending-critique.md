@@ -186,7 +186,7 @@ Single atomic transaction:
 - ❌ Cross-chain settlement (cannot atomic swap across chains)
 - ❌ Uniform pricing eliminates arbitrage profit (no guaranteed profit to pay interest)
 
-**Conclusion:** Atomica's futures delivery model fundamentally prevents atomic lending.
+**Conclusion:** Atomica's batch settlement model fundamentally prevents atomic lending.
 
 ### Option 2: Auction Clearing Price Guarantees Repayment
 

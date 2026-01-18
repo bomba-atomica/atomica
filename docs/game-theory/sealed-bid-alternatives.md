@@ -1077,12 +1077,12 @@ Where:
 **Challenges**:
 - ⚠ Indicative price gaming (orders submitted/cancelled to move price)
 - ⚠ Information leakage (order book visible → HFT advantage)
-- ⚠ Requires market maker participation (specialists, DMMs)
+- ⚠ Requires Bidder participation (specialists, DMMs)
 
 **Why It Works**:
 - Deep liquidity (millions of traders)
 - Regulatory oversight (SEC, exchanges)
-- Professional participants (institutions, MMs)
+- Professional participants (institutions, Bidders)
 - Continuous market follows (price discovery ongoing)
 
 **Difference from Blockchain**:
@@ -1941,13 +1941,13 @@ With sealed bids (same scenario):
 **Observation**: Public order books show demand, but liquidity providers protected differently
 
 **Protections**:
-- **Designated Market Makers**: Obligated to provide liquidity (compensated by exchange)
+- **Designated Bidders**: Obligated to provide liquidity (compensated by exchange)
 - **Continuous trading follows**: Opening auction just sets starting price; bad execution can be corrected immediately in continuous market
 - **Deep liquidity**: Thousands of participants (undersubscription rare)
 - **Regulatory oversight**: Manipulation illegal, prosecutable
 
 **Not Applicable to Atomica**:
-- No designated market makers (permissionless)
+- No designated Bidders (permissionless)
 - No continuous trading following auction (daily batch only)
 - Thin markets likely during bootstrap (not deep liquidity)
 - Limited regulatory recourse (decentralized, pseudonymous)
@@ -2045,7 +2045,7 @@ Post-auction: All bids made public (transparency)
 - Easy to audit and verify
 
 **5. Atomica-Specific Fit**:
-- Daily batch matches futures delivery model
+- Daily batch matches batch settlement model
 - Cross-chain coordination easier with predictable schedule
 - Sufficient for launch phase (add complexity later if needed)
 

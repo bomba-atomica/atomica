@@ -1,3 +1,11 @@
+> ⚠️ **DEPRECATED DOCUMENT**
+>
+> This document is archived for historical reference only.
+> It may contain outdated information, abandoned ideas, or incorrect statements.
+> Do NOT use this document as a source of truth.
+>
+> **Canonical sources:** See [PRD.md](/PRD.md) and [README.md](/README.md)
+
 # Atomica Call Auction - Product Design v0
 
 ## Overview
