@@ -24,7 +24,7 @@
 - Achieved superior capital efficiency compared to CPMMs through price-specific liquidity provision
 - Provided better price discovery through order matching
 
-**Constant Product Bidders (CPMMs)**
+**Constant Product Market Makers (CPMMs)**
 - Popularized by Uniswap (2018) using the x*y=k formula, though Bancor (2017) launched the first AMM
 - Eliminated need for order matching and direct counterparty interaction
 - Automated liquidity provision through pooled assets
@@ -55,7 +55,7 @@
 - High gas costs for frequent on-chain operations (order placement, cancellation, updates)
 - Liquidity fragmentation across multiple order books and on-chain latency slower than centralized exchanges
 
-**Constant Product Bidders**
+**Constant Product Market Makers**
 - Impermanent loss for liquidity providers
 - Adverse selection through Loss-Versus-Rebalancing (LVR)—LPs constantly trade at stale prices against informed arbitrageurs, with fees often insufficient to compensate
 - Poor capital efficiency (liquidity spread across entire price curve in v2)
@@ -396,7 +396,7 @@ The auction operates as follows:
 - Escrow is released at auction conclusion based on settlement outcome
 
 **Bidders (Home Chain Bidders)**
-- Professional Bidders on Home chain bid for units of the Away chain asset
+- Professional Market Makers on Home chain bid for units of the Away chain asset
 - Bidders use unlocked balances from ordinary wallets—no capital lock-up required until auction clears
 - Each bidder submits bids specifying quantity and price for units they wish to purchase
 
@@ -463,20 +463,20 @@ We propose four complementary mitigations:
 
 **3. Reserve Price with Commit-Reveal**
 - Seller can set a reserve price (minimum acceptable clearing price) using commit-reveal scheme
-- During auction setup, auctioneer commits to a hash of their reserve price
+- During auction setup, Seller commits to a hash of their reserve price
 - Auction proceeds normally with this commitment on-chain
-- **Default behavior**: If auctioneer does nothing, escrow releases and auction settles normally
-- **Active rejection**: If clearing price < reserve, auctioneer must actively submit proof (reveal) that auction failed to meet reserve, triggering fund return
+- **Default behavior**: If Seller does nothing, escrow releases and auction settles normally
+- **Active rejection**: If clearing price < reserve, Seller must actively submit proof (reveal) that auction failed to meet reserve, triggering fund return
 - This prevents strategic reserve price manipulation after seeing bids
 
 **4. Reserve Price Cost (Seller Penalty)**
-- Exercising the reserve price rejection incurs a cost to the auctioneer: **5% of (reserve price × volume)**
+- Exercising the reserve price rejection incurs a cost to the Seller: **5% of (reserve price × volume)**
 - Note: The fee is calculated on the reserve price, not the final auction clearing price
 - This creates an incentive to lower the reserve price (making auctions more attractive to bidders) to reduce insurance costs
 - The penalty is distributed to qualifying bidders as compensation for wasted time and opportunity cost
-- Creates economic disincentive for auctioneers to set unrealistic reserves
-- Ensures auctioneers only reject auctions when clearing price is genuinely unacceptable
-- Aligns incentives: auctioneers want auctions to succeed; bidders are protected against time-wasting
+- Creates economic disincentive for Sellers to set unrealistic reserves
+- Ensures Sellers only reject auctions when clearing price is genuinely unacceptable
+- Aligns incentives: Sellers want auctions to succeed; bidders are protected against time-wasting
 
 ### Game-Theoretic Properties
 
@@ -510,9 +510,9 @@ The previous section outlined the general auction mechanism for Atomic Auctions.
 
 ### Core Insight: Embrace Latency, Don't Fight It
 
-Cross-chain atomic swaps inherently require coordination time and settlement delays. Rather than positioning this as a limitation, we reframe the system as a **futures market** where users understand they're purchasing assets for delivery at a future time.
+Cross-chain atomic swaps inherently require coordination time and settlement delays. Rather than positioning this as a limitation, we reframe the system as a **batch auction model** where users understand they're purchasing assets for delivery at a future time.
 
-**Key Realization:** Users should not expect spot market pricing. This is a futures market.
+**Key Realization:** Users should not expect spot market pricing. This is a batch auction model.
 
 ### Daily Batch Auction Architecture (Initial Launch)
 
@@ -549,7 +549,7 @@ For the bootstrapping phase, Atomica will launch with **one unified batch auctio
 - **Higher Volume per Auction:** Single large auction worth infrastructure investment
 
 **User Experience Benefits:**
-- **Clear Expectations:** Users know they're buying futures for next-day delivery, not spot
+- **Clear Expectations:** Users know they're buying batch auction for next-day delivery, not spot
 - **Simpler Mental Model:** two auctions per day is easy to understand
 - **Better Pricing:** Reduced MM risk premium through hedging may result in better rates than spot
 - **Predictable Timing:** Know exactly when to participate
@@ -562,7 +562,7 @@ For the bootstrapping phase, Atomica will launch with **one unified batch auctio
 
 ### Critical Requirement: Timelocked Sealed Bids
 
-For the daily batch futures model to work effectively, **sealed bid privacy is essential**—even more critical than in the multi-auction spot model.
+For the daily batch batch auction model to work effectively, **sealed bid privacy is essential**—even more critical than in the multi-auction spot model.
 
 **Why Sealed Bids Are Mandatory:**
 
@@ -589,11 +589,11 @@ As documented in `timelock-bids.md`, this approach is **practical and implementa
 
 ### Comparison to Multi-Auction Spot Model
 
-| Dimension | Spot Model (Multiple Daily) | Futures Model (Single Daily) |
+| Dimension | Spot Model (Multiple Daily) | batch auction model (Single Daily) |
 |-----------|----------------------------|------------------------------|
 | **Frequency** | Many auctions throughout day | One daily auction |
 | **Settlement** | Immediate after auction | X hours after close |
-| **User Expectation** | Spot pricing | Futures/forward pricing |
+| **User Expectation** | Spot pricing | batch auction/forward pricing |
 | **Liquidity per Auction** | Fragmented | Concentrated |
 | **Reserve Price** | Needed (with penalties) | Not needed |
 | **Sealed Bids** | Helpful | Essential |
@@ -621,17 +621,17 @@ The settlement delay after auction close is a key design parameter with tradeoff
 - ⚠️ Moderate inventory risk
 
 **Long Delay (48+ hours):**
-- ✅ True futures market dynamics
+- ✅ True batch auction model dynamics
 - ✅ Maximum hedging flexibility for Bidders
 - ✅ Potentially best pricing for users
 - ❌ Significant wait time may frustrate users
 - ❌ More price risk over delay period
 
-**Recommended for Launch:** **12-24 hour settlement delay** balances user expectations with Bidder risk management, while maintaining the futures market framing.
+**Recommended for Launch:** **12-24 hour settlement delay** balances user expectations with Bidder risk management, while maintaining the batch auction model framing.
 
 ### Evolution Path
 
-The daily futures model is optimized for **bootstrapping liquidity**. As volume grows, the protocol can evolve:
+The daily batch auction model is optimized for **bootstrapping liquidity**. As volume grows, the protocol can evolve:
 
 **Phase 1 (Launch):** Single daily batch auction with sealed bids, batch settlement
 - Focus: Build critical mass, establish Bidder relationships
@@ -639,10 +639,10 @@ The daily futures model is optimized for **bootstrapping liquidity**. As volume 
 
 **Phase 2 (Growth):** Multiple daily auctions at different times
 - Add auctions for different geographies (e.g., Asia, Europe, Americas hours)
-- Maintain futures model but increase frequency
+- Maintain batch auction model but increase frequency
 - Still use sealed bids for each auction
 
-**Phase 3 (Maturity):** Hybrid spot + futures options
+**Phase 3 (Maturity):** Hybrid spot + batch auction options
 - Offer premium spot auctions (shorter settlement) for users willing to pay higher spreads
 - Maintain batch auctions for best pricing
 - Introduce more sophisticated products (limit orders, etc.)
@@ -652,7 +652,7 @@ The daily futures model is optimized for **bootstrapping liquidity**. As volume 
 - Dynamic settlement windows based on market conditions
 - Full DCLOB-style continuous trading (if sufficient liquidity achieved)
 
-### Why Start with Futures Model
+### Why Start with batch auction model
 
 The batch auction model is optimal for launch because it:
 
@@ -664,7 +664,7 @@ The batch auction model is optimal for launch because it:
 6. **Clear UX:** Users know what to expect (batch settlement)
 7. **Better Pricing:** Reduced MM risk premium benefits users
 
-Starting with a complex multi-auction spot model would fragment liquidity and make bootstrapping significantly harder. The futures model provides a clear, implementable path to achieving economic sustainability and user adoption.
+Starting with a complex multi-auction spot model would fragment liquidity and make bootstrapping significantly harder. The batch auction model provides a clear, implementable path to achieving economic sustainability and user adoption.
 
 For detailed analysis comparing CPMM, spot auctions, and batch auction models, see [CPMM vs Auction: Comprehensive Comparison](cpmm-vs-auction.md).
 

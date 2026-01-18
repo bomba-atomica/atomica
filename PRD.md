@@ -291,7 +291,7 @@ Atomica prioritizes:
 - 500-2,000 active users
 - $5M-50M/day in volume
 - 30-50+ bidders per auction
-- Professional Bidders showing inbound interest
+- Professional Market Makers showing inbound interest
 - 1-2 major wallet/aggregator integrations
 
 ## Documentation Map

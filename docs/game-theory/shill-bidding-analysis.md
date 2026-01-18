@@ -26,7 +26,7 @@ This document provides rigorous game-theoretic analysis proving that shill biddi
 **Players**:
 - N legitimate bidders: M₁, M₂, ..., Mₙ
 - 1 strategic attacker: A (may control multiple addresses)
-- 1 auctioneer: U
+- 1 Seller: U
 
 **Strategies**:
 - Each bidder i has true valuation vᵢ for the auctioned asset
@@ -286,7 +286,7 @@ If clearing price p* < $1,900:
 ```
 
 **Effect on Collusion**:
-- Colluding bidders know auctioneer will reject if price drops >5% below market
+- Colluding bidders know Seller will reject if price drops >5% below market
 - Collusion only profitable if clearing price ∈ [$1,900, $2,000]
 - Maximum extractable profit: $10,000 total (divided among colluders)
 - Risk of defection still dominates for individual colluders
@@ -351,7 +351,7 @@ Treasury auctions share key properties with Atomic Auctions:
 
 **Reserve Price Backstop**:
 - ✅ **Economic floor**: Limits maximum extractable value from manipulation to ~5%
-- Aligns auctioneer incentives to reject unreasonably low clearing prices
+- Aligns Seller incentives to reject unreasonably low clearing prices
 
 ## Conclusion: Incentive-Compatible Design
 

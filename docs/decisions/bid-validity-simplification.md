@@ -520,7 +520,7 @@ if validate(bid) {
 - `/docs/technical/cryptographic-stack-analysis.md` - Remove bid validity proving sections
 - `/docs/technical/timelock-bids.md` - Simplify to post-decryption validation
 - `/PRD.md` - Update sealed bid requirements
-- `/docs/design/futures-market-model.md` - May reference bid validity
+- `/docs/design/batch-auction-economics.md` - May reference bid validity
 - `/docs/game-theory/shill-bidding-remediation.md` - May reference bid deposits
 
 **Key technical references:**

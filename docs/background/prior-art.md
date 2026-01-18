@@ -16,7 +16,7 @@ This document provides background on existing decentralized exchange mechanisms 
 - Achieved superior capital efficiency compared to CPMMs through price-specific liquidity provision
 - Provided better price discovery through order matching
 
-### Constant Product Bidders (CPMMs)
+### Constant Product Market Makers (CPMMs)
 - Popularized by Uniswap (2018) using the x*y=k formula, though Bancor (2017) launched the first AMM
 - Eliminated need for order matching and direct counterparty interaction
 - Automated liquidity provision through pooled assets
@@ -47,7 +47,7 @@ This document provides background on existing decentralized exchange mechanisms 
 - High gas costs for frequent on-chain operations (order placement, cancellation, updates)
 - Liquidity fragmentation across multiple order books and on-chain latency slower than centralized exchanges
 
-### Constant Product Bidders
+### Constant Product Market Makers
 - Impermanent loss for liquidity providers
 - Adverse selection through Loss-Versus-Rebalancing (LVR)—LPs constantly trade at stale prices against informed arbitrageurs, with fees often insufficient to compensate
 - Poor capital efficiency (liquidity spread across entire price curve in v2)
@@ -103,7 +103,7 @@ Payment channels (e.g., Lightning Network, Raiden) and state channels are Layer 
 ### Limitations for Competitive Auctions
 While payment channels offer instant settlement and low costs for repeated transactions between the *same* parties, they fail for competitive multi-party auctions:
 
-1.  **Capital Inefficiency:** Bidders must lock funds in channels with specific auctioneers in advance. To bid on 100 different auctions, a bidder would need 100 funded channels, fragmenting capital and preventing the "flash loan" leverage model used in Atomica.
+1.  **Capital Inefficiency:** Bidders must lock funds in channels with specific Sellers in advance. To bid on 100 different auctions, a bidder would need 100 funded channels, fragmenting capital and preventing the "flash loan" leverage model used in Atomica.
 2.  **Liveness Requirements:** Both parties must be online to update the channel. If a bidder goes offline, they cannot participate, whereas smart contract auctions allow passive participation via simple bid submission.
 3.  **Auction Incompatibility:** Competitive uniform price auctions require aggregating N bids to find a clearing price. Implementing this logic inside a bilateral state channel network is exponentially complex and requires custom routing that reintroduces centralization.
 

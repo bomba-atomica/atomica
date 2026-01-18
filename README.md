@@ -8,7 +8,7 @@
 2. **Cross-chain execution requires trusted bridges** — $2B+ lost to bridge exploits (2021-2024); wrapped tokens introduce custodial and depegging risk
 3. **No canonical reference price** — Unlike equities (NYSE close) or gold (LBMA fixing), crypto lacks an authoritative batch-cleared benchmark
 4. **MEV extraction is unavoidable in transparent mempools** — Front-running, sandwich attacks, and arbitrage extraction cost users $600M+ annually
-5. **Continuous Bidders face Loss-Versus-Rebalancing** — LPs systematically lose to informed traders; fees rarely compensate for adverse selection
+5. **Continuous Market Makers face Loss-Versus-Rebalancing** — LPs systematically lose to informed traders; fees rarely compensate for adverse selection
 6. **Large trades suffer significant price impact** — Fragmented liquidity across time means institutional-size orders move markets against themselves
 
 ## Quick Start
@@ -79,6 +79,12 @@ atomica/
     │   ├── architecture-overview.md
     │   ├── cross-chain-verification.md
     │   ├── cross-chain-swap.md
+    │   ├── onion-timelock.md
+    │   ├── timelock-dataflow-specification.md
+    │   ├── rust-move-interface-specification.md
+    │   ├── event-schema-specification.md
+    │   ├── bitcoin-taproot-analysis.md
+    │   ├── bitcoin-bitvm-sp1-fiamma-analysis.md
     │   └── ethereum-wallet-atomica-bridge.md
     ├── game-theory/          ← Economics & mechanism design
     │   ├── uniform-price-auctions.md
@@ -145,15 +151,36 @@ atomica/
 - Dual-layer verification (BLS + ZK)
 - Account abstraction
 
+**[Onion Timelock Encryption](docs/technical/onion-timelock.md)**
+- Composition and ordering of encryption layers
+- Multi-layer security model
+
+**[Timelock Dataflow Specification](docs/technical/timelock-dataflow-specification.md)**
+- End-to-end flow from Rust to Move contracts
+- DKG and share generation mechanics
+
+**[Rust ↔ Move Interface](docs/technical/rust-move-interface-specification.md)**
+- Low-level interface boundaries and native functions
+- Event schema and validator transaction formats
+
 **[Cross-Chain Verification](docs/technical/cross-chain-verification.md)**
 - ZK proofs of away-chain state
 - Merkle proof inclusion
 - Atomic settlement mechanics
 
-**[Cross-Chain Swap Mechanism](docs/technical/cross-chain-swap.md)**
-- Trustless "Fail Only" design philosophy
-- Dual-Layer Verification (BLS + ZK)
-- HTLC + Timelock IBE mechanics
+**[Atomic Cross-Chain Swap](docs/technical/cross-chain-swap.md)**
+- Hash Time Locked Contracts (HTLCs) and ZK verification
+- "Fail-only" design philosophy for fund safety
+
+### ₿ Bitcoin Integration
+
+**[Bitcoin Taproot Analysis](docs/technical/bitcoin-taproot-analysis.md)**
+- Critical analysis of Taproot capabilities for auctions
+- Pareto-optimal design for Bitcoin mainnet
+
+**[Fiamma & BitVM Analysis](docs/technical/bitcoin-bitvm-sp1-fiamma-analysis.md)**
+- Scaling Bitcoin verification using SP1 and BitVM2
+- Comparison of ZK-proof verification pathways on Bitcoin
 
 **[Ethereum Wallet Atomica Bridge](docs/technical/ethereum-wallet-atomica-bridge.md)**
 - Account abstraction specification

@@ -3,13 +3,13 @@
 ## Purpose of This Document
 
 This document provides a **detailed comparative economic analysis** of three exchange mechanisms for cross-chain atomic swaps:
-1. **Constant Product Bidders (CPMMs)** - Passive liquidity pools
+1. **Constant Product Market Makers (CPMMs)** - Passive liquidity pools
 2. **Spot Auctions** - Multiple daily auctions with immediate settlement
 3. **batch auctions** - Daily batch auction with delayed settlement (Atomica's chosen model)
 
 **Note:** This is an analytical document, not a mechanism explainer. For implementation details, see:
 - [Uniform Price Auctions](uniform-price-auctions.md) - Auction mechanism details
-- [batch auction model](../design/futures-market-model.md) - Why futures model for Atomica
+- [batch auction model](../design/batch-auction-economics.md) - Why batch auction model for Atomica
 - [Prior Art](../background/prior-art.md) - Background on DEX mechanisms
 
 ## Executive Summary
@@ -34,7 +34,7 @@ This analysis assumes the following infrastructure:
 - No protocol fees or profit extraction
 - Trustless execution (no custodians or centralized intermediaries)
 
-## Constant Product Bidder (CPMM) Approach
+## Constant Product Market Maker (CPMM) Approach
 
 ### Mechanism Overview
 
@@ -517,11 +517,11 @@ Bootstrapping initial bidder participation:
 
 ## batch auction model: A Third Approach
 
-Recent design insights suggest that reframing the auction mechanism as a **futures market** rather than a spot market fundamentally addresses several challenges identified with both CPMMs and traditional auction designs.
+Recent design insights suggest that reframing the auction mechanism as a **batch auction model** rather than a spot market fundamentally addresses several challenges identified with both CPMMs and traditional auction designs.
 
 ### Core Insight: Users Should Not Expect Spot Pricing
 
-The key realization is that cross-chain atomic swaps inherently require coordination time and settlement delays. Rather than fighting this constraint, we can embrace it by designing the system as a **futures market** where:
+The key realization is that cross-chain atomic swaps inherently require coordination time and settlement delays. Rather than fighting this constraint, we can embrace it by designing the system as a **batch auction model** where:
 
 1. **Commodity delivered in X hours after auction close** - Assets settle after a predetermined delay (1-3 hours)
 2. **Price smoothing** - auction pricing naturally smooths volatility and reduces sensitivity to momentary price spikes
@@ -584,11 +584,11 @@ This approach is **practical and implementable** with current cryptographic tool
 
 ### Comparison to Spot Auction Model
 
-| Dimension | Spot Auctions (Multiple Daily) | Futures Market (Single Daily) |
+| Dimension | Spot Auctions (Multiple Daily) | batch auction model (Single Daily) |
 |-----------|-------------------------------|------------------------------|
 | **Frequency** | Many auctions per day | two auctions per day |
 | **Settlement** | Immediate | X hours after close |
-| **Pricing Expectation** | Spot market rates | Futures/forward rates |
+| **Pricing Expectation** | Spot market rates | batch auction/forward rates |
 | **Liquidity per Auction** | Fragmented across many | Concentrated in one |
 | **Bidder Appeal** | Lower volume, higher risk | Higher volume, hedgeable |
 | **Price Volatility Risk** | High (immediate settlement) | Lower (time to hedge) |
@@ -675,7 +675,7 @@ Three distinct mechanisms can enable trustless cross-chain atomic swaps, each wi
 - Easier bootstrapping (critical mass in single auction)
 - Clear user expectations (batch settlement, not spot)
 
-**The core question shifts from "sustainable economics vs. superior UX" to "spot immediacy vs. futures predictability."**
+**The core question shifts from "sustainable economics vs. superior UX" to "spot immediacy vs. batch auction predictability."**
 
 For cross-chain atomic swaps specifically, the batch auction model may be optimal:
 - Cross-chain coordination already introduces latency (embrace it, don't fight it)
@@ -688,7 +688,7 @@ For cross-chain atomic swaps specifically, the batch auction model may be optima
 Start with a **single daily batch auction using timelocked sealed bids** for the bootstrapping phase. This maximizes liquidity concentration, simplifies the mechanism, and creates predictable schedule for bidder participation. As volume grows, consider adding:
 - Multiple daily auctions at different times for different geographies
 - Spot auction options for users willing to pay premium for immediate settlement
-- Hybrid approaches where large trades use futures and small trades use spot
+- Hybrid approaches where large trades use batch auction and small trades use spot
 
 The batch auction model represents a practical, implementable approach that aligns incentives across all participants while maintaining trustless execution and economic sustainability.
 
@@ -734,7 +734,7 @@ These papers collectively establish that uniform price auctions are subject to s
 - Foundational model of adverse selection in market making
 - Derives bid-ask spreads as compensation for trading with informed traders
 
-### DeFi and Automated Bidders
+### DeFi and Automated Market Makers
 
 **Note:** DeFi research is rapidly evolving. The following represents current understanding but citations may be approximate:
 
@@ -748,7 +748,7 @@ These papers collectively establish that uniform price auctions are subject to s
 - Technical documentation available from Uniswap Labs
 - Increases capital efficiency but creates additional complexity and risks
 
-**Constant Function Bidders (CFMMs):**
+**Constant Function Market Makers (CFMMs):**
 - Researchers including Angeris, Chitra, and others have provided mathematical analysis
 - Work covers arbitrage conditions, price discovery, and oracle properties
 

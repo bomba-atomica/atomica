@@ -32,7 +32,7 @@ From `liquidity-provision.md`, the claimed advantages over Aave/Compound:
 
 **Comparison to Aave:**
 - Aave: Borrow USDC against ETH collateral, can default if ETH drops
-- Atomica: Borrow USDC against Open Libra collateral, can default if Open Libra drops
+- Atomica: Borrow USDC against Atomica collateral, can default if Atomica drops
 - **No difference in risk model**
 
 ### Claimed Advantage 2: "Zero Protocol Fees - 100% to LPs" (Lines 48-49)
@@ -56,7 +56,7 @@ From `liquidity-provision.md`, the claimed advantages over Aave/Compound:
 **Reality:** UNSUBSTANTIATED - Likely higher than traditional lending
 
 **Why:**
-- Cross-chain collateral (Open Libra on home chain, lending on Ethereum)
+- Cross-chain collateral (Atomica on home chain, lending on Ethereum)
 - Adds cross-chain bridge risk, ZK proof risk, oracle risk
 - Default risk = collateral volatility risk (same as Aave)
 - Settlement delay (24-48 hours) increases volatility exposure
@@ -71,14 +71,14 @@ From `liquidity-provision.md`, the claimed advantages over Aave/Compound:
 **Reality:** ADDS COMPLEXITY, NOT VALUE
 
 **Why:**
-- Collateral on Open Libra chain
+- Collateral on Atomica chain
 - Lending on Ethereum/Arbitrum
 - Requires cross-chain proofs, oracles, bridge-like infrastructure
 - **Adds risk without reducing lending risk**
 
 **What would be needed:**
-- ZK light client to verify Open Libra collateral from Ethereum
-- Oracle to price Open Libra token in USDC terms
+- ZK light client to verify Atomica collateral from Ethereum
+- Oracle to price ATOMICA token in USDC terms
 - Cross-chain liquidation mechanism
 - All of these are **additional failure points**
 
@@ -116,7 +116,7 @@ From `liquidity-provision.md`, the claimed advantages over Aave/Compound:
 
 **Lending timeline:**
 ```
-T=-24h:  LP lends USDC to bidder (backed by Open Libra collateral)
+T=-24h:  LP lends USDC to bidder (backed by Atomica collateral)
 T=0:     Auction closes, bidder wins ETH at clearing price
 T=+24h:  Settlement delivers ETH to MM
 T=+48h:  bidder sells ETH, repays LP
@@ -137,7 +137,7 @@ T=+48h:  bidder sells ETH, repays LP
 **Atomica lending = Aave with different collateral asset**
 
 **Structure:**
-- User deposits Open Libra as collateral
+- User deposits Atomica as collateral
 - User borrows USDC
 - User uses USDC to participate in auctions (or anything else)
 - User must repay USDC + interest
@@ -150,7 +150,7 @@ T=+48h:  bidder sells ETH, repays LP
 - User must repay USDC + interest
 - If collateral value drops, liquidation occurs
 
-**The only difference:** Collateral is Open Libra instead of ETH
+**The only difference:** Collateral is Atomica instead of ETH
 - This is WORSE (less liquid, more volatile, unproven)
 - Not a competitive advantage
 
@@ -167,8 +167,8 @@ T=+48h:  bidder sells ETH, repays LP
 Single atomic transaction:
 1. Verify bidder won auction (ZK proof from home chain)
 2. LP lends USDC to MM
-3. bidder pays USDC to auctioneer
-4. bidder receives ETH from auctioneer
+3. bidder pays USDC to Seller
+4. bidder receives ETH from Seller
 5. bidder sells ETH for USDC (AMM swap within same transaction)
 6. bidder repays LP in USDC (principal + interest)
 7. If steps 1-6 succeed, commit; else revert all
@@ -181,7 +181,7 @@ Single atomic transaction:
 - ✅ Unique to auction mechanism
 
 **Why this is IMPOSSIBLE in Atomica:**
-- ❌ Settlement has 12-24 hour delay (futures model)
+- ❌ Settlement has 12-24 hour delay (batch auction model)
 - ❌ Cannot sell ETH atomically (no AMM in settlement transaction)
 - ❌ Cross-chain settlement (cannot atomic swap across chains)
 - ❌ Uniform pricing eliminates arbitrage profit (no guaranteed profit to pay interest)
@@ -219,11 +219,11 @@ Single atomic transaction:
 
 **How this would work:**
 ```
-1. bidder deposits 100 Open Libra collateral
+1. bidder deposits 100 Atomica collateral
 2. LP lends $199K against collateral
 3. bidder wins auction, receives 100 ETH
 4. If bidder doesn't repay within 48 hours:
-   - Open Libra collateral automatically auctioned
+   - Atomica collateral automatically auctioned
    - Proceeds sent to LP to cover debt
    - No external liquidators needed
 ```
@@ -249,7 +249,7 @@ Single atomic transaction:
 
 **What Atomica offers:**
 - 55% APY (0.15% per 24 hours)
-- Backed by Open Libra collateral (130% LTV)
+- Backed by Atomica collateral (130% LTV)
 - Cross-chain complexity
 
 **What Aave offers:**
@@ -268,8 +268,8 @@ Single atomic transaction:
 - **Question:** Does 10x APY justify the risk?
 
 **Answer depends on:**
-- Open Libra collateral liquidity (can LPs liquidate if needed?)
-- Open Libra volatility (>3x ETH volatility = unacceptable risk)
+- Atomica collateral liquidity (can LPs liquidate if needed?)
+- Atomica volatility (>3x ETH volatility = unacceptable risk)
 - Cross-chain infrastructure reliability (ZK proofs, oracles)
 - Protocol maturity (new vs. Aave's years of operation)
 
@@ -281,7 +281,7 @@ Single atomic transaction:
 ### For Bidders (Borrowers)
 
 **What Atomica offers:**
-- Borrow against Open Libra collateral
+- Borrow against Atomica collateral
 - 10x leverage (130% collateral ratio)
 - 0.15% per 24 hours interest (55% APY)
 
@@ -297,20 +297,20 @@ Single atomic transaction:
 
 **Why would an bidder use Atomica?**
 - Only if they don't have ETH/BTC collateral
-- Only if they have Open Libra tokens
+- Only if they have ATOMICA tokens
 - Only if they're already in the Atomica ecosystem
 
 **Likely outcome:**
 - bidders with ETH: Use Aave (cheaper)
-- bidders with only Open Libra: Use Atomica (forced)
+- bidders with only Atomica: Use Atomica (forced)
 - **Total addressable market: Only users locked into Atomica ecosystem**
 
 ### Circular Dependency Problem
 
 **The paradox:**
-1. bidders need Open Libra tokens to use Atomica lending
-2. To get Open Libra, they must buy it (creates buy pressure)
-3. To buy Open Libra, they need capital (but they need lending for capital)
+1. bidders need ATOMICA tokens to use Atomica lending
+2. To get Atomica, they must buy it (creates buy pressure)
+3. To buy Atomica, they need capital (but they need lending for capital)
 4. **Chicken-and-egg problem**
 
 **Comparison to Aave:**
@@ -326,10 +326,10 @@ Single atomic transaction:
 
 | Feature | Aave | Morpho | dYdX | Atomica (Proposed) |
 |---------|------|--------|------|-------------------|
-| **Lending Model** | Pool-based | P2P matching | Order book margin | P2P (futures settlement) |
+| **Lending Model** | Pool-based | P2P matching | Order book margin | P2P (batch settlement) |
 | **LP APY** | 3-8% | 4-10% | N/A | 55% (claimed) |
 | **Borrower APY** | 5-8% | 5-10% | Funding rate | 55% |
-| **Collateral** | ETH, BTC, stables | Same as Aave | Trading assets | Open Libra (unproven) |
+| **Collateral** | ETH, BTC, stables | Same as Aave | Trading assets | Atomica (unproven) |
 | **Liquidation** | Dutch auction | Same as Aave | Auto | Cross-chain (complex) |
 | **Default Risk** | 1-3% (proven) | 1-2% (proven) | 2-5% | Unknown + cross-chain risk |
 | **Chain Support** | Same chain | Same chain | Same chain | Cross-chain (adds risk) |
@@ -352,7 +352,7 @@ Single atomic transaction:
 4. Market inefficiency (temporary mispricing)
 
 **Atomica's 55% APY is driven by:**
-- ✅ Higher default risk (Open Libra volatility)
+- ✅ Higher default risk (Atomica volatility)
 - ✅ Lower liquidity (new protocol, small market)
 - ✅ Smart contract risk (cross-chain complexity)
 - ❌ NOT market inefficiency (no unique value creation)
@@ -471,7 +471,7 @@ Mechanism:
 
 **What it actually is:**
 - Standard overcollateralized lending (like Aave)
-- Using Open Libra as collateral (instead of ETH)
+- Using Atomica as collateral (instead of ETH)
 - Higher interest rates (55% vs 5%) due to higher risk
 - Cross-chain infrastructure (adds complexity)
 - **Zero auction-specific guarantees or benefits**
@@ -519,7 +519,7 @@ This is **out-of-band lending** - the auction mechanism provides no unique value
 
 ### What NOT to Do
 
-1. ❌ Build Aave clone with Open Libra collateral (no differentiation)
+1. ❌ Build Aave clone with Atomica collateral (no differentiation)
 2. ❌ Claim "zero default risk" or "atomic" when it's not true
 3. ❌ Pretend cross-chain is an advantage when it adds risk
 4. ❌ Launch with unrealistic APY expectations (55% is risk premium, not value creation)

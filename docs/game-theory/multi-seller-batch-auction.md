@@ -548,7 +548,7 @@ Traditional order book with continuous matching:
 - More granular price discovery over time
 - Established infrastructure and user familiarity
 
-### Automated Bidders (AMMs)
+### Automated Market Makers (AMMs)
 
 Constant product bidders (like Uniswap):
 

@@ -190,7 +190,7 @@ Based on global crypto trading patterns, CEX volume data, and professional tradi
 
 ---
 
-### 7. Professional Bidders (liquidity providers)
+### 7. Professional Market Makers (liquidity providers)
 
 **Daily Volume: $20-30B** (15-20% of spot market)
 
@@ -627,9 +627,9 @@ Your local time: November 15, 2025 at 12:00 PM EST
 ## Related Documents
 
 - [Market Volume by Participant Category](./market-volume-by-participant-category.md) - Addressable market analysis
-- [GTM Pull Strategy](./gtm-pull-strategy.md) - Go-to-market strategy for individual arbitrageurs
-- [Product Design v0](../design/product-design-v0.md) - Atomica auction mechanism design
-- [batch auction model](../design/futures-market-model.md) - Why batch settlement works
+- [GTM Pull Strategy](./gtm-considerations.md) - Go-to-market strategy for individual arbitrageurs
+- [Product Design v0](../design/product-design-v0-ARCHIVED.md) - Atomica auction mechanism design
+- [batch auction model](../design/batch-auction-economics.md) - Why batch settlement works
 
 ---
 

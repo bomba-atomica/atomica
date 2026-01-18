@@ -559,7 +559,7 @@ Defection payoff > Cooperation payoff
 t=0: Attacker bids 50 units @ $2,000 (high, locks allocation)
 t=close-1s: Attacker lowers bid to 50 units @ $1,900
 → Clearing price drops from $1,980 to $1,900
-→ All bidders benefit from lower price (at auctioneer's expense)
+→ All bidders benefit from lower price (at Seller's expense)
 ```
 
 **Implementation**:
@@ -782,7 +782,7 @@ t=close-1s: Attacker lowers bid to 50 units @ $1,900
 - User sets minimum acceptable clearing price
 - Auction fails if clearing price < reserve
 - Commit-reveal prevents strategic reserve setting
-- Penalty fee (5% of reserve × volume) if auctioneer rejects
+- Penalty fee (5% of reserve × volume) if Seller rejects
 
 **Status**: Not currently implemented. Single daily batch auction provides sufficient liquidity concentration. Reserve prices are potential future feature for guaranteed execution on large individual orders.
 
@@ -945,12 +945,12 @@ All pay same price
 
 ### Single-Seller vs Multi-Seller Auctions
 
-**Single-Seller**: One auctioneer sells quantity Q
+**Single-Seller**: One Seller sells quantity Q
 - Simpler mechanism
 - Clear seller incentive (maximize revenue)
 - Used in most traditional auctions
 
-**Multi-Seller**: Multiple auctioneers each sell quantities q₁, q₂, ..., qₙ
+**Multi-Seller**: Multiple Sellers each sell quantities q₁, q₂, ..., qₙ
 - Aggregates fragmented supply
 - Each seller may have different reserve price
 - Used in stock exchanges (opening/closing auctions), electricity markets

@@ -20,13 +20,13 @@ The document claims that liquidity providers can earn **50-400% APY** by providi
 
 **Example given (lines 540-571):**
 ```
-Bob deposits $20K Open Libra collateral, uses 10x leverage:
+Bob deposits $20K Atomica collateral, uses 10x leverage:
 - Auction: 100 ETH @ $2,000 market price
 - Clearing price: $1,990/ETH (0.5% spread)
 - Bob borrows $199,000 USDC from LP @ 0.15% rate
 - Atomic transaction:
   1. Borrow $199,000 USDC
-  2. Pay auctioneer $199,000 USDC
+  2. Pay Seller $199,000 USDC
   3. Receive 100 ETH
   4. Repay LP $199,298.50 (principal + 0.15% interest)
   5. Bob keeps 100 ETH
@@ -43,7 +43,7 @@ Bob's profit:
 But this creates an impossible timeline:
 
 1. **During atomic transaction** (Mode 1, lines 330-369):
-   - Borrow USDC → Pay auctioneer → Receive ETH → **Repay LP in same transaction**
+   - Borrow USDC → Pay Seller → Receive ETH → **Repay LP in same transaction**
    - Bob must repay LP $199,298.50 **IMMEDIATELY**
    - Bob only has 100 ETH, not USDC
 
@@ -267,9 +267,9 @@ Flash loans work for:
 
 ## What Margin Models COULD Work
 
-### Option 1: Futures-Based Margin (Post-Auction)
+### Option 1: batch auction-Based Margin (Post-Auction)
 
-**Concept:** Lend to bidders AFTER auction, to be repaid AFTER futures settlement
+**Concept:** Lend to bidders AFTER auction, to be repaid AFTER batch settlement
 
 **Timeline:**
 1. Auction clears at T=0 (e.g., 12:00 UTC)
@@ -299,7 +299,7 @@ Flash loans work for:
 **Concept:** LPs stake capital to increase MM's bidding limit, earn fee share
 
 **Mechanism:**
-1. bidder deposits $20K Open Libra collateral
+1. bidder deposits $20K Atomica collateral
 2. LP stakes $180K USDC to back MM's bids
 3. bidder can now bid up to $200K in auctions
 4. When bidder wins auction, settlement funded from LP's staked capital
@@ -405,7 +405,7 @@ Flash loans work for:
 - This is actually "short-term collateralized lending" not flash loans
 
 **Correction:**
-- Call it "futures settlement lending" or "collateralized auction margin"
+- Call it "batch settlement lending" or "collateralized auction margin"
 - Remove flash loan comparison (creates false expectations)
 
 ### Claim 4: "MM Profit Example: $701.50" (Line 558)
@@ -445,10 +445,10 @@ Flash loans work for:
 
 ### What SHOULD Be Built
 
-**Futures Settlement Margin Lending:**
+**batch settlement Margin Lending:**
 
 **Structure:**
-1. **Collateral:** bidder deposits Open Libra on home chain (current design ✓)
+1. **Collateral:** bidder deposits Atomica on home chain (current design ✓)
 2. **Bidding:** bidder bids in auctions using collateral-backed capacity (current design ✓)
 3. **Winning:** bidder wins at uniform clearing price (current design ✓)
 4. **Lending Period:** Between auction close and settlement delivery (NEW)
@@ -460,7 +460,7 @@ T=0:    Auction closes, bidder wins 100 ETH at $1,990 clearing price
         bidder needs $199K to settle
 
 T=0:    LP lends $199K to bidder for 24-hour term @ 0.15% interest
-        bidder provides 130% collateral ($258.7K Open Libra)
+        bidder provides 130% collateral ($258.7K Atomica)
 
 T=24h:  Settlement: bidder receives 100 ETH
 
@@ -519,10 +519,10 @@ T=48h:  bidder repays LP $199K + $298.50 interest = $199,298.50
 
 ### What IS Feasible
 
-**Futures Settlement Margin Lending:**
+**batch settlement Margin Lending:**
 - ✅ Lend during settlement window (24-48 hours)
 - ✅ Interest rate: 0.15% per 24 hours = ~55% APY
-- ✅ Collateralized with Open Libra tokens
+- ✅ Collateralized with ATOMICA tokens
 - ✅ Low default risk (short duration + overcollateralization)
 - ✅ Economically viable for both LPs and Bidders
 
@@ -555,7 +555,7 @@ T=48h:  bidder repays LP $199K + $298.50 interest = $199,298.50
 ### Immediate Actions
 
 1. **Archive `liquidity-provision.md`** to docs/archive with clear note that economic model is flawed
-2. **Create new document:** `futures-settlement-lending.md` with corrected model
+2. **Create new document:** `batch auction-settlement-lending.md` with corrected model
 3. **Remove flash loan terminology** - this is short-term collateralized lending
 4. **Fix APY calculations** - use realistic 24-hour lending period
 5. **Clarify risk model** - default risk exists during settlement window
@@ -571,7 +571,7 @@ T=48h:  bidder repays LP $199K + $298.50 interest = $199,298.50
 ### New Document Structure
 
 **Proposed outline for corrected lending doc:**
-1. Overview: Futures Settlement Margin Lending
+1. Overview: batch settlement Margin Lending
 2. Economic Model: How bidders profit from spread AFTER settlement
 3. Lending Timeline: Auction → Settlement → External Sale → Repayment
 4. Interest Rates: 0.15% per 24 hours = 54.75% APY
@@ -585,7 +585,7 @@ T=48h:  bidder repays LP $199K + $298.50 interest = $199,298.50
 
 The peer-to-peer margin lending model described in `liquidity-provision.md` is based on a **fundamental economic misunderstanding**: it assumes borrowers can generate profit during atomic auction settlement when the uniform price mechanism eliminates that profit opportunity.
 
-**The corrected model** - Futures Settlement Lending - IS economically viable and provides value:
+**The corrected model** - batch settlement Lending - IS economically viable and provides value:
 - LPs earn ~55% APY (not 400%, but still attractive)
 - bidders get capital efficiency (10x leverage)
 - Risk is manageable (collateral + short duration)
@@ -593,7 +593,7 @@ The peer-to-peer margin lending model described in `liquidity-provision.md` is b
 
 **The path forward:**
 1. Archive the flawed document
-2. Build futures settlement lending (24-48 hour loans)
+2. Build batch settlement lending (24-48 hour loans)
 3. Set realistic expectations (55% APY, low but non-zero default risk)
 4. Focus on capital efficiency benefits, not impossible arbitrage
 

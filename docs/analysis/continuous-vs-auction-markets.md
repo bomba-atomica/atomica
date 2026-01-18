@@ -1337,7 +1337,7 @@ Batch Auction (CoW Swap):
 #### D. Composability with Timewlock Encryption
 - drand provides natural auction timing
 - Sealed bids via timelock encryption
-- No trusted auctioneer needed (cryptographic enforcement)
+- No trusted Seller needed (cryptographic enforcement)
 
 ### 2. Why Continuous DEXs Dominated (Despite Inferiority)
 
@@ -1589,7 +1589,7 @@ History provides the answer: We didn't think—we assumed. Atomica corrects that
 **Related Documents:**
 - `PRD.md` - Atomica product requirements
 - `docs/game-theory/uniform-price-auctions.md` - Auction mechanism details
-- `docs/design/futures-market-model.md` - Why futures for cross-chain
+- `docs/design/batch-auction-economics.md` - Why batch auction for cross-chain
 - `docs/game-theory/cpmm-vs-auction-comparison.md` - Economic comparison
 
 ---

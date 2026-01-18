@@ -95,18 +95,18 @@ A "flash loan-style P2P lending" system where:
 
 | Feature | Aave (Standard Lending) | Atomica Lending (Proposed) |
 |---------|------------------------|---------------------------|
-| Collateral required | ETH, BTC, stables (130% LTV) | Open Libra tokens (130% LTV) |
+| Collateral required | ETH, BTC, stables (130% LTV) | ATOMICA tokens (130% LTV) |
 | Loan repayment | Borrower sells assets, repays | Borrower sells assets, repays |
 | Default risk | If collateral drops, liquidation | If collateral drops, liquidation |
 | Atomicity | No (multi-transaction) | No (multi-transaction) |
 | APY to lenders | 5-8% | 55% (due to higher risk) |
 | APY to borrowers | 5-8% | 55% (10x more expensive) |
-| Collateral liquidity | High (ETH, BTC are liquid) | Low (Open Libra is new token) |
+| Collateral liquidity | High (ETH, BTC are liquid) | Low (Atomica is new token) |
 | Cross-chain | Same chain (simple) | Cross-chain (complex) |
 | Protocol maturity | 5+ years, $10B+ TVL | New, $0 TVL |
 
 **Conclusion:** This is just Aave with:
-- Different collateral (Open Libra instead of ETH)
+- Different collateral (Atomica instead of ETH)
 - Higher risk (cross-chain, new protocol, illiquid collateral)
 - Higher cost (55% APY instead of 5%)
 - More complexity (cross-chain proofs, oracles)
@@ -202,11 +202,11 @@ Settlement transaction:
 - Settlement delivers 100% of assets to winner
 - No mechanism to split proceeds
 
-### Option 2: Truly Atomic Settlement (No Futures Delay)
+### Option 2: Truly Atomic Settlement (No settlement delay)
 
 **Mechanism:**
 - Borrow, bid, win, settle, repay in SINGLE transaction
-- Requires instant settlement (not 12-24 hour futures)
+- Requires instant settlement (not 12-24 hour batch auction)
 - Requires same-asset repayment (or atomic swap in settlement)
 
 **Why we can't have this:**
@@ -246,14 +246,14 @@ Settlement transaction:
 
 3. **Better Alternatives Exist**
    - bidders can use Aave/Morpho TODAY at 1/10th the cost
-   - More liquid collateral (ETH/BTC vs Open Libra)
+   - More liquid collateral (ETH/BTC vs Atomica)
    - Proven protocols ($10B+ TVL, years of operation)
    - No need to build anything
 
 4. **High Complexity, Low Benefit**
    - Cross-chain infrastructure (oracles, proofs, liquidations)
    - Smart contract risk
-   - Liquidity bootstrapping for Open Libra collateral
+   - Liquidity bootstrapping for Atomica collateral
    - All for a product that's worse than existing alternatives
 
 5. **Misleading Marketing**
@@ -268,7 +268,7 @@ Settlement transaction:
 - Perfecting cross-chain atomic settlement
 - Optimizing uniform price auction design
 - Building robust anti-manipulation defenses
-- Improving UX for auctioneers and bidders
+- Improving UX for Sellers and bidders
 
 **Leverage through existing protocols:**
 - Document how bidders can use Aave/Morpho for leverage
@@ -289,12 +289,12 @@ Settlement transaction:
    - Impossible to implement with current architecture
 
 2. **Instant Settlement Architecture**
-   - Eliminate 12-24 hour futures delay
+   - Eliminate 12-24 hour settlement delay
    - Enable same-transaction borrow-bid-settle-repay
    - Major architecture change (probably not worth it)
 
 3. **Compelling Market Demand**
-   - Evidence that bidders need Open Libra-collateralized lending
+   - Evidence that bidders need Atomica-collateralized lending
    - Evidence that Aave integration is insufficient
    - Currently no such evidence exists
 

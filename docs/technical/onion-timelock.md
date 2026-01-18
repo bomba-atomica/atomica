@@ -4,6 +4,8 @@
 
 The Onion Timelock system is a flexible, multi-layer encryption scheme designed for sealed-bid auctions and other time-sensitive secrets on Atomica. Unlike traditional timelock schemes that rely on a single trusted beacon or validator set, the Onion Timelock allows users to compose multiple encryption layers from independent key providers (e.g., Validators, Drand, Seller).
 
+> ⚠️ **Note on Layer Providers**: The **Validator** and **Drand** layers are the primary production mechanisms. The **Seller layer** (and its associated DKG) is currently an investigational research topic and is not part of the initial production architecture.
+
 **Key Feature**: Users have complete control over the **selection** and **ordering** of these layers, enabling dynamic security configurations that prevent attackers from pre-computing exploits against fixed architectural patterns.
 
 ## 2. Core Concepts

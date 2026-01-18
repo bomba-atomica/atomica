@@ -10,9 +10,9 @@ Cross-chain atomic swaps inherently require coordination time and settlement del
 - Cross-chain state synchronization
 - Atomic settlement coordination
 
-Rather than positioning this latency as a limitation, Atomica reframes the system as a **futures market** where users understand they're purchasing assets for delivery at a future time.
+Rather than positioning this latency as a limitation, Atomica reframes the system as a **batch auction model** where users understand they're purchasing assets for delivery at a future time.
 
-## Why Futures, Not Spot?
+## Why batch auction, Not Spot?
 
 ### Benefits
 
@@ -39,7 +39,7 @@ Rather than positioning this latency as a limitation, Atomica reframes the syste
 - Easier to understand and audit
 
 **5. Clear User Expectations**
-- Users know they're buying futures for next-day delivery (not confused about spot vs delayed)
+- Users know they're buying batch auction for next-day delivery (not confused about spot vs delayed)
 - Transparent about timing from the start
 - Mental model similar to traditional futures markets
 
@@ -186,19 +186,19 @@ Atomica launches with **1-3 hour** settlement delay, which can be adjusted based
 
 ### vs. Spot Auctions (Multiple Daily)
 
-| Dimension | Futures (Single Daily) | Spot (Multiple Daily) |
+| Dimension | batch auction (Single Daily) | Spot (Multiple Daily) |
 |-----------|------------------------|------------------------|
 | **Liquidity per Auction** | Concentrated | Fragmented |
 | **Bidder Appeal** | High (worth investment) | Lower (thin auctions) |
 | **Bootstrapping** | Easier (critical mass) | Harder (need bidders for each) |
-| **User Expectations** | Clear (futures) | Confused (delayed "spot") |
+| **User Expectations** | Clear (batch auction) | Confused (delayed "spot") |
 | **Reserve Prices** | Not needed | Needed for protection |
 | **Complexity** | Simpler | More complex |
 | **Best Pricing** | Yes (hedgeable) | No (higher risk premium) |
 
 ### vs. Continuous Trading
 
-| Dimension | Futures Batch | Continuous Trading |
+| Dimension | batch auction Batch | Continuous Trading |
 |-----------|---------------|-------------------|
 | **MEV Resistance** | Strong (batch) | Weak (ordering matters) |
 | **Sealed Bids** | Natural fit | Complex to implement |
@@ -206,12 +206,12 @@ Atomica launches with **1-3 hour** settlement delay, which can be adjusted based
 | **Price Discovery** | Efficient (auction) | Requires continuous quotes |
 | **Implementation** | Simpler | Much more complex |
 
-## Success Criteria for Futures Model
+## Success Criteria for batch auction model
 
 **Key Metrics:**
 
 1. **Auctions consistently clear** - Every daily auction has sufficient bidder participation
-2. **Competitive pricing** - Spreads comparable to spot exchanges + reasonable futures premium
+2. **Competitive pricing** - Spreads comparable to spot exchanges + reasonable batch auction premium
 3. **User adoption** - Growing volume indicating users accept batch settlement model
 4. **Bidder profitability** - Bidders remain profitable and expand participation
 5. **No gaming** - No manipulation or strategic behavior undermining mechanism

@@ -15,7 +15,7 @@
 
 **Key Insight:** Individual arbitrageurs are BOTH sellers AND bidders, solving the two-sided market chicken-and-egg problem organically.
 
-**Why Not Institutions:** Professional Bidders (Wintermute, Jump, GSR) require long enterprise sales cycles and are tightly integrated into crypto establishment. Not viable for crypto-native team without connections.
+**Why Not Institutions:** Professional Market Makers (Wintermute, Jump, GSR) require long enterprise sales cycles and are tightly integrated into crypto establishment. Not viable for crypto-native team without connections.
 
 ---
 
@@ -149,7 +149,7 @@
 
 ### De-Prioritized Segments (Year 2+ After Traction)
 
-**Professional Bidders:**
+**Professional Market Makers:**
 - Examples: Wintermute, Jump Crypto, GSR, Cumberland
 - Why deprioritized: Requires enterprise sales, long cycles, need connections
 - When to approach: Year 2+ after demonstrating $50M-500M/day volume
@@ -355,7 +355,7 @@
 - 10-30 DAOs using for treasury operations
 - Recognized as credible alternative to bridges
 - 1-2 major wallet/aggregator integrations live
-- Professional Bidders showing inbound interest
+- Professional Market Makers showing inbound interest
 
 ---
 
@@ -370,7 +370,7 @@
 
 **Why this is HARD:**
 - DAOs are sellers only (need separate bidder recruitment)
-- Professional Bidders require enterprise sales (slow)
+- Professional Market Makers require enterprise sales (slow)
 - Can't launch until both sides are ready (delays launch)
 
 ---
@@ -418,7 +418,7 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
 - 200-500 arbitrageurs + 500-2K other users
 - Every auction has 20-50 competitive bids
 - Spreads compress to 0.1-0.2% (competitive with bridges)
-- Professional Bidders notice and join (inbound)
+- Professional Market Makers notice and join (inbound)
 - Professional participation further tightens spreads to 0.05-0.15%
 
 ---
@@ -536,7 +536,7 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
 **Liquidity Depth:**
 - Average bidders per auction: **Month 6: 20+, Year 1: 30-50+**
 - Average spreads: **Month 6: <0.2%, Year 1: <0.15%**
-- Professional Bidders participating: **Year 1: 1-3 firms**
+- Professional Market Makers participating: **Year 1: 1-3 firms**
 
 ---
 
@@ -686,7 +686,7 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
 
 **Success unlocks Year 2+ expansion:**
 - DAOs (now have proven liquidity)
-- Professional Bidders (inbound interest)
+- Professional Market Makers (inbound interest)
 - Wallet/aggregator integrations (ecosystem credibility)
 - Path to $100M-500M/day and beyond
 
@@ -695,8 +695,8 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
 **Related Documents:**
 - [Market Volume by Participant Category](./market-volume-by-participant-category.md) - Addressable market analysis
 - [Optimal Time of Day Analysis](./optimal-time-of-day.md) - Timezone and auction timing strategy
-- [Product Design v0](../design/product-design-v0.md) - Atomica auction mechanism
-- [batch auction model](../design/futures-market-model.md) - Why batch settlement works
+- [Product Design v0](../design/product-design-v0-ARCHIVED.md) - Atomica auction mechanism
+- [batch auction model](../design/batch-auction-economics.md) - Why batch settlement works
 
 **Version:** 1.0
 **Date:** 2025-11-15

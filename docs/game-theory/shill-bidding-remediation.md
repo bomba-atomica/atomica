@@ -88,7 +88,7 @@ Based on the formal analysis in [shill-bidding-analysis.md](shill-bidding-analys
 #### Type 4: Collusive Bid Depression
 - Multiple bidders coordinate to submit uniformly low bids
 - **Goal**: Collectively suppress clearing price
-- **Impact**: Extract systematic value from auctioneers
+- **Impact**: Extract systematic value from Sellers
 
 #### Type 5: Seller-Side Manipulation
 - Fake supply announcements to manipulate bidder expectations
@@ -681,7 +681,7 @@ The defense mechanisms rely on several assumptions. If these are violated, addit
 - **Partial Mitigation**: Batch deposits across multiple blocks, privacy-preserving deposit aggregators
 - **Residual Risk**: Medium, inherent to cross-chain transparency, but does not enable profitable manipulation attacks
 
-**Futures Settlement Model (By Design, Not a Limitation):**
+**batch settlement Model (By Design, Not a Limitation):**
 - 12-24hr delay between auction close and settlement is intentional - this is a batch auction
 - Users explicitly bid for future delivery, not spot settlement
 - Bidders price bids with settlement delay in mind (auction pricing)
@@ -690,7 +690,7 @@ The defense mechanisms rely on several assumptions. If these are violated, addit
   - Reduces inventory risk premium compared to instant settlement
   - Dampens manipulation incentives (no urgency-driven bidding)
   - Allows time for cross-chain atomic settlement verification
-- **Not a Risk**: External price movements are priced into bids; bidders bear volatility risk voluntarily as part of futures model
+- **Not a Risk**: External price movements are priced into bids; bidders bear volatility risk voluntarily as part of batch auction model
 - **Note**: This is a feature differentiating Atomica from spot exchanges, not a limitation to be mitigated
 
 **Scalability of ZK Proof Verification:**

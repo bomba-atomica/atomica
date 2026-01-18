@@ -102,10 +102,10 @@ Atomica employs four complementary mitigations:
 
 **Mechanism:**
 - Seller could set a reserve price (minimum acceptable clearing price) using commit-reveal scheme
-- During auction setup, auctioneer commits to a hash of their reserve price
+- During auction setup, Seller commits to a hash of their reserve price
 - Auction proceeds normally with this commitment on-chain
-- **Default behavior**: If auctioneer does nothing, escrow releases and auction settles normally
-- **Active rejection**: If clearing price < reserve, auctioneer must actively submit proof (reveal) that auction failed to meet reserve, triggering fund return
+- **Default behavior**: If Seller does nothing, escrow releases and auction settles normally
+- **Active rejection**: If clearing price < reserve, Seller must actively submit proof (reveal) that auction failed to meet reserve, triggering fund return
 - This prevents strategic reserve price manipulation after seeing bids
 
 **Use Case:** Large individual orders (e.g., institutional trades) that require execution guarantees and can afford to pay for this protection.
@@ -115,13 +115,13 @@ Atomica employs four complementary mitigations:
 **Status:** Not currently implemented. Applies only if reserve prices are added in future.
 
 **Mechanism:**
-- Exercising the reserve price rejection would incur a cost to the auctioneer: **5% of (reserve price × volume)**
+- Exercising the reserve price rejection would incur a cost to the Seller: **5% of (reserve price × volume)**
 - Note: The fee is calculated on the reserve price, not the final auction clearing price
 - This creates an incentive to lower the reserve price (making auctions more attractive to bidders) to reduce insurance costs
 - The penalty is distributed to qualifying bidders as compensation for wasted time and opportunity cost
-- Creates economic disincentive for auctioneers to set unrealistic reserves
-- Ensures auctioneers only reject auctions when clearing price is genuinely unacceptable
-- Aligns incentives: auctioneers want auctions to succeed; bidders are protected against time-wasting
+- Creates economic disincentive for Sellers to set unrealistic reserves
+- Ensures Sellers only reject auctions when clearing price is genuinely unacceptable
+- Aligns incentives: Sellers want auctions to succeed; bidders are protected against time-wasting
 
 ## Game-Theoretic Properties
 

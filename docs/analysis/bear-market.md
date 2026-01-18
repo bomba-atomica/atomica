@@ -1450,7 +1450,7 @@ An established batch auction venue with sufficient liquidity would provide **dem
 - Long-tail assets see dramatic spread widening
 
 **DEXs:**
-- Automated Bidder (AMM) pools experience:
+- Automated Market Maker (AMM) pools experience:
   - Impermanent loss drives LP withdrawals → reduced TVL → wider effective spreads
   - Price impact increases for given trade size as liquidity thins
   - Arbitrageurs less active in low-volume environment → prices drift from external markets

@@ -84,9 +84,9 @@ The communication strategy's implementation must begin well before launch. Pre-l
 
 Target audiences for pre-launch communication include DEX protocol teams, DeFi thought leaders on Twitter, and DAO community forums. The messaging approach should lead with the shared enemy framing: "DEXes and Atomica both fight to keep crypto trading decentralized. CEXes capture 85% of spot volume, OTC desks dominate institutional flow—we all lose together or win together."
 
-Emphasizing integration over disruption is critical: "Atomica is infrastructure *for* the DEX ecosystem, not competition. Our bidders are DEX power users who will trade more, not less. We're building the futures layer to complement the spot layer."
+Emphasizing integration over disruption is critical: "Atomica is infrastructure *for* the DEX ecosystem, not competition. Our bidders are DEX power users who will trade more, not less. We're building the batch auction layer to complement the spot layer."
 
-Educational content should establish the spot vs. futures mental model, drawing parallels to traditional finance where these markets coexist symbiotically. This prepares the audience to understand Atomica as category creation rather than market fragmentation.
+Educational content should establish the spot vs. batch auction mental model, drawing parallels to traditional finance where these markets coexist symbiotically. This prepares the audience to understand Atomica as category creation rather than market fragmentation.
 
 Crucially, pre-launch communication should involve direct outreach to DEX protocol teams and key thought leaders. Private conversations that explain the complementarity thesis before public launch can prevent hostile misunderstandings. A single well-respected voice saying "I've looked at Atomica's design and it's genuinely complementary to DEXes" can inoculate against mob dynamics.
 
@@ -94,7 +94,7 @@ Crucially, pre-launch communication should involve direct outreach to DEX protoc
 
 At launch, communication should focus on demonstrating—not just claiming—complementarity through concrete data and case studies.
 
-A flagship "Why Atomica Makes DEXes Stronger" blog post should detail the bidder-DEX symbiosis with quantitative analysis showing how Atomica volume generates DEX hedging volume. Educational content explaining "Futures for DeFi: The Missing Layer" should establish the spot vs. futures framework and explain use cases that DEXes struggle with (scheduled execution, treasury automation).
+A flagship "Why Atomica Makes DEXes Stronger" blog post should detail the bidder-DEX symbiosis with quantitative analysis showing how Atomica volume generates DEX hedging volume. Educational content explaining "batch auction for DeFi: The Missing Layer" should establish the spot vs. batch auction framework and explain use cases that DEXes struggle with (scheduled execution, treasury automation).
 
 Partnership announcements with DEX aggregators would provide powerful social proof. If LI.FI, Socket, or Bungee integrate Atomica as a cross-chain routing option, it signals that established DEX infrastructure views Atomica as complementary. The framing should emphasize: "Your instant swap vs. our next-day delivery—let users choose. Route cross-chain swaps through Atomica to eliminate bridge risk."
 
@@ -124,7 +124,7 @@ Despite genuine complementarity, certain objections will arise. Addressing them 
 
 **Objection 1: "You're still taking volume from DEXes"**
 
-The counter-argument must emphasize volume *creation* rather than *migration*: "We're creating NEW volume from markets that don't use DEXes today. DAOs currently use OTC desks (custody risk forces them off-chain). Bridge arbitrageurs avoid high-volume cross-chain DEX usage (bridge risk too high). Institutional patient capital has no futures option in DeFi currently. We're converting OTC desk and CEX volume to DeFi, not cannibalizing DEX volume."
+The counter-argument must emphasize volume *creation* rather than *migration*: "We're creating NEW volume from markets that don't use DEXes today. DAOs currently use OTC desks (custody risk forces them off-chain). Bridge arbitrageurs avoid high-volume cross-chain DEX usage (bridge risk too high). Institutional patient capital has no batch auction option in DeFi currently. We're converting OTC desk and CEX volume to DeFi, not cannibalizing DEX volume."
 
 This argument is strengthened by data showing Atomica's target segments (DAOs, cross-chain arbitrageurs, treasury management) and their current trading venues (predominantly OTC desks and CEXes, not DEXes).
 
@@ -154,13 +154,13 @@ These integrations aren't just partnerships—they're proof of concept for the c
 
 ## Conclusion: Category Creation, Not Market Share Capture
 
-The ultimate goal of Atomica's communication strategy is to establish a new mental category: "DeFi futures infrastructure" that sits alongside—not in competition with—"DeFi spot trading infrastructure." This is category creation rather than market share capture.
+The ultimate goal of Atomica's communication strategy is to establish a new mental category: "DeFi batch auction infrastructure" that sits alongside—not in competition with—"DeFi spot trading infrastructure." This is category creation rather than market share capture.
 
-The positioning statement that synthesizes the entire strategy: "Atomica is DeFi's futures layer—complementing AMMs' spot trading with scheduled execution, cross-chain atomic settlement, and treasury automation. We serve patient capital and institutional workflows that DEXes aren't designed for, while driving additional DEX volume through bidder hedging activity. Together, we're expanding DeFi's TAM into treasury management and reducing reliance on risky bridges, making the entire ecosystem stronger against our shared adversaries: CEXes and OTC desks."
+The positioning statement that synthesizes the entire strategy: "Atomica is DeFi's batch auction layer—complementing AMMs' spot trading with scheduled execution, cross-chain atomic settlement, and treasury automation. We serve patient capital and institutional workflows that DEXes aren't designed for, while driving additional DEX volume through bidder hedging activity. Together, we're expanding DeFi's TAM into treasury management and reducing reliance on risky bridges, making the entire ecosystem stronger against our shared adversaries: CEXes and OTC desks."
 
 This framing accomplishes several objectives simultaneously:
 
-1. **Establishes distinct positioning** (futures vs. spot) that makes competition less likely
+1. **Establishes distinct positioning** (batch auction vs. spot) that makes competition less likely
 2. **Emphasizes symbiosis** (bidder hedging drives DEX volume) that makes DEX success aligned with Atomica success
 3. **Highlights shared enemies** (CEXes, OTC desks) that unite rather than divide
 4. **Focuses on TAM expansion** (bringing OTC volume to DeFi) rather than market share capture
@@ -180,6 +180,6 @@ That narrative transformation—from potential competitor to ecosystem infrastru
 **Status**: Draft
 **Related Documents**:
 - [Market Volume by Participant Category](./market-volume-by-participant-category.md)
-- [GTM Pull Strategy](./gtm-pull-strategy.md)
+- [GTM Pull Strategy](./gtm-considerations.md)
 - [CoW Swap vs OTC Analysis](../background/cowswap-otc-analysis.md)
-- [Product Design v0](../design/product-design-v0.md)
+- [Product Design v0](../design/product-design-v0-ARCHIVED.md)

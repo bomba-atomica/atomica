@@ -24,7 +24,7 @@
 
 ### III. Current Continuous Prediction Market Mechanisms
 - Order book markets (Polymarket, Kalshi)
-- Automated Bidders (Augur, Omen)
+- Automated Market Makers (Augur, Omen)
 - Hybrid approaches
 - Strengths and weaknesses in low-liquidity scenarios
 
@@ -132,7 +132,7 @@ Without liquidity, informed traders cannot profitably trade on information → p
    - Traders can take liquidity immediately (market orders) or provide liquidity (limit orders)
    - **Challenge**: In low-liquidity markets, spreads widen dramatically
 
-2. **Automated Bidders (AMM)**
+2. **Automated Market Makers (AMM)**
    - Constant function Bidders (CPMM): x * y = k (Uniswap analog)
    - Logarithmic market scoring rules (LMSR): subsidized liquidity provider
    - **Advantage**: Always quotable price, never "empty" orderbook
@@ -250,7 +250,7 @@ Without liquidity, informed traders cannot profitably trade on information → p
    - Must offload inventory at worse prices or hold until event resolution
    - In illiquid markets, inventory risk prohibitive → no market making
 
-### B. Automated Bidders (Augur, Omen)
+### B. Automated Market Makers (Augur, Omen)
 
 **Structure:**
 - Constant function determines price based on current share ratio
@@ -507,7 +507,7 @@ As prediction market event approaches, information becomes more time-sensitive:
 **Implications:**
 
 1. **Elimination of Adverse Selection Premium**
-   - Continuous Bidders widen spreads to compensate for being picked off
+   - Continuous Market Makers widen spreads to compensate for being picked off
    - In low-liquidity markets, this can be 10-30% of spread
    - Batch auctions: All orders revealed simultaneously → no picking off
    - **Result**: Bidders can submit tighter quotes (lower bid-ask spread)
@@ -1232,7 +1232,7 @@ Based on continuous market data:
 
 1. **Sufficient Volume** (>$50k daily)
    - Spread revenue exceeds adverse selection + inventory costs
-   - Professional Bidders can operate profitably
+   - Professional Market Makers can operate profitably
    - **Result**: Tight spreads (<3%), deep liquidity
 
 2. **Predictable Flow**

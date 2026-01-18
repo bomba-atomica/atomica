@@ -9,7 +9,7 @@ Uniform price auctions are vulnerable to two critical attacks when bid informati
 1. **Under-subscription Exploitation**: Malicious actors observe unfilled auction capacity and strategically fill it with $0 bids to collapse the clearing price
 2. **Sequential Reveal Defection**: In commit-reveal schemes with non-simultaneous reveals, the last revealer can defect after observing all other bids
 
-Both attacks undermine the auction's price discovery mechanism and can result in catastrophic losses for the auctioneer.
+Both attacks undermine the auction's price discovery mechanism and can result in catastrophic losses for the Seller.
 
 ## Attack 1: Under-Subscription Exploitation (Visible Bids During Auction)
 
@@ -49,7 +49,7 @@ The uniform price auction mechanism sets the clearing price at the **lowest winn
 
 - Ensures the auction clears (all units allocated)
 - Forces the clearing price to their $0 bid
-- Benefits all bidders (including themselves) at the auctioneer's total expense
+- Benefits all bidders (including themselves) at the Seller's total expense
 
 ### Economic Incentives
 
@@ -71,7 +71,7 @@ The uniform price auction mechanism sets the clearing price at the **lowest winn
 **Partial Exploitation:**
 - If 80 units are bid, attacker bids remaining 20 units @ $0.01
 - Clearing price drops from market rate to $0.01
-- Still devastating for auctioneer
+- Still devastating for Seller
 
 **Strategic Positioning:**
 - Attacker waits until close to auction deadline to maximize information
