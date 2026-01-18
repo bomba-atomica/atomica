@@ -1,45 +1,94 @@
 # Atomica Documentation
 
+**The global canonical market open/close auction for crypto.** Twice-daily sealed-bid batch auctions like NYSE open/close for digital assets. Implemented non-custodially with trust minimized cross-chain atomic swaps, with timelock encryption.
 
-**Atomica enables trustless cross-chain atomic swaps via daily batch auctions with futures delivery.**
+## Why?
+
+1. **24/7 continuous trading fragments liquidity** — Crypto is the only major asset class that trades continuously; this creates thin orderbooks at off-peak hours and amplifies adverse selection
+2. **Cross-chain execution requires trusted bridges** — $2B+ lost to bridge exploits (2021-2024); wrapped tokens introduce custodial and depegging risk
+3. **No canonical reference price** — Unlike equities (NYSE close) or gold (LBMA fixing), crypto lacks an authoritative batch-cleared benchmark
+4. **MEV extraction is unavoidable in transparent mempools** — Front-running, sandwich attacks, and arbitrage extraction cost users $600M+ annually
+5. **Continuous market makers face Loss-Versus-Rebalancing** — LPs systematically lose to informed traders; fees rarely compensate for adverse selection
+6. **Large trades suffer significant price impact** — Fragmented liquidity across time means institutional-size orders move markets against themselves
 
 ## Quick Start
 
 **New readers should start here:**
 
-1. **[Prd.md](Prd.md)** - Product requirements document (~10 min read)
-2. **[Futures Market Model](docs/design/futures-market-model.md)** - Why futures for cross-chain (~15 min)
+1. **[PRD.md](PRD.md)** - Product requirements document (~10 min read)
+2. **[Auction Prior Art](docs/analysis/secondary-auctions-plus-continuous.md)** - Institutional auction precedents (~20 min)
 3. **[CPMM vs Auction Comparison](docs/game-theory/cpmm-vs-auction-comparison.md)** - Economic analysis (~20 min)
+
+## Key Concepts
+
+### Atomic Auctions
+Novel design combining atomic swaps' trustless cross-chain execution with auction-based competitive price discovery. No bridges, no wrapped tokens, no custodians.
+
+### Twice-Daily Batch Auctions
+Two auctions per day at 12:00 PM NYC (17:00 UTC) and 12:00 PM Tokyo (03:00 UTC). All trading pairs clear simultaneously. Settlement 1-3 hours after auction close.
+
+### Sealed Bids via N-Layer Timelock Encryption
+Bids are encrypted using an **N-Layer "Onion"** scheme with configurable layer composition. Each layer uses independent key providers (Validators, Sellers, Drand, etc.). Decryption requires cooperation from ALL N layers.
+
+### Uniform Price Auction
+All winning bidders pay the same clearing price (lowest qualifying bid), regardless of original bid. Similar properties to Vickrey auctions (Nobel Prize-winning research).
+
+### Fee Model: Deal Breakers Pay Deal Makers
+All externalities internalized. Fees proportional to distance from clearing price—accurate bidders get rebates, noisy bidders pay. **Zero operator fees for Bitcoin and Ethereum markets.**
+
+### Unified Cross-Chain Architecture
+All away chains (Ethereum, Solana, Base, Arbitrum, etc.) use identical verification mechanisms. Dual-layer security: BLS threshold signatures + ZK proofs.
+
+### Account Abstraction
+Users deposit on preferred chains using familiar wallets (MetaMask, Phantom). Sign bids with Ethereum wallet—no Atomica-native wallet or gas tokens needed.
+
+**Note:** Atomica chain uses Aptos-core as its blockchain software vendor (consensus, BLS cryptography, Move VM) while running as an independent network.
+
+### Design Principles
+
+Atomica prioritizes:
+1. **Trustlessness over convenience** - Cryptographic guarantees, no custodians
+2. **Economic sustainability over UX familiarity** - Self-sustaining economics, no subsidies
+3. **Practical deployability over theoretical privacy** - Timelock encryption, not FHE
+4. **Market-driven liquidity over protocol subsidies** - Competitive bidding, no tokens
+5. **Underserved markets over major pairs** - Long-tail assets where Atomica adds most value
+
+---
 
 ## Documentation Structure
 
 ```
 atomica/
-├── Prd.md                    ← Start here (executive summary, 163 lines)
+├── PRD.md                    ← Start here (executive summary)
 ├── README.md                 ← This file (navigation guide)
 └── docs/
     ├── development/          ← Implementation planning & status
     │   ├── technical-risks.md
     │   └── timelock-implementation-plan.md
+    ├── analysis/             ← Market & economic research
+    │   ├── bear-market.md
+    │   ├── continuous-vs-auction-markets.md
+    │   ├── secondary-auctions-plus-continuous.md
+    │   └── gtm-pull-strategy.md
     ├── background/           ← Context & prior art
     │   ├── prior-art.md
     │   └── cow-swap-analysis.md
     ├── design/               ← Product design & strategy
     │   ├── ideal-characteristics.md
-    │   ├── futures-market-model.md
-    │   └── evolution-roadmap.md
+    │   ├── product-design-v0.md
+    │   └── timelock-seller-stake-dkg.md
     ├── technical/            ← Technical specifications
+    │   ├── architecture-overview.md
     │   ├── cross-chain-verification.md
-    │   ├── timelock-bids.md
-    │   └── technology-limitations.md
+    │   └── ethereum-wallet-atomica-bridge.md
     ├── game-theory/          ← Economics & mechanism design
     │   ├── uniform-price-auctions.md
     │   ├── shill-bidding-analysis.md
     │   └── cpmm-vs-auction-comparison.md
+    ├── decisions/            ← Architecture decision records
+    │   ├── unified-away-chain-architecture.md
+    │   └── aptos-validator-timelock.md
     └── archive/              ← Historical & exploratory docs
-        ├── Prd-v1-archive.md
-        ├── liquidity-provision.md
-        └── payment-channel-option.md
 ```
 
 ## Document Guide
@@ -58,63 +107,49 @@ atomica/
 - Phase 1: zapatos testing and validation (2-3 weeks)
 - Phase 2: atomica-move-contracts integration (3-4 weeks)
 - Phase 3: atomica-web frontend (2-3 weeks)
-- Detailed task breakdown with deliverables
 
 ### 📋 Product Specification
 
-**[Prd.md](Prd.md)** - Complete product requirements (163 lines)
+**[PRD.md](PRD.md)** - Complete product requirements
 - Executive summary: What, why, how
-- Problem statement (with link to detailed prior art)
-- Solution overview: Atomic Auctions
-- Daily batch auction architecture
+- Problem statement (bridge risks, DEX risks)
+- Solution: Atomic Auctions
+- Twice-daily auction architecture (12:00 NYC, 12:00 Tokyo)
+- Fee structure: Deal breakers pay deal makers
 - Technical architecture summaries
-- Launch strategy (Phase 1 focus)
-- Design principles & tradeoffs
-- Open questions
-- Documentation map
 
 ### 🎯 Design & Strategy
+
+**[Auction Prior Art](docs/analysis/secondary-auctions-plus-continuous.md)** ⭐
+- Institutional auction adoption across asset classes
+- Equities (NYSE/LSE), bonds (Treasury), commodities (LME), precious metals (LBMA)
+- Why auctions coexist with continuous markets
+- Empirical evidence on auction volume share
+
+**[N-Layer Onion Timelock Design](docs/design/timelock-seller-stake-dkg.md)** ⭐
+- Pluggable key providers (Validators, Sellers, Drand, etc.)
+- Example configurations: Dual-layer and Triple-layer
+- Preventing "Invisible Handshake" collusion
+- Key provider independence (orthogonal key generation)
+
+**[Product Design v0](docs/design/product-design-v0.md)**
+- Complete auction mechanics
+- Multi-asset clearing
+- Reserve price economics
+- Bid deposits and spam prevention
 
 **[Ideal Solution Characteristics](docs/design/ideal-characteristics.md)**
 - Requirements for cross-chain exchange
 - Tradeoffs for each property
-- How Atomica addresses each
 - Design philosophy
-
-**[Futures Market Model](docs/design/futures-market-model.md)** ⭐
-- Why futures instead of spot trading
-- Daily batch auction architecture
-- Settlement delay considerations
-- Success criteria
-
-**[Evolution Roadmap](docs/design/evolution-roadmap.md)**
-- Phase 1: Single daily batch auction (launch)
-- Phase 2: Multiple daily auctions (growth)
-- Phase 3: Hybrid spot + futures (maturity)
-- Phase 4: Market-driven frequency (advanced)
-
-**[N-Layer Onion Timelock Design](docs/design/timelock-seller-stake-dkg.md)** ⭐
-- **The N-Layer "Onion" Timelock Architecture**
-- Pluggable key providers (Validators, Sellers, Drand, etc.)
-- Example configurations: Dual-layer and Triple-layer
-- Preventing "Invisible Handshake" collusion via multi-layer security
-- Seller participation and incentives (Scuttle Reward)
-- Key provider independence (orthogonal key generation)
-- v1.0 Homogeneous Crypto (BLS12-381), v2.0 Heterogeneous roadmap
 
 ### 🔧 Technical Specifications
 
 **[Architecture Overview](docs/technical/architecture-overview.md)** ⭐
 - Complete system architecture
 - Unified away chain verification
-- Aptos validator timelock implementation
 - Dual-layer verification (BLS + ZK)
 - Account abstraction
-
-**[Architecture Plan](docs/technical/architecture-plan.md)**
-- Detailed technical implementation plan
-- Aptos API integration research
-- Research topics for implementation
 
 **[Cross-Chain Verification](docs/technical/cross-chain-verification.md)**
 - ZK proofs of away-chain state
@@ -126,184 +161,63 @@ atomica/
 - Ethereum wallet integration
 - Cross-chain UX flow
 
-**[Timelock Encryption for Sealed Bids](docs/technical/timelock-bids.md)**
-- **(DEPRECATED)** Historical reference for Drand/ZK approaches
-- Superseded by **[Seller-Stake DKG Design](docs/design/timelock-seller-stake-dkg.md)**
-
-**[Technology Limitations](docs/technical/technology-limitations.md)**
-- Why fully private auctions aren't feasible
-- Limitations of commit-reveal, ZK, homomorphic encryption
-- Atomica's pragmatic approach
-
 ### 📊 Game Theory & Economics
 
 **[Uniform Price Auctions](docs/game-theory/uniform-price-auctions.md)**
 - Auction mechanism details
 - Theoretical foundation (Vickrey, Milgrom, Wilson)
-- Shill bidding mitigations
 - Game-theoretic properties
-- Phased implementation (Phase 1 vs Phase 3+)
 
-**[CPMM vs Auction Comparison](docs/game-theory/cpmm-vs-auction-comparison.md)** ⭐ (761 lines)
+**[CPMM vs Auction Comparison](docs/game-theory/cpmm-vs-auction-comparison.md)** ⭐
 - Detailed economic analysis
-- CPMM analysis (challenges, viability)
-- Spot auction analysis
-- Futures market model analysis
+- Why batch auctions over continuous AMMs
 - Comparative tables across all dimensions
-- Scenario analysis
-- Recommended approach
 
 **[Shill Bidding Analysis](docs/game-theory/shill-bidding-analysis.md)**
 - Formal analysis of manipulation attacks
-- Attack vectors & scenarios
 - Mitigation strategies
 - Game-theoretic proofs
+
+### 📈 Market Analysis
+
+**[Secondary Auctions Analysis](docs/analysis/secondary-auctions-plus-continuous.md)** ⭐
+- Equity markets (NYSE/LSE opening/closing auctions)
+- Precious metals (LBMA gold/silver fixings)
+- Industrial metals (LME ring)
+- Energy (Brent MOC window)
+- Why secondary auctions coexist with continuous markets
+
+**[Continuous vs Auction Markets](docs/analysis/continuous-vs-auction-markets.md)**
+- Historical evidence from 150+ years of markets
+- Case studies: Flash crashes, institutional auction adoption
+- Why auctions work: equities, bonds, commodities, spectrum
+
+**[Bear Market Analysis](docs/analysis/bear-market.md)**
+- Auction advantages in low-liquidity conditions
+- Why auctions become more valuable as liquidity fragments
 
 ### 📋 Architecture Decision Records
 
 **[Unified Away Chain Architecture](docs/decisions/unified-away-chain-architecture.md)** ⭐
 - Decision to use single architecture for all chains
-- Analysis of chain-specific vs unified approaches
-- Gas cost trade-offs (Ethereum vs Solana)
 - Why consistency over micro-optimization
 
 **[Atomica Validator Timelock](docs/decisions/aptos-validator-timelock.md)** ⭐
 - Decision to use Atomica validators for timelock encryption
-- Establishes the **Outer Layer** (Layer 1) in N-layer onion architecture
-- Leverages Aptos-core BLS12-381 infrastructure
-- Security analysis and implementation plan
+- Outer Layer in N-layer onion architecture
 
 **[Bid Validity Simplification](docs/decisions/bid-validity-simplification.md)**
-- Decision to use post-decryption validation
-- vs ZK proof pre-validation
+- Post-decryption validation vs ZK pre-validation
 - Economic deposits prevent spam
-- Simpler implementation
 
 ### 📚 Background & Context
 
 **[Prior Art: Decentralized Exchanges](docs/background/prior-art.md)**
 - Atomic swaps, DCLOBs, CPMMs, bridges
 - Shortcomings of each approach
-- Combined bridge + exchange risks
 - Implications for Atomica
 
 **[CoW Swap Analysis](docs/background/cow-swap-analysis.md)**
 - How CoW Swap works (batch auctions, solvers)
-- Evaluation against ideal characteristics
-- Key limitations (no cross-chain, solver centralization)
+- Key limitations (no cross-chain)
 - Insights for Atomica design
-
-### 🗄️ Archive
-
-**[Prd-v1-archive.md](docs/archive/Prd-v1-archive.md)** - Original 719-line PRD (pre-refactor)
-
-**[liquidity-provision.md](docs/archive/liquidity-provision.md)** - Exploratory liquidity strategies
-
-**[payment-channel-option.md](docs/archive/payment-channel-option.md)** - Alternative payment channel approach
-
-## Key Concepts
-
-### Atomic Auctions
-Novel design combining atomic swaps' trustless cross-chain execution with auction-based competitive price discovery. No bridges, no wrapped tokens, no custodians.
-
-### Futures Market Model
-Single daily batch auction with delivery 1-3 hours after auction close (not spot market). Embraces cross-chain latency, enabling better MM economics, liquidity concentration, and simpler mechanism. Settlement delay prevents arbitrage/information withholding and provides verification period.
-
-### Sealed Bids via N-Layer Timelock Encryption
-Bids are encrypted using an **N-Layer "Onion"** scheme with configurable layer composition. Each layer uses independent key providers (Validators, Sellers, Drand, etc.). Decryption requires cooperation from ALL N layers in sequential order. Example: Dual-layer (Validator + Seller) requires >67% Validators AND >33% Sellers. Triple-layer adds Drand beacon for additional security. This architecture prevents off-chain collusion by forcing attackers to compromise multiple independent groups simultaneously.
-
-**Note:** Atomica chain uses Aptos-core as its blockchain software vendor (consensus, BLS cryptography, Move VM) while running as an independent network.
-
-### Uniform Price Auction
-All winning bidders pay the same clearing price (lowest qualifying bid), regardless of original bid. Similar properties to Vickrey auctions under certain conditions (Nobel Prize-winning research).
-
-### Unified Cross-Chain Architecture
-All away chains (Ethereum, Solana, Base, Arbitrum, etc.) use identical verification mechanisms. Dual-layer security: BLS threshold signatures (consensus layer) + ZK proofs (computation layer). Both must agree on merkle root for settlement. Single codebase, consistent UX, unified security model.
-
-### Account Abstraction
-Users deposit on preferred chains using familiar wallets (MetaMask, Phantom). Account abstraction maps Ethereum addresses to Atomica accounts. Users sign bids with Ethereum wallet—no Atomica-native wallet or gas tokens needed. Never leave your wallet ecosystem.
-
-### Self-Sustaining Economics
-Market makers earn through bid-ask spreads (competitive returns, not excess rents). No protocol fees, no subsidies, no token emissions required.
-
-## Reading Paths
-
-### For Product Managers
-1. Prd.md (executive summary)
-2. Futures Market Model (why this approach)
-3. Evolution Roadmap (growth plan)
-4. Ideal Solution Characteristics (requirements)
-
-### For Engineers
-1. **[Technical Risks](docs/development/technical-risks.md)** (current status & priorities)
-2. **[Timelock Implementation Plan](docs/development/timelock-implementation-plan.md)** (next sprint)
-3. Prd.md (overview)
-4. Cross-Chain Verification (technical architecture)
-5. Timelock Encryption (sealed bid implementation)
-6. Uniform Price Auctions (mechanism details)
-
-### For Economists
-1. CPMM vs Auction Comparison (full economic analysis)
-2. Uniform Price Auctions (game theory)
-3. Shill Bidding Analysis (security proofs)
-4. Futures Market Model (why futures pricing)
-
-### For Market Makers
-1. Prd.md (what & why)
-2. Futures Market Model (daily auction structure)
-3. Uniform Price Auctions (bidding mechanism)
-4. Evolution Roadmap (future opportunities)
-
-## Design Principles
-
-Atomica prioritizes:
-1. **Trustlessness over convenience** - Cryptographic guarantees, no custodians
-2. **Economic sustainability over UX familiarity** - Self-sustaining MM economics
-3. **Practical deployability over theoretical privacy** - Timelock encryption, not FHE
-4. **Market-driven liquidity over protocol subsidies** - Competitive bidding, no tokens
-
-## Change Log
-
-**2025-12-22 - Development Documentation:**
-- Added Technical Risks tracking document
-- Added Timelock Implementation Plan (7-10 week roadmap)
-- Created docs/development/ directory
-- Updated README with development section
-
-**2025-01-10 - Aggressive Deduplication:**
-- Slimmed PRD from 344 → 163 lines (53% reduction)
-- Moved all root-level docs into docs/ structure
-- Extracted Evolution Roadmap to separate doc
-- Extracted Futures Market Model to separate doc
-- Created archive/ for historical docs
-- Deduplicated mechanism explanations (single source of truth)
-- Updated all cross-references
-
-**2025-01-09 - Major Refactor:**
-- Created streamlined PRD (344 lines, down from 719 - 52% reduction)
-- Extracted background to docs/background/
-- Extracted technical specs to docs/technical/
-- Extracted design to docs/design/
-- Extracted game theory to docs/game-theory/
-- Added futures market model analysis
-
-## References
-
-**Nobel Prize Winners in Auction Theory:**
-- **Vickrey, W. (1961)** - Revenue equivalence theorem (Nobel 1996)
-- **Wilson, R. (1979)** - Uniform-price multi-unit auctions
-- **Milgrom, P. & Wilson, R. (2020)** - Auction theory improvements (Nobel 2020)
-
-See individual documents for complete citations.
-
-## Contributing
-
-This is design documentation for Atomica. For questions or suggestions:
-- Open an issue for discussion
-- Propose changes via pull request
-- Ensure technical claims are well-sourced
-
----
-
-**Status:** Risk #1 complete, Risk #2 in progress (timelock encryption)
-**Last Updated:** 2025-12-22
