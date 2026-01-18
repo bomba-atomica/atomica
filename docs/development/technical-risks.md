@@ -268,7 +268,7 @@ Risk #1 (Ethereum Signing) → Risk #2 (Timelock) → Risk #3 (Cross-Chain Verif
 
 ### Design Documents
 - [Product Requirements Document](/Prd.md)
-- [Futures Market Model](/docs/design/futures-market-model.md)
+- [batch auction model](/docs/design/batch-auction-economics.md)
 - [Uniform Price Auctions](/docs/game-theory/uniform-price-auctions.md)
 
 ---

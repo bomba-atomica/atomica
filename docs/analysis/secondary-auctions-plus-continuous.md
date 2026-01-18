@@ -184,7 +184,7 @@ The key criterion: **The same asset from secondary holders can be sold via both 
 **ICE Brent Futures**:
 - **Hours**: 24-hour electronic trading (Intercontinental Exchange)
 - **History**: Originally London IPE open outcry (1988); moved to ICE electronic (2005)
-- **Settlement**: Financially settled or deliverable via Exchange of Futures for Physicals (EFP)
+- **Settlement**: Financially settled or deliverable via Exchange of batch auction for Physicals (EFP)
 - **Liquidity**: Extremely high volume; global benchmark
 
 **Physical Forward Market**:
@@ -195,7 +195,7 @@ The key criterion: **The same asset from secondary holders can be sold via both 
 
 #### Market Structure
 - **Brent Complex**: Integration of physical spot, forward, and financial derivatives
-- **Price Discovery**: MOC window provides daily benchmark; continuous futures provide real-time pricing
+- **Price Discovery**: MOC window provides daily benchmark; continuous batch auction provide real-time pricing
 - **Secondary Re-trading**: Active secondary market for physical cargoes between initial sale and delivery
 - **Derivatives**: Financially settled derivatives based on Brent benchmark trade continuously
 
@@ -279,7 +279,7 @@ The key criterion: **The same asset from secondary holders can be sold via both 
 
 #### Secondary Market - Continuous Trading
 - **Venues**: EEX, ICE, ENDEX, Nasdaq (ICE ~80% of volume)
-- **Products**: Spot, futures, options, forward contracts
+- **Products**: Spot, batch auction, options, forward contracts
 - **Trading**: Exchange-based and over-the-counter
 - **Volume**: **€781 billion in 2024** (vast majority of total trading)
 - **Scale**: "Vast majority of trading takes place on secondary market"
@@ -289,7 +289,7 @@ The key criterion: **The same asset from secondary holders can be sold via both 
 - **Dual Structure**: Daily primary auctions + massive continuous secondary market
 - **Participant Divergence**: Few auction participants vs. hundreds of active secondary traders
 - **Liquidity**: Secondary market provides continuous price discovery and risk management
-- **Derivatives**: Extensive futures/options trading for hedging and speculation
+- **Derivatives**: Extensive batch auction/options trading for hedging and speculation
 
 ---
 
@@ -338,7 +338,7 @@ The key criterion: **The same asset from secondary holders can be sold via both 
 
 #### Periodic Auctions
 - **Schedule**: Seasonal calendar (major sales in May, November, etc.)
-- **Format**: Live auctions with auctioneer, absentee bids, phone bidding, online bidding
+- **Format**: Live auctions with Seller, absentee bids, phone bidding, online bidding
 - **Volume**: 83-85% of auction house revenues (Christie's/Sotheby's)
 - **Prestige**: High-value lots, public price discovery, competitive bidding
 
@@ -426,14 +426,14 @@ The key criterion: **The same asset from secondary holders can be sold via both 
 - **Formula Pricing**: Base price adjusted by grid premiums/discounts
 - **Forward Contracts**: Agreed price for future delivery (e.g., 650 lb steers sold as 800 lb for delivery in 75 days)
 
-#### Futures Markets (Different Asset)
+#### batch auction Markets (Different Asset)
 - **Products**: Live Cattle, Feeder Cattle (CME)
 - **Nature**: Financial contracts, not physical cattle
-- **Limitation**: Futures are different instrument; not same asset as physical auctions
+- **Limitation**: batch auction are different instrument; not same asset as physical auctions
 
 #### Assessment
 - **Weak Example**: Physical auctions vs. bilateral sales both exist, but unclear if same cattle trade in both venues
-- **Futures Separate**: Futures market is financial risk management, not secondary physical trading
+- **batch auction Separate**: batch auction market is financial risk management, not secondary physical trading
 
 ---
 
@@ -466,7 +466,7 @@ The key criterion: **The same asset from secondary holders can be sold via both 
 
 5. **Crude Oil Brent**
    - Platts MOC window at 16:30 for daily benchmark
-   - ICE futures 24-hour + physical cargo re-trading
+   - ICE batch auction 24-hour + physical cargo re-trading
    - "Each cargo often traded more than once"
 
 6. **EU ETS Carbon Permits**
@@ -483,7 +483,7 @@ The key criterion: **The same asset from secondary holders can be sold via both 
 
 8. **Iron Ore (Platts IODEX)**
    - Daily MOC assessment explicitly includes secondary transactions
-   - Continuous bilateral + brokerage platforms + futures
+   - Continuous bilateral + brokerage platforms + batch auction
    - Integrated price discovery mechanism
 
 9. **Art Auctions (Christie's, Sotheby's)**
@@ -567,7 +567,7 @@ European markets show **significantly higher auction participation** than US mar
 
 3. **Institutional Behavior**: Passive funds and institutional investors concentrate trades at close for benchmarking. In lower liquidity markets, this concentration is more pronounced relative to continuous volume.
 
-4. **Market Maker Economics**: Thin markets have wider spreads and less competitive market making. Auctions provide alternative execution venue with better pricing for larger orders.
+4. **Bidder Economics**: Thin markets have wider spreads and less competitive market making. Auctions provide alternative execution venue with better pricing for larger orders.
 
 5. **Rebalancing Concentration**: Index rebalances and portfolio adjustments create predictable liquidity events. Lower liquidity markets see even higher auction concentration during these events (e.g., 54% Euronext rebalancing days).
 
@@ -644,7 +644,7 @@ Different studies use different denominators:
 
 ### **Asset Classes WITHOUT This Structure**
 
-- **Most Agricultural Commodities**: Grains, sugar, coffee, cocoa, rubber → continuous futures dominant, no clear periodic secondary auctions
+- **Most Agricultural Commodities**: Grains, sugar, coffee, cocoa, rubber → continuous batch auction dominant, no clear periodic secondary auctions
 - **Government Bonds**: Primary issuance auctions, but continuous secondary only (no periodic secondary auctions)
 - **FX Markets**: Continuous 24-hour markets; no periodic auctions (except WM/Reuters fixes, which are benchmarks not auctions)
 - **Cryptocurrencies**: Continuous 24/7 markets across exchanges
@@ -668,7 +668,7 @@ This dual-market structure is relevant for:
 1. **Market Microstructure**: Understanding optimal trading venue design
 2. **Algorithmic Trading**: Strategies spanning auction and continuous venues
 3. **Price Discovery**: Role of periodic batching vs. continuous information incorporation
-4. **Liquidity Provision**: Market maker strategies across dual venues
+4. **Liquidity Provision**: Bidder strategies across dual venues
 5. **Regulatory Design**: When to mandate auctions vs. allow continuous trading
 6. **Blockchain/DeFi**: Applying lessons to decentralized exchange design
 

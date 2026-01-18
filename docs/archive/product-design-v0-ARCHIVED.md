@@ -1,3 +1,11 @@
+> ⚠️ **DEPRECATED DOCUMENT**
+>
+> This document is archived for historical reference only.
+> It may contain outdated information, abandoned ideas, or incorrect statements.
+> Do NOT use this document as a source of truth.
+>
+> **Canonical sources:** See [PRD.md](/PRD.md) and [README.md](/README.md)
+
 # Atomica Call Auction - Product Design v0
 
 ## Overview
@@ -24,12 +32,12 @@ The auction system supports both single-chain and cross-chain trading scenarios:
 #### 2a. Single-Chain Auctions
 When all buyers and sellers operate on the same chain (e.g., Ethereum):
 - Auction execution occurs natively on that chain
-- Only auction **metadata** is registered on the Open Libra chain
+- Only auction **metadata** is registered on the Atomica chain
 - Settlement is direct and efficient within the native chain
 
 #### 2b. Cross-Chain Auctions
 When buyers and sellers are distributed across different chains:
-- Auction execution is conducted on the **Open Libra chain**
+- Auction execution is conducted on the **Atomica chain**
 - Cross-chain atomic swaps enable settlement
 - See [Cross-Chain Swap Mechanism](./cross-chain-swap.md) for implementation details
 

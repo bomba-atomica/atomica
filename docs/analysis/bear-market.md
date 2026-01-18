@@ -27,7 +27,7 @@
 
 2. **Crypto Recessions (2018, 2022) Exhibit Classic Recessionary Liquidity Dynamics**:
    - **Volume collapse**: 60-75% decline (comparable to 2008-09 equity volume decline of ~40%, but more severe due to crypto's nascent institutional base)
-   - **Bid-ask spread widening**: Market makers increase spreads to compensate for inventory risk and adverse selection—classic recession pattern documented since Great Depression
+   - **Bid-ask spread widening**: Bidders increase spreads to compensate for inventory risk and adverse selection—classic recession pattern documented since Great Depression
    - **Flight to quality**: Capital concentration in BTC/ETH mirrors traditional recession flight to Treasury securities
    - **Information asymmetry increases**: Price discovery becomes more difficult; volatility and thin orderbooks create greater uncertainty about fundamental values
    - **Search friction externality**: MEV extraction on DEXs represents search cost externality that persists despite lower volumes (parasitic intermediation)
@@ -39,7 +39,7 @@
    - **vs OTC**: Democratizes access to large-trade execution ($10k-$100k segment excluded by OTC minimums); transparent pricing reduces bilateral bargaining inefficiency; non-custodial removes counterparty risk
 
 4. **Mechanism Design Constraints Limit Addressable Market**:
-   - **Temporal inflexibility**: Discrete auction timing incompatible with continuous liquidity needs (eliminates high-frequency traders, arbitrageurs, market makers who require immediate execution)
+   - **Temporal inflexibility**: Discrete auction timing incompatible with continuous liquidity needs (eliminates high-frequency traders, arbitrageurs, Bidders who require immediate execution)
    - **Competitive equilibrium on major pairs**: BTC/ETH maintain sufficient CEX liquidity even in recessions; instant execution critical; auction temporal advantage insufficient to overcome this
    - **Information leakage for large traders**: Transparency creates signaling cost for institutions executing block trades (vs OTC discretion); reputation concerns
    - **Minimum viable scale**: Below critical participant density, uniform price auction fails to achieve efficient price discovery (market failure in extreme illiquidity)
@@ -61,7 +61,7 @@ Crypto "bear markets" (2018, 2022) exhibit structural similarities to traditiona
 **1. Liquidity Spirals (Brunnermeier & Pedersen, 2009)**
 - **Traditional recessions**: 2008 financial crisis saw corporate bond spreads widen from 100bp to 600bp as dealers withdrew; equity bid-ask spreads tripled
 - **Crypto recessions**: 2022 saw DEX spreads widen to "excruciating levels," particularly for stablecoins and long-tail assets; LP withdrawals created self-reinforcing liquidity spiral
-- **Common mechanism**: Loss spirals cause market makers to reduce inventory → wider spreads → reduced trading → further maker withdrawal → positive feedback loop
+- **Common mechanism**: Loss spirals cause Bidders to reduce inventory → wider spreads → reduced trading → further maker withdrawal → positive feedback loop
 
 **2. Flight to Quality (Caballero & Krishnamurthy, 2008)**
 - **Traditional recessions**: Capital flees to Treasury securities (safe asset demand spike); corporate bonds and equities suffer disproportionate outflows
@@ -72,7 +72,7 @@ Crypto "bear markets" (2018, 2022) exhibit structural similarities to traditiona
 **3. Adverse Selection and Market Breakdown (Akerlof, 1970)**
 - **Traditional recessions**: "Lemons problem" intensifies as information asymmetry increases; informed sellers (insiders) more active than informed buyers
 - **Crypto recessions**: Orderbooks thin as uninformed traders withdraw; informed traders (whales, insiders) can more easily manipulate prices
-- **Result**: Wider spreads necessary to compensate uninformed market makers for adverse selection risk
+- **Result**: Wider spreads necessary to compensate uninformed Bidders for adverse selection risk
 - **Auction advantage**: Simultaneous revelation mechanism mitigates adverse selection by eliminating sequential information advantage
 
 **4. Counterparty Risk Cascades (Diamond & Dybvig, 1983)**
@@ -138,7 +138,7 @@ Crypto "bear markets" (2018, 2022) exhibit structural similarities to traditiona
 - Trader-to-market-maker ratio on Uniswap fell from 3:1 (2021 bull) to 1-2:1 (2022 bear)
 
 **Spread Widening:**
-- Market makers widened spreads to compensate for increased volatility and risk
+- Bidders widened spreads to compensate for increased volatility and risk
 - Orderbook depth declined as makers reduced position sizes
 - Long-tail assets saw dramatic spread increases; even stablecoin liquidity paradoxically evaporated from DEXs despite capital flight to stables
 
@@ -185,7 +185,7 @@ Crypto "bear markets" (2018, 2022) exhibit structural similarities to traditiona
 #### A. Centralized Exchanges (CEXs) in Bear Markets
 
 **Strengths:**
-- Deep liquidity on major pairs (BTC/ETH) maintained due to institutional market makers
+- Deep liquidity on major pairs (BTC/ETH) maintained due to institutional Bidders
 - Established trust and brand recognition (survivors like Coinbase, Binance, Kraken)
 - Full-featured platforms (derivatives, margin, staking, etc.)
 - Immediate execution and 24/7 availability
@@ -421,7 +421,7 @@ Prospect theory predicts asymmetric response to gains vs losses: losses hurt app
 **1. Adverse Selection Costs (Glosten & Milgrom, 1985)**
 - Uninformed traders face adverse selection when trading with informed counterparties
 - **Recession amplification**: As liquidity thins, proportion of informed traders increases
-- Market makers widen spreads to compensate for adverse selection risk
+- Bidders widen spreads to compensate for adverse selection risk
 - **Auction advantage**: Simultaneous revelation reduces sequential adverse selection
 
 **2. Search Frictions (Diamond, 1982)**
@@ -516,7 +516,7 @@ Bear markets transform trader psychology around execution costs. When operating 
 
 2. **Implicit Costs - Spread**:
    - Bid-ask spread: The gap between best buy and sell prices
-   - Bear markets: Spreads widen dramatically as market makers reduce inventory risk
+   - Bear markets: Spreads widen dramatically as Bidders reduce inventory risk
    - 2022 data: Spreads reached "excruciating levels" especially for stablecoins and long-tail assets
    - Major pairs maintained relatively tight spreads, but mid-cap and long-tail saw 2-10x spread widening
 
@@ -601,9 +601,9 @@ In bear markets, traders demand a premium above intrinsic value to compensate fo
 
 **How Uncertainty Manifests as Wider Spreads:**
 
-**Market Maker Behavior:**
+**Bidder Behavior:**
 - Uncertain environment → increase spread to compensate for risk
-- If "true price" unclear, market maker must price in potential adverse moves
+- If "true price" unclear, Bidder must price in potential adverse moves
 - Bear market volatility → position can move against them rapidly
 - Inventory risk increases → reduce size willing to quote or widen spread
 
@@ -880,7 +880,7 @@ During bear markets, liquidity doesn't just decline—it **fragments** across ti
 - User may bid conservatively to protect against adverse moves, reducing chances of fill
 
 **Not Suitable for Active Traders**
-- Day traders, arbitrageurs, market makers need continuous markets
+- Day traders, arbitrageurs, Bidders need continuous markets
 - These users generate significant volume on CEXs/DEXs
 - Atomica can't serve this segment at all
 - Limits addressable market to "patient capital" traders - a minority, especially in bear markets
@@ -1150,7 +1150,7 @@ This analysis has examined multiple hypotheses about how an established batch au
 
 **H2: Bear markets significantly widen spreads and reduce liquidity**
 - **Evidence**: 2022 data shows 60-75% volume decline, DEX market share fell 33%, LP withdrawals created spirals, spreads widened to "excruciating levels"
-- **Mechanism**: Market makers widen spreads to compensate for volatility risk; LPs exit due to impermanent loss; capital flees long-tail assets
+- **Mechanism**: Bidders widen spreads to compensate for volatility risk; LPs exit due to impermanent loss; capital flees long-tail assets
 - **Confidence**: Very High (well-documented historical pattern)
 
 **H3: Auctions provide superior execution for medium-large trades in thin markets**
@@ -1258,13 +1258,13 @@ The evidence strongly supports that uniform-price batch auctions provide superio
 
 **1. Temporal Liquidity Coordination (Market Microstructure Theory)**
 - **Theoretical foundation**: Recessions create temporal fragmentation as trading becomes sporadic and unpredictable (analogous to coordination failure in Keynesian models)
-- **Empirical validation**: 60-75% volume decline (2018, 2022), LP withdrawals, market maker retreat
+- **Empirical validation**: 60-75% volume decline (2018, 2022), LP withdrawals, Bidder retreat
 - **Continuous market failure**: Sequential arrivals force orderbook walking—first traders achieve acceptable execution, subsequent traders suffer nonlinear price impact (2-10% common in thin markets)
 - **Batch auction solution**: Temporal aggregation overcomes coordination failure by concentrating all trading interest at discrete intervals (Walrasian tatonnement in practice)
 - **Critical nonlinearity**: As market depth declines linearly, adverse selection costs increase nonlinearly → auction advantage accelerates
 
 **2. Adverse Selection Mitigation (Kyle 1985, Glosten-Milgrom 1985)**
-- **Continuous market problem**: Informed traders exploit thin orderbooks sequentially; market makers widen spreads to compensate for adverse selection risk
+- **Continuous market problem**: Informed traders exploit thin orderbooks sequentially; Bidders widen spreads to compensate for adverse selection risk
 - **Recession amplification**: As uninformed traders withdraw (60-75% volume decline), proportion of informed traders increases → adverse selection costs spiral
 - **Auction mechanism advantage**: Simultaneous bid revelation eliminates sequential information advantage; informed traders cannot observe and react to uninformed flow
 - **Result**: Tighter effective spreads achievable despite thin overall liquidity
@@ -1398,9 +1398,9 @@ An established batch auction venue with sufficient liquidity would provide **dem
 
 **Liquidity Provider Behavior:**
 - **TVL concentration**: During 2022 bear market, TVL shifted back to Top-50 tokens almost entirely, reversing prior bull market trend of capital flowing to long-tail assets
-- **Market maker exodus**: Many LPs withdrew due to sustained falling prices over nearly 2 years and significant impermanent losses
-- **Trader-to-LP ratio decline**: Bull cycle (2021) saw 3 traders per active market maker on Uniswap; by 2022 this fell to 1-2 traders per market maker, indicating relative reduction in trader activity
-- **Responsive behavior**: Market makers followed fee revenue, moving capital to pools that provided best returns
+- **Bidder exodus**: Many LPs withdrew due to sustained falling prices over nearly 2 years and significant impermanent losses
+- **Trader-to-LP ratio decline**: Bull cycle (2021) saw 3 traders per active Bidder on Uniswap; by 2022 this fell to 1-2 traders per Bidder, indicating relative reduction in trader activity
+- **Responsive behavior**: Bidders followed fee revenue, moving capital to pools that provided best returns
 
 **Spread Dynamics on DEXs:**
 - **Stablecoin liquidity crisis**: During bear markets, capital flight to stablecoins caused liquidity to disappear from exchanges, resulting in spreads widening to "excruciating levels" (particularly noted on Curve)
@@ -1426,10 +1426,10 @@ An established batch auction venue with sufficient liquidity would provide **dem
 
 #### Why Spreads Widen During Volatility and Bear Markets
 
-**Market Maker Risk Management:**
-- During price volatility, spreads typically widen as market makers hedge positions to avoid being trapped in unfavorable price swings
-- Market makers face greater risk as prices move rapidly against their positions → increase spread to compensate for added risk
-- During rapid market decline or advancement, market makers take advantage of increased volatility to charge higher premiums
+**Bidder Risk Management:**
+- During price volatility, spreads typically widen as Bidders hedge positions to avoid being trapped in unfavorable price swings
+- Bidders face greater risk as prices move rapidly against their positions → increase spread to compensate for added risk
+- During rapid market decline or advancement, Bidders take advantage of increased volatility to charge higher premiums
 
 **Liquidity Dynamics:**
 - Wide spreads indicate weaker liquidity for an asset, making it more difficult to exchange at stable prices
@@ -1444,8 +1444,8 @@ An established batch auction venue with sufficient liquidity would provide **dem
 #### CEX vs DEX Spread Behavior
 
 **CEXs:**
-- Orderbook depth declines as market makers withdraw or reduce size
-- Reduced competition among market makers → wider spreads
+- Orderbook depth declines as Bidders withdraw or reduce size
+- Reduced competition among Bidders → wider spreads
 - High-volume pairs (BTC, ETH) maintain tighter spreads due to institutional support
 - Long-tail assets see dramatic spread widening
 

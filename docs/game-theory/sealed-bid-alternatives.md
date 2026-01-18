@@ -1077,12 +1077,12 @@ Where:
 **Challenges**:
 - ⚠ Indicative price gaming (orders submitted/cancelled to move price)
 - ⚠ Information leakage (order book visible → HFT advantage)
-- ⚠ Requires market maker participation (specialists, DMMs)
+- ⚠ Requires Bidder participation (specialists, DMMs)
 
 **Why It Works**:
 - Deep liquidity (millions of traders)
 - Regulatory oversight (SEC, exchanges)
-- Professional participants (institutions, MMs)
+- Professional participants (institutions, Bidders)
 - Continuous market follows (price discovery ongoing)
 
 **Difference from Blockchain**:
@@ -1941,13 +1941,13 @@ With sealed bids (same scenario):
 **Observation**: Public order books show demand, but liquidity providers protected differently
 
 **Protections**:
-- **Designated Market Makers**: Obligated to provide liquidity (compensated by exchange)
+- **Designated Bidders**: Obligated to provide liquidity (compensated by exchange)
 - **Continuous trading follows**: Opening auction just sets starting price; bad execution can be corrected immediately in continuous market
 - **Deep liquidity**: Thousands of participants (undersubscription rare)
 - **Regulatory oversight**: Manipulation illegal, prosecutable
 
 **Not Applicable to Atomica**:
-- No designated market makers (permissionless)
+- No designated Bidders (permissionless)
 - No continuous trading following auction (daily batch only)
 - Thin markets likely during bootstrap (not deep liquidity)
 - Limited regulatory recourse (decentralized, pseudonymous)
@@ -2045,7 +2045,7 @@ Post-auction: All bids made public (transparency)
 - Easy to audit and verify
 
 **5. Atomica-Specific Fit**:
-- Daily batch matches futures delivery model
+- Daily batch matches batch settlement model
 - Cross-chain coordination easier with predictable schedule
 - Sufficient for launch phase (add complexity later if needed)
 
@@ -2209,7 +2209,7 @@ Example:
 Daily auction: 12:00 UTC
 Bid window: 08:00-12:00 UTC (4 hours)
 Settlement: 12:00 UTC (atomic)
-Delivery: +24 hours (futures model)
+Delivery: +24 hours (batch auction model)
 ```
 
 **Smart Contract Logic**:
@@ -2364,7 +2364,7 @@ After analyzing undersubscription risks, **public bids create severe seller prot
 2. ✓ Meets critical requirements (R7, R8, R12, R5, R10)
 3. ✓ Simple bid mechanism
 4. ✓ Gas efficient (but reserves add complexity)
-5. ✓ Fits Atomica's daily futures model
+5. ✓ Fits Atomica's daily batch auction model
 6. ✗ **SEVERE seller risk** requires mandatory reserves
 
 **Mandatory Requirements for Public Bids**:

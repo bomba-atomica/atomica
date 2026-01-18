@@ -1,3 +1,8 @@
+> ⚠️ **EXPERIMENTAL RESEARCH**
+>
+> This document describes an "N-Layer Onion" architecture with a Seller-Stake DKG layer.
+> While the N-Layer concept is the current design (using Validators + Drand), the **Seller DKG layer** specifically is experimental and not currently scheduled for production.
+
 # Design: N-Layer Onion Timelock Encryption
 
 ## 1. Project Brief & Architecture Evolution

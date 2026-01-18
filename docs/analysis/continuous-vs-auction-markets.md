@@ -477,7 +477,7 @@ CoW Swap (batch auction):
 **Mechanism:**
 - Each security "called" in alphabetical order
 - All orders for that security accumulated
-- Auctioneer determined clearing price vocally
+- Seller determined clearing price vocally
 - Move to next security
 
 **Venues:**
@@ -1337,7 +1337,7 @@ Batch Auction (CoW Swap):
 #### D. Composability with Timewlock Encryption
 - drand provides natural auction timing
 - Sealed bids via timelock encryption
-- No trusted auctioneer needed (cryptographic enforcement)
+- No trusted Seller needed (cryptographic enforcement)
 
 ### 2. Why Continuous DEXs Dominated (Despite Inferiority)
 
@@ -1361,7 +1361,7 @@ Batch Auction (CoW Swap):
 **Not Binary Choice:** Markets can combine continuous and batch elements
 
 **Proposed Hybrid (Atomica):**
-1. **Batch auctions for primary liquidity** (daily futures delivery)
+1. **Batch auctions for primary liquidity** (daily batch settlement)
 2. **Continuous secondary markets** (for those willing to pay premium)
 3. **User choice:** Auction (better price) vs continuous (immediacy)
 
@@ -1512,7 +1512,7 @@ The **myth of continuous market superiority** persists despite overwhelming evid
 - Blockchain's fairness properties (transparency, composability)
 - Fresh start without legacy continuous market infrastructure
 
-By embracing **batch auctions with futures delivery**, Atomica rejects the false dichotomy of "continuous = modern/good, auctions = antiquated/bad" and instead designs for:
+By embracing **batch auctions with batch settlement**, Atomica rejects the false dichotomy of "continuous = modern/good, auctions = antiquated/bad" and instead designs for:
 - **Empirically validated price discovery**
 - **Proven stability and resilience**
 - **Fundamental fairness**
@@ -1589,7 +1589,7 @@ History provides the answer: We didn't think—we assumed. Atomica corrects that
 **Related Documents:**
 - `PRD.md` - Atomica product requirements
 - `docs/game-theory/uniform-price-auctions.md` - Auction mechanism details
-- `docs/design/futures-market-model.md` - Why futures for cross-chain
+- `docs/design/batch-auction-economics.md` - Why batch auction for cross-chain
 - `docs/game-theory/cpmm-vs-auction-comparison.md` - Economic comparison
 
 ---

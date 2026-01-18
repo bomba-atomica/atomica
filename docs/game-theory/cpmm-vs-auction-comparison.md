@@ -3,20 +3,20 @@
 ## Purpose of This Document
 
 This document provides a **detailed comparative economic analysis** of three exchange mechanisms for cross-chain atomic swaps:
-1. **Constant Product Bidders (CPMMs)** - Passive liquidity pools
+1. **Constant Product Market Makers (CPMMs)** - Passive liquidity pools
 2. **Spot Auctions** - Multiple daily auctions with immediate settlement
-3. **Futures Auctions** - Daily batch auction with delayed settlement (Atomica's chosen model)
+3. **batch auctions** - Daily batch auction with delayed settlement (Atomica's chosen model)
 
 **Note:** This is an analytical document, not a mechanism explainer. For implementation details, see:
 - [Uniform Price Auctions](uniform-price-auctions.md) - Auction mechanism details
-- [Futures Market Model](../design/futures-market-model.md) - Why futures model for Atomica
+- [batch auction model](../design/batch-auction-economics.md) - Why batch auction model for Atomica
 - [Prior Art](../background/prior-art.md) - Background on DEX mechanisms
 
 ## Executive Summary
 
 This analysis compares exchange mechanisms for enabling trustless cross-chain asset swaps without bridges or wrapped tokens. The mechanisms use fundamentally different approaches to liquidity provision and price discovery, leading to distinct economic tradeoffs.
 
-**Key Finding:** For zero-fee, zero-subsidy operation, auctions (especially futures auctions) are economically superior to CPMMs due to self-sustaining bidder compensation through bid-ask spreads.
+**Key Finding:** For zero-fee, zero-subsidy operation, auctions (especially batch auctions) are economically superior to CPMMs due to self-sustaining bidder compensation through bid-ask spreads.
 
 ## Context and Assumptions
 
@@ -34,7 +34,7 @@ This analysis assumes the following infrastructure:
 - No protocol fees or profit extraction
 - Trustless execution (no custodians or centralized intermediaries)
 
-## Constant Product Bidder (CPMM) Approach
+## Constant Product Market Maker (CPMM) Approach
 
 ### Mechanism Overview
 
@@ -292,7 +292,7 @@ Public bid visibility creates information asymmetries and strategic timing issue
 **7. Cold Start Problem**
 
 Bootstrapping initial bidder participation:
-- New markets need critical mass of MMs
+- New markets need critical mass of Bidders
 - Chicken-and-egg: users want liquidity, bidders want volume
 - May require initial incentives or market making commitments
 
@@ -339,7 +339,7 @@ Bootstrapping initial bidder participation:
 | **Mechanism** | Arbitrage-driven | Competitive bidding |
 | **Speed** | Continuous | Batch (auction window) |
 | **Accuracy** | Depends on arbitrageur activity | Depends on bidder competition |
-| **Information Efficiency** | Reactive (follows external markets) | Active (MMs incorporate market data) |
+| **Information Efficiency** | Reactive (follows external markets) | Active (Bidders incorporate market data) |
 
 **Analysis:** Both rely on external market information. CPMMs update continuously; auctions discover prices in batches.
 
@@ -370,7 +370,7 @@ Bootstrapping initial bidder participation:
 |-----------|------|---------|
 | **New Trading Pairs** | Requires new LP deposits per pair | bidders can service multiple pairs |
 | **Thin Markets** | Extreme slippage or no liquidity | May receive few/no bids |
-| **High Volume Markets** | Scales well (if liquidity exists) | Scales well (attracts more MMs) |
+| **High Volume Markets** | Scales well (if liquidity exists) | Scales well (attracts more Bidders) |
 | **Cross-Chain Complexity** | Each chain needs separate pools | Centralized auction coordination |
 
 **Analysis:** Both face challenges with thin markets. CPMMs require more capital per new pair.
@@ -515,24 +515,24 @@ Bootstrapping initial bidder participation:
 
 4. **Cross-Chain Finality:** How do different away-chain finality times (Bitcoin ~60min vs Ethereum ~15min) affect both models?
 
-## Futures Market Model: A Third Approach
+## batch auction model: A Third Approach
 
-Recent design insights suggest that reframing the auction mechanism as a **futures market** rather than a spot market fundamentally addresses several challenges identified with both CPMMs and traditional auction designs.
+Recent design insights suggest that reframing the auction mechanism as a **batch auction model** rather than a spot market fundamentally addresses several challenges identified with both CPMMs and traditional auction designs.
 
 ### Core Insight: Users Should Not Expect Spot Pricing
 
-The key realization is that cross-chain atomic swaps inherently require coordination time and settlement delays. Rather than fighting this constraint, we can embrace it by designing the system as a **futures market** where:
+The key realization is that cross-chain atomic swaps inherently require coordination time and settlement delays. Rather than fighting this constraint, we can embrace it by designing the system as a **batch auction model** where:
 
 1. **Commodity delivered in X hours after auction close** - Assets settle after a predetermined delay (1-3 hours)
-2. **Price smoothing** - Futures pricing naturally smooths volatility and reduces sensitivity to momentary price spikes
+2. **Price smoothing** - auction pricing naturally smooths volatility and reduces sensitivity to momentary price spikes
 3. **Reduced auction frequency** - A single daily batch auction suffices, dramatically simplifying coordination
 
 ### Daily Batch Auction Architecture
 
-**Single Daily Auction Design:**
+**twice-daily batch auction Design:**
 - One unified batch auction per day per trading pair
 - All users with USDC (or other quote asset) auction together in a single large batch
-- All holders of the base asset (e.g., LIBRA) can submit bids
+- All holders of the base asset (e.g., ATOMICA) can submit bids
 - **No reserve prices** - Eliminates reserve price complexity and associated penalties
 - Settlement occurs X hours after auction close with known delivery time
 
@@ -546,14 +546,14 @@ The key realization is that cross-chain atomic swaps inherently require coordina
 
 **Bidder Advantages**
 - Known settlement time allows proper hedging strategies
-- Futures pricing reduces price risk (MMs can take offsetting positions)
+- auction pricing reduces price risk (Bidders can take offsetting positions)
 - Single large auction more attractive than many small ones
 - Predictable daily rhythm enables automated participation
 
 **User Experience Benefits**
 - Clear delivery expectations (not spot market confusion)
-- Futures pricing may provide better rates due to reduced bidder risk
-- Single daily auction easier to understand than continuous trading
+- auction pricing may provide better rates due to reduced bidder risk
+- twice-daily batch auction easier to understand than continuous trading
 - Predictable schedule (auction at same time daily)
 
 ### Timelocked Sealed Bids: Essential for Fair Price Discovery
@@ -584,11 +584,11 @@ This approach is **practical and implementable** with current cryptographic tool
 
 ### Comparison to Spot Auction Model
 
-| Dimension | Spot Auctions (Multiple Daily) | Futures Market (Single Daily) |
+| Dimension | Spot Auctions (Multiple Daily) | batch auction model (Single Daily) |
 |-----------|-------------------------------|------------------------------|
-| **Frequency** | Many auctions per day | One auction per day |
+| **Frequency** | Many auctions per day | two auctions per day |
 | **Settlement** | Immediate | X hours after close |
-| **Pricing Expectation** | Spot market rates | Futures/forward rates |
+| **Pricing Expectation** | Spot market rates | batch auction/forward rates |
 | **Liquidity per Auction** | Fragmented across many | Concentrated in one |
 | **Bidder Appeal** | Lower volume, higher risk | Higher volume, hedgeable |
 | **Price Volatility Risk** | High (immediate settlement) | Lower (time to hedge) |
@@ -603,7 +603,7 @@ This approach is **practical and implementable** with current cryptographic tool
 - Eliminates reserve price penalty mechanism complexity
 - No commit-reveal scheme needed for reserves
 - Users cannot reject auctions (reduces strategic gaming)
-- Auctioneers and bidders have aligned interests (auction must clear)
+- Sellers and bidders have aligned interests (auction must clear)
 
 **With Sealed Bids:**
 - Information symmetry among all bidders
@@ -611,7 +611,7 @@ This approach is **practical and implementable** with current cryptographic tool
 - Prevents shill bidding and collusion
 - Uniform price auction works better when bids are sealed
 
-**Futures Pricing Dynamics:**
+**auction pricing Dynamics:**
 - Bidders can price in expected risk over settlement period
 - Bid-ask spreads may be tighter due to hedging opportunities
 - Less sensitivity to momentary volatility spikes
@@ -622,13 +622,13 @@ This approach is **practical and implementable** with current cryptographic tool
 **Bidder Perspective:**
 - Single large daily auction worth the infrastructure investment
 - Known settlement time enables proper risk management
-- Futures pricing allows hedging on other markets
+- auction pricing allows hedging on other markets
 - Sufficient volume to justify competitive bidding
 
 **User Perspective:**
-- Clear expectations (futures delivery, not spot)
+- Clear expectations (batch settlement, not spot)
 - Potentially better pricing due to reduced bidder risk premium
-- Simple mental model (one auction per day)
+- Simple mental model (two auctions per day)
 - Predictable schedule for planning transactions
 
 **Protocol Perspective:**
@@ -666,21 +666,21 @@ Three distinct mechanisms can enable trustless cross-chain atomic swaps, each wi
 
 **Spot Auctions** prioritize economic sustainability through active liquidity provision and self-compensating bidders. However, they introduce execution latency, complexity (reserve prices, penalties), and potential timing game vulnerabilities. Multiple auctions per day fragment liquidity and create bootstrapping challenges.
 
-**Futures Market Model (Daily Batch Auctions with Sealed Bids)** represents a novel synthesis that addresses many challenges of both prior approaches:
+**batch auction model (Daily Batch Auctions with Sealed Bids)** represents a novel synthesis that addresses many challenges of both prior approaches:
 - Self-sustaining economics (like spot auctions)
 - Concentrated liquidity through single daily batch
 - Simpler mechanism (no reserve prices needed)
 - Fair price discovery via mandatory sealed bids (timelock + ZK)
 - Better pricing for users (reduced bidder risk premium through hedging)
 - Easier bootstrapping (critical mass in single auction)
-- Clear user expectations (futures delivery, not spot)
+- Clear user expectations (batch settlement, not spot)
 
-**The core question shifts from "sustainable economics vs. superior UX" to "spot immediacy vs. futures predictability."**
+**The core question shifts from "sustainable economics vs. superior UX" to "spot immediacy vs. batch auction predictability."**
 
-For cross-chain atomic swaps specifically, the futures market model may be optimal:
+For cross-chain atomic swaps specifically, the batch auction model may be optimal:
 - Cross-chain coordination already introduces latency (embrace it, don't fight it)
 - Settlement delays enable better risk management for bidders
-- Single daily auction creates natural liquidity concentration
+- twice-daily batch auction creates natural liquidity concentration
 - Sealed bids solve information asymmetry problems
 - Simpler mechanism (no reserve prices) reduces attack surface
 
@@ -688,9 +688,9 @@ For cross-chain atomic swaps specifically, the futures market model may be optim
 Start with a **single daily batch auction using timelocked sealed bids** for the bootstrapping phase. This maximizes liquidity concentration, simplifies the mechanism, and creates predictable schedule for bidder participation. As volume grows, consider adding:
 - Multiple daily auctions at different times for different geographies
 - Spot auction options for users willing to pay premium for immediate settlement
-- Hybrid approaches where large trades use futures and small trades use spot
+- Hybrid approaches where large trades use batch auction and small trades use spot
 
-The futures market model represents a practical, implementable approach that aligns incentives across all participants while maintaining trustless execution and economic sustainability.
+The batch auction model represents a practical, implementable approach that aligns incentives across all participants while maintaining trustless execution and economic sustainability.
 
 ## Academic References and Further Reading
 
@@ -734,7 +734,7 @@ These papers collectively establish that uniform price auctions are subject to s
 - Foundational model of adverse selection in market making
 - Derives bid-ask spreads as compensation for trading with informed traders
 
-### DeFi and Automated Bidders
+### DeFi and Automated Market Makers
 
 **Note:** DeFi research is rapidly evolving. The following represents current understanding but citations may be approximate:
 
@@ -748,7 +748,7 @@ These papers collectively establish that uniform price auctions are subject to s
 - Technical documentation available from Uniswap Labs
 - Increases capital efficiency but creates additional complexity and risks
 
-**Constant Function Bidders (CFMMs):**
+**Constant Function Market Makers (CFMMs):**
 - Researchers including Angeris, Chitra, and others have provided mathematical analysis
 - Work covers arbitrage conditions, price discovery, and oracle properties
 

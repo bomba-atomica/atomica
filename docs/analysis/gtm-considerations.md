@@ -1,4 +1,9 @@
-# Atomica Go-to-Market Strategy: Pull-Driven Approach
+> ⚠️ **STRATEGIC CONSIDERATIONS**
+>
+> This document outlines potential GTM strategies and considerations.
+> It is not a finalized plan but a collection of ideas and analysis.
+
+# Go-to-Market Considerations
 
 ## Executive Summary
 
@@ -10,7 +15,7 @@
 
 **Key Insight:** Individual arbitrageurs are BOTH sellers AND bidders, solving the two-sided market chicken-and-egg problem organically.
 
-**Why Not Institutions:** Professional market makers (Wintermute, Jump, GSR) require long enterprise sales cycles and are tightly integrated into crypto establishment. Not viable for crypto-native team without connections.
+**Why Not Institutions:** Professional Market Makers (Wintermute, Jump, GSR) require long enterprise sales cycles and are tightly integrated into crypto establishment. Not viable for crypto-native team without connections.
 
 ---
 
@@ -18,7 +23,7 @@
 
 ### The Problem with Institutional-First Approach
 
-**Enterprise market makers (Wintermute, Jump Crypto, GSR, Cumberland):**
+**Enterprise Bidders (Wintermute, Jump Crypto, GSR, Cumberland):**
 - ❌ **Requires enterprise sales** (6-12 month cycles)
 - ❌ **Need warm introductions** (crypto establishment gatekeepers)
 - ❌ **Legal/compliance reviews** (slow, unpredictable)
@@ -350,7 +355,7 @@
 - 10-30 DAOs using for treasury operations
 - Recognized as credible alternative to bridges
 - 1-2 major wallet/aggregator integrations live
-- Professional market makers showing inbound interest
+- Professional Market Makers showing inbound interest
 
 ---
 
@@ -365,7 +370,7 @@
 
 **Why this is HARD:**
 - DAOs are sellers only (need separate bidder recruitment)
-- Professional market makers require enterprise sales (slow)
+- Professional Market Makers require enterprise sales (slow)
 - Can't launch until both sides are ready (delays launch)
 
 ---
@@ -413,7 +418,7 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
 - 200-500 arbitrageurs + 500-2K other users
 - Every auction has 20-50 competitive bids
 - Spreads compress to 0.1-0.2% (competitive with bridges)
-- Professional market makers notice and join (inbound)
+- Professional Market Makers notice and join (inbound)
 - Professional participation further tightens spreads to 0.05-0.15%
 
 ---
@@ -440,7 +445,7 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
 - Spreads compress to 0.15-0.25%
 - Competitive with bridge costs
 
-**Mature market:** 200+ arbitrageurs + professional market makers
+**Mature market:** 200+ arbitrageurs + professional Bidders
 - 50+ bidders per auction
 - Spreads compress to 0.05-0.15%
 - Better than bridges on total cost (no risk premium)
@@ -531,7 +536,7 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
 **Liquidity Depth:**
 - Average bidders per auction: **Month 6: 20+, Year 1: 30-50+**
 - Average spreads: **Month 6: <0.2%, Year 1: <0.15%**
-- Professional market makers participating: **Year 1: 1-3 firms**
+- Professional Market Makers participating: **Year 1: 1-3 firms**
 
 ---
 
@@ -542,7 +547,7 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
 - Brand recognition: "Atomica is the safe way to arbitrage cross-chain"
 
 **Ecosystem:**
-- Bidder ecosystem: **20+ professional market makers** providing competitive bids
+- Bidder ecosystem: **20+ professional Bidders** providing competitive bids
 - Integration ecosystem: **5+ wallet/aggregator integrations**
 - DAO adoption: **30-50 DAOs** using for treasury operations
 
@@ -597,7 +602,7 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
 - Pre-launch waitlist building (commit users before launch)
 - Liquidity mining incentives (token rewards for early participants)
 - Direct outreach to known arbitrageurs (even if requires some 1:1 effort)
-- Consider temporary market maker subsidy (pay to provide bids during bootstrap)
+- Consider temporary Bidder subsidy (pay to provide bids during bootstrap)
 
 **Threshold:** If <10 active arbitrageurs by Month 2, need emergency intervention
 
@@ -681,7 +686,7 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
 
 **Success unlocks Year 2+ expansion:**
 - DAOs (now have proven liquidity)
-- Professional market makers (inbound interest)
+- Professional Market Makers (inbound interest)
 - Wallet/aggregator integrations (ecosystem credibility)
 - Path to $100M-500M/day and beyond
 
@@ -690,8 +695,8 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
 **Related Documents:**
 - [Market Volume by Participant Category](./market-volume-by-participant-category.md) - Addressable market analysis
 - [Optimal Time of Day Analysis](./optimal-time-of-day.md) - Timezone and auction timing strategy
-- [Product Design v0](../design/product-design-v0.md) - Atomica auction mechanism
-- [Futures Market Model](../design/futures-market-model.md) - Why futures delivery works
+- [Product Design v0](../design/product-design-v0-ARCHIVED.md) - Atomica auction mechanism
+- [batch auction model](../design/batch-auction-economics.md) - Why batch settlement works
 
 **Version:** 1.0
 **Date:** 2025-11-15

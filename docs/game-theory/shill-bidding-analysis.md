@@ -26,7 +26,7 @@ This document provides rigorous game-theoretic analysis proving that shill biddi
 **Players**:
 - N legitimate bidders: M₁, M₂, ..., Mₙ
 - 1 strategic attacker: A (may control multiple addresses)
-- 1 auctioneer: U
+- 1 Seller: U
 
 **Strategies**:
 - Each bidder i has true valuation vᵢ for the auctioned asset
@@ -265,10 +265,10 @@ In repeated games with perfect monitoring, collusion can be sustained via trigge
 
 Even if collusion were somehow sustained, the reserve price mechanism provides a backstop:
 
-**Auctioneer's Optimal Strategy**:
+**Seller's Optimal Strategy**:
 
 If clearing price p* is suspiciously low (e.g., $1,900 when market price is $2,000):
-- Auctioneer rejects auction by revealing reserve price R > p*
+- Seller rejects auction by revealing reserve price R > p*
 - Pays 5% penalty on auction value
 
 **Break-Even Analysis**:
@@ -279,14 +279,14 @@ Auction value: $200,000 (100 ETH @ $2,000 true value)
 If clearing price p* = $1,900:
   Loss from accepting: ($2,000 - $1,900) × 100 = $10,000
   Cost of rejecting: $10,000
-  Auctioneer is indifferent
+  Seller is indifferent
 
 If clearing price p* < $1,900:
-  Auctioneer strictly prefers to reject
+  Seller strictly prefers to reject
 ```
 
 **Effect on Collusion**:
-- Colluding bidders know auctioneer will reject if price drops >5% below market
+- Colluding bidders know Seller will reject if price drops >5% below market
 - Collusion only profitable if clearing price ∈ [$1,900, $2,000]
 - Maximum extractable profit: $10,000 total (divided among colluders)
 - Risk of defection still dominates for individual colluders
@@ -351,7 +351,7 @@ Treasury auctions share key properties with Atomic Auctions:
 
 **Reserve Price Backstop**:
 - ✅ **Economic floor**: Limits maximum extractable value from manipulation to ~5%
-- Aligns auctioneer incentives to reject unreasonably low clearing prices
+- Aligns Seller incentives to reject unreasonably low clearing prices
 
 ## Conclusion: Incentive-Compatible Design
 
@@ -359,7 +359,7 @@ The combination of:
 1. Uniform price auction mechanism
 2. No bid lowering policy
 3. Reserve price with commit-reveal
-4. Auctioneer penalty for rejection
+4. Seller penalty for rejection
 5. Anonymous, open-entry market structure
 
 Creates an **incentive-compatible** auction system where:

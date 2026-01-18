@@ -16,7 +16,7 @@ This document provides background on existing decentralized exchange mechanisms 
 - Achieved superior capital efficiency compared to CPMMs through price-specific liquidity provision
 - Provided better price discovery through order matching
 
-### Constant Product Bidders (CPMMs)
+### Constant Product Market Makers (CPMMs)
 - Popularized by Uniswap (2018) using the x*y=k formula, though Bancor (2017) launched the first AMM
 - Eliminated need for order matching and direct counterparty interaction
 - Automated liquidity provision through pooled assets
@@ -47,7 +47,7 @@ This document provides background on existing decentralized exchange mechanisms 
 - High gas costs for frequent on-chain operations (order placement, cancellation, updates)
 - Liquidity fragmentation across multiple order books and on-chain latency slower than centralized exchanges
 
-### Constant Product Bidders
+### Constant Product Market Makers
 - Impermanent loss for liquidity providers
 - Adverse selection through Loss-Versus-Rebalancing (LVR)—LPs constantly trade at stale prices against informed arbitrageurs, with fees often insufficient to compensate
 - Poor capital efficiency (liquidity spread across entire price curve in v2)
@@ -90,3 +90,21 @@ These shortcomings motivate Atomica's design:
 4. **Native cross-chain settlement** (addressing fragmentation)
 
 For a detailed comparison of different exchange mechanisms in the context of cross-chain swaps, see [CPMM vs Auction Analysis](../../cpmm-vs-auction.md).
+
+## Alternative Approaches: Payment Channels
+
+Payment channels (e.g., Lightning Network, Raiden) and state channels are Layer 2 scaling solutions primarily designed for high-frequency bilateral transactions. They were evaluated as a potential architecture for atomic auctions but found to be fundamentally incompatible with the core requirements.
+
+### Mechanism
+- **Setup:** Two parties lock funds in an on-chain multisig contract.
+- **Operation:** Parties exchange signed state updates off-chain instantly.
+- **Settlement:** Final state is settled on-chain closing the channel.
+
+### Limitations for Competitive Auctions
+While payment channels offer instant settlement and low costs for repeated transactions between the *same* parties, they fail for competitive multi-party auctions:
+
+1.  **Capital Inefficiency:** Bidders must lock funds in channels with specific Sellers in advance. To bid on 100 different auctions, a bidder would need 100 funded channels, fragmenting capital and preventing the "flash loan" leverage model used in Atomica.
+2.  **Liveness Requirements:** Both parties must be online to update the channel. If a bidder goes offline, they cannot participate, whereas smart contract auctions allow passive participation via simple bid submission.
+3.  **Auction Incompatibility:** Competitive uniform price auctions require aggregating N bids to find a clearing price. Implementing this logic inside a bilateral state channel network is exponentially complex and requires custom routing that reintroduces centralization.
+
+**Conclusion:** Payment channels solve for *throughput* of repeated trades, while Atomica solves for *trustless price discovery* of distinct assets. The ZK-verified batch auction model provides superior capital efficiency and market access for this use case.

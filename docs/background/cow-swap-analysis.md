@@ -111,6 +111,6 @@ Atomica extends these insights by:
 - Using batch auctions for cross-chain native asset swaps (no bridges)
 - Employing sealed bid timelock encryption to prevent information asymmetry
 - Targeting bidders as competitive bidders (similar to solvers)
-- Framing as futures market to bootstrap liquidity
+- Framing as batch auction market to bootstrap liquidity
 
 See [Atomica PRD](../../Prd.md) for the full product design.

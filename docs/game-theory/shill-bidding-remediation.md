@@ -14,7 +14,7 @@ References to "ZK proofs of bid validity" in this document are now **deprecated*
 
 ## 1. Introduction & Context
 
-Atomica implements trustless cross-chain atomic swaps via daily batch auctions with futures delivery. Bidders submit sealed bids to acquire locked user assets, with settlement occurring 12-24 hours post-auction. The auction uses a uniform price mechanism where all winning bidders pay the same clearing price.
+Atomica implements trustless cross-chain atomic swaps via daily batch auctions with batch settlement. Bidders submit sealed bids to acquire locked user assets, with settlement occurring 12-24 hours post-auction. The auction uses a uniform price mechanism where all winning bidders pay the same clearing price.
 
 ### Why Shill Bidding Matters
 
@@ -88,7 +88,7 @@ Based on the formal analysis in [shill-bidding-analysis.md](shill-bidding-analys
 #### Type 4: Collusive Bid Depression
 - Multiple bidders coordinate to submit uniformly low bids
 - **Goal**: Collectively suppress clearing price
-- **Impact**: Extract systematic value from auctioneers
+- **Impact**: Extract systematic value from Sellers
 
 #### Type 5: Seller-Side Manipulation
 - Fake supply announcements to manipulate bidder expectations
@@ -157,7 +157,7 @@ Atomica employs a multi-layered defense architecture combining economic, cryptog
 - **Defense**: Increases attack cost, enables bidder response time
 
 **Settlement Delay (12-24 hours):**
-- Futures delivery model reduces inventory risk premium
+- batch settlement model reduces inventory risk premium
 - Bidders can hedge positions post-auction
 - Reduces urgency-driven bidding behavior
 - **Defense**: Dampens price volatility manipulation incentives
@@ -681,16 +681,16 @@ The defense mechanisms rely on several assumptions. If these are violated, addit
 - **Partial Mitigation**: Batch deposits across multiple blocks, privacy-preserving deposit aggregators
 - **Residual Risk**: Medium, inherent to cross-chain transparency, but does not enable profitable manipulation attacks
 
-**Futures Settlement Model (By Design, Not a Limitation):**
-- 12-24hr delay between auction close and settlement is intentional - this is a futures auction
+**batch settlement Model (By Design, Not a Limitation):**
+- 12-24hr delay between auction close and settlement is intentional - this is a batch auction
 - Users explicitly bid for future delivery, not spot settlement
-- Bidders price bids with settlement delay in mind (futures pricing)
+- Bidders price bids with settlement delay in mind (auction pricing)
 - **Benefits**:
   - Enables bidders to hedge positions on external markets post-auction
   - Reduces inventory risk premium compared to instant settlement
   - Dampens manipulation incentives (no urgency-driven bidding)
   - Allows time for cross-chain atomic settlement verification
-- **Not a Risk**: External price movements are priced into bids; bidders bear volatility risk voluntarily as part of futures model
+- **Not a Risk**: External price movements are priced into bids; bidders bear volatility risk voluntarily as part of batch auction model
 - **Note**: This is a feature differentiating Atomica from spot exchanges, not a limitation to be mitigated
 
 **Scalability of ZK Proof Verification:**
@@ -898,7 +898,7 @@ Atomica's auction architecture achieves robust manipulation resistance through *
 - **Judgment**: Post-reveal publication provides sufficient audit trail
 
 **Settlement Delay vs. Capital Efficiency:**
-- 12-24hr futures delivery reduces immediate liquidity
+- 12-24hr batch settlement reduces immediate liquidity
 - **Judgment**: Enables bidder hedging, reduces manipulation incentives
 
 **Gas Costs vs. Participation:**

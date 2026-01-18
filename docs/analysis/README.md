@@ -13,7 +13,7 @@ This directory contains detailed technical and economic analyses of proposed fea
    - Identifies the "profit paradox" - borrowers cannot generate profit during auction lifecycle
    - Analyzes both Mode 1 (MM borrows to bid) and Mode 2 (user borrows to auction)
    - Evaluates all claims made in the original proposal (TRUE/FALSE assessment)
-   - Proposes alternative models that could work (futures settlement lending)
+   - Proposes alternative models that could work (batch settlement lending)
 
 2. **`margin-lending-critique.md`**
    - Answers the key question: "Does the auction mechanism provide unique guarantees?"

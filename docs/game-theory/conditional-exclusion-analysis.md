@@ -44,12 +44,12 @@ Extensive research exists on detecting collusive bidding in procurement auctions
    - Does NOT adjust auction outcome in real-time
 
 2. **Reserve Price Mechanisms:**
-   - Auctioneer sets reserve price (minimum acceptable bid)
+   - Seller sets reserve price (minimum acceptable bid)
    - Auction canceled if all bids below reserve
    - Used in Treasury auctions, art auctions, spectrum auctions
 
 3. **Auction Cancellation Rights:**
-   - Auctioneer reserves right to cancel if bids seem suspicious
+   - Seller reserves right to cancel if bids seem suspicious
    - Common in government procurement
    - Subjective, not algorithmic
 
@@ -106,7 +106,7 @@ Market Deviation = (External Market Price - Clearing Price) / External Market Pr
 **Challenge:**
 - Requires trusted external price oracle
 - External markets might be manipulated too
-- Futures pricing adds complexity (12-24hr forward price)
+- auction pricing adds complexity (12-24hr forward price)
 
 ### Metric 3: Lowest Bid Outlier Detection
 

@@ -2,12 +2,12 @@
 
 ## Executive Summary
 
-This document analyzes global crypto trading volume by participant category and estimates Atomica's addressable market. For go-to-market strategy, see [GTM Pull Strategy](./gtm-pull-strategy.md). For auction timing analysis, see [Optimal Time of Day](./optimal-time-of-day.md).
+This document analyzes global crypto trading volume by participant category and estimates Atomica's addressable market. For go-to-market strategy, see [GTM Pull Strategy](./gtm-considerations.md). For auction timing analysis, see [Optimal Time of Day](./optimal-time-of-day.md).
 
 **Key Findings:**
 - Total daily spot crypto trading volume: **$133-198B**
-- Atomica's addressable market (excluding near-term futures): **$6.65-20.55B/day**
-- Including near-term futures markets: **$7.175-23.6B/day**
+- Atomica's addressable market (excluding near-term batch auction): **$6.65-20.55B/day**
+- Including near-term batch auction markets: **$7.175-23.6B/day**
 - Primary target segments: Bridge arbitrageurs ($300M-1.5B/day), DeFi institutions ($3-7.5B/day), DAO treasuries ($1.2-4.8B/day)
 
 ---
@@ -33,14 +33,14 @@ This document analyzes global crypto trading volume by participant category and 
 1. **Retail traders** ($1K-$50K per trade)
 2. **Retail whales / HNW individuals** ($50K-$1M per trade)
 3. **Crypto-native DAOs & protocol treasuries** ($1M+ per trade)
-4. **DeFi-native institutions** (hedge funds, market makers trading DeFi tokens)
+4. **DeFi-native institutions** (hedge funds, Bidders trading DeFi tokens)
 5. **TradFi crypto hedge funds** (trading BTC/ETH/major alts)
 6. **OTC desks & custodians** (institutional intermediaries)
-7. **Professional market makers** (liquidity providers across venues)
+7. **Professional Market Makers** (liquidity providers across venues)
 
 ### What the Original Taxonomy Missed
 
-- **Professional market makers**: Distinct from hedge funds; provide liquidity across venues rather than taking directional positions
+- **Professional Market Makers**: Distinct from hedge funds; provide liquidity across venues rather than taking directional positions
 - **Arbitrage traders**: Professional, high-frequency cross-venue arbitrage specialists
 - Both segments are critical for liquidity provision in any trading venue
 
@@ -174,7 +174,7 @@ This document analyzes global crypto trading volume by participant category and 
 
 ---
 
-### 4. DeFi-Native Institutions (crypto-native hedge funds, market makers)
+### 4. DeFi-Native Institutions (crypto-native hedge funds, Bidders)
 
 **Estimated Daily Volume: $20-30B (15-20% of spot market)**
 
@@ -338,7 +338,7 @@ This document analyzes global crypto trading volume by participant category and 
 
 #### Atomica Addressability: **HIGH as liquidity providers (bidders)**
 
-**Market makers ARE your bidders, not customers:**
+**Bidders ARE your bidders, not customers:**
 - These participants will submit competitive bids in auctions
 - Opportunity to earn bid-ask spreads
 - Similar to CoW Swap solver model
@@ -359,7 +359,7 @@ This document analyzes global crypto trading volume by participant category and 
 | **DeFi Institutions** | $20-30B | 15-20% | 08:00-20:00 | 15-25% | $3-7.5B |
 | **TradFi Hedge Funds** | $25-35B | 20-25% | 08:00-20:00 | 1-3% | $0.25-1B |
 | **OTC Desks (flow)** | $15-25B | 12-18% | 08:00-20:00 | <1% customer | ~$0 |
-| **Market Makers** | $20-30B | 15-20% | 08:00-20:00 | Bidders only | ~$0 |
+| **Bidders** | $20-30B | 15-20% | 08:00-20:00 | Bidders only | ~$0 |
 | **TOTAL** | **$133-198B** | **100%** | | | **$6.65-20.55B** |
 
 ---
@@ -377,7 +377,7 @@ This document analyzes global crypto trading volume by participant category and 
 5. **Retail**: $0.5-1B/day (DCA limit order strategies)
 
 #### Required Bidder Participation
-- 5-10 professional market maker bidders competing
+- 5-10 professional Bidder bidders competing
 - OTC desks experimenting as liquidity providers
 - Early adopter solvers (similar to CoW Swap solver network launch)
 
@@ -390,7 +390,7 @@ This document analyzes global crypto trading volume by participant category and 
 - 50%+ of DAO treasury trades (governance-mandated transparency becomes standard)
 - 30%+ of DeFi institution token trading (cross-chain native swaps become preferred method)
 - 25%+ of retail whale trades (MEV protection becomes expected, not exceptional)
-- 20+ professional market maker bidders providing deep competitive liquidity
+- 20+ professional Bidder bidders providing deep competitive liquidity
 - Integration into DAO governance tooling (Safe, Tally, Snapshot)
 
 ---
@@ -417,7 +417,7 @@ This document analyzes global crypto trading volume by participant category and 
 This 8-hour window captures:
 - European afternoon activity (DAOs wrapping up governance decisions)
 - US morning-to-afternoon activity (DAOs coordinating multi-sig transactions)
-- Professional market maker bidders at peak activity
+- Professional Market Maker bidders at peak activity
 - Traditional financial markets open (stable price discovery for crypto)
 
 ---
@@ -478,9 +478,9 @@ This 8-hour window captures:
 - Captures both European and US professional traders
 - Within traditional business hours for both regions
 
-#### ✅ Market Maker Participation (Critical)
+#### ✅ Bidder Participation (Critical)
 - Professional bidders (your liquidity source) operate during business hours
-- 17:00 UTC = peak liquidity provision window for crypto-native market makers
+- 17:00 UTC = peak liquidity provision window for crypto-native Bidders
 - Coincides with deep order book depth on CEXs (reference pricing)
 
 #### ✅ Liquidity Concentration
@@ -531,7 +531,7 @@ This 8-hour window captures:
 #### Early Adopter Segments
 - Early DAO adopters (similar to Origin Protocol, ENS DAO pattern on CoW Swap)
 - Crypto-native whales testing the platform (evangelists, early believers)
-- 5-10 active bidding market makers providing liquidity
+- 5-10 active bidding Bidders providing liquidity
 
 #### Key Success Metrics
 - 3-5 DAO governance proposals approving Atomica for treasury operations
@@ -565,7 +565,7 @@ This 8-hour window captures:
 #### Market Position
 - Becomes standard for DAO treasury operations (like CoW Swap achieved "1/3 of DAO volume")
 - Cross-chain native swaps preferred over bridge+DEX for large trades
-- Deep market maker competition (20+ active solvers)
+- Deep Bidder competition (20+ active solvers)
 - Retail whale standard for MEV-protected large trades
 
 #### Key Success Metrics
@@ -608,7 +608,7 @@ This 8-hour window captures:
 **GTM Strategy:**
 - Partner with 3-5 DeFi-native hedge funds for pilot
 - Demonstrate superior execution vs. public DEX slippage
-- Build solver network from existing DeFi market makers
+- Build solver network from existing DeFi Bidders
 
 #### 2. DAO Treasuries ($1.2-4.8B/day)
 **Why must-win:**
@@ -675,7 +675,7 @@ This 8-hour window captures:
 - Publish transparent execution reports
 - Build reputation as "the DAO treasury standard"
 
-#### 2. Market Maker Recruitment
+#### 2. Bidder Recruitment
 - Need 10+ professional bidders to ensure competitive pricing
 - Build solver network (similar to CoW Swap model)
 - Provide bidder analytics and tools
@@ -693,7 +693,7 @@ This 8-hour window captures:
 
 #### 5. 17:00 UTC Timing
 - Optimal for Tier 1 target segments (DAOs, DeFi institutions)
-- Maximizes bidder participation (market makers most active)
+- Maximizes bidder participation (Bidders most active)
 - Aligns with traditional market hours (price discovery reference)
 
 ---
@@ -745,7 +745,7 @@ This 8-hour window captures:
    - Bridge risk elimination is compelling for large trades
    - Expands addressable market beyond Ethereum-only DAOs
 
-3. **Market maker recruitment is critical**: No buyers, no market
+3. **Bidder recruitment is critical**: No buyers, no market
    - Need 10+ competitive bidders from day one
    - Build solver network similar to CoW Swap model
    - Provide analytics and tools for professional bidders
@@ -793,7 +793,7 @@ This 8-hour window captures:
 
 ---
 
-## Near-Term Delivery Futures Markets (<24h Settlement)
+## Near-Term Delivery batch auction Markets (<24h Settlement)
 
 ### Executive Summary: The Bridge Arbitrage Wedge Market
 
@@ -832,7 +832,7 @@ This 8-hour window captures:
 - Path to $100M-500M/day by Year 2 (adding DAOs, yield farmers)
 
 **De-prioritize:**
-- Professional market makers (Wintermute, Jump, GSR) → Year 2+ after traction
+- Professional Market Makers (Wintermute, Jump, GSR) → Year 2+ after traction
 - Large DAOs → Month 6+ after liquidity established
 - Both require enterprise sales or governance cycles (slow, gated by connections)
 
@@ -840,11 +840,11 @@ This 8-hour window captures:
 
 ### Market Opportunity Analysis
 
-Atomica's futures delivery model (12-24h settlement) positions it to capture volume from existing near-term crypto futures markets. This is an **underappreciated addressable market segment**.
+Atomica's batch settlement model (12-24h settlement) positions it to capture volume from existing near-term crypto batch auction markets. This is an **underappreciated addressable market segment**.
 
 ---
 
-### Existing Near-Term Futures Volume
+### Existing Near-Term batch auction Volume
 
 #### 1. CEX Futures Markets (Quarterly & Perpetuals)
 
@@ -852,7 +852,7 @@ Atomica's futures delivery model (12-24h settlement) positions it to capture vol
 
 However, the vast majority is perpetual swaps (synthetic spot with funding rates) and quarterly futures, NOT near-term delivery futures.
 
-**Near-term delivery futures (<1 week to settlement):**
+**Near-term delivery batch auction (<1 week to settlement):**
 - Estimated: $2-5B/day in notional volume
 - Primarily: Weekly BTC/ETH futures on CME, Deribit, Binance
 - Users: Institutional hedgers, arbitrage traders
@@ -861,7 +861,7 @@ However, the vast majority is perpetual swaps (synthetic spot with funding rates
 - ✅ Physical settlement (not cash-settled like most CEX futures)
 - ✅ No counterparty risk (CEX custody vs. atomic settlement)
 - ✅ Cross-chain delivery (can't do BTC→ETH on CEX futures)
-- ❌ Daily batch less flexible than continuous futures trading
+- ❌ Daily batch less flexible than continuous batch auction trading
 
 **Addressability: LOW-MEDIUM (5-15%)**
 - Primarily institutional arbitrage traders seeking physical settlement
@@ -869,7 +869,7 @@ However, the vast majority is perpetual swaps (synthetic spot with funding rates
 
 ---
 
-#### 2. DeFi Options & Structured Products (Implicit Futures)
+#### 2. DeFi Options & Structured Products (Implicit batch auction)
 
 **Daily Volume: ~$500M-1.5B**
 
@@ -880,24 +880,24 @@ However, the vast majority is perpetual swaps (synthetic spot with funding rates
 - GammaSwap (volatility vaults)
 
 **User behavior:**
-- Options sellers/buyers effectively taking futures positions
+- Options sellers/buyers effectively taking batch auction positions
 - Settlement windows: 1 day to 1 week
 - Average position size: $5K-100K
 
 **Why these users might prefer Atomica:**
-- ✅ Simpler than options (just futures, no strikes/Greeks complexity)
+- ✅ Simpler than options (just batch auction, no strikes/Greeks complexity)
 - ✅ Cross-chain settlement (can't do on existing DeFi options - single-chain only)
 - ✅ MEV protection (critical for large settlements)
 - ✅ More predictable execution (daily batch vs. options expiry timing risk)
 
 **Addressability: MEDIUM (10-20%)**
 - Users comfortable with delayed settlement
-- Seeking simpler futures vs. complex options strategies
+- Seeking simpler batch auction vs. complex options strategies
 - **Addressable: $50M-300M/day**
 
 ---
 
-#### 3. Cross-Chain Bridge Arbitrage (Implicit Futures Trading)
+#### 3. Cross-Chain Bridge Arbitrage (Implicit batch auction trading)
 
 **Daily Volume: ~$1-3B** (estimated bridge arbitrage flow)
 
@@ -936,7 +936,7 @@ Cross-chain arbitrage exploits price differences for the same asset across diffe
 - Treasury/user migrations: ~$2-5B/day (non-arbitrage)
 
 **Key players in bridge arbitrage:**
-1. **Professional crypto market makers**: Wintermute, Jump Crypto, GSR, Cumberland
+1. **Professional crypto Bidders**: Wintermute, Jump Crypto, GSR, Cumberland
 2. **DeFi-native arbitrage funds**: Specialized cross-chain arbitrage operations
 3. **Individual power users**: Crypto-native traders running automated bots
 4. **MEV searchers**: Expanding from single-chain MEV to cross-chain opportunities
@@ -997,9 +997,9 @@ Unlike market risk (which can be hedged), bridge risk is binary and catastrophic
 
 ##### Why Bridge Arbitrageurs Are Perfect for Atomica
 
-**Bridge arbitrage is already implicit futures trading:**
+**Bridge arbitrage is already implicit batch auction trading:**
 
-| Aspect | Bridge Arbitrage | Atomica Futures |
+| Aspect | Bridge Arbitrage | Atomica batch auction |
 |--------|------------------|-----------------|
 | **Settlement delay** | 10min-24h (varies by bridge) | 12-24h (fixed, predictable) |
 | **Asset delivery** | Wrapped tokens on destination chain | Native assets on both chains |
@@ -1008,14 +1008,14 @@ Unlike market risk (which can be hedged), bridge risk is binary and catastrophic
 | **Hack risk** | $2B+ annual losses | Zero (no bridge) |
 | **Predictability** | Variable (bridge congestion) | Fixed schedule (17:00 UTC daily) |
 
-**Key insight: Bridge arbitrageurs are ALREADY doing futures trading, they just don't realize it.**
+**Key insight: Bridge arbitrageurs are ALREADY doing batch auction trading, they just don't realize it.**
 
 When an arbitrageur bridges ETH from Ethereum to Arbitrum:
-- They're effectively selling "ETH futures for delivery on Arbitrum in 30 minutes"
+- They're effectively selling "ETH batch auction for delivery on Arbitrum in 30 minutes"
 - The bridge is the settlement mechanism (risky, slow, variable)
 - The arbitrageur accepts settlement delay in exchange for spread capture
 
-**Atomica is just a better futures settlement mechanism:**
+**Atomica is just a better batch settlement mechanism:**
 - Same settlement delay (12-24h is acceptable to arbitrageurs already using bridges)
 - Superior safety (atomic settlement vs. bridge risk)
 - Better predictability (fixed 17:00 UTC vs. variable bridge times)
@@ -1087,7 +1087,7 @@ Unlike most users (one-sided), arbitrageurs can:
 - Arbitrageur sees ETH cheap on Ethereum ($3,000), expensive on Arbitrum ($3,010)
 - **As seller in auction**: Offers to sell ETH on Ethereum via Atomica auction
 - **Simultaneously**: Shorts ETH on Arbitrum (or has inventory to sell)
-- **Settlement**: Receives LIBRA on Ethereum (converts to USDC), delivers ETH on Arbitrum
+- **Settlement**: Receives ATOMICA on Ethereum (converts to USDC), delivers ETH on Arbitrum
 - **Profit**: $10 spread - auction costs, **zero bridge risk**
 
 **Strategic value: Two-sided market participation solves chicken-egg liquidity problem**
@@ -1099,7 +1099,7 @@ Most marketplaces struggle with bootstrapping:
 Arbitrageurs solve this by being BOTH:
 - They sell when profitable to sell
 - They bid when profitable to bid
-- Natural market makers in the auction
+- Natural Bidders in the auction
 
 ---
 
@@ -1372,7 +1372,7 @@ Atomica_profit = Spread - Auction_spread - (Settlement_delay_premium)
 
 ##### Go-to-Market: Pull-Driven Strategy (No Enterprise Sales Required)
 
-**Critical insight: Professional market makers (Wintermute, Jump, GSR) require long enterprise sales cycles and are tightly integrated into crypto establishment. This is NOT a viable launch strategy for a crypto-native team without connections.**
+**Critical insight: Professional Market Makers (Wintermute, Jump, GSR) require long enterprise sales cycles and are tightly integrated into crypto establishment. This is NOT a viable launch strategy for a crypto-native team without connections.**
 
 **Revised strategy: Focus on segments that can self-serve and convert without formal sales process.**
 
@@ -1612,7 +1612,7 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
 - 200-500 arbitrageurs + 500-2K other users
 - Every auction has 20-50 competitive bids
 - Spreads compress to 0.1-0.2% (competitive with bridges)
-- Professional market makers notice and join (inbound)
+- Professional Market Makers notice and join (inbound)
 - Professional participation further tightens spreads to 0.05-0.15%
 
 **Why this works (unlike DAO-first strategy):**
@@ -1634,7 +1634,7 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 
 - **Absolute minimum**: 10 active arbitrageurs (5 sellers, 5 bidders per auction on average)
 - **Competitive market**: 50+ active arbitrageurs (20+ bidders per auction)
-- **Mature market**: 200+ arbitrageurs + professional market makers
+- **Mature market**: 200+ arbitrageurs + professional Bidders
 
 **Launch target: 20-100 arbitrageurs in Month 1-2 achieves minimum viable liquidity**
 
@@ -1674,7 +1674,7 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 **Scenario:** Bidder competition is weak, clearing prices are 0.5% away from reference prices
 
 **Mitigation:**
-- Market maker recruitment (ensure 10+ competitive bidders)
+- Bidder recruitment (ensure 10+ competitive bidders)
 - Liquidity mining for early bidders
 - Publish transparent spread data (attract more bidders when spreads wide)
 
@@ -1701,25 +1701,25 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 
 **Mitigation:**
 - Technical documentation and audits
-- Pilot with trusted market makers (social proof)
+- Pilot with trusted Bidders (social proof)
 - Start with small trade sizes, scale up as trust builds
 - Educational content explaining cryptographic guarantees
 
-**Threshold:** If major market makers refuse to participate, segment fails
+**Threshold:** If major Bidders refuse to participate, segment fails
 
 ---
 
 **Risk 4: Regulatory uncertainty**
 
-**Scenario:** Futures trading may attract regulatory scrutiny
+**Scenario:** batch auction trading may attract regulatory scrutiny
 
 **Mitigation:**
-- Position as "cross-chain swap with settlement delay" not "futures"
+- Position as "cross-chain swap with settlement delay" not "batch auction"
 - Physical settlement (not cash-settled derivatives)
 - No leverage, no margin
 - Compliance-ready infrastructure
 
-**Threshold:** If regulators ban physically-settled futures, need pivot
+**Threshold:** If regulators ban physically-settled batch auction, need pivot
 
 ---
 
@@ -1740,7 +1740,7 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 **Market Leadership Indicators (Year 2+):**
 - Bridge arbitrage market share: Target 30-50% of total bridge arbitrage flow
 - Brand recognition: "Atomica is the safe way to arbitrage cross-chain"
-- Bidder ecosystem: 20+ professional market makers providing competitive bids
+- Bidder ecosystem: 20+ professional Bidders providing competitive bids
 - Arbitrageur profitability: Average 0.2-0.5% profit per trade (competitive with bridge arbitrage)
 
 ---
@@ -1757,11 +1757,11 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 **User behavior:**
 - Set limit order at target price
 - Willing to wait hours to days for execution
-- Essentially buying/selling futures at specified price
+- Essentially buying/selling batch auction at specified price
 
 **Why these users might prefer Atomica:**
 - ✅ **Daily batch = guaranteed execution window** (vs. "maybe fills" on limit orders)
-- ✅ **Cross-chain futures** (limit orders are single-chain)
+- ✅ **Cross-chain batch auction** (limit orders are single-chain)
 - ✅ **Uniform pricing** (all participants get same price, no ordering games)
 - ⚠️ **Less flexibility** (only one execution time per day vs. continuous)
 
@@ -1772,11 +1772,11 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 
 ---
 
-### Total Near-Term Futures Addressable Market
+### Total Near-Term batch auction Addressable Market
 
 | Segment | Daily Volume | Atomica Addressable % | Addressable $ |
 |---------|--------------|------------------------|---------------|
-| **CEX Near-Term Futures** | $2-5B | 5-15% | $100M-750M |
+| **CEX Near-Term batch auction** | $2-5B | 5-15% | $100M-750M |
 | **DeFi Options/Structured** | $500M-1.5B | 10-20% | $50M-300M |
 | **Bridge Arbitrage** | $1-3B | 30-50% | $300M-1.5B |
 | **DEX Limit Orders** | $500M-2B | 15-25% | $75M-500M |
@@ -1790,7 +1790,7 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 
 **Bridge arbitrageurs are Atomica's perfect early adopter segment:**
 
-1. **Already comfortable with futures settlement** (bridge latency = implicit futures)
+1. **Already comfortable with batch settlement** (bridge latency = implicit batch auction)
 2. **Desperate for bridge risk elimination** (annual losses in billions)
 3. **Professional users who understand auction mechanics**
 4. **High-volume, regular trading patterns** (not one-off)
@@ -1803,7 +1803,7 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
   - Profit: $10 - bridge fees - depegging risk
 
 - **With Atomica**: Same price difference detected
-  - Submits sealed bid in daily auction to buy LIBRA on Ethereum, deliver on Arbitrum
+  - Submits sealed bid in daily auction to buy ATOMICA on Ethereum, deliver on Arbitrum
   - Settlement in 24h via native atomic swap (no bridge)
   - Profit: $10 - auction spread - **zero bridge risk**
 
@@ -1823,7 +1823,7 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 
 ---
 
-#### Competitive Advantages vs. Existing Futures
+#### Competitive Advantages vs. Existing batch auction
 
 | Feature | CEX Futures | DeFi Options | Bridge Arbitrage | **Atomica** |
 |---------|-------------|--------------|------------------|-------------|
@@ -1832,7 +1832,7 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 | **Counterparty risk** | ❌ CEX custody | ⚠️ Smart contract | ❌ Bridge | ✅ Atomic |
 | **Bridge risk** | N/A | ✅ None | ❌ High | ✅ None |
 | **MEV protection** | N/A | ❌ Weak | ❌ Weak | ✅ Strong |
-| **Complexity** | ⚠️ Futures understanding | ❌ High (strikes/Greeks) | ⚠️ Medium | ✅ Simple futures |
+| **Complexity** | ⚠️ batch auction understanding | ❌ High (strikes/Greeks) | ⚠️ Medium | ✅ Simple batch auction |
 | **Settlement time** | 1-7 days | Hours-7 days | 10min-24h | 12-24h |
 | **Continuous trading** | ✅ Yes | ✅ Yes | ✅ Yes | ❌ Daily batch |
 
@@ -1840,9 +1840,9 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 
 ### Updated Total Addressable Market
 
-**Including near-term futures markets:**
+**Including near-term batch auction markets:**
 
-| Category | Original Estimate | Futures Markets | **Total Addressable** |
+| Category | Original Estimate | batch auction Markets | **Total Addressable** |
 |----------|------------------|-----------------|----------------------|
 | **DAO Treasuries** | $1.2-4.8B/day | +$100M (cross-chain rebalancing) | **$1.3-4.9B/day** |
 | **DeFi Institutions** | $3-7.5B/day | +$200M (arbitrage) | **$3.2-7.7B/day** |
@@ -1858,7 +1858,7 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 #### Phase 1: Target Bridge Arbitrageurs First
 
 **Why:**
-- Perfect fit for futures model (already doing implicit futures)
+- Perfect fit for batch auction model (already doing implicit batch auction)
 - Desperate for bridge risk elimination
 - Professional users who can evangelize to broader market
 - High-volume, regular trading (not one-off)
@@ -1878,9 +1878,9 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 - Cross-chain settlement is unique capability
 
 **Tactics:**
-1. Compare futures simplicity vs. options complexity
+1. Compare batch auction simplicity vs. options complexity
 2. Target Ribbon Finance / Opyn power users
-3. Education: "Futures without the Greeks"
+3. Education: "batch auction without the Greeks"
 
 #### Phase 3: Convert DEX Limit Order Users
 
@@ -1890,13 +1890,13 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 - Want cross-chain capabilities
 
 **Tactics:**
-1. Integration into CoW Swap / 1inch UI (cross-chain futures option)
+1. Integration into CoW Swap / 1inch UI (cross-chain batch auction option)
 2. "Scheduled execution" marketing vs. "maybe fills"
 3. Batch liquidity advantages for large orders
 
 ---
 
-### Success Metrics for Futures Market Penetration
+### Success Metrics for batch auction model Penetration
 
 **Leading Indicators (Months 1-3):**
 - 2-3 professional arbitrage firms using Atomica regularly
@@ -1905,8 +1905,8 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 
 **Growth Indicators (Months 3-12):**
 - 10+ arbitrage firms active
-- $50-200M/day volume from futures markets
-- Options users converting to simpler futures model
+- $50-200M/day volume from batch auction markets
+- Options users converting to simpler batch auction model
 
 **Market Leadership (Year 2+):**
 - 30-50% of bridge arbitrage volume ($300M-1.5B/day)
@@ -1922,10 +1922,10 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 - [CoW Swap vs OTC Analysis](./cowswap-otc-analysis.md) - Why DAOs choose CoW over OTC desks
 
 **Strategy & Execution:**
-- [GTM Pull Strategy](./gtm-pull-strategy.md) - Go-to-market strategy focused on individual arbitrageurs
+- [GTM Pull Strategy](./gtm-considerations.md) - Go-to-market strategy focused on individual arbitrageurs
 - [Optimal Time of Day](./optimal-time-of-day.md) - Auction timing analysis and timezone considerations
 
 **Product Design:**
-- [Product Design v0](../design/product-design-v0.md) - Atomica auction mechanism design
-- [Futures Market Model](../design/futures-market-model.md) - Why Atomica uses futures delivery
-- [Ideal Characteristics](../design/ideal-characteristics.md) - Target solution properties
+- [Product Design v0](../design/product-design-v0-ARCHIVED.md) - Atomica auction mechanism design
+- [batch auction model](../design/batch-auction-economics.md) - Why Atomica uses batch settlement
+- [Design Principles](../../PRD.md#design-principles--system-properties) - Target solution properties

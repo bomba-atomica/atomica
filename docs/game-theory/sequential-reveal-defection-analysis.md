@@ -147,7 +147,7 @@ Payoff(reveal | observed_bids) ≥ -D
 
 #### Optimal Deposit Analysis
 
-**Auctioneer's Objective**: Set D high enough to prevent strategic defection.
+**Seller's Objective**: Set D high enough to prevent strategic defection.
 
 **Bidder's Constraint**: D must be low enough to justify participation.
 
@@ -250,15 +250,15 @@ Simultaneous reveal eliminates the sequential sub-game entirely, collapsing a mu
 
 #### 4. "Verifiable Sealed-Bid Auction on the Ethereum Blockchain" (Galal & Youssef, 2018)
 
-**Attack Vector**: "Malicious auctioneer pretends that a bidder has not revealed the opening values of their commitment."
+**Attack Vector**: "Malicious Seller pretends that a bidder has not revealed the opening values of their commitment."
 
-**Mitigation**: Store ciphertexts on the auction contract (not sent directly to auctioneer) to prevent selective non-acknowledgment.
+**Mitigation**: Store ciphertexts on the auction contract (not sent directly to Seller) to prevent selective non-acknowledgment.
 
 **Relevance**: Even with deposits, the *order* and *verification* of reveals creates manipulation opportunities.
 
 #### 5. "Credible, Truthful, and Two-Round (Optimal) Auctions"
 
-**Problem**: Auctioneers or bidders can choose not to reveal certain bids.
+**Problem**: Sellers or bidders can choose not to reveal certain bids.
 
 **Solution**: "Fine all bidders who conceal their bids to disincentivize this deviation."
 
@@ -270,7 +270,7 @@ Simultaneous reveal eliminates the sequential sub-game entirely, collapsing a mu
 
 Sequential reveal auctions can be modeled as **extensive form games** with:
 
-**1. Players**: N bidders + 1 auctioneer
+**1. Players**: N bidders + 1 Seller
 
 **2. Actions**:
    - **Commit Phase** (simultaneous): Submit commitment C_i = Hash(bid_i, nonce_i)
@@ -313,7 +313,7 @@ Recursively anticipate all later players' optimal strategies.
 
 From an information economics standpoint, sequential reveal creates a **principal-agent problem** with moral hazard:
 
-**Principal**: Auctioneer (wants all bids revealed honestly)
+**Principal**: Seller (wants all bids revealed honestly)
 **Agents**: Bidders (have private information and option to defect)
 
 **Moral Hazard**: Agents can take hidden action (defect) that harms principal but benefits agent.
@@ -473,7 +473,7 @@ Even with temporal separation, if reveals can be observed individually as they'r
 
 **Source**: Research on Pedersen commitment schemes in Ethereum auctions
 
-**Attack**: "Collusion between a malicious bidder and the auctioneer to eliminate a competitor's winning chance by abusing the homomorphic property of the Pedersen commitment."
+**Attack**: "Collusion between a malicious bidder and the Seller to eliminate a competitor's winning chance by abusing the homomorphic property of the Pedersen commitment."
 
 **Mechanism**:
 
@@ -485,7 +485,7 @@ Commit(a) + Commit(b) = Commit(a + b)
 **Attack Steps**:
 
 1. Honest bidder commits to bid B
-2. Auctioneer and malicious bidder collude
+2. Seller and malicious bidder collude
 3. They create commitment that appears valid but is actually manipulated using homomorphic properties
 4. During reveal, they can selectively "open" commitments in ways that disadvantage honest bidder
 

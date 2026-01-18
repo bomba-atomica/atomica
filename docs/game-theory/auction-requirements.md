@@ -2,7 +2,7 @@
 
 ## Document Purpose
 
-This document establishes the fundamental requirements for Atomica's blockchain auction format, starting from first principles rather than assumptions. While we've explored specific auction mechanisms (uniform price, sealed bids, futures delivery), this document steps back to examine:
+This document establishes the fundamental requirements for Atomica's blockchain auction format, starting from first principles rather than assumptions. While we've explored specific auction mechanisms (uniform price, sealed bids, batch settlement), this document steps back to examine:
 
 1. **What attacks are possible on blockchain auctions?** - Understanding the threat model
 2. **What properties must an auction have to resist these attacks?** - Deriving requirements from threats
@@ -559,7 +559,7 @@ Defection payoff > Cooperation payoff
 t=0: Attacker bids 50 units @ $2,000 (high, locks allocation)
 t=close-1s: Attacker lowers bid to 50 units @ $1,900
 → Clearing price drops from $1,980 to $1,900
-→ All bidders benefit from lower price (at auctioneer's expense)
+→ All bidders benefit from lower price (at Seller's expense)
 ```
 
 **Implementation**:
@@ -665,7 +665,7 @@ t=close-1s: Attacker lowers bid to 50 units @ $1,900
 - Concentrates all liquidity at one time
 - Creates critical mass for price discovery
 - Predictable schedule enables bidder preparation
-- Futures delivery model (settlement delay) justifies wait time
+- batch settlement model (settlement delay) justifies wait time
 
 **Metrics**:
 - Average bid depth per auction
@@ -724,14 +724,14 @@ t=close-1s: Attacker lowers bid to 50 units @ $1,900
 - Open entry increases Sybil risk
 
 **References**:
-- docs/design/ideal-characteristics.md, "Unified User Experience" section
+- [Design Principles](../../PRD.md#design-principles--system-properties), "Unified User Experience" section
 - Budish et al (2015) - Fairness in continuous vs batch auctions
 
 ---
 
 ### R12: Bidder Compensation Sustainability
 
-**Requirement**: Mechanism must economically sustain liquidity providers (bidders/market makers) without external subsidies.
+**Requirement**: Mechanism must economically sustain liquidity providers (bidders/Bidders) without external subsidies.
 
 **Why Critical**: Without sustainable compensation, rational liquidity providers exit → market fails.
 
@@ -782,7 +782,7 @@ t=close-1s: Attacker lowers bid to 50 units @ $1,900
 - User sets minimum acceptable clearing price
 - Auction fails if clearing price < reserve
 - Commit-reveal prevents strategic reserve setting
-- Penalty fee (5% of reserve × volume) if auctioneer rejects
+- Penalty fee (5% of reserve × volume) if Seller rejects
 
 **Status**: Not currently implemented. Single daily batch auction provides sufficient liquidity concentration. Reserve prices are potential future feature for guaranteed execution on large individual orders.
 
@@ -808,7 +808,7 @@ t=close-1s: Attacker lowers bid to 50 units @ $1,900
 
 **References**:
 - docs/game-theory/uniform-price-auctions.md, "Reserve Price with Commit-Reveal" section
-- docs/design/ideal-characteristics.md, "Protection Against Illiquidity" section
+- [Design Principles](../../PRD.md#design-principles--system-properties), "Protection Against Illiquidity" section
 
 ---
 
@@ -945,12 +945,12 @@ All pay same price
 
 ### Single-Seller vs Multi-Seller Auctions
 
-**Single-Seller**: One auctioneer sells quantity Q
+**Single-Seller**: One Seller sells quantity Q
 - Simpler mechanism
 - Clear seller incentive (maximize revenue)
 - Used in most traditional auctions
 
-**Multi-Seller**: Multiple auctioneers each sell quantities q₁, q₂, ..., qₙ
+**Multi-Seller**: Multiple Sellers each sell quantities q₁, q₂, ..., qₙ
 - Aggregates fragmented supply
 - Each seller may have different reserve price
 - Used in stock exchanges (opening/closing auctions), electricity markets
@@ -1196,7 +1196,7 @@ Excluded seller gets deposit back, can try next auction
 
 **Resolution**:
 - Accept batch windows (daily auctions) for high capital efficiency
-- Futures delivery model sets user expectations correctly
+- batch settlement model sets user expectations correctly
 
 **Tradeoffs Accepted**:
 - Users must wait for daily auction (not instant swaps)
@@ -1288,7 +1288,7 @@ Excluded seller gets deposit back, can try next auction
 - All winners pay uniform clearing price (lowest qualifying bid)
 - Sealed bids via timelock encryption
 - Daily batch auction (single large auction per day)
-- Futures delivery (settlement delay after auction)
+- batch settlement (settlement delay after auction)
 
 **Rationale**:
 1. **Meets critical requirements**: MEV resistance, sustainable economics, manipulation resistance
@@ -1300,7 +1300,7 @@ Excluded seller gets deposit back, can try next auction
 - Drand timelock encryption for sealed bids (docs/technical/timelock-bids.md)
 - Economic deposits prevent spam (post-decryption validation)
 - No bid lowering rule (smart contract enforcement)
-- Single daily auction (liquidity concentration)
+- twice-daily batch auction (liquidity concentration)
 - No reserve prices for launch (rely on competitive bidding)
 
 ---
@@ -1357,7 +1357,7 @@ Excluded seller gets deposit back, can try next auction
 **❌ Multiple Small Auctions (at Launch)**
 - Fragments liquidity
 - Hard to bootstrap bidder participation
-- Single daily auction creates critical mass
+- twice-daily batch auction creates critical mass
 
 ---
 
@@ -1489,7 +1489,7 @@ See references throughout document to:
 - docs/game-theory/multi-seller-batch-auction.md
 - docs/technical/timelock-bids.md
 - docs/game-theory/cpmm-vs-auction-comparison.md
-- docs/design/ideal-characteristics.md
+- [Design Principles](../../PRD.md#design-principles--system-properties)
 
 ---
 

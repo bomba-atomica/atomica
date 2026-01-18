@@ -12,7 +12,7 @@ The uniform price multi-unit auction (also known as a "Treasury Auction" after i
 
 The auction operates as follows:
 
-**Auctioneer (Away Chain User)**
+**Seller (Away Chain User)**
 - User on Away chain (e.g., Ethereum) initiates auction to sell a quantity of their native asset (e.g., ETH)
 - Assets are locked in temporary escrow (via HTLC or similar mechanism) on the Away chain
 - Escrow is released at auction conclusion based on settlement outcome
@@ -31,7 +31,7 @@ The auction operates as follows:
 ### Example
 
 **Scenario:**
-- Auctioneer sells 100 ETH units
+- Seller sells 100 ETH units
 - Bidder A: 40 units @ $2,000
 - Bidder B: 30 units @ $1,980
 - Bidder C: 40 units @ $1,950
@@ -101,27 +101,27 @@ Atomica employs four complementary mitigations:
 **Status:** Not currently implemented. Potential future feature for large individual orders requiring guaranteed minimum prices.
 
 **Mechanism:**
-- Auctioneer could set a reserve price (minimum acceptable clearing price) using commit-reveal scheme
-- During auction setup, auctioneer commits to a hash of their reserve price
+- Seller could set a reserve price (minimum acceptable clearing price) using commit-reveal scheme
+- During auction setup, Seller commits to a hash of their reserve price
 - Auction proceeds normally with this commitment on-chain
-- **Default behavior**: If auctioneer does nothing, escrow releases and auction settles normally
-- **Active rejection**: If clearing price < reserve, auctioneer must actively submit proof (reveal) that auction failed to meet reserve, triggering fund return
+- **Default behavior**: If Seller does nothing, escrow releases and auction settles normally
+- **Active rejection**: If clearing price < reserve, Seller must actively submit proof (reveal) that auction failed to meet reserve, triggering fund return
 - This prevents strategic reserve price manipulation after seeing bids
 
 **Use Case:** Large individual orders (e.g., institutional trades) that require execution guarantees and can afford to pay for this protection.
 
-### 4. Reserve Price Cost (Auctioneer Penalty)
+### 4. Reserve Price Cost (Seller Penalty)
 
 **Status:** Not currently implemented. Applies only if reserve prices are added in future.
 
 **Mechanism:**
-- Exercising the reserve price rejection would incur a cost to the auctioneer: **5% of (reserve price × volume)**
+- Exercising the reserve price rejection would incur a cost to the Seller: **5% of (reserve price × volume)**
 - Note: The fee is calculated on the reserve price, not the final auction clearing price
 - This creates an incentive to lower the reserve price (making auctions more attractive to bidders) to reduce insurance costs
 - The penalty is distributed to qualifying bidders as compensation for wasted time and opportunity cost
-- Creates economic disincentive for auctioneers to set unrealistic reserves
-- Ensures auctioneers only reject auctions when clearing price is genuinely unacceptable
-- Aligns incentives: auctioneers want auctions to succeed; bidders are protected against time-wasting
+- Creates economic disincentive for Sellers to set unrealistic reserves
+- Ensures Sellers only reject auctions when clearing price is genuinely unacceptable
+- Aligns incentives: Sellers want auctions to succeed; bidders are protected against time-wasting
 
 ## Game-Theoretic Properties
 
@@ -130,7 +130,7 @@ This design achieves several desirable properties:
 ### Incentive Compatibility
 
 - Bidders are incentivized to bid near their true valuation (uniform price protects them from winner's curse)
-- Auctioneers incentivized to set realistic reserves when used (penalty for rejection)
+- Sellers incentivized to set realistic reserves when used (penalty for rejection)
 - No advantage to strategic delay or last-minute manipulation (no bid lowering + sealed bids)
 
 ### Sybil Resistance
@@ -141,7 +141,7 @@ This design achieves several desirable properties:
 ### Collusion Resistance
 
 - Bidders cannot profitably collude to lower clearing price (no bid lowering policy)
-- Auctioneer cannot collude with bidders to manipulate reserve (commit-reveal with default release)
+- Seller cannot collude with bidders to manipulate reserve (commit-reveal with default release)
 - Sealed bids prevent coordination during auction window
 
 ### Bidder Participation

@@ -229,7 +229,7 @@ Effective fee: 0.000035%
 **Who Can Submit Proofs**:
 - **Protocol relayers**: Automated services that batch and submit proofs
 - **Winning bidders**: Bidders who want their assets released faster
-- **Users**: Auctioneers who want their proceeds faster
+- **Users**: Sellers who want their proceeds faster
 - **Any third party**: Anyone can generate and submit valid proofs
 
 **Incentive Structure**:
@@ -335,7 +335,7 @@ If winner submits immediately (no batching):
 
 ### Aligned Incentives
 
-**For Users (Auctioneers)**:
+**For Users (Sellers)**:
 - Transparent cost ($0.08 deduction from $100K+ settlement at normal gas prices)
 - Essentially free (<0.0001% of settlement value)
 - Option to self-submit for priority if needed ($7.50 for immediate settlement)

@@ -1,4 +1,4 @@
-# Atomica's Communication Strategy: Positioning Futures Markets as DeFi's Complementary Layer
+# Atomica's Communication Strategy: Positioning batch auction markets as DeFi's Complementary Layer
 
 ## Introduction: The Positioning Challenge
 
@@ -14,9 +14,9 @@ The strongest argument for complementarity lies in a fundamental dimension that 
 
 AMMs excel at serving immediate liquidity needs. When a trader needs tokens *now*—whether for arbitrage, immediate consumption, or time-sensitive strategies—AMMs provide instant, continuous execution. This instant-gratification model has proven enormously successful, capturing billions in daily volume and becoming the default mental model for "DeFi trading."
 
-Atomica, by contrast, is architected around delayed execution. The daily batch auction with 12-24 hour futures delivery isn't a limitation to be apologized for—it's the core feature that enables the protocol's economics. Bidders need that settlement delay to hedge positions, manage inventory risk, and capture sustainable spreads. The futures model isn't something Atomica might "fix" later by adding instant swaps; it's economically fundamental to how the protocol works.
+Atomica, by contrast, is architected around delayed execution. The daily batch auction with 12-24 hour batch settlement isn't a limitation to be apologized for—it's the core feature that enables the protocol's economics. Bidders need that settlement delay to hedge positions, manage inventory risk, and capture sustainable spreads. The batch auction model isn't something Atomica might "fix" later by adding instant swaps; it's economically fundamental to how the protocol works.
 
-This creates a natural market segmentation analogous to traditional finance, where spot and futures markets coexist symbiotically. Spot markets serve immediate price discovery and instant settlement needs. Futures markets serve scheduled execution, risk management, and strategic positioning. No serious market participant would argue that CME futures "compete" with NYSE spot markets—they're recognized as complementary infrastructure serving different purposes.
+This creates a natural market segmentation analogous to traditional finance, where spot and batch auction markets coexist symbiotically. Spot markets serve immediate price discovery and instant settlement needs. batch auction markets serve scheduled execution, risk management, and strategic positioning. No serious market participant would argue that CME futures "compete" with NYSE spot markets—they're recognized as complementary infrastructure serving different purposes.
 
 The communication strategy must relentlessly hammer this point: Atomica serves *scheduled trades* and *patient capital*, while AMMs serve *instant swaps* and *active trading*. These are different use cases with different user segments. The DAO conducting quarterly treasury rebalancing has fundamentally different needs than the arbitrageur exploiting a fleeting price discrepancy. Both markets can—and should—exist.
 
@@ -34,7 +34,7 @@ This narrative is particularly powerful when addressing DEX aggregators like 1in
 
 ## The Bidder-DEX Symbiosis: Volume Generation, Not Cannibalization
 
-Perhaps the most counterintuitive argument for complementarity involves Atomica's bidders—the market makers who provide liquidity in daily auctions. On the surface, one might assume these bidders compete with DEX liquidity providers. But the economics reveal a symbiotic relationship that actually drives *additional* DEX volume.
+Perhaps the most counterintuitive argument for complementarity involves Atomica's bidders—the Bidders who provide liquidity in daily auctions. On the surface, one might assume these bidders compete with DEX liquidity providers. But the economics reveal a symbiotic relationship that actually drives *additional* DEX volume.
 
 Consider how a professional bidder operates on Atomica: They win an auction, acquiring ETH at $2,995 in the clearing price. But this creates immediate inventory risk—if ETH price moves against them during the 12-24 hour settlement window, they could lose money. The solution? Immediately hedge on a DEX or CEX by selling ETH at the current market price of $3,000. This locks in their spread profit while eliminating directional price risk.
 
@@ -84,9 +84,9 @@ The communication strategy's implementation must begin well before launch. Pre-l
 
 Target audiences for pre-launch communication include DEX protocol teams, DeFi thought leaders on Twitter, and DAO community forums. The messaging approach should lead with the shared enemy framing: "DEXes and Atomica both fight to keep crypto trading decentralized. CEXes capture 85% of spot volume, OTC desks dominate institutional flow—we all lose together or win together."
 
-Emphasizing integration over disruption is critical: "Atomica is infrastructure *for* the DEX ecosystem, not competition. Our bidders are DEX power users who will trade more, not less. We're building the futures layer to complement the spot layer."
+Emphasizing integration over disruption is critical: "Atomica is infrastructure *for* the DEX ecosystem, not competition. Our bidders are DEX power users who will trade more, not less. We're building the batch auction layer to complement the spot layer."
 
-Educational content should establish the spot vs. futures mental model, drawing parallels to traditional finance where these markets coexist symbiotically. This prepares the audience to understand Atomica as category creation rather than market fragmentation.
+Educational content should establish the spot vs. batch auction mental model, drawing parallels to traditional finance where these markets coexist symbiotically. This prepares the audience to understand Atomica as category creation rather than market fragmentation.
 
 Crucially, pre-launch communication should involve direct outreach to DEX protocol teams and key thought leaders. Private conversations that explain the complementarity thesis before public launch can prevent hostile misunderstandings. A single well-respected voice saying "I've looked at Atomica's design and it's genuinely complementary to DEXes" can inoculate against mob dynamics.
 
@@ -94,7 +94,7 @@ Crucially, pre-launch communication should involve direct outreach to DEX protoc
 
 At launch, communication should focus on demonstrating—not just claiming—complementarity through concrete data and case studies.
 
-A flagship "Why Atomica Makes DEXes Stronger" blog post should detail the bidder-DEX symbiosis with quantitative analysis showing how Atomica volume generates DEX hedging volume. Educational content explaining "Futures for DeFi: The Missing Layer" should establish the spot vs. futures framework and explain use cases that DEXes struggle with (scheduled execution, treasury automation).
+A flagship "Why Atomica Makes DEXes Stronger" blog post should detail the bidder-DEX symbiosis with quantitative analysis showing how Atomica volume generates DEX hedging volume. Educational content explaining "batch auction for DeFi: The Missing Layer" should establish the spot vs. batch auction framework and explain use cases that DEXes struggle with (scheduled execution, treasury automation).
 
 Partnership announcements with DEX aggregators would provide powerful social proof. If LI.FI, Socket, or Bungee integrate Atomica as a cross-chain routing option, it signals that established DEX infrastructure views Atomica as complementary. The framing should emphasize: "Your instant swap vs. our next-day delivery—let users choose. Route cross-chain swaps through Atomica to eliminate bridge risk."
 
@@ -104,7 +104,7 @@ Case studies showcasing actual user journeys that involve both Atomica and DEXes
 
 - **DAO treasury story**: "We use CoW Swap for operational swaps (contributor payments, immediate needs) and Atomica for quarterly treasury rebalancing (cross-chain diversification). Different tools for different jobs."
 
-- **Market maker story**: "Atomica auctions are where I source inventory at competitive prices, DEXes are where I manage risk through hedging. I need both."
+- **Bidder story**: "Atomica auctions are where I source inventory at competitive prices, DEXes are where I manage risk through hedging. I need both."
 
 These narratives demonstrate that Atomica usage patterns include—rather than replace—DEX interaction.
 
@@ -124,7 +124,7 @@ Despite genuine complementarity, certain objections will arise. Addressing them 
 
 **Objection 1: "You're still taking volume from DEXes"**
 
-The counter-argument must emphasize volume *creation* rather than *migration*: "We're creating NEW volume from markets that don't use DEXes today. DAOs currently use OTC desks (custody risk forces them off-chain). Bridge arbitrageurs avoid high-volume cross-chain DEX usage (bridge risk too high). Institutional patient capital has no futures option in DeFi currently. We're converting OTC desk and CEX volume to DeFi, not cannibalizing DEX volume."
+The counter-argument must emphasize volume *creation* rather than *migration*: "We're creating NEW volume from markets that don't use DEXes today. DAOs currently use OTC desks (custody risk forces them off-chain). Bridge arbitrageurs avoid high-volume cross-chain DEX usage (bridge risk too high). Institutional patient capital has no batch auction option in DeFi currently. We're converting OTC desk and CEX volume to DeFi, not cannibalizing DEX volume."
 
 This argument is strengthened by data showing Atomica's target segments (DAOs, cross-chain arbitrageurs, treasury management) and their current trading venues (predominantly OTC desks and CEXes, not DEXes).
 
@@ -136,7 +136,7 @@ This frames Atomica as expanding aggregator capabilities rather than competing w
 
 **Objection 3: "You could expand to instant swaps later and compete directly"**
 
-This requires emphasizing structural economic lock-in: "Our economics REQUIRE futures delivery. Bidders need 12-24h to hedge and manage risk. Instant settlement would kill bidder participation by forcing them to take directional price risk they can't hedge. We're economically locked into the futures model. This isn't a strategic choice we might change—it's structural to our market design."
+This requires emphasizing structural economic lock-in: "Our economics REQUIRE batch settlement. Bidders need 12-24h to hedge and manage risk. Instant settlement would kill bidder participation by forcing them to take directional price risk they can't hedge. We're economically locked into the batch auction model. This isn't a strategic choice we might change—it's structural to our market design."
 
 This credibility is enhanced by technical documentation showing how the economics break down without settlement delay, demonstrating that instant swaps aren't a viable future direction.
 
@@ -154,20 +154,20 @@ These integrations aren't just partnerships—they're proof of concept for the c
 
 ## Conclusion: Category Creation, Not Market Share Capture
 
-The ultimate goal of Atomica's communication strategy is to establish a new mental category: "DeFi futures infrastructure" that sits alongside—not in competition with—"DeFi spot trading infrastructure." This is category creation rather than market share capture.
+The ultimate goal of Atomica's communication strategy is to establish a new mental category: "DeFi batch auction infrastructure" that sits alongside—not in competition with—"DeFi spot trading infrastructure." This is category creation rather than market share capture.
 
-The positioning statement that synthesizes the entire strategy: "Atomica is DeFi's futures layer—complementing AMMs' spot trading with scheduled execution, cross-chain atomic settlement, and treasury automation. We serve patient capital and institutional workflows that DEXes aren't designed for, while driving additional DEX volume through bidder hedging activity. Together, we're expanding DeFi's TAM into treasury management and reducing reliance on risky bridges, making the entire ecosystem stronger against our shared adversaries: CEXes and OTC desks."
+The positioning statement that synthesizes the entire strategy: "Atomica is DeFi's batch auction layer—complementing AMMs' spot trading with scheduled execution, cross-chain atomic settlement, and treasury automation. We serve patient capital and institutional workflows that DEXes aren't designed for, while driving additional DEX volume through bidder hedging activity. Together, we're expanding DeFi's TAM into treasury management and reducing reliance on risky bridges, making the entire ecosystem stronger against our shared adversaries: CEXes and OTC desks."
 
 This framing accomplishes several objectives simultaneously:
 
-1. **Establishes distinct positioning** (futures vs. spot) that makes competition less likely
+1. **Establishes distinct positioning** (batch auction vs. spot) that makes competition less likely
 2. **Emphasizes symbiosis** (bidder hedging drives DEX volume) that makes DEX success aligned with Atomica success
 3. **Highlights shared enemies** (CEXes, OTC desks) that unite rather than divide
 4. **Focuses on TAM expansion** (bringing OTC volume to DeFi) rather than market share capture
 
 The success of this communication strategy will be measured not just by Atomica's adoption, but by the absence of hostile narrative from the DEX community. If Atomica can launch without triggering defensive tribalism from Uniswap, CoW Swap, or 1inch communities—and ideally with explicit endorsements from thought leaders in these communities—the strategy will have succeeded in its primary goal: establishing Atomica as infrastructure that strengthens DeFi rather than fragments it.
 
-The crypto-native community's tenor and attitude can indeed be harsh and tribal. But that same community also deeply values genuine innovation that advances decentralization, eliminates trust requirements, and expands what's possible in DeFi. Atomica's native cross-chain atomic swaps genuinely solve a real problem (bridge risk) that hurts the entire ecosystem. The futures model genuinely serves use cases (DAO treasury management, scheduled execution) that AMMs don't target. The bidder economics genuinely create symbiosis with DEXes through hedging volume.
+The crypto-native community's tenor and attitude can indeed be harsh and tribal. But that same community also deeply values genuine innovation that advances decentralization, eliminates trust requirements, and expands what's possible in DeFi. Atomica's native cross-chain atomic swaps genuinely solve a real problem (bridge risk) that hurts the entire ecosystem. The batch auction model genuinely serves use cases (DAO treasury management, scheduled execution) that AMMs don't target. The bidder economics genuinely create symbiosis with DEXes through hedging volume.
 
 The communication challenge is not to spin these truths—it's to make them obvious to audiences who might initially view Atomica through a competitive lens. If the strategy succeeds, Atomica won't be seen as "the protocol that competes with Uniswap"—it will be seen as "the protocol that makes DeFi viable for institutional treasury management and safe cross-chain trading," which are wins for the entire ecosystem.
 
@@ -180,6 +180,6 @@ That narrative transformation—from potential competitor to ecosystem infrastru
 **Status**: Draft
 **Related Documents**:
 - [Market Volume by Participant Category](./market-volume-by-participant-category.md)
-- [GTM Pull Strategy](./gtm-pull-strategy.md)
+- [GTM Pull Strategy](./gtm-considerations.md)
 - [CoW Swap vs OTC Analysis](../background/cowswap-otc-analysis.md)
-- [Product Design v0](../design/product-design-v0.md)
+- [Product Design v0](../design/product-design-v0-ARCHIVED.md)
