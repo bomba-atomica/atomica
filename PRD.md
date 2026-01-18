@@ -95,7 +95,7 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 
 **Strategic Focus:** While all markets clear simultaneously, Atomica's competitive advantage is providing fair execution for **long-tail assets** where CEX/DEX liquidity is thin. Major pairs (ETH/BTC) already have deep liquidity elsewhere.
 
-**→ See:** [Product Design v0](docs/design/product-design-v0.md) for complete multi-asset mechanism
+**→ See:** [Product Design v0 (Archived)](docs/archive/product-design-v0-ARCHIVED.md) for complete multi-asset mechanism
 
 ## Technical Architecture
 
@@ -301,8 +301,7 @@ Atomica prioritizes:
 - [CoW Swap Analysis](docs/background/cow-swap-analysis.md) - Batch auction case study
 
 **Design & Strategy:**
-- [Ideal Solution Characteristics](docs/design/ideal-characteristics.md) - Requirements with tradeoffs
-- [Product Design v0](docs/design/product-design-v0.md) - Complete auction mechanism
+- [Product Design v0 (Archived)](docs/archive/product-design-v0-ARCHIVED.md) - Historical auction mechanism
 - [N-Layer Onion Timelock](docs/design/timelock-seller-stake-dkg.md) - Sealed bid architecture
 
 **Technical Specifications:**

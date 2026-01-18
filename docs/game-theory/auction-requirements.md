@@ -724,7 +724,7 @@ t=close-1s: Attacker lowers bid to 50 units @ $1,900
 - Open entry increases Sybil risk
 
 **References**:
-- docs/design/ideal-characteristics.md, "Unified User Experience" section
+- [Design Principles](../../PRD.md#design-principles--system-properties), "Unified User Experience" section
 - Budish et al (2015) - Fairness in continuous vs batch auctions
 
 ---
@@ -808,7 +808,7 @@ t=close-1s: Attacker lowers bid to 50 units @ $1,900
 
 **References**:
 - docs/game-theory/uniform-price-auctions.md, "Reserve Price with Commit-Reveal" section
-- docs/design/ideal-characteristics.md, "Protection Against Illiquidity" section
+- [Design Principles](../../PRD.md#design-principles--system-properties), "Protection Against Illiquidity" section
 
 ---
 
@@ -1489,7 +1489,7 @@ See references throughout document to:
 - docs/game-theory/multi-seller-batch-auction.md
 - docs/technical/timelock-bids.md
 - docs/game-theory/cpmm-vs-auction-comparison.md
-- docs/design/ideal-characteristics.md
+- [Design Principles](../../PRD.md#design-principles--system-properties)
 
 ---
 

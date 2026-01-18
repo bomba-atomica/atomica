@@ -1928,4 +1928,4 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 **Product Design:**
 - [Product Design v0](../design/product-design-v0.md) - Atomica auction mechanism design
 - [batch auction model](../design/futures-market-model.md) - Why Atomica uses batch settlement
-- [Ideal Characteristics](../design/ideal-characteristics.md) - Target solution properties
+- [Design Principles](../../PRD.md#design-principles--system-properties) - Target solution properties

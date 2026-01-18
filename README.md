@@ -69,20 +69,20 @@ atomica/
     │   ├── bear-market.md
     │   ├── continuous-vs-auction-markets.md
     │   ├── secondary-auctions-plus-continuous.md
-    │   └── gtm-pull-strategy.md
+    │   └── gtm-considerations.md
     ├── background/           ← Context & prior art
     │   ├── prior-art.md
     │   └── cow-swap-analysis.md
     ├── design/               ← Product design & strategy
-    │   ├── ideal-characteristics.md
-    │   ├── product-design-v0.md
-    │   └── timelock-seller-stake-dkg.md
+    │   ├── timelock-seller-stake-dkg.md
     ├── technical/            ← Technical specifications
     │   ├── architecture-overview.md
     │   ├── cross-chain-verification.md
+    │   ├── cross-chain-swap.md
     │   └── ethereum-wallet-atomica-bridge.md
     ├── game-theory/          ← Economics & mechanism design
     │   ├── uniform-price-auctions.md
+    │   ├── batch-auction-economics.md
     │   ├── shill-bidding-analysis.md
     │   └── cpmm-vs-auction-comparison.md
     ├── decisions/            ← Architecture decision records
@@ -132,16 +132,10 @@ atomica/
 - Preventing "Invisible Handshake" collusion
 - Key provider independence (orthogonal key generation)
 
-**[Product Design v0](docs/design/product-design-v0.md)**
-- Complete auction mechanics
-- Multi-asset clearing
-- Reserve price economics
-- Bid deposits and spam prevention
-
-**[Ideal Solution Characteristics](docs/design/ideal-characteristics.md)**
-- Requirements for cross-chain exchange
-- Tradeoffs for each property
-- Design philosophy
+**[Batch Auction Economics](docs/game-theory/batch-auction-economics.md)**
+- Core Insight: "Embrace Latency"
+- Why batch settlement is a feature, not a bug
+- Daily auction structure and 1-3 hour settlement justification
 
 ### 🔧 Technical Specifications
 
@@ -155,6 +149,11 @@ atomica/
 - ZK proofs of away-chain state
 - Merkle proof inclusion
 - Atomic settlement mechanics
+
+**[Cross-Chain Swap Mechanism](docs/technical/cross-chain-swap.md)**
+- Trustless "Fail Only" design philosophy
+- Dual-Layer Verification (BLS + ZK)
+- HTLC + Timelock IBE mechanics
 
 **[Ethereum Wallet Atomica Bridge](docs/technical/ethereum-wallet-atomica-bridge.md)**
 - Account abstraction specification
@@ -195,6 +194,11 @@ atomica/
 **[Bear Market Analysis](docs/analysis/bear-market.md)**
 - Auction advantages in low-liquidity conditions
 - Why auctions become more valuable as liquidity fragments
+
+**[GTM Considerations](docs/analysis/gtm-considerations.md)**
+- Strategic considerations for go-to-market
+- Arbitrageur-focused bootstrap strategy
+- Analysis of user segments and acquisition channels
 
 ### 📋 Architecture Decision Records
 
