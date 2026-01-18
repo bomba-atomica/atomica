@@ -1,8 +1,9 @@
 # Optimal Auction Time Analysis
 
-## Executive Summary
-
-**Recommendation: 17:00 UTC (fixed)**
+> [!IMPORTANT]
+> **This document has been SUPERSEDED.**
+> Following a strategic shift to a dual-auction model to better cover global hemispheres, the current canonical timing is specified in:
+> **[Dual Auction Timing Specification](./dual-auction-timing.md)**
 
 **Why UTC (not "12:00 PM ET"):**
 - Blockchain timestamps are UTC-based

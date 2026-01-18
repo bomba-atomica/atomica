@@ -418,86 +418,29 @@ This 8-hour window captures:
 - European afternoon activity (DAOs wrapping up governance decisions)
 - US morning-to-afternoon activity (DAOs coordinating multi-sig transactions)
 - Professional Market Maker bidders at peak activity
-- Traditional financial markets open (stable price discovery for crypto)
+- Maximum global stablecoin and CEX liquidity (deepest reference books)
 
 ---
 
 ## Optimal Auction Time Analysis
 
-### Recommendation: **17:00 UTC**
+### Recommendation: **Dual Auctions (16:15 and 07:45 UTC)**
 
-(Note: Current product design already specifies 12:00 PM ET, which is 17:00 UTC in winter / 16:00 UTC in summer)
+Following a strategic shift, Atomica has moved from a single daily auction to a dual-auction model to maximize global institutional coverage. 
 
-### Why UTC Specification is Critical
+**See: [Dual Auction Timing Specification](./dual-auction-timing.md)** for the current canonical specification.
 
-**Problems with "12:00 PM ET" specification:**
-1. **Daylight Savings Ambiguity**
-   - Eastern Time switches between EST (UTC-5) and EDT (UTC-4)
-   - "12:00 PM ET" means 17:00 UTC in winter and 16:00 UTC in summer
-   - Auction would shift by 1 hour twice per year
+### Why the Dual-Auction Model is Optimal for Atomica
 
-2. **Global Confusion**
-   - European participants deal with their own DST transitions (different dates than US)
-   - Asian participants never have DST ambiguity with UTC
-   - Creates coordination problems: "Is it 12pm EST or EDT right now?"
+#### ✅ Global Hub Coverage
+- **16:15 UTC (Atlantic Bridge):** Hits the peak US institutional morning (NY/Chicago) while anchoring the SF desk arrival.
+- **07:45 UTC (Euro-Asia Bridge):** Captures the Tokyo "Closing Cross" while hitting the London morning "at-desk" window.
 
-3. **Smart Contract Complications**
-   - Blockchain timestamps use Unix time (always UTC-based)
-   - drand timelock encryption uses UTC
-   - Converting "12pm ET" to blockchain time requires DST logic
-
-4. **Historical Data Confusion**
-   - When analyzing auction outcomes: "Was this auction at 16:00 UTC or 17:00 UTC?"
-   - Makes historical analysis and seasonal pattern detection harder
-
-**Solution: Specify as 17:00 UTC fixed**
-
-### What 17:00 UTC Means for Global Participants
-
-| Location | Winter (Standard Time) | Summer (Daylight Time) |
-|----------|----------------------|----------------------|
-| **New York** | 12:00 PM (noon) EST | 1:00 PM EDT |
-| **London** | 5:00 PM GMT | 6:00 PM BST |
-| **Singapore** | 1:00 AM +1 day | 1:00 AM +1 day |
-| **San Francisco** | 9:00 AM PST | 10:00 AM PDT |
-| **Sydney** | 4:00 AM +1 day | 3:00 AM +1 day (varies by AU DST) |
-
----
-
-### Why 17:00 UTC is Optimal for Atomica
-
-#### ✅ DAO Coordination Window
-- **1:00 PM EST** (winter) / **1:00 PM EDT** (summer) = prime US East Coast business hours
-- Where most DAO contributors are located
-- Late enough that European contributors are online (6:00 PM London)
-- Enables real-time governance coordination before submission deadline
-
-#### ✅ Institutional Trading Desk Coverage
-- **NY trading desks**: Mid-day (highly active)
-- **London desks**: End of day but still active
-- Captures both European and US professional traders
-- Within traditional business hours for both regions
-
-#### ✅ Bidder Participation (Critical)
-- Professional bidders (your liquidity source) operate during business hours
-- 17:00 UTC = peak liquidity provision window for crypto-native Bidders
-- Coincides with deep order book depth on CEXs (reference pricing)
+#### ✅ Professional Readiness
+- By positioning auctions at the start/peak of professional workdays, Atomica ensures multi-sig signers and operations teams are active and available for coordination.
 
 #### ✅ Liquidity Concentration
-- Within the **12:00-20:00 UTC "golden window"** of maximum global liquidity
-- Traditional markets still open (US stock market closes at 21:00 UTC)
-- Can reference robust price discovery from active markets
-- Forex markets highly active (stable stablecoin pricing reference)
-
-#### ✅ Strategic Differentiation
-- Avoids competing with traditional finance market closes
-- Early enough that European participants can monitor settlement
-- Late enough that Asian participants can submit limit orders before sleep
-
-#### ✅ Psychological Factors
-- **Noon = midday** = natural psychological checkpoint (in US winter timezone)
-- Creates urgency without being too early (morning rush) or too late (end-of-day fatigue)
-- Easy to remember and communicate
+- Both windows align with the deepest global crypto-native liquidity periods (CEX/Stablecoin depth), ensuring solvers and bidders have robust reference pricing and hedging options.
 
 ---
 
@@ -691,10 +634,11 @@ This 8-hour window captures:
 - Enables set-and-forget treasury strategies
 - Reduces coordination overhead for multi-sig signers
 
-#### 5. 17:00 UTC Timing
-- Optimal for Tier 1 target segments (DAOs, DeFi institutions)
-- Maximizes bidder participation (Bidders most active)
-- Aligns with traditional market hours (price discovery reference)
+#### 5. Dual Auction Timing (16:15 and 07:45 UTC)
+- Optimal for Tier 1 target segments (DAOs, DeFi institutions) globally.
+- Maximizes bidder participation across all major financial hubs.
+- Aligns with traditional market hours (price discovery reference) in both hemispheres.
+- **See: [Dual Auction Timing Specification](./dual-auction-timing.md)**
 
 ---
 
