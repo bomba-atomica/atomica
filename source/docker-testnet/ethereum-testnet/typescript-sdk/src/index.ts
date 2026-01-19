@@ -29,8 +29,8 @@ export class EthereumDockerTestnet {
         console.log(`Setting up Ethereum PoS testnet with ${numValidators} validators...`);
 
         // 1. Generate genesis and keys
-        const generateScript = pathResolve(configDir, "generate-genesis.sh");
-        await this.runCommand("bash", [generateScript, numValidators.toString()], configDir);
+        // Genesis generation is handled by the "setup" service in docker-compose.yaml
+        // which runs before other services.
 
         // 2. Start Docker Compose
         await this.runCommand("docker", ["compose", "up", "-d"], configDir);
@@ -51,8 +51,8 @@ export class EthereumDockerTestnet {
     async teardown(): Promise<void> {
         console.log("Tearing down Ethereum testnet...");
         await EthereumDockerTestnet.runCommand(
-            "docker", 
-            ["compose", "down", "-v", "--remove-orphans"], 
+            "docker",
+            ["compose", "down", "-v", "--remove-orphans"],
             this.configDir
         );
     }
@@ -109,8 +109,8 @@ export class EthereumDockerTestnet {
      * Get a block by number
      */
     async getBlock(blockNumber: number | "latest" | "finalized" | "safe"): Promise<any> {
-        const blockParam = typeof blockNumber === "number" 
-            ? `0x${blockNumber.toString(16)}` 
+        const blockParam = typeof blockNumber === "number"
+            ? `0x${blockNumber.toString(16)}`
             : blockNumber;
         const response = await this.rpcCall("eth_getBlockByNumber", [blockParam, false]);
         return response.result;
@@ -129,8 +129,8 @@ export class EthereumDockerTestnet {
      * This is the key API for state proof verification
      */
     async getProof(
-        address: string, 
-        storageKeys: string[], 
+        address: string,
+        storageKeys: string[],
         block: string = "latest"
     ): Promise<EthereumProof> {
         const response = await this.rpcCall("eth_getProof", [address, storageKeys, block]);

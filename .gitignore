@@ -31,3 +31,7 @@ tests/Cargo.lock
 
 # Environment
 .env.local
+
+# Bun
+bun.lockb
+bun.lock
