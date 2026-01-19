@@ -14,35 +14,36 @@
     <style>
         body {
             margin: 0;
-            background-color: #ffffff;
+            background-color: #f7f9fc;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            align-items: center;
             height: 100vh;
             overflow: hidden;
         }
 
         #controls {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            height: 100px;
+            background: #ffffff;
+            padding: 10px 40px;
+            border-top: 1px solid #e1e4e8;
+            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
             display: flex;
-            flex-direction: column;
-            gap: 15px;
+            flex-direction: row;
+            justify-content: space-around;
+            align-items: center;
+            gap: 40px;
             z-index: 100;
-            min-width: 250px;
+            flex-shrink: 0;
         }
 
         .control-group {
             display: flex;
             flex-direction: column;
             gap: 5px;
+            min-width: 200px;
+            flex: 1;
         }
 
         label {
@@ -62,8 +63,14 @@
         }
 
         #map-container {
-            width: 95vw;
-            height: 90vh;
+            flex-grow: 1;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0;
+            background: #ffffff;
+            overflow: hidden;
         }
 
         svg {
@@ -72,7 +79,7 @@
         }
 
         .coastline {
-            fill: none;
+            fill: #f8f9fa;
             stroke: #2c3e50;
             stroke-width: 0.5px;
         }
@@ -84,13 +91,13 @@
 
         .corridor-blue {
             fill: #3498db;
-            fill-opacity: 0.3;
+            fill-opacity: 0.2;
             filter: url(#blur);
         }
 
         .corridor-green {
             fill: #27ae60;
-            fill-opacity: 0.3;
+            fill-opacity: 0.2;
             filter: url(#blur);
         }
 
@@ -103,18 +110,59 @@
         .label-small {
             font-size: 10px;
         }
+
+        /* City Markers */
+        .city-marker {
+            fill: #2c3e50;
+            stroke: #fff;
+            stroke-width: 1px;
+            transition: r 0.2s;
+        }
+
+        .city-marker:hover {
+            r: 5;
+        }
+
+        .city-label-group {
+            pointer-events: none;
+        }
+
+        .city-label {
+            font-size: 10px;
+            font-weight: 700;
+            fill: #2c3e50;
+        }
+
+        .city-time {
+            font-size: 9px;
+            fill: #7f8c8d;
+        }
+
+        .label-bg {
+            fill: none;
+            rx: 3;
+            ry: 3;
+        }
+
+        .market-label-bg {
+            fill: rgba(255, 255, 255, 0.7);
+            stroke: #2c3e50;
+            stroke-width: 1.5px;
+            rx: 4;
+            ry: 4;
+        }
     </style>
 </head>
 
 <body>
     <div id="controls">
         <div class="control-group">
-            <label>Western Daily (UTC)</label>
+            <label>Western Daily: Atlantic / Americas Bridge</label>
             <input type="range" id="western-time" min="0" max="23.75" step="0.25" value="16.25">
             <div class="value-display" id="western-time-display">16:15 UTC</div>
         </div>
         <div class="control-group">
-            <label>Eastern Daily (UTC)</label>
+            <label>Eastern Daily: Euro-Asia Bridge</label>
             <input type="range" id="eastern-time" min="0" max="23.75" step="0.25" value="7.75">
             <div class="value-display" id="eastern-time-display">07:45 UTC</div>
         </div>
@@ -123,12 +171,31 @@
             <input type="range" id="day-of-year" min="1" max="365" step="1" value="172">
             <div class="value-display" id="day-of-year-display">Summer Solstice (Day 172)</div>
         </div>
+        <div style="font-size: 10px; color: #7f8c8d; margin-top: 5px; padding-top: 5px; border-top: 1px solid #eee;">
+            * Cities show local <strong>Seller Cutoff</strong> times.
+        </div>
     </div>
     <div id="map-container"></div>
 
     <script>
         const width = 1200;
         const height = 600;
+
+        // Top Global Financial Hubs with deconflicted label offsets
+        const CAPITALS = [
+            { name: "New York", lon: -74.0060, lat: 40.7128, offset: -5, offX: 5, offY: -5 },
+            { name: "London", lon: -0.1278, lat: 51.5074, offset: 0, offX: -85, offY: -5 }, // Shift further left
+            { name: "Frankfurt", lon: 8.6821, lat: 50.1109, offset: 1, offX: 5, offY: -45 }, // Shift further up
+            { name: "Dubai", lon: 55.2708, lat: 25.2048, offset: 4, offX: 5, offY: -5 },
+            { name: "Mumbai", lon: 72.8777, lat: 19.0760, offset: 5.5, offX: -85, offY: 5 },
+            { name: "Singapore", lon: 103.8198, lat: 1.3521, offset: 8, offX: -85, offY: 15 }, // Shift more down
+            { name: "Hong Kong", lon: 114.1694, lat: 22.3193, offset: 8, offX: 5, offY: -45 }, // Shift further up
+            { name: "Tokyo", lon: 139.6503, lat: 35.6762, offset: 9, offX: 5, offY: -5 },
+            { name: "Sydney", lon: 151.2093, lat: -33.8688, offset: 10, offX: 5, offY: -5 },
+            { name: "San Francisco", lon: -122.4194, lat: 37.7749, offset: -8, offX: 5, offY: -5 },
+            { name: "Johannesburg", lon: 28.0473, lat: -26.2041, offset: 2, offX: 5, offY: -5 },
+            { name: "São Paulo", lon: -46.6333, lat: -23.5505, offset: -3, offX: 5, offY: -5 }
+        ];
 
         const svg = d3.select("#map-container")
             .append("svg")
@@ -150,7 +217,7 @@
         function formatTime(decimalHours) {
             const h = Math.floor(decimalHours);
             const m = Math.round((decimalHours - h) * 60);
-            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} UTC`;
+            return `${(h % 24).toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
         }
 
         function getDayName(day) {
@@ -164,7 +231,6 @@
         // Generate longitude band polygons
         function generateBand(lonStart, lonEnd, step = 5) {
             const points = [];
-            // Handle wrapping across 180°
             let effectiveLonEnd = lonEnd;
             if (effectiveLonEnd < lonStart) {
                 effectiveLonEnd += 360;
@@ -183,39 +249,28 @@
         }
 
         function getDSTShift(lon, day) {
-            // Refined Regional DST Model
-            // US/Americas: 2nd Sunday March (~Day 69) to 1st Sunday Nov (~Day 307)
             const isAmericasDST = day >= 69 && day <= 307;
-            // UK/Europe: Last Sunday March (~Day 90) to Last Sunday Oct (~Day 300)
             const isEuropeDST = day >= 90 && day <= 300;
+            const isAussieDST = day >= 274 || day <= 91; // Sydney DST
 
-            // Americas (approx SF to Atlantic mid-ocean)
-            if (lon <= -45 && lon >= -140) {
-                return isAmericasDST ? 1 : 0;
-            }
-            // UK/Europe/W. Africa (bridge zone)
-            if (lon > -45 && lon < 45) {
-                return isEuropeDST ? 1 : 0;
-            }
-            // Asia, Dubai, Japan - No DST (Dubai is 55, Tokyo is 139)
+            // Americas
+            if (lon <= -45 && lon >= -140) return isAmericasDST ? 1 : 0;
+            // Europe/W. Africa
+            if (lon > -45 && lon < 45) return isEuropeDST ? 1 : 0;
+            // Australia
+            if (lon > 140 && lon < 160) return isAussieDST ? 1 : 0;
             return 0;
         }
 
         function calculateBoundaries(utcTime, day) {
-            // Find longitude where UTCTime corresponds to 8am/6pm local time.
-            // Lon = (LocalTime - UTCTime - DST) * 15
-
-            // Start Edge (8am)
-            const lon8am_guess = (8 - utcTime) * 15;
-            const dst8am = getDSTShift(lon8am_guess > 180 ? lon8am_guess - 360 : lon8am_guess, day);
+            const lonStart_guess = (8 - utcTime) * 15;
+            const dst8am = getDSTShift(lonStart_guess > 180 ? lonStart_guess - 360 : lonStart_guess, day);
             let lonStart = (8 - utcTime - dst8am) * 15;
 
-            // End Edge (6pm)
             const lonEnd_guess = (18 - utcTime) * 15;
             const dstEnd = getDSTShift(lonEnd_guess > 180 ? lonEnd_guess - 360 : lonEnd_guess, day);
             let lonEnd = (18 - utcTime - dstEnd) * 15;
 
-            // Normalize to [-180, 180]
             while (lonStart > 180) lonStart -= 360;
             while (lonStart < -180) lonStart += 360;
             while (lonEnd > 180) lonEnd -= 360;
@@ -241,24 +296,26 @@
             const easternUTC = +document.getElementById('eastern-time').value;
             const dayOfYear = +document.getElementById('day-of-year').value;
 
-            document.getElementById('western-time-display').innerText = formatTime(westernUTC);
-            document.getElementById('eastern-time-display').innerText = formatTime(easternUTC);
+            document.getElementById('western-time-display').innerText = formatTime(westernUTC) + " UTC";
+            document.getElementById('eastern-time-display').innerText = formatTime(easternUTC) + " UTC";
             document.getElementById('day-of-year-display').innerText = `${getDayName(dayOfYear)} (${dayOfYear})`;
 
             const corridors = [
                 {
-                    name: 'Atlantic Bridge',
+                    name: 'WEST MARKET',
                     ...calculateBoundaries(westernUTC, dayOfYear),
                     colorClass: 'corridor-green',
-                    time: formatTime(westernUTC),
-                    hubs: 'SF → NY → LON'
+                    time: formatTime(westernUTC) + ' UTC',
+                    hubs: 'SF → NY → LON',
+                    lat: -45, lon: -40
                 },
                 {
-                    name: 'Euro-Asia Bridge',
+                    name: 'EAST MARKET',
                     ...calculateBoundaries(easternUTC, dayOfYear),
                     colorClass: 'corridor-blue',
-                    time: formatTime(easternUTC),
-                    hubs: 'LON → DXB → TYO'
+                    time: formatTime(easternUTC) + ' UTC',
+                    hubs: 'LON → DXB → TYO',
+                    lat: -45, lon: 70
                 }
             ];
 
@@ -285,33 +342,82 @@
                     .attr("class", c.colorClass)
                     .attr("d", path);
 
-                let span = c.lonEnd - c.lonStart;
-                if (span < 0) span += 360;
-                let midLon = c.lonStart + span / 2;
-                while (midLon > 180) midLon -= 360;
-                while (midLon < -180) midLon += 360;
-
-                const centroid = projection([midLon, -20]);
-                if (centroid) {
+                const pos = projection([c.lon, c.lat]);
+                if (pos) {
                     const labelGroup = g.append("g")
-                        .attr("transform", `translate(${centroid[0]}, ${centroid[1]})`);
+                        .attr("transform", `translate(${pos[0]}, ${pos[1]})`);
+
+                    // Market label border
+                    labelGroup.append("rect")
+                        .attr("class", "market-label-bg")
+                        .attr("x", -60)
+                        .attr("y", -15)
+                        .attr("width", 120)
+                        .attr("height", 45);
 
                     labelGroup.append("text")
                         .attr("class", "label")
-                        .attr("dy", "0")
+                        .attr("dy", "5px") // Adjusted for centering in rect
                         .style("font-weight", "bold")
                         .text(c.name);
 
                     labelGroup.append("text")
                         .attr("class", "label")
-                        .attr("dy", "1.2em")
+                        .attr("dy", "1.7em") // Adjusted for centering in rect
                         .text(c.time);
-
-                    labelGroup.append("text")
-                        .attr("class", "label label-small")
-                        .attr("dy", "2.4em")
-                        .text(c.hubs);
                 }
+            });
+
+            // City Markers & Local Cutoff Times
+            CAPITALS.forEach(city => {
+                const pos = projection([city.lon, city.lat]);
+                if (!pos) return;
+
+                const dst = getDSTShift(city.lon, dayOfYear);
+                // Local Time calculation: UTC + Offset + DST
+                const localWestern = (westernUTC + city.offset + dst + 24) % 24;
+                const localEastern = (easternUTC + city.offset + dst + 24) % 24;
+
+                const isBizWestern = localWestern >= 9 && localWestern < 17;
+                const isBizEastern = localEastern >= 9 && localEastern < 17;
+
+                const cityGroup = g.append("g")
+                    .attr("transform", `translate(${pos[0]}, ${pos[1]})`);
+
+                cityGroup.append("circle")
+                    .attr("class", "city-marker")
+                    .attr("r", 3);
+
+                const labelBox = cityGroup.append("g")
+                    .attr("class", "city-label-group")
+                    .attr("transform", `translate(${city.offX || 5}, ${city.offY || -5})`);
+
+                // Dynamic label logic with more padding
+                labelBox.append("rect")
+                    .attr("class", "label-bg")
+                    .attr("x", -5)
+                    .attr("y", -12)
+                    .attr("width", 85)
+                    .attr("height", 42);
+
+                labelBox.append("text")
+                    .attr("class", "city-label")
+                    .attr("dx", "2px")
+                    .text(city.name);
+
+                labelBox.append("text")
+                    .attr("class", "city-time")
+                    .attr("dx", "2px")
+                    .attr("dy", "1.3em")
+                    .style("font-weight", isBizWestern ? "800" : "normal")
+                    .text(`W: ${formatTime(localWestern)}`);
+
+                labelBox.append("text")
+                    .attr("class", "city-time")
+                    .attr("dx", "2px")
+                    .attr("dy", "2.6em")
+                    .style("font-weight", isBizEastern ? "800" : "normal")
+                    .text(`E: ${formatTime(localEastern)}`);
             });
         }
 
