@@ -171,9 +171,9 @@
             <div class="value-display" id="eastern-time-display">07:00 UTC</div>
         </div>
         <div class="control-group">
-            <label>Time of Year (Day)</label>
-            <input type="range" id="day-of-year" min="1" max="365" step="1" value="172">
-            <div class="value-display" id="day-of-year-display">Summer Solstice (Day 172)</div>
+            <label>Time of Year</label>
+            <input type="range" id="day-of-year" min="0" max="365" step="1" value="0">
+            <div class="value-display" id="day-of-year-display">Jan 18, 2026</div>
         </div>
         <div style="font-size: 10px; color: #7f8c8d; margin-top: 5px; padding-top: 5px; border-top: 1px solid #eee;">
             * Cities show local <strong>Seller Cutoff</strong> times.
@@ -224,12 +224,24 @@
             return `${(h % 24).toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
         }
 
-        function getDayName(day) {
-            if (day >= 170 && day <= 174) return "Summer Solstice";
-            if (day >= 353 && day <= 357) return "Winter Solstice";
-            if (day >= 78 && day <= 82) return "Spring Equinox";
-            if (day >= 263 && day <= 267) return "Autumn Equinox";
-            return `Day ${day}`;
+        const TODAY = new Date(2026, 0, 18);
+
+        function getDayName(offset) {
+            const date = new Date(TODAY);
+            date.setDate(date.getDate() + offset);
+            const options = { month: 'short', day: 'numeric', year: 'numeric' };
+            const formatted = date.toLocaleDateString('en-US', options);
+
+            // Calculate absolute day of year for seasonal labels
+            const start = new Date(date.getFullYear(), 0, 0);
+            const diff = date - start + (start.getTimezoneOffset() - date.getTimezoneOffset()) * 60 * 1000;
+            const absoluteDay = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+            if (absoluteDay >= 170 && absoluteDay <= 174) return `${formatted} (Summer Solstice)`;
+            if (absoluteDay >= 353 && absoluteDay <= 357) return `${formatted} (Winter Solstice)`;
+            if (absoluteDay >= 78 && absoluteDay <= 82) return `${formatted} (Spring Equinox)`;
+            if (absoluteDay >= 263 && absoluteDay <= 267) return `${formatted} (Autumn Equinox)`;
+            return formatted;
         }
 
         // Generate longitude band polygons
@@ -255,25 +267,34 @@
         function getDSTShift(lon, day) {
             const isAmericasDST = day >= 69 && day <= 307;
             const isEuropeDST = day >= 90 && day <= 300;
-            const isAussieDST = day >= 274 || day <= 91; // Sydney DST
+            const isAussieDST = day >= 274 || day <= 91;
 
-            // Americas
-            if (lon <= -45 && lon >= -140) return isAmericasDST ? 1 : 0;
+            // Americas (SF to Brazil East)
+            if (lon <= -35 && lon >= -135) return isAmericasDST ? 1 : 0;
             // Europe/W. Africa
-            if (lon > -45 && lon < 45) return isEuropeDST ? 1 : 0;
-            // Australia
-            if (lon > 140 && lon < 160) return isAussieDST ? 1 : 0;
+            if (lon > -15 && lon < 40) return isEuropeDST ? 1 : 0;
+            // Australia (Focusing on Sydney/Eastern States)
+            if (lon > 130 && lon < 160) return isAussieDST ? 1 : 0;
             return 0;
         }
 
         function calculateBoundaries(utcTime, day) {
-            const lonStart_guess = (8 - utcTime) * 15;
-            const dst8am = getDSTShift(lonStart_guess > 180 ? lonStart_guess - 360 : lonStart_guess, day);
-            let lonStart = (8 - utcTime - dst8am) * 15;
+            function getStableLon(targetHour) {
+                // Calculate lon for standard time
+                const lon0 = (targetHour - utcTime) * 15;
+                const lon1 = (targetHour - utcTime - 1) * 15;
 
-            const lonEnd_guess = (18 - utcTime) * 15;
-            const dstEnd = getDSTShift(lonEnd_guess > 180 ? lonEnd_guess - 360 : lonEnd_guess, day);
-            let lonEnd = (18 - utcTime - dstEnd) * 15;
+                // Direct lookup for consistency
+                const norm0 = ((lon0 + 180) % 360 + 360) % 360 - 180;
+                const norm1 = ((lon1 + 180) % 360 + 360) % 360 - 180;
+
+                // If the daylight-shifted boundary lands in a DST zone, prioritize it
+                if (getDSTShift(norm1, day) === 1) return lon1;
+                return lon0;
+            }
+
+            let lonStart = getStableLon(8.5); // Refined 8:30 AM 
+            let lonEnd = getStableLon(18);    // Refined 6:00 PM
 
             while (lonStart > 180) lonStart -= 360;
             while (lonStart < -180) lonStart += 360;
@@ -281,6 +302,17 @@
             while (lonEnd < -180) lonEnd += 360;
 
             return { lonStart, lonEnd };
+        }
+
+        function getCountdown(targetHour) {
+            const now = new Date();
+            const currentUTC = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+            let diff = targetHour - currentUTC;
+            if (diff <= 0) diff += 24;
+
+            const h = Math.floor(diff);
+            const m = Math.floor((diff - h) * 60);
+            return `${h}h ${m}m remaining`;
         }
 
         let worldData, landData;
@@ -292,6 +324,9 @@
                 const countries = worldData.objects.countries.geometries.filter(d => d.id !== "010" && d.id !== 10);
                 landData = topojson.feature(worldData, { type: "GeometryCollection", geometries: countries });
                 update();
+
+                // Keep the countdown live
+                setInterval(update, 60000);
             } catch (error) {
                 console.error("Error loading map data:", error);
             }
@@ -300,11 +335,18 @@
         function update() {
             const westernUTC = +document.getElementById('western-time').value;
             const easternUTC = +document.getElementById('eastern-time').value;
-            const dayOfYear = +document.getElementById('day-of-year').value;
+            const dateOffset = +document.getElementById('day-of-year').value;
+
+            // Calculate absolute day of year for the selected offset
+            const date = new Date(TODAY);
+            date.setDate(date.getDate() + dateOffset);
+            const start = new Date(date.getFullYear(), 0, 0);
+            const diff = date - start + (start.getTimezoneOffset() - date.getTimezoneOffset()) * 60 * 1000;
+            const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
 
             document.getElementById('western-time-display').innerText = formatTime(westernUTC) + " UTC";
             document.getElementById('eastern-time-display').innerText = formatTime(easternUTC) + " UTC";
-            document.getElementById('day-of-year-display').innerText = `${getDayName(dayOfYear)} (${dayOfYear})`;
+            document.getElementById('day-of-year-display').innerText = getDayName(dateOffset);
 
             const corridors = [
                 {
@@ -312,6 +354,7 @@
                     ...calculateBoundaries(westernUTC, dayOfYear),
                     colorClass: 'corridor-green',
                     time: formatTime(westernUTC) + ' UTC',
+                    countdown: getCountdown(westernUTC),
                     hubs: 'SF → NY → LON',
                     lat: -45, lon: -40
                 },
@@ -320,6 +363,7 @@
                     ...calculateBoundaries(easternUTC, dayOfYear),
                     colorClass: 'corridor-blue',
                     time: formatTime(easternUTC) + ' UTC',
+                    countdown: getCountdown(easternUTC),
                     hubs: 'LON → DXB → TYO',
                     lat: -45, lon: 70
                 }
@@ -357,20 +401,27 @@
                     labelGroup.append("rect")
                         .attr("class", "market-label-bg")
                         .attr("x", -60)
-                        .attr("y", -15)
+                        .attr("y", -20)
                         .attr("width", 120)
-                        .attr("height", 45);
+                        .attr("height", 60);
 
                     labelGroup.append("text")
                         .attr("class", "label")
-                        .attr("dy", "5px") // Adjusted for centering in rect
+                        .attr("dy", "0")
                         .style("font-weight", "bold")
                         .text(c.name);
 
                     labelGroup.append("text")
                         .attr("class", "label")
-                        .attr("dy", "1.7em") // Adjusted for centering in rect
+                        .attr("dy", "1.4em")
                         .text(c.time);
+
+                    labelGroup.append("text")
+                        .attr("class", "label")
+                        .attr("dy", "2.8em")
+                        .style("font-size", "10px")
+                        .style("fill", "#7f8c8d")
+                        .text(c.countdown);
                 }
             });
 
