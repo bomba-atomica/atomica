@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-**Standard Times: 16:15 UTC and 07:45 UTC**
+**Standard Times: 16:30 UTC and 07:00 UTC**
 
 Atomica's dual-auction model is a strategically calibrated system designed to synchronize global liquidity. A core pillar of the strategy is the **Consolidation of the Americas**, ensuring that both California (SF) and New York (NY) are served by the same daily liquidity event: the **Western Daily**.
 
 | Auction | UTC Time | Strategic Market | Primary Bridge | Strategic Anchor |
 | :--- | :--- | :--- | :--- | :--- |
-| **Western Daily** | **16:15 UTC** | **WEST MARKET** | Atlantic / Americas Bridge | **Unified Americas (SF & NY)** $\leftrightarrow$ London Afternoon |
-| **Eastern Daily** | **07:45 UTC** | **EAST MARKET** | Euro-Asia Bridge | Tokyo Close $\leftrightarrow$ London Morning |
+| **Western Daily** | **16:30 UTC** | **WEST MARKET** | Atlantic / Americas Bridge | **Unified Americas (SF & NY)** $\leftrightarrow$ London Afternoon |
+| **Eastern Daily** | **07:00 UTC** | **EAST MARKET** | Euro-Asia Bridge | Tokyo Afternoon $\leftrightarrow$ London Early-Bird |
 
 ---
 
@@ -29,17 +29,17 @@ Auction timing is dictated by the **Seller Signature Deadline** (Auction Start),
 
 ## 2. Consolidation of the Americas (Western Daily: WEST MARKET)
 
-The **Western Daily (16:15 UTC)**, visualized as the **WEST MARKET** corridor, is specifically optimized to pool the liquidity of both US coasts into a single ocean of collateral.
+The **Western Daily (16:30 UTC)**, visualized as the **WEST MARKET** corridor, is specifically optimized to pool the liquidity of both US coasts into a single ocean of collateral.
 
 | Hub | Local (Winter) | Seller QoL (2h Prep) | Coordination Status |
 | :--- | :--- | :--- | :--- |
-| **New York** | 11:15 AM | **Perfect** (09:15 AM start) | Peak institutional morning. |
-| **San Francisco** | 08:15 AM | **Tight** (06:15 AM start) | Requires early readiness; anchors the US market open. |
+| **New York** | 11:30 AM | **Perfect** (09:30 AM start) | Peak institutional morning. |
+| **San Francisco** | 08:30 AM | **Perfect** (06:30 AM start) | Anchors the absolute start of the US market open. |
 
 ### Why Unified Americas Wins:
 1. **Network Effect**: Pooling SF and NY volume into the same 15-minute window creates a much higher "Gravity" for global bidders.
 2. **Standardization**: Provides a single "Market Open" event for all US-based DAOs and funds.
-3. **The 17:00 UTC Alternative**: Shifting toward 17:00 UTC (9 AM PT / 12 PM ET) would make the window "Perfect" for both coasts but pushes the European session into the post-market "Closing Pulse."
+3. **Strategic Pivot**: Transitioning from 16:15 to 16:30 ensures the San Francisco desk hits the 08:30 AM threshold perfectly, maximizing West Coast participation.
 
 ---
 
@@ -47,10 +47,10 @@ The **Western Daily (16:15 UTC)**, visualized as the **WEST MARKET** corridor, i
 
 The choice of the Western Daily time creates a direct trade-off for European participants.
 
-### 3.1 16:15 UTC (The Atlantic Peak)
-- **London (4:15 PM GMT)**: Maximum institutional activity. High overlap with the US morning entry.
-- **Frankfurt (5:15 PM CET)**: Final hour of the core trading day.
-- **Verdict**: This is the **Maximum Liquidity Overlap**.
+### 3.1 16:30 UTC (The Atlantic Peak)
+- **London (4:30 PM GMT)**: Trading day close; captures late-day liquidity volume.
+- **Frankfurt (5:30 PM CET)**: Post-market wrap-up.
+- **Verdict**: Maintains high liquidity while enabling a better US Open synchronization.
 
 ### 3.2 17:00 UTC (The Closing Pulse)
 - **London (5:00 PM GMT)**: Post-LSE close (4:30 PM). Desks shift to "Clean-up" mode.
@@ -60,11 +60,11 @@ The choice of the Western Daily time creates a direct trade-off for European par
 
 ## 4. The Euro-Asia Bridge (Eastern Daily: EAST MARKET)
 
-The **Eastern Daily (07:45 UTC)**, or **EAST MARKET**, bridges the closing volume of the Asian session with the opening of the European desks.
+The **Eastern Daily (07:00 UTC)**, or **EAST MARKET**, bridges the core Asian afternoon volume with the earliest European desk arrivals.
 
-- **Tokyo (4:45 PM JST)**: Captures the "Closing Cross." **Perfect QoL.**
-- **Singapore/Hong Kong (3:45 PM SGT/HKT)**: Mid-afternoon liquidity.
-- **London (7:45 AM GMT)**: Desk arrival; captures early-bird institutional flow.
+- **Tokyo (4:00 PM JST)**: Peak afternoon trading. **Perfect QoL.**
+- **Singapore/Hong Kong (3:00 PM SGT/HKT)**: Core afternoon liquidity.
+- **London (7:00 AM GMT)**: Early-bird desk arrival; requires automated high-readiness for coordinating desks.
 
 ---
 
