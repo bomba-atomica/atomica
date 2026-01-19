@@ -85,41 +85,13 @@
             stroke: none;
         }
 
-        .timezone-boundary {
+        .timezone-band {
+            stroke: none;
+        }
+
+        .country-border {
             fill: none;
-            stroke: #2c3e50;
-            stroke-width: 0.3px;
-        }
-
-        .country {
-            fill: #f8f9fa;
-            stroke: #bdc3c7;
-            stroke-width: 0.3px;
-        }
-
-        .label {
-            font-size: 12px;
-            fill: #2c3e50;
-            text-anchor: middle;
-        }
-
-        .highlight-zone {
-            fill: #3498db !important;
-            fill-opacity: 0.4 !important;
-            stroke: #2980b9;
-            stroke-width: 0.6px;
-        }
-
-        .label-small {
-            font-size: 10px;
-        }
-
-        /* City Markers */
-        .city-marker {
-            fill: #2c3e50;
-            stroke: #fff;
-            stroke-width: 1px;
-            transition: r 0.2s;
+            stroke: rgba(255, 255, 255, 0.5);
         }
 
         .city-marker:hover {
@@ -259,6 +231,30 @@
             if (absoluteDay >= 263 && absoluteDay <= 267) return `${formatted} (Autumn Equinox)`;
             return formatted;
         }
+
+        // Global Helper Functions for Visualization
+        const getOffset = (d) => {
+            if (!d || !d.properties) return 0;
+            const p = d.properties;
+
+            // Coerce known properties (Natural Earth)
+            const zone = parseFloat(p.zone);
+            if (!isNaN(zone)) return zone;
+
+            const gmt = parseFloat(p.gmtoffset);
+            if (!isNaN(gmt)) return gmt;
+
+            // Geometric Fallback
+            const centroid = d3.geoCentroid(d);
+            if (!centroid || isNaN(centroid[0])) return 0;
+            return centroid[0] / 15;
+        };
+
+        // Use standard Rainbow scale for robust coloring
+        // Domain [-12, 12] maps to [0, 1] for the interpolator
+        const colorScale = d3.scaleSequential(d3.interpolateRainbow)
+            .domain([-12, 12]);
+
         function getDSTShift(lon, day) {
             const isAmericasDST = day >= 69 && day <= 307;
             const isEuropeDST = day >= 90 && day <= 300;
@@ -310,7 +306,7 @@
             return `${h}h ${m}m remaining`;
         }
 
-        let timezoneData, countryData;
+        let timezoneData, countryData, landFeature;
 
         async function init() {
             try {
@@ -322,14 +318,12 @@
                 // Direct GeoJSON use (no topojson conversion needed for timezones)
                 timezoneData = tzGeoJSON;
 
-
-
                 const countries = countryTopo.objects.countries.geometries.filter(d => d.id !== "010" && d.id !== 10 && d.id !== "ATA");
                 countryData = topojson.feature(countryTopo, { type: "GeometryCollection", geometries: countries });
 
                 // Pre-calculate merged land for clipping
                 const landGeometry = topojson.merge(countryTopo, countries);
-                const landFeature = { type: "Feature", geometry: landGeometry };
+                landFeature = { type: "Feature", geometry: landGeometry };
 
                 // Setup land clipping path once and stay fixed
                 defs.select("#land-clipping").selectAll("path").remove();
@@ -392,42 +386,31 @@
                 .attr("class", "sphere")
                 .attr("d", path);
 
-            // Countries
-            g.append("path")
-                .datum(countryData)
-                .attr("class", "country")
-                .attr("d", path);
-
-            // Robust offset extraction (Geometric Fallback re-defined for scope safety)
-            const getOffset = (d) => {
-                const p = d.properties;
-                if (typeof p.zone === 'number') return p.zone;
-                if (typeof p.gmtoffset === 'number') return p.gmtoffset;
-                // Geometric: 15 degrees = 1 hour
-                const centroid = d3.geoCentroid(d)[0];
-                return centroid / 15;
-            };
-
-            // Sinebow for cyclic 24h rainbow
-            const colorScale = d3.scaleSequential(d3.interpolateSinebow)
-                .domain([-12, 12]);
-
+            // Render Timezone Bands (Clipped to Land)
+            // Note: Restored clip-path to ensure colors only appear on land
             const tzGroup = g.append("g")
                 .attr("clip-path", "url(#land-clipping)");
+
+            console.log("Land Feature Geometry:", landFeature);
 
             tzGroup.selectAll(".timezone-band")
                 .data(timezoneData.features)
                 .enter().append("path")
                 .attr("class", "timezone-band")
-                .attr("fill", d => {
+                .attr("fill", (d) => {
                     const offset = getOffset(d);
-                    return colorScale(offset);
+                    const col = colorScale(offset);
+                    return col;
                 })
-                .attr("fill-opacity", 0.8)
+                .attr("fill-opacity", 0.9)
                 .attr("stroke", "none")
                 .attr("d", path);
 
-            // 4. (Removed Timezone Boundaries Overlay per request)
+            // 4. Country Borders Overlay (White)
+            g.append("path")
+                .datum(countryData)
+                .attr("class", "country-border")
+                .attr("d", path);
 
             // Market Labels (Fixed positional markers)
             corridors.forEach(c => {
