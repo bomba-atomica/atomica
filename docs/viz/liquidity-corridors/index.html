@@ -24,25 +24,33 @@
 
         #controls {
             width: 100%;
-            height: 100px;
             background: #ffffff;
-            padding: 10px 40px;
-            border-top: 1px solid #e1e4e8;
-            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+            padding: 15px 20px;
+            border-bottom: 1px solid #e1e4e8;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
             display: flex;
-            flex-direction: row;
-            justify-content: space-around;
-            align-items: center;
-            gap: 40px;
+            flex-direction: column;
+            gap: 15px;
             z-index: 100;
             flex-shrink: 0;
+        }
+
+        .control-row {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 20px;
+            width: 100%;
         }
 
         .control-group {
             display: flex;
             flex-direction: column;
             gap: 5px;
-            min-width: 200px;
+            min-width: 180px;
+            max-width: 300px;
             flex: 1;
         }
 
@@ -86,7 +94,9 @@
         }
 
         .timezone-band {
-            stroke: none;
+            stroke: #cccccc;
+            stroke-width: 0.5px;
+            vector-effect: non-scaling-stroke;
         }
 
         .country-border {
@@ -106,7 +116,6 @@
             font-size: 10px;
             font-weight: 700;
             fill: #2c3e50;
-            text-anchor: start;
             paint-order: stroke;
             stroke: rgba(255, 255, 255, 0.9);
             stroke-width: 3px;
@@ -117,7 +126,6 @@
         .city-time {
             font-size: 9px;
             fill: #2c3e50;
-            text-anchor: start;
             font-weight: 600;
             paint-order: stroke;
             stroke: rgba(255, 255, 255, 0.9);
@@ -144,22 +152,34 @@
 
 <body>
     <div id="controls">
-        <div class="control-group">
-            <label>Western Daily: Atlantic / Americas Bridge</label>
-            <input type="range" id="western-time" min="0" max="23.75" step="0.25" value="16.5">
-            <div class="value-display" id="western-time-display">16:30 UTC</div>
+        <div class="control-row">
+            <div class="control-group">
+                <label>Western Daily: Atlantic / Americas Bridge</label>
+                <input type="range" id="western-time" min="0" max="23.75" step="0.25" value="16.5">
+                <div class="value-display" id="western-time-display">16:30 UTC</div>
+            </div>
+            <div class="control-group">
+                <label>Eastern Daily: Euro-Asia Bridge</label>
+                <input type="range" id="eastern-time" min="0" max="23.75" step="0.25" value="7.0">
+                <div class="value-display" id="eastern-time-display">07:00 UTC</div>
+            </div>
+            <div class="control-group">
+                <label>Time of Year</label>
+                <input type="range" id="day-of-year" min="-180" max="180" step="1" value="0">
+                <div class="value-display" id="day-of-year-display">Today</div>
+            </div>
+            <div class="control-group">
+                <label>Solar Noon (UTC)</label>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="range" id="simulation-time" min="0" max="24" step="0.01" value="12">
+                    <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; white-space: nowrap;">
+                        <input type="checkbox" id="animate-toggle"> Animate
+                    </label>
+                </div>
+                <div class="value-display" id="simulation-time-display">12:00 UTC</div>
+            </div>
         </div>
-        <div class="control-group">
-            <label>Eastern Daily: Euro-Asia Bridge</label>
-            <input type="range" id="eastern-time" min="0" max="23.75" step="0.25" value="7.0">
-            <div class="value-display" id="eastern-time-display">07:00 UTC</div>
-        </div>
-        <div class="control-group">
-            <label>Time of Year</label>
-            <input type="range" id="day-of-year" min="0" max="365" step="1" value="0">
-            <div class="value-display" id="day-of-year-display">Jan 18, 2026</div>
-        </div>
-        <div style="font-size: 10px; color: #7f8c8d; margin-top: 5px; padding-top: 5px; border-top: 1px solid #eee;">
+        <div style="font-size: 11px; color: #7f8c8d; border-top: 1px solid #eee; padding-top: 8px; text-align: center;">
             * Cities show local <strong>Seller Cutoff</strong> times.
         </div>
     </div>
@@ -200,7 +220,8 @@
         const clipPathDef = defs.append("clipPath")
             .attr("id", "land-clipping");
 
-        const projection = d3.geoRobinson()
+        // Initial Projection (will be updated dynamically)
+        const projection = d3.geoEquirectangular()
             .scale(180)
             .translate([width / 2, height / 2]);
 
@@ -252,8 +273,22 @@
 
         // Use standard Rainbow scale for robust coloring
         // Domain [-12, 12] maps to [0, 1] for the interpolator
-        const colorScale = d3.scaleSequential(d3.interpolateRainbow)
-            .domain([-12, 12]);
+        // REGIONAL PALETTE LOGIC (Stepped Gradients)
+        // West Market: Shades of GREEN.
+        const westDomain = [8, 18]; // 08:00 (Light) to 18:00 (Dark)
+        const westSteps = 10;
+        const greenPalette = d3.quantize(d3.interpolateGreens, westSteps + 2).slice(1, -1);
+        const scaleGreen = d3.scaleQuantize()
+            .domain(westDomain)
+            .range(greenPalette);
+
+        // East Market: Shades of BLUE.
+        const eastDomain = [8, 18]; // 08:00 (Light) to 18:00 (Dark)
+        const eastSteps = 10;
+        const bluePalette = d3.quantize(d3.interpolateBlues, eastSteps + 2).slice(1, -1);
+        const scaleBlue = d3.scaleQuantize()
+            .domain(eastDomain)
+            .range(bluePalette);
 
         function getDSTShift(lon, day) {
             const isAmericasDST = day >= 69 && day <= 307;
@@ -332,9 +367,6 @@
                     .attr("d", path);
 
                 update();
-
-                // Keep the countdown live
-                setInterval(update, 60000);
             } catch (error) {
                 console.error("Error loading map data:", error);
             }
@@ -352,9 +384,44 @@
             const diff = date - start + (start.getTimezoneOffset() - date.getTimezoneOffset()) * 60 * 1000;
             const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
 
+            // DYNAMIC SOLAR CENTERING (Linked to Slider)
+            const currentDecimalUTC = +document.getElementById('simulation-time').value;
+
+            // Solar Noon is at Longitude 0 (Greenwich) when UTC is 12:00
+            // Formula: (12 - currentUTC) * 15
+            const solarRotation = (12 - currentDecimalUTC) * 15;
+
+            projection.rotate([-solarRotation, 0]);
+
+            // UPDATE CLIP PATH for current rotation
+            defs.select("#land-clipping").selectAll("path")
+                .datum(landFeature)
+                .attr("d", path);
+
+            // Moved inside to avoid ReferenceError & Access closure variables
+            function getMarketColor(offset) {
+                // Offset -> Longitude approx
+                const dst = getDSTShift(offset * 15, dayOfYear);
+                const localWestern = (westernUTC + offset + dst + 24) % 24;
+                const localEastern = (easternUTC + offset + dst + 24) % 24;
+
+                const isWestViable = localWestern >= 8.5 && localWestern < 18;
+                const isEastViable = localEastern >= 8.5 && localEastern < 18;
+
+                if (isWestViable && !isEastViable) return scaleGreen(localWestern);
+                if (!isWestViable && isEastViable) return scaleBlue(localEastern);
+
+                if (isWestViable && isEastViable) {
+                    // TIEBREAKER: 50/50 Blend
+                    return d3.interpolateLab(scaleGreen(localWestern), scaleBlue(localEastern))(0.5);
+                }
+                return "#e0e0e0";
+            }
+
             document.getElementById('western-time-display').innerText = formatTime(westernUTC) + " UTC";
             document.getElementById('eastern-time-display').innerText = formatTime(easternUTC) + " UTC";
             document.getElementById('day-of-year-display').innerText = getDayName(dateOffset);
+            document.getElementById('simulation-time-display').innerText = formatTime(currentDecimalUTC) + " UTC";
 
             const corridors = [
                 {
@@ -391,7 +458,7 @@
             const tzGroup = g.append("g")
                 .attr("clip-path", "url(#land-clipping)");
 
-            console.log("Land Feature Geometry:", landFeature);
+
 
             tzGroup.selectAll(".timezone-band")
                 .data(timezoneData.features)
@@ -399,11 +466,11 @@
                 .attr("class", "timezone-band")
                 .attr("fill", (d) => {
                     const offset = getOffset(d);
-                    const col = colorScale(offset);
-                    return col;
+                    return getMarketColor(offset);
                 })
                 .attr("fill-opacity", 0.9)
-                .attr("stroke", "none")
+                .attr("stroke", "#cccccc")
+                .attr("stroke-width", "0.5px")
                 .attr("d", path);
 
             // 4. Country Borders Overlay (White)
@@ -431,18 +498,21 @@
 
                     labelGroup.append("text")
                         .attr("class", "city-label")
+                        .attr("x", 0)
                         .attr("y", -8)
                         .attr("text-anchor", "middle")
                         .text(c.name);
 
                     labelGroup.append("text")
                         .attr("class", "city-time")
+                        .attr("x", 0)
                         .attr("y", 6)
                         .attr("text-anchor", "middle")
                         .text(c.time);
 
                     labelGroup.append("text")
                         .attr("class", "city-time")
+                        .attr("x", 0)
                         .attr("y", 18)
                         .attr("text-anchor", "middle")
                         .attr("style", "font-size: 8px;")
@@ -481,12 +551,14 @@
                 labelBox.append("text")
                     .attr("class", "city-time")
                     .attr("y", 12)
+                    .attr("text-anchor", "start")
                     .style("font-weight", isBizWestern ? "800" : "normal")
                     .text(`W: ${formatTime(localWestern)}`);
 
                 labelBox.append("text")
                     .attr("class", "city-time")
                     .attr("y", 22)
+                    .attr("text-anchor", "start")
                     .style("font-weight", isBizEastern ? "800" : "normal")
                     .text(`E: ${formatTime(localEastern)}`);
             });
@@ -495,8 +567,34 @@
         document.getElementById('western-time').oninput = update;
         document.getElementById('eastern-time').oninput = update;
         document.getElementById('day-of-year').oninput = update;
+        document.getElementById('simulation-time').oninput = update;
 
-        init();
+        function tick() {
+            const animate = document.getElementById('animate-toggle').checked;
+            if (animate) {
+                const slider = document.getElementById('simulation-time');
+                let val = parseFloat(slider.value) + 0.02; // Slower, smoother animation
+                if (val >= 24) val = 0;
+                slider.value = val;
+                update();
+            } else {
+                // Constant background update for time displays/countdown even if not animating
+                update();
+            }
+            requestAnimationFrame(tick);
+        }
+
+        async function start() {
+            // Set initial simulation time to current UTC
+            const now = new Date();
+            const currentUTC = now.getUTCHours() + (now.getUTCMinutes() / 60);
+            document.getElementById('simulation-time').value = currentUTC;
+
+            await init();
+            tick();
+        }
+
+        start();
     </script>
 </body>
 
