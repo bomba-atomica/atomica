@@ -4,55 +4,90 @@
 
 ### Existing Infrastructure
 *   **Docker Setup (`source/docker-testnet/ethereum-testnet`)**:
-    *   Foundational `docker-compose.yaml` exists defining Geth (EL), Lighthouse Beacon (CL), and Validator.
-    *   `generate-genesis.sh` script exists to bootstrap the consensus layer using `lcli`.
-*   **TypeScript SDK**:
-    *   Functional SDK exists to manage the Docker lifecycle and fetch basic Beacon data (headers, sync committees).
-*   **Rust Testing Framework (`source/atomica-crosschain-testing`)**:
-    *   Basic `CrossChainTestEnv` structure exists.
-    *   Ethereum integration is now **completed**.
+    *   Production-ready `docker-compose.yaml` defining Geth (EL), Lighthouse Beacon (CL), and 4 Validators
+    *   Automated genesis generation via setup container
+*   **TypeScript SDK (`source/docker-testnet/ethereum-testnet/typescript-sdk`)**:
+    *   Fully functional SDK for Docker lifecycle management
+    *   Complete API coverage: Execution Layer (Geth), Beacon Chain (Lighthouse), state proofs
+    *   Comprehensive test suite: 15 tests across 3 suites, all passing
 
 ### Completed Components
-*   **Merge-Ready Genesis**: The `generate-genesis.sh` script now produces a synchronized Geth/Lighthouse genesis with `TerminalTotalDifficulty: 0`.
-*   **Rust Integration**: A new Rust crate `ethereum-docker-testnet` provides a programmatic interface to the harness.
-*   **Unified Testing**: `CrossChainTestEnv` now spins up both Aptos and Ethereum chains.
+*   **Docker Testnet**: Merge-ready PoS chain with `TerminalTotalDifficulty: 0`, all forks enabled at genesis
+*   **TypeScript SDK**: Production-ready programmatic interface with full API coverage
+*   **CI/CD**: Active GitHub Actions workflow running all TypeScript tests on every PR/push
+*   **Documentation**: Complete README with API reference, examples, and troubleshooting
+
+### Deferred Components
+*   **Rust SDK**: Deferred in favor of TypeScript for faster iteration and development velocity
+    *   Rust integration (`source/atomica-crosschain-testing`) references non-existent `rust-sdk/`
+    *   Will be implemented when cross-language integration becomes necessary
 
 ---
 
-## 2. Implementation Plan (Completed)
+## 2. Implementation Status
 
-### Phase 1: Harden the Docker Harness (✅ Done)
-**Goal**: Ensure the manual Docker setup produces a stable, finalized PoS chain.
+### Phase 1: Docker Harness + TypeScript SDK (✅ Complete)
+**Goal**: Production-ready Ethereum PoS testnet with programmatic control
 
-1.  **Custom Geth Genesis**:
-    *   Updated `generate-genesis.sh` to create `genesis.json` with `terminalTotalDifficulty: 0`.
-    *   Implemented initialization of Geth datadir.
-2.  **Synchronize Genesis Time**:
-    *   Script now coordinates timestamps and fetches the Geth genesis hash for the Beacon Chain.
-3.  **Verification**:
-    *   `docker-compose.yaml` updated to use the generated testnet data.
+**Completed**:
+1.  **Docker Infrastructure**:
+    *   Geth execution layer (v1.13.14) with archive mode, JSON-RPC + WebSocket
+    *   Lighthouse beacon node (v5.3.0) with REST API
+    *   4 validator clients with automatic key import
+    *   Automated genesis generation in setup container
+2.  **TypeScript SDK** (`typescript-sdk/src/index.ts`):
+    *   Lifecycle: `start()`, `teardown()`, health checks, block waiting
+    *   Execution Layer: block queries, balance, transactions, **state proofs via `eth_getProof`**
+    *   Beacon Chain: headers, sync committees, finality, light client data
+3.  **Test Coverage** (`typescript-sdk/test/`):
+    *   `validator-connectivity.test.ts` - EL/CL connectivity and genesis verification
+    *   `block-production.test.ts` - Block production and state root matching
+    *   `state-proofs.test.ts` - Merkle-Patricia proof generation and verification
+    *   **All 15 tests passing** (verified 2026-01-20)
+4.  **CI/CD Integration**:
+    *   Active workflow: `.github/workflows/docker-testnet-sanity.yml`
+    *   Runs all 3 test suites on every PR/push to paths matching `source/docker-testnet/ethereum-testnet/**`
+    *   Includes cleanup and debugging steps for failures
 
-### Phase 2: Create Rust SDK for Ethereum Harness (✅ Done)
-**Goal**: Allow Rust tests to programmatically manage the Ethereum testnet.
+### Phase 2: Rust SDK (⏸️ Deferred)
+**Goal**: Rust programmatic interface for cross-chain testing
 
-1.  **Create `source/docker-testnet/ethereum-testnet/rust-sdk`**:
-    *   Created `ethereum-docker-testnet` crate.
-    *   Implemented `EthereumTestnet` struct with `new()`, `teardown()`, `wait_for_healthy()`.
-    *   Added methods to fetch Beacon Headers and Sync Committees.
+**Decision**: Deferred in favor of TypeScript for faster iteration
 
-### Phase 3: Integrate into `atomica-crosschain-testing` (✅ Done)
-**Goal**: A unified `CrossChainTestEnv` that spins up both chains.
+**Rationale**:
+*   TypeScript SDK provides complete functionality needed for development/testing
+*   Faster iteration cycles with Bun runtime
+*   Rust integration adds complexity without immediate value
+*   Can be implemented later if needed for performance or type-safety requirements
 
-1.  **Update `CrossChainTestEnv`**:
-    *   Added `ethereum: EthereumTestnet` field.
-    *   Initialization logic added to `new()`.
-2.  **Port Test Logic**:
-    *   Updated `cross_chain_workflow.rs` to verify Ethereum connectivity (fetch header/sync committee).
+**Current State**:
+*   Skeleton code exists in `atomica-crosschain-testing/src/env.rs` (lines 8, 19, 25-27)
+*   References non-existent `ethereum-docker-testnet` crate
+*   Cross-chain tests cannot compile: `cargo check` fails
 
-### Phase 4: CI/CD Integration (Pending)
-1.  **Github Actions**:
-    *   Update `.github/workflows/test-integration.yaml` to include the Ethereum Docker testnet steps.
+**When to Implement**:
+*   When cross-language integration becomes necessary
+*   When Rust type-safety is required for production bridge contracts
+*   When performance requirements exceed TypeScript capabilities
 
 ## 3. Next Steps
-1.  Run the tests locally: `cargo test -p atomica-cross-chain`.
-2.  Update CI pipelines.
+
+### Immediate
+1.  Continue development using TypeScript SDK
+2.  Add more test coverage as needed (e.g., transaction submission, light client sync)
+
+### Future (Rust SDK)
+1.  Create `source/docker-testnet/ethereum-testnet/rust-sdk/Cargo.toml`
+2.  Implement `EthereumTestnet` struct matching TypeScript API
+3.  Update `atomica-crosschain-testing` dependency
+4.  Activate `.github/workflows/test-integration.yaml` (currently `.todo`)
+
+## 4. Success Metrics
+
+**Current Status**: ✅ Production Ready
+- [x] Docker testnet stable and finalized
+- [x] TypeScript SDK with full API coverage
+- [x] 100% test pass rate (15/15 tests)
+- [x] CI/CD pipeline active and passing
+- [x] Documentation complete
+- [ ] Rust SDK (deferred)
