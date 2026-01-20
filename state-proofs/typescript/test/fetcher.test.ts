@@ -1,10 +1,14 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import { fetchProof, fetchBlock } from "../src/fetcher";
-import { startTestnet, stopTestnet, getRpcUrl, getTestAccounts } from "./helpers/testnet";
+import { fetchProof, fetchBlock, fetchTransaction, fetchTransactionReceipt } from "../src/fetcher";
+import { startTestnet, stopTestnet, getRpcUrl, getTestAccounts, waitForBlocks } from "./helpers/testnet";
+import { createWalletClient, http, parseEther, type Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { mainnet } from "viem/chains";
 
 describe("Proof Fetching", () => {
     let testRpcUrl: string;
     let testAddress: string;
+    let testTxHash: string;
 
     beforeAll(async () => {
         // Start Docker testnet for integration tests
@@ -12,6 +16,24 @@ describe("Proof Fetching", () => {
         testRpcUrl = getRpcUrl();
         const accounts = getTestAccounts();
         testAddress = accounts[0].address;
+        const privateKey = accounts[0].privateKey;
+
+        if (privateKey) {
+            // Send a transaction to verify fetchTransaction logic later
+            const walletClient = createWalletClient({
+                chain: mainnet,
+                transport: http(testRpcUrl)
+            });
+            const account = privateKeyToAccount(privateKey as Hex);
+            testTxHash = await walletClient.sendTransaction({
+                account,
+                to: accounts[1].address as Hex,
+                value: parseEther("0.1"),
+                chain: mainnet
+            });
+            // Wait for it to be mined
+            await waitForBlocks(1);
+        }
     }, 300000);
 
     afterAll(async () => {
@@ -90,5 +112,21 @@ describe("Proof Fetching", () => {
         expect(proof.address.toLowerCase()).toBe(emptyAddress.toLowerCase());
         expect(BigInt(proof.balance)).toBe(BigInt(0));
         expect(BigInt(proof.nonce)).toBe(BigInt(0));
+    });
+
+    test("should fetch transaction details", async () => {
+        const tx = await fetchTransaction(testRpcUrl, testTxHash);
+        expect(tx).toBeDefined();
+        expect(tx.value).toBe(parseEther("0.1"));
+        expect(tx.from.toLowerCase()).toBe(testAddress.toLowerCase());
+    });
+
+    test("should fetch transaction receipt", async () => {
+        const receipt = await fetchTransactionReceipt(testRpcUrl, testTxHash);
+        expect(receipt).toBeDefined();
+        expect(receipt.status).toBe("success");
+        expect(receipt.blockNumber).toBeDefined();
+        // Check that blockNumber is a BigInt
+        expect(typeof receipt.blockNumber).toBe("bigint");
     });
 });
