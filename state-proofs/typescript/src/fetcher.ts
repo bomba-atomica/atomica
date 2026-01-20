@@ -21,7 +21,7 @@ export async function fetchProof(
     rpcUrl: string,
     address: string,
     storageKeys: string[],
-    block: number | string,
+    block: number | string | bigint,
 ): Promise<EthereumProof> {
     const client = createPublicClient({
         chain: mainnet, // Chain ID doesn't matter for getProof usually, but viem needs one
@@ -74,7 +74,10 @@ export async function fetchProof(
  * @param block - Block number or tag
  * @returns Block data including stateRoot, hash, number, etc.
  */
-export async function fetchBlock(rpcUrl: string, block: number | string): Promise<Block> {
+export async function fetchBlock(
+    rpcUrl: string,
+    block: number | string | bigint,
+): Promise<Block> {
     const client = createPublicClient({
         chain: mainnet,
         transport: http(rpcUrl),
@@ -104,6 +107,63 @@ export async function fetchBlock(rpcUrl: string, block: number | string): Promis
     } catch (error) {
         throw new Error(
             `Failed to fetch block: ${error instanceof Error ? error.message : String(error)}`,
+        );
+    }
+}
+
+/**
+ * Fetch transaction receipt
+ *
+ * @param rpcUrl - Ethereum RPC endpoint URL
+ * @param txHash - Transaction hash
+ * @returns Transaction receipt with block number
+ */
+export async function fetchTransactionReceipt(rpcUrl: string, txHash: string) {
+    const client = createPublicClient({
+        chain: mainnet,
+        transport: http(rpcUrl),
+    });
+
+    try {
+        const receipt = await client.getTransactionReceipt({ hash: txHash as Hex });
+        return {
+            blockNumber: receipt.blockNumber,
+            from: receipt.from,
+            to: receipt.to,
+            status: receipt.status,
+        };
+    } catch (error) {
+        throw new Error(
+            `Failed to fetch receipt: ${error instanceof Error ? error.message : String(error)}`,
+        );
+    }
+}
+
+/**
+ * Fetch transaction details
+ *
+ * @param rpcUrl - Ethereum RPC endpoint URL
+ * @param txHash - Transaction hash
+ * @returns Transaction details (value, data, etc.)
+ */
+export async function fetchTransaction(rpcUrl: string, txHash: string) {
+    const client = createPublicClient({
+        chain: mainnet,
+        transport: http(rpcUrl),
+    });
+
+    try {
+        const tx = await client.getTransaction({ hash: txHash as Hex });
+        return {
+            from: tx.from,
+            to: tx.to,
+            value: tx.value,
+            input: tx.input,
+            nonce: tx.nonce,
+        };
+    } catch (error) {
+        throw new Error(
+            `Failed to fetch transaction: ${error instanceof Error ? error.message : String(error)}`,
         );
     }
 }

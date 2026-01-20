@@ -8,7 +8,7 @@
  * - verify-transfer: Verify a transfer transaction
  */
 
-import { fetchProof, fetchBlock, verifyAccountProof, verifyStorageProof } from "./index";
+import { fetchProof, fetchBlock, verifyAccountProof, verifyStorageProof, fetchTransaction, fetchTransactionReceipt } from "./index";
 
 interface CliArgs {
     command: string;
@@ -259,11 +259,144 @@ async function verifyStorageCommand(args: CliArgs) {
 }
 
 /**
- * Verify transfer command (TODO)
+ * Verify transfer command
  */
-async function verifyTransferCommand(_args: CliArgs) {
-    console.log("verify-transfer command not yet implemented");
-    process.exit(1);
+async function verifyTransferCommand(args: CliArgs) {
+    const [txHash] = args.args;
+    const rpcUrl = args.options.rpc as string;
+
+    if (!txHash || !rpcUrl) {
+        console.error("Error: Missing required arguments");
+        console.error("Usage: eth-verify verify-transfer <txHash> --rpc <url>");
+        process.exit(1);
+    }
+
+    try {
+        if (args.options.verbose) {
+            console.log("Fetching transaction details...");
+            console.log("  RPC:", rpcUrl);
+            console.log("  TxHash:", txHash);
+        }
+
+        // 1. Fetch receipt to get block number and status
+        const receipt = await fetchTransactionReceipt(rpcUrl, txHash);
+        
+        if (args.options.verbose) {
+            console.log("✓ Receipt fetched");
+            console.log("  Block:", receipt.blockNumber);
+            console.log("  Status:", receipt.status);
+        }
+
+        if (receipt.status !== "success") {
+            console.warn("Warning: Transaction status is not success (reverted or pending)");
+        }
+
+        // 2. Fetch transaction to get value (optional, but good for context)
+        const tx = await fetchTransaction(rpcUrl, txHash);
+        
+        const blockNumber = receipt.blockNumber;
+        const sender = receipt.from;
+        const receiver = receipt.to;
+
+        if (!receiver) {
+            console.error("Error: Contract creation transactions not supported for transfer verification");
+            process.exit(1);
+        }
+
+        // 3. Fetch Block for state root
+        const blockData = await fetchBlock(rpcUrl, blockNumber);
+
+        if (args.options.verbose) {
+            console.log("✓ Block header fetched");
+            console.log("  State Root:", blockData.stateRoot);
+        }
+
+        console.log(`Verifying transfer in block ${blockNumber}...`);
+
+        // 4. Verify Sender State
+        if (args.options.verbose) console.log(`\nFetching proof for Sender: ${sender}`);
+        const senderProof = await fetchProof(rpcUrl, sender, [], blockNumber);
+        const senderResult = await verifyAccountProof(senderProof.accountProof, blockData.stateRoot, sender);
+
+        // 5. Verify Receiver State
+        if (args.options.verbose) console.log(`Fetching proof for Receiver: ${receiver}`);
+        const receiverProof = await fetchProof(rpcUrl, receiver, [], blockNumber);
+        const receiverResult = await verifyAccountProof(receiverProof.accountProof, blockData.stateRoot, receiver);
+
+        // Output Results
+        if (args.options.json) {
+            console.log(
+                JSON.stringify(
+                    {
+                        valid: senderResult.valid && receiverResult.valid,
+                        transaction: {
+                            hash: txHash,
+                            block: blockNumber.toString(),
+                            from: sender,
+                            to: receiver,
+                            value: tx.value.toString(),
+                        },
+                        sender: {
+                            address: sender,
+                            valid: senderResult.valid,
+                            balance: senderResult.accountState?.balance.toString(),
+                            nonce: senderResult.accountState?.nonce,
+                        },
+                        receiver: {
+                            address: receiver,
+                            valid: receiverResult.valid,
+                            balance: receiverResult.accountState?.balance.toString(),
+                            nonce: receiverResult.accountState?.nonce,
+                        }
+                    },
+                    null,
+                    2,
+                ),
+            );
+        } else {
+            console.log("\n============================================");
+            console.log("TRANSFER VERIFICATION REPORT");
+            console.log("============================================");
+            console.log(`Transaction: ${txHash}`);
+            console.log(`Block:       ${blockNumber}`);
+            console.log(`Value:       ${formatEth(tx.value)}`);
+            console.log("--------------------------------------------");
+            
+            console.log(`SENDER:   ${sender}`);
+            if (senderResult.valid && senderResult.accountState) {
+                console.log(`  State:  VERIFIED ✓`);
+                console.log(`  Nonce:  ${senderResult.accountState.nonce}`);
+                console.log(`  Bal:    ${formatEth(senderResult.accountState.balance)}`);
+            } else {
+                console.log(`  State:  FAILED ✗`);
+                console.log(`  Error:  ${senderResult.error}`);
+            }
+
+            console.log("--------------------------------------------");
+            
+            console.log(`RECEIVER: ${receiver}`);
+            if (receiverResult.valid && receiverResult.accountState) {
+                console.log(`  State:  VERIFIED ✓`);
+                console.log(`  Nonce:  ${receiverResult.accountState.nonce}`);
+                console.log(`  Bal:    ${formatEth(receiverResult.accountState.balance)}`);
+            } else {
+                console.log(`  State:  FAILED ✗`);
+                console.log(`  Error:  ${receiverResult.error}`);
+            }
+            console.log("============================================");
+
+            if (senderResult.valid && receiverResult.valid) {
+                console.log("\n✓ Transfer verified: Both accounts match the global state root.");
+            } else {
+                console.error("\n✗ Verification failed.");
+                process.exit(1);
+            }
+        }
+
+    } catch (error) {
+        console.error("Error:", error instanceof Error ? error.message : error);
+        process.exit(1);
+    }
 }
 
 /**

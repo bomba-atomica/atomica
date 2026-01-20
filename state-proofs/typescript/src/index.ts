@@ -17,7 +17,7 @@
  */
 
 // Re-export proof fetching functions
-export { fetchProof, fetchBlock } from "./fetcher";
+export { fetchProof, fetchBlock, fetchTransaction, fetchTransactionReceipt } from "./fetcher";
 
 // Re-export verification functions
 export { verifyAccountProof, verifyStorageProof, decodeAccountState } from "./verifier";
