@@ -24,6 +24,9 @@ export { verifyAccountProof, verifyStorageProof, decodeAccountState } from "./ve
 export { verifyTransactionProof } from "./transaction";
 export { verifyReceiptProof } from "./receipt";
 
+// Re-export beacon/light client functions
+export * from "./beacon";
+
 // Re-export MPT core functions (advanced usage)
 
 export {
