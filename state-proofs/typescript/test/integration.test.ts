@@ -1,6 +1,8 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import { fetchProof, fetchBlock } from "../src/fetcher";
-import { verifyAccountProof } from "../src/verifier";
+import { fetchProof, fetchBlock, fetchBlockTransactions, fetchBlockReceipts } from "../src/fetcher";
+import { verifyAccountProof as verifyAccountProofDirect } from "../src/verifier";
+import { verifyTransactionProof as verifyTxProof } from "../src/transaction";
+import { verifyReceiptProof as verifyRcptProof } from "../src/receipt";
 import { startTestnet, stopTestnet, getRpcUrl, getTestAccounts } from "./helpers/testnet";
 import { createWalletClient, createPublicClient, http, parseEther, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -206,7 +208,7 @@ describe("End-to-End Verification", () => {
         const proof = await fetchProof(rpcUrl, testAddress, [], "latest");
         const block = await fetchBlock(rpcUrl, "latest");
 
-        const result = await verifyAccountProof(proof.accountProof, block.stateRoot, testAddress);
+        const result = await verifyAccountProofDirect(proof.accountProof, block.stateRoot, testAddress);
 
         expect(result.valid).toBe(true);
 
@@ -216,6 +218,121 @@ describe("End-to-End Verification", () => {
         // 3. Verify it matches block.stateRoot
         // 4. Verify account proof against that state root
     });
+});
+
+describe("Transaction & Receipt Verification", () => {
+    let rpcUrl: string;
+    let privateKey: string;
+
+    beforeAll(async () => {
+        await startTestnet();
+        rpcUrl = getRpcUrl();
+        const accounts = getTestAccounts();
+        privateKey = accounts[0].privateKey || "";
+    }, 300000);
+
+    afterAll(async () => {
+        await stopTestnet();
+    }, 60000);
+
+    test("should verify transaction and receipt inclusion proofs", async () => {
+        // 1. Create a new random recipient
+        const recipientAccount = privateKeyToAccount(
+            "0x1234567890123456789012345678901234567890123456789012345678901234",
+        );
+        const recipientAddress = recipientAccount.address;
+
+        // 2. Setup wallet client to send transaction
+        const walletClient = createWalletClient({
+            chain: mainnet,
+            transport: http(rpcUrl),
+        });
+
+        const publicClient = createPublicClient({
+            chain: mainnet,
+            transport: http(rpcUrl),
+        });
+
+        // 3. Send 1 ETH from pre-funded account
+        const pk = privateKey.startsWith("0x") ? privateKey : `0x${privateKey}`;
+        const senderAccount = privateKeyToAccount(pk as Hex);
+
+        const hash = await walletClient.sendTransaction({
+            account: senderAccount,
+            to: recipientAddress,
+            value: parseEther("1"),
+            chain: mainnet,
+        });
+
+        console.log("Transaction sent:", hash);
+
+        // 4. Wait for transaction to be mined
+        let receipt;
+        const maxRetries = 10;
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                receipt = await publicClient.waitForTransactionReceipt({ hash });
+                break;
+            } catch (e) {
+                console.log(`Retry ${i + 1}/${maxRetries} waiting for receipt`);
+                await new Promise((r) => setTimeout(r, 2000));
+            }
+        }
+
+        if (!receipt) {
+            throw new Error("Failed to get transaction receipt");
+        }
+
+        const blockNumber = receipt.blockNumber;
+        console.log("Transaction mined in block:", blockNumber);
+
+        // 5. Fetch all transactions and receipts in the block
+        const allTxs = await fetchBlockTransactions(rpcUrl, blockNumber);
+        const allReceipts = await fetchBlockReceipts(rpcUrl, blockNumber);
+
+        expect(allTxs.length).toBeGreaterThan(0);
+        expect(allReceipts.length).toBe(allTxs.length);
+
+        // 6. Find our transaction and receipt
+        const targetTx = allTxs.find((tx) => tx.hash.toLowerCase() === hash.toLowerCase());
+        const targetReceipt = allReceipts.find((r) => r.transactionHash.toLowerCase() === hash.toLowerCase());
+
+        expect(targetTx).toBeDefined();
+        expect(targetReceipt).toBeDefined();
+
+        // 7. Fetch block header
+        const block = await fetchBlock(rpcUrl, blockNumber);
+        expect(block.transactionsRoot).toBeDefined();
+        expect(block.receiptsRoot).toBeDefined();
+
+        // 8. Verify Transaction Inclusion Proof
+        if (targetTx) {
+            const txValid = await verifyTxProof(targetTx, block, allTxs);
+            expect(txValid).toBe(true);
+            console.log("Transaction inclusion proof: VERIFIED ✓");
+        }
+
+        // 9. Verify Receipt Inclusion Proof
+        if (targetReceipt) {
+            const receiptValid = await verifyRcptProof(targetReceipt, block, allReceipts);
+            expect(receiptValid).toBe(true);
+            console.log("Receipt inclusion proof: VERIFIED ✓");
+        }
+
+        // 10. Verify recipient account state
+        const proof = await fetchProof(rpcUrl, recipientAddress, [], blockNumber);
+        const result = await verifyAccountProofDirect(proof.accountProof, block.stateRoot, recipientAddress);
+
+        expect(result.valid).toBe(true);
+        expect(result.accountState).toBeDefined();
+
+        if (result.accountState) {
+            expect(result.accountState.balance).toBe(parseEther("1"));
+            console.log("Recipient balance: VERIFIED ✓");
+        }
+
+        console.log("\n✓ Full transaction verification successful!");
+    }, 60000);
 });
 
 describe("Storage Proof End-to-End", () => {

@@ -24,14 +24,14 @@
 | 7. Make Tests Pass | ✅ Complete | 38/38 tests passing (unit + integration) |
 | 8. GitHub Workflow | ✅ Complete | `test-state-proofs.yml` (lint, format, test) |
 
-### Transaction & Receipt Verification (Phase 3) - 🚧 In Progress
+### Transaction & Receipt Verification (Phase 3) - ✅ Complete
 | Step | Status | Details |
 |------|--------|---------|
 | 1. Stub Libraries | ✅ Complete | `src/transaction.ts`, `src/receipt.ts`, types updated |
 | 2. Stub Tests | ✅ Complete | `test/transaction.test.ts`, `test/receipt.test.ts` |
-| 3. Transaction Logic | 🚧 Pending | Client-side MPT reconstruction for Tx |
-| 4. Receipt Logic | 🚧 Pending | Client-side MPT reconstruction for Receipts |
-| 5. Integration | 🚧 Pending | Update CLI to use new verifiers |
+| 3. Transaction Logic | ✅ Complete | Client-side MPT reconstruction for Tx |
+| 4. Receipt Logic | ✅ Complete | Client-side MPT reconstruction for Receipts |
+| 5. CLI Update | ✅ Complete | Enhance `verify-transfer` to use new verifiers |
 
 **Current Location**: `state-proofs/typescript/`
 - ✅ **Fully Functional**: Can fetch and cryptographically verify proofs
@@ -73,21 +73,19 @@ This addresses Requirement 1: "Prove a transaction with inputs and mutations".
 *   **Problem**: Standard JSON-RPC (`eth_getProof`) does **not** provide Merkle proofs for Transactions or Receipts.
 *   **Solution**: The CLI must fetch the full block (transactions) and full receipt list, locally reconstruct the MPT, calculate the root, and match it against the block header. This proves that the Transaction/Receipt `txHash` is indeed part of the block `N`.
 
-*   [x] **Stubbing**:
-    *   Create `src/transaction.ts` and `src/receipt.ts`.
-    *   Update `src/types.ts`.
-    *   Create test stubs.
 *   [x] **Transaction Inclusion Proof**:
     *   Implement `verifyTransactionProof(tx, blockHeader, proof)`
     *   Verify transaction matches `transactionsRoot` in block header
     *   Requires MPT verification of the Transaction Trie
     *   **Status**: Implemented & Tested (2026-01-20)
-*   [ ] **Receipt Inclusion Proof**:
+*   [x] **Receipt Inclusion Proof**:
     *   Implement `verifyReceiptProof(receipt, blockHeader, proof)`
     *   Verify receipt (logs/status) matches `receiptsRoot` in block header
     *   Proves the "mutation" or execution result
-*   [ ] **CLI Update**:
-    *   Enhance `verify-transfer` to include receipt proof verification (currently it verifies state effects, but not the receipt trie inclusion itself)
+    *   **Status**: Implemented & Tested (2026-01-20)
+*   [x] **CLI Update**:
+    *   Enhance `verify-transfer` to include transaction and receipt proof verification
+    *   **Status**: Implemented (2026-01-20)
 
 ### Phase 4: Consensus Layer & Validator Set (📋 Future)
 **Goal**: Trustless header verification via Light Client Sync Protocol.

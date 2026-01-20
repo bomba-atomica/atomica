@@ -2,6 +2,8 @@
  * Type definitions for Ethereum state proof verification
  */
 
+import type { Hex } from "viem";
+
 /**
  * Ethereum proof data returned by eth_getProof RPC call
  */
@@ -42,15 +44,15 @@ export interface Transaction {
     from: string;
     to: string | null;
     value: string;
-    gasPrice: string;
+    gasPrice?: string;
     gas: string;
     input: string;
     v?: string;
     r?: string;
     s?: string;
-    type?: string; // EIP-2718
-    maxFeePerGas?: string; // EIP-1559
-    maxPriorityFeePerGas?: string; // EIP-1559
+    type?: string;
+    maxFeePerGas?: string;
+    maxPriorityFeePerGas?: string;
     chainId?: string;
 }
 
@@ -59,26 +61,26 @@ export interface Receipt {
     transactionIndex: string;
     blockHash: string;
     blockNumber: string;
-    from: string;
-    to: string | null;
+    from: Hex;
+    to: Hex | null | undefined;
     cumulativeGasUsed: string;
     gasUsed: string;
     contractAddress: string | null;
     logs: Log[];
     logsBloom: string;
-    status: string | null; // 0x1 (success) or 0x0 (failure)
-    root?: string; // Pre-Byzantium
-    type?: string; // EIP-2718
+    status: string | null;
+    root?: string;
+    type?: string;
 }
 
 export interface Log {
-    address: string;
+    address: Hex;
     topics: string[];
     data: string;
     blockNumber: string;
-    transactionHash: string;
+    transactionHash: Hex;
     transactionIndex: string;
-    blockHash: string;
+    blockHash: Hex;
     logIndex: string;
     removed: boolean;
 }
@@ -124,6 +126,10 @@ export interface Block {
     hash: string;
     /** State trie root hash */
     stateRoot: string;
+    /** Transactions trie root hash */
+    transactionsRoot: string;
+    /** Receipts trie root hash */
+    receiptsRoot: string;
     /** Parent block hash */
     parentHash: string;
     /** Block timestamp (hex string) */

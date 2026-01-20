@@ -72,7 +72,7 @@ describe("Receipt Verification", () => {
                 await trie.put(index, value);
             }
             
-            const expectedRoot = "0x" + trie.root().toString("hex");
+            const expectedRoot = "0x" + Buffer.from(trie.root()).toString("hex");
             
             const block: Block = {
                 number: "0x1",
@@ -81,7 +81,7 @@ describe("Receipt Verification", () => {
                 timestamp: "0x0",
                 stateRoot: mockHash,
                 transactionsRoot: mockHash,
-                receiptsRoot: expectedRoot // Must match
+                receiptsRoot: expectedRoot
             };
 
             const isValid = await verifyReceiptProof(eip1559Receipt, block, receipts);

@@ -98,7 +98,7 @@ describe("Transaction Verification", () => {
                 await trie.put(key, value);
             }
             
-            const expectedRoot = "0x" + trie.root().toString("hex");
+            const expectedRoot = "0x" + Buffer.from(trie.root()).toString("hex");
             
             // 3. Mock block with this root
             const block: Block = {
