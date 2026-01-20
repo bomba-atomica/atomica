@@ -136,6 +136,7 @@ The core verification relies on **EIP-1186** (`eth_getProof`).
 *   [x] **Unit Tests**: All MPT and Verifier logic verified
 *   [x] **Integration Tests**: Successfully verifying proofs against live local Geth node
 *   [x] **Edge Cases**: Verified empty accounts (non-existence proofs) and tampered proofs
+*   [x] **Transaction Verification**: Successfully proved a balance update resulting from a real transaction on the testnet
 
 #### Step 8: Create GitHub Workflow (✅ Complete)
 *   [x] Created `.github/workflows/test-state-proofs.yml`
@@ -160,6 +161,12 @@ The core verification relies on **EIP-1186** (`eth_getProof`).
 *   [ ] Create WASM build for browser verification
 *   [ ] Integrate with Atomica bridge protocol
 *   [ ] Document gas costs for on-chain verification
+
+## Deviations from Original Plan
+1.  **Integration Testing**: Added a more comprehensive test (`should verify transaction execution and balance update`) than originally planned. This involved using `viem`'s `walletClient` to sign and send transactions from a pre-funded account, requiring derivation of the correct private key from the testnet mnemonic.
+2.  **SDK Dependency**: Added a `.gitignore` to the SDK directory to prevent build artifacts from being committed, which was causing issues during local testing.
+3.  **BigInt Support**: Updated `fetcher.ts` to accept `bigint` for block numbers, as `viem` transaction receipts return block numbers as `bigint`. This was not in the initial stub specification.
+4.  **Retry Logic**: Added robust retry logic for `waitForTransactionReceipt` in integration tests to handle potential indexing delays in the local testnet.
 
 ## Directory Structure
 
