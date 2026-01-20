@@ -2,7 +2,7 @@
 
 ## Status Summary
 
-**Current State**: Phase 3 - Transaction & Receipt Verification (Planned)
+**Current State**: Phase 3 - Transaction & Receipt Verification (In Progress)
 
 ### Infrastructure (Phase 1) - ✅ Complete
 | Component | Status | Details |
@@ -23,6 +23,15 @@
 | 6. TDD Implementation | ✅ Complete | fetcher, mpt, verifier logic implemented |
 | 7. Make Tests Pass | ✅ Complete | 38/38 tests passing (unit + integration) |
 | 8. GitHub Workflow | ✅ Complete | `test-state-proofs.yml` (lint, format, test) |
+
+### Transaction & Receipt Verification (Phase 3) - 🚧 In Progress
+| Step | Status | Details |
+|------|--------|---------|
+| 1. Stub Libraries | ✅ Complete | `src/transaction.ts`, `src/receipt.ts`, types updated |
+| 2. Stub Tests | ✅ Complete | `test/transaction.test.ts`, `test/receipt.test.ts` |
+| 3. Transaction Logic | 🚧 Pending | Client-side MPT reconstruction for Tx |
+| 4. Receipt Logic | 🚧 Pending | Client-side MPT reconstruction for Receipts |
+| 5. Integration | 🚧 Pending | Update CLI to use new verifiers |
 
 **Current Location**: `state-proofs/typescript/`
 - ✅ **Fully Functional**: Can fetch and cryptographically verify proofs
@@ -56,7 +65,7 @@ The core verification relies on **EIP-1186** (`eth_getProof`).
 ### Phase 2: Build State Proof Verifier CLI (✅ Complete)
 **Deliverables**: `verify-account` and `verify-storage` commands, fully tested.
 
-### Phase 3: Transaction & Receipt Verification (📋 Next Priority)
+### Phase 3: Transaction & Receipt Verification (🚧 In Progress)
 **Goal**: Cryptographically prove transaction inclusion, inputs, and execution results (receipts).
 
 This addresses Requirement 1: "Prove a transaction with inputs and mutations".
@@ -64,6 +73,10 @@ This addresses Requirement 1: "Prove a transaction with inputs and mutations".
 *   **Problem**: Standard JSON-RPC (`eth_getProof`) does **not** provide Merkle proofs for Transactions or Receipts.
 *   **Solution**: The CLI must fetch the full block (transactions) and full receipt list, locally reconstruct the MPT, calculate the root, and match it against the block header. This proves that the Transaction/Receipt `txHash` is indeed part of the block `N`.
 
+*   [x] **Stubbing**:
+    *   Create `src/transaction.ts` and `src/receipt.ts`.
+    *   Update `src/types.ts`.
+    *   Create test stubs.
 *   [ ] **Transaction Inclusion Proof**:
     *   Implement `verifyTransactionProof(tx, blockHeader, proof)`
     *   Verify transaction matches `transactionsRoot` in block header
@@ -119,10 +132,14 @@ state-proofs/
       verifier.ts      # High-level verification functions
       mpt.ts           # Core MPT verification logic
       cli.ts           # CLI commands and argument parsing
+      transaction.ts   # Tx verification logic (Phase 3)
+      receipt.ts       # Receipt verification logic (Phase 3)
     test/
       fetcher.test.ts            # Unit tests for RPC fetching
       verifier.test.ts           # Unit tests for verification logic
       mpt.test.ts                # Unit tests for MPT functions
+      transaction.test.ts        # Unit tests for Tx verification
+      receipt.test.ts            # Unit tests for Receipt verification
       integration.test.ts        # Integration tests with live testnet
       helpers/
         testnet.ts               # Testnet lifecycle (uses ethereum-docker-testnet)
