@@ -2,10 +2,14 @@ import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { fetchProof, fetchBlock } from "../src/fetcher";
 import { verifyAccountProof } from "../src/verifier";
 import { startTestnet, stopTestnet, getRpcUrl, getTestAccounts } from "./helpers/testnet";
+import { createWalletClient, createPublicClient, http, parseEther, type Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { mainnet } from "viem/chains";
 
 describe("End-to-End Verification", () => {
     let rpcUrl: string;
     let testAddress: string;
+    let privateKey: string;
 
     beforeAll(async () => {
         // Start Docker testnet
@@ -15,6 +19,7 @@ describe("End-to-End Verification", () => {
         rpcUrl = getRpcUrl();
         const accounts = getTestAccounts();
         testAddress = accounts[0].address;
+        privateKey = accounts[0].privateKey || "";
 
         console.log("Test RPC URL:", rpcUrl);
         console.log("Test Address:", testAddress);
@@ -47,6 +52,61 @@ describe("End-to-End Verification", () => {
             console.log("  Balance:", result.accountState.balance.toString());
             console.log("  Storage Hash:", result.accountState.storageHash);
             console.log("  Code Hash:", result.accountState.codeHash);
+        }
+    });
+
+    test("should verify transaction execution and balance update", async () => {
+        // 1. Create a new random recipient
+        // Use a known valid 32-byte hex string for private key
+        const recipientAccount = privateKeyToAccount("0x1234567890123456789012345678901234567890123456789012345678901234");
+        const recipientAddress = recipientAccount.address;
+
+        console.log("Recipient Address:", recipientAddress);
+
+        // 2. Setup wallet client to send transaction
+        const walletClient = createWalletClient({
+            chain: mainnet,
+            transport: http(rpcUrl)
+        });
+
+        const publicClient = createPublicClient({
+            chain: mainnet,
+            transport: http(rpcUrl)
+        });
+
+        // 3. Send 1 ETH from pre-funded account
+        // Ensure private key has 0x prefix
+        const pk = privateKey.startsWith("0x") ? privateKey : `0x${privateKey}`;
+        const senderAccount = privateKeyToAccount(pk as Hex);
+        
+        console.log("Sender Address:", senderAccount.address);
+
+        const hash = await walletClient.sendTransaction({
+            account: senderAccount,
+            to: recipientAddress,
+            value: parseEther("1"),
+            chain: mainnet
+        });
+        
+        console.log("Transaction sent:", hash);
+
+        // 4. Wait for transaction to be mined
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        console.log("Transaction mined in block:", receipt.blockNumber);
+
+        // 5. Verify the recipient's account state has the correct balance
+        // We verify at the block where it was mined
+        const proof = await fetchProof(rpcUrl, recipientAddress, [], receipt.blockNumber);
+        const block = await fetchBlock(rpcUrl, receipt.blockNumber);
+        const result = await verifyAccountProof(proof.accountProof, block.stateRoot, recipientAddress);
+
+        expect(result.valid).toBe(true);
+        expect(result.accountState).toBeDefined();
+        
+        if (result.accountState) {
+            // Balance should be exactly 1 ETH
+            expect(result.accountState.balance).toBe(parseEther("1"));
+            console.log("Verified Recipient Balance:", result.accountState.balance.toString());
         }
     });
 
