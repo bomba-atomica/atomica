@@ -77,10 +77,11 @@ This addresses Requirement 1: "Prove a transaction with inputs and mutations".
     *   Create `src/transaction.ts` and `src/receipt.ts`.
     *   Update `src/types.ts`.
     *   Create test stubs.
-*   [ ] **Transaction Inclusion Proof**:
+*   [x] **Transaction Inclusion Proof**:
     *   Implement `verifyTransactionProof(tx, blockHeader, proof)`
     *   Verify transaction matches `transactionsRoot` in block header
     *   Requires MPT verification of the Transaction Trie
+    *   **Status**: Implemented & Tested (2026-01-20)
 *   [ ] **Receipt Inclusion Proof**:
     *   Implement `verifyReceiptProof(receipt, blockHeader, proof)`
     *   Verify receipt (logs/status) matches `receiptsRoot` in block header
