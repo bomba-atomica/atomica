@@ -1,0 +1,78 @@
+name: State Proof Verifier
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'state-proofs/typescript/**'
+      - 'source/docker-testnet/ethereum-testnet/typescript-sdk/**'
+  pull_request:
+    paths:
+      - 'state-proofs/typescript/**'
+      - 'source/docker-testnet/ethereum-testnet/typescript-sdk/**'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      # We need to build SDK first because `bun install` in verifier might resolve types/dist
+      - name: Install SDK dependencies
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: bun install
+      - name: Build SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: bun run build
+      - name: Install Verifier dependencies
+        working-directory: state-proofs/typescript
+        run: bun install
+      - name: Run Lint
+        working-directory: state-proofs/typescript
+        run: bun run lint
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        working-directory: state-proofs/typescript
+        run: bun install
+      - name: Check Formatting
+        working-directory: state-proofs/typescript
+        run: bun run format:check
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install SDK dependencies
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: bun install
+
+      - name: Build SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: bun run build
+
+      - name: Install Verifier dependencies
+        working-directory: state-proofs/typescript
+        run: bun install
+
+      - name: Build Verifier
+        working-directory: state-proofs/typescript
+        run: bun run build
+
+      - name: Run Tests
+        working-directory: state-proofs/typescript
+        # This runs all tests including integration tests which spin up Docker
+        run: bun test
+        env:
+          # Ensure color output for test results
+          FORCE_COLOR: 1
