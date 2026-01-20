@@ -2,7 +2,7 @@
 
 ## Status Summary
 
-**Current State**: Phase 3 - Production Hardening (Future)
+**Current State**: Phase 3 - Transaction & Receipt Verification (Planned)
 
 ### Infrastructure (Phase 1) - ✅ Complete
 | Component | Status | Details |
@@ -30,52 +30,8 @@
 - ✅ **CI/CD**: Automated testing pipeline active
 - ✅ **Type-Safe**: Strict TypeScript configuration
 
-**Development Approach**: Self-sufficient standalone tool
-- Fetches proofs from any Ethereum RPC (mainnet, testnets, local nodes)
-- Verifies proofs cryptographically using MPT
-- No dependency on `ethereum-docker-testnet` SDK in production code
-- SDK used ONLY in integration tests to spin up local testnet
-
 ## Objective
 Implement cryptographic verification of Ethereum state proofs (EIP-1186) to validate that account state (balance, nonce, storage) is part of the global state trie committed in a block header. This enables trustless cross-chain state verification for bridges.
-
-## System Components
-
-### 1. Docker Testnet (✅ Complete)
-*   **Location**: `source/docker-testnet/ethereum-testnet`
-*   **Status**: Production-ready, all tests passing
-*   **Capabilities**:
-    *   Geth execution layer with archive mode (`--gcmode=archive`)
-    *   Lighthouse beacon + consensus layer
-    *   JSON-RPC API: `eth_sendTransaction`, `eth_getProof`, `eth_getBlockByNumber`
-    *   Beacon API: headers, sync committees, execution payloads
-    *   4 pre-funded test accounts (1000 ETH each)
-
-### 2. Ethereum Docker SDK (✅ Proof Fetching Complete)
-*   **Location**: `source/docker-testnet/ethereum-testnet/typescript-sdk`
-*   **Features**:
-    *   ✅ Testnet lifecycle management (`start()`, `teardown()`, health checks)
-    *   ✅ Execution layer API (blocks, balances, transactions)
-    *   ✅ **Proof fetching** via `getProof(address, storageKeys, block)` - Returns raw proof data
-    *   ✅ Beacon chain API (headers, sync committees, finality)
-    *   ✅ Type definitions: `EthereumProof`, `StorageProof` interfaces
-*   **Role**: Provides proof data source for the verification tool
-
-### 3. State Proof Verifier CLI (✅ Complete)
-*   **Location**: `state-proofs/typescript`
-*   **Purpose**: **Self-sufficient** CLI tool and library for fetching AND verifying state proofs
-*   **Design Philosophy**: Standalone tool that works against any Ethereum RPC (mainnet, testnets, local nodes)
-*   **Dependencies**:
-    *   `viem` - RPC client for fetching proofs
-    *   `@ethereumjs/trie` - Merkle Patricia Trie verification
-    *   `@ethereumjs/util` - Keccak-256 hashing, address utilities
-    *   `@ethereumjs/rlp` - RLP encoding/decoding
-*   **Capabilities**:
-    *   ✅ **Fetch proofs** from any Ethereum RPC endpoint (mainnet, Infura, Alchemy, local node)
-    *   ✅ **Verify account proofs** cryptographically against state roots
-    *   ✅ **Verify storage proofs** against storage roots
-    *   ✅ CLI commands for end-to-end proof fetching + verification
-    *   ✅ Library API for programmatic use
 
 ## Verification Logic (The "How-To")
 
@@ -98,55 +54,15 @@ The core verification relies on **EIP-1186** (`eth_getProof`).
 **Deliverables**: Docker testnet + SDK that can fetch proof data from Geth
 
 ### Phase 2: Build State Proof Verifier CLI (✅ Complete)
-
-**Location**: `state-proofs/typescript`
-
-#### Step 1: Create Documentation (✅ Complete)
-*   [x] README.md with usage examples
-*   [x] API.md with library reference
-
-#### Step 2: Stub Tests (✅ Complete)
-*   [x] `fetcher.test.ts`
-*   [x] `verifier.test.ts`
-*   [x] `integration.test.ts`
-*   [x] `mpt.test.ts`
-
-#### Step 3: Stub Libraries (✅ Complete)
-*   [x] `types.ts`
-*   [x] `fetcher.ts`
-*   [x] `verifier.ts`
-*   [x] `mpt.ts`
-*   [x] `index.ts`
-
-#### Step 4: Stub CLI (✅ Complete)
-*   [x] `cli.ts` (Command routing, argument parsing)
-*   [x] `package.json` (Binary configuration)
-
-#### Step 5: Integrate Ethereum Docker SDK (✅ Complete)
-*   [x] Used as dev-dependency for integration tests
-*   [x] `testnet.ts` helper for spinning up Docker environment
-
-#### Step 6: TDD Implementation of Library (✅ Complete)
-*   [x] `fetcher.ts`: Implemented `viem` RPC calls
-*   [x] `mpt.ts`: Implemented RLP decoding, Keccak hashing, Hex-Prefix decoding, and recursive verification
-*   [x] `verifier.ts`: Implemented account and storage proof verification logic
-*   [x] `cli.ts`: Implemented `verify-account` and `verify-storage` commands
-
-#### Step 7: Make Tests Pass (✅ Complete)
-*   [x] **Unit Tests**: All MPT and Verifier logic verified
-*   [x] **Integration Tests**: Successfully verifying proofs against live local Geth node
-*   [x] **Edge Cases**: Verified empty accounts (non-existence proofs) and tampered proofs
-*   [x] **Transaction Verification**: Successfully proved a balance update resulting from a real transaction on the testnet
-
-#### Step 8: Create GitHub Workflow (✅ Complete)
-*   [x] Created `.github/workflows/test-state-proofs.yml`
-*   [x] Includes Lint, Format, and Test jobs
-*   [x] Runs on every push to `state-proofs/typescript`
+**Deliverables**: `verify-account` and `verify-storage` commands, fully tested.
 
 ### Phase 3: Transaction & Receipt Verification (📋 Next Priority)
 **Goal**: Cryptographically prove transaction inclusion, inputs, and execution results (receipts).
 
 This addresses Requirement 1: "Prove a transaction with inputs and mutations".
+
+*   **Problem**: Standard JSON-RPC (`eth_getProof`) does **not** provide Merkle proofs for Transactions or Receipts.
+*   **Solution**: The CLI must fetch the full block (transactions) and full receipt list, locally reconstruct the MPT, calculate the root, and match it against the block header. This proves that the Transaction/Receipt `txHash` is indeed part of the block `N`.
 
 *   [ ] **Transaction Inclusion Proof**:
     *   Implement `verifyTransactionProof(tx, blockHeader, proof)`
@@ -163,6 +79,10 @@ This addresses Requirement 1: "Prove a transaction with inputs and mutations".
 **Goal**: Trustless header verification via Light Client Sync Protocol.
 
 This addresses Requirement 3: "Validator set change (new public keys)".
+
+*   **Problem**: Trusting the block header `stateRoot` implies trusting the RPC.
+*   **Solution**: Light Client Sync Protocol.
+*   **Tech**: SSZ decoding, BLS verification.
 
 *   [ ] **Light Client Logic**:
     *   Implement `sync-committee` verification (Altair hardfork logic)
@@ -213,11 +133,3 @@ state-proofs/
     tsconfig.json                # TypeScript configuration
     README.md                    # Usage, installation, examples
 ```
-
-**Benefits of Self-Sufficient Standalone Tool**:
-- **Works against any Ethereum node**: mainnet, testnet, Infura, Alchemy, local node
-- **No external dependencies**: Fetches and verifies independently
-- Can be published as independent npm package
-- CLI provides standalone utility for developers
-- Library API allows programmatic use
-- **Code duplication intentional**: Self-sufficiency > DRY in this case
