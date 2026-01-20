@@ -143,24 +143,40 @@ The core verification relies on **EIP-1186** (`eth_getProof`).
 *   [x] Includes Lint, Format, and Test jobs
 *   [x] Runs on every push to `state-proofs/typescript`
 
-### Phase 3: Production Hardening (⏳ Future)
-*   [ ] Add CLI features:
-    *   Batch verification
-    *   JSON output mode
-    *   Verbose/debug logging
-*   [ ] Performance optimization:
-    *   Benchmark verification time
-    *   Profile memory usage
-*   [ ] Documentation:
-    *   Tutorial: Verifying a real transaction
-    *   Tutorial: Building a custom verifier
-    *   Blog post: Understanding Ethereum state proofs
+### Phase 3: Transaction & Receipt Verification (📋 Next Priority)
+**Goal**: Cryptographically prove transaction inclusion, inputs, and execution results (receipts).
 
-### Phase 4: Cross-Chain Integration (📋 Future)
-*   [ ] Port verifier to Rust for on-chain use
-*   [ ] Create WASM build for browser verification
-*   [ ] Integrate with Atomica bridge protocol
-*   [ ] Document gas costs for on-chain verification
+This addresses Requirement 1: "Prove a transaction with inputs and mutations".
+
+*   [ ] **Transaction Inclusion Proof**:
+    *   Implement `verifyTransactionProof(tx, blockHeader, proof)`
+    *   Verify transaction matches `transactionsRoot` in block header
+    *   Requires MPT verification of the Transaction Trie
+*   [ ] **Receipt Inclusion Proof**:
+    *   Implement `verifyReceiptProof(receipt, blockHeader, proof)`
+    *   Verify receipt (logs/status) matches `receiptsRoot` in block header
+    *   Proves the "mutation" or execution result
+*   [ ] **CLI Update**:
+    *   Enhance `verify-transfer` to include receipt proof verification (currently it verifies state effects, but not the receipt trie inclusion itself)
+
+### Phase 4: Consensus Layer & Validator Set (📋 Future)
+**Goal**: Trustless header verification via Light Client Sync Protocol.
+
+This addresses Requirement 3: "Validator set change (new public keys)".
+
+*   [ ] **Light Client Logic**:
+    *   Implement `sync-committee` verification (Altair hardfork logic)
+    *   Verify BLS signatures from current validator set
+*   [ ] **Validator Set Tracking**:
+    *   Fetch and verify `light_client/updates` from Beacon API
+    *   Track `next_sync_committee` to know valid public keys for future periods
+    *   Prove handoff from Validator Set A to Validator Set B
+*   [ ] **Integration**:
+    *   Replace trusted RPC block header with light-client verified header
+
+### Phase 5: Production Hardening & Cross-Chain (📋 Future)
+*   [ ] Port verifier to Rust/WASM
+*   [ ] Gas optimization
 
 ## Deviations from Original Plan
 1.  **Integration Testing**: Added a more comprehensive test (`should verify transaction execution and balance update`) than originally planned. This involved using `viem`'s `walletClient` to sign and send transactions from a pre-funded account, requiring derivation of the correct private key from the testnet mnemonic.
