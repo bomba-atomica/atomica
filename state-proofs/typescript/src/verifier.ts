@@ -58,7 +58,7 @@ export async function verifyAccountProof(
                 } else if (decodedLast.type === "branch" && decodedLast.value) {
                     claimedValue = decodedLast.value;
                 }
-            } catch (e) {
+            } catch (_e) {
                 // Ignore decoding errors here, let verifyMerkleProof handle validity
             }
         }
@@ -142,7 +142,7 @@ export async function verifyStorageProof(
                 } else if (decodedLast.type === "branch" && decodedLast.value) {
                     claimedValue = decodedLast.value;
                 }
-            } catch (e) {
+            } catch (_e) {
                 // Ignore decoding errors
             }
         }

@@ -58,7 +58,9 @@ describe("End-to-End Verification", () => {
     test("should verify transaction execution and balance update", async () => {
         // 1. Create a new random recipient
         // Use a known valid 32-byte hex string for private key
-        const recipientAccount = privateKeyToAccount("0x1234567890123456789012345678901234567890123456789012345678901234");
+        const recipientAccount = privateKeyToAccount(
+            "0x1234567890123456789012345678901234567890123456789012345678901234",
+        );
         const recipientAddress = recipientAccount.address;
 
         console.log("Recipient Address:", recipientAddress);
@@ -66,28 +68,28 @@ describe("End-to-End Verification", () => {
         // 2. Setup wallet client to send transaction
         const walletClient = createWalletClient({
             chain: mainnet,
-            transport: http(rpcUrl)
+            transport: http(rpcUrl),
         });
 
         const publicClient = createPublicClient({
             chain: mainnet,
-            transport: http(rpcUrl)
+            transport: http(rpcUrl),
         });
 
         // 3. Send 1 ETH from pre-funded account
         // Ensure private key has 0x prefix
         const pk = privateKey.startsWith("0x") ? privateKey : `0x${privateKey}`;
         const senderAccount = privateKeyToAccount(pk as Hex);
-        
+
         console.log("Sender Address:", senderAccount.address);
 
         const hash = await walletClient.sendTransaction({
             account: senderAccount,
             to: recipientAddress,
             value: parseEther("1"),
-            chain: mainnet
+            chain: mainnet,
         });
-        
+
         console.log("Transaction sent:", hash);
 
         // 4. Wait for transaction to be mined
@@ -99,26 +101,33 @@ describe("End-to-End Verification", () => {
                 receipt = await publicClient.waitForTransactionReceipt({ hash });
                 break;
             } catch (e) {
-                console.log(`Retry ${i+1}/${maxRetries} waiting for receipt:`, e instanceof Error ? e.message.split('\n')[0] : e);
-                await new Promise(r => setTimeout(r, 2000));
+                console.log(
+                    `Retry ${i + 1}/${maxRetries} waiting for receipt:`,
+                    e instanceof Error ? e.message.split("\n")[0] : e,
+                );
+                await new Promise((r) => setTimeout(r, 2000));
             }
         }
 
         if (!receipt) {
             throw new Error("Failed to get transaction receipt after multiple retries");
         }
-        
+
         console.log("Transaction mined in block:", receipt.blockNumber);
 
         // 5. Verify the recipient's account state has the correct balance
         // We verify at the block where it was mined
         const proof = await fetchProof(rpcUrl, recipientAddress, [], receipt.blockNumber);
         const block = await fetchBlock(rpcUrl, receipt.blockNumber);
-        const result = await verifyAccountProof(proof.accountProof, block.stateRoot, recipientAddress);
+        const result = await verifyAccountProof(
+            proof.accountProof,
+            block.stateRoot,
+            recipientAddress,
+        );
 
         expect(result.valid).toBe(true);
         expect(result.accountState).toBeDefined();
-        
+
         if (result.accountState) {
             // Balance should be exactly 1 ETH
             expect(result.accountState.balance).toBe(parseEther("1"));

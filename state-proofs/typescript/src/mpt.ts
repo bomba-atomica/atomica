@@ -70,7 +70,7 @@ export function verifyMerkleProof(
         let node: TrieNode;
         try {
             node = decodeNode(rlpNode);
-        } catch (e) {
+        } catch (_e) {
             return false;
         }
 

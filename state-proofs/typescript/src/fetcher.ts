@@ -53,6 +53,7 @@ export async function fetchProof(
             codeHash: proof.codeHash,
             nonce: `0x${proof.nonce.toString(16)}`,
             storageHash: proof.storageHash,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             storageProof: proof.storageProof.map((sp: any) => ({
                 key: sp.key,
                 value: `0x${sp.value.toString(16)}`,

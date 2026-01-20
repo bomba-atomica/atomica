@@ -81,6 +81,7 @@ export interface Block {
     /** Block timestamp (hex string) */
     timestamp: string;
     /** Other block fields... */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     [key: string]: any;
 }
 

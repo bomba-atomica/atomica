@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { verifyAccountProof, verifyStorageProof, decodeAccountState } from "../src/verifier";
-import type { AccountState } from "../src/types";
+import { verifyAccountProof, verifyStorageProof } from "../src/verifier";
 
 describe("Account Proof Verification", () => {
     test("should verify valid account proof against state root", async () => {
@@ -143,7 +142,7 @@ describe("Account State Decoding", () => {
     test("should decode RLP-encoded account state", () => {
         // This will be tested with real RLP data
         // For now, define expected interface
-        const rlpEncodedAccount = Buffer.from("f84401", "hex"); // Placeholder
+        const _rlpEncodedAccount = Buffer.from("f84401", "hex"); // Placeholder
 
         // This should not throw
         expect(() => {
