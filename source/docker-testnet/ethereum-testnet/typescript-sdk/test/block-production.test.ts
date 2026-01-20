@@ -18,14 +18,10 @@ describe("Block Production", () => {
     beforeAll(async () => {
         testnet = await initializeTestnet(NUM_VALIDATORS);
 
-        // Manual kickstart to break single-node deadlock
-        console.log("Running manual kickstart...");
-        const proc = Bun.spawn(["bun", "scripts/kickstart.ts"], {
-            cwd: process.cwd(),
-            stdout: "inherit",
-            stderr: "inherit"
-        });
-        await proc.exited;
+        // Manual kickstart removed as script is missing
+        // console.log("Running manual kickstart...");
+        // const proc = Bun.spawn(["bun", "scripts/kickstart.ts"], { ... });
+        // await proc.exited;
 
         await waitForNetworkStabilization(testnet);
     }, 300000); // 5 min timeout for setup

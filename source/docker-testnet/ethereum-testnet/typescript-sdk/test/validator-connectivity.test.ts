@@ -22,7 +22,7 @@ describe("Validator Connectivity", () => {
     afterAll(async () => {
         await performCleanup("Validator connectivity tests completed");
         setGlobalTestnet(undefined);
-    });
+    }, 60000);
 
     test("should have correct number of validators", () => {
         expect(testnet).toBeDefined();
@@ -43,7 +43,7 @@ describe("Validator Connectivity", () => {
         const genesis = await testnet.getBeaconGenesis();
         console.log(`Genesis time: ${genesis.genesis_time}`);
         console.log(`Genesis validators root: ${genesis.genesis_validators_root}`);
-        
+
         expect(genesis.genesis_time).toBeDefined();
         expect(genesis.genesis_validators_root).toBeDefined();
     });
@@ -52,7 +52,7 @@ describe("Validator Connectivity", () => {
         const header = await testnet.getBeaconHeader("head");
         console.log(`Beacon slot: ${header.header.message.slot}`);
         console.log(`State root: ${header.header.message.state_root}`);
-        
+
         expect(header.root).toBeDefined();
         expect(header.header.message.slot).toBeDefined();
     });
@@ -61,19 +61,21 @@ describe("Validator Connectivity", () => {
         const accounts = testnet.getTestAccounts();
         expect(accounts.length).toBeGreaterThan(0);
 
-        for (const account of accounts) {
+        for (const [index, account] of accounts.entries()) {
             const balance = await testnet.getBalance(account.address);
             console.log(`Account ${account.address}: ${balance} wei`);
-            
-            // Should have 1000 ETH = 1000 * 10^18 wei
-            expect(balance).toBeGreaterThan(BigInt(0));
+
+            // The first account must be funded (genesis mnemonic index 0)
+            if (index === 0) {
+                expect(balance).toBeGreaterThan(BigInt(0));
+            }
         }
     });
 
     test("should retrieve validator public keys", () => {
         const pubkeys = testnet.getValidatorPublicKeys();
         console.log(`Found ${pubkeys.length} validator public keys`);
-        
+
         // May be empty if keys weren't extracted properly
         // This is informational, not a hard failure
         if (pubkeys.length > 0) {

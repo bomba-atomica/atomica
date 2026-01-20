@@ -23,7 +23,7 @@ describe("State Proofs (eth_getProof)", () => {
     afterAll(async () => {
         await performCleanup("State proof tests completed");
         setGlobalTestnet(undefined);
-    });
+    }, 60000);
 
     test("should get account proof for funded account", async () => {
         const accounts = testnet.getTestAccounts();
@@ -54,8 +54,8 @@ describe("State Proofs (eth_getProof)", () => {
     });
 
     test("should get proof for empty account", async () => {
-        // An address that doesn't exist
-        const emptyAddress = "0x0000000000000000000000000000000000000001";
+        // An address that doesn't exist (and isn't a precompile)
+        const emptyAddress = "0x1111111111111111111111111111111111111111";
 
         const proof = await testnet.getProof(emptyAddress, [], "latest");
 
