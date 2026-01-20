@@ -91,7 +91,23 @@ describe("End-to-End Verification", () => {
         console.log("Transaction sent:", hash);
 
         // 4. Wait for transaction to be mined
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        // Use robust retry mechanism for transaction receipt
+        let receipt;
+        const maxRetries = 10;
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                receipt = await publicClient.waitForTransactionReceipt({ hash });
+                break;
+            } catch (e) {
+                console.log(`Retry ${i+1}/${maxRetries} waiting for receipt:`, e instanceof Error ? e.message.split('\n')[0] : e);
+                await new Promise(r => setTimeout(r, 2000));
+            }
+        }
+
+        if (!receipt) {
+            throw new Error("Failed to get transaction receipt after multiple retries");
+        }
+        
         console.log("Transaction mined in block:", receipt.blockNumber);
 
         // 5. Verify the recipient's account state has the correct balance
@@ -108,7 +124,7 @@ describe("End-to-End Verification", () => {
             expect(result.accountState.balance).toBe(parseEther("1"));
             console.log("Verified Recipient Balance:", result.accountState.balance.toString());
         }
-    });
+    }, 60000); // 60 seconds timeout
 
     test("should verify account proof at specific block height", async () => {
         // Get current block

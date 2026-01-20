@@ -30,7 +30,8 @@ export async function fetchProof(
 
     try {
         let proof;
-        if (typeof block === "number") {
+        // Handle BigInt block numbers which might come from receipts
+        if (typeof block === "number" || typeof block === "bigint") {
             proof = await client.getProof({
                 address: address as Hex,
                 storageKeys: storageKeys as Hex[],
@@ -80,7 +81,8 @@ export async function fetchBlock(rpcUrl: string, block: number | string): Promis
 
     try {
         let blockData;
-        if (typeof block === "number") {
+        // Handle BigInt block numbers which might come from receipts
+        if (typeof block === "number" || typeof block === "bigint") {
             blockData = await client.getBlock({
                 blockNumber: BigInt(block),
             });
