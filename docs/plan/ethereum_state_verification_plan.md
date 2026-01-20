@@ -167,6 +167,7 @@ The core verification relies on **EIP-1186** (`eth_getProof`).
 2.  **SDK Dependency**: Added a `.gitignore` to the SDK directory to prevent build artifacts from being committed, which was causing issues during local testing.
 3.  **BigInt Support**: Updated `fetcher.ts` to accept `bigint` for block numbers, as `viem` transaction receipts return block numbers as `bigint`. This was not in the initial stub specification.
 4.  **Retry Logic**: Added robust retry logic for `waitForTransactionReceipt` in integration tests to handle potential indexing delays in the local testnet.
+5.  **Verify Transfer**: Implemented `verify-transfer` command ahead of Phase 3, enabling end-to-end transaction verification (sender/receiver state) via CLI.
 
 ## Directory Structure
 
