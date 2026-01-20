@@ -21,8 +21,11 @@ export { fetchProof, fetchBlock, fetchTransaction, fetchTransactionReceipt } fro
 
 // Re-export verification functions
 export { verifyAccountProof, verifyStorageProof, decodeAccountState } from "./verifier";
+export { verifyTransactionProof } from "./transaction";
+export { verifyReceiptProof } from "./receipt";
 
 // Re-export MPT core functions (advanced usage)
+
 export {
     verifyMerkleProof,
     hashNode,

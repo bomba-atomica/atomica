@@ -28,13 +28,61 @@ export interface EthereumProof {
  * Storage proof for a specific storage slot
  */
 export interface StorageProof {
-    /** Storage slot key (0x-prefixed hex) */
     key: string;
-    /** Storage value (0x-prefixed hex) */
     value: string;
-    /** Array of RLP-encoded trie nodes from storage root to value leaf */
     proof: string[];
 }
+
+export interface Transaction {
+    hash: string;
+    nonce: string;
+    blockHash: string | null;
+    blockNumber: string | null;
+    transactionIndex: string | null;
+    from: string;
+    to: string | null;
+    value: string;
+    gasPrice: string;
+    gas: string;
+    input: string;
+    v?: string;
+    r?: string;
+    s?: string;
+    type?: string; // EIP-2718
+    maxFeePerGas?: string; // EIP-1559
+    maxPriorityFeePerGas?: string; // EIP-1559
+    chainId?: string;
+}
+
+export interface Receipt {
+    transactionHash: string;
+    transactionIndex: string;
+    blockHash: string;
+    blockNumber: string;
+    from: string;
+    to: string | null;
+    cumulativeGasUsed: string;
+    gasUsed: string;
+    contractAddress: string | null;
+    logs: Log[];
+    logsBloom: string;
+    status: string | null; // 0x1 (success) or 0x0 (failure)
+    root?: string; // Pre-Byzantium
+    type?: string; // EIP-2718
+}
+
+export interface Log {
+    address: string;
+    topics: string[];
+    data: string;
+    blockNumber: string;
+    transactionHash: string;
+    transactionIndex: string;
+    blockHash: string;
+    logIndex: string;
+    removed: boolean;
+}
+
 
 /**
  * Decoded account state from MPT leaf node
