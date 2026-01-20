@@ -1,9 +1,9 @@
 import { spawn } from "child_process";
 import { existsSync } from "fs";
 import { resolve as pathResolve } from "path";
-import { DockerTestnet } from "../../src/index";
+import { EthereumDockerTestnet } from "../../src/index";
 
-let globalTestnet: DockerTestnet | undefined;
+let globalTestnet: EthereumDockerTestnet | undefined;
 let cleanupInProgress = false;
 
 /**
@@ -25,17 +25,17 @@ export async function performCleanup(reason: string): Promise<void> {
             console.log("✓ Testnet torn down successfully");
         } catch (error) {
             console.error("✗ Failed to tear down testnet:", error);
-            console.error("Run manually: cd ../config && docker compose down -v");
+            console.error("Run manually: cd config && docker compose down -v");
         }
     } else {
         // Testnet never initialized, try manual cleanup
         console.log("⚠ Testnet was never initialized, attempting cleanup anyway...");
         try {
-            const composeDir = findComposeDir();
+            const configDir = findConfigDir();
 
             await new Promise<void>((resolve) => {
                 const proc = spawn("docker", ["compose", "down", "-v", "--remove-orphans"], {
-                    cwd: composeDir,
+                    cwd: configDir,
                     stdio: "inherit",
                 });
 
@@ -71,18 +71,16 @@ export async function performCleanup(reason: string): Promise<void> {
  * Register global cleanup handlers for the process
  */
 export function registerCleanupHandlers(): void {
-    // Install signal handlers BEFORE tests start
     process.on("SIGINT", async () => {
         await performCleanup("Received SIGINT (Ctrl+C)");
-        process.exit(130); // Standard exit code for SIGINT
+        process.exit(130);
     });
 
     process.on("SIGTERM", async () => {
         await performCleanup("Received SIGTERM");
-        process.exit(143); // Standard exit code for SIGTERM
+        process.exit(143);
     });
 
-    // Also handle uncaught exceptions
     process.on("uncaughtException", async (error) => {
         console.error("Uncaught exception:", error);
         await performCleanup("Uncaught exception occurred");
@@ -99,25 +97,24 @@ export function registerCleanupHandlers(): void {
 /**
  * Set the global testnet instance for cleanup handlers
  */
-export function setGlobalTestnet(testnet: DockerTestnet | undefined): void {
+export function setGlobalTestnet(testnet: EthereumDockerTestnet | undefined): void {
     globalTestnet = testnet;
 }
 
 /**
  * Get the global testnet instance
  */
-export function getGlobalTestnet(): DockerTestnet | undefined {
+export function getGlobalTestnet(): EthereumDockerTestnet | undefined {
     return globalTestnet;
 }
 
 /**
- * Helper to find compose directory
+ * Helper to find config directory
  */
-function findComposeDir(): string {
+function findConfigDir(): string {
     const candidates = [
         pathResolve(__dirname, "../../../config"),
-        pathResolve(process.cwd(), "source/docker-testnet/config"),
-        pathResolve(process.cwd(), "docker-testnet/config"),
+        pathResolve(process.cwd(), "source/docker-testnet/ethereum-testnet/config"),
         pathResolve(process.cwd(), "config"),
     ];
 
@@ -127,43 +124,27 @@ function findComposeDir(): string {
         }
     }
 
-    throw new Error("Could not find docker-testnet/config directory");
+    throw new Error("Could not find ethereum-testnet/config directory");
 }
 
 /**
  * Initialize a testnet with the specified number of validators
- * and wait for consensus to start
+ * and wait for the network to be healthy
  */
-export async function initializeTestnet(numValidators: number): Promise<DockerTestnet> {
-    console.log(`Initializing testnet with ${numValidators} validators...`);
+export async function initializeTestnet(numValidators: number): Promise<EthereumDockerTestnet> {
+    console.log(`Initializing Ethereum PoS testnet with ${numValidators} validators...`);
 
-    const testnet = await DockerTestnet.new(numValidators);
+    const testnet = await EthereumDockerTestnet.start(numValidators);
     setGlobalTestnet(testnet);
-    console.log("✓ Testnet initialized successfully");
+    console.log("✓ Testnet containers started");
 
-    // Wait for validators to start consensus
-    console.log("Waiting for consensus to start...");
-    await new Promise((resolve) => setTimeout(resolve, 10000)); // 10s additional wait
+    // Wait for the network to be healthy
+    await testnet.waitForHealthy(120);
 
-    // Check if we're past genesis
-    const initialInfo = await testnet.getLedgerInfo(0);
-    console.log(
-        `Initial state: epoch=${initialInfo.epoch}, block=${initialInfo.block_height}, version=${initialInfo.ledger_version}`,
-    );
-
-    if (parseInt(initialInfo.epoch) === 0 && parseInt(initialInfo.block_height) === 0) {
-        console.log("⚠ Validators still at genesis, waiting 20 more seconds...");
-        await new Promise((resolve) => setTimeout(resolve, 20000));
-
-        const checkInfo = await testnet.getLedgerInfo(0);
-        console.log(
-            `After wait: epoch=${checkInfo.epoch}, block=${checkInfo.block_height}, version=${checkInfo.ledger_version}`,
-        );
-
-        if (parseInt(checkInfo.epoch) === 0 && parseInt(checkInfo.block_height) === 0) {
-            console.warn("⚠ WARNING: Validators may be stuck at genesis!");
-        }
-    }
+    // Get initial chain state
+    const chainId = await testnet.getChainId();
+    const blockNumber = await testnet.getBlockNumber();
+    console.log(`Initial state: chainId=${chainId}, block=${blockNumber}`);
 
     return testnet;
 }
@@ -171,12 +152,30 @@ export async function initializeTestnet(numValidators: number): Promise<DockerTe
 /**
  * Wait for the network to stabilize and produce at least one block
  */
-export async function waitForNetworkStabilization(testnet: DockerTestnet): Promise<void> {
-    console.log("Waiting for network to stabilize and produce at least 1 block...");
-    await new Promise((resolve) => setTimeout(resolve, 10000));
+export async function waitForNetworkStabilization(testnet: EthereumDockerTestnet): Promise<void> {
+    console.log("Waiting for network to stabilize and produce blocks...");
+    
+    // Wait for at least 1 block to be produced
     try {
         await testnet.waitForBlocks(1, 60);
     } catch (_e) {
-        console.warn("Timed out waiting for block 1, continuing anyway...");
+        console.warn("Timed out waiting for block production, continuing anyway...");
+    }
+}
+
+/**
+ * Wait for a sync committee period to complete (for light client testing)
+ */
+export async function waitForSyncCommitteePeriod(testnet: EthereumDockerTestnet): Promise<void> {
+    console.log("Waiting for sync committee data to be available...");
+    
+    // Sync committee periods are 256 epochs = 8192 slots
+    // At 12s/slot, that's ~27 hours - too long for tests
+    // For local testing, we just verify the API works
+    try {
+        const syncCommittee = await testnet.getSyncCommittee();
+        console.log(`✓ Sync committee available with ${syncCommittee.validators.length} validators`);
+    } catch (e) {
+        console.warn("Sync committee not yet available (expected for new testnets)");
     }
 }

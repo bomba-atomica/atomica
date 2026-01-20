@@ -5,6 +5,7 @@ use std::time::Duration;
 use tokio::time::sleep;
 use aptos_config::keys::ConfigKey;
 use aptos_config::utils::get_available_port;
+use ethereum_docker_testnet::EthereumTestnet;
 
 use rand::rngs::OsRng;
 
@@ -15,10 +16,16 @@ use std::num::NonZeroUsize;
 
 pub struct CrossChainTestEnv {
     pub aptos: LocalSwarm,
+    pub ethereum: EthereumTestnet,
 }
 
 impl CrossChainTestEnv {
     pub async fn new() -> Result<Self> {
+        // Ethereum Setup
+        let ethereum = EthereumTestnet::new(4).await?;
+        // Start Ethereum first as it might take longer to settle
+        ethereum.wait_for_healthy(Duration::from_secs(120)).await?;
+
         // Aptos Setup
         // Simplified version of smoke_test_environment::new_local_swarm_with_aptos
         let num_validators = 1;
@@ -55,12 +62,14 @@ impl CrossChainTestEnv {
             
         Ok(Self {
             aptos,
+            ethereum,
         })
     }
 }
 
 impl Drop for CrossChainTestEnv {
     fn drop(&mut self) {
-        // No anvil to kill
+        // Teardown Ethereum
+        let _ = self.ethereum.teardown();
     }
 }

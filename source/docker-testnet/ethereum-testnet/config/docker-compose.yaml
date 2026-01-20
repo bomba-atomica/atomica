@@ -1,0 +1,179 @@
+name: ethereum-testnet
+services:
+  # 1. Setup Service (Generates Artifacts, Initializes Geth, Imports Keys)
+  setup:
+    build:
+      context: ./genesis
+    volumes:
+      - testnet-data:/data
+    environment:
+      # Network ID
+      - CHAIN_ID=32382
+      - EL_NETWORK_ID=32382
+      - CL_NETWORK_ID=32382
+      
+      # Merge Config
+      - TERMINAL_TOTAL_DIFFICULTY=0
+      
+      # Consensus Config (All forks active at epoch 0)
+      - ALTAIR_FORK_EPOCH=0
+      - BELLATRIX_FORK_EPOCH=0
+      - CAPELLA_FORK_EPOCH=0
+      - DENEB_FORK_EPOCH=0
+      - ELECTRA_FORK_EPOCH=100000000
+      - FULU_FORK_EPOCH=100000000
+      
+      # Genesis Config
+      - MIN_GENESIS_ACTIVE_VALIDATOR_COUNT=4
+      - GENESIS_FORK_VERSION=0x00000001
+      - GENESIS_DELAY=0
+      - NUMBER_OF_VALIDATORS=4
+      - EL_AND_CL_MNEMONIC=giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete
+    entrypoint: ["/bin/bash", "/generate.sh"]
+
+  # 4. Main Execution Client
+  geth:
+    image: ethereum/client-go:v1.13.14
+    container_name: eth-execution
+    restart: unless-stopped
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    entrypoint: []
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -d /data/geth/geth/chaindata ]; then
+          geth init --datadir=/data/geth /data/geth/genesis.json
+        fi
+        exec geth --datadir=/data/geth --networkid=32382 --http --http.api=eth,net,web3,debug,engine,txpool --http.addr=0.0.0.0 --http.port=8545 --http.vhosts=* --http.corsdomain=* --ws --ws.api=eth,net,web3,debug,engine --ws.addr=0.0.0.0 --ws.port=8546 --ws.origins=* --authrpc.addr=0.0.0.0 --authrpc.port=8551 --authrpc.vhosts=* --authrpc.jwtsecret=/data/jwtsecret --nodiscover --syncmode=full --gcmode=archive --maxpeers=0 --txlookuplimit=0
+    volumes:
+      - testnet-data:/data
+    ports:
+      - "8545:8545"
+      - "8546:8546"
+      - "8551:8551"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8545"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # 5. Main Beacon Node
+  beacon:
+    image: sigp/lighthouse:v5.3.0
+    container_name: eth-beacon
+    restart: unless-stopped
+    depends_on:
+      geth:
+        condition: service_healthy
+    command:
+      - lighthouse
+      - beacon_node
+      - --debug-level=info
+      - --datadir=/data/beacon-data
+      - --testnet-dir=/data/beacon-config
+      - --execution-endpoint=http://geth:8551
+      - --execution-jwt=/data/jwtsecret
+      - --http
+      - --http-address=0.0.0.0
+      - --http-port=5052
+      - --http-allow-origin=*
+      - --suggested-fee-recipient=0x0000000000000000000000000000000000000000
+      - --execution-timeout-multiplier=5
+      - --allow-insecure-genesis-sync
+      - --disable-peer-scoring
+      - --target-peers=0
+      - --staking
+      - --subscribe-all-subnets
+      - --always-prepare-payload
+    volumes:
+      - testnet-data:/data
+    ports:
+      - "5052:5052"
+
+  # 6. Main Validator Clients
+  validator-1:
+    image: sigp/lighthouse:v5.3.0
+    container_name: eth-validator-1
+    restart: unless-stopped
+    depends_on:
+      beacon:
+        condition: service_started
+      setup:
+        condition: service_completed_successfully
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -d /data/validator-1/validators ]; then
+          lighthouse account validator import --datadir=/data/validator-1 --keystore=/data/node-keys/1/keystore.json --password-file=/data/node-keys/1/password.txt --testnet-dir=/data/beacon-config --reuse-password
+        fi
+        exec lighthouse validator_client --debug-level=info --testnet-dir=/data/beacon-config --beacon-nodes=http://beacon:5052 --datadir=/data/validator-1 --init-slashing-protection --suggested-fee-recipient=0x0000000000000000000000000000000000000000 --graffiti=val-1
+    volumes:
+      - testnet-data:/data
+
+  validator-2:
+    image: sigp/lighthouse:v5.3.0
+    container_name: eth-validator-2
+    restart: unless-stopped
+    depends_on:
+      beacon:
+        condition: service_started
+      setup:
+        condition: service_completed_successfully
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -d /data/validator-2/validators ]; then
+          lighthouse account validator import --datadir=/data/validator-2 --keystore=/data/node-keys/2/keystore.json --password-file=/data/node-keys/2/password.txt --testnet-dir=/data/beacon-config --reuse-password
+        fi
+        exec lighthouse validator_client --debug-level=info --testnet-dir=/data/beacon-config --beacon-nodes=http://beacon:5052 --datadir=/data/validator-2 --init-slashing-protection --suggested-fee-recipient=0x0000000000000000000000000000000000000000 --graffiti=val-2
+    volumes:
+      - testnet-data:/data
+
+  validator-3:
+    image: sigp/lighthouse:v5.3.0
+    container_name: eth-validator-3
+    restart: unless-stopped
+    depends_on:
+      beacon:
+        condition: service_started
+      setup:
+        condition: service_completed_successfully
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -d /data/validator-3/validators ]; then
+          lighthouse account validator import --datadir=/data/validator-3 --keystore=/data/node-keys/3/keystore.json --password-file=/data/node-keys/3/password.txt --testnet-dir=/data/beacon-config --reuse-password
+        fi
+        exec lighthouse validator_client --debug-level=info --testnet-dir=/data/beacon-config --beacon-nodes=http://beacon:5052 --datadir=/data/validator-3 --init-slashing-protection --suggested-fee-recipient=0x0000000000000000000000000000000000000000 --graffiti=val-3
+    volumes:
+      - testnet-data:/data
+
+  validator-4:
+    image: sigp/lighthouse:v5.3.0
+    container_name: eth-validator-4
+    restart: unless-stopped
+    depends_on:
+      beacon:
+        condition: service_started
+      setup:
+        condition: service_completed_successfully
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -d /data/validator-4/validators ]; then
+          lighthouse account validator import --datadir=/data/validator-4 --keystore=/data/node-keys/4/keystore.json --password-file=/data/node-keys/4/password.txt --testnet-dir=/data/beacon-config --reuse-password
+        fi
+        exec lighthouse validator_client --debug-level=info --testnet-dir=/data/beacon-config --beacon-nodes=http://beacon:5052 --datadir=/data/validator-4 --init-slashing-protection --suggested-fee-recipient=0x0000000000000000000000000000000000000000 --graffiti=val-4
+    volumes:
+      - testnet-data:/data
+
+volumes:
+  testnet-data:
