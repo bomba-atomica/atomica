@@ -21,6 +21,12 @@ mkdir -p $VALIDATOR_KEYS_DIR
 
 echo "🧬 Generating Artifacts..."
 
+# Explicitly set genesis timestamp to current time if not provided
+if [ -z "$GENESIS_TIMESTAMP" ]; then
+    export GENESIS_TIMESTAMP=$(date +%s)
+    echo "⏰ Set GENESIS_TIMESTAMP to $GENESIS_TIMESTAMP"
+fi
+
 # EL Genesis
 /work/entrypoint.sh el
 
