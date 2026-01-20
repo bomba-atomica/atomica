@@ -60,7 +60,7 @@ The market analysis reveals that DAOs represent 40-60% of Atomica's addressable 
 
 DAOs need governance-approved, scheduled execution. Multi-sig coordination for treasury operations doesn't work well with continuous trading that requires real-time monitoring. The DAO that votes on Tuesday to "diversify 10% of treasury from DAO token to ETH over the next week" can't easily coordinate multi-sig approvals for instant DEX swaps at unpredictable times. They need *scheduled* execution at *predictable* times that enable proper governance coordination.
 
-Furthermore, DAOs require transparent, auditable execution that can be verified by their communities. OTC desks fail this requirement (opaque pricing, centralized trust). Instant DEXes partially meet it but don't solve the coordination problem. Atomica's daily auction at a fixed time (17:00 UTC) provides both transparency *and* coordination-friendly timing.
+Furthermore, DAOs require transparent, auditable execution that can be verified by their communities. OTC desks fail this requirement (opaque pricing, centralized trust). Instant DEXes partially meet it but don't solve the coordination problem. Atomica's dual auctions at fixed times (16:15 and 07:45 UTC) provide both transparency *and* coordination-friendly timing.
 
 The communication strategy should emphasize that Atomica serves "treasury management workflows" while AMMs serve "operational trading." These aren't competitive—they're complementary use cases within the same organization. A DAO might use CoW Swap for immediate operational needs (paying contributors, covering expenses) while using Atomica for strategic treasury management (quarterly rebalancing, cross-chain diversification). Both tools are needed; neither replaces the other.
 

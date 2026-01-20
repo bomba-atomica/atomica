@@ -429,7 +429,7 @@ An alternative approach was analyzed: instead of random exclusion, use bid patte
 #### Multi-Hour Auction Prevents Flash Attacks
 
 **Timing:**
-- Auction duration: 4+ hours (e.g., 08:00-12:00 UTC)
+- Auction duration: 15-minute reveal windows (see [Dual Auction Timing Specification](../analysis/dual-auction-timing.md) for details)
 - Block production: ~12 seconds per block (Ethereum), ~1 second (Aptos)
 - Total blocks: ~1,200+ blocks during auction window
 

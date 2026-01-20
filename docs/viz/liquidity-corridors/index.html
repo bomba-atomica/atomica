@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atomica Liquidity Corridors</title>
+    <!-- D3 Core -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- D3 Geo Projections (Robinson) -->
+    <script src="https://d3js.org/d3-geo-projection.v4.min.js"></script>
+    <!-- TopoJSON -->
+    <script src="https://unpkg.com/topojson-client@3"></script>
+    <style>
+        body {
+            margin: 0;
+            background-color: #f7f9fc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #controls {
+            width: 100%;
+            background: #ffffff;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e1e4e8;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            z-index: 100;
+            flex-shrink: 0;
+        }
+
+        .control-row {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 20px;
+            width: 100%;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 180px;
+            max-width: 300px;
+            flex: 1;
+        }
+
+        label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #000;
+        }
+
+        .value-display {
+            font-size: 12px;
+            color: #7f8c8d;
+            text-align: right;
+        }
+
+        #map-container {
+            flex-grow: 1;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0;
+            background: #ffffff;
+            overflow: hidden;
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .sphere {
+            fill: #ffffff;
+            stroke: none;
+        }
+
+        .timezone-band {
+            stroke: #cccccc;
+            stroke-width: 0.5px;
+            vector-effect: non-scaling-stroke;
+        }
+
+        .country-border {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.5);
+        }
+
+        .city-marker:hover {
+            r: 5;
+        }
+
+        .city-label-group {
+            pointer-events: none;
+        }
+
+        .city-label {
+            font-size: 10px;
+            font-weight: 700;
+            fill: #2c3e50;
+            paint-order: stroke;
+            stroke: rgba(255, 255, 255, 0.9);
+            stroke-width: 3px;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .city-time {
+            font-size: 9px;
+            fill: #2c3e50;
+            font-weight: 600;
+            paint-order: stroke;
+            stroke: rgba(255, 255, 255, 0.9);
+            stroke-width: 2.5px;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .label-bg {
+            fill: none;
+            rx: 3;
+            ry: 3;
+        }
+
+        .market-label-bg {
+            fill: rgba(255, 255, 255, 0.7);
+            stroke: #2c3e50;
+            stroke-width: 1.5px;
+            rx: 4;
+            ry: 4;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="controls">
+        <div class="control-row">
+            <div class="control-group">
+                <label>Western Daily: Atlantic / Americas Bridge</label>
+                <input type="range" id="western-time" min="0" max="23.75" step="0.25" value="16.5">
+                <div class="value-display" id="western-time-display">16:30 UTC</div>
+            </div>
+            <div class="control-group">
+                <label>Eastern Daily: Euro-Asia Bridge</label>
+                <input type="range" id="eastern-time" min="0" max="23.75" step="0.25" value="7.0">
+                <div class="value-display" id="eastern-time-display">07:00 UTC</div>
+            </div>
+            <div class="control-group">
+                <label>Time of Year</label>
+                <input type="range" id="day-of-year" min="-180" max="180" step="1" value="0">
+                <div class="value-display" id="day-of-year-display">Today</div>
+            </div>
+            <div class="control-group">
+                <label>Solar Noon (UTC)</label>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="range" id="simulation-time" min="0" max="24" step="0.01" value="12">
+                    <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; white-space: nowrap;">
+                        <input type="checkbox" id="animate-toggle"> Animate
+                    </label>
+                </div>
+                <div class="value-display" id="simulation-time-display">12:00 UTC</div>
+            </div>
+        </div>
+        <div style="font-size: 11px; color: #7f8c8d; border-top: 1px solid #eee; padding-top: 8px; text-align: center;">
+            * Cities show local <strong>Seller Cutoff</strong> times.
+        </div>
+    </div>
+    <div id="map-container"></div>
+
+    <script>
+        const width = 1200;
+        const height = 600;
+
+        // Global Financial Hubs (Standardized right-aligned, London left)
+        const CAPITALS = [
+            { name: "New York", lon: -74.0060, lat: 40.7128, offset: -5, offX: 2, offY: 0 },
+            { name: "London", lon: -0.1278, lat: 51.5074, offset: 0, offX: -87, offY: 0 }, // Left
+            { name: "Frankfurt", lon: 8.6821, lat: 50.1109, offset: 1, offX: 2, offY: 0 },
+            { name: "Dubai", lon: 55.2708, lat: 25.2048, offset: 4, offX: 2, offY: 0 },
+            { name: "Mumbai", lon: 72.8777, lat: 19.0760, offset: 5.5, offX: 2, offY: 0 },
+            { name: "Singapore", lon: 103.8198, lat: 1.3521, offset: 8, offX: 2, offY: 0 },
+            { name: "Hong Kong", lon: 114.1694, lat: 22.3193, offset: 8, offX: 2, offY: 0 },
+            { name: "Tokyo", lon: 139.6503, lat: 35.6762, offset: 9, offX: 2, offY: 0 },
+            { name: "Sydney", lon: 151.2093, lat: -33.8688, offset: 10, offX: 2, offY: 0 },
+            { name: "San Francisco", lon: -122.4194, lat: 37.7749, offset: -8, offX: 2, offY: 0 },
+            { name: "Johannesburg", lon: 28.0473, lat: -26.2041, offset: 2, offX: 2, offY: 0 },
+            { name: "São Paulo", lon: -46.6333, lat: -23.5505, offset: -3, offX: 2, offY: 0 }
+        ];
+
+        const svg = d3.select("#map-container")
+            .append("svg")
+            .attr("viewBox", `0 0 ${width} ${height}`)
+            .attr("preserveAspectRatio", "xMidYMid meet");
+
+        const defs = svg.append("defs");
+        defs.append("filter")
+            .attr("id", "blur")
+            .append("feGaussianBlur")
+            .attr("stdDeviation", 10);
+
+        // Land-clipping path
+        const clipPathDef = defs.append("clipPath")
+            .attr("id", "land-clipping");
+
+        // Initial Projection (will be updated dynamically)
+        const projection = d3.geoEquirectangular()
+            .scale(180)
+            .translate([width / 2, height / 2]);
+
+        const path = d3.geoPath().projection(projection);
+
+        function formatTime(decimalHours) {
+            const h = Math.floor(decimalHours);
+            const m = Math.round((decimalHours - h) * 60);
+            return `${(h % 24).toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        }
+
+        const TODAY = new Date(2026, 0, 18);
+
+        function getDayName(offset) {
+            const date = new Date(TODAY);
+            date.setDate(date.getDate() + offset);
+            const options = { month: 'short', day: 'numeric', year: 'numeric' };
+            const formatted = date.toLocaleDateString('en-US', options);
+
+            // Calculate absolute day of year for seasonal labels
+            const start = new Date(date.getFullYear(), 0, 0);
+            const diff = date - start + (start.getTimezoneOffset() - date.getTimezoneOffset()) * 60 * 1000;
+            const absoluteDay = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+            if (absoluteDay >= 170 && absoluteDay <= 174) return `${formatted} (Summer Solstice)`;
+            if (absoluteDay >= 353 && absoluteDay <= 357) return `${formatted} (Winter Solstice)`;
+            if (absoluteDay >= 78 && absoluteDay <= 82) return `${formatted} (Spring Equinox)`;
+            if (absoluteDay >= 263 && absoluteDay <= 267) return `${formatted} (Autumn Equinox)`;
+            return formatted;
+        }
+
+        // Global Helper Functions for Visualization
+        const getOffset = (d) => {
+            if (!d || !d.properties) return 0;
+            const p = d.properties;
+
+            // Coerce known properties (Natural Earth)
+            const zone = parseFloat(p.zone);
+            if (!isNaN(zone)) return zone;
+
+            const gmt = parseFloat(p.gmtoffset);
+            if (!isNaN(gmt)) return gmt;
+
+            // Geometric Fallback
+            const centroid = d3.geoCentroid(d);
+            if (!centroid || isNaN(centroid[0])) return 0;
+            return centroid[0] / 15;
+        };
+
+        // Use standard Rainbow scale for robust coloring
+        // Domain [-12, 12] maps to [0, 1] for the interpolator
+        // REGIONAL PALETTE LOGIC (Stepped Gradients)
+        // West Market: Shades of GREEN.
+        const westDomain = [8, 18]; // 08:00 (Light) to 18:00 (Dark)
+        const westSteps = 10;
+        const greenPalette = d3.quantize(d3.interpolateGreens, westSteps + 2).slice(1, -1);
+        const scaleGreen = d3.scaleQuantize()
+            .domain(westDomain)
+            .range(greenPalette);
+
+        // East Market: Shades of BLUE.
+        const eastDomain = [8, 18]; // 08:00 (Light) to 18:00 (Dark)
+        const eastSteps = 10;
+        const bluePalette = d3.quantize(d3.interpolateBlues, eastSteps + 2).slice(1, -1);
+        const scaleBlue = d3.scaleQuantize()
+            .domain(eastDomain)
+            .range(bluePalette);
+
+        function getDSTShift(lon, day) {
+            const isAmericasDST = day >= 69 && day <= 307;
+            const isEuropeDST = day >= 90 && day <= 300;
+            const isAussieDST = day >= 274 || day <= 91;
+
+            // Americas (SF to Brazil East)
+            if (lon <= -35 && lon >= -135) return isAmericasDST ? 1 : 0;
+            // Europe/W. Africa
+            if (lon > -15 && lon < 40) return isEuropeDST ? 1 : 0;
+            // Australia (Focusing on Sydney/Eastern States)
+            if (lon > 130 && lon < 160) return isAussieDST ? 1 : 0;
+            return 0;
+        }
+
+        function calculateBoundaries(utcTime, day) {
+            function getStableLon(targetHour) {
+                // Calculate lon for standard time
+                const lon0 = (targetHour - utcTime) * 15;
+                const lon1 = (targetHour - utcTime - 1) * 15;
+
+                // Direct lookup for consistency
+                const norm0 = ((lon0 + 180) % 360 + 360) % 360 - 180;
+                const norm1 = ((lon1 + 180) % 360 + 360) % 360 - 180;
+
+                // If the daylight-shifted boundary lands in a DST zone, prioritize it
+                if (getDSTShift(norm1, day) === 1) return lon1;
+                return lon0;
+            }
+
+            let lonStart = getStableLon(8.5); // Refined 8:30 AM 
+            let lonEnd = getStableLon(18);    // Refined 6:00 PM
+
+            while (lonStart > 180) lonStart -= 360;
+            while (lonStart < -180) lonStart += 360;
+            while (lonEnd > 180) lonEnd -= 360;
+            while (lonEnd < -180) lonEnd += 360;
+
+            return { lonStart, lonEnd };
+        }
+
+        function getCountdown(targetHour) {
+            const now = new Date();
+            const currentUTC = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+            let diff = targetHour - currentUTC;
+            if (diff <= 0) diff += 24;
+
+            const h = Math.floor(diff);
+            const m = Math.floor((diff - h) * 60);
+            return `${h}h ${m}m remaining`;
+        }
+
+        let timezoneData, countryData, landFeature;
+
+        async function init() {
+            try {
+                const [tzGeoJSON, countryTopo] = await Promise.all([
+                    d3.json("https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_time_zones.geojson"),
+                    d3.json("https://unpkg.com/world-atlas@2.0.2/countries-110m.json")
+                ]);
+
+                // Direct GeoJSON use (no topojson conversion needed for timezones)
+                timezoneData = tzGeoJSON;
+
+                const countries = countryTopo.objects.countries.geometries.filter(d => d.id !== "010" && d.id !== 10 && d.id !== "ATA");
+                countryData = topojson.feature(countryTopo, { type: "GeometryCollection", geometries: countries });
+
+                // Pre-calculate merged land for clipping
+                const landGeometry = topojson.merge(countryTopo, countries);
+                landFeature = { type: "Feature", geometry: landGeometry };
+
+                // Setup land clipping path once and stay fixed
+                defs.select("#land-clipping").selectAll("path").remove();
+                defs.select("#land-clipping").append("path")
+                    .datum(landFeature)
+                    .attr("d", path);
+
+                update();
+            } catch (error) {
+                console.error("Error loading map data:", error);
+            }
+        }
+
+        function update() {
+            const westernUTC = +document.getElementById('western-time').value;
+            const easternUTC = +document.getElementById('eastern-time').value;
+            const dateOffset = +document.getElementById('day-of-year').value;
+
+            // Calculate absolute day of year for the selected offset
+            const date = new Date(TODAY);
+            date.setDate(date.getDate() + dateOffset);
+            const start = new Date(date.getFullYear(), 0, 0);
+            const diff = date - start + (start.getTimezoneOffset() - date.getTimezoneOffset()) * 60 * 1000;
+            const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+            // DYNAMIC SOLAR CENTERING (Linked to Slider)
+            const currentDecimalUTC = +document.getElementById('simulation-time').value;
+
+            // Solar Noon is at Longitude 0 (Greenwich) when UTC is 12:00
+            // Formula: (12 - currentUTC) * 15
+            const solarRotation = (12 - currentDecimalUTC) * 15;
+
+            projection.rotate([-solarRotation, 0]);
+
+            // UPDATE CLIP PATH for current rotation
+            defs.select("#land-clipping").selectAll("path")
+                .datum(landFeature)
+                .attr("d", path);
+
+            // Moved inside to avoid ReferenceError & Access closure variables
+            function getMarketColor(offset) {
+                // Offset -> Longitude approx
+                const dst = getDSTShift(offset * 15, dayOfYear);
+                const localWestern = (westernUTC + offset + dst + 24) % 24;
+                const localEastern = (easternUTC + offset + dst + 24) % 24;
+
+                const isWestViable = localWestern >= 8.5 && localWestern < 18;
+                const isEastViable = localEastern >= 8.5 && localEastern < 18;
+
+                if (isWestViable && !isEastViable) return scaleGreen(localWestern);
+                if (!isWestViable && isEastViable) return scaleBlue(localEastern);
+
+                if (isWestViable && isEastViable) {
+                    // TIEBREAKER: 50/50 Blend
+                    return d3.interpolateLab(scaleGreen(localWestern), scaleBlue(localEastern))(0.5);
+                }
+                return "#e0e0e0";
+            }
+
+            document.getElementById('western-time-display').innerText = formatTime(westernUTC) + " UTC";
+            document.getElementById('eastern-time-display').innerText = formatTime(easternUTC) + " UTC";
+            document.getElementById('day-of-year-display').innerText = getDayName(dateOffset);
+            document.getElementById('simulation-time-display').innerText = formatTime(currentDecimalUTC) + " UTC";
+
+            const corridors = [
+                {
+                    name: 'WEST MARKET',
+                    ...calculateBoundaries(westernUTC, dayOfYear),
+                    colorClass: 'corridor-green',
+                    time: formatTime(westernUTC) + ' UTC',
+                    countdown: getCountdown(westernUTC),
+                    hubs: 'SF → NY → LON',
+                    lat: -45, lon: -40
+                },
+                {
+                    name: 'EAST MARKET',
+                    ...calculateBoundaries(easternUTC, dayOfYear),
+                    colorClass: 'corridor-blue',
+                    time: formatTime(easternUTC) + ' UTC',
+                    countdown: getCountdown(easternUTC),
+                    hubs: 'LON → DXB → TYO',
+                    lat: -45, lon: 70
+                }
+            ];
+
+            svg.selectAll(".map-content").remove();
+            const g = svg.append("g").attr("class", "map-content");
+
+            // Background sphere
+            g.append("path")
+                .datum({ type: "Sphere" })
+                .attr("class", "sphere")
+                .attr("d", path);
+
+            // Render Timezone Bands (Clipped to Land)
+            // Note: Restored clip-path to ensure colors only appear on land
+            const tzGroup = g.append("g")
+                .attr("clip-path", "url(#land-clipping)");
+
+
+
+            tzGroup.selectAll(".timezone-band")
+                .data(timezoneData.features)
+                .enter().append("path")
+                .attr("class", "timezone-band")
+                .attr("fill", (d) => {
+                    const offset = getOffset(d);
+                    return getMarketColor(offset);
+                })
+                .attr("fill-opacity", 0.9)
+                .attr("stroke", "#cccccc")
+                .attr("stroke-width", "0.5px")
+                .attr("d", path);
+
+            // 4. Country Borders Overlay (White)
+            g.append("path")
+                .datum(countryData)
+                .attr("class", "country-border")
+                .attr("d", path);
+
+            // Market Labels (Fixed positional markers)
+            corridors.forEach(c => {
+                const pos = projection([c.lon, c.lat]);
+                if (pos) {
+                    const labelGroup = g.append("g")
+                        .attr("transform", `translate(${pos[0]}, ${pos[1]})`);
+
+                    labelGroup.append("rect")
+                        .attr("x", -60)
+                        .attr("y", -25)
+                        .attr("width", 120)
+                        .attr("height", 50)
+                        .attr("rx", 4)
+                        .attr("fill", "rgba(255, 255, 255, 0.95)")
+                        .attr("stroke", "#bdc3c7")
+                        .attr("stroke-width", 1);
+
+                    labelGroup.append("text")
+                        .attr("class", "city-label")
+                        .attr("x", 0)
+                        .attr("y", -8)
+                        .attr("text-anchor", "middle")
+                        .text(c.name);
+
+                    labelGroup.append("text")
+                        .attr("class", "city-time")
+                        .attr("x", 0)
+                        .attr("y", 6)
+                        .attr("text-anchor", "middle")
+                        .text(c.time);
+
+                    labelGroup.append("text")
+                        .attr("class", "city-time")
+                        .attr("x", 0)
+                        .attr("y", 18)
+                        .attr("text-anchor", "middle")
+                        .attr("style", "font-size: 8px;")
+                        .text(c.countdown);
+                }
+            });
+
+            // City Markers & Local Cutoff Times
+            CAPITALS.forEach(city => {
+                const pos = projection([city.lon, city.lat]);
+                if (!pos) return;
+
+                const dst = getDSTShift(city.lon, dayOfYear);
+                const localWestern = (westernUTC + city.offset + dst + 24) % 24;
+                const localEastern = (easternUTC + city.offset + dst + 24) % 24;
+
+                const isBizWestern = localWestern >= 8.5 && localWestern < 18;
+                const isBizEastern = localEastern >= 8.5 && localEastern < 18;
+
+                const cityGroup = g.append("g")
+                    .attr("transform", `translate(${pos[0]}, ${pos[1]})`);
+
+                cityGroup.append("circle")
+                    .attr("class", "city-marker")
+                    .attr("r", 3);
+
+                const labelBox = cityGroup.append("g")
+                    .attr("class", "city-label-group")
+                    .attr("transform", `translate(${city.offX || 5}, ${city.offY || -5})`);
+
+                labelBox.append("text")
+                    .attr("class", "city-label")
+                    .attr("text-anchor", "start")
+                    .text(city.name);
+
+                labelBox.append("text")
+                    .attr("class", "city-time")
+                    .attr("y", 12)
+                    .attr("text-anchor", "start")
+                    .style("font-weight", isBizWestern ? "800" : "normal")
+                    .text(`W: ${formatTime(localWestern)}`);
+
+                labelBox.append("text")
+                    .attr("class", "city-time")
+                    .attr("y", 22)
+                    .attr("text-anchor", "start")
+                    .style("font-weight", isBizEastern ? "800" : "normal")
+                    .text(`E: ${formatTime(localEastern)}`);
+            });
+        }
+
+        document.getElementById('western-time').oninput = update;
+        document.getElementById('eastern-time').oninput = update;
+        document.getElementById('day-of-year').oninput = update;
+        document.getElementById('simulation-time').oninput = update;
+
+        function tick() {
+            const animate = document.getElementById('animate-toggle').checked;
+            if (animate) {
+                const slider = document.getElementById('simulation-time');
+                let val = parseFloat(slider.value) + 0.02; // Slower, smoother animation
+                if (val >= 24) val = 0;
+                slider.value = val;
+                update();
+            } else {
+                // Constant background update for time displays/countdown even if not animating
+                update();
+            }
+            requestAnimationFrame(tick);
+        }
+
+        async function start() {
+            // Set initial simulation time to current UTC
+            const now = new Date();
+            const currentUTC = now.getUTCHours() + (now.getUTCMinutes() / 60);
+            document.getElementById('simulation-time').value = currentUTC;
+
+            await init();
+            tick();
+        }
+
+        start();
+    </script>
+</body>
+
+</html>

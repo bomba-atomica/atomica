@@ -693,8 +693,8 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
 ---
 
 **Related Documents:**
-- [Market Volume by Participant Category](./market-volume-by-participant-category.md) - Addressable market analysis
-- [Optimal Time of Day Analysis](./optimal-time-of-day.md) - Timezone and auction timing strategy
+- [Dual Auction Timing Specification](./dual-auction-timing.md) - Current canonical timing strategy
+- [Optimal Time of Day Analysis](./optimal-time-of-day.md) - Historical research on timezone strategy
 - [Product Design v0](../design/product-design-v0-ARCHIVED.md) - Atomica auction mechanism
 - [batch auction model](../design/batch-auction-economics.md) - Why batch settlement works
 

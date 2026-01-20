@@ -1,6 +1,6 @@
 # Atomica Documentation
 
-**The global canonical market open/close auction for crypto.** Twice-daily sealed-bid batch auctions like NYSE open/close for digital assets. Implemented non-custodially with trust minimized cross-chain atomic swaps, with timelock encryption.
+**The global canonical daily market for crypto.** Twice-daily sealed-bid batch auctions designed for professional crypto-institutional participants. Implemented non-custodially with trust minimized cross-chain atomic swaps, with timelock encryption.
 
 ## Why?
 
@@ -25,7 +25,11 @@
 Novel design combining atomic swaps' trustless cross-chain execution with auction-based competitive price discovery. No bridges, no wrapped tokens, no custodians.
 
 ### Twice-Daily Batch Auctions
-Two auctions per day at 12:00 PM NYC (17:00 UTC) and 12:00 PM Tokyo (03:00 UTC). All trading pairs clear simultaneously. Settlement 1-3 hours after auction close.
+Two auctions per day at **07:45 UTC** and **16:15 UTC**. These are strategically timed "Global Bridges" designed to capture peak professional participation:
+- **Strategic Session Overlap**: Captures "Morning Desk Arrival" for London (7:45 AM) and San Francisco (8:15 AM) while hitting the Tokyo "Closing Cross" (4:45 PM).
+- **Professional Readiness**: Timing ensures multi-sig signers and crypto operations teams are at their desks and available for coordination.
+- **Fixed UTC Stability**: Fixed UTC provides permanent anchors for hubs like Tokyo and Dubai while ensuring Western participants remain within their peak sessions year-round.
+- **Liquidity Concentration**: Auctions settle during peak global crypto-native liquidity windows (CEX/Stablecoin depth) for robust reference pricing.
 
 ### Sealed Bids via N-Layer Timelock Encryption
 Bids are encrypted using an **N-Layer "Onion"** scheme with configurable layer composition. Each layer uses independent key providers (Validators, Sellers, Drand, etc.). Decryption requires cooperation from ALL N layers.
@@ -120,7 +124,7 @@ atomica/
 - Executive summary: What, why, how
 - Problem statement (bridge risks, DEX risks)
 - Solution: Atomic Auctions
-- Twice-daily auction architecture (12:00 NYC, 12:00 Tokyo)
+- Twice-daily auction architecture (07:45 and 16:15 UTC)
 - Fee structure: Deal breakers pay deal makers
 - Technical architecture summaries
 
