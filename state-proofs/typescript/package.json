@@ -1,0 +1,66 @@
+{
+  "name": "@atomica/state-proof-verifier",
+  "version": "0.1.0",
+  "description": "Self-sufficient TypeScript library and CLI for fetching and verifying Ethereum state proofs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "eth-verify": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:integration": "bun test test/integration.test.ts",
+    "clean": "rm -rf dist",
+    "lint": "eslint 'src/**/*.ts' 'test/**/*.ts'",
+    "lint:fix": "eslint 'src/**/*.ts' 'test/**/*.ts' --fix",
+    "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
+    "prepublishOnly": "bun run build"
+  },
+  "keywords": [
+    "ethereum",
+    "state-proof",
+    "merkle-patricia-trie",
+    "eip-1186",
+    "verification",
+    "cryptography",
+    "cross-chain",
+    "light-client"
+  ],
+  "author": "Atomica",
+  "license": "MIT",
+  "dependencies": {
+    "viem": "^2.0.0",
+    "@ethereumjs/trie": "^6.0.0",
+    "@ethereumjs/util": "^9.0.0",
+    "@ethereumjs/rlp": "^5.0.0",
+    "@ethereumjs/common": "^4.0.0"
+  },
+  "devDependencies": {
+    "@atomica/ethereum-docker-testnet": "file:../../source/docker-testnet/ethereum-testnet/typescript-sdk",
+    "@types/node": "^20.8.2",
+    "@typescript-eslint/eslint-plugin": "^8.53.1",
+    "@typescript-eslint/parser": "^8.53.1",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "prettier": "^3.8.0",
+    "typescript": "^5.2.2",
+    "typescript-eslint": "^8.53.1"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/atomica/atomica.git",
+    "directory": "state-proofs/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/atomica/atomica/issues"
+  },
+  "homepage": "https://github.com/atomica/atomica/tree/main/state-proofs/typescript#readme"
+}

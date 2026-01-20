@@ -1,0 +1,49 @@
+/**
+ * Ethereum State Proof Verifier
+ *
+ * Self-sufficient library for fetching and verifying Ethereum state proofs
+ *
+ * @example
+ * ```typescript
+ * import { fetchProof, verifyAccountProof } from '@atomica/state-proof-verifier';
+ *
+ * const proof = await fetchProof(rpcUrl, address, [], blockNumber);
+ * const result = await verifyAccountProof(proof.accountProof, proof.stateRoot, address);
+ *
+ * if (result.valid) {
+ *     console.log('Account state:', result.accountState);
+ * }
+ * ```
+ */
+
+// Re-export proof fetching functions
+export { fetchProof, fetchBlock } from "./fetcher";
+
+// Re-export verification functions
+export { verifyAccountProof, verifyStorageProof, decodeAccountState } from "./verifier";
+
+// Re-export MPT core functions (advanced usage)
+export {
+    verifyMerkleProof,
+    hashNode,
+    decodeNode,
+    keyToNibbles,
+    decodeHexPrefix,
+    matchPath,
+} from "./mpt";
+
+// Re-export all types
+export type {
+    EthereumProof,
+    StorageProof,
+    AccountState,
+    VerificationResult,
+    Block,
+    TrieNode,
+    BranchNode,
+    ExtensionNode,
+    LeafNode,
+} from "./types";
+
+// Re-export constants
+export { EMPTY_ACCOUNT, HP_FLAGS } from "./types";
