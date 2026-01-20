@@ -118,9 +118,9 @@ export interface LightClientBootstrap {
 }
 
 /**
- * Light client store (persisted state)
+ * Light client state (persisted data)
  */
-export interface LightClientStore {
+export interface LightClientState {
   /** Most recent trusted header */
   header: LightClientHeader;
   /** Current sync committee */
@@ -133,6 +133,14 @@ export interface LightClientStore {
   period: number;
   /** Previous period update timestamp */
   previousSlot: number;
+}
+
+/**
+ * Light client store (wrapper for persistence)
+ */
+export interface LightClientStore {
+  state: LightClientState;
+  lastUpdated: number;
 }
 
 /**

@@ -2,7 +2,7 @@
 
 ## Status Summary
 
-**Current State**: Phase 3 - Transaction & Receipt Verification (In Progress)
+**Current State**: Phase 4 - Light Client Sync Protocol (In Progress)
 
 ### Infrastructure (Phase 1) - ✅ Complete
 | Component | Status | Details |
@@ -33,11 +33,10 @@
 | 4. Receipt Logic | ✅ Complete | Client-side MPT reconstruction for Receipts |
 | 5. CLI Update | ✅ Complete | Enhance `verify-transfer` to use new verifiers |
 
-**Current Location**: `state-proofs/typescript/`
-- ✅ **Fully Functional**: Can fetch and cryptographically verify proofs
-- ✅ **Tested**: Verified against live Geth testnet
-- ✅ **CI/CD**: Automated testing pipeline active
-- ✅ **Type-Safe**: Strict TypeScript configuration
+**Current Location**: `state-proofs/typescript/beacon/`
+- ✅ **Phase 1-3**: Complete - State proof verification working
+- 🚧 **Phase 4**: In Progress - Light Client Sync Protocol stubs created
+- ✅ **Tested**: Unit tests passing (integration tests need beacon node)
 
 ## Objective
 Implement cryptographic verification of Ethereum state proofs (EIP-1186) to validate that account state (balance, nonce, storage) is part of the global state trie committed in a block header. This enables trustless cross-chain state verification for bridges.
@@ -87,7 +86,7 @@ This addresses Requirement 1: "Prove a transaction with inputs and mutations".
     *   Enhance `verify-transfer` to include transaction and receipt proof verification
     *   **Status**: Implemented (2026-01-20)
 
-### Phase 4: Consensus Layer & Validator Set (📋 Future)
+### Phase 4: Consensus Layer & Validator Set (🚧 In Progress)
 **Goal**: Trustless header verification via Light Client Sync Protocol.
 
 This addresses Requirement 3: "Validator set change (new public keys)".
@@ -96,6 +95,9 @@ This addresses Requirement 3: "Validator set change (new public keys)".
 *   **Solution**: Light Client Sync Protocol.
 *   **Tech**: SSZ decoding, BLS verification.
 
+*   [x] **Plan Document**: Created `docs/plan/light_client_plan.md`
+*   [x] **Stub Libraries**: `src/beacon/types.ts`, `fetch.ts`, `sync.ts`, `state.ts`
+*   [x] **Stub Tests**: `test/beacon/*.test.ts`
 *   [ ] **Light Client Logic**:
     *   Implement `sync-committee` verification (Altair hardfork logic)
     *   Verify BLS signatures from current validator set

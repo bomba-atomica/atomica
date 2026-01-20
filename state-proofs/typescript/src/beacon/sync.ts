@@ -8,28 +8,20 @@
  * - https://github.com/ethereum/consensus-specs/blob/master/specs/phase0/beacon-chain.md#bls-signature
  */
 
-import type {
-  LightClientState,
-  LightClientUpdate,
-  LightClientHeader,
-  SyncCommittee,
-  BeaconBlockHeader,
-  SyncAggregate,
-} from "./types";
-import { SYNC_COMMITTEE_SIZE, PUBKEY_SIZE, hexToBytes, bytesToHex } from "./types";
+import type { LightClientState, LightClientUpdate, LightClientHeader, SyncCommittee, BeaconBlockHeader, SyncAggregate } from "./types";
 
 /**
  * Initialize light client state from bootstrap
  *
- * @param header - Initial trusted header
- * @param syncCommittee - Initial sync committee
- * @param period - Current sync committee period
+ * @param _header - Initial trusted header
+ * @param _syncCommittee - Initial sync committee
+ * @param _period - Current sync committee period
  * @returns Initialized LightClientState
  */
 export function initializeLightClient(
-  header: LightClientHeader,
-  syncCommittee: SyncCommittee,
-  period: number,
+  _header: LightClientHeader,
+  _syncCommittee: SyncCommittee,
+  _period: number,
 ): LightClientState {
   throw new Error("Not implemented");
 }
@@ -39,15 +31,15 @@ export function initializeLightClient(
  *
  * Verifies the update and updates the trusted state.
  *
- * @param state - Current light client state
- * @param update - Update to process
- * @param isFinalized - Whether the update is finalized
+ * @param _state - Current light client state
+ * @param _update - Update to process
+ * @param _isFinalized - Whether the update is finalized
  * @returns Updated LightClientState
  */
 export async function processLightClientUpdate(
-  state: LightClientState,
-  update: LightClientUpdate,
-  isFinalized: boolean,
+  _state: LightClientState,
+  _update: LightClientUpdate,
+  _isFinalized: boolean,
 ): Promise<LightClientState> {
   throw new Error("Not implemented");
 }
@@ -58,15 +50,15 @@ export async function processLightClientUpdate(
  * Uses BLS signature verification to ensure the update
  * has sufficient signatures from the sync committee.
  *
- * @param header - Header being signed
- * @param syncAggregate - Sync committee signature data
- * @param syncCommittee - Current sync committee
+ * @param _header - Header being signed
+ * @param _syncAggregate - Sync committee signature data
+ * @param _syncCommittee - Current sync committee
  * @returns True if signature is valid and has quorum
  */
 export async function verifySyncCommitteeSignature(
-  header: LightClientHeader,
-  syncAggregate: SyncAggregate,
-  syncCommittee: SyncCommittee,
+  _header: LightClientHeader,
+  _syncAggregate: SyncAggregate,
+  _syncCommittee: SyncCommittee,
 ): Promise<boolean> {
   throw new Error("Not implemented");
 }
@@ -74,15 +66,15 @@ export async function verifySyncCommitteeSignature(
 /**
  * Verify BLS signature
  *
- * @param message - Signed message (SSZ serialized)
- * @param signature - BLS signature
- * @param publicKey - BLS public key
+ * @param _message - Signed message (SSZ serialized)
+ * @param _signature - BLS signature
+ * @param _publicKey - BLS public key
  * @returns True if signature is valid
  */
 export async function verifyBlsSignature(
-  message: Uint8Array,
-  signature: Uint8Array,
-  publicKey: Uint8Array,
+  _message: Uint8Array,
+  _signature: Uint8Array,
+  _publicKey: Uint8Array,
 ): Promise<boolean> {
   throw new Error("Not implemented");
 }
@@ -90,13 +82,13 @@ export async function verifyBlsSignature(
 /**
  * Aggregate public keys for a subset of sync committee
  *
- * @param publicKeys - Array of BLS public keys
- * @param participationBits - Bitmask of which validators participated
+ * @param _publicKeys - Array of BLS public keys
+ * @param _participationBits - Bitmask of which validators participated
  * @returns Aggregated public key
  */
 export async function aggregatePublicKeys(
-  publicKeys: Uint8Array[],
-  participationBits: Uint8Array,
+  _publicKeys: Uint8Array[],
+  _participationBits: Uint8Array,
 ): Promise<Uint8Array> {
   throw new Error("Not implemented");
 }
@@ -104,15 +96,15 @@ export async function aggregatePublicKeys(
 /**
  * Verify merkle proof for next sync committee
  *
- * @param nextSyncCommittee - Next sync committee from update
- * @param branch - Merkle branch from update
- * @param header - Header to verify against
+ * @param _nextSyncCommittee - Next sync committee from update
+ * @param _branch - Merkle branch from update
+ * @param _header - Header to verify against
  * @returns True if proof is valid
  */
 export async function verifyNextSyncCommitteeProof(
-  nextSyncCommittee: SyncCommittee,
-  branch: string[],
-  header: LightClientHeader,
+  _nextSyncCommittee: SyncCommittee,
+  _branch: string[],
+  _header: LightClientHeader,
 ): Promise<boolean> {
   throw new Error("Not implemented");
 }
@@ -120,15 +112,15 @@ export async function verifyNextSyncCommitteeProof(
 /**
  * Verify execution payload proof
  *
- * @param header - Light client header with execution payload
- * @param branch - Merkle branch from update
- * @param executionPayloadIndex - Index in SSZ container
+ * @param _header - Light client header with execution payload
+ * @param _branch - Merkle branch from update
+ * @param _executionPayloadIndex - Index in SSZ container
  * @returns True if proof is valid
  */
 export async function verifyExecutionPayloadProof(
-  header: LightClientHeader,
-  branch: string[],
-  executionPayloadIndex: number,
+  _header: LightClientHeader,
+  _branch: string[],
+  _executionPayloadIndex: number,
 ): Promise<boolean> {
   throw new Error("Not implemented");
 }
@@ -138,23 +130,23 @@ export async function verifyExecutionPayloadProof(
  *
  * Requires 2/3 of validators to have signed.
  *
- * @param participationBits - Bitmask of validators who signed
+ * @param _participationBits - Bitmask of validators who signed
  * @returns True if quorum is achieved
  */
-export function hasSyncCommitteeQuorum(participationBits: Uint8Array): boolean {
+export function hasSyncCommitteeQuorum(_participationBits: Uint8Array): boolean {
   throw new Error("Not implemented");
 }
 
 /**
  * Compute domain for sync committee signatures
  *
- * @param forkVersion - Current fork version
- * @param genesisValidatorRoot - Genesis validators root
+ * @param _forkVersion - Current fork version
+ * @param _genesisValidatorRoot - Genesis validators root
  * @returns BLS signature domain
  */
 export function computeSyncCommitteeDomain(
-  forkVersion: Uint8Array,
-  genesisValidatorRoot: Uint8Array,
+  _forkVersion: Uint8Array,
+  _genesisValidatorRoot: Uint8Array,
 ): Uint8Array {
   throw new Error("Not implemented");
 }
@@ -162,11 +154,11 @@ export function computeSyncCommitteeDomain(
 /**
  * Compute signing root for sync committee message
  *
- * @param header - Header to sign
- * @param domain - BLS signature domain
+ * @param _header - Header to sign
+ * @param _domain - BLS signature domain
  * @returns Signing root bytes
  */
-export function computeSigningRoot(header: BeaconBlockHeader, domain: Uint8Array): Uint8Array {
+export function computeSigningRoot(_header: BeaconBlockHeader, _domain: Uint8Array): Uint8Array {
   throw new Error("Not implemented");
 }
 

@@ -21,6 +21,32 @@
  */
 
 export * from "./types";
-export * from "./fetch";
-export * from "./sync";
-export * from "./state";
+export {
+  fetchLightClientBootstrap,
+  fetchLightClientUpdates,
+  fetchLightClientFinalityUpdate,
+  fetchLightClientOptimisticUpdate,
+  BEACON_CONFIGS,
+  computeSyncCommitteePeriod,
+} from "./fetch";
+
+export {
+  initializeLightClient,
+  processLightClientUpdate,
+  verifySyncCommitteeSignature,
+  verifyBlsSignature,
+  hasSyncCommitteeQuorum,
+  getTrustedStateRoots,
+} from "./sync";
+
+export {
+  createInitialState,
+  updateState,
+  isUpdateNewer,
+  transitionPeriod,
+  serializeState,
+  deserializeState,
+  saveState,
+  loadState,
+  clearState,
+} from "./state";

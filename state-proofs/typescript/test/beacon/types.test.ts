@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { LightClientUpdate, SyncCommittee, LightClientHeader } from "../src/beacon/types";
-import { computeSyncCommitteePeriod, SYNC_COMMITTEE_PERIOD, hexToBytes, bytesToHex } from "../src/beacon/types";
-import { BEACON_CONFIGS } from "../src/beacon/fetch";
+import type { LightClientUpdate, SyncCommittee, LightClientHeader } from "../../dist/beacon/types";
+import { hexToBytes, bytesToHex } from "../../dist/beacon/types";
+import { computeSyncCommitteePeriod, BEACON_CONFIGS } from "../../dist/beacon/fetch";
 
 describe("Beacon Types", () => {
   describe("hexToBytes", () => {

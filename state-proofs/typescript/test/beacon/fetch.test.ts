@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeAll, afterAll, mock } from "bun:test";
-import { fetchLightClientBootstrap, fetchLightClientUpdates, fetchLightClientFinalityUpdate, BEACON_CONFIGS, computeSyncCommitteePeriod } from "../src/beacon/fetch";
+import { fetchLightClientBootstrap, fetchLightClientUpdates, fetchLightClientFinalityUpdate, BEACON_CONFIGS, computeSyncCommitteePeriod } from "../../dist/beacon/fetch";
 
 describe("Beacon API Fetching", () => {
   describe("BEACON_CONFIGS", () => {

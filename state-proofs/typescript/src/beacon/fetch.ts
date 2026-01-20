@@ -13,11 +13,7 @@
 import type {
   LightClientBootstrap,
   LightClientUpdate,
-  LightClientHeader,
   BeaconBlockHeader,
-  SyncCommittee,
-  SyncAggregate,
-  ExecutionPayloadHeader,
 } from "./types";
 
 /**
@@ -58,13 +54,13 @@ export const BEACON_CONFIGS: Record<string, BeaconConfig> = {
 /**
  * Fetch light client bootstrap for initial sync
  *
- * @param apiUrl - Beacon API URL
- * @param blockRoot - Trusted block root (usually genesis or checkpoint)
+ * @param _apiUrl - Beacon API URL
+ * @param _blockRoot - Trusted block root (usually genesis or checkpoint)
  * @returns LightClientBootstrap response
  */
 export async function fetchLightClientBootstrap(
-  apiUrl: string,
-  blockRoot: string,
+  _apiUrl: string,
+  _blockRoot: string,
 ): Promise<LightClientBootstrap> {
   throw new Error("Not implemented");
 }
@@ -72,15 +68,15 @@ export async function fetchLightClientBootstrap(
 /**
  * Fetch light client updates for a period range
  *
- * @param apiUrl - Beacon API URL
- * @param startPeriod - Starting sync committee period
- * @param count - Number of periods to fetch
+ * @param _apiUrl - Beacon API URL
+ * @param _startPeriod - Starting sync committee period
+ * @param _count - Number of periods to fetch
  * @returns Array of LightClientUpdate responses
  */
 export async function fetchLightClientUpdates(
-  apiUrl: string,
-  startPeriod: number,
-  count: number,
+  _apiUrl: string,
+  _startPeriod: number,
+  _count: number,
 ): Promise<LightClientUpdate[]> {
   throw new Error("Not implemented");
 }
@@ -88,11 +84,11 @@ export async function fetchLightClientUpdates(
 /**
  * Fetch light client finality update
  *
- * @param apiUrl - Beacon API URL
+ * @param _apiUrl - Beacon API URL
  * @returns LightClientUpdate with finality information
  */
 export async function fetchLightClientFinalityUpdate(
-  apiUrl: string,
+  _apiUrl: string,
 ): Promise<LightClientUpdate> {
   throw new Error("Not implemented");
 }
@@ -100,11 +96,11 @@ export async function fetchLightClientFinalityUpdate(
 /**
  * Fetch light client optimistic update
  *
- * @param apiUrl - Beacon API URL
+ * @param _apiUrl - Beacon API URL
  * @returns LightClientUpdate for head block
  */
 export async function fetchLightClientOptimisticUpdate(
-  apiUrl: string,
+  _apiUrl: string,
 ): Promise<LightClientUpdate> {
   throw new Error("Not implemented");
 }
@@ -112,13 +108,13 @@ export async function fetchLightClientOptimisticUpdate(
 /**
  * Fetch beacon block header by slot
  *
- * @param apiUrl - Beacon API URL
- * @param slot - Block slot number
+ * @param _apiUrl - Beacon API URL
+ * @param _slot - Block slot number
  * @returns BeaconBlockHeader
  */
 export async function fetchBeaconBlockHeader(
-  apiUrl: string,
-  slot: number,
+  _apiUrl: string,
+  _slot: number,
 ): Promise<BeaconBlockHeader> {
   throw new Error("Not implemented");
 }

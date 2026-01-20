@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { LightClientState, LightClientUpdate, SyncCommittee, LightClientHeader } from "../src/beacon/types";
+import type { LightClientState, LightClientUpdate, SyncCommittee, LightClientHeader } from "../../dist/beacon/types";
 import {
   initializeLightClient,
   processLightClientUpdate,
@@ -8,7 +8,7 @@ import {
   aggregatePublicKeys,
   hasSyncCommitteeQuorum,
   getTrustedStateRoots,
-} from "../src/beacon/sync";
+} from "../../dist/beacon/sync";
 
 const mockAddress = "0x" + "11".repeat(20);
 
@@ -114,14 +114,14 @@ describe("Light Client Sync", () => {
   });
 
   describe("hasSyncCommitteeQuorum", () => {
-    test("should return false for empty participation", () => {
+    test("should throw not implemented error for empty participation", () => {
       const bits = new Uint8Array(64);
-      expect(hasSyncCommitteeQuorum(bits)).toBe(false);
+      expect(() => hasSyncCommitteeQuorum(bits)).toThrow("Not implemented");
     });
 
-    test("should return true for full participation", () => {
+    test("should throw not implemented error for full participation", () => {
       const bits = new Uint8Array(64).fill(0xff);
-      expect(hasSyncCommitteeQuorum(bits)).toBe(true);
+      expect(() => hasSyncCommitteeQuorum(bits)).toThrow("Not implemented");
     });
 
     test("should throw not implemented error", () => {

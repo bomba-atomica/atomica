@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { LightClientState, LightClientUpdate, SyncCommittee } from "../src/beacon/types";
+import type { LightClientState, LightClientUpdate, SyncCommittee } from "../../dist/beacon/types";
 import {
   createInitialState,
   updateState,
@@ -10,7 +10,7 @@ import {
   saveState,
   loadState,
   clearState,
-} from "../src/beacon/state";
+} from "../../dist/beacon/state";
 
 const createMockHeader = (slot: number) => ({
   beacon: {

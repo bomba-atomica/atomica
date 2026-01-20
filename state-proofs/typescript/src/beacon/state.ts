@@ -5,15 +5,7 @@
  * including sync committee tracking and trusted headers.
  */
 
-import type { LightClientState, LightClientUpdate, LightClientHeader, SyncCommittee } from "./types";
-
-/**
- * Light client state store
- */
-export interface LightClientStore {
-  state: LightClientState;
-  lastUpdated: number;
-}
+import type { LightClientState, LightClientUpdate, SyncCommittee, LightClientStore } from "./types";
 
 /**
  * Create initial light client state
@@ -26,8 +18,8 @@ export function createInitialState(): LightClientState {
  * Update light client state with new update
  */
 export function updateState(
-  current: LightClientState,
-  update: LightClientUpdate,
+  _current: LightClientState,
+  _update: LightClientUpdate,
 ): LightClientState {
   throw new Error("Not implemented");
 }
@@ -36,8 +28,8 @@ export function updateState(
  * Check if update is newer than current state
  */
 export function isUpdateNewer(
-  update: LightClientUpdate,
-  current: LightClientState,
+  _update: LightClientUpdate,
+  _current: LightClientState,
 ): boolean {
   throw new Error("Not implemented");
 }
@@ -46,8 +38,8 @@ export function isUpdateNewer(
  * Transition to next sync committee period
  */
 export function transitionPeriod(
-  state: LightClientState,
-  nextSyncCommittee: SyncCommittee,
+  _state: LightClientState,
+  _nextSyncCommittee: SyncCommittee,
 ): LightClientState {
   throw new Error("Not implemented");
 }
@@ -55,21 +47,21 @@ export function transitionPeriod(
 /**
  * Serialize state for storage
  */
-export function serializeState(state: LightClientState): string {
+export function serializeState(_state: LightClientState): string {
   throw new Error("Not implemented");
 }
 
 /**
  * Deserialize state from storage
  */
-export function deserializeState(data: string): LightClientState {
+export function deserializeState(_data: string): LightClientState {
   throw new Error("Not implemented");
 }
 
 /**
  * Save state to persistent storage
  */
-export async function saveState(store: LightClientStore): Promise<void> {
+export async function saveState(_store: LightClientStore): Promise<void> {
   throw new Error("Not implemented");
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import type { LightClientState, LightClientHeader } from "../src/beacon/types";
-import { BEACON_CONFIGS } from "../src/beacon/fetch";
+import type { LightClientState, LightClientHeader } from "../../dist/beacon/types";
+import { BEACON_CONFIGS } from "../../dist/beacon/fetch";
 
 describe("Light Client Integration", () => {
   describe("Full Sync Workflow", () => {
