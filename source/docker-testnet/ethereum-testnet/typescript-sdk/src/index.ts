@@ -238,7 +238,7 @@ export class EthereumDockerTestnet {
     /**
      * Wait for the beacon node to be healthy and synced
      */
-    async waitForHealthy(timeoutSecs: number = 120): Promise<void> {
+    async waitForHealthy(timeoutSecs: number = 300): Promise<void> {
         const deadline = Date.now() + timeoutSecs * 1000;
 
         console.log("Waiting for Ethereum testnet to become healthy...");

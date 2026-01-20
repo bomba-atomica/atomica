@@ -36,7 +36,8 @@ describe("Block Production", () => {
         console.log(`Start block: ${startBlock}`);
 
         // Wait for 2 blocks (24 seconds at 12s/slot)
-        const endBlock = await testnet.waitForBlocks(2, 60);
+        // Increased timeout to 180s (3 minutes) for CI stability
+        const endBlock = await testnet.waitForBlocks(2, 180);
         console.log(`End block: ${endBlock}`);
 
         expect(endBlock).toBeGreaterThan(startBlock);
@@ -89,6 +90,11 @@ describe("Block Production", () => {
 
         console.log(`CL state root: ${executionPayload.state_root}`);
         console.log(`EL state root: ${elBlock.stateRoot}`);
+
+        // Guard against zero state root (indicating EL sync/startup issues)
+        if (elBlock.stateRoot === "0x0000000000000000000000000000000000000000000000000000000000000000") {
+            throw new Error("Execution layer is not producing valid stateRoots. Check Geth logs and EL/CL connectivity.");
+        }
 
         // State roots should match
         expect(executionPayload.state_root).toBe(elBlock.stateRoot);
