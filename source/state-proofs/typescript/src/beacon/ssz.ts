@@ -35,8 +35,8 @@ import type {
 import { hexToBytes, bytesToHex } from "./types";
 
 type SSZSerializedBeaconBlockHeader = {
-    slot: bigint;
-    proposerIndex: bigint;
+    slot: number;
+    proposerIndex: number;
     parentRoot: Uint8Array;
     stateRoot: Uint8Array;
     bodyRoot: Uint8Array;
@@ -49,11 +49,11 @@ type SSZSerializedExecutionPayloadHeader = {
     receiptsRoot: Uint8Array;
     logsBloom: Uint8Array;
     prevRandao: Uint8Array;
-    blockNumber: bigint;
-    gasLimit: bigint;
-    gasUsed: bigint;
-    timestamp: bigint;
-    extraDataLength: bigint;
+    blockNumber: number;
+    gasLimit: number;
+    gasUsed: number;
+    timestamp: number;
+    extraDataLength: number;
     baseFeePerGas: bigint;
     blockHash: Uint8Array;
     transactionsRoot: Uint8Array;
@@ -83,7 +83,7 @@ type SSZSerializedLightClientUpdate = {
     finalizedHeader: SSZSerializedLightClientHeader;
     finalityBranch: Uint8Array[];
     syncAggregate: SSZSerializedSyncAggregate;
-    signatureSlot: bigint;
+    signatureSlot: number;
 };
 
 type SSZSerializedLightClientBootstrap = {
@@ -97,8 +97,8 @@ type SSZSerializedLightClientState = {
     currentSyncCommittee: SSZSerializedSyncCommittee;
     nextSyncCommittee: SSZSerializedSyncCommittee;
     finalizedHeader: SSZSerializedLightClientHeader;
-    period: bigint;
-    previousSlot: bigint;
+    period: number;
+    previousSlot: number;
 };
 
 const UINT64 = new UintNumberType(8);
@@ -213,8 +213,8 @@ export interface SSZModule {
 function convertHeaderToSSZ(header: LightClientHeader): SSZSerializedLightClientHeader {
     return {
         beacon: {
-            slot: BigInt(header.beacon.slot),
-            proposerIndex: BigInt(header.beacon.proposerIndex),
+            slot: header.beacon.slot,
+            proposerIndex: header.beacon.proposerIndex,
             parentRoot: hexToBytes(header.beacon.parentRoot),
             stateRoot: hexToBytes(header.beacon.stateRoot),
             bodyRoot: hexToBytes(header.beacon.bodyRoot),
@@ -226,11 +226,11 @@ function convertHeaderToSSZ(header: LightClientHeader): SSZSerializedLightClient
             receiptsRoot: hexToBytes(header.execution.receiptsRoot),
             logsBloom: hexToBytes(header.execution.logsBloom),
             prevRandao: hexToBytes(header.execution.prevRandao),
-            blockNumber: BigInt(header.execution.blockNumber),
-            gasLimit: BigInt(header.execution.gasLimit),
-            gasUsed: BigInt(header.execution.gasUsed),
-            timestamp: BigInt(header.execution.timestamp),
-            extraDataLength: BigInt(0),
+            blockNumber: header.execution.blockNumber,
+            gasLimit: header.execution.gasLimit,
+            gasUsed: header.execution.gasUsed,
+            timestamp: header.execution.timestamp,
+            extraDataLength: 0,
             baseFeePerGas: header.execution.baseFeePerGas,
             blockHash: hexToBytes(header.execution.blockHash),
             transactionsRoot: hexToBytes(header.execution.transactionsRoot),
@@ -243,8 +243,8 @@ function convertHeaderToSSZ(header: LightClientHeader): SSZSerializedLightClient
 function convertHeaderFromSSZ(ssz: SSZSerializedLightClientHeader): LightClientHeader {
     return {
         beacon: {
-            slot: Number(ssz.beacon.slot),
-            proposerIndex: Number(ssz.beacon.proposerIndex),
+            slot: ssz.beacon.slot,
+            proposerIndex: ssz.beacon.proposerIndex,
             parentRoot: bytesToHex(ssz.beacon.parentRoot),
             stateRoot: bytesToHex(ssz.beacon.stateRoot),
             bodyRoot: bytesToHex(ssz.beacon.bodyRoot),
@@ -256,10 +256,10 @@ function convertHeaderFromSSZ(ssz: SSZSerializedLightClientHeader): LightClientH
             receiptsRoot: bytesToHex(ssz.execution.receiptsRoot),
             logsBloom: bytesToHex(ssz.execution.logsBloom),
             prevRandao: bytesToHex(ssz.execution.prevRandao),
-            blockNumber: Number(ssz.execution.blockNumber),
-            gasLimit: Number(ssz.execution.gasLimit),
-            gasUsed: Number(ssz.execution.gasUsed),
-            timestamp: Number(ssz.execution.timestamp),
+            blockNumber: ssz.execution.blockNumber,
+            gasLimit: ssz.execution.gasLimit,
+            gasUsed: ssz.execution.gasUsed,
+            timestamp: ssz.execution.timestamp,
             extraData: "0x",
             baseFeePerGas: ssz.execution.baseFeePerGas,
             blockHash: bytesToHex(ssz.execution.blockHash),
@@ -297,7 +297,7 @@ function convertUpdateToSSZ(update: LightClientUpdate): SSZSerializedLightClient
             syncCommitteeBits: update.syncAggregate.syncCommitteeBits,
             syncCommitteeSignature: hexToBytes(update.syncAggregate.syncCommitteeSignature),
         },
-        signatureSlot: BigInt(update.signatureSlot),
+        signatureSlot: update.signatureSlot,
     };
 }
 
@@ -315,7 +315,7 @@ function convertUpdateFromSSZ(ssz: SSZSerializedLightClientUpdate): LightClientU
             syncCommitteeBits: ssz.syncAggregate.syncCommitteeBits,
             syncCommitteeSignature: bytesToHex(ssz.syncAggregate.syncCommitteeSignature),
         },
-        signatureSlot: Number(ssz.signatureSlot),
+        signatureSlot: ssz.signatureSlot,
     };
 }
 
@@ -343,8 +343,8 @@ function convertStateToSSZ(state: LightClientState): SSZSerializedLightClientSta
         finalizedHeader: state.finalizedHeader
             ? convertHeaderToSSZ(state.finalizedHeader)
             : (LightClientHeaderType.defaultValue() as SSZSerializedLightClientHeader),
-        period: BigInt(state.period),
-        previousSlot: BigInt(state.previousSlot),
+        period: state.period,
+        previousSlot: state.previousSlot,
     };
 }
 
@@ -357,8 +357,8 @@ function convertStateFromSSZ(ssz: SSZSerializedLightClientState): LightClientSta
             ssz.finalizedHeader && "beacon" in ssz.finalizedHeader
                 ? convertHeaderFromSSZ(ssz.finalizedHeader)
                 : null,
-        period: Number(ssz.period),
-        previousSlot: Number(ssz.previousSlot),
+        period: ssz.period,
+        previousSlot: ssz.previousSlot,
     };
 }
 
@@ -367,8 +367,8 @@ export function createSSZModule(): SSZModule {
         BeaconBlockHeader: {
             serialize: (value: BeaconBlockHeader) => {
                 const sszValue: SSZSerializedBeaconBlockHeader = {
-                    slot: BigInt(value.slot),
-                    proposerIndex: BigInt(value.proposerIndex),
+                    slot: value.slot,
+                    proposerIndex: value.proposerIndex,
                     parentRoot: hexToBytes(value.parentRoot),
                     stateRoot: hexToBytes(value.stateRoot),
                     bodyRoot: hexToBytes(value.bodyRoot),
@@ -378,8 +378,8 @@ export function createSSZModule(): SSZModule {
             deserialize: (data: Uint8Array) => {
                 const value = BeaconBlockHeaderType.deserialize(data);
                 return {
-                    slot: Number(value.slot),
-                    proposerIndex: Number(value.proposerIndex),
+                    slot: value.slot,
+                    proposerIndex: value.proposerIndex,
                     parentRoot: bytesToHex(value.parentRoot),
                     stateRoot: bytesToHex(value.stateRoot),
                     bodyRoot: bytesToHex(value.bodyRoot),
@@ -387,8 +387,8 @@ export function createSSZModule(): SSZModule {
             },
             hashTreeRoot: (value: BeaconBlockHeader) => {
                 const sszValue: SSZSerializedBeaconBlockHeader = {
-                    slot: BigInt(value.slot),
-                    proposerIndex: BigInt(value.proposerIndex),
+                    slot: value.slot,
+                    proposerIndex: value.proposerIndex,
                     parentRoot: hexToBytes(value.parentRoot),
                     stateRoot: hexToBytes(value.stateRoot),
                     bodyRoot: hexToBytes(value.bodyRoot),
@@ -419,11 +419,11 @@ export function createSSZModule(): SSZModule {
                     receiptsRoot: hexToBytes(value.receiptsRoot),
                     logsBloom: hexToBytes(value.logsBloom),
                     prevRandao: hexToBytes(value.prevRandao),
-                    blockNumber: BigInt(value.blockNumber),
-                    gasLimit: BigInt(value.gasLimit),
-                    gasUsed: BigInt(value.gasUsed),
-                    timestamp: BigInt(value.timestamp),
-                    extraDataLength: BigInt(0),
+                    blockNumber: value.blockNumber,
+                    gasLimit: value.gasLimit,
+                    gasUsed: value.gasUsed,
+                    timestamp: value.timestamp,
+                    extraDataLength: 0,
                     baseFeePerGas: value.baseFeePerGas,
                     blockHash: hexToBytes(value.blockHash),
                     transactionsRoot: hexToBytes(value.transactionsRoot),
@@ -440,10 +440,10 @@ export function createSSZModule(): SSZModule {
                     receiptsRoot: bytesToHex(value.receiptsRoot),
                     logsBloom: bytesToHex(value.logsBloom),
                     prevRandao: bytesToHex(value.prevRandao),
-                    blockNumber: Number(value.blockNumber),
-                    gasLimit: Number(value.gasLimit),
-                    gasUsed: Number(value.gasUsed),
-                    timestamp: Number(value.timestamp),
+                    blockNumber: value.blockNumber,
+                    gasLimit: value.gasLimit,
+                    gasUsed: value.gasUsed,
+                    timestamp: value.timestamp,
                     extraData: "0x",
                     baseFeePerGas: value.baseFeePerGas,
                     blockHash: bytesToHex(value.blockHash),
@@ -459,11 +459,11 @@ export function createSSZModule(): SSZModule {
                     receiptsRoot: hexToBytes(value.receiptsRoot),
                     logsBloom: hexToBytes(value.logsBloom),
                     prevRandao: hexToBytes(value.prevRandao),
-                    blockNumber: BigInt(value.blockNumber),
-                    gasLimit: BigInt(value.gasLimit),
-                    gasUsed: BigInt(value.gasUsed),
-                    timestamp: BigInt(value.timestamp),
-                    extraDataLength: BigInt(0),
+                    blockNumber: value.blockNumber,
+                    gasLimit: value.gasLimit,
+                    gasUsed: value.gasUsed,
+                    timestamp: value.timestamp,
+                    extraDataLength: 0,
                     baseFeePerGas: value.baseFeePerGas,
                     blockHash: hexToBytes(value.blockHash),
                     transactionsRoot: hexToBytes(value.transactionsRoot),

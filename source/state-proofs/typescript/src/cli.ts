@@ -25,6 +25,8 @@ import {
     fetchTransactionReceipt,
 } from "./index";
 
+import { type Block } from "./types";
+
 import {
     initLightClient,
     syncLightClient,

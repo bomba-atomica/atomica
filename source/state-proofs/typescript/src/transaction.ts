@@ -42,7 +42,7 @@ export async function verifyTransactionProof(
             throw new Error(`Transaction indices are not sequential. Expected ${i}, got ${index}`);
         }
 
-        const key = Buffer.from((RLP.encode)(index));
+        const key = Buffer.from(RLP.encode(index));
         const value = encodeTransaction(tx);
 
         await trie.put(key, value);
@@ -56,7 +56,7 @@ export async function verifyTransactionProof(
 }
 
 export function encodeTransaction(tx: Transaction): Uint8Array {
-    const rlp = RLP as unknown;
+    const rlp = RLP as { encode: (data: unknown[]) => Uint8Array };
     const txType = tx.type ? parseInt(tx.type, 16) : 0;
 
     if (txType === 2) {
@@ -89,7 +89,7 @@ export function encodeTransaction(tx: Transaction): Uint8Array {
             v,
             r,
             s,
-        ]);
+        ]) as Buffer;
         const result = new Uint8Array(payload.length + 1);
         result[0] = 0x02;
         result.set(payload, 1);
@@ -121,7 +121,7 @@ export function encodeTransaction(tx: Transaction): Uint8Array {
             v,
             r,
             s,
-        ]);
+        ]) as Buffer;
         const result = new Uint8Array(payload.length + 1);
         result[0] = 0x01;
         result.set(payload, 1);
@@ -139,7 +139,7 @@ export function encodeTransaction(tx: Transaction): Uint8Array {
         const v = Buffer.from(tx.v.replace("0x", ""), "hex");
         const r = Buffer.from(tx.r.replace("0x", ""), "hex");
         const s = Buffer.from(tx.s.replace("0x", ""), "hex");
-        return rlp.encode([nonce, gasPrice, gasLimit, to, value, data, v, r, s]);
+        return rlp.encode([nonce, gasPrice, gasLimit, to, value, data, v, r, s]) as Buffer;
     }
-    return rlp.encode([nonce, gasPrice, gasLimit, to, value, data]);
+    return rlp.encode([nonce, gasPrice, gasLimit, to, value, data]) as Buffer;
 }

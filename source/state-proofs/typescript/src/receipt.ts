@@ -41,7 +41,7 @@ export async function verifyReceiptProof(
             throw new Error(`Receipt indices are not sequential. Expected ${i}, got ${index}`);
         }
 
-        const key = Buffer.from((RLP.encode (index));
+        const key = Buffer.from(RLP.encode(index));
         const value = encodeReceipt(r);
 
         await trie.put(key, value);
@@ -84,7 +84,7 @@ export function encodeReceipt(receipt: Receipt): Buffer {
     ]);
 
     const receiptData = [statusOrRoot, cumulativeGas, bloom, logs];
-    const encoded = Buffer.from((RLP.encode (receiptData));
+    const encoded = Buffer.from(RLP.encode(receiptData));
 
     if (receipt.type && receipt.type !== "0x0" && receipt.type !== "0x00") {
         const typeInt = parseInt(receipt.type, 16);
