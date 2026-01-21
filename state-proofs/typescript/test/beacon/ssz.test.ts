@@ -78,7 +78,7 @@ const createMockUpdate = (slot: number): LightClientUpdate => ({
 describe("SSZ Module", () => {
     describe("createSSZModule", () => {
         test("should throw not implemented error", () => {
-            expect(() => createSSZModule()).toThrow("Not implemented - @chainsafe/ssz not installed");
+            expect(() => createSSZModule()).toThrow("Not implemented - @chainsafe/ssz has Bun compatibility issues");
         });
     });
 
@@ -86,7 +86,7 @@ describe("SSZ Module", () => {
         test("should throw not implemented error", () => {
             const update = createMockUpdate(100);
             expect(() => serializeSSZ(update, "LightClientUpdate")).toThrow(
-                "Not implemented - @chainsafe/ssz not installed",
+                "Not implemented - @chainsafe/ssz has Bun compatibility issues",
             );
         });
     });
@@ -95,7 +95,7 @@ describe("SSZ Module", () => {
         test("should throw not implemented error", () => {
             const data = new Uint8Array(100);
             expect(() => deserializeSSZ<LightClientUpdate>(data, "LightClientUpdate")).toThrow(
-                "Not implemented - @chainsafe/ssz not installed",
+                "Not implemented - @chainsafe/ssz has Bun compatibility issues",
             );
         });
     });
@@ -104,7 +104,7 @@ describe("SSZ Module", () => {
         test("should throw not implemented error", () => {
             const header = createMockHeader(100);
             expect(() => hashTreeRoot(header, "LightClientHeader")).toThrow(
-                "Not implemented - @chainsafe/ssz not installed",
+                "Not implemented - @chainsafe/ssz has Bun compatibility issues",
             );
         });
     });
@@ -115,7 +115,7 @@ describe("SSZ Module", () => {
             const proof = Array(10).fill(null).map((_, i) => new Uint8Array(32).fill(i));
             const leaf = new Uint8Array(32).fill(0xab);
             expect(() => verifyMerkleProof(root, proof, 0, leaf)).toThrow(
-                "Not implemented - @chainsafe/ssz not installed",
+                "Not implemented - @chainsafe/ssz has Bun compatibility issues",
             );
         });
     });
@@ -123,21 +123,21 @@ describe("SSZ Module", () => {
     describe("merkleize", () => {
         test("should throw not implemented error", () => {
             const values = Array(4).fill(null).map((_, i) => new Uint8Array(32).fill(i));
-            expect(() => merkleize(values)).toThrow("Not implemented - @chainsafe/ssz not installed");
+            expect(() => merkleize(values)).toThrow("Not implemented - @chainsafe/ssz has Bun compatibility issues");
         });
     });
 
     describe("mixInLength", () => {
         test("should throw not implemented error", () => {
             const value = new Uint8Array(32).fill(0xab);
-            expect(() => mixInLength(value, 100)).toThrow("Not implemented - @chainsafe/ssz not installed");
+            expect(() => mixInLength(value, 100)).toThrow("Not implemented - @chainsafe/ssz has Bun compatibility issues");
         });
     });
 
     describe("getGeneralizedIndex", () => {
         test("should throw not implemented error", () => {
             expect(() => getGeneralizedIndex("LightClientUpdate", "finalizedHeader")).toThrow(
-                "Not implemented - @chainsafe/ssz not installed",
+                "Not implemented - @chainsafe/ssz has Bun compatibility issues",
             );
         });
     });
@@ -146,7 +146,7 @@ describe("SSZ Module", () => {
         test("should throw not implemented error", () => {
             const update = createMockUpdate(100);
             expect(() => serializeLightClientUpdate(update)).toThrow(
-                "Not implemented - @chainsafe/ssz not installed",
+                "Not implemented - @chainsafe/ssz has Bun compatibility issues",
             );
         });
     });
@@ -155,7 +155,7 @@ describe("SSZ Module", () => {
         test("should throw not implemented error", () => {
             const data = new Uint8Array(100);
             expect(() => deserializeLightClientUpdate(data)).toThrow(
-                "Not implemented - @chainsafe/ssz not installed",
+                "Not implemented - @chainsafe/ssz has Bun compatibility issues",
             );
         });
     });
@@ -168,7 +168,7 @@ describe("SSZ Module", () => {
                 currentSyncCommitteeBranch: Array(4).fill(null).map((_, i) => "0x" + (i + 1).toString(16).padStart(64, "0")),
             };
             expect(() => serializeLightClientBootstrap(bootstrap)).toThrow(
-                "Not implemented - @chainsafe/ssz not installed",
+                "Not implemented - @chainsafe/ssz has Bun compatibility issues",
             );
         });
     });
@@ -177,7 +177,7 @@ describe("SSZ Module", () => {
         test("should throw not implemented error", () => {
             const data = new Uint8Array(100);
             expect(() => deserializeLightClientBootstrap(data)).toThrow(
-                "Not implemented - @chainsafe/ssz not installed",
+                "Not implemented - @chainsafe/ssz has Bun compatibility issues",
             );
         });
     });
@@ -193,7 +193,7 @@ describe("SSZ Module", () => {
                 previousSlot: 100,
             };
             expect(() => serializeLightClientState(state)).toThrow(
-                "Not implemented - @chainsafe/ssz not installed",
+                "Not implemented - @chainsafe/ssz has Bun compatibility issues",
             );
         });
     });
@@ -202,7 +202,7 @@ describe("SSZ Module", () => {
         test("should throw not implemented error", () => {
             const data = new Uint8Array(100);
             expect(() => deserializeLightClientState(data)).toThrow(
-                "Not implemented - @chainsafe/ssz not installed",
+                "Not implemented - @chainsafe/ssz has Bun compatibility issues",
             );
         });
     });
@@ -212,14 +212,14 @@ describe("SSZ Module", () => {
             const forkVersion = Uint8Array.from([0x01, 0x00, 0x00, 0x00]);
             const domainType = Uint8Array.from([0x03, 0x00, 0x00, 0x00]);
             expect(() => computeSigningDomain(forkVersion, domainType)).toThrow(
-                "Not implemented - @chainsafe/ssz not installed",
+                "Not implemented - @chainsafe/ssz has Bun compatibility issues",
             );
         });
     });
 
     describe("computeSyncPeriod", () => {
         test("should throw not implemented error", () => {
-            expect(() => computeSyncPeriod(100)).toThrow("Not implemented - @chainsafe/ssz not installed");
+            expect(() => computeSyncPeriod(100)).toThrow("Not implemented - @chainsafe/ssz has Bun compatibility issues");
         });
     });
 });

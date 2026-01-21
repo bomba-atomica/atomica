@@ -60,10 +60,13 @@ export interface SSZModule {
  * LightClientHeader, ExecutionPayloadHeader, SyncCommittee, SyncAggregate,
  * LightClientUpdate, LightClientBootstrap, and LightClientState encoders.
  *
+ * Note: @chainsafe/ssz has Bun compatibility issues with ContainerType serialization.
+ * This implementation is pending resolution of https://github.com/ChainSafe/ssz/issues
+ *
  * @throws Error if the SSZ module cannot be initialized
  */
 export function createSSZModule(): SSZModule {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -75,7 +78,7 @@ export function createSSZModule(): SSZModule {
  * @throws Error if serialization fails
  */
 export function serializeSSZ<T>(_value: T, _typeName: string): Uint8Array {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -87,7 +90,7 @@ export function serializeSSZ<T>(_value: T, _typeName: string): Uint8Array {
  * @throws Error if deserialization fails
  */
 export function deserializeSSZ<T>(_data: Uint8Array, _typeName: string): T {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -99,7 +102,7 @@ export function deserializeSSZ<T>(_data: Uint8Array, _typeName: string): T {
  * @throws Error if hashing fails
  */
 export function hashTreeRoot<T>(_value: T, _typeName: string): Uint8Array {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -117,7 +120,7 @@ export function verifyMerkleProof(
     _index: number,
     _leaf: Uint8Array,
 ): boolean {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -128,7 +131,7 @@ export function verifyMerkleProof(
  * @returns The merkle root
  */
 export function merkleize(_values: Uint8Array[], _chunkSize?: number): Uint8Array {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -139,7 +142,7 @@ export function merkleize(_values: Uint8Array[], _chunkSize?: number): Uint8Arra
  * @returns The length-mixed value
  */
 export function mixInLength(_value: Uint8Array, _length: number): Uint8Array {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -150,7 +153,7 @@ export function mixInLength(_value: Uint8Array, _length: number): Uint8Array {
  * @returns The generalized index
  */
 export function getGeneralizedIndex(_containerType: string, _fieldName: string): number {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -160,7 +163,7 @@ export function getGeneralizedIndex(_containerType: string, _fieldName: string):
  * @returns The serialized Uint8Array
  */
 export function serializeLightClientUpdate(_update: LightClientUpdate): Uint8Array {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -170,7 +173,7 @@ export function serializeLightClientUpdate(_update: LightClientUpdate): Uint8Arr
  * @returns The decoded update
  */
 export function deserializeLightClientUpdate(_data: Uint8Array): LightClientUpdate {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -180,7 +183,7 @@ export function deserializeLightClientUpdate(_data: Uint8Array): LightClientUpda
  * @returns The serialized Uint8Array
  */
 export function serializeLightClientBootstrap(_bootstrap: LightClientBootstrap): Uint8Array {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -190,7 +193,7 @@ export function serializeLightClientBootstrap(_bootstrap: LightClientBootstrap):
  * @returns The decoded bootstrap
  */
 export function deserializeLightClientBootstrap(_data: Uint8Array): LightClientBootstrap {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -200,7 +203,7 @@ export function deserializeLightClientBootstrap(_data: Uint8Array): LightClientB
  * @returns The serialized Uint8Array
  */
 export function serializeLightClientState(_state: LightClientState): Uint8Array {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -210,7 +213,7 @@ export function serializeLightClientState(_state: LightClientState): Uint8Array 
  * @returns The decoded state
  */
 export function deserializeLightClientState(_data: Uint8Array): LightClientState {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -224,7 +227,7 @@ export function computeSigningDomain(
     _forkVersion: Uint8Array,
     _domainType: Uint8Array,
 ): Uint8Array {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }
 
 /**
@@ -234,5 +237,5 @@ export function computeSigningDomain(
  * @returns The sync committee period
  */
 export function computeSyncPeriod(_slot: number): number {
-    throw new Error("Not implemented - @chainsafe/ssz not installed");
+    throw new Error("Not implemented - @chainsafe/ssz has Bun compatibility issues with ContainerType");
 }

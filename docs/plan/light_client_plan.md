@@ -147,14 +147,14 @@ interface LightClientUpdate {
 | Docker testnet SDK | DONE |
 | Transaction encoding | DONE |
 | CLI Integration | DONE |
-| **SSZ encoding/decoding** | **PENDING** |
+| **SSZ encoding/decoding** | **BLOCKED** |
 | State persistence | DONE |
 
 ### Remaining Tasks
 
 | Priority | Task |
 |----------|-------|
-| HIGH | **SSZ encoding/decoding** - Add proper SSZ serialization for beacon types |
+| HIGH | **SSZ encoding/decoding** - BLOCKED: @chainsafe/ssz has Bun compatibility issues |
 | MEDIUM | **Full integration test** - Test with real beacon API (not invalid URLs) |
 | LOW | **Performance testing** - Benchmark verification time |
 
@@ -262,7 +262,21 @@ Implement proper SSZ (Simple Serialize) encoding and decoding for Ethereum beaco
 
 #### Library Choice
 - **@chainsafe/ssz**: Officially maintained, supports all beacon types
-- Alternative: Custom implementation (rejected - complex and error-prone)
+- Alternative: Custom SSZ implementation (blocked on Bun compatibility)
+
+#### ⚠️ BLOCKED: Bun Compatibility Issue
+
+**Issue**: @chainsafe/ssz v1.3.0 and v0.9.4 have a critical bug when running on Bun runtime:
+- ContainerType serialization fails with "fieldType.value_serializeToBytes is not a function"
+- Basic types (ByteVectorType, UintNumberType) work correctly
+- The issue is specific to ContainerType field serialization
+
+**Workarounds**:
+1. Use Node.js runtime instead of Bun for SSZ operations
+2. Implement custom SSZ encoding/decoding for beacon types
+3. Use a different SSZ library (e.g., eth2-types or manual implementation)
+
+**Reference**: https://github.com/ChainSafe/ssz/issues (to be filed)
 
 #### Types to Implement
 
@@ -318,21 +332,22 @@ interface SSZModule {
 
 | Subtask | Status |
 |---------|--------|
-| Install @chainsafe/ssz | PENDING |
-| Create src/beacon/ssz.ts module | PENDING |
-| Implement BeaconBlockHeader SSZ | PENDING |
-| Implement LightClientHeader SSZ | PENDING |
-| Implement SyncCommittee SSZ | PENDING |
-| Implement LightClientUpdate SSZ | PENDING |
-| Implement LightClientBootstrap SSZ | PENDING |
-| Implement merkleization utilities | PENDING |
-| Create unit tests | PENDING |
+| Install @chainsafe/ssz | BLOCKED |
+| Create src/beacon/ssz.ts module | DONE |
+| Implement BeaconBlockHeader SSZ | BLOCKED |
+| Implement LightClientHeader SSZ | BLOCKED |
+| Implement SyncCommittee SSZ | BLOCKED |
+| Implement LightClientUpdate SSZ | BLOCKED |
+| Implement LightClientBootstrap SSZ | BLOCKED |
+| Implement merkleization utilities | BLOCKED |
+| Create unit tests | DONE |
 | Integration test with beacon API | PENDING |
 
 ### Risk Assessment
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
+| **Bun compatibility issue** | HIGH | HIGH | Workaround: use Node.js runtime or implement custom SSZ |
 | Library version incompatibility | Low | High | Pin to specific version, test with multiple beacon chain versions |
 | Complex type interactions | Medium | Medium | Start with simple types, build incrementally |
 | Performance overhead | Medium | Medium | Benchmark and optimize critical paths |
