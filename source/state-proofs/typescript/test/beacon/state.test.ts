@@ -16,6 +16,7 @@ import {
     loadState,
     clearState,
 } from "../../src/beacon/state";
+
 import { promises as fs } from "fs";
 import * as _path from "path";
 
@@ -108,17 +109,30 @@ describe("Light Client State", () => {
     });
 
     describe("isUpdateNewer", () => {
-        test("should throw not implemented error", () => {
-            expect(() =>
-                isUpdateNewer(createMockUpdate(200), {
-                    header: createMockHeader(100),
-                    currentSyncCommittee: createMockSyncCommittee(0),
-                    nextSyncCommittee: createMockSyncCommittee(1),
-                    finalizedHeader: null,
-                    period: 0,
-                    previousSlot: 100,
-                }),
-            ).toThrow("Not implemented");
+        test("should return true if update is newer than state", () => {
+            const state: LightClientState = {
+                header: createMockHeader(100),
+                currentSyncCommittee: createMockSyncCommittee(0),
+                nextSyncCommittee: createMockSyncCommittee(1),
+                finalizedHeader: null,
+                period: 0,
+                previousSlot: 100,
+            };
+            const update = createMockUpdate(101);
+            expect(isUpdateNewer(update, state)).toBe(true);
+        });
+
+        test("should return false if update is older or same", () => {
+            const state: LightClientState = {
+                header: createMockHeader(100),
+                currentSyncCommittee: createMockSyncCommittee(0),
+                nextSyncCommittee: createMockSyncCommittee(1),
+                finalizedHeader: null,
+                period: 0,
+                previousSlot: 100,
+            };
+            const update = createMockUpdate(100);
+            expect(isUpdateNewer(update, state)).toBe(false);
         });
     });
 
