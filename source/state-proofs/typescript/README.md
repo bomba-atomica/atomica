@@ -289,7 +289,7 @@ const result = await verifyAccountProof(
 
 ```bash
 git clone https://github.com/atomica/atomica
-cd atomica/state-proofs/typescript
+cd atomica/source/state-proofs/typescript
 bun install
 ```
 

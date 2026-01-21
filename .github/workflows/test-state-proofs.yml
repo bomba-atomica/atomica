@@ -4,11 +4,11 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'state-proofs/typescript/**'
+      - 'source/state-proofs/typescript/**'
       - 'source/docker-testnet/ethereum-testnet/typescript-sdk/**'
   pull_request:
     paths:
-      - 'state-proofs/typescript/**'
+      - 'source/state-proofs/typescript/**'
       - 'source/docker-testnet/ethereum-testnet/typescript-sdk/**'
 
 jobs:
@@ -25,10 +25,10 @@ jobs:
         working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
         run: bun run build
       - name: Install Verifier dependencies
-        working-directory: state-proofs/typescript
+        working-directory: source/state-proofs/typescript
         run: bun install
       - name: Run Lint
-        working-directory: state-proofs/typescript
+        working-directory: source/state-proofs/typescript
         run: bun run lint
 
   format:
@@ -37,15 +37,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - name: Install dependencies
-        working-directory: state-proofs/typescript
+        working-directory: source/state-proofs/typescript
         run: bun install
       - name: Check Formatting
-        working-directory: state-proofs/typescript
+        working-directory: source/state-proofs/typescript
         run: bun run format:check
 
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       
@@ -62,15 +61,15 @@ jobs:
         run: bun run build
 
       - name: Install Verifier dependencies
-        working-directory: state-proofs/typescript
+        working-directory: source/state-proofs/typescript
         run: bun install
 
       - name: Build Verifier
-        working-directory: state-proofs/typescript
+        working-directory: source/state-proofs/typescript
         run: bun run build
 
       - name: Run Tests
-        working-directory: state-proofs/typescript
+        working-directory: source/state-proofs/typescript
         # This runs all tests including integration tests which spin up Docker
         run: bun test
         env:

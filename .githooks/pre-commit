@@ -1,0 +1,26 @@
+#!/bin/bash
+# Git pre-commit hook for Atomica
+# Runs build, lint, and format tests for the state-proof module
+
+set -e
+
+# Get the root of the repository
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+echo "🔍 Running pre-commit checks for state-proof module..."
+
+# 1. Build SDK (Required dependency for state-proofs)
+echo "📦 Building SDK..."
+cd "$REPO_ROOT/source/docker-testnet/ethereum-testnet/typescript-sdk"
+# We assume 'bun install' has been run by the developer, but we run build to ensure dist is up to date
+bun run build
+
+# 2. Run checks in source/state-proofs/typescript
+echo "🧪 Running lint, format, and build in source/state-proofs/typescript..."
+cd "$REPO_ROOT/source/state-proofs/typescript"
+bun run lint
+bun run format:check
+bun run build
+
+echo "✅ Pre-commit checks passed!"
+exit 0

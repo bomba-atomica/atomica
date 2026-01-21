@@ -4,7 +4,13 @@
  * Provides utilities for integrating light client verification into CLI commands.
  */
 
-import type { LightClientState, LightClientUpdate, LightClientHeader, SyncCommittee, LightClientStore } from "./types";
+import type {
+    LightClientState,
+    LightClientUpdate,
+    LightClientHeader,
+    SyncCommittee,
+    LightClientStore,
+} from "./types";
 
 import {
     fetchLightClientBootstrap,
@@ -13,17 +19,8 @@ import {
     BEACON_CONFIGS,
     computeSyncCommitteePeriod,
 } from "./fetch";
-import {
-    initializeLightClient,
-    processLightClientUpdate,
-    getTrustedStateRoots,
-} from "./sync";
-import {
-    isUpdateNewer,
-    saveState,
-    loadState,
-    clearState,
-} from "./state";
+import { initializeLightClient, processLightClientUpdate, getTrustedStateRoots } from "./sync";
+import { isUpdateNewer, saveState, loadState, clearState } from "./state";
 
 export interface LightClientConfig {
     /** Beacon API URL */
@@ -77,7 +74,9 @@ export async function initLightClient(config: LightClientConfig): Promise<LightC
     if (loadedStore) {
         if (config.verbose) {
             console.log(`[LightClient] Loaded persisted state`);
-            console.log(`[LightClient] Current period: ${loadedStore.state.period}, Slot: ${loadedStore.state.header.beacon.slot}`);
+            console.log(
+                `[LightClient] Current period: ${loadedStore.state.period}, Slot: ${loadedStore.state.header.beacon.slot}`,
+            );
         }
         return loadedStore.state;
     }
@@ -89,7 +88,8 @@ export async function initLightClient(config: LightClientConfig): Promise<LightC
 
     const bootstrap = await fetchLightClientBootstrap(
         config.beaconApiUrl,
-        config.checkpointRoot || "0x0000000000000000000000000000000000000000000000000000000000000000",
+        config.checkpointRoot ||
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
     );
 
     if (!bootstrap || !bootstrap.header) {
@@ -103,11 +103,7 @@ export async function initLightClient(config: LightClientConfig): Promise<LightC
         console.log(`[LightClient] Slot: ${bootstrap.header.beacon.slot}, Period: ${period}`);
     }
 
-    const state = initializeLightClient(
-        bootstrap.header,
-        bootstrap.currentSyncCommittee,
-        period,
-    );
+    const state = initializeLightClient(bootstrap.header, bootstrap.currentSyncCommittee, period);
 
     const store: LightClientStore = {
         state,
@@ -149,11 +145,17 @@ export async function syncLightClient(
 
         if (finalityUpdate && isUpdateNewer(finalityUpdate, currentState)) {
             if (config.verbose) {
-                console.log(`[LightClient] Processing finality update (slot: ${finalityUpdate.attestedHeader.beacon.slot})`);
+                console.log(
+                    `[LightClient] Processing finality update (slot: ${finalityUpdate.attestedHeader.beacon.slot})`,
+                );
             }
 
             const isFinalized = !!finalityUpdate.finalizedHeader;
-            currentState = await processLightClientUpdate(currentState, finalityUpdate, isFinalized);
+            currentState = await processLightClientUpdate(
+                currentState,
+                finalityUpdate,
+                isFinalized,
+            );
             synced = true;
         }
     } catch (error) {
@@ -167,7 +169,9 @@ export async function syncLightClient(
 
     if (currentState.period < currentPeriod) {
         if (config.verbose) {
-            console.log(`[LightClient] Syncing from period ${currentState.period} to ${currentPeriod}...`);
+            console.log(
+                `[LightClient] Syncing from period ${currentState.period} to ${currentPeriod}...`,
+            );
         }
 
         try {
@@ -180,11 +184,17 @@ export async function syncLightClient(
             for (const update of updates) {
                 if (isUpdateNewer(update, currentState)) {
                     const isFinalized = !!update.finalizedHeader;
-                    currentState = await processLightClientUpdate(currentState, update, isFinalized);
+                    currentState = await processLightClientUpdate(
+                        currentState,
+                        update,
+                        isFinalized,
+                    );
                     synced = true;
 
                     if (config.verbose) {
-                        console.log(`[LightClient] Processed update for period ${currentState.period}`);
+                        console.log(
+                            `[LightClient] Processed update for period ${currentState.period}`,
+                        );
                     }
                 }
             }

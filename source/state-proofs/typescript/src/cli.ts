@@ -318,7 +318,8 @@ async function verifyTransferCommand(args: CliArgs) {
         process.exit(1);
     }
 
-    let trustedRoots: { stateRoot: string; transactionsRoot: string; receiptsRoot: string } | null = null;
+    let trustedRoots: { stateRoot: string; transactionsRoot: string; receiptsRoot: string } | null =
+        null;
     let lightClientVerified = false;
     let blockData: any;
 
@@ -327,7 +328,10 @@ async function verifyTransferCommand(args: CliArgs) {
             console.log("Fetching transaction details...");
             console.log("  RPC:", rpcUrl);
             console.log("  TxHash:", txHash);
-            console.log("  Light Client Mode:", useLightClient ? "Enabled" : "Disabled (RPC trust required)");
+            console.log(
+                "  Light Client Mode:",
+                useLightClient ? "Enabled" : "Disabled (RPC trust required)",
+            );
         }
 
         // 1. Fetch receipt to get block number and status
@@ -402,9 +406,18 @@ async function verifyTransferCommand(args: CliArgs) {
                 if (args.options.verbose) {
                     console.log("\n[Light Client] ✓ Block header verified by sync committee");
                     if (trustedRoots) {
-                        console.log("  Trusted State Root:      ", trustedRoots.stateRoot.slice(0, 30) + "...");
-                        console.log("  Trusted TransactionsRoot:", trustedRoots.transactionsRoot.slice(0, 30) + "...");
-                        console.log("  Trusted ReceiptsRoot:    ", trustedRoots.receiptsRoot.slice(0, 30) + "...");
+                        console.log(
+                            "  Trusted State Root:      ",
+                            trustedRoots.stateRoot.slice(0, 30) + "...",
+                        );
+                        console.log(
+                            "  Trusted TransactionsRoot:",
+                            trustedRoots.transactionsRoot.slice(0, 30) + "...",
+                        );
+                        console.log(
+                            "  Trusted ReceiptsRoot:    ",
+                            trustedRoots.receiptsRoot.slice(0, 30) + "...",
+                        );
                     }
                 }
             }

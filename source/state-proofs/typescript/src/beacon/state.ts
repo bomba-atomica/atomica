@@ -78,7 +78,7 @@ export async function saveState(store: LightClientStore, configPath?: string): P
     try {
         await fs.mkdir(stateDir, { recursive: true });
         const data = JSON.stringify(store, (_key, value) =>
-            typeof value === "bigint" ? value.toString() : value
+            typeof value === "bigint" ? value.toString() : value,
         );
         await fs.writeFile(statePath, data, "utf-8");
     } catch (error) {

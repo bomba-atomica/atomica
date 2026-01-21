@@ -17,7 +17,8 @@
     "lint:fix": "eslint 'src/**/*.ts' 'test/**/*.ts' --fix",
     "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
     "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.ts'",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "bun run build",
+    "prepare": "../../../scripts/install-hooks.sh"
   },
   "keywords": [
     "ethereum",
@@ -41,7 +42,7 @@
     "viem": "^2.0.0"
   },
   "devDependencies": {
-    "@atomica/ethereum-docker-testnet": "file:../../source/docker-testnet/ethereum-testnet/typescript-sdk",
+    "@atomica/ethereum-docker-testnet": "file:../../docker-testnet/ethereum-testnet/typescript-sdk",
     "@ethereumjs/tx": "^10.1.0",
     "@types/node": "^20.8.2",
     "@typescript-eslint/eslint-plugin": "^8.53.1",
@@ -61,10 +62,10 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/atomica/atomica.git",
-    "directory": "state-proofs/typescript"
+    "directory": "source/state-proofs/typescript"
   },
   "bugs": {
     "url": "https://github.com/atomica/atomica/issues"
   },
-  "homepage": "https://github.com/atomica/atomica/tree/main/state-proofs/typescript#readme"
+  "homepage": "https://github.com/atomica/atomica/tree/main/source/state-proofs/typescript#readme"
 }

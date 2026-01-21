@@ -33,7 +33,7 @@
 | 4. Receipt Logic | ✅ Complete | Client-side MPT reconstruction for Receipts |
 | 5. CLI Update | ✅ Complete | Enhance `verify-transfer` to use new verifiers |
 
-**Current Location**: `state-proofs/typescript/beacon/`
+**Current Location**: `source/state-proofs/typescript/beacon/`
 - ✅ **Phase 1-3**: Complete - State proof verification working
 - 🚧 **Phase 4**: In Progress - Light Client Sync Protocol stubs created
 - ✅ **Tested**: Unit tests passing (integration tests need beacon node)
@@ -121,33 +121,34 @@ This addresses Requirement 3: "Validator set change (new public keys)".
 
 ## Directory Structure
 
-**Approach**: Standalone CLI tool with library at `state-proofs/typescript`
+**Approach**: Standalone CLI tool with library at `source/state-proofs/typescript`
 
 ```
-state-proofs/
-  typescript/
-    src/
-      index.ts         # Public API exports (fetcher + verifier)
-      types.ts         # Type definitions (AccountProof, StorageProof, etc.)
-      fetcher.ts       # RPC client - fetch proofs from any Ethereum node
-      verifier.ts      # High-level verification functions
-      mpt.ts           # Core MPT verification logic
-      cli.ts           # CLI commands and argument parsing
-      transaction.ts   # Tx verification logic (Phase 3)
-      receipt.ts       # Receipt verification logic (Phase 3)
-    test/
-      fetcher.test.ts            # Unit tests for RPC fetching
-      verifier.test.ts           # Unit tests for verification logic
-      mpt.test.ts                # Unit tests for MPT functions
-      transaction.test.ts        # Unit tests for Tx verification
-      receipt.test.ts            # Unit tests for Receipt verification
-      integration.test.ts        # Integration tests with live testnet
-      helpers/
-        testnet.ts               # Testnet lifecycle (uses ethereum-docker-testnet)
-    docs/
-      API.md                     # Detailed API documentation
-      ARCHITECTURE.md            # MPT verification architecture
-    package.json                 # Dependencies: viem, @ethereumjs/*
-    tsconfig.json                # TypeScript configuration
-    README.md                    # Usage, installation, examples
+source/
+  state-proofs/
+    typescript/
+      src/
+        index.ts         # Public API exports (fetcher + verifier)
+        types.ts         # Type definitions (AccountProof, StorageProof, etc.)
+        fetcher.ts       # RPC client - fetch proofs from any Ethereum node
+        verifier.ts      # High-level verification functions
+        mpt.ts           # Core MPT verification logic
+        cli.ts           # CLI commands and argument parsing
+        transaction.ts   # Tx verification logic (Phase 3)
+        receipt.ts       # Receipt verification logic (Phase 3)
+      test/
+        fetcher.test.ts            # Unit tests for RPC fetching
+        verifier.test.ts           # Unit tests for verification logic
+        mpt.test.ts                # Unit tests for MPT functions
+        transaction.test.ts        # Unit tests for Tx verification
+        receipt.test.ts            # Unit tests for Receipt verification
+        integration.test.ts        # Integration tests with live testnet
+        helpers/
+          testnet.ts               # Testnet lifecycle (uses ethereum-docker-testnet)
+      docs/
+        API.md                     # Detailed API documentation
+        ARCHITECTURE.md            # MPT verification architecture
+      package.json                 # Dependencies: viem, @ethereumjs/*
+      tsconfig.json                # TypeScript configuration
+      README.md                    # Usage, installation, examples
 ```

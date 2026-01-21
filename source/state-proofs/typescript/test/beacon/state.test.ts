@@ -1,5 +1,10 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import type { LightClientState, LightClientUpdate, SyncCommittee, LightClientStore } from "../../dist/beacon/types";
+import type {
+    LightClientState,
+    LightClientUpdate,
+    SyncCommittee,
+    LightClientStore,
+} from "../../dist/beacon/types";
 import {
     createInitialState,
     updateState,
@@ -70,6 +75,7 @@ describe("Light Client State", () => {
         try {
             await fs.unlink(testStatePath);
         } catch {
+            // Ignore if file does not exist
         }
     });
 
@@ -77,6 +83,7 @@ describe("Light Client State", () => {
         try {
             await fs.unlink(testStatePath);
         } catch {
+            // Ignore if file does not exist
         }
     });
 
@@ -169,7 +176,10 @@ describe("Light Client State", () => {
                 lastUpdated: Date.now(),
             };
             await saveState(store, testStatePath);
-            const exists = await fs.access(testStatePath).then(() => true).catch(() => false);
+            const exists = await fs
+                .access(testStatePath)
+                .then(() => true)
+                .catch(() => false);
             expect(exists).toBe(true);
         });
     });
@@ -194,7 +204,10 @@ describe("Light Client State", () => {
     describe("clearState", () => {
         test("should clear state file", async () => {
             await clearState(testStatePath);
-            const exists = await fs.access(testStatePath).then(() => true).catch(() => false);
+            const exists = await fs
+                .access(testStatePath)
+                .then(() => true)
+                .catch(() => false);
             expect(exists).toBe(false);
         });
 

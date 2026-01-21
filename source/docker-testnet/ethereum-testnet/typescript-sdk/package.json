@@ -7,7 +7,8 @@
     "scripts": {
         "build": "tsc",
         "test": "bun test",
-        "clean": "rm -rf dist"
+        "clean": "rm -rf dist",
+        "prepare": "../../../../scripts/install-hooks.sh"
     },
     "dependencies": {
         "dotenv": "^16.3.1"
