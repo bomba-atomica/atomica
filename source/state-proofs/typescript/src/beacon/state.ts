@@ -40,8 +40,8 @@ export function updateState(
 /**
  * Check if update is newer than current state
  */
-export function isUpdateNewer(_update: LightClientUpdate, _current: LightClientState): boolean {
-    throw new Error("Not implemented");
+export function isUpdateNewer(update: LightClientUpdate, current: LightClientState): boolean {
+    return update.attestedHeader.beacon.slot > current.header.beacon.slot;
 }
 
 /**

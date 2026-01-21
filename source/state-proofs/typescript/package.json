@@ -12,6 +12,8 @@
     "test": "bun test",
     "test:watch": "bun test --watch",
     "test:integration": "bun test test/integration.test.ts",
+    "benchmark": "bun test test/benchmark.test.ts",
+    "demo:sepolia": "bun run scripts/sepolia-demo.ts",
     "clean": "rm -rf dist",
     "lint": "eslint 'src/**/*.ts' 'test/**/*.ts'",
     "lint:fix": "eslint 'src/**/*.ts' 'test/**/*.ts' --fix",

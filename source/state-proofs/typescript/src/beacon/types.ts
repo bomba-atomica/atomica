@@ -9,11 +9,6 @@
  */
 
 /**
- * Sync committee period length in epochs
- */
-export const SYNC_COMMITTEE_PERIOD = 27 * 32; // ~27 days
-
-/**
  * Bytes per public key in BLS12-381
  */
 export const PUBKEY_SIZE = 48;

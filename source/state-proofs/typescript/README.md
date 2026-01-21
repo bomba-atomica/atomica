@@ -170,6 +170,28 @@ Verify a transfer transaction affected account states correctly.
 eth-verify verify-transfer <txHash> --rpc <url> [options]
 ```
 
+## Live Demo (Sepolia)
+
+Run a complete end-to-end verification demo on Sepolia testnet. This script:
+1. Syncs the light client to the latest finalized header.
+2. Sends a self-transfer transaction (if private key provided).
+3. Verifies account state, transaction inclusion, and receipt inclusion against the light client root.
+
+### Setup
+
+1. Copy example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+2. Edit `.env` and add your `SEPOLIA_RPC_URL` (e.g. from Infura/Alchemy).
+3. (Optional) Add a `PRIVATE_KEY` with some Sepolia ETH to verify a live transaction.
+
+### Run
+
+```bash
+bun run demo:sepolia
+```
+
 ## Library API
 
 See [API.md](./docs/API.md) for detailed API documentation.

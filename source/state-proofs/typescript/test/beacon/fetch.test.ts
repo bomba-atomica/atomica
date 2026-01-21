@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, spyOn, mock } from "bun:test";
 import {
     fetchLightClientBootstrap,
     fetchLightClientUpdates,
@@ -7,9 +7,30 @@ import {
     BEACON_CONFIGS,
     computeSyncCommitteePeriod,
     getBeaconApiUrls,
-} from "../../dist/beacon/fetch";
+} from "../../src/beacon/fetch";
 
 describe("Beacon API Fetching", () => {
+    // Suppress console.warn/error during these tests as they intentionally provoke errors
+    const originalWarn = console.warn;
+    const originalError = console.error;
+    
+    // We can't use beforeAll/afterAll to mock console easily in Bun 
+    // because it might affect parallel tests if not careful.
+    // However, console mocks are local to the process.
+    
+    // Helper to run test with suppressed logging
+    const runQuiet = async (fn: () => Promise<void> | void) => {
+        const noop = () => {};
+        console.warn = noop;
+        console.error = noop;
+        try {
+            await fn();
+        } finally {
+            console.warn = originalWarn;
+            console.error = originalError;
+        }
+    };
+
     describe("BEACON_CONFIGS", () => {
         test("should have mainnet config", () => {
             expect(BEACON_CONFIGS.mainnet).toBeDefined();
@@ -62,32 +83,40 @@ describe("Beacon API Fetching", () => {
 
     describe("fetchLightClientBootstrap", () => {
         test("should throw for invalid API URL", async () => {
-            await expect(
-                fetchLightClientBootstrap("https://invalid.example.com", "0x1234"),
-            ).rejects.toThrow();
+            await runQuiet(async () => {
+                await expect(
+                    fetchLightClientBootstrap("https://invalid.example.com", "0x1234"),
+                ).rejects.toThrow();
+            });
         });
     });
 
     describe("fetchLightClientUpdates", () => {
         test("should return empty array for invalid API", async () => {
-            const updates = await fetchLightClientUpdates("https://invalid.example.com", 0, 1);
-            expect(updates).toEqual([]);
+            await runQuiet(async () => {
+                const updates = await fetchLightClientUpdates("https://invalid.example.com", 0, 1);
+                expect(updates).toEqual([]);
+            });
         });
     });
 
     describe("fetchLightClientFinalityUpdate", () => {
         test("should throw for invalid API URL", async () => {
-            await expect(
-                fetchLightClientFinalityUpdate("https://invalid.example.com"),
-            ).rejects.toThrow();
+            await runQuiet(async () => {
+                await expect(
+                    fetchLightClientFinalityUpdate("https://invalid.example.com"),
+                ).rejects.toThrow();
+            });
         });
     });
 
     describe("fetchLightClientOptimisticUpdate", () => {
         test("should throw for invalid API URL", async () => {
-            await expect(
-                fetchLightClientOptimisticUpdate("https://invalid.example.com"),
-            ).rejects.toThrow();
+            await runQuiet(async () => {
+                await expect(
+                    fetchLightClientOptimisticUpdate("https://invalid.example.com"),
+                ).rejects.toThrow();
+            });
         });
     });
 });

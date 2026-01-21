@@ -135,28 +135,27 @@ export async function syncLightClient(
     let currentState = state;
     let synced = false;
 
-    // Fetch finality update first
+    // 1. Determine target period from finality update (without verifying yet)
+    // We fetch this to know how far ahead the chain is
+    let finalityUpdate: LightClientUpdate | null = null;
+    let targetPeriod = currentState.period;
+
     if (config.verbose) {
-        console.log(`[LightClient] Fetching finality update...`);
+        console.log(`[LightClient] Fetching finality update to determine head...`);
     }
 
     try {
-        const finalityUpdate = await fetchLightClientFinalityUpdate(config.beaconApiUrl);
-
-        if (finalityUpdate && isUpdateNewer(finalityUpdate, currentState)) {
+        finalityUpdate = await fetchLightClientFinalityUpdate(config.beaconApiUrl);
+        if (finalityUpdate) {
+            targetPeriod = computeSyncCommitteePeriod(
+                finalityUpdate.attestedHeader.beacon.slot,
+                chainConfig,
+            );
             if (config.verbose) {
                 console.log(
-                    `[LightClient] Processing finality update (slot: ${finalityUpdate.attestedHeader.beacon.slot})`,
+                    `[LightClient] Network is at period ${targetPeriod} (slot ${finalityUpdate.attestedHeader.beacon.slot})`,
                 );
             }
-
-            const isFinalized = !!finalityUpdate.finalizedHeader;
-            currentState = await processLightClientUpdate(
-                currentState,
-                finalityUpdate,
-                isFinalized,
-            );
-            synced = true;
         }
     } catch (error) {
         if (config.verbose) {
@@ -164,43 +163,80 @@ export async function syncLightClient(
         }
     }
 
-    // Fetch period updates if needed
-    const currentPeriod = computeSyncCommitteePeriod(currentState.header.beacon.slot, chainConfig);
-
-    if (currentState.period < currentPeriod) {
+    // 2. Fetch period updates if we are behind
+    // We iterate until we catch up to the target period
+    // Note: We might need multiple rounds if the target period increases while we sync
+    if (currentState.period < targetPeriod) {
         if (config.verbose) {
             console.log(
-                `[LightClient] Syncing from period ${currentState.period} to ${currentPeriod}...`,
+                `[LightClient] Syncing from period ${currentState.period} to ${targetPeriod}...`,
             );
         }
 
         try {
+            // Fetch updates in batches
+            const startPeriod = currentState.period;
+            const count = targetPeriod - startPeriod;
+            
             const updates = await fetchLightClientUpdates(
                 config.beaconApiUrl,
-                currentState.period,
-                currentPeriod - currentState.period,
+                startPeriod,
+                count,
             );
 
             for (const update of updates) {
                 if (isUpdateNewer(update, currentState)) {
+                    // Check if this update allows us to advance periods
+                    // Ideally we verify it sequentially
                     const isFinalized = !!update.finalizedHeader;
-                    currentState = await processLightClientUpdate(
-                        currentState,
-                        update,
-                        isFinalized,
-                    );
-                    synced = true;
-
-                    if (config.verbose) {
-                        console.log(
-                            `[LightClient] Processed update for period ${currentState.period}`,
+                    try {
+                        currentState = await processLightClientUpdate(
+                            currentState,
+                            update,
+                            isFinalized,
                         );
+                        synced = true;
+
+                        if (config.verbose) {
+                            console.log(
+                                `[LightClient] Advanced to period ${currentState.period} (slot ${currentState.header.beacon.slot})`,
+                            );
+                        }
+                    } catch (e) {
+                        console.warn(`[LightClient] Failed to process update for period:`, e);
+                        // Stop processing if we break the chain
+                        break;
                     }
                 }
             }
         } catch (error) {
             if (config.verbose) {
                 console.log(`[LightClient] Could not fetch period updates: ${error}`);
+            }
+        }
+    }
+
+    // 3. Process finality update (now that we hopefully have the right committee)
+    if (finalityUpdate && isUpdateNewer(finalityUpdate, currentState)) {
+        if (config.verbose) {
+            console.log(`[LightClient] Processing finality update...`);
+        }
+
+        try {
+            const isFinalized = !!finalityUpdate.finalizedHeader;
+            currentState = await processLightClientUpdate(
+                currentState,
+                finalityUpdate,
+                isFinalized,
+            );
+            synced = true;
+            if (config.verbose) {
+                console.log(`[LightClient] Synced to finalized head`);
+            }
+        } catch (error) {
+            // This is expected if we failed to catch up the sync committee
+            if (config.verbose) {
+                console.log(`[LightClient] Could not verify finality update (may be missing sync committee): ${error}`);
             }
         }
     }

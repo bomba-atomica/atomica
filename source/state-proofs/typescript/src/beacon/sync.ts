@@ -27,6 +27,10 @@ function hashTreeRoot(obj: Uint8Array): Uint8Array {
     return createHash("sha256").update(obj).digest();
 }
 
+const SLOTS_PER_EPOCH = 32;
+const EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 256;
+const SLOTS_PER_PERIOD = SLOTS_PER_EPOCH * EPOCHS_PER_SYNC_COMMITTEE_PERIOD;
+
 export function initializeLightClient(
     header: LightClientHeader,
     syncCommittee: SyncCommittee,
@@ -47,10 +51,27 @@ export async function processLightClientUpdate(
     update: LightClientUpdate,
     isFinalized: boolean,
 ): Promise<LightClientState> {
+    // Determine which committee signed this update
+    // The signature is for the block at `signature_slot`.
+    const signaturePeriod = Math.floor(update.signatureSlot / SLOTS_PER_PERIOD);
+    
+    // Validate period consistency
+    // We can only validate updates signed by current or next committee
+    let signingCommittee: SyncCommittee;
+    if (signaturePeriod === state.period) {
+        signingCommittee = state.currentSyncCommittee;
+    } else if (signaturePeriod === state.period + 1) {
+        signingCommittee = state.nextSyncCommittee;
+    } else {
+        throw new Error(
+            `Update signature period ${signaturePeriod} is not valid for state period ${state.period}`,
+        );
+    }
+
     const isValid = await verifySyncCommitteeSignature(
         update.attestedHeader,
         update.syncAggregate,
-        state.currentSyncCommittee,
+        signingCommittee,
     );
 
     if (!isValid) {
@@ -70,10 +91,13 @@ export async function processLightClientUpdate(
         newState.finalizedHeader = update.finalizedHeader;
     }
 
-    const currentPeriod = Math.floor(update.attestedHeader.beacon.slot / (12 * 32 * 27));
+    const currentPeriod = Math.floor(update.attestedHeader.beacon.slot / SLOTS_PER_PERIOD);
     if (update.nextSyncCommittee && update.finalizedHeader) {
-        const updatePeriod = Math.floor(update.finalizedHeader.beacon.slot / (12 * 32 * 27));
-        if (updatePeriod > state.period && updatePeriod < currentPeriod + 1) {
+        const updatePeriod = Math.floor(update.finalizedHeader.beacon.slot / SLOTS_PER_PERIOD);
+        
+        // If the finalized header proves we are in a new period, rotate committees
+        // We can only rotate if we have the NEXT committee (which this update provides)
+        if (updatePeriod > state.period) {
             newState.currentSyncCommittee = state.nextSyncCommittee;
             newState.nextSyncCommittee = update.nextSyncCommittee;
             newState.period = updatePeriod;
