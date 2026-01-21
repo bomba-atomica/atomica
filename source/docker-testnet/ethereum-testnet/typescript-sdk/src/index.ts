@@ -28,12 +28,16 @@ export class EthereumDockerTestnet {
 
         console.log(`Setting up Ethereum PoS testnet with ${numValidators} validators...`);
 
-        // 1. Generate genesis and keys
-        // Genesis generation is handled by the "setup" service in docker-compose.yaml
-        // which runs before other services.
+        // 1. Clean up any existing testnet
+        await this.runCommand("docker", ["compose", "down", "-v", "--remove-orphans"], configDir);
 
-        // 2. Start Docker Compose
-        await this.runCommand("docker", ["compose", "up", "-d"], configDir);
+        // 2. Run setup service (foreground, wait for completion)
+        console.log("Running genesis setup...");
+        await this.runCommand("docker", ["compose", "run", "--rm", "setup"], configDir);
+
+        // 3. Start remaining services (setup has completed, data is in volume)
+        console.log("Starting network services...");
+        await this.runCommand("docker", ["compose", "up", "-d", "geth", "beacon", "validator-1", "validator-2", "validator-3", "validator-4"], configDir);
 
         return new EthereumDockerTestnet(configDir, numValidators);
     }
@@ -405,6 +409,46 @@ export class EthereumDockerTestnet {
             proc.on("close", (code) => {
                 if (code === 0) resolve();
                 else reject(new Error(`${command} ${args.join(" ")} failed with code ${code}`));
+            });
+            proc.on("error", reject);
+        });
+    }
+
+    private static async waitForServiceCompleted(configDir: string, serviceName: string): Promise<void> {
+        const maxWaitMs = 120000; // 2 minutes
+        const pollInterval = 2000;
+        const startTime = Date.now();
+
+        while (Date.now() - startTime < maxWaitMs) {
+            const result = await this.runCommandAsync("docker", ["compose", "ps", "-a", serviceName], configDir);
+            if (result.includes("Exited (0)") || result.includes("Completed")) {
+                return;
+            }
+            if (result.includes("Exit")) {
+                throw new Error(`Service ${serviceName} failed`);
+            }
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+        throw new Error(`Timeout waiting for ${serviceName} to complete`);
+    }
+
+    private static async runCommandAsync(command: string, args: string[], cwd: string): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const proc = spawn(command, args, { cwd, stdio: "pipe" });
+            let stdout = "";
+            let stderr = "";
+
+            proc.stdout?.on("data", (data) => {
+                stdout += data.toString();
+            });
+
+            proc.stderr?.on("data", (data) => {
+                stderr += data.toString();
+            });
+
+            proc.on("close", (code) => {
+                if (code === 0) resolve(stdout);
+                else reject(new Error(`${command} ${args.join(" ")} failed with code ${code}: ${stderr}`));
             });
             proc.on("error", reject);
         });

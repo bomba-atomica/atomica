@@ -1,5 +1,5 @@
-import { describe, expect, test, beforeAll, afterAll, mock } from "bun:test";
-import { fetchLightClientBootstrap, fetchLightClientUpdates, fetchLightClientFinalityUpdate, BEACON_CONFIGS, computeSyncCommitteePeriod } from "../../dist/beacon/fetch";
+import { describe, expect, test } from "bun:test";
+import { fetchLightClientBootstrap, fetchLightClientUpdates, fetchLightClientFinalityUpdate, fetchLightClientOptimisticUpdate, BEACON_CONFIGS, computeSyncCommitteePeriod, getBeaconApiUrls } from "../../dist/beacon/fetch";
 
 describe("Beacon API Fetching", () => {
   describe("BEACON_CONFIGS", () => {
@@ -32,21 +32,52 @@ describe("Beacon API Fetching", () => {
     });
   });
 
+  describe("getBeaconApiUrls", () => {
+    test("should return mainnet URLs", () => {
+      const urls = getBeaconApiUrls("mainnet");
+      expect(urls.length).toBeGreaterThan(0);
+      expect(urls[0]).toContain("beaconcha.in");
+    });
+
+    test("should return sepolia URLs", () => {
+      const urls = getBeaconApiUrls("sepolia");
+      expect(urls.length).toBe(1);
+      expect(urls[0]).toContain("sepolia");
+    });
+
+    test("should throw for unknown chain", () => {
+      expect(() => getBeaconApiUrls("unknown")).toThrow("Unknown chain");
+    });
+  });
+
   describe("fetchLightClientBootstrap", () => {
-    test("should throw not implemented error", async () => {
-      await expect(fetchLightClientBootstrap("https://example.com", "0x1234")).rejects.toThrow("Not implemented");
+    test("should throw for invalid API URL", async () => {
+      await expect(
+        fetchLightClientBootstrap("https://invalid.example.com", "0x1234"),
+      ).rejects.toThrow();
     });
   });
 
   describe("fetchLightClientUpdates", () => {
-    test("should throw not implemented error", async () => {
-      await expect(fetchLightClientUpdates("https://example.com", 0, 1)).rejects.toThrow("Not implemented");
+    test("should return empty array for invalid API", async () => {
+      const updates = await fetchLightClientUpdates("https://invalid.example.com", 0, 1);
+      expect(updates).toEqual([]);
     });
   });
 
   describe("fetchLightClientFinalityUpdate", () => {
-    test("should throw not implemented error", async () => {
-      await expect(fetchLightClientFinalityUpdate("https://example.com")).rejects.toThrow("Not implemented");
+    test("should throw for invalid API URL", async () => {
+      await expect(
+        fetchLightClientFinalityUpdate("https://invalid.example.com"),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe("fetchLightClientOptimisticUpdate", () => {
+    test("should throw for invalid API URL", async () => {
+      await expect(
+        fetchLightClientOptimisticUpdate("https://invalid.example.com"),
+      ).rejects.toThrow();
     });
   });
 });

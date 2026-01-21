@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { LightClientState, LightClientUpdate, SyncCommittee, LightClientHeader } from "../../dist/beacon/types";
+import type { LightClientState, LightClientUpdate, SyncCommittee, LightClientHeader, BeaconBlockHeader } from "../../dist/beacon/types";
 import {
   initializeLightClient,
   processLightClientUpdate,
@@ -8,7 +8,10 @@ import {
   aggregatePublicKeys,
   hasSyncCommitteeQuorum,
   getTrustedStateRoots,
+  computeSyncCommitteeDomain,
+  computeSigningRoot,
 } from "../../dist/beacon/sync";
+import bls from "@chainsafe/bls";
 
 const mockAddress = "0x" + "11".repeat(20);
 
@@ -40,26 +43,46 @@ const createMockHeader = (slot: number): LightClientHeader => ({
   executionBranch: [],
 });
 
-const createMockSyncCommittee = (period: number): SyncCommittee => ({
-  pubkeys: Array(512).fill(null).map((_, i) => "0x" + (i + period * 1000).toString(16).padStart(96, "0")),
-  aggregatePubkey: "0x" + "bb".repeat(48),
-});
+async function createMockSyncCommittee(): Promise<SyncCommittee> {
+  const pubkeys: string[] = [];
+  for (let i = 0; i < 512; i++) {
+    const secretKey = bls.SecretKey.fromKeygen(new Uint8Array([i]));
+    const publicKey = secretKey.toPublicKey();
+    pubkeys.push(publicKey.toHex());
+  }
+
+  const aggregatePubkey = bls.aggregatePublicKeys(
+    pubkeys.map((hex) => bls.PublicKey.fromHex(hex).toBytes()),
+  );
+
+  return {
+    pubkeys,
+    aggregatePubkey: bls.PublicKey.fromBytes(aggregatePubkey).toHex(),
+  };
+}
 
 describe("Light Client Sync", () => {
   describe("initializeLightClient", () => {
-    test("should throw not implemented error", () => {
+    test("should create initial state from header and sync committee", async () => {
       const header = createMockHeader(100);
-      const committee = createMockSyncCommittee(0);
-      expect(() => initializeLightClient(header, committee, 0)).toThrow("Not implemented");
+      const committee = await createMockSyncCommittee();
+      const state = initializeLightClient(header, committee, 0);
+
+      expect(state.header).toEqual(header);
+      expect(state.currentSyncCommittee).toEqual(committee);
+      expect(state.nextSyncCommittee).toEqual(committee);
+      expect(state.finalizedHeader).toBeNull();
+      expect(state.period).toBe(0);
+      expect(state.previousSlot).toBe(100);
     });
   });
 
   describe("processLightClientUpdate", () => {
-    test("should throw not implemented error", async () => {
+    test("should reject invalid sync committee signature", async () => {
       const state: LightClientState = {
         header: createMockHeader(100),
-        currentSyncCommittee: createMockSyncCommittee(0),
-        nextSyncCommittee: createMockSyncCommittee(1),
+        currentSyncCommittee: await createMockSyncCommittee(),
+        nextSyncCommittee: await createMockSyncCommittee(),
         finalizedHeader: null,
         period: 0,
         previousSlot: 100,
@@ -67,7 +90,7 @@ describe("Light Client Sync", () => {
 
       const update: LightClientUpdate = {
         attestedHeader: createMockHeader(200),
-        nextSyncCommittee: createMockSyncCommittee(2),
+        nextSyncCommittee: await createMockSyncCommittee(),
         nextSyncCommitteeBranch: [],
         finalizedHeader: null,
         finalityBranch: [],
@@ -78,64 +101,92 @@ describe("Light Client Sync", () => {
         signatureSlot: 201,
       };
 
-      await expect(processLightClientUpdate(state, update, false)).rejects.toThrow("Not implemented");
+      await expect(processLightClientUpdate(state, update, false)).rejects.toThrow("Invalid sync committee signature");
     });
   });
 
   describe("verifySyncCommitteeSignature", () => {
-    test("should throw not implemented error", async () => {
+    test("should return false for empty participation", async () => {
       const header = createMockHeader(100);
-      const committee = createMockSyncCommittee(0);
+      const committee = await createMockSyncCommittee();
 
-      await expect(
-        verifySyncCommitteeSignature(header, {
-          syncCommitteeBits: new Uint8Array(64),
-          syncCommitteeSignature: "0x" + "dd".repeat(96),
-        }, committee),
-      ).rejects.toThrow("Not implemented");
+      const result = await verifySyncCommitteeSignature(header, {
+        syncCommitteeBits: new Uint8Array(64),
+        syncCommitteeSignature: "0x" + "dd".repeat(96),
+      }, committee);
+
+      expect(result).toBe(false);
     });
   });
 
   describe("verifyBlsSignature", () => {
-    test("should throw not implemented error", async () => {
-      await expect(
-        verifyBlsSignature(new Uint8Array(32), new Uint8Array(96), new Uint8Array(48)),
-      ).rejects.toThrow("Not implemented");
+    test("should return false for empty public keys", async () => {
+      const result = await verifyBlsSignature(
+        new Uint8Array(32),
+        new Uint8Array(96).fill(0x01),
+        [],
+      );
+      expect(result).toBe(false);
     });
   });
 
   describe("aggregatePublicKeys", () => {
-    test("should throw not implemented error", async () => {
-      const publicKeys = Array(10).fill(null).map(() => new Uint8Array(48));
-      const participationBits = new Uint8Array([0xff, 0xff]);
+    test("should throw for empty public keys", async () => {
+      await expect(aggregatePublicKeys([])).rejects.toThrow("Cannot aggregate zero public keys");
+    });
 
-      await expect(aggregatePublicKeys(publicKeys, participationBits)).rejects.toThrow("Not implemented");
+    test("should aggregate multiple valid public keys", async () => {
+      const publicKeys: Uint8Array[] = [];
+      for (let i = 0; i < 10; i++) {
+        const secretKey = bls.SecretKey.fromKeygen(new Uint8Array([i]));
+        publicKeys.push(secretKey.toPublicKey().toBytes());
+      }
+
+      const aggregated = await aggregatePublicKeys(publicKeys);
+      expect(aggregated.length).toBe(48);
     });
   });
 
   describe("hasSyncCommitteeQuorum", () => {
-    test("should throw not implemented error for empty participation", () => {
+    test("should return false for empty participation", () => {
       const bits = new Uint8Array(64);
-      expect(() => hasSyncCommitteeQuorum(bits)).toThrow("Not implemented");
+      expect(hasSyncCommitteeQuorum(bits)).toBe(false);
     });
 
-    test("should throw not implemented error for full participation", () => {
+    test("should return true for full participation", () => {
       const bits = new Uint8Array(64).fill(0xff);
-      expect(() => hasSyncCommitteeQuorum(bits)).toThrow("Not implemented");
+      expect(hasSyncCommitteeQuorum(bits)).toBe(true);
     });
 
-    test("should throw not implemented error", () => {
+    test("should return false for insufficient participation", () => {
       const bits = new Uint8Array(64);
-      expect(() => hasSyncCommitteeQuorum(bits)).toThrow("Not implemented");
+      bits[0] = 0x55;
+      expect(hasSyncCommitteeQuorum(bits)).toBe(false);
+    });
+
+    test("should return true for 2/3 quorum", () => {
+      const bits = new Uint8Array(64);
+      for (let i = 0; i < 342; i++) {
+        bits[i >> 3] |= 1 << (i % 8);
+      }
+      expect(hasSyncCommitteeQuorum(bits)).toBe(true);
+    });
+
+    test("should return false for just under 2/3 quorum", () => {
+      const bits = new Uint8Array(64);
+      for (let i = 0; i < 341; i++) {
+        bits[i >> 3] |= 1 << (i % 8);
+      }
+      expect(hasSyncCommitteeQuorum(bits)).toBe(false);
     });
   });
 
   describe("getTrustedStateRoots", () => {
-    test("should return null for state without header", () => {
+    test("should return null for state without header", async () => {
       const state: LightClientState = {
         header: null as unknown as LightClientHeader,
-        currentSyncCommittee: createMockSyncCommittee(0),
-        nextSyncCommittee: createMockSyncCommittee(1),
+        currentSyncCommittee: await createMockSyncCommittee(),
+        nextSyncCommittee: await createMockSyncCommittee(),
         finalizedHeader: null,
         period: 0,
         previousSlot: 0,
@@ -143,11 +194,11 @@ describe("Light Client Sync", () => {
       expect(getTrustedStateRoots(state)).toBeNull();
     });
 
-    test("should return state roots for valid header", () => {
+    test("should return state roots for valid header", async () => {
       const state: LightClientState = {
         header: createMockHeader(100),
-        currentSyncCommittee: createMockSyncCommittee(0),
-        nextSyncCommittee: createMockSyncCommittee(1),
+        currentSyncCommittee: await createMockSyncCommittee(),
+        nextSyncCommittee: await createMockSyncCommittee(),
         finalizedHeader: null,
         period: 0,
         previousSlot: 0,
@@ -160,6 +211,30 @@ describe("Light Client Sync", () => {
         expect(roots.transactionsRoot).toBeDefined();
         expect(roots.receiptsRoot).toBeDefined();
       }
+    });
+  });
+
+  describe("computeSyncCommitteeDomain", () => {
+    test("should compute domain", () => {
+      const forkVersion = Uint8Array.from([0x01, 0x00, 0x00, 0x00]);
+      const genesisValidatorRoot = new Uint8Array(32);
+      const domain = computeSyncCommitteeDomain(forkVersion, genesisValidatorRoot);
+      expect(domain.length).toBe(32);
+    });
+  });
+
+  describe("computeSigningRoot", () => {
+    test("should compute signing root", () => {
+      const header: BeaconBlockHeader = {
+        slot: 100,
+        proposerIndex: 0,
+        parentRoot: "0x" + "22".repeat(32),
+        stateRoot: "0x" + "33".repeat(32),
+        bodyRoot: "0x" + "44".repeat(32),
+      };
+      const domain = new Uint8Array(32);
+      const root = computeSigningRoot(header, domain);
+      expect(root.length).toBe(32);
     });
   });
 });

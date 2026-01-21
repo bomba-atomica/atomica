@@ -32,11 +32,12 @@
   "author": "Atomica",
   "license": "MIT",
   "dependencies": {
-    "viem": "^2.0.0",
+    "@chainsafe/bls": "^8.2.0",
+    "@ethereumjs/common": "^4.0.0",
+    "@ethereumjs/rlp": "^5.0.0",
     "@ethereumjs/trie": "^6.0.0",
     "@ethereumjs/util": "^9.0.0",
-    "@ethereumjs/rlp": "^5.0.0",
-    "@ethereumjs/common": "^4.0.0"
+    "viem": "^2.0.0"
   },
   "devDependencies": {
     "@atomica/ethereum-docker-testnet": "file:../../source/docker-testnet/ethereum-testnet/typescript-sdk",

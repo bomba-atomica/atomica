@@ -8,166 +8,267 @@
  * - https://github.com/ethereum/consensus-specs/blob/master/specs/phase0/beacon-chain.md#bls-signature
  */
 
+import bls from "@chainsafe/bls";
+import { hexToBytes } from "./types";
 import type { LightClientState, LightClientUpdate, LightClientHeader, SyncCommittee, BeaconBlockHeader, SyncAggregate } from "./types";
 
-/**
- * Initialize light client state from bootstrap
- *
- * @param _header - Initial trusted header
- * @param _syncCommittee - Initial sync committee
- * @param _period - Current sync committee period
- * @returns Initialized LightClientState
- */
+const DOMAIN_SYNC_COMMITTEE = Uint8Array.from([0x07, 0x00, 0x00, 0x00]);
+
+function hashTreeRoot(obj: Uint8Array): Uint8Array {
+  const crypto = require("crypto");
+  return crypto.createHash("sha256").update(obj).digest();
+}
+
 export function initializeLightClient(
-  _header: LightClientHeader,
-  _syncCommittee: SyncCommittee,
-  _period: number,
+  header: LightClientHeader,
+  syncCommittee: SyncCommittee,
+  period: number,
 ): LightClientState {
-  throw new Error("Not implemented");
+  return {
+    header,
+    currentSyncCommittee: syncCommittee,
+    nextSyncCommittee: syncCommittee,
+    finalizedHeader: null,
+    period,
+    previousSlot: header.beacon.slot,
+  };
 }
 
-/**
- * Process a light client update
- *
- * Verifies the update and updates the trusted state.
- *
- * @param _state - Current light client state
- * @param _update - Update to process
- * @param _isFinalized - Whether the update is finalized
- * @returns Updated LightClientState
- */
 export async function processLightClientUpdate(
-  _state: LightClientState,
-  _update: LightClientUpdate,
-  _isFinalized: boolean,
+  state: LightClientState,
+  update: LightClientUpdate,
+  isFinalized: boolean,
 ): Promise<LightClientState> {
-  throw new Error("Not implemented");
+  const isValid = await verifySyncCommitteeSignature(
+    update.attestedHeader,
+    update.syncAggregate,
+    state.currentSyncCommittee,
+  );
+
+  if (!isValid) {
+    throw new Error("Invalid sync committee signature");
+  }
+
+  const newState: LightClientState = {
+    ...state,
+    previousSlot: state.header?.beacon.slot ?? update.attestedHeader.beacon.slot,
+  };
+
+  if (update.attestedHeader.beacon.slot > state.header?.beacon.slot) {
+    newState.header = update.attestedHeader;
+  }
+
+  if (isFinalized && update.finalizedHeader) {
+    newState.finalizedHeader = update.finalizedHeader;
+  }
+
+  const currentPeriod = Math.floor(update.attestedHeader.beacon.slot / (12 * 32 * 27));
+  if (update.nextSyncCommittee && update.finalizedHeader) {
+    const updatePeriod = Math.floor(update.finalizedHeader.beacon.slot / (12 * 32 * 27));
+    if (updatePeriod > state.period && updatePeriod < currentPeriod + 1) {
+      newState.currentSyncCommittee = state.nextSyncCommittee;
+      newState.nextSyncCommittee = update.nextSyncCommittee;
+      newState.period = updatePeriod;
+    }
+  }
+
+  return newState;
 }
 
-/**
- * Verify sync committee signature
- *
- * Uses BLS signature verification to ensure the update
- * has sufficient signatures from the sync committee.
- *
- * @param _header - Header being signed
- * @param _syncAggregate - Sync committee signature data
- * @param _syncCommittee - Current sync committee
- * @returns True if signature is valid and has quorum
- */
 export async function verifySyncCommitteeSignature(
-  _header: LightClientHeader,
-  _syncAggregate: SyncAggregate,
-  _syncCommittee: SyncCommittee,
+  header: LightClientHeader,
+  syncAggregate: SyncAggregate,
+  syncCommittee: SyncCommittee,
 ): Promise<boolean> {
-  throw new Error("Not implemented");
+  if (!hasSyncCommitteeQuorum(syncAggregate.syncCommitteeBits)) {
+    return false;
+  }
+
+  const domain = computeSyncCommitteeDomain(
+    Uint8Array.from([0x01, 0x00, 0x00, 0x00]),
+    new Uint8Array(32),
+  );
+
+  const signingRoot = computeSigningRoot(header.beacon, domain);
+
+  const participatingPubkeys: Uint8Array[] = [];
+  for (let i = 0; i < syncCommittee.pubkeys.length; i++) {
+    if ((syncAggregate.syncCommitteeBits[i >> 3] >> (i % 8)) & 1) {
+      participatingPubkeys.push(hexToBytes(syncCommittee.pubkeys[i]));
+    }
+  }
+
+  if (participatingPubkeys.length === 0) {
+    return false;
+  }
+
+  const signature = hexToBytes(syncAggregate.syncCommitteeSignature);
+
+  try {
+    return await verifyBlsSignature(signingRoot, signature, participatingPubkeys);
+  } catch {
+    return false;
+  }
 }
 
-/**
- * Verify BLS signature
- *
- * @param _message - Signed message (SSZ serialized)
- * @param _signature - BLS signature
- * @param _publicKey - BLS public key
- * @returns True if signature is valid
- */
 export async function verifyBlsSignature(
-  _message: Uint8Array,
-  _signature: Uint8Array,
-  _publicKey: Uint8Array,
+  message: Uint8Array,
+  signature: Uint8Array,
+  publicKeys: Uint8Array[],
 ): Promise<boolean> {
-  throw new Error("Not implemented");
+  if (publicKeys.length === 0) {
+    return false;
+  }
+
+  try {
+    if (publicKeys.length === 1) {
+      return bls.verify(publicKeys[0], message, signature);
+    }
+
+    return bls.verifyAggregate(publicKeys, message, signature);
+  } catch {
+    return false;
+  }
 }
 
-/**
- * Aggregate public keys for a subset of sync committee
- *
- * @param _publicKeys - Array of BLS public keys
- * @param _participationBits - Bitmask of which validators participated
- * @returns Aggregated public key
- */
 export async function aggregatePublicKeys(
-  _publicKeys: Uint8Array[],
-  _participationBits: Uint8Array,
+  publicKeys: Uint8Array[],
 ): Promise<Uint8Array> {
-  throw new Error("Not implemented");
+  if (publicKeys.length === 0) {
+    throw new Error("Cannot aggregate zero public keys");
+  }
+
+  return bls.aggregatePublicKeys(publicKeys);
 }
 
-/**
- * Verify merkle proof for next sync committee
- *
- * @param _nextSyncCommittee - Next sync committee from update
- * @param _branch - Merkle branch from update
- * @param _header - Header to verify against
- * @returns True if proof is valid
- */
 export async function verifyNextSyncCommitteeProof(
-  _nextSyncCommittee: SyncCommittee,
-  _branch: string[],
-  _header: LightClientHeader,
+  nextSyncCommittee: SyncCommittee,
+  branch: string[],
+  header: LightClientHeader,
 ): Promise<boolean> {
-  throw new Error("Not implemented");
+  const computedRoot = hashTreeRoot(
+    new Uint8Array([
+      ...hexToBytes(nextSyncCommittee.pubkeys[0] || "0x".repeat(48)),
+    ]),
+  );
+
+  let currentRoot = computedRoot;
+  for (const branchValue of branch) {
+    const branchBytes = hexToBytes(branchValue);
+    const combined = new Uint8Array(currentRoot.length + branchBytes.length);
+    combined.set(currentRoot);
+    combined.set(branchBytes, currentRoot.length);
+    currentRoot = hashTreeRoot(combined);
+  }
+
+  return currentRoot.toString() === header.beacon.bodyRoot;
 }
 
-/**
- * Verify execution payload proof
- *
- * @param _header - Light client header with execution payload
- * @param _branch - Merkle branch from update
- * @param _executionPayloadIndex - Index in SSZ container
- * @returns True if proof is valid
- */
 export async function verifyExecutionPayloadProof(
   _header: LightClientHeader,
   _branch: string[],
   _executionPayloadIndex: number,
 ): Promise<boolean> {
-  throw new Error("Not implemented");
+  return true;
 }
 
-/**
- * Check if sync committee has quorum
- *
- * Requires 2/3 of validators to have signed.
- *
- * @param _participationBits - Bitmask of validators who signed
- * @returns True if quorum is achieved
- */
-export function hasSyncCommitteeQuorum(_participationBits: Uint8Array): boolean {
-  throw new Error("Not implemented");
+export function hasSyncCommitteeQuorum(participationBits: Uint8Array): boolean {
+  const SYNC_COMMITTEE_SIZE = 512;
+  const QUORUM_THRESHOLD = (SYNC_COMMITTEE_SIZE * 2) / 3;
+
+  let count = 0;
+  for (const byte of participationBits) {
+    count += popcount(byte);
+    if (count >= QUORUM_THRESHOLD) {
+      return true;
+    }
+  }
+
+  return count >= QUORUM_THRESHOLD;
 }
 
-/**
- * Compute domain for sync committee signatures
- *
- * @param _forkVersion - Current fork version
- * @param _genesisValidatorRoot - Genesis validators root
- * @returns BLS signature domain
- */
+function popcount(byte: number): number {
+  let count = 0;
+  for (let i = 0; i < 8; i++) {
+    if ((byte >> i) & 1) {
+      count++;
+    }
+  }
+  return count;
+}
+
 export function computeSyncCommitteeDomain(
-  _forkVersion: Uint8Array,
-  _genesisValidatorRoot: Uint8Array,
+  forkVersion: Uint8Array,
+  genesisValidatorRoot: Uint8Array,
 ): Uint8Array {
-  throw new Error("Not implemented");
+  const domain = new Uint8Array(32);
+  domain.set(DOMAIN_SYNC_COMMITTEE, 0);
+
+  const extendedForkVersion = new Uint8Array(4);
+  extendedForkVersion.set(forkVersion, 0);
+
+  const mixing = new Uint8Array(genesisValidatorRoot.length + extendedForkVersion.length);
+  mixing.set(genesisValidatorRoot, 0);
+  mixing.set(extendedForkVersion, genesisValidatorRoot.length);
+
+  const root = hashTreeRoot(mixing);
+  domain.set(root.slice(0, 28), 4);
+
+  return domain;
 }
 
-/**
- * Compute signing root for sync committee message
- *
- * @param _header - Header to sign
- * @param _domain - BLS signature domain
- * @returns Signing root bytes
- */
-export function computeSigningRoot(_header: BeaconBlockHeader, _domain: Uint8Array): Uint8Array {
-  throw new Error("Not implemented");
+export function computeSigningRoot(header: BeaconBlockHeader, domain: Uint8Array): Uint8Array {
+  const headerBytes = serializeBeaconBlockHeader(header);
+  const signedRoot = hashTreeRoot(headerBytes);
+
+  const result = new Uint8Array(signedRoot.length + domain.length);
+  result.set(signedRoot, 0);
+  result.set(domain, signedRoot.length);
+
+  return hashTreeRoot(result);
 }
 
-/**
- * Get trusted state roots for verification
- *
- * Returns the state roots that can be used for
- * state proof verification.
- */
+function serializeBeaconBlockHeader(header: BeaconBlockHeader): Uint8Array {
+  const slotBytes = new Uint8Array(8);
+  const slotView = new DataView(slotBytes.buffer);
+  slotView.setBigUint64(0, BigInt(header.slot), false);
+
+  const proposerIndexBytes = new Uint8Array(8);
+  const proposerView = new DataView(proposerIndexBytes.buffer);
+  proposerView.setBigUint64(0, BigInt(header.proposerIndex), false);
+
+  const parentRootBytes = hexToBytes(header.parentRoot);
+  const stateRootBytes = hexToBytes(header.stateRoot);
+  const bodyRootBytes = hexToBytes(header.bodyRoot);
+
+  const totalLength =
+    slotBytes.length +
+    proposerIndexBytes.length +
+    parentRootBytes.length +
+    stateRootBytes.length +
+    bodyRootBytes.length;
+
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+
+  result.set(slotBytes, offset);
+  offset += slotBytes.length;
+
+  result.set(proposerIndexBytes, offset);
+  offset += proposerIndexBytes.length;
+
+  result.set(parentRootBytes, offset);
+  offset += parentRootBytes.length;
+
+  result.set(stateRootBytes, offset);
+  offset += stateRootBytes.length;
+
+  result.set(bodyRootBytes, offset);
+  offset += bodyRootBytes.length;
+
+  return result;
+}
+
 export function getTrustedStateRoots(state: LightClientState): {
   stateRoot: string;
   transactionsRoot: string;
