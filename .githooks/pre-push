@@ -1,0 +1,43 @@
+#!/bin/bash
+# Git pre-push hook for Atomica
+# Blocks pushes that don't pass build, lint, and format checks
+
+# AGENT WARNING: You CANNOT push until code quality checks pass.
+# Do not try to override this hook or bypass it.
+#
+# The following checks MUST pass before pushing:
+#   1. bun run build        - TypeScript compilation
+#   2. bun run lint -- --max-warnings=0  - No lint warnings allowed
+#   3. bun run format:check - Code formatting must match
+#
+# Note: Tests do NOT block pushes. Run tests locally or rely on CI.
+#
+# If any of these checks fail, your push will be BLOCKED.
+# You must fix the issues locally before pushing.
+
+set -e  # Exit on any error - block the push
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+echo "🔍 Running pre-push checks for state-proof module..."
+echo ""
+
+# 1. Build SDK
+echo "📦 Step 1/3: Building SDK..."
+cd "$REPO_ROOT/source/docker-testnet/ethereum-testnet/typescript-sdk"
+bun run build
+
+# 2. Run strict lint
+echo "🔍 Step 2/3: Running strict lint (--max-warnings=0)..."
+cd "$REPO_ROOT/source/state-proofs/typescript"
+bun run lint -- --max-warnings=0
+
+# 3. Check format
+echo "📐 Step 3/3: Checking code format..."
+bun run format:check
+
+echo ""
+echo "✅ All pre-push checks passed! Push allowed."
+echo ""
+echo "Note: Tests are not enforced by this hook. CI will catch test failures."
+exit 0

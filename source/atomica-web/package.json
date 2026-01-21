@@ -15,7 +15,8 @@
     "test:ui": "vitest run tests/ui-component",
     "test:meta": "vitest run --config vitest.config.nodejs.ts",
     "test:docker": "vitest run --config vitest.config.nodejs.ts tests/meta/docker-testnet.test.ts",
-    "demo": "npx tsx scripts/orchestrator.ts"
+    "demo": "npx tsx scripts/orchestrator.ts",
+    "prepare": "../../scripts/install-hooks.sh"
   },
   "dependencies": {
     "@aptos-labs/ts-sdk": "^5.2.0",

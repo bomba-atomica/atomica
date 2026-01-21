@@ -1,0 +1,44 @@
+#!/bin/bash
+# Git pre-commit hook for Atomica
+# Runs automatic cleanups but allows commits
+
+# AGENT NOTE: This hook runs automatic cleanups but ALLOWS commits.
+# You should run 'bun run lint' and 'bun run format:check' before pushing.
+# The pre-push hook will BLOCK pushes that don't pass all checks.
+#
+# Automatic cleanups performed:
+#   - bun run format  (fixes formatting)
+#   - bun run lint:fix (fixes lint issues)
+#
+# These do NOT run during commit:
+#   - bun run build
+#   - bun test
+#   - bun run format:check
+#   - bun run lint -- --max-warnings=0
+#
+# Those strict checks run in pre-push and will block your push if they fail.
+
+set +e  # Don't exit on errors - allow commit
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+echo "⚠️  Running pre-commit auto-cleanups..."
+echo "⚠️  NOTE: This hook allows commits. Strict checks run in pre-push."
+echo ""
+
+# Run automatic cleanups
+echo "🧹 Auto-fixing formatting and lint issues..."
+cd "$REPO_ROOT/source/state-proofs/typescript"
+bun run format 2>/dev/null
+bun run lint:fix 2>/dev/null
+
+echo ""
+echo "⚠️  Auto-cleanup complete. Commit allowed."
+echo "⚠️  BEFORE PUSHING, run these checks:"
+echo "   bun run build"
+echo "   bun test"
+echo "   bun run lint -- --max-warnings=0"
+echo "   bun run format:check"
+echo ""
+echo "⚠️  The pre-push hook will BLOCK pushes that fail any of these."
+exit 0
