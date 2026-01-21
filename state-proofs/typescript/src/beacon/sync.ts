@@ -8,6 +8,8 @@
  * - https://github.com/ethereum/consensus-specs/blob/master/specs/phase0/beacon-chain.md#bls-signature
  */
 
+import { createHash } from "crypto";
+
 import bls from "@chainsafe/bls";
 import { hexToBytes } from "./types";
 import type {
@@ -22,8 +24,7 @@ import type {
 const DOMAIN_SYNC_COMMITTEE = Uint8Array.from([0x07, 0x00, 0x00, 0x00]);
 
 function hashTreeRoot(obj: Uint8Array): Uint8Array {
-    const crypto = require("crypto");
-    return crypto.createHash("sha256").update(obj).digest();
+    return createHash("sha256").update(obj).digest();
 }
 
 export function initializeLightClient(
