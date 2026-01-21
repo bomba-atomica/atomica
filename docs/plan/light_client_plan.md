@@ -245,3 +245,107 @@ Runs on pushes to `main` or `ethereum-docker` branches when Docker testnet files
 1. **SSZ Encoding/Decoding** - Add proper SSZ serialization for beacon types using @chainsafe/ssz
 2. **Real API Test** - Update `test/beacon/fetch.test.ts` to use actual beacon API endpoints
 3. **Performance Testing** - Benchmark verification time and optimize if needed
+
+---
+
+## Phase 5: SSZ Encoding/Decoding
+
+### Product Features
+
+Implement proper SSZ (Simple Serialize) encoding and decoding for Ethereum beacon chain types. This enables:
+- Serialization of light client state for network transmission
+- Deserialization of beacon API responses
+- Merkle proof verification using SSZ merkleization
+- Compatibility with Ethereum consensus specification
+
+### Technical Implementation
+
+#### Library Choice
+- **@chainsafe/ssz**: Officially maintained, supports all beacon types
+- Alternative: Custom implementation (rejected - complex and error-prone)
+
+#### Types to Implement
+
+```typescript
+// Container types (struct-like, ordered fields)
+interface LightClientUpdate {
+    attestedHeader: LightClientHeader;
+    nextSyncCommittee: SyncCommittee;
+    nextSyncCommitteeBranch: MerkleProof; // Vector<bytes32>
+    finalizedHeader: LightClientHeader | null;
+    finalityBranch: MerkleProof; // Vector<bytes32>
+    syncAggregate: SyncAggregate;
+    signatureSlot: Slot;
+}
+
+interface LightClientBootstrap {
+    header: LightClientHeader;
+    currentSyncCommittee: SyncCommittee;
+    currentSyncCommitteeBranch: MerkleProof;
+}
+
+// Primitive types
+type Slot = uint64;
+type Epoch = uint64;
+type ValidatorIndex = uint64;
+type BlobKzgCommitment = bytes48;
+type MerkleProof = Vector<bytes32>; // Variable-length list
+```
+
+#### SSZ Operations
+
+```typescript
+interface SSZEncoder<T> {
+    serialize(value: T): Uint8Array;
+    deserialize(data: Uint8Array): T;
+    hashTreeRoot(value: T): Uint8Array;
+    equals(a: T, b: T): boolean;
+}
+
+interface SSZModule {
+    BeaconBlockHeader: SSZEncoder<BeaconBlockHeader>;
+    LightClientHeader: SSZEncoder<LightClientHeader>;
+    SyncCommittee: SSZEncoder<SyncCommittee>;
+    LightClientUpdate: SSZEncoder<LightClientUpdate>;
+    LightClientBootstrap: SSZEncoder<LightClientBootstrap>;
+    LightClientStore: SSZEncoder<LightClientStore>;
+    merkleize(proof: Uint8Array[]): Uint8Array;
+    verifyMerkleProof(root: Uint8Array, proof: Uint8Array[], leaf: Uint8Array, index: number): boolean;
+}
+```
+
+### Subtasks
+
+| Subtask | Status |
+|---------|--------|
+| Install @chainsafe/ssz | PENDING |
+| Create src/beacon/ssz.ts module | PENDING |
+| Implement BeaconBlockHeader SSZ | PENDING |
+| Implement LightClientHeader SSZ | PENDING |
+| Implement SyncCommittee SSZ | PENDING |
+| Implement LightClientUpdate SSZ | PENDING |
+| Implement LightClientBootstrap SSZ | PENDING |
+| Implement merkleization utilities | PENDING |
+| Create unit tests | PENDING |
+| Integration test with beacon API | PENDING |
+
+### Risk Assessment
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| Library version incompatibility | Low | High | Pin to specific version, test with multiple beacon chain versions |
+| Complex type interactions | Medium | Medium | Start with simple types, build incrementally |
+| Performance overhead | Medium | Medium | Benchmark and optimize critical paths |
+| Memory usage for large types | Low | Low | SSZ is compact, no special concerns |
+
+### Test Strategy
+
+1. **Known Vector Tests**: Use test vectors from Ethereum consensus specs
+2. **Round-trip Tests**: Serialize -> Deserialize -> Verify equality
+3. **Merkle Proof Tests**: Verify known merkle proofs
+4. **Integration Test**: Fetch real beacon API data and decode
+
+### Reference Documentation
+- [SSZ Specification](https://github.com/ethereum/consensus-specs/blob/master/specs/phase0/simple-serialize.md)
+- [@chainsafe/ssz GitHub](https://github.com/ChainSafe/ssz)
+- [SSZ Merkleization](https://github.com/ethereum/consensus-specs/blob/master/specs/phase0/merkle-proofs.md)
