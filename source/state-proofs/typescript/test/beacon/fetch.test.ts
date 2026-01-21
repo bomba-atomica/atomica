@@ -1,4 +1,4 @@
-import { describe, expect, test, spyOn, mock } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
     fetchLightClientBootstrap,
     fetchLightClientUpdates,
@@ -13,11 +13,11 @@ describe("Beacon API Fetching", () => {
     // Suppress console.warn/error during these tests as they intentionally provoke errors
     const originalWarn = console.warn;
     const originalError = console.error;
-    
-    // We can't use beforeAll/afterAll to mock console easily in Bun 
+
+    // We can't use beforeAll/afterAll to mock console easily in Bun
     // because it might affect parallel tests if not careful.
     // However, console mocks are local to the process.
-    
+
     // Helper to run test with suppressed logging
     const runQuiet = async (fn: () => Promise<void> | void) => {
         const noop = () => {};

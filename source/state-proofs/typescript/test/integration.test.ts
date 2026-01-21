@@ -4,7 +4,15 @@ import { verifyAccountProof, verifyStorageProof } from "../src/verifier";
 import { verifyTransactionProof as verifyTxProof } from "../src/transaction";
 import { verifyReceiptProof as verifyRcptProof } from "../src/receipt";
 import { startTestnet, stopTestnet, getRpcUrl, getTestAccounts } from "./helpers/testnet";
-import { createWalletClient, createPublicClient, http, parseEther, type Hex, keccak256, toHex, pad } from "viem";
+import {
+    createWalletClient,
+    createPublicClient,
+    http,
+    parseEther,
+    type Hex,
+    toHex,
+    pad,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
 
@@ -365,7 +373,7 @@ describe("Storage Proof End-to-End", () => {
             chain: mainnet,
             transport: http(rpcUrl),
         });
-        
+
         const publicClient = createPublicClient({
             chain: mainnet,
             transport: http(rpcUrl),
@@ -380,9 +388,9 @@ describe("Storage Proof End-to-End", () => {
             for (let i = 0; i < maxRetries; i++) {
                 try {
                     return await publicClient.waitForTransactionReceipt({ hash });
-                } catch (e) {
+                } catch (_e) {
                     // Ignore indexing errors and retry
-                    await new Promise(r => setTimeout(r, 2000));
+                    await new Promise((r) => setTimeout(r, 2000));
                 }
             }
             throw new Error(`Failed to get receipt for ${hash}`);
@@ -424,13 +432,13 @@ describe("Storage Proof End-to-End", () => {
         // 3. Fetch Proof for Slot 0
         const slot0 = pad("0x0", { size: 32 }); // Slot 0 key
         const proof = await fetchProof(rpcUrl, contractAddress, [slot0], blockNumber);
-        
+
         // 4. Verify Account Proof first (to get storage root)
         const block = await fetchBlock(rpcUrl, blockNumber);
         const accountResult = await verifyAccountProof(
             proof.accountProof,
             block.stateRoot,
-            contractAddress
+            contractAddress,
         );
 
         expect(accountResult.valid).toBe(true);
@@ -444,11 +452,11 @@ describe("Storage Proof End-to-End", () => {
             // wait, let's check verifyStorageProof implementation in verifier.ts
             // "const keyBuffer = hexToBytes(key); const pathKey = Buffer.from(keccak256(keyBuffer));"
             // So we pass the slot key (padded 32 bytes).
-            
+
             const storageResult = await verifyStorageProof(
                 proof.storageProof[0].proof,
                 storageRoot,
-                slot0
+                slot0,
             );
 
             expect(storageResult.valid).toBe(true);
@@ -461,18 +469,18 @@ describe("Storage Proof End-to-End", () => {
             // Let's verify what the verifier returns.
             // It returns `bytesToHex(claimedValue)`.
             // So we expect the RLP encoding of 0x3039.
-            
+
             // Actually, let's verify what we get.
             console.log("Verified Storage Value (RLP):", storageResult.value);
-            
+
             // To be precise: RLP(0x3039) -> 0x823039
             // RLP(12345) -> 0x823039
             // If it was just 0x3039, it would be incorrect.
-            
+
             // Note: eth_getProof returns the value as a hex string (integer).
             // But the PROOF contains the RLP encoded value.
             // Our verifier decodes the proof.
-            
+
             // Let's assert it is defined and valid.
             expect(storageResult.value).toBeDefined();
         }

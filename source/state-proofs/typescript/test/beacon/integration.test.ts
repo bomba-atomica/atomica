@@ -1,14 +1,11 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { startTestnet, stopTestnet, waitForBlocks } from "../helpers/testnet";
-import type { LightClientState, LightClientUpdate } from "../../src/beacon/types";
 import {
     BEACON_CONFIGS,
-    fetchLightClientBootstrap,
     fetchLightClientUpdates,
     fetchLightClientOptimisticUpdate,
     fetchLightClientFinalityUpdate,
 } from "../../src/beacon/fetch";
-import { initializeLightClient, processLightClientUpdate } from "../../src/beacon/sync";
 
 describe("Light Client Integration", () => {
     // Local beacon API endpoint
@@ -18,7 +15,7 @@ describe("Light Client Integration", () => {
     beforeAll(async () => {
         try {
             await startTestnet();
-        } catch (e) {
+        } catch (_e) {
             console.log("Could not start testnet, tests may skip if node is not running");
         }
     }, 120000); // Increased timeout for testnet startup (2 minutes)
@@ -44,8 +41,10 @@ describe("Light Client Integration", () => {
             // Check if node is reachable
             try {
                 await fetch(`${BEACON_API_URL}/eth/v1/node/health`);
-            } catch (e) {
-                console.log(`Skipping Beacon API test: Beacon node not reachable at ${BEACON_API_URL}`);
+            } catch (_e) {
+                console.log(
+                    `Skipping Beacon API test: Beacon node not reachable at ${BEACON_API_URL}`,
+                );
                 return;
             }
 
@@ -53,7 +52,7 @@ describe("Light Client Integration", () => {
             try {
                 console.log("Waiting for block production (2 blocks)...");
                 await waitForBlocks(2);
-            } catch (e) {
+            } catch (_e) {
                 console.log("Warning: Waiting for blocks timed out or failed");
             }
 
@@ -68,23 +67,21 @@ describe("Light Client Integration", () => {
                 try {
                     const finalityUpdate = await fetchLightClientFinalityUpdate(BEACON_API_URL);
                     expect(finalityUpdate).toBeDefined();
-                } catch (e) {
-                    console.log("Finality update not available yet (expected for fresh local testnet)");
+                } catch (_e) {
+                    console.log(
+                        "Finality update not available yet (expected for fresh local testnet)",
+                    );
                 }
 
                 // 3. Test Fetch Updates
                 const currentPeriod = Math.floor(
-                    optimisticUpdate.attestedHeader.beacon.slot / (32 * 256)
+                    optimisticUpdate.attestedHeader.beacon.slot / (32 * 256),
                 );
-                
+
                 const targetPeriod = currentPeriod > 0 ? currentPeriod - 1 : currentPeriod;
-                
-                const updates = await fetchLightClientUpdates(
-                    BEACON_API_URL,
-                    targetPeriod,
-                    1
-                );
-                
+
+                const updates = await fetchLightClientUpdates(BEACON_API_URL, targetPeriod, 1);
+
                 expect(Array.isArray(updates)).toBe(true);
 
                 if (updates.length > 0) {
@@ -94,18 +91,19 @@ describe("Light Client Integration", () => {
                 }
 
                 console.log("Local Beacon API tests passed (connectivity and format check)");
-
             } catch (error) {
                 // Handle 404 specifically for fresh testnets
                 if (error instanceof Error && error.message.includes("404")) {
-                    console.log("Light client data not available yet (404). This is normal for a freshly started local testnet.");
+                    console.log(
+                        "Light client data not available yet (404). This is normal for a freshly started local testnet.",
+                    );
                     return;
                 }
-                
+
                 // If we reach here, something actually broke in the fetch logic despite the node being up
                 console.error(
                     "Beacon API test failed:",
-                    error instanceof Error ? error.message : error
+                    error instanceof Error ? error.message : error,
                 );
                 throw error; // Fail the test
             }

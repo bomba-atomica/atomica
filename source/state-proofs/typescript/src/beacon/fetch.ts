@@ -553,7 +553,7 @@ export function computeSyncCommitteePeriod(slot: number, config: BeaconConfig): 
 
 /**
  * Get public beacon API URLs
- * 
+ *
  * Note: These are public endpoints for production/demo use.
  * Tests should typically use a local beacon node (e.g. http://localhost:5052).
  */

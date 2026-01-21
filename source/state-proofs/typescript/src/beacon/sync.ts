@@ -54,7 +54,7 @@ export async function processLightClientUpdate(
     // Determine which committee signed this update
     // The signature is for the block at `signature_slot`.
     const signaturePeriod = Math.floor(update.signatureSlot / SLOTS_PER_PERIOD);
-    
+
     // Validate period consistency
     // We can only validate updates signed by current or next committee
     let signingCommittee: SyncCommittee;
@@ -91,10 +91,10 @@ export async function processLightClientUpdate(
         newState.finalizedHeader = update.finalizedHeader;
     }
 
-    const currentPeriod = Math.floor(update.attestedHeader.beacon.slot / SLOTS_PER_PERIOD);
+    const _currentPeriod = Math.floor(update.attestedHeader.beacon.slot / SLOTS_PER_PERIOD);
     if (update.nextSyncCommittee && update.finalizedHeader) {
         const updatePeriod = Math.floor(update.finalizedHeader.beacon.slot / SLOTS_PER_PERIOD);
-        
+
         // If the finalized header proves we are in a new period, rotate committees
         // We can only rotate if we have the NEXT committee (which this update provides)
         if (updatePeriod > state.period) {

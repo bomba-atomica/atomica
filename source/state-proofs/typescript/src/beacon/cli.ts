@@ -177,12 +177,8 @@ export async function syncLightClient(
             // Fetch updates in batches
             const startPeriod = currentState.period;
             const count = targetPeriod - startPeriod;
-            
-            const updates = await fetchLightClientUpdates(
-                config.beaconApiUrl,
-                startPeriod,
-                count,
-            );
+
+            const updates = await fetchLightClientUpdates(config.beaconApiUrl, startPeriod, count);
 
             for (const update of updates) {
                 if (isUpdateNewer(update, currentState)) {
@@ -236,7 +232,9 @@ export async function syncLightClient(
         } catch (error) {
             // This is expected if we failed to catch up the sync committee
             if (config.verbose) {
-                console.log(`[LightClient] Could not verify finality update (may be missing sync committee): ${error}`);
+                console.log(
+                    `[LightClient] Could not verify finality update (may be missing sync committee): ${error}`,
+                );
             }
         }
     }

@@ -1,14 +1,10 @@
-
 import { describe, expect, test } from "bun:test";
 import {
-    initializeLightClient,
-    processLightClientUpdate,
     verifySyncCommitteeSignature,
-    verifyBlsSignature,
     computeSigningRoot,
     computeSyncCommitteeDomain,
 } from "../src/beacon/sync";
-import type { LightClientHeader, SyncCommittee, LightClientUpdate } from "../src/beacon/types";
+import type { LightClientHeader, SyncCommittee } from "../src/beacon/types";
 import { createSSZModule } from "../src/beacon/ssz";
 import bls from "@chainsafe/bls";
 
@@ -16,7 +12,7 @@ import bls from "@chainsafe/bls";
 async function createMockData(committeeSize: number = 512) {
     const pubkeys: string[] = [];
     const secretKeys: Uint8Array[] = [];
-    
+
     for (let i = 0; i < committeeSize; i++) {
         const secretKey = bls.SecretKey.fromKeygen(new Uint8Array([i % 255]));
         secretKeys.push(secretKey.toBytes());
@@ -26,7 +22,7 @@ async function createMockData(committeeSize: number = 512) {
     let aggregatePubkey = "0x" + "00".repeat(48);
     if (committeeSize > 0) {
         aggregatePubkey = bls.PublicKey.aggregate(
-            secretKeys.map(sk => bls.SecretKey.fromBytes(sk).toPublicKey())
+            secretKeys.map((sk) => bls.SecretKey.fromBytes(sk).toPublicKey()),
         ).toHex();
     }
 
@@ -64,7 +60,7 @@ async function createMockData(committeeSize: number = 512) {
             "0x" + "00".repeat(32),
             "0x" + "00".repeat(32),
             "0x" + "00".repeat(32),
-            "0x" + "00".repeat(32)
+            "0x" + "00".repeat(32),
         ],
     };
 
@@ -75,17 +71,17 @@ describe("Performance Benchmarks", () => {
     test("BLS Signature Verification Benchmark", async () => {
         console.log("\n--- BLS Benchmark ---");
         const { committee, header, secretKeys } = await createMockData(512);
-        
+
         // Sign the header
         const domain = computeSyncCommitteeDomain(
             Uint8Array.from([0x01, 0x00, 0x00, 0x00]),
-            new Uint8Array(32)
+            new Uint8Array(32),
         );
         const signingRoot = computeSigningRoot(header.beacon, domain);
-        
-        const signatures = secretKeys.map(sk => bls.SecretKey.fromBytes(sk).sign(signingRoot));
+
+        const signatures = secretKeys.map((sk) => bls.SecretKey.fromBytes(sk).sign(signingRoot));
         const aggregateSignature = bls.Signature.aggregate(signatures);
-        
+
         const syncAggregate = {
             syncCommitteeBits: new Uint8Array(64).fill(0xff),
             syncCommitteeSignature: aggregateSignature.toHex(),
@@ -93,14 +89,14 @@ describe("Performance Benchmarks", () => {
 
         const start = performance.now();
         const iterations = 2; // Reduced from 10 to avoid timeout in slow environments
-        
+
         for (let i = 0; i < iterations; i++) {
             await verifySyncCommitteeSignature(header, syncAggregate, committee);
         }
-        
+
         const end = performance.now();
         const avgTime = (end - start) / iterations;
-        
+
         console.log(`Verify Sync Committee Signature (512 keys): ${avgTime.toFixed(2)}ms`);
         // Note: 500ms might be tight for some environments, but decent target
     });
@@ -109,17 +105,17 @@ describe("Performance Benchmarks", () => {
         console.log("\n--- SSZ Benchmark ---");
         const ssz = createSSZModule();
         const { header } = await createMockData(0);
-        
+
         const start = performance.now();
         const iterations = 1000;
-        
+
         for (let i = 0; i < iterations; i++) {
             ssz.LightClientHeader.serialize(header);
         }
-        
+
         const end = performance.now();
         const avgTime = (end - start) / iterations;
-        
+
         console.log(`SSZ Serialize LightClientHeader: ${avgTime.toFixed(4)}ms`);
         expect(avgTime).toBeLessThan(1);
     });
