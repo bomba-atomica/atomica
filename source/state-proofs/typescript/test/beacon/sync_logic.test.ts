@@ -65,7 +65,7 @@ describe("Light Client Sync Logic", () => {
         spyOn(fetcher, "fetchLightClientFinalityUpdate").mockResolvedValue(finalityUpdate);
 
         const updatesSpy = spyOn(fetcher, "fetchLightClientUpdates").mockImplementation(
-            async (url, startPeriod, count) => {
+            async (_url, startPeriod, count) => {
                 const updates = [];
                 for (let i = 0; i < count; i++) {
                     updates.push(createMockUpdate(startPeriod + i));

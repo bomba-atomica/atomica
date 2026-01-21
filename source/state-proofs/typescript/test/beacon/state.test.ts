@@ -4,7 +4,7 @@ import type {
     LightClientUpdate,
     SyncCommittee,
     LightClientStore,
-} from "../../dist/beacon/types";
+} from "../../src/beacon/types";
 import {
     createInitialState,
     updateState,
@@ -15,8 +15,7 @@ import {
     saveState,
     loadState,
     clearState,
-    _getStatePath,
-} from "../../dist/beacon/state";
+} from "../../src/beacon/state";
 import { promises as fs } from "fs";
 import * as _path from "path";
 

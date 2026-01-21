@@ -91,7 +91,6 @@ export async function processLightClientUpdate(
         newState.finalizedHeader = update.finalizedHeader;
     }
 
-    const _currentPeriod = Math.floor(update.attestedHeader.beacon.slot / SLOTS_PER_PERIOD);
     if (update.nextSyncCommittee && update.finalizedHeader) {
         const updatePeriod = Math.floor(update.finalizedHeader.beacon.slot / SLOTS_PER_PERIOD);
 

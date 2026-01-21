@@ -142,8 +142,7 @@ describe("Account State Decoding", () => {
     test("should decode RLP-encoded account state", () => {
         // This will be tested with real RLP data
         // For now, define expected interface
-        const _rlpEncodedAccount = Buffer.from("f84401", "hex"); // Placeholder
-
+        
         // This should not throw
         expect(() => {
             // decodeAccountState will be implemented
