@@ -74,10 +74,7 @@ export async function fetchProof(
  * @param block - Block number or tag
  * @returns Block data including stateRoot, transactionsRoot, receiptsRoot
  */
-export async function fetchBlock(
-    rpcUrl: string,
-    block: number | string | bigint,
-): Promise<Block> {
+export async function fetchBlock(rpcUrl: string, block: number | string | bigint): Promise<Block> {
     const client = createPublicClient({
         chain: mainnet,
         transport: http(rpcUrl),
@@ -159,7 +156,9 @@ export async function fetchBlockTransactions(
             r: tx.r !== undefined ? `0x${Number(tx.r).toString(16)}` : undefined,
             s: tx.s !== undefined ? `0x${Number(tx.s).toString(16)}` : undefined,
             maxFeePerGas: tx.maxFeePerGas ? `0x${tx.maxFeePerGas.toString(16)}` : undefined,
-            maxPriorityFeePerGas: tx.maxPriorityFeePerGas ? `0x${tx.maxPriorityFeePerGas.toString(16)}` : undefined,
+            maxPriorityFeePerGas: tx.maxPriorityFeePerGas
+                ? `0x${tx.maxPriorityFeePerGas.toString(16)}`
+                : undefined,
             chainId: tx.chainId ? `0x${tx.chainId.toString(16)}` : undefined,
         }));
     } catch (error) {
@@ -211,7 +210,9 @@ export async function fetchBlockReceipts(
                         transactionHash: receipt.transactionHash,
                         transactionIndex: `0x${receipt.transactionIndex.toString(16)}`,
                         blockHash: receipt.blockHash || blockHash,
-                        blockNumber: receipt.blockNumber ? `0x${receipt.blockNumber.toString(16)}` : blockNumberHex,
+                        blockNumber: receipt.blockNumber
+                            ? `0x${receipt.blockNumber.toString(16)}`
+                            : blockNumberHex,
                         from: receipt.from,
                         to: receipt.to === undefined ? null : receipt.to,
                         cumulativeGasUsed: `0x${receipt.cumulativeGasUsed.toString(16)}`,
@@ -221,16 +222,23 @@ export async function fetchBlockReceipts(
                             address: log.address,
                             topics: log.topics,
                             data: log.data,
-                            blockNumber: log.blockNumber ? `0x${log.blockNumber.toString(16)}` : "0x0",
+                            blockNumber: log.blockNumber
+                                ? `0x${log.blockNumber.toString(16)}`
+                                : "0x0",
                             transactionHash: log.transactionHash,
-                            transactionIndex: log.transactionIndex ? `0x${log.transactionIndex.toString(16)}` : "0x0",
+                            transactionIndex: log.transactionIndex
+                                ? `0x${log.transactionIndex.toString(16)}`
+                                : "0x0",
                             blockHash: log.blockHash,
                             logIndex: log.logIndex ? `0x${log.logIndex.toString(16)}` : "0x0",
                             removed: false,
                         })),
                         logsBloom: receipt.logsBloom,
                         status: receipt.status === "success" ? "0x1" : "0x0",
-                        type: receipt.type !== undefined ? `0x${Number(receipt.type).toString(16)}` : "0x0",
+                        type:
+                            receipt.type !== undefined
+                                ? `0x${Number(receipt.type).toString(16)}`
+                                : "0x0",
                     });
                 } catch {
                     // Skip if receipt fetch fails for this transaction
@@ -332,7 +340,9 @@ export async function fetchFullTransactionReceipt(rpcUrl: string, txHash: string
                 data: log.data,
                 blockNumber: log.blockNumber ? `0x${log.blockNumber.toString(16)}` : "0x0",
                 transactionHash: log.transactionHash,
-                transactionIndex: log.transactionIndex ? `0x${log.transactionIndex.toString(16)}` : "0x0",
+                transactionIndex: log.transactionIndex
+                    ? `0x${log.transactionIndex.toString(16)}`
+                    : "0x0",
                 blockHash: log.blockHash,
                 logIndex: log.logIndex ? `0x${log.logIndex.toString(16)}` : "0x0",
                 removed: false,

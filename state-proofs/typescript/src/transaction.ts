@@ -62,7 +62,10 @@ export function encodeTransaction(tx: Transaction): Uint8Array {
     if (txType === 2) {
         const chainId = Buffer.from(tx.chainId?.replace("0x", "") || "01", "hex");
         const nonce = Buffer.from(tx.nonce.replace("0x", ""), "hex");
-        const maxPriorityFee = Buffer.from(tx.maxPriorityFeePerGas?.replace("0x", "") || "0", "hex");
+        const maxPriorityFee = Buffer.from(
+            tx.maxPriorityFeePerGas?.replace("0x", "") || "0",
+            "hex",
+        );
         const maxFee = Buffer.from(tx.maxFeePerGas?.replace("0x", "") || "0", "hex");
         const gasLimit = Buffer.from(tx.gas.replace("0x", ""), "hex");
         const to = tx.to === null ? Buffer.from([]) : Buffer.from(tx.to.replace("0x", ""), "hex");
@@ -73,7 +76,20 @@ export function encodeTransaction(tx: Transaction): Uint8Array {
         const r = tx.r ? Buffer.from(tx.r.replace("0x", ""), "hex") : Buffer.from("00", "hex");
         const s = tx.s ? Buffer.from(tx.s.replace("0x", ""), "hex") : Buffer.from("00", "hex");
 
-        const payload = rlp.encode([chainId, nonce, maxPriorityFee, maxFee, gasLimit, to, value, data, accessList, v, r, s]);
+        const payload = rlp.encode([
+            chainId,
+            nonce,
+            maxPriorityFee,
+            maxFee,
+            gasLimit,
+            to,
+            value,
+            data,
+            accessList,
+            v,
+            r,
+            s,
+        ]);
         const result = new Uint8Array(payload.length + 1);
         result[0] = 0x02;
         result.set(payload, 1);
@@ -93,7 +109,19 @@ export function encodeTransaction(tx: Transaction): Uint8Array {
         const r = tx.r ? Buffer.from(tx.r.replace("0x", ""), "hex") : Buffer.from("00", "hex");
         const s = tx.s ? Buffer.from(tx.s.replace("0x", ""), "hex") : Buffer.from("00", "hex");
 
-        const payload = rlp.encode([chainId, nonce, gasPrice, gasLimit, to, value, data, accessList, v, r, s]);
+        const payload = rlp.encode([
+            chainId,
+            nonce,
+            gasPrice,
+            gasLimit,
+            to,
+            value,
+            data,
+            accessList,
+            v,
+            r,
+            s,
+        ]);
         const result = new Uint8Array(payload.length + 1);
         result[0] = 0x01;
         result.set(payload, 1);

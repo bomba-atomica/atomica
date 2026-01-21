@@ -295,7 +295,9 @@ describe("Transaction & Receipt Verification", () => {
 
         // 6. Find our transaction and receipt
         const targetTx = allTxs.find((tx) => tx.hash.toLowerCase() === hash.toLowerCase());
-        const targetReceipt = allReceipts.find((r) => r.transactionHash.toLowerCase() === hash.toLowerCase());
+        const targetReceipt = allReceipts.find(
+            (r) => r.transactionHash.toLowerCase() === hash.toLowerCase(),
+        );
 
         expect(targetTx).toBeDefined();
         expect(targetReceipt).toBeDefined();
@@ -308,18 +310,28 @@ describe("Transaction & Receipt Verification", () => {
         // 8. Verify Transaction Inclusion Proof
         if (targetTx) {
             const txValid = await verifyTxProof(targetTx, block, allTxs);
-            console.log("Transaction inclusion proof:", txValid ? "VERIFIED ✓" : "SKIPPED (encoding mismatch)");
+            console.log(
+                "Transaction inclusion proof:",
+                txValid ? "VERIFIED ✓" : "SKIPPED (encoding mismatch)",
+            );
         }
 
         // 9. Verify Receipt Inclusion Proof
         if (targetReceipt) {
             const receiptValid = await verifyRcptProof(targetReceipt, block, allReceipts);
-            console.log("Receipt inclusion proof:", receiptValid ? "VERIFIED ✓" : "SKIPPED (encoding mismatch)");
+            console.log(
+                "Receipt inclusion proof:",
+                receiptValid ? "VERIFIED ✓" : "SKIPPED (encoding mismatch)",
+            );
         }
 
         // 10. Verify recipient account state
         const proof = await fetchProof(rpcUrl, recipientAddress, [], blockNumber);
-        const result = await verifyAccountProof(proof.accountProof, block.stateRoot, recipientAddress);
+        const result = await verifyAccountProof(
+            proof.accountProof,
+            block.stateRoot,
+            recipientAddress,
+        );
 
         expect(result.valid).toBe(true);
         expect(result.accountState).toBeDefined();

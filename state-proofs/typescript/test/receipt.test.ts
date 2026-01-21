@@ -22,7 +22,7 @@ const legacyReceipt: Receipt = {
     logs: [],
     logsBloom: "0x" + "0".repeat(512), // Empty bloom
     status: "0x1", // Success
-    type: "0x0" // Explicitly legacy
+    type: "0x0", // Explicitly legacy
 };
 
 // Sample EIP-1559 Receipt (Type 2)
@@ -31,7 +31,7 @@ const eip1559Receipt: Receipt = {
     ...legacyReceipt,
     transactionIndex: "0x1",
     type: "0x2",
-    cumulativeGasUsed: "0xa410" // 42000 (21000 + 21000)
+    cumulativeGasUsed: "0xa410", // 42000 (21000 + 21000)
 };
 
 describe("Receipt Verification", () => {
@@ -39,7 +39,7 @@ describe("Receipt Verification", () => {
         test("should encode legacy receipt correctly", () => {
             const encoded = encodeReceipt(legacyReceipt);
             expect(encoded).toBeInstanceOf(Buffer);
-            
+
             const decoded = RLP.decode(encoded);
             expect(Array.isArray(decoded)).toBe(true);
             // Expect 4 elements: status, cumulativeGas, bloom, logs
@@ -49,10 +49,10 @@ describe("Receipt Verification", () => {
         test("should encode EIP-1559 receipt correctly", () => {
             const encoded = encodeReceipt(eip1559Receipt);
             expect(encoded).toBeInstanceOf(Buffer);
-            
+
             // Starts with Type byte 0x02
             expect(encoded[0]).toBe(0x02);
-            
+
             // Rest is RLP
             const decoded = RLP.decode(encoded.subarray(1));
             expect(Array.isArray(decoded)).toBe(true);
@@ -63,7 +63,7 @@ describe("Receipt Verification", () => {
     describe("verifyReceiptProof", () => {
         test("should verify valid receipt proof with locally constructed MPT", async () => {
             const receipts = [legacyReceipt, eip1559Receipt];
-            
+
             // Calculate expected root locally
             const trie = new Trie();
             for (let i = 0; i < receipts.length; i++) {
@@ -71,9 +71,9 @@ describe("Receipt Verification", () => {
                 const value = encodeReceipt(receipts[i]);
                 await trie.put(index, value);
             }
-            
+
             const expectedRoot = "0x" + Buffer.from(trie.root()).toString("hex");
-            
+
             const block: Block = {
                 number: "0x1",
                 hash: mockHash,
@@ -81,7 +81,7 @@ describe("Receipt Verification", () => {
                 timestamp: "0x0",
                 stateRoot: mockHash,
                 transactionsRoot: mockHash,
-                receiptsRoot: expectedRoot
+                receiptsRoot: expectedRoot,
             };
 
             const isValid = await verifyReceiptProof(eip1559Receipt, block, receipts);
@@ -97,7 +97,7 @@ describe("Receipt Verification", () => {
                 timestamp: "0x0",
                 stateRoot: mockHash,
                 transactionsRoot: mockHash,
-                receiptsRoot: "0x" + "0".repeat(64) // Wrong root
+                receiptsRoot: "0x" + "0".repeat(64), // Wrong root
             };
 
             const isValid = await verifyReceiptProof(legacyReceipt, block, receipts);

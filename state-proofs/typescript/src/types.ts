@@ -85,7 +85,6 @@ export interface Log {
     removed: boolean;
 }
 
-
 /**
  * Decoded account state from MPT leaf node
  */

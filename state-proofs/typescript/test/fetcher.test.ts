@@ -1,6 +1,12 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { fetchProof, fetchBlock, fetchTransaction, fetchTransactionReceipt } from "../src/fetcher";
-import { startTestnet, stopTestnet, getRpcUrl, getTestAccounts, waitForBlocks } from "./helpers/testnet";
+import {
+    startTestnet,
+    stopTestnet,
+    getRpcUrl,
+    getTestAccounts,
+    waitForBlocks,
+} from "./helpers/testnet";
 import { createWalletClient, http, parseEther, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
@@ -22,14 +28,14 @@ describe("Proof Fetching", () => {
             // Send a transaction to verify fetchTransaction logic later
             const walletClient = createWalletClient({
                 chain: mainnet,
-                transport: http(testRpcUrl)
+                transport: http(testRpcUrl),
             });
             const account = privateKeyToAccount(privateKey as Hex);
             testTxHash = await walletClient.sendTransaction({
                 account,
                 to: accounts[1].address as Hex,
                 value: parseEther("0.1"),
-                chain: mainnet
+                chain: mainnet,
             });
             // Wait for it to be mined
             await waitForBlocks(1);

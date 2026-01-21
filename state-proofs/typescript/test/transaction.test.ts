@@ -20,12 +20,12 @@ const legacyTx: Transaction = {
     value: "0xde0b6b3a7640000", // 1 ETH
     input: "0x",
     v: "0x25", // 37 (ChainID 1)
-        r: "0x123", // Needs valid hex
+    r: "0x123", // Needs valid hex
     s: "0x456", // Needs valid hex
     blockHash: null,
     blockNumber: null,
     transactionIndex: "0x1",
-    from: mockAddress
+    from: mockAddress,
 };
 
 // Sample EIP-1559 Transaction (Type 2)
@@ -48,7 +48,7 @@ const eip1559Tx: Transaction = {
     blockHash: null,
     blockNumber: null,
     transactionIndex: "0x1",
-    from: mockAddress
+    from: mockAddress,
 };
 
 describe("Transaction Verification", () => {
@@ -56,7 +56,7 @@ describe("Transaction Verification", () => {
         test("should encode legacy transaction correctly", () => {
             const encoded = encodeTransaction(legacyTx);
             expect(encoded).toBeInstanceOf(Uint8Array); // @ethereumjs/tx returns Uint8Array which Buffer inherits from
-            
+
             // For legacy, it's just RLP list
             const decoded = RLP.decode(encoded);
             expect(Array.isArray(decoded)).toBe(true);
@@ -67,10 +67,10 @@ describe("Transaction Verification", () => {
         test("should encode EIP-1559 transaction correctly", () => {
             const encoded = encodeTransaction(eip1559Tx);
             expect(encoded).toBeInstanceOf(Uint8Array);
-            
+
             // EIP-1559 starts with 0x02
             expect(encoded[0]).toBe(0x02);
-            
+
             // The rest should be RLP
             const rlpPart = encoded.subarray(1);
             const decoded = RLP.decode(rlpPart);
@@ -84,9 +84,9 @@ describe("Transaction Verification", () => {
             // IMPORTANT: Transaction indices must be sequential and match array order
             const txs = [
                 { ...legacyTx, transactionIndex: "0x0" },
-                { ...eip1559Tx, transactionIndex: "0x1" }
+                { ...eip1559Tx, transactionIndex: "0x1" },
             ];
-            
+
             // 2. Create MPT locally to generate the expected root
             const trie = new Trie();
             for (let i = 0; i < txs.length; i++) {
@@ -97,9 +97,9 @@ describe("Transaction Verification", () => {
                 const value = encodeTransaction(tx);
                 await trie.put(key, value);
             }
-            
+
             const expectedRoot = "0x" + Buffer.from(trie.root()).toString("hex");
-            
+
             // 3. Mock block with this root
             const block: Block = {
                 number: "0x1",
@@ -108,13 +108,13 @@ describe("Transaction Verification", () => {
                 timestamp: "0x0",
                 stateRoot: mockHash,
                 transactionsRoot: expectedRoot, // CRITICAL: This must match
-                receiptsRoot: mockHash
+                receiptsRoot: mockHash,
             };
 
             // 4. Verify specific transaction (e.g., index 1)
             const targetTx = txs[1]; // eip1559Tx
             const isValid = await verifyTransactionProof(targetTx, block, txs);
-            
+
             expect(isValid).toBe(true);
         });
 
@@ -127,7 +127,7 @@ describe("Transaction Verification", () => {
                 timestamp: "0x0",
                 stateRoot: mockHash,
                 transactionsRoot: "0x" + "0".repeat(64), // Wrong root
-                receiptsRoot: mockHash
+                receiptsRoot: mockHash,
             };
 
             const isValid = await verifyTransactionProof(legacyTx, block, txs);
@@ -135,26 +135,25 @@ describe("Transaction Verification", () => {
         });
 
         test("should fail if transaction index is missing in siblings", async () => {
-             // If we pass a tx that IS NOT in the siblings list
-             const txs = [{ ...legacyTx, transactionIndex: "0x0" }]; // Missing eip1559Tx
-             const block: Block = {
+            // If we pass a tx that IS NOT in the siblings list
+            const txs = [{ ...legacyTx, transactionIndex: "0x0" }]; // Missing eip1559Tx
+            const block: Block = {
+                number: "0x1",
+                hash: mockHash,
+                parentHash: mockHash,
+                timestamp: "0x0",
+                stateRoot: mockHash,
+                transactionsRoot: mockHash, // Doesn't matter, reconstruction will fail match
+                receiptsRoot: mockHash,
+            };
 
-                 number: "0x1",
-                 hash: mockHash,
-                 parentHash: mockHash,
-                 timestamp: "0x0",
-                 stateRoot: mockHash,
-                 transactionsRoot: mockHash, // Doesn't matter, reconstruction will fail match
-                 receiptsRoot: mockHash
-             };
-             
-             // In this case, `eip1559Tx` is not in `txs`.
-             // The function `verifyTransactionProof(target, block, siblings)`
-             // usually assumes `siblings` includes `target` or is the full list.
-             // If `siblings` IS the full list, then `target` must be in it.
-             
-             const isValid = await verifyTransactionProof(eip1559Tx, block, txs);
-             expect(isValid).toBe(false);
+            // In this case, `eip1559Tx` is not in `txs`.
+            // The function `verifyTransactionProof(target, block, siblings)`
+            // usually assumes `siblings` includes `target` or is the full list.
+            // If `siblings` IS the full list, then `target` must be in it.
+
+            const isValid = await verifyTransactionProof(eip1559Tx, block, txs);
+            expect(isValid).toBe(false);
         });
     });
 });

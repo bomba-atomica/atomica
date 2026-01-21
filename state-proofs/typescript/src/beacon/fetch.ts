@@ -11,86 +11,83 @@
  */
 
 import type {
-  LightClientBootstrap,
-  LightClientUpdate,
-  BeaconBlockHeader,
-  LightClientHeader,
-  SyncCommittee,
-  SyncAggregate,
+    LightClientBootstrap,
+    LightClientUpdate,
+    BeaconBlockHeader,
+    LightClientHeader,
+    SyncCommittee,
+    SyncAggregate,
 } from "./types";
 
 /**
  * Beacon chain configuration
  */
 export interface BeaconConfig {
-  name: "mainnet" | "sepolia" | "holesky";
-  genesisTime: number;
-  secondsPerSlot: number;
-  slotsPerEpoch: number;
-  epochsPerSyncCommitteePeriod: number;
+    name: "mainnet" | "sepolia" | "holesky";
+    genesisTime: number;
+    secondsPerSlot: number;
+    slotsPerEpoch: number;
+    epochsPerSyncCommitteePeriod: number;
 }
 
 export const BEACON_CONFIGS: Record<string, BeaconConfig> = {
-  mainnet: {
-    name: "mainnet",
-    genesisTime: 1606824022,
-    secondsPerSlot: 12,
-    slotsPerEpoch: 32,
-    epochsPerSyncCommitteePeriod: 256,
-  },
-  sepolia: {
-    name: "sepolia",
-    genesisTime: 1655733600,
-    secondsPerSlot: 12,
-    slotsPerEpoch: 32,
-    epochsPerSyncCommitteePeriod: 256,
-  },
-  holesky: {
-    name: "holesky",
-    genesisTime: 1695907200,
-    secondsPerSlot: 12,
-    slotsPerEpoch: 32,
-    epochsPerSyncCommitteePeriod: 256,
-  },
+    mainnet: {
+        name: "mainnet",
+        genesisTime: 1606824022,
+        secondsPerSlot: 12,
+        slotsPerEpoch: 32,
+        epochsPerSyncCommitteePeriod: 256,
+    },
+    sepolia: {
+        name: "sepolia",
+        genesisTime: 1655733600,
+        secondsPerSlot: 12,
+        slotsPerEpoch: 32,
+        epochsPerSyncCommitteePeriod: 256,
+    },
+    holesky: {
+        name: "holesky",
+        genesisTime: 1695907200,
+        secondsPerSlot: 12,
+        slotsPerEpoch: 32,
+        epochsPerSyncCommitteePeriod: 256,
+    },
 };
 
 interface BeaconAPIResponse<T> {
-  data: T;
-  execution_optimistic: boolean;
-  finalized: boolean;
+    data: T;
+    execution_optimistic: boolean;
+    finalized: boolean;
 }
 
 /**
  * Convert hex string to bytes
  */
 function hexToUint8Array(hex: string): Uint8Array {
-  if (hex.startsWith("0x")) {
-    hex = hex.slice(2);
-  }
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
-  }
-  return bytes;
+    if (hex.startsWith("0x")) {
+        hex = hex.slice(2);
+    }
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < hex.length; i += 2) {
+        bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+    }
+    return bytes;
 }
 
 /**
  * Parse beacon API response
  */
-async function fetchBeaconApi<T>(
-  apiUrl: string,
-  endpoint: string,
-): Promise<T> {
-  const response = await fetch(`${apiUrl}${endpoint}`, {
-    headers: { Accept: "application/json" },
-  });
+async function fetchBeaconApi<T>(apiUrl: string, endpoint: string): Promise<T> {
+    const response = await fetch(`${apiUrl}${endpoint}`, {
+        headers: { Accept: "application/json" },
+    });
 
-  if (!response.ok) {
-    throw new Error(`Beacon API error: ${response.status} ${response.statusText}`);
-  }
+    if (!response.ok) {
+        throw new Error(`Beacon API error: ${response.status} ${response.statusText}`);
+    }
 
-  const data = await response.json();
-  return data as T;
+    const data = await response.json();
+    return data as T;
 }
 
 /**
@@ -101,70 +98,69 @@ async function fetchBeaconApi<T>(
  * @returns LightClientBootstrap response
  */
 export async function fetchLightClientBootstrap(
-  apiUrl: string,
-  blockRoot: string,
+    apiUrl: string,
+    blockRoot: string,
 ): Promise<LightClientBootstrap> {
-  const response = await fetchBeaconApi<BeaconAPIResponse<{
-    header: {
-      message: {
-        slot: string;
-        proposer_index: string;
-        parent_root: string;
-        state_root: string;
-        body_root: string;
-      };
-      signature: string;
+    const response = await fetchBeaconApi<
+        BeaconAPIResponse<{
+            header: {
+                message: {
+                    slot: string;
+                    proposer_index: string;
+                    parent_root: string;
+                    state_root: string;
+                    body_root: string;
+                };
+                signature: string;
+            };
+            current_sync_committee: {
+                pubkeys: string[];
+                aggregate_pubkey: string;
+            };
+            current_sync_committee_branch: string[];
+        }>
+    >(apiUrl, `/eth/v1/beacon/light_client/bootstrap/${blockRoot.replace("0x", "")}`);
+
+    const data = response.data;
+
+    const header: LightClientHeader = {
+        beacon: {
+            slot: parseInt(data.header.message.slot, 10),
+            proposerIndex: parseInt(data.header.message.proposer_index, 10),
+            parentRoot: data.header.message.parent_root,
+            stateRoot: data.header.message.state_root,
+            bodyRoot: data.header.message.body_root,
+        },
+        execution: {
+            parentHash: "0x" + "00".repeat(32),
+            feeRecipient: "0x" + "00".repeat(20),
+            stateRoot: "0x" + "00".repeat(32),
+            receiptsRoot: "0x" + "00".repeat(32),
+            logsBloom: "0x" + "00".repeat(256),
+            prevRandao: "0x" + "00".repeat(32),
+            blockNumber: 0,
+            gasLimit: 0,
+            gasUsed: 0,
+            timestamp: 0,
+            extraData: "0x",
+            baseFeePerGas: 0n,
+            blockHash: "0x" + "00".repeat(32),
+            transactionsRoot: "0x" + "00".repeat(32),
+            withdrawalsRoot: "0x" + "00".repeat(32),
+        },
+        executionBranch: [],
     };
-    current_sync_committee: {
-      pubkeys: string[];
-      aggregate_pubkey: string;
+
+    const syncCommittee: SyncCommittee = {
+        pubkeys: data.current_sync_committee.pubkeys,
+        aggregatePubkey: data.current_sync_committee.aggregate_pubkey,
     };
-    current_sync_committee_branch: string[];
-  }>>(
-    apiUrl,
-    `/eth/v1/beacon/light_client/bootstrap/${blockRoot.replace("0x", "")}`,
-  );
 
-  const data = response.data;
-
-  const header: LightClientHeader = {
-    beacon: {
-      slot: parseInt(data.header.message.slot, 10),
-      proposerIndex: parseInt(data.header.message.proposer_index, 10),
-      parentRoot: data.header.message.parent_root,
-      stateRoot: data.header.message.state_root,
-      bodyRoot: data.header.message.body_root,
-    },
-    execution: {
-      parentHash: "0x" + "00".repeat(32),
-      feeRecipient: "0x" + "00".repeat(20),
-      stateRoot: "0x" + "00".repeat(32),
-      receiptsRoot: "0x" + "00".repeat(32),
-      logsBloom: "0x" + "00".repeat(256),
-      prevRandao: "0x" + "00".repeat(32),
-      blockNumber: 0,
-      gasLimit: 0,
-      gasUsed: 0,
-      timestamp: 0,
-      extraData: "0x",
-      baseFeePerGas: 0n,
-      blockHash: "0x" + "00".repeat(32),
-      transactionsRoot: "0x" + "00".repeat(32),
-      withdrawalsRoot: "0x" + "00".repeat(32),
-    },
-    executionBranch: [],
-  };
-
-  const syncCommittee: SyncCommittee = {
-    pubkeys: data.current_sync_committee.pubkeys,
-    aggregatePubkey: data.current_sync_committee.aggregate_pubkey,
-  };
-
-  return {
-    header,
-    currentSyncCommittee: syncCommittee,
-    currentSyncCommitteeBranch: data.current_sync_committee_branch,
-  };
+    return {
+        header,
+        currentSyncCommittee: syncCommittee,
+        currentSyncCommitteeBranch: data.current_sync_committee_branch,
+    };
 }
 
 /**
@@ -176,131 +172,139 @@ export async function fetchLightClientBootstrap(
  * @returns Array of LightClientUpdate responses
  */
 export async function fetchLightClientUpdates(
-  apiUrl: string,
-  startPeriod: number,
-  count: number,
+    apiUrl: string,
+    startPeriod: number,
+    count: number,
 ): Promise<LightClientUpdate[]> {
-  const updates: LightClientUpdate[] = [];
+    const updates: LightClientUpdate[] = [];
 
-  for (let i = 0; i < count; i++) {
-    const period = startPeriod + i;
-    try {
-      const update = await fetchLightClientUpdateByPeriod(apiUrl, period);
-      if (update) {
-        updates.push(update);
-      }
-    } catch (error) {
-      console.warn(`Failed to fetch update for period ${period}:`, error instanceof Error ? error.message : error);
+    for (let i = 0; i < count; i++) {
+        const period = startPeriod + i;
+        try {
+            const update = await fetchLightClientUpdateByPeriod(apiUrl, period);
+            if (update) {
+                updates.push(update);
+            }
+        } catch (error) {
+            console.warn(
+                `Failed to fetch update for period ${period}:`,
+                error instanceof Error ? error.message : error,
+            );
+        }
     }
-  }
 
-  return updates;
+    return updates;
 }
 
 /**
  * Fetch a single light client update by period
  */
 async function fetchLightClientUpdateByPeriod(
-  apiUrl: string,
-  period: number,
+    apiUrl: string,
+    period: number,
 ): Promise<LightClientUpdate | null> {
-  const response = await fetchBeaconApi<BeaconAPIResponse<{
-    version: string;
-    attested_header: {
-      message: {
+    const response = await fetchBeaconApi<BeaconAPIResponse<{
+        version: string;
+        attested_header: {
+            message: {
+                slot: string;
+                proposer_index: string;
+                parent_root: string;
+                state_root: string;
+                body_root: string;
+            };
+            signature: string;
+        };
+        next_sync_committee: {
+            pubkeys: string[];
+            aggregate_pubkey: string;
+        };
+        next_sync_committee_branch: string[];
+        finalized_header: {
+            message: {
+                slot: string;
+                proposer_index: string;
+                parent_root: string;
+                state_root: string;
+                body_root: string;
+            };
+            signature: string;
+        } | null;
+        finality_branch: string[];
+        sync_aggregate: {
+            sync_committee_bits: string;
+            sync_committee_signature: string;
+        };
+        signature_slot: string;
+    }> | null>(apiUrl, `/eth/v1/beacon/light_client/updates/${period}?count=1`);
+
+    if (!response || !response.data) {
+        return null;
+    }
+
+    const data = response.data;
+
+    const parseHeader = (msg: {
         slot: string;
         proposer_index: string;
         parent_root: string;
         state_root: string;
         body_root: string;
-      };
-      signature: string;
+    }): BeaconBlockHeader => ({
+        slot: parseInt(msg.slot, 10),
+        proposerIndex: parseInt(msg.proposer_index, 10),
+        parentRoot: msg.parent_root,
+        stateRoot: msg.state_root,
+        bodyRoot: msg.body_root,
+    });
+
+    const attestedHeader: LightClientHeader = {
+        beacon: parseHeader(data.attested_header.message),
+        execution: {
+            parentHash: "0x" + "00".repeat(32),
+            feeRecipient: "0x" + "00".repeat(20),
+            stateRoot: "0x" + "00".repeat(32),
+            receiptsRoot: "0x" + "00".repeat(32),
+            logsBloom: "0x" + "00".repeat(256),
+            prevRandao: "0x" + "00".repeat(32),
+            blockNumber: 0,
+            gasLimit: 0,
+            gasUsed: 0,
+            timestamp: 0,
+            extraData: "0x",
+            baseFeePerGas: 0n,
+            blockHash: "0x" + "00".repeat(32),
+            transactionsRoot: "0x" + "00".repeat(32),
+            withdrawalsRoot: "0x" + "00".repeat(32),
+        },
+        executionBranch: [],
     };
-    next_sync_committee: {
-      pubkeys: string[];
-      aggregate_pubkey: string;
+
+    const nextSyncCommittee: SyncCommittee = {
+        pubkeys: data.next_sync_committee.pubkeys,
+        aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
     };
-    next_sync_committee_branch: string[];
-    finalized_header: {
-      message: {
-        slot: string;
-        proposer_index: string;
-        parent_root: string;
-        state_root: string;
-        body_root: string;
-      };
-      signature: string;
-    } | null;
-    finality_branch: string[];
-    sync_aggregate: {
-      sync_committee_bits: string;
-      sync_committee_signature: string;
+
+    const syncAggregate: SyncAggregate = {
+        syncCommitteeBits: hexToUint8Array(data.sync_aggregate.sync_committee_bits),
+        syncCommitteeSignature: data.sync_aggregate.sync_committee_signature,
     };
-    signature_slot: string;
-  }> | null>(
-    apiUrl,
-    `/eth/v1/beacon/light_client/updates/${period}?count=1`,
-  );
 
-  if (!response || !response.data) {
-    return null;
-  }
-
-  const data = response.data;
-
-  const parseHeader = (
-    msg: { slot: string; proposer_index: string; parent_root: string; state_root: string; body_root: string },
-  ): BeaconBlockHeader => ({
-    slot: parseInt(msg.slot, 10),
-    proposerIndex: parseInt(msg.proposer_index, 10),
-    parentRoot: msg.parent_root,
-    stateRoot: msg.state_root,
-    bodyRoot: msg.body_root,
-  });
-
-  const attestedHeader: LightClientHeader = {
-    beacon: parseHeader(data.attested_header.message),
-    execution: {
-      parentHash: "0x" + "00".repeat(32),
-      feeRecipient: "0x" + "00".repeat(20),
-      stateRoot: "0x" + "00".repeat(32),
-      receiptsRoot: "0x" + "00".repeat(32),
-      logsBloom: "0x" + "00".repeat(256),
-      prevRandao: "0x" + "00".repeat(32),
-      blockNumber: 0,
-      gasLimit: 0,
-      gasUsed: 0,
-      timestamp: 0,
-      extraData: "0x",
-      baseFeePerGas: 0n,
-      blockHash: "0x" + "00".repeat(32),
-      transactionsRoot: "0x" + "00".repeat(32),
-      withdrawalsRoot: "0x" + "00".repeat(32),
-    },
-    executionBranch: [],
-  };
-
-  const nextSyncCommittee: SyncCommittee = {
-    pubkeys: data.next_sync_committee.pubkeys,
-    aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
-  };
-
-  const syncAggregate: SyncAggregate = {
-    syncCommitteeBits: hexToUint8Array(data.sync_aggregate.sync_committee_bits),
-    syncCommitteeSignature: data.sync_aggregate.sync_committee_signature,
-  };
-
-  return {
-    attestedHeader,
-    nextSyncCommittee,
-    nextSyncCommitteeBranch: data.next_sync_committee_branch,
-    finalizedHeader: data.finalized_header
-      ? { beacon: parseHeader(data.finalized_header.message), execution: attestedHeader.execution, executionBranch: [] }
-      : null,
-    finalityBranch: data.finality_branch,
-    syncAggregate,
-    signatureSlot: parseInt(data.signature_slot, 10),
-  };
+    return {
+        attestedHeader,
+        nextSyncCommittee,
+        nextSyncCommitteeBranch: data.next_sync_committee_branch,
+        finalizedHeader: data.finalized_header
+            ? {
+                  beacon: parseHeader(data.finalized_header.message),
+                  execution: attestedHeader.execution,
+                  executionBranch: [],
+              }
+            : null,
+        finalityBranch: data.finality_branch,
+        syncAggregate,
+        signatureSlot: parseInt(data.signature_slot, 10),
+    };
 }
 
 /**
@@ -309,103 +313,104 @@ async function fetchLightClientUpdateByPeriod(
  * @param apiUrl - Beacon API URL
  * @returns LightClientUpdate with finality information
  */
-export async function fetchLightClientFinalityUpdate(
-  apiUrl: string,
-): Promise<LightClientUpdate> {
-  const response = await fetchBeaconApi<BeaconAPIResponse<{
-    attested_header: {
-      message: {
+export async function fetchLightClientFinalityUpdate(apiUrl: string): Promise<LightClientUpdate> {
+    const response = await fetchBeaconApi<
+        BeaconAPIResponse<{
+            attested_header: {
+                message: {
+                    slot: string;
+                    proposer_index: string;
+                    parent_root: string;
+                    state_root: string;
+                    body_root: string;
+                };
+                signature: string;
+            };
+            next_sync_committee: {
+                pubkeys: string[];
+                aggregate_pubkey: string;
+            };
+            next_sync_committee_branch: string[];
+            finalized_header: {
+                message: {
+                    slot: string;
+                    proposer_index: string;
+                    parent_root: string;
+                    state_root: string;
+                    body_root: string;
+                };
+                signature: string;
+            };
+            finality_branch: string[];
+            sync_aggregate: {
+                sync_committee_bits: string;
+                sync_committee_signature: string;
+            };
+            signature_slot: string;
+        }>
+    >(apiUrl, "/eth/v1/beacon/light_client/finality_update");
+
+    const data = response.data;
+
+    const parseHeader = (msg: {
         slot: string;
         proposer_index: string;
         parent_root: string;
         state_root: string;
         body_root: string;
-      };
-      signature: string;
+    }): BeaconBlockHeader => ({
+        slot: parseInt(msg.slot, 10),
+        proposerIndex: parseInt(msg.proposer_index, 10),
+        parentRoot: msg.parent_root,
+        stateRoot: msg.state_root,
+        bodyRoot: msg.body_root,
+    });
+
+    const attestedHeader: LightClientHeader = {
+        beacon: parseHeader(data.attested_header.message),
+        execution: {
+            parentHash: "0x" + "00".repeat(32),
+            feeRecipient: "0x" + "00".repeat(20),
+            stateRoot: "0x" + "00".repeat(32),
+            receiptsRoot: "0x" + "00".repeat(32),
+            logsBloom: "0x" + "00".repeat(256),
+            prevRandao: "0x" + "00".repeat(32),
+            blockNumber: 0,
+            gasLimit: 0,
+            gasUsed: 0,
+            timestamp: 0,
+            extraData: "0x",
+            baseFeePerGas: 0n,
+            blockHash: "0x" + "00".repeat(32),
+            transactionsRoot: "0x" + "00".repeat(32),
+            withdrawalsRoot: "0x" + "00".repeat(32),
+        },
+        executionBranch: [],
     };
-    next_sync_committee: {
-      pubkeys: string[];
-      aggregate_pubkey: string;
+
+    const nextSyncCommittee: SyncCommittee = {
+        pubkeys: data.next_sync_committee.pubkeys,
+        aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
     };
-    next_sync_committee_branch: string[];
-    finalized_header: {
-      message: {
-        slot: string;
-        proposer_index: string;
-        parent_root: string;
-        state_root: string;
-        body_root: string;
-      };
-      signature: string;
+
+    const syncAggregate: SyncAggregate = {
+        syncCommitteeBits: hexToUint8Array(data.sync_aggregate.sync_committee_bits),
+        syncCommitteeSignature: data.sync_aggregate.sync_committee_signature,
     };
-    finality_branch: string[];
-    sync_aggregate: {
-      sync_committee_bits: string;
-      sync_committee_signature: string;
+
+    return {
+        attestedHeader,
+        nextSyncCommittee,
+        nextSyncCommitteeBranch: data.next_sync_committee_branch,
+        finalizedHeader: {
+            beacon: parseHeader(data.finalized_header.message),
+            execution: attestedHeader.execution,
+            executionBranch: [],
+        },
+        finalityBranch: data.finality_branch,
+        syncAggregate,
+        signatureSlot: parseInt(data.signature_slot, 10),
     };
-    signature_slot: string;
-  }>>(
-    apiUrl,
-    "/eth/v1/beacon/light_client/finality_update",
-  );
-
-  const data = response.data;
-
-  const parseHeader = (
-    msg: { slot: string; proposer_index: string; parent_root: string; state_root: string; body_root: string },
-  ): BeaconBlockHeader => ({
-    slot: parseInt(msg.slot, 10),
-    proposerIndex: parseInt(msg.proposer_index, 10),
-    parentRoot: msg.parent_root,
-    stateRoot: msg.state_root,
-    bodyRoot: msg.body_root,
-  });
-
-  const attestedHeader: LightClientHeader = {
-    beacon: parseHeader(data.attested_header.message),
-    execution: {
-      parentHash: "0x" + "00".repeat(32),
-      feeRecipient: "0x" + "00".repeat(20),
-      stateRoot: "0x" + "00".repeat(32),
-      receiptsRoot: "0x" + "00".repeat(32),
-      logsBloom: "0x" + "00".repeat(256),
-      prevRandao: "0x" + "00".repeat(32),
-      blockNumber: 0,
-      gasLimit: 0,
-      gasUsed: 0,
-      timestamp: 0,
-      extraData: "0x",
-      baseFeePerGas: 0n,
-      blockHash: "0x" + "00".repeat(32),
-      transactionsRoot: "0x" + "00".repeat(32),
-      withdrawalsRoot: "0x" + "00".repeat(32),
-    },
-    executionBranch: [],
-  };
-
-  const nextSyncCommittee: SyncCommittee = {
-    pubkeys: data.next_sync_committee.pubkeys,
-    aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
-  };
-
-  const syncAggregate: SyncAggregate = {
-    syncCommitteeBits: hexToUint8Array(data.sync_aggregate.sync_committee_bits),
-    syncCommitteeSignature: data.sync_aggregate.sync_committee_signature,
-  };
-
-  return {
-    attestedHeader,
-    nextSyncCommittee,
-    nextSyncCommitteeBranch: data.next_sync_committee_branch,
-    finalizedHeader: {
-      beacon: parseHeader(data.finalized_header.message),
-      execution: attestedHeader.execution,
-      executionBranch: [],
-    },
-    finalityBranch: data.finality_branch,
-    syncAggregate,
-    signatureSlot: parseInt(data.signature_slot, 10),
-  };
 }
 
 /**
@@ -414,88 +419,89 @@ export async function fetchLightClientFinalityUpdate(
  * @param apiUrl - Beacon API URL
  * @returns LightClientUpdate for head block
  */
-export async function fetchLightClientOptimisticUpdate(
-  apiUrl: string,
-): Promise<LightClientUpdate> {
-  const response = await fetchBeaconApi<BeaconAPIResponse<{
-    attested_header: {
-      message: {
+export async function fetchLightClientOptimisticUpdate(apiUrl: string): Promise<LightClientUpdate> {
+    const response = await fetchBeaconApi<
+        BeaconAPIResponse<{
+            attested_header: {
+                message: {
+                    slot: string;
+                    proposer_index: string;
+                    parent_root: string;
+                    state_root: string;
+                    body_root: string;
+                };
+                signature: string;
+            };
+            next_sync_committee: {
+                pubkeys: string[];
+                aggregate_pubkey: string;
+            };
+            next_sync_committee_branch: string[];
+            sync_aggregate: {
+                sync_committee_bits: string;
+                sync_committee_signature: string;
+            };
+            signature_slot: string;
+        }>
+    >(apiUrl, "/eth/v1/beacon/light_client/optimistic_update");
+
+    const data = response.data;
+
+    const parseHeader = (msg: {
         slot: string;
         proposer_index: string;
         parent_root: string;
         state_root: string;
         body_root: string;
-      };
-      signature: string;
+    }): BeaconBlockHeader => ({
+        slot: parseInt(msg.slot, 10),
+        proposerIndex: parseInt(msg.proposer_index, 10),
+        parentRoot: msg.parent_root,
+        stateRoot: msg.state_root,
+        bodyRoot: msg.body_root,
+    });
+
+    const attestedHeader: LightClientHeader = {
+        beacon: parseHeader(data.attested_header.message),
+        execution: {
+            parentHash: "0x" + "00".repeat(32),
+            feeRecipient: "0x" + "00".repeat(20),
+            stateRoot: "0x" + "00".repeat(32),
+            receiptsRoot: "0x" + "00".repeat(32),
+            logsBloom: "0x" + "00".repeat(256),
+            prevRandao: "0x" + "00".repeat(32),
+            blockNumber: 0,
+            gasLimit: 0,
+            gasUsed: 0,
+            timestamp: 0,
+            extraData: "0x",
+            baseFeePerGas: 0n,
+            blockHash: "0x" + "00".repeat(32),
+            transactionsRoot: "0x" + "00".repeat(32),
+            withdrawalsRoot: "0x" + "00".repeat(32),
+        },
+        executionBranch: [],
     };
-    next_sync_committee: {
-      pubkeys: string[];
-      aggregate_pubkey: string;
+
+    const nextSyncCommittee: SyncCommittee = {
+        pubkeys: data.next_sync_committee.pubkeys,
+        aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
     };
-    next_sync_committee_branch: string[];
-    sync_aggregate: {
-      sync_committee_bits: string;
-      sync_committee_signature: string;
+
+    const syncAggregate: SyncAggregate = {
+        syncCommitteeBits: hexToUint8Array(data.sync_aggregate.sync_committee_bits),
+        syncCommitteeSignature: data.sync_aggregate.sync_committee_signature,
     };
-    signature_slot: string;
-  }>>(
-    apiUrl,
-    "/eth/v1/beacon/light_client/optimistic_update",
-  );
 
-  const data = response.data;
-
-  const parseHeader = (
-    msg: { slot: string; proposer_index: string; parent_root: string; state_root: string; body_root: string },
-  ): BeaconBlockHeader => ({
-    slot: parseInt(msg.slot, 10),
-    proposerIndex: parseInt(msg.proposer_index, 10),
-    parentRoot: msg.parent_root,
-    stateRoot: msg.state_root,
-    bodyRoot: msg.body_root,
-  });
-
-  const attestedHeader: LightClientHeader = {
-    beacon: parseHeader(data.attested_header.message),
-    execution: {
-      parentHash: "0x" + "00".repeat(32),
-      feeRecipient: "0x" + "00".repeat(20),
-      stateRoot: "0x" + "00".repeat(32),
-      receiptsRoot: "0x" + "00".repeat(32),
-      logsBloom: "0x" + "00".repeat(256),
-      prevRandao: "0x" + "00".repeat(32),
-      blockNumber: 0,
-      gasLimit: 0,
-      gasUsed: 0,
-      timestamp: 0,
-      extraData: "0x",
-      baseFeePerGas: 0n,
-      blockHash: "0x" + "00".repeat(32),
-      transactionsRoot: "0x" + "00".repeat(32),
-      withdrawalsRoot: "0x" + "00".repeat(32),
-    },
-    executionBranch: [],
-  };
-
-  const nextSyncCommittee: SyncCommittee = {
-    pubkeys: data.next_sync_committee.pubkeys,
-    aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
-  };
-
-  const syncAggregate: SyncAggregate = {
-    syncCommitteeBits: hexToUint8Array(data.sync_aggregate.sync_committee_bits),
-    syncCommitteeSignature: data.sync_aggregate.sync_committee_signature,
-  };
-
-  return {
-    attestedHeader,
-    nextSyncCommittee,
-    nextSyncCommitteeBranch: data.next_sync_committee_branch,
-    finalizedHeader: null,
-    finalityBranch: [],
-    syncAggregate,
-    signatureSlot: parseInt(data.signature_slot, 10),
-  };
+    return {
+        attestedHeader,
+        nextSyncCommittee,
+        nextSyncCommitteeBranch: data.next_sync_committee_branch,
+        finalizedHeader: null,
+        finalityBranch: [],
+        syncAggregate,
+        signatureSlot: parseInt(data.signature_slot, 10),
+    };
 }
 
 /**
@@ -506,32 +512,31 @@ export async function fetchLightClientOptimisticUpdate(
  * @returns BeaconBlockHeader
  */
 export async function fetchBeaconBlockHeader(
-  apiUrl: string,
-  slot: number,
+    apiUrl: string,
+    slot: number,
 ): Promise<BeaconBlockHeader> {
-  const response = await fetchBeaconApi<BeaconAPIResponse<{
-    message: {
-      slot: string;
-      proposer_index: string;
-      parent_root: string;
-      state_root: string;
-      body_root: string;
+    const response = await fetchBeaconApi<
+        BeaconAPIResponse<{
+            message: {
+                slot: string;
+                proposer_index: string;
+                parent_root: string;
+                state_root: string;
+                body_root: string;
+            };
+            signature: string;
+        }>
+    >(apiUrl, `/eth/v1/beacon/blocks/${slot}/root`);
+
+    const data = response.data;
+
+    return {
+        slot: parseInt(data.message.slot, 10),
+        proposerIndex: parseInt(data.message.proposer_index, 10),
+        parentRoot: data.message.parent_root,
+        stateRoot: data.message.state_root,
+        bodyRoot: data.message.body_root,
     };
-    signature: string;
-  }>>(
-    apiUrl,
-    `/eth/v1/beacon/blocks/${slot}/root`,
-  );
-
-  const data = response.data;
-
-  return {
-    slot: parseInt(data.message.slot, 10),
-    proposerIndex: parseInt(data.message.proposer_index, 10),
-    parentRoot: data.message.parent_root,
-    stateRoot: data.message.state_root,
-    bodyRoot: data.message.body_root,
-  };
 }
 
 /**
@@ -541,29 +546,23 @@ export async function fetchBeaconBlockHeader(
  * @param config - Beacon chain configuration
  * @returns Sync committee period number
  */
-export function computeSyncCommitteePeriod(
-  slot: number,
-  config: BeaconConfig,
-): number {
-  const epoch = Math.floor(slot / config.slotsPerEpoch);
-  return Math.floor(epoch / config.epochsPerSyncCommitteePeriod);
+export function computeSyncCommitteePeriod(slot: number, config: BeaconConfig): number {
+    const epoch = Math.floor(slot / config.slotsPerEpoch);
+    return Math.floor(epoch / config.epochsPerSyncCommitteePeriod);
 }
 
 /**
  * Get public beacon API URLs
  */
 export function getBeaconApiUrls(chain: string): string[] {
-  switch (chain) {
-    case "mainnet":
-      return [
-        "https://beaconcha.in/api/v1",
-        "https://www.lightclientdata.org/api/v1",
-      ];
-    case "sepolia":
-      return ["https://checkpoint-sync.sepolia.beaconcha.in/api/v1"];
-    case "holesky":
-      return ["https://checkpoint-sync.holesky.beaconcha.in/api/v1"];
-    default:
-      throw new Error(`Unknown chain: ${chain}`);
-  }
+    switch (chain) {
+        case "mainnet":
+            return ["https://beaconcha.in/api/v1", "https://www.lightclientdata.org/api/v1"];
+        case "sepolia":
+            return ["https://checkpoint-sync.sepolia.beaconcha.in/api/v1"];
+        case "holesky":
+            return ["https://checkpoint-sync.holesky.beaconcha.in/api/v1"];
+        default:
+            throw new Error(`Unknown chain: ${chain}`);
+    }
 }

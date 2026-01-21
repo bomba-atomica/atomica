@@ -8,7 +8,18 @@
  * - verify-transfer: Verify a transfer transaction
  */
 
-import { fetchProof, fetchBlock, fetchBlockTransactions, fetchBlockReceipts, verifyAccountProof, verifyStorageProof, verifyTransactionProof, verifyReceiptProof, fetchTransaction, fetchTransactionReceipt } from "./index";
+import {
+    fetchProof,
+    fetchBlock,
+    fetchBlockTransactions,
+    fetchBlockReceipts,
+    verifyAccountProof,
+    verifyStorageProof,
+    verifyTransactionProof,
+    verifyReceiptProof,
+    fetchTransaction,
+    fetchTransactionReceipt,
+} from "./index";
 
 interface CliArgs {
     command: string;
@@ -280,7 +291,7 @@ async function verifyTransferCommand(args: CliArgs) {
 
         // 1. Fetch receipt to get block number and status
         const receipt = await fetchTransactionReceipt(rpcUrl, txHash);
-        
+
         if (args.options.verbose) {
             console.log("✓ Receipt fetched");
             console.log("  Block:", receipt.blockNumber);
@@ -293,13 +304,15 @@ async function verifyTransferCommand(args: CliArgs) {
 
         // 2. Fetch transaction to get value
         const tx = await fetchTransaction(rpcUrl, txHash);
-        
+
         const blockNumber = receipt.blockNumber;
         const sender = receipt.from;
         const receiver = receipt.to;
 
         if (!receiver) {
-            console.error("Error: Contract creation transactions not supported for transfer verification");
+            console.error(
+                "Error: Contract creation transactions not supported for transfer verification",
+            );
             process.exit(1);
         }
 
@@ -331,7 +344,7 @@ async function verifyTransferCommand(args: CliArgs) {
         if (args.options.verbose) {
             console.log("\nVerifying transaction inclusion in transactions trie...");
         }
-        const targetTx = allTxs.find(t => t.hash.toLowerCase() === txHash.toLowerCase());
+        const targetTx = allTxs.find((t) => t.hash.toLowerCase() === txHash.toLowerCase());
         if (!targetTx) {
             console.error("Error: Transaction not found in block");
             process.exit(1);
@@ -339,14 +352,18 @@ async function verifyTransferCommand(args: CliArgs) {
         const txVerified = await verifyTransactionProof(targetTx, blockData, allTxs);
 
         if (args.options.verbose) {
-            console.log(`  Transaction ${txHash.slice(0, 10)}... verification: ${txVerified ? "PASSED ✓" : "FAILED ✗"}`);
+            console.log(
+                `  Transaction ${txHash.slice(0, 10)}... verification: ${txVerified ? "PASSED ✓" : "FAILED ✗"}`,
+            );
         }
 
         // 6. Verify Receipt Inclusion Proof
         if (args.options.verbose) {
             console.log("Verifying receipt inclusion in receipts trie...");
         }
-        const targetReceipt = allReceipts.find(r => r.transactionHash.toLowerCase() === txHash.toLowerCase());
+        const targetReceipt = allReceipts.find(
+            (r) => r.transactionHash.toLowerCase() === txHash.toLowerCase(),
+        );
         if (!targetReceipt) {
             console.error("Error: Receipt not found in block");
             process.exit(1);
@@ -360,19 +377,31 @@ async function verifyTransferCommand(args: CliArgs) {
         // 7. Verify Sender State
         if (args.options.verbose) console.log(`\nVerifying sender state: ${sender}`);
         const senderProof = await fetchProof(rpcUrl, sender, [], blockNumber);
-        const senderResult = await verifyAccountProof(senderProof.accountProof, blockData.stateRoot, sender);
+        const senderResult = await verifyAccountProof(
+            senderProof.accountProof,
+            blockData.stateRoot,
+            sender,
+        );
 
         // 8. Verify Receiver State
         if (args.options.verbose) console.log(`Verifying receiver state: ${receiver}`);
         const receiverProof = await fetchProof(rpcUrl, receiver, [], blockNumber);
-        const receiverResult = await verifyAccountProof(receiverProof.accountProof, blockData.stateRoot, receiver);
+        const receiverResult = await verifyAccountProof(
+            receiverProof.accountProof,
+            blockData.stateRoot,
+            receiver,
+        );
 
         // Output Results
         if (args.options.json) {
             console.log(
                 JSON.stringify(
                     {
-                        valid: senderResult.valid && receiverResult.valid && txVerified && receiptVerified,
+                        valid:
+                            senderResult.valid &&
+                            receiverResult.valid &&
+                            txVerified &&
+                            receiptVerified,
                         transaction: {
                             hash: txHash,
                             block: blockNumber.toString(),
@@ -396,7 +425,7 @@ async function verifyTransferCommand(args: CliArgs) {
                             valid: receiverResult.valid,
                             balance: receiverResult.accountState?.balance.toString(),
                             nonce: receiverResult.accountState?.nonce,
-                        }
+                        },
                     },
                     null,
                     2,
@@ -410,11 +439,11 @@ async function verifyTransferCommand(args: CliArgs) {
             console.log(`Block:       ${blockNumber}`);
             console.log(`Value:       ${formatEth(tx.value)}`);
             console.log("--------------------------------------------");
-            
+
             console.log("PROOF VERIFICATION SUMMARY:");
             console.log(`  Transaction: ${txVerified ? "✓ VERIFIED" : "✗ FAILED"}`);
             console.log(`  Receipt:     ${receiptVerified ? "✓ VERIFIED" : "✗ FAILED"}`);
-            
+
             console.log("--------------------------------------------");
             console.log(`SENDER:   ${sender}`);
             if (senderResult.valid && senderResult.accountState) {
@@ -427,7 +456,7 @@ async function verifyTransferCommand(args: CliArgs) {
             }
 
             console.log("--------------------------------------------");
-            
+
             console.log(`RECEIVER: ${receiver}`);
             if (receiverResult.valid && receiverResult.accountState) {
                 console.log(`  State:  VERIFIED ✓`);
@@ -439,7 +468,8 @@ async function verifyTransferCommand(args: CliArgs) {
             }
             console.log("============================================");
 
-            const allVerified = senderResult.valid && receiverResult.valid && txVerified && receiptVerified;
+            const allVerified =
+                senderResult.valid && receiverResult.valid && txVerified && receiptVerified;
             if (allVerified) {
                 console.log("\n✓ Transfer verified: All proofs cryptographically valid.");
             } else {
@@ -447,7 +477,6 @@ async function verifyTransferCommand(args: CliArgs) {
                 process.exit(1);
             }
         }
-
     } catch (error) {
         console.error("Error:", error instanceof Error ? error.message : error);
         process.exit(1);
