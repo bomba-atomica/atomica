@@ -6,6 +6,10 @@
  * - verify-account: Verify an account's state at a specific block
  * - verify-storage: Verify a storage slot value
  * - verify-transfer: Verify a transfer transaction
+ *
+ * Light Client Commands:
+ * - light-client-init: Initialize light client from checkpoint
+ * - light-client-status: Show current light client state
  */
 
 import {
@@ -20,6 +24,13 @@ import {
     fetchTransaction,
     fetchTransactionReceipt,
 } from "./index";
+
+import {
+    initLightClient,
+    syncLightClient,
+    verifyWithLightClient,
+    type LightClientConfig,
+} from "./beacon/cli";
 
 interface CliArgs {
     command: string;
@@ -76,10 +87,24 @@ COMMANDS:
   verify-transfer <txHash>
       Verify a transfer transaction affected account states
 
+  light-client-init [--beacon-rpc <url>] [--chain <mainnet|sepolia|holesky>]
+      Initialize light client from beacon checkpoint
+
+  light-client-sync [--beacon-rpc <url>] [--chain <mainnet|sepolia|holesky>]
+      Sync light client to latest beacon state
+
+  light-client-status
+      Show current light client status
+
 OPTIONS:
-  --rpc <url>       Ethereum RPC endpoint (required)
-  --json            Output as JSON instead of formatted table
-  --verbose         Show detailed verification steps
+  --rpc <url>           Ethereum RPC endpoint (required for verify commands)
+  --beacon-rpc <url>    Beacon API endpoint (required for light client commands)
+  --chain <name>        Beacon chain: mainnet, sepolia, holesky (default: mainnet)
+  --state-path <path>   Path to persist light client state
+  --checkpoint <root>   Checkpoint block root for bootstrap
+  --light-client        Use light client verified headers instead of RPC
+  --json                Output as JSON instead of formatted table
+  --verbose             Show detailed verification steps
 
 EXAMPLES:
   # Verify account against mainnet
@@ -93,6 +118,16 @@ EXAMPLES:
   # Get JSON output
   eth-verify verify-account 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb latest \\
     --rpc https://mainnet.infura.io/v3/YOUR_KEY --json
+
+  # Initialize light client
+  eth-verify light-client-init --beacon-rpc https://beaconcha.in/api/v1 \\
+    --chain mainnet --state-path ~/.eth-verify/light-client.json
+
+  # Verify with light client (trustless mode)
+  eth-verify verify-transfer 0x1234... \\
+    --rpc https://mainnet.infura.io/v3/YOUR_KEY \\
+    --beacon-rpc https://beaconcha.in/api/v1 \\
+    --light-client --state-path ~/.eth-verify/light-client.json
 `);
 }
 
@@ -275,6 +310,7 @@ async function verifyStorageCommand(args: CliArgs) {
 async function verifyTransferCommand(args: CliArgs) {
     const [txHash] = args.args;
     const rpcUrl = args.options.rpc as string;
+    const useLightClient = !!args.options["light-client"];
 
     if (!txHash || !rpcUrl) {
         console.error("Error: Missing required arguments");
@@ -282,11 +318,16 @@ async function verifyTransferCommand(args: CliArgs) {
         process.exit(1);
     }
 
+    let trustedRoots: { stateRoot: string; transactionsRoot: string; receiptsRoot: string } | null = null;
+    let lightClientVerified = false;
+    let blockData: any;
+
     try {
         if (args.options.verbose) {
             console.log("Fetching transaction details...");
             console.log("  RPC:", rpcUrl);
             console.log("  TxHash:", txHash);
+            console.log("  Light Client Mode:", useLightClient ? "Enabled" : "Disabled (RPC trust required)");
         }
 
         // 1. Fetch receipt to get block number and status
@@ -317,16 +358,65 @@ async function verifyTransferCommand(args: CliArgs) {
         }
 
         // 3. Fetch Block for state root, transactionsRoot, receiptsRoot
-        const blockData = await fetchBlock(rpcUrl, blockNumber);
+        blockData = await fetchBlock(rpcUrl, blockNumber);
 
         if (args.options.verbose) {
             console.log("✓ Block header fetched");
-            console.log("  State Root:     ", blockData.stateRoot);
+            console.log("  Block Hash:      ", blockData.hash);
+            console.log("  State Root:      ", blockData.stateRoot);
             console.log("  Transactions Root:", blockData.transactionsRoot);
             console.log("  Receipts Root:   ", blockData.receiptsRoot);
         }
 
+        // 3a. Light Client Verification (if enabled)
+        if (useLightClient) {
+            if (args.options.verbose) {
+                console.log("\n[Light Client] Verifying block header...");
+            }
+
+            const beaconApiUrl = args.options["beacon-rpc"] as string;
+            const chain = (args.options.chain as string) || "mainnet";
+            const statePath = args.options["state-path"] as string;
+
+            if (!beaconApiUrl) {
+                console.error("Error: --beacon-rpc required when --light-client is enabled");
+                process.exit(1);
+            }
+
+            const lcConfig: LightClientConfig = {
+                beaconApiUrl,
+                chain,
+                statePath,
+                verbose: !!args.options.verbose,
+            };
+
+            const lcResult = await verifyWithLightClient(blockData.hash, lcConfig);
+
+            if (!lcResult.valid) {
+                console.error(`\n✗ Light client verification failed: ${lcResult.error}`);
+                console.log("\nFalling back to RPC-based verification...");
+            } else {
+                trustedRoots = lcResult.roots;
+                lightClientVerified = true;
+
+                if (args.options.verbose) {
+                    console.log("\n[Light Client] ✓ Block header verified by sync committee");
+                    if (trustedRoots) {
+                        console.log("  Trusted State Root:      ", trustedRoots.stateRoot.slice(0, 30) + "...");
+                        console.log("  Trusted TransactionsRoot:", trustedRoots.transactionsRoot.slice(0, 30) + "...");
+                        console.log("  Trusted ReceiptsRoot:    ", trustedRoots.receiptsRoot.slice(0, 30) + "...");
+                    }
+                }
+            }
+        }
+
         console.log(`Verifying transfer in block ${blockNumber}...`);
+
+        if (lightClientVerified) {
+            console.log("  Mode: Light Client Verified (trustless)");
+        } else {
+            console.log("  Mode: RPC Trust Required");
+        }
 
         // 4. Fetch all transactions and receipts in the block for MPT reconstruction
         if (args.options.verbose) {
@@ -349,7 +439,12 @@ async function verifyTransferCommand(args: CliArgs) {
             console.error("Error: Transaction not found in block");
             process.exit(1);
         }
-        const txVerified = await verifyTransactionProof(targetTx, blockData, allTxs);
+
+        // Use light client transactions root if verified
+        const txBlockData = trustedRoots
+            ? { ...blockData, transactionsRoot: trustedRoots.transactionsRoot }
+            : blockData;
+        const txVerified = await verifyTransactionProof(targetTx, txBlockData, allTxs);
 
         if (args.options.verbose) {
             console.log(
@@ -368,7 +463,12 @@ async function verifyTransferCommand(args: CliArgs) {
             console.error("Error: Receipt not found in block");
             process.exit(1);
         }
-        const receiptVerified = await verifyReceiptProof(targetReceipt, blockData, allReceipts);
+
+        // Use light client receipts root if verified
+        const rcptBlockData = trustedRoots
+            ? { ...blockData, receiptsRoot: trustedRoots.receiptsRoot }
+            : blockData;
+        const receiptVerified = await verifyReceiptProof(targetReceipt, rcptBlockData, allReceipts);
 
         if (args.options.verbose) {
             console.log(`  Receipt verification: ${receiptVerified ? "PASSED ✓" : "FAILED ✗"}`);
@@ -377,9 +477,14 @@ async function verifyTransferCommand(args: CliArgs) {
         // 7. Verify Sender State
         if (args.options.verbose) console.log(`\nVerifying sender state: ${sender}`);
         const senderProof = await fetchProof(rpcUrl, sender, [], blockNumber);
+
+        // Use light client state root if verified
+        const senderBlockData = trustedRoots
+            ? { ...blockData, stateRoot: trustedRoots.stateRoot }
+            : blockData;
         const senderResult = await verifyAccountProof(
             senderProof.accountProof,
-            blockData.stateRoot,
+            senderBlockData.stateRoot,
             sender,
         );
 
@@ -388,7 +493,7 @@ async function verifyTransferCommand(args: CliArgs) {
         const receiverProof = await fetchProof(rpcUrl, receiver, [], blockNumber);
         const receiverResult = await verifyAccountProof(
             receiverProof.accountProof,
-            blockData.stateRoot,
+            senderBlockData.stateRoot,
             receiver,
         );
 
@@ -402,6 +507,7 @@ async function verifyTransferCommand(args: CliArgs) {
                             receiverResult.valid &&
                             txVerified &&
                             receiptVerified,
+                        lightClientVerified,
                         transaction: {
                             hash: txHash,
                             block: blockNumber.toString(),
@@ -426,6 +532,7 @@ async function verifyTransferCommand(args: CliArgs) {
                             balance: receiverResult.accountState?.balance.toString(),
                             nonce: receiverResult.accountState?.nonce,
                         },
+                        trustedStateRoots: trustedRoots ?? undefined,
                     },
                     null,
                     2,
@@ -438,6 +545,16 @@ async function verifyTransferCommand(args: CliArgs) {
             console.log(`Transaction: ${txHash}`);
             console.log(`Block:       ${blockNumber}`);
             console.log(`Value:       ${formatEth(tx.value)}`);
+
+            if (lightClientVerified) {
+                console.log("--------------------------------------------");
+                console.log("VERIFICATION MODE: Light Client (Trustless) ✓");
+                console.log("  Block header verified by beacon chain sync committee");
+                console.log("  State roots cryptographically authenticated");
+            } else {
+                console.log("--------------------------------------------");
+                console.log("VERIFICATION MODE: RPC-Based (Requires Trusted RPC)");
+            }
             console.log("--------------------------------------------");
 
             console.log("PROOF VERIFICATION SUMMARY:");
@@ -484,6 +601,137 @@ async function verifyTransferCommand(args: CliArgs) {
 }
 
 /**
+ * Build light client config from CLI args
+ */
+function getLightClientConfig(args: CliArgs): LightClientConfig {
+    const beaconApiUrl = args.options["beacon-rpc"] as string;
+    const chain = (args.options.chain as string) || "mainnet";
+    const statePath = args.options["state-path"] as string;
+    const checkpointRoot = args.options.checkpoint as string;
+
+    if (!beaconApiUrl) {
+        console.error("Error: --beacon-rpc required for light client commands");
+        process.exit(1);
+    }
+
+    return {
+        beaconApiUrl,
+        chain,
+        statePath,
+        checkpointRoot,
+        verbose: !!args.options.verbose,
+    };
+}
+
+/**
+ * Light client init command
+ */
+async function lightClientInitCommand(args: CliArgs) {
+    const config = getLightClientConfig(args);
+
+    try {
+        console.log(`Initializing light client for ${config.chain}...`);
+        console.log(`Beacon API: ${config.beaconApiUrl}`);
+
+        const state = await initLightClient(config);
+
+        if (state) {
+            console.log("\n✓ Light client initialized successfully");
+            console.log(`  Current slot: ${state.header.beacon.slot}`);
+            console.log(`  Current period: ${state.period}`);
+            console.log(`  Finalized: ${state.finalizedHeader ? "Yes" : "No"}`);
+
+            if (config.statePath) {
+                console.log(`\nState saved to: ${config.statePath}`);
+            }
+        } else {
+            console.error("Failed to initialize light client");
+            process.exit(1);
+        }
+    } catch (error) {
+        console.error("Error:", error instanceof Error ? error.message : error);
+        process.exit(1);
+    }
+}
+
+/**
+ * Light client sync command
+ */
+async function lightClientSyncCommand(args: CliArgs) {
+    const config = getLightClientConfig(args);
+
+    if (!config.statePath) {
+        console.error("Error: --state-path required for sync (state must be initialized first)");
+        process.exit(1);
+    }
+
+    try {
+        console.log(`Syncing light client for ${config.chain}...`);
+        console.log(`Beacon API: ${config.beaconApiUrl}`);
+
+        const state = await initLightClient(config);
+
+        if (!state) {
+            console.error("Light client not initialized. Run 'light-client-init' first.");
+            process.exit(1);
+        }
+
+        const syncedState = await syncLightClient(state, config);
+
+        console.log("\n✓ Light client synced successfully");
+        console.log(`  Current slot: ${syncedState.header.beacon.slot}`);
+        console.log(`  Current period: ${syncedState.period}`);
+        console.log(`  Finalized: ${syncedState.finalizedHeader ? "Yes" : "No"}`);
+    } catch (error) {
+        console.error("Error:", error instanceof Error ? error.message : error);
+        process.exit(1);
+    }
+}
+
+/**
+ * Light client status command
+ */
+async function lightClientStatusCommand(args: CliArgs) {
+    const chain = (args.options.chain as string) || "mainnet";
+
+    try {
+        const { loadState } = await import("./beacon/state");
+        const { getTrustedStateRoots } = await import("./beacon/sync");
+        const store = await loadState();
+
+        if (!store || !store.state.header) {
+            console.log("Light client state not found.");
+            console.log("Run 'light-client-init' to initialize.");
+            process.exit(0);
+        }
+
+        const state = store.state;
+
+        console.log("Light Client Status");
+        console.log("===================");
+        console.log(`Chain:        ${chain}`);
+        console.log(`Current Slot: ${state.header.beacon.slot}`);
+        console.log(`Period:       ${state.period}`);
+        console.log(`Finalized:    ${state.finalizedHeader ? "Yes" : "No"}`);
+
+        if (state.finalizedHeader) {
+            console.log(`Finalized Slot: ${state.finalizedHeader.beacon.slot}`);
+        }
+
+        const roots = getTrustedStateRoots(state);
+        if (roots) {
+            console.log("\nTrusted State Roots:");
+            console.log(`  State Root:      ${roots.stateRoot.slice(0, 20)}...`);
+            console.log(`  Transactions:    ${roots.transactionsRoot.slice(0, 20)}...`);
+            console.log(`  Receipts:        ${roots.receiptsRoot.slice(0, 20)}...`);
+        }
+    } catch (error) {
+        console.error("Error:", error instanceof Error ? error.message : error);
+        process.exit(1);
+    }
+}
+
+/**
  * Main CLI entry point
  */
 async function main() {
@@ -503,6 +751,15 @@ async function main() {
             break;
         case "verify-transfer":
             await verifyTransferCommand(args);
+            break;
+        case "light-client-init":
+            await lightClientInitCommand(args);
+            break;
+        case "light-client-sync":
+            await lightClientSyncCommand(args);
+            break;
+        case "light-client-status":
+            await lightClientStatusCommand(args);
             break;
         default:
             console.error(`Unknown command: ${args.command}`);

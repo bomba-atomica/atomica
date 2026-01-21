@@ -123,13 +123,28 @@ interface LightClientUpdate {
 | Beacon API fetching | DONE | `src/beacon/fetch.ts` |
 | Unit tests (45 passing) | DONE | `test/beacon/*.test.ts` |
 | @chainsafe/bls integration | DONE | `package.json` |
-| **Docker integration tests** | **FIXED** | `test/integration.test.ts`, `typescript-sdk` |
-| **Transaction verification** | **FIXED** | `src/transaction.ts`, `test/transaction.test.ts` |
+| Docker integration tests | FIXED | `test/integration.test.ts`, `typescript-sdk` |
+| Transaction verification | FIXED | `src/transaction.ts`, `test/transaction.test.ts` |
+| Code formatting/linting | FIXED | All TS files pass lint/format |
+| CI/CD passes | VERIFIED | test-state-proofs.yml #25 success |
 
 ### Test Results
 - **96 tests passing**, 1 skipped, 0 failing
 - All integration tests passing with Docker testnet
 - Transaction and receipt verification working
+
+### Phase 4 Progress (Light Client Implementation)
+
+| Subtask | Status |
+|---------|--------|
+| Type definitions | DONE |
+| BLS verification | DONE |
+| Beacon API fetching | DONE |
+| Docker testnet SDK | DONE |
+| Transaction encoding | DONE |
+| **CLI Integration** | **IN PROGRESS** |
+| SSZ encoding/decoding | PENDING |
+| State persistence | PENDING |
 
 ### Remaining Tasks
 

@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import type { LightClientState, LightClientUpdate, SyncCommittee } from "../../dist/beacon/types";
+import { describe, expect, test, beforeAll, afterAll } from "bun:test";
+import type { LightClientState, LightClientUpdate, SyncCommittee, LightClientStore } from "../../dist/beacon/types";
 import {
     createInitialState,
     updateState,
@@ -10,7 +10,10 @@ import {
     saveState,
     loadState,
     clearState,
+    getStatePath,
 } from "../../dist/beacon/state";
+import { promises as fs } from "fs";
+import * as path from "path";
 
 const createMockHeader = (slot: number) => ({
     beacon: {
@@ -60,7 +63,23 @@ const createMockUpdate = (slot: number): LightClientUpdate => ({
     signatureSlot: slot + 1,
 });
 
+const testStatePath = "/tmp/atomica-test-light-client-state.json";
+
 describe("Light Client State", () => {
+    beforeAll(async () => {
+        try {
+            await fs.unlink(testStatePath);
+        } catch {
+        }
+    });
+
+    afterAll(async () => {
+        try {
+            await fs.unlink(testStatePath);
+        } catch {
+        }
+    });
+
     describe("createInitialState", () => {
         test("should throw not implemented error", () => {
             expect(() => createInitialState()).toThrow("Not implemented");
@@ -137,32 +156,50 @@ describe("Light Client State", () => {
     });
 
     describe("saveState", () => {
-        test("should throw not implemented error", async () => {
-            await expect(
-                saveState({
-                    state: {
-                        header: createMockHeader(100),
-                        currentSyncCommittee: createMockSyncCommittee(0),
-                        nextSyncCommittee: createMockSyncCommittee(1),
-                        finalizedHeader: null,
-                        period: 0,
-                        previousSlot: 100,
-                    },
-                    lastUpdated: Date.now(),
-                }),
-            ).rejects.toThrow("Not implemented");
+        test("should save state to file", async () => {
+            const store: LightClientStore = {
+                state: {
+                    header: createMockHeader(100),
+                    currentSyncCommittee: createMockSyncCommittee(0),
+                    nextSyncCommittee: createMockSyncCommittee(1),
+                    finalizedHeader: null,
+                    period: 0,
+                    previousSlot: 100,
+                },
+                lastUpdated: Date.now(),
+            };
+            await saveState(store, testStatePath);
+            const exists = await fs.access(testStatePath).then(() => true).catch(() => false);
+            expect(exists).toBe(true);
         });
     });
 
     describe("loadState", () => {
-        test("should throw not implemented error", async () => {
-            await expect(loadState()).rejects.toThrow("Not implemented");
+        test("should load state from file", async () => {
+            const loaded = await loadState(testStatePath);
+            expect(loaded).not.toBeNull();
+            if (loaded) {
+                expect(loaded.state.header.beacon.slot).toBe(100);
+                expect(loaded.state.period).toBe(0);
+                expect(loaded.lastUpdated).toBeDefined();
+            }
+        });
+
+        test("should return null for non-existent file", async () => {
+            const loaded = await loadState("/tmp/non-existent-file-12345.json");
+            expect(loaded).toBeNull();
         });
     });
 
     describe("clearState", () => {
-        test("should throw not implemented error", async () => {
-            await expect(clearState()).rejects.toThrow("Not implemented");
+        test("should clear state file", async () => {
+            await clearState(testStatePath);
+            const exists = await fs.access(testStatePath).then(() => true).catch(() => false);
+            expect(exists).toBe(false);
+        });
+
+        test("should not throw for non-existent file", async () => {
+            await clearState("/tmp/non-existent-file-12345.json");
         });
     });
 });
