@@ -142,7 +142,7 @@ describe("Account State Decoding", () => {
     test("should decode RLP-encoded account state", () => {
         // This will be tested with real RLP data
         // For now, define expected interface
-        
+
         // This should not throw
         expect(() => {
             // decodeAccountState will be implemented
