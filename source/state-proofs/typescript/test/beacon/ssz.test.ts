@@ -47,7 +47,9 @@ const createMockHeader = (slot: number) => ({
         transactionsRoot: "0x" + "99".repeat(32),
         withdrawalsRoot: "0x" + "aa".repeat(32),
     },
-    executionBranch: Array(4).fill(null).map((_, i) => "0x" + (i + 1).toString(16).padStart(64, "0")),
+    executionBranch: Array(4)
+        .fill(null)
+        .map((_, i) => "0x" + (i + 1).toString(16).padStart(64, "0")),
 });
 
 const createMockSyncCommittee = (period: number): SyncCommittee => ({
@@ -60,9 +62,13 @@ const createMockSyncCommittee = (period: number): SyncCommittee => ({
 const createMockUpdate = (slot: number): LightClientUpdate => ({
     attestedHeader: createMockHeader(slot),
     nextSyncCommittee: createMockSyncCommittee(Math.floor(slot / (256 * 32)) + 1),
-    nextSyncCommitteeBranch: Array(4).fill(null).map((_, i) => "0x" + (i + 1).toString(16).padStart(64, "0")),
+    nextSyncCommitteeBranch: Array(4)
+        .fill(null)
+        .map((_, i) => "0x" + (i + 1).toString(16).padStart(64, "0")),
     finalizedHeader: createMockHeader(slot - 32),
-    finalityBranch: Array(6).fill(null).map((_, i) => "0x" + (i + 10).toString(16).padStart(64, "0")),
+    finalityBranch: Array(6)
+        .fill(null)
+        .map((_, i) => "0x" + (i + 10).toString(16).padStart(64, "0")),
     syncAggregate: {
         syncCommitteeBits: new Uint8Array(64).fill(0xff),
         syncCommitteeSignature: "0x" + "cc".repeat(96),
@@ -185,7 +191,9 @@ describe("SSZ Module", () => {
 
     describe("merkleize", () => {
         test("should merkleize leaves into a root", () => {
-            const values = Array(4).fill(null).map((_, i) => new Uint8Array(32).fill(i + 1));
+            const values = Array(4)
+                .fill(null)
+                .map((_, i) => new Uint8Array(32).fill(i + 1));
             const root = merkleize(values);
             expect(root).toBeDefined();
             expect(root).toBeInstanceOf(Uint8Array);
@@ -223,7 +231,9 @@ describe("SSZ Module", () => {
         });
 
         test("should throw for unknown container type", () => {
-            expect(() => getGeneralizedIndex("UnknownType", "field")).toThrow("Unknown container type");
+            expect(() => getGeneralizedIndex("UnknownType", "field")).toThrow(
+                "Unknown container type",
+            );
         });
     });
 
@@ -271,7 +281,9 @@ describe("SSZ Round-trip Tests (Integration)", () => {
             const bootstrap: LightClientBootstrap = {
                 header: createMockHeader(0),
                 currentSyncCommittee: createMockSyncCommittee(0),
-                currentSyncCommitteeBranch: Array(4).fill(null).map((_, i) => "0x" + (i + 1).toString(16).padStart(64, "0")),
+                currentSyncCommitteeBranch: Array(4)
+                    .fill(null)
+                    .map((_, i) => "0x" + (i + 1).toString(16).padStart(64, "0")),
             };
             const serialized = serializeLightClientBootstrap(bootstrap);
             const deserialized = deserializeLightClientBootstrap(serialized);

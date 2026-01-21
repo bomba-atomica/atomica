@@ -17,7 +17,10 @@ import {
     UintBigintType,
     VectorCompositeType,
 } from "@chainsafe/ssz";
-import { merkleize as sszMerkleize, mixInLength as sszMixInLength } from "@chainsafe/ssz/lib/util/merkleize";
+import {
+    merkleize as sszMerkleize,
+    mixInLength as sszMixInLength,
+} from "@chainsafe/ssz/lib/util/merkleize";
 import { digest as sszDigest } from "@chainsafe/as-sha256";
 import type {
     LightClientHeader,
@@ -221,7 +224,9 @@ function convertUpdateToSSZ(update: LightClientUpdate): Record<string, unknown> 
         attestedHeader: convertHeaderToSSZ(update.attestedHeader),
         nextSyncCommittee: convertSyncCommitteeToSSZ(update.nextSyncCommittee),
         nextSyncCommitteeBranch: update.nextSyncCommitteeBranch.map(hexToBytes),
-        finalizedHeader: update.finalizedHeader ? convertHeaderToSSZ(update.finalizedHeader) : LightClientHeaderType.defaultValue(),
+        finalizedHeader: update.finalizedHeader
+            ? convertHeaderToSSZ(update.finalizedHeader)
+            : LightClientHeaderType.defaultValue(),
         finalityBranch: update.finalityBranch.map(hexToBytes),
         syncAggregate: {
             syncCommitteeBits: update.syncAggregate.syncCommitteeBits,
@@ -235,13 +240,20 @@ function convertUpdateFromSSZ(ssz: Record<string, unknown>): LightClientUpdate {
     const finalizedHeader = ssz.finalizedHeader as Record<string, unknown>;
     return {
         attestedHeader: convertHeaderFromSSZ(ssz.attestedHeader as Record<string, unknown>),
-        nextSyncCommittee: convertSyncCommitteeFromSSZ(ssz.nextSyncCommittee as Record<string, unknown>),
+        nextSyncCommittee: convertSyncCommitteeFromSSZ(
+            ssz.nextSyncCommittee as Record<string, unknown>,
+        ),
         nextSyncCommitteeBranch: (ssz.nextSyncCommitteeBranch as Uint8Array[]).map(bytesToHex),
-        finalizedHeader: finalizedHeader && finalizedHeader.beacon ? convertHeaderFromSSZ(finalizedHeader) : null,
+        finalizedHeader:
+            finalizedHeader && finalizedHeader.beacon
+                ? convertHeaderFromSSZ(finalizedHeader)
+                : null,
         finalityBranch: (ssz.finalityBranch as Uint8Array[]).map(bytesToHex),
         syncAggregate: {
             syncCommitteeBits: (ssz.syncAggregate as Record<string, Uint8Array>).syncCommitteeBits,
-            syncCommitteeSignature: bytesToHex((ssz.syncAggregate as Record<string, Uint8Array>).syncCommitteeSignature),
+            syncCommitteeSignature: bytesToHex(
+                (ssz.syncAggregate as Record<string, Uint8Array>).syncCommitteeSignature,
+            ),
         },
         signatureSlot: ssz.signatureSlot as number,
     };
@@ -258,8 +270,12 @@ function convertBootstrapToSSZ(bootstrap: LightClientBootstrap): Record<string, 
 function convertBootstrapFromSSZ(ssz: Record<string, unknown>): LightClientBootstrap {
     return {
         header: convertHeaderFromSSZ(ssz.header as Record<string, unknown>),
-        currentSyncCommittee: convertSyncCommitteeFromSSZ(ssz.currentSyncCommittee as Record<string, unknown>),
-        currentSyncCommitteeBranch: (ssz.currentSyncCommitteeBranch as Uint8Array[]).map(bytesToHex),
+        currentSyncCommittee: convertSyncCommitteeFromSSZ(
+            ssz.currentSyncCommittee as Record<string, unknown>,
+        ),
+        currentSyncCommitteeBranch: (ssz.currentSyncCommitteeBranch as Uint8Array[]).map(
+            bytesToHex,
+        ),
     };
 }
 
@@ -268,7 +284,9 @@ function convertStateToSSZ(state: LightClientState): Record<string, unknown> {
         header: convertHeaderToSSZ(state.header),
         currentSyncCommittee: convertSyncCommitteeToSSZ(state.currentSyncCommittee),
         nextSyncCommittee: convertSyncCommitteeToSSZ(state.nextSyncCommittee),
-        finalizedHeader: state.finalizedHeader ? convertHeaderToSSZ(state.finalizedHeader) : LightClientHeaderType.defaultValue(),
+        finalizedHeader: state.finalizedHeader
+            ? convertHeaderToSSZ(state.finalizedHeader)
+            : LightClientHeaderType.defaultValue(),
         period: state.period,
         previousSlot: state.previousSlot,
     };
@@ -278,9 +296,16 @@ function convertStateFromSSZ(ssz: Record<string, unknown>): LightClientState {
     const finalizedHeader = ssz.finalizedHeader as Record<string, unknown>;
     return {
         header: convertHeaderFromSSZ(ssz.header as Record<string, unknown>),
-        currentSyncCommittee: convertSyncCommitteeFromSSZ(ssz.currentSyncCommittee as Record<string, unknown>),
-        nextSyncCommittee: convertSyncCommitteeFromSSZ(ssz.nextSyncCommittee as Record<string, unknown>),
-        finalizedHeader: finalizedHeader && finalizedHeader.beacon ? convertHeaderFromSSZ(finalizedHeader) : null,
+        currentSyncCommittee: convertSyncCommitteeFromSSZ(
+            ssz.currentSyncCommittee as Record<string, unknown>,
+        ),
+        nextSyncCommittee: convertSyncCommitteeFromSSZ(
+            ssz.nextSyncCommittee as Record<string, unknown>,
+        ),
+        finalizedHeader:
+            finalizedHeader && finalizedHeader.beacon
+                ? convertHeaderFromSSZ(finalizedHeader)
+                : null,
         period: ssz.period as number,
         previousSlot: ssz.previousSlot as number,
     };
@@ -484,7 +509,12 @@ export function createSSZModule(): SSZModule {
         hash: (x: Uint8Array) => {
             return sszDigest(x);
         },
-        verifyMerkleProof: (root: Uint8Array, proof: Uint8Array[], index: number, leaf: Uint8Array) => {
+        verifyMerkleProof: (
+            root: Uint8Array,
+            proof: Uint8Array[],
+            index: number,
+            leaf: Uint8Array,
+        ) => {
             let current = leaf;
             for (let i = 0; i < proof.length; i++) {
                 if ((index >> i) & 1) {
