@@ -42,7 +42,7 @@ export async function verifyTransactionProof(
             throw new Error(`Transaction indices are not sequential. Expected ${i}, got ${index}`);
         }
 
-        const key = Buffer.from((RLP.encode as any)(index));
+        const key = Buffer.from((RLP.encode)(index));
         const value = encodeTransaction(tx);
 
         await trie.put(key, value);
