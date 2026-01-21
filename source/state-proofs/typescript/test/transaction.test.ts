@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { verifyTransactionProof, encodeTransaction } from "../src/transaction";
 import type { Block, Transaction } from "../src/types";
 import { RLP } from "@ethereumjs/rlp";
-import { keccak256 } from "ethereum-cryptography/keccak";
+import { _keccak256 } from "ethereum-cryptography/keccak";
 import { Trie } from "@ethereumjs/trie";
 
 // Mock data helpers

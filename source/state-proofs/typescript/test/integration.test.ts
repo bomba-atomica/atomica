@@ -102,10 +102,10 @@ describe("End-to-End Verification", () => {
             try {
                 receipt = await publicClient.waitForTransactionReceipt({ hash });
                 break;
-            } catch (e) {
+            } catch (_e) {
                 console.log(
                     `Retry ${i + 1}/${maxRetries} waiting for receipt:`,
-                    e instanceof Error ? e.message.split("\n")[0] : e,
+                    _e instanceof Error ? _e.message.split("\n")[0] : String(_e),
                 );
                 await new Promise((r) => setTimeout(r, 2000));
             }
@@ -273,7 +273,7 @@ describe("Transaction & Receipt Verification", () => {
             try {
                 receipt = await publicClient.waitForTransactionReceipt({ hash });
                 break;
-            } catch (e) {
+            } catch (_e) {
                 console.log(`Retry ${i + 1}/${maxRetries} waiting for receipt`);
                 await new Promise((r) => setTimeout(r, 2000));
             }

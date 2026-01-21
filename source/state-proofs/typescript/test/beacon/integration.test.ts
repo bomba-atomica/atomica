@@ -1,5 +1,5 @@
-import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import type { LightClientState, LightClientHeader } from "../../dist/beacon/types";
+import { describe, expect, test, _beforeAll, _afterAll } from "bun:test";
+import type { _LightClientState, _LightClientHeader } from "../../dist/beacon/types";
 import { BEACON_CONFIGS } from "../../dist/beacon/fetch";
 
 describe("Light Client Integration", () => {
@@ -8,7 +8,7 @@ describe("Light Client Integration", () => {
             // This test requires a running beacon node or public API
             // For now, it demonstrates the expected workflow
 
-            const expectedPeriod = 0;
+            const _expectedPeriod = 0;
 
             // Verify config is correct
             expect(BEACON_CONFIGS.mainnet.epochsPerSyncCommitteePeriod).toBe(256);

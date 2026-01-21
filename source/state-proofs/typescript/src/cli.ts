@@ -321,7 +321,7 @@ async function verifyTransferCommand(args: CliArgs) {
     let trustedRoots: { stateRoot: string; transactionsRoot: string; receiptsRoot: string } | null =
         null;
     let lightClientVerified = false;
-    let blockData: any;
+    let blockData: Block;
 
     try {
         if (args.options.verbose) {

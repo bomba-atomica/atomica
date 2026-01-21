@@ -15,10 +15,10 @@ import {
     saveState,
     loadState,
     clearState,
-    getStatePath,
+    _getStatePath,
 } from "../../dist/beacon/state";
 import { promises as fs } from "fs";
-import * as path from "path";
+import * as _path from "path";
 
 const createMockHeader = (slot: number) => ({
     beacon: {

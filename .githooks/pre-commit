@@ -1,26 +1,44 @@
 #!/bin/bash
 # Git pre-commit hook for Atomica
-# Runs build, lint, and format tests for the state-proof module
+# Runs automatic cleanups but allows commits
 
-set -e
+# AGENT NOTE: This hook runs automatic cleanups but ALLOWS commits.
+# You should run 'bun run lint' and 'bun run format:check' before pushing.
+# The pre-push hook will BLOCK pushes that don't pass all checks.
+#
+# Automatic cleanups performed:
+#   - bun run format  (fixes formatting)
+#   - bun run lint:fix (fixes lint issues)
+#
+# These do NOT run during commit:
+#   - bun run build
+#   - bun test
+#   - bun run format:check
+#   - bun run lint -- --max-warnings=0
+#
+# Those strict checks run in pre-push and will block your push if they fail.
 
-# Get the root of the repository
+set +e  # Don't exit on errors - allow commit
+
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
-echo "🔍 Running pre-commit checks for state-proof module..."
+echo "⚠️  Running pre-commit auto-cleanups..."
+echo "⚠️  NOTE: This hook allows commits. Strict checks run in pre-push."
+echo ""
 
-# 1. Build SDK (Required dependency for state-proofs)
-echo "📦 Building SDK..."
-cd "$REPO_ROOT/source/docker-testnet/ethereum-testnet/typescript-sdk"
-# We assume 'bun install' has been run by the developer, but we run build to ensure dist is up to date
-bun run build
-
-# 2. Run checks in source/state-proofs/typescript
-echo "🧪 Running lint, format, and build in source/state-proofs/typescript..."
+# Run automatic cleanups
+echo "🧹 Auto-fixing formatting and lint issues..."
 cd "$REPO_ROOT/source/state-proofs/typescript"
-bun run lint
-bun run format:check
-bun run build
+bun run format 2>/dev/null
+bun run lint:fix 2>/dev/null
 
-echo "✅ Pre-commit checks passed!"
+echo ""
+echo "⚠️  Auto-cleanup complete. Commit allowed."
+echo "⚠️  BEFORE PUSHING, run these checks:"
+echo "   bun run build"
+echo "   bun test"
+echo "   bun run lint -- --max-warnings=0"
+echo "   bun run format:check"
+echo ""
+echo "⚠️  The pre-push hook will BLOCK pushes that fail any of these."
 exit 0

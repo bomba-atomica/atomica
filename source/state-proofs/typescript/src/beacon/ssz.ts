@@ -34,6 +34,73 @@ import type {
 } from "./types";
 import { hexToBytes, bytesToHex } from "./types";
 
+type SSZSerializedBeaconBlockHeader = {
+    slot: bigint;
+    proposerIndex: bigint;
+    parentRoot: Uint8Array;
+    stateRoot: Uint8Array;
+    bodyRoot: Uint8Array;
+};
+
+type SSZSerializedExecutionPayloadHeader = {
+    parentHash: Uint8Array;
+    feeRecipient: Uint8Array;
+    stateRoot: Uint8Array;
+    receiptsRoot: Uint8Array;
+    logsBloom: Uint8Array;
+    prevRandao: Uint8Array;
+    blockNumber: bigint;
+    gasLimit: bigint;
+    gasUsed: bigint;
+    timestamp: bigint;
+    extraDataLength: bigint;
+    baseFeePerGas: bigint;
+    blockHash: Uint8Array;
+    transactionsRoot: Uint8Array;
+    withdrawalsRoot: Uint8Array;
+};
+
+type SSZSerializedLightClientHeader = {
+    beacon: SSZSerializedBeaconBlockHeader;
+    execution: SSZSerializedExecutionPayloadHeader;
+    executionBranch: Uint8Array[];
+};
+
+type SSZSerializedSyncCommittee = {
+    pubkeys: Uint8Array[];
+    aggregatePubkey: Uint8Array;
+};
+
+type SSZSerializedSyncAggregate = {
+    syncCommitteeBits: Uint8Array;
+    syncCommitteeSignature: Uint8Array;
+};
+
+type SSZSerializedLightClientUpdate = {
+    attestedHeader: SSZSerializedLightClientHeader;
+    nextSyncCommittee: SSZSerializedSyncCommittee;
+    nextSyncCommitteeBranch: Uint8Array[];
+    finalizedHeader: SSZSerializedLightClientHeader;
+    finalityBranch: Uint8Array[];
+    syncAggregate: SSZSerializedSyncAggregate;
+    signatureSlot: bigint;
+};
+
+type SSZSerializedLightClientBootstrap = {
+    header: SSZSerializedLightClientHeader;
+    currentSyncCommittee: SSZSerializedSyncCommittee;
+    currentSyncCommitteeBranch: Uint8Array[];
+};
+
+type SSZSerializedLightClientState = {
+    header: SSZSerializedLightClientHeader;
+    currentSyncCommittee: SSZSerializedSyncCommittee;
+    nextSyncCommittee: SSZSerializedSyncCommittee;
+    finalizedHeader: SSZSerializedLightClientHeader;
+    period: bigint;
+    previousSlot: bigint;
+};
+
 const UINT64 = new UintNumberType(8);
 const UINT256 = new UintBigintType(32);
 const BYTE_VECTOR_20 = new ByteVectorType(20);
@@ -143,11 +210,11 @@ export interface SSZModule {
     getGeneralizedIndex(containerType: string, fieldName: string): number;
 }
 
-function convertHeaderToSSZ(header: LightClientHeader): Record<string, unknown> {
+function convertHeaderToSSZ(header: LightClientHeader): SSZSerializedLightClientHeader {
     return {
         beacon: {
-            slot: header.beacon.slot,
-            proposerIndex: header.beacon.proposerIndex,
+            slot: BigInt(header.beacon.slot),
+            proposerIndex: BigInt(header.beacon.proposerIndex),
             parentRoot: hexToBytes(header.beacon.parentRoot),
             stateRoot: hexToBytes(header.beacon.stateRoot),
             bodyRoot: hexToBytes(header.beacon.bodyRoot),
@@ -159,11 +226,11 @@ function convertHeaderToSSZ(header: LightClientHeader): Record<string, unknown> 
             receiptsRoot: hexToBytes(header.execution.receiptsRoot),
             logsBloom: hexToBytes(header.execution.logsBloom),
             prevRandao: hexToBytes(header.execution.prevRandao),
-            blockNumber: header.execution.blockNumber,
-            gasLimit: header.execution.gasLimit,
-            gasUsed: header.execution.gasUsed,
-            timestamp: header.execution.timestamp,
-            extraDataLength: 0,
+            blockNumber: BigInt(header.execution.blockNumber),
+            gasLimit: BigInt(header.execution.gasLimit),
+            gasUsed: BigInt(header.execution.gasUsed),
+            timestamp: BigInt(header.execution.timestamp),
+            extraDataLength: BigInt(0),
             baseFeePerGas: header.execution.baseFeePerGas,
             blockHash: hexToBytes(header.execution.blockHash),
             transactionsRoot: hexToBytes(header.execution.transactionsRoot),
@@ -173,93 +240,86 @@ function convertHeaderToSSZ(header: LightClientHeader): Record<string, unknown> 
     };
 }
 
-function convertHeaderFromSSZ(ssz: Record<string, unknown>): LightClientHeader {
-    const beacon = ssz.beacon as Record<string, unknown>;
-    const execution = ssz.execution as Record<string, unknown>;
+function convertHeaderFromSSZ(ssz: SSZSerializedLightClientHeader): LightClientHeader {
     return {
         beacon: {
-            slot: beacon.slot as number,
-            proposerIndex: beacon.proposerIndex as number,
-            parentRoot: bytesToHex(beacon.parentRoot as Uint8Array),
-            stateRoot: bytesToHex(beacon.stateRoot as Uint8Array),
-            bodyRoot: bytesToHex(beacon.bodyRoot as Uint8Array),
+            slot: Number(ssz.beacon.slot),
+            proposerIndex: Number(ssz.beacon.proposerIndex),
+            parentRoot: bytesToHex(ssz.beacon.parentRoot),
+            stateRoot: bytesToHex(ssz.beacon.stateRoot),
+            bodyRoot: bytesToHex(ssz.beacon.bodyRoot),
         },
         execution: {
-            parentHash: bytesToHex(execution.parentHash as Uint8Array),
-            feeRecipient: bytesToHex(execution.feeRecipient as Uint8Array),
-            stateRoot: bytesToHex(execution.stateRoot as Uint8Array),
-            receiptsRoot: bytesToHex(execution.receiptsRoot as Uint8Array),
-            logsBloom: bytesToHex(execution.logsBloom as Uint8Array),
-            prevRandao: bytesToHex(execution.prevRandao as Uint8Array),
-            blockNumber: execution.blockNumber as number,
-            gasLimit: execution.gasLimit as number,
-            gasUsed: execution.gasUsed as number,
-            timestamp: execution.timestamp as number,
+            parentHash: bytesToHex(ssz.execution.parentHash),
+            feeRecipient: bytesToHex(ssz.execution.feeRecipient),
+            stateRoot: bytesToHex(ssz.execution.stateRoot),
+            receiptsRoot: bytesToHex(ssz.execution.receiptsRoot),
+            logsBloom: bytesToHex(ssz.execution.logsBloom),
+            prevRandao: bytesToHex(ssz.execution.prevRandao),
+            blockNumber: Number(ssz.execution.blockNumber),
+            gasLimit: Number(ssz.execution.gasLimit),
+            gasUsed: Number(ssz.execution.gasUsed),
+            timestamp: Number(ssz.execution.timestamp),
             extraData: "0x",
-            baseFeePerGas: execution.baseFeePerGas as bigint,
-            blockHash: bytesToHex(execution.blockHash as Uint8Array),
-            transactionsRoot: bytesToHex(execution.transactionsRoot as Uint8Array),
-            withdrawalsRoot: bytesToHex(execution.withdrawalsRoot as Uint8Array),
+            baseFeePerGas: ssz.execution.baseFeePerGas,
+            blockHash: bytesToHex(ssz.execution.blockHash),
+            transactionsRoot: bytesToHex(ssz.execution.transactionsRoot),
+            withdrawalsRoot: bytesToHex(ssz.execution.withdrawalsRoot),
         },
-        executionBranch: (ssz.executionBranch as Uint8Array[]).map(bytesToHex),
+        executionBranch: ssz.executionBranch.map(bytesToHex),
     };
 }
 
-function convertSyncCommitteeToSSZ(sc: SyncCommittee): Record<string, unknown> {
+function convertSyncCommitteeToSSZ(sc: SyncCommittee): SSZSerializedSyncCommittee {
     return {
         pubkeys: sc.pubkeys.map(hexToBytes),
         aggregatePubkey: hexToBytes(sc.aggregatePubkey),
     };
 }
 
-function convertSyncCommitteeFromSSZ(ssz: Record<string, unknown>): SyncCommittee {
+function convertSyncCommitteeFromSSZ(ssz: SSZSerializedSyncCommittee): SyncCommittee {
     return {
-        pubkeys: (ssz.pubkeys as Uint8Array[]).map(bytesToHex),
-        aggregatePubkey: bytesToHex(ssz.aggregatePubkey as Uint8Array),
+        pubkeys: ssz.pubkeys.map(bytesToHex),
+        aggregatePubkey: bytesToHex(ssz.aggregatePubkey),
     };
 }
 
-function convertUpdateToSSZ(update: LightClientUpdate): Record<string, unknown> {
+function convertUpdateToSSZ(update: LightClientUpdate): SSZSerializedLightClientUpdate {
     return {
         attestedHeader: convertHeaderToSSZ(update.attestedHeader),
         nextSyncCommittee: convertSyncCommitteeToSSZ(update.nextSyncCommittee),
         nextSyncCommitteeBranch: update.nextSyncCommitteeBranch.map(hexToBytes),
         finalizedHeader: update.finalizedHeader
             ? convertHeaderToSSZ(update.finalizedHeader)
-            : LightClientHeaderType.defaultValue(),
+            : (LightClientHeaderType.defaultValue() as SSZSerializedLightClientHeader),
         finalityBranch: update.finalityBranch.map(hexToBytes),
         syncAggregate: {
             syncCommitteeBits: update.syncAggregate.syncCommitteeBits,
             syncCommitteeSignature: hexToBytes(update.syncAggregate.syncCommitteeSignature),
         },
-        signatureSlot: update.signatureSlot,
+        signatureSlot: BigInt(update.signatureSlot),
     };
 }
 
-function convertUpdateFromSSZ(ssz: Record<string, unknown>): LightClientUpdate {
-    const finalizedHeader = ssz.finalizedHeader as Record<string, unknown>;
+function convertUpdateFromSSZ(ssz: SSZSerializedLightClientUpdate): LightClientUpdate {
     return {
-        attestedHeader: convertHeaderFromSSZ(ssz.attestedHeader as Record<string, unknown>),
-        nextSyncCommittee: convertSyncCommitteeFromSSZ(
-            ssz.nextSyncCommittee as Record<string, unknown>,
-        ),
-        nextSyncCommitteeBranch: (ssz.nextSyncCommitteeBranch as Uint8Array[]).map(bytesToHex),
+        attestedHeader: convertHeaderFromSSZ(ssz.attestedHeader),
+        nextSyncCommittee: convertSyncCommitteeFromSSZ(ssz.nextSyncCommittee),
+        nextSyncCommitteeBranch: ssz.nextSyncCommitteeBranch.map(bytesToHex),
         finalizedHeader:
-            finalizedHeader && finalizedHeader.beacon
-                ? convertHeaderFromSSZ(finalizedHeader)
+            ssz.finalizedHeader && "beacon" in ssz.finalizedHeader
+                ? convertHeaderFromSSZ(ssz.finalizedHeader)
                 : null,
-        finalityBranch: (ssz.finalityBranch as Uint8Array[]).map(bytesToHex),
+        finalityBranch: ssz.finalityBranch.map(bytesToHex),
         syncAggregate: {
-            syncCommitteeBits: (ssz.syncAggregate as Record<string, Uint8Array>).syncCommitteeBits,
-            syncCommitteeSignature: bytesToHex(
-                (ssz.syncAggregate as Record<string, Uint8Array>).syncCommitteeSignature,
-            ),
+            syncCommitteeBits: ssz.syncAggregate.syncCommitteeBits,
+            syncCommitteeSignature: bytesToHex(ssz.syncAggregate.syncCommitteeSignature),
         },
-        signatureSlot: ssz.signatureSlot as number,
+        signatureSlot: Number(ssz.signatureSlot),
     };
 }
 
-function convertBootstrapToSSZ(bootstrap: LightClientBootstrap): Record<string, unknown> {
+function convertBootstrapToSSZ(bootstrap: LightClientBootstrap): SSZSerializedLightClientBootstrap {
     return {
         header: convertHeaderToSSZ(bootstrap.header),
         currentSyncCommittee: convertSyncCommitteeToSSZ(bootstrap.currentSyncCommittee),
@@ -267,47 +327,38 @@ function convertBootstrapToSSZ(bootstrap: LightClientBootstrap): Record<string, 
     };
 }
 
-function convertBootstrapFromSSZ(ssz: Record<string, unknown>): LightClientBootstrap {
+function convertBootstrapFromSSZ(ssz: SSZSerializedLightClientBootstrap): LightClientBootstrap {
     return {
-        header: convertHeaderFromSSZ(ssz.header as Record<string, unknown>),
-        currentSyncCommittee: convertSyncCommitteeFromSSZ(
-            ssz.currentSyncCommittee as Record<string, unknown>,
-        ),
-        currentSyncCommitteeBranch: (ssz.currentSyncCommitteeBranch as Uint8Array[]).map(
-            bytesToHex,
-        ),
+        header: convertHeaderFromSSZ(ssz.header),
+        currentSyncCommittee: convertSyncCommitteeFromSSZ(ssz.currentSyncCommittee),
+        currentSyncCommitteeBranch: ssz.currentSyncCommitteeBranch.map(bytesToHex),
     };
 }
 
-function convertStateToSSZ(state: LightClientState): Record<string, unknown> {
+function convertStateToSSZ(state: LightClientState): SSZSerializedLightClientState {
     return {
         header: convertHeaderToSSZ(state.header),
         currentSyncCommittee: convertSyncCommitteeToSSZ(state.currentSyncCommittee),
         nextSyncCommittee: convertSyncCommitteeToSSZ(state.nextSyncCommittee),
         finalizedHeader: state.finalizedHeader
             ? convertHeaderToSSZ(state.finalizedHeader)
-            : LightClientHeaderType.defaultValue(),
-        period: state.period,
-        previousSlot: state.previousSlot,
+            : (LightClientHeaderType.defaultValue() as SSZSerializedLightClientHeader),
+        period: BigInt(state.period),
+        previousSlot: BigInt(state.previousSlot),
     };
 }
 
-function convertStateFromSSZ(ssz: Record<string, unknown>): LightClientState {
-    const finalizedHeader = ssz.finalizedHeader as Record<string, unknown>;
+function convertStateFromSSZ(ssz: SSZSerializedLightClientState): LightClientState {
     return {
-        header: convertHeaderFromSSZ(ssz.header as Record<string, unknown>),
-        currentSyncCommittee: convertSyncCommitteeFromSSZ(
-            ssz.currentSyncCommittee as Record<string, unknown>,
-        ),
-        nextSyncCommittee: convertSyncCommitteeFromSSZ(
-            ssz.nextSyncCommittee as Record<string, unknown>,
-        ),
+        header: convertHeaderFromSSZ(ssz.header),
+        currentSyncCommittee: convertSyncCommitteeFromSSZ(ssz.currentSyncCommittee),
+        nextSyncCommittee: convertSyncCommitteeFromSSZ(ssz.nextSyncCommittee),
         finalizedHeader:
-            finalizedHeader && finalizedHeader.beacon
-                ? convertHeaderFromSSZ(finalizedHeader)
+            ssz.finalizedHeader && "beacon" in ssz.finalizedHeader
+                ? convertHeaderFromSSZ(ssz.finalizedHeader)
                 : null,
-        period: ssz.period as number,
-        previousSlot: ssz.previousSlot as number,
+        period: Number(ssz.period),
+        previousSlot: Number(ssz.previousSlot),
     };
 }
 
@@ -315,189 +366,189 @@ export function createSSZModule(): SSZModule {
     return {
         BeaconBlockHeader: {
             serialize: (value: BeaconBlockHeader) => {
-                const sszValue = {
-                    slot: value.slot,
-                    proposerIndex: value.proposerIndex,
+                const sszValue: SSZSerializedBeaconBlockHeader = {
+                    slot: BigInt(value.slot),
+                    proposerIndex: BigInt(value.proposerIndex),
                     parentRoot: hexToBytes(value.parentRoot),
                     stateRoot: hexToBytes(value.stateRoot),
                     bodyRoot: hexToBytes(value.bodyRoot),
                 };
-                return BeaconBlockHeaderType.serialize(sszValue as any);
+                return BeaconBlockHeaderType.serialize(sszValue);
             },
             deserialize: (data: Uint8Array) => {
                 const value = BeaconBlockHeaderType.deserialize(data);
                 return {
-                    slot: value.slot as number,
-                    proposerIndex: value.proposerIndex as number,
-                    parentRoot: bytesToHex(value.parentRoot as Uint8Array),
-                    stateRoot: bytesToHex(value.stateRoot as Uint8Array),
-                    bodyRoot: bytesToHex(value.bodyRoot as Uint8Array),
+                    slot: Number(value.slot),
+                    proposerIndex: Number(value.proposerIndex),
+                    parentRoot: bytesToHex(value.parentRoot),
+                    stateRoot: bytesToHex(value.stateRoot),
+                    bodyRoot: bytesToHex(value.bodyRoot),
                 };
             },
             hashTreeRoot: (value: BeaconBlockHeader) => {
-                const sszValue = {
-                    slot: value.slot,
-                    proposerIndex: value.proposerIndex,
+                const sszValue: SSZSerializedBeaconBlockHeader = {
+                    slot: BigInt(value.slot),
+                    proposerIndex: BigInt(value.proposerIndex),
                     parentRoot: hexToBytes(value.parentRoot),
                     stateRoot: hexToBytes(value.stateRoot),
                     bodyRoot: hexToBytes(value.bodyRoot),
                 };
-                return BeaconBlockHeaderType.hashTreeRoot(sszValue as any);
+                return BeaconBlockHeaderType.hashTreeRoot(sszValue);
             },
         },
         LightClientHeader: {
             serialize: (value: LightClientHeader) => {
                 const sszValue = convertHeaderToSSZ(value);
-                return LightClientHeaderType.serialize(sszValue as any);
+                return LightClientHeaderType.serialize(sszValue);
             },
             deserialize: (data: Uint8Array) => {
                 const value = LightClientHeaderType.deserialize(data);
-                return convertHeaderFromSSZ(value as any);
+                return convertHeaderFromSSZ(value);
             },
             hashTreeRoot: (value: LightClientHeader) => {
                 const sszValue = convertHeaderToSSZ(value);
-                return LightClientHeaderType.hashTreeRoot(sszValue as any);
+                return LightClientHeaderType.hashTreeRoot(sszValue);
             },
         },
         ExecutionPayloadHeader: {
             serialize: (value: ExecutionPayloadHeader) => {
-                const sszValue = {
+                const sszValue: SSZSerializedExecutionPayloadHeader = {
                     parentHash: hexToBytes(value.parentHash),
                     feeRecipient: hexToBytes(value.feeRecipient),
                     stateRoot: hexToBytes(value.stateRoot),
                     receiptsRoot: hexToBytes(value.receiptsRoot),
                     logsBloom: hexToBytes(value.logsBloom),
                     prevRandao: hexToBytes(value.prevRandao),
-                    blockNumber: value.blockNumber,
-                    gasLimit: value.gasLimit,
-                    gasUsed: value.gasUsed,
-                    timestamp: value.timestamp,
-                    extraDataLength: 0,
+                    blockNumber: BigInt(value.blockNumber),
+                    gasLimit: BigInt(value.gasLimit),
+                    gasUsed: BigInt(value.gasUsed),
+                    timestamp: BigInt(value.timestamp),
+                    extraDataLength: BigInt(0),
                     baseFeePerGas: value.baseFeePerGas,
                     blockHash: hexToBytes(value.blockHash),
                     transactionsRoot: hexToBytes(value.transactionsRoot),
                     withdrawalsRoot: hexToBytes(value.withdrawalsRoot),
                 };
-                return ExecutionPayloadHeaderType.serialize(sszValue as any);
+                return ExecutionPayloadHeaderType.serialize(sszValue);
             },
             deserialize: (data: Uint8Array) => {
                 const value = ExecutionPayloadHeaderType.deserialize(data);
                 return {
-                    parentHash: bytesToHex(value.parentHash as Uint8Array),
-                    feeRecipient: bytesToHex(value.feeRecipient as Uint8Array),
-                    stateRoot: bytesToHex(value.stateRoot as Uint8Array),
-                    receiptsRoot: bytesToHex(value.receiptsRoot as Uint8Array),
-                    logsBloom: bytesToHex(value.logsBloom as Uint8Array),
-                    prevRandao: bytesToHex(value.prevRandao as Uint8Array),
-                    blockNumber: value.blockNumber as number,
-                    gasLimit: value.gasLimit as number,
-                    gasUsed: value.gasUsed as number,
-                    timestamp: value.timestamp as number,
+                    parentHash: bytesToHex(value.parentHash),
+                    feeRecipient: bytesToHex(value.feeRecipient),
+                    stateRoot: bytesToHex(value.stateRoot),
+                    receiptsRoot: bytesToHex(value.receiptsRoot),
+                    logsBloom: bytesToHex(value.logsBloom),
+                    prevRandao: bytesToHex(value.prevRandao),
+                    blockNumber: Number(value.blockNumber),
+                    gasLimit: Number(value.gasLimit),
+                    gasUsed: Number(value.gasUsed),
+                    timestamp: Number(value.timestamp),
                     extraData: "0x",
-                    baseFeePerGas: value.baseFeePerGas as bigint,
-                    blockHash: bytesToHex(value.blockHash as Uint8Array),
-                    transactionsRoot: bytesToHex(value.transactionsRoot as Uint8Array),
-                    withdrawalsRoot: bytesToHex(value.withdrawalsRoot as Uint8Array),
+                    baseFeePerGas: value.baseFeePerGas,
+                    blockHash: bytesToHex(value.blockHash),
+                    transactionsRoot: bytesToHex(value.transactionsRoot),
+                    withdrawalsRoot: bytesToHex(value.withdrawalsRoot),
                 };
             },
             hashTreeRoot: (value: ExecutionPayloadHeader) => {
-                const sszValue = {
+                const sszValue: SSZSerializedExecutionPayloadHeader = {
                     parentHash: hexToBytes(value.parentHash),
                     feeRecipient: hexToBytes(value.feeRecipient),
                     stateRoot: hexToBytes(value.stateRoot),
                     receiptsRoot: hexToBytes(value.receiptsRoot),
                     logsBloom: hexToBytes(value.logsBloom),
                     prevRandao: hexToBytes(value.prevRandao),
-                    blockNumber: value.blockNumber,
-                    gasLimit: value.gasLimit,
-                    gasUsed: value.gasUsed,
-                    timestamp: value.timestamp,
-                    extraDataLength: 0,
+                    blockNumber: BigInt(value.blockNumber),
+                    gasLimit: BigInt(value.gasLimit),
+                    gasUsed: BigInt(value.gasUsed),
+                    timestamp: BigInt(value.timestamp),
+                    extraDataLength: BigInt(0),
                     baseFeePerGas: value.baseFeePerGas,
                     blockHash: hexToBytes(value.blockHash),
                     transactionsRoot: hexToBytes(value.transactionsRoot),
                     withdrawalsRoot: hexToBytes(value.withdrawalsRoot),
                 };
-                return ExecutionPayloadHeaderType.hashTreeRoot(sszValue as any);
+                return ExecutionPayloadHeaderType.hashTreeRoot(sszValue);
             },
         },
         SyncCommittee: {
             serialize: (value: SyncCommittee) => {
                 const sszValue = convertSyncCommitteeToSSZ(value);
-                return SyncCommitteeType.serialize(sszValue as any);
+                return SyncCommitteeType.serialize(sszValue);
             },
             deserialize: (data: Uint8Array) => {
                 const value = SyncCommitteeType.deserialize(data);
-                return convertSyncCommitteeFromSSZ(value as any);
+                return convertSyncCommitteeFromSSZ(value);
             },
             hashTreeRoot: (value: SyncCommittee) => {
                 const sszValue = convertSyncCommitteeToSSZ(value);
-                return SyncCommitteeType.hashTreeRoot(sszValue as any);
+                return SyncCommitteeType.hashTreeRoot(sszValue);
             },
         },
         SyncAggregate: {
             serialize: (value: SyncAggregate) => {
-                const sszValue = {
+                const sszValue: SSZSerializedSyncAggregate = {
                     syncCommitteeBits: value.syncCommitteeBits,
                     syncCommitteeSignature: hexToBytes(value.syncCommitteeSignature),
                 };
-                return SyncAggregateType.serialize(sszValue as any);
+                return SyncAggregateType.serialize(sszValue);
             },
             deserialize: (data: Uint8Array) => {
                 const value = SyncAggregateType.deserialize(data);
                 return {
-                    syncCommitteeBits: value.syncCommitteeBits as Uint8Array,
-                    syncCommitteeSignature: bytesToHex(value.syncCommitteeSignature as Uint8Array),
+                    syncCommitteeBits: value.syncCommitteeBits,
+                    syncCommitteeSignature: bytesToHex(value.syncCommitteeSignature),
                 };
             },
             hashTreeRoot: (value: SyncAggregate) => {
-                const sszValue = {
+                const sszValue: SSZSerializedSyncAggregate = {
                     syncCommitteeBits: value.syncCommitteeBits,
                     syncCommitteeSignature: hexToBytes(value.syncCommitteeSignature),
                 };
-                return SyncAggregateType.hashTreeRoot(sszValue as any);
+                return SyncAggregateType.hashTreeRoot(sszValue);
             },
         },
         LightClientUpdate: {
             serialize: (value: LightClientUpdate) => {
                 const sszValue = convertUpdateToSSZ(value);
-                return LightClientUpdateType.serialize(sszValue as any);
+                return LightClientUpdateType.serialize(sszValue);
             },
             deserialize: (data: Uint8Array) => {
                 const value = LightClientUpdateType.deserialize(data);
-                return convertUpdateFromSSZ(value as any);
+                return convertUpdateFromSSZ(value);
             },
             hashTreeRoot: (value: LightClientUpdate) => {
                 const sszValue = convertUpdateToSSZ(value);
-                return LightClientUpdateType.hashTreeRoot(sszValue as any);
+                return LightClientUpdateType.hashTreeRoot(sszValue);
             },
         },
         LightClientBootstrap: {
             serialize: (value: LightClientBootstrap) => {
                 const sszValue = convertBootstrapToSSZ(value);
-                return LightClientBootstrapType.serialize(sszValue as any);
+                return LightClientBootstrapType.serialize(sszValue);
             },
             deserialize: (data: Uint8Array) => {
                 const value = LightClientBootstrapType.deserialize(data);
-                return convertBootstrapFromSSZ(value as any);
+                return convertBootstrapFromSSZ(value);
             },
             hashTreeRoot: (value: LightClientBootstrap) => {
                 const sszValue = convertBootstrapToSSZ(value);
-                return LightClientBootstrapType.hashTreeRoot(sszValue as any);
+                return LightClientBootstrapType.hashTreeRoot(sszValue);
             },
         },
         LightClientState: {
             serialize: (value: LightClientState) => {
                 const sszValue = convertStateToSSZ(value);
-                return LightClientStateType.serialize(sszValue as any);
+                return LightClientStateType.serialize(sszValue);
             },
             deserialize: (data: Uint8Array) => {
                 const value = LightClientStateType.deserialize(data);
-                return convertStateFromSSZ(value as any);
+                return convertStateFromSSZ(value);
             },
             hashTreeRoot: (value: LightClientState) => {
                 const sszValue = convertStateToSSZ(value);
-                return LightClientStateType.hashTreeRoot(sszValue as any);
+                return LightClientStateType.hashTreeRoot(sszValue);
             },
         },
         merkleize: (leaves: Uint8Array[], _length?: number) => {

@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import type {
     LightClientUpdate,
     LightClientBootstrap,
-    LightClientState,
     BeaconBlockHeader,
     SyncCommittee,
 } from "../../dist/beacon/types";

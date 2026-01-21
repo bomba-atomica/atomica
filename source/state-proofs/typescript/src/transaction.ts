@@ -56,7 +56,7 @@ export async function verifyTransactionProof(
 }
 
 export function encodeTransaction(tx: Transaction): Uint8Array {
-    const rlp = RLP as any;
+    const rlp = RLP as unknown;
     const txType = tx.type ? parseInt(tx.type, 16) : 0;
 
     if (txType === 2) {
