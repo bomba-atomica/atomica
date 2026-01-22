@@ -9,11 +9,12 @@ contract AuctionManagerTest is Test {
     address admin = makeAddr("admin");
 
     function setUp() public {
+        vm.prank(admin);
         auctionManager = new AuctionManager();
     }
 
     function testScuttleTrueByDefault() public {
-        vm.prank(admin);
+        vm.prank(admin); // vm.prank(admin) sets the msg.sender for the next call to admin, who is the owner
         uint64 nonce = auctionManager.initializeAuction(
             0,
             uint64(block.timestamp + 24 hours),
@@ -28,7 +29,7 @@ contract AuctionManagerTest is Test {
     }
 
     function testIsValidFalseWhenScuttled() public {
-        vm.prank(admin);
+        vm.prank(admin); // vm.prank(admin) ensures the initializeAuction call is made by the owner
         uint64 nonce = auctionManager.initializeAuction(
             0,
             uint64(block.timestamp + 24 hours),
@@ -39,7 +40,7 @@ contract AuctionManagerTest is Test {
     }
 
     function testAutoScuttleOnDeadline() public {
-        vm.prank(admin);
+        vm.prank(admin); // vm.prank(admin) allows calling onlyOwner function initializeAuction
         uint64 nonce = auctionManager.initializeAuction(
             0,
             uint64(block.timestamp + 1 hours),
@@ -52,7 +53,7 @@ contract AuctionManagerTest is Test {
     }
 
     function testAutoScuttleOnBlock() public {
-        vm.prank(admin);
+        vm.prank(admin); // vm.prank(admin) sets msg.sender to admin for the initializeAuction call
         uint64 nonce = auctionManager.initializeAuction(
             0,
             uint64(block.timestamp + 24 hours),
@@ -65,12 +66,12 @@ contract AuctionManagerTest is Test {
     }
 
     function testCannotReinitialize() public {
-        vm.prank(admin);
-        auctionManager.initializeAuction(0, uint64(block.timestamp + 24 hours), block.number + 1000);
+        vm.prank(admin); // vm.prank(admin) makes the next call execute as if sent by the admin address, which is the owner
+        auctionManager.initializeAuction(42, uint64(block.timestamp + 24 hours), block.number + 1000);
 
-        vm.prank(admin);
+        vm.prank(admin); // Again, prank to admin to call as owner
         vm.expectRevert("already initialized");
-        auctionManager.initializeAuction(0, uint64(block.timestamp + 24 hours), block.number + 1000);
+        auctionManager.initializeAuction(42, uint64(block.timestamp + 24 hours), block.number + 1000);
     }
 
     function testZeroScuttleBlockMeansNotInitialized() public {
@@ -78,7 +79,7 @@ contract AuctionManagerTest is Test {
     }
 
     function testCustomNonce() public {
-        vm.prank(admin);
+        vm.prank(admin); // vm.prank(admin) is used to call initializeAuction as the contract owner
         uint64 nonce = auctionManager.initializeAuction(
             42,
             uint64(block.timestamp + 24 hours),

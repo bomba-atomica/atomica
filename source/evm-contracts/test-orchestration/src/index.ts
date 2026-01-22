@@ -144,7 +144,7 @@ export class TestOrchestrator {
         await this.testnet.waitForHealthy(180);
 
         console.log("Waiting 30 seconds for chain to stabilize...");
-        await new Promise(resolve => setTimeout(resolve, 30000));
+        await new Promise((resolve) => setTimeout(resolve, 30000));
 
         console.log(`✓ Testnet started at ${this.testnet.getExecutionRpcUrl()}`);
         console.log(`  - Geth RPC: ${this.testnet.getExecutionRpcUrl()}`);
@@ -332,7 +332,7 @@ export class TestOrchestrator {
     private async getDeployedContracts(rpcUrl: string): Promise<Record<string, string>> {
         // Run script without broadcast to get addresses from logs if needed
         // but we already have them from the broadcast run
-        
+
         // Parse deployment log
         const deployments: Record<string, string> = {};
         const deploymentsPath = pathResolve(

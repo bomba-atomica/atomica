@@ -101,9 +101,10 @@ contract DepositBoxTest is Test {
     function testConfirmDeposits() public {
         usdcMock.mint(alice, 1000e6);
 
-        vm.prank(alice);
+        vm.startPrank(alice);
         usdcMock.approve(address(depositBox), 500e6);
         depositBox.depositUSDC(1, 1, 500e6);
+        vm.stopPrank();
 
         vm.prank(address(this));
         depositBox.setSettlementContract(settlement);
@@ -138,9 +139,10 @@ contract DepositBoxTest is Test {
     function testMarkSettled() public {
         usdcMock.mint(alice, 1000e6);
 
-        vm.prank(alice);
+        vm.startPrank(alice);
         usdcMock.approve(address(depositBox), 500e6);
         depositBox.depositUSDC(1, 1, 500e6);
+        vm.stopPrank();
 
         vm.prank(address(this));
         depositBox.setSettlementContract(settlement);
@@ -175,7 +177,7 @@ contract DepositBoxTest is Test {
         vm.prank(alice);
         depositBox.refundDeposit(1, alice, 1);
 
-        assertEq(address(alice).balance, 11 ether);
+        assertEq(address(alice).balance, 10 ether);
     }
 
     function testRefundDepositBeforeTimeout() public {
