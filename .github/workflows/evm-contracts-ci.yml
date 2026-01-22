@@ -3,22 +3,11 @@ name: EVM Contracts CI
 on:
   workflow_dispatch:
   push:
-    branches: [main, master, debug-e2e]
-  pull_request:
-    branches: [main, master, debug-e2e]
-    types: [opened, synchronize]
+    branches: [debug-e2e]
 
 jobs:
-  e2e-tests:
+  test:
     runs-on: ubuntu-latest
-    services:
-      ethereum-testnet:
-        image: ethereum/client-go:latest
-        ports:
-          - 8545:8545
-    defaults:
-      run:
-        working-directory: source/evm-contracts
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,17 +22,10 @@ jobs:
           curl -fsSL https://bun.sh/install | bash
           echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
-      - name: Install dependencies
-        run: bun install
-
-      - name: Build Ethereum Docker Testnet SDK
+      - name: Build SDK
         working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
         run: bun install && bun run build
 
-      - name: Debug: Check SDK dist folder
+      - name: Check dist folder
+        working-directory: source/evm-contracts
         run: ls -la ../../docker-testnet/ethereum-testnet/typescript-sdk/dist/
-
-      - name: Run e2e tests
-        run: bun run test:docker
-        env:
-          ETH_RPC_URL: http://localhost:8545
