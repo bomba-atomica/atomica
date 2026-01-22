@@ -36,6 +36,9 @@ cd "$REPO_ROOT/source/evm-contracts/test-orchestration"
 bun run format 2>/dev/null
 bun run lint:fix 2>/dev/null
 
+cd "$REPO_ROOT/source/docker-testnet/ethereum-testnet/typescript-sdk"
+bun run format 2>/dev/null || true
+
 echo ""
 echo "⚠️  Auto-cleanup complete. Commit allowed."
 echo "⚠️  BEFORE PUSHING, run these checks:"

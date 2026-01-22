@@ -14,12 +14,15 @@
         "build": "tsc",
         "test": "bun test",
         "clean": "rm -rf dist",
+        "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
+        "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.ts'",
         "prepare": "../../../../scripts/install-hooks.sh"
     },
     "dependencies": {
         "dotenv": "^16.3.1"
     },
     "devDependencies": {
+        "prettier": "^3.0.0",
         "typescript": "^5.2.2",
         "@types/node": "^20.8.2"
     }
