@@ -13,7 +13,7 @@
     "test:smoke": "bun run src/index.ts --test smoke",
     "deploy": "bun run src/deploy.ts",
     "clean": "bun run src/clean.ts",
-    "lint": "eslint 'src/**/*.ts'",
+    "lint": "eslint 'src/**/*.ts' --max-warnings=10",
     "lint:fix": "eslint 'src/**/*.ts' --fix",
     "format": "prettier 'src/**/*.ts' --write",
     "format:check": "prettier 'src/**/*.ts' --check"
