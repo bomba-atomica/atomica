@@ -382,7 +382,1251 @@ if (AuctionDeadlineConverter.isDeadlinePassed(deadline)) {
 
 ---
 
-This page was updated January 2026 to reflect the simplified architecture using native Ethereum state proofs instead of custom commitment trees.
+## 2. Auction-Based Deposit System
+
+### 2.1 Overview
+
+All deposits must be tied to a specific auction. Deposits without a valid auction ID and nonce are rejected. Additionally, deposits for auctions that have passed their deposit deadline are rejected.
+
+### 2.2 Deposit Requirements
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     DEPOSIT VALIDATION RULES                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Rule 1: Auction ID Required                                                 │
+│  ════════════════════════════════                                            │
+│  - Every deposit must specify a valid auction ID (nonce)                     │
+│  - Zero or non-existent auction ID → REJECT                                  │
+│                                                                              │
+│  Rule 2: Nonce Required                                                      │
+│  ═════════════════════════════                                               │
+│  - Each deposit requires a unique nonce                                      │
+│  - Prevents duplicate deposits                                               │
+│  - Format: keccak256(abi.encode(auctionId, depositor, nonce))                │
+│                                                                              │
+│  Rule 3: Deadline Check                                                      │
+│  ═══════════════════════                                                     │
+│  - Deposit window closes at auction.deadlineSeconds                          │
+│  - block.timestamp >= deadline → REJECT                                      │
+│  - Uses block.timestamp (consensus-driven, not block.number)                 │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2.3 Auction Registration Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   AUCTION REGISTRATION AND DEPOSIT FLOW                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. OFF-CHAIN: Auction Coordinator                                          │
+│  ═══════════════════════════════════                                         │
+│                                                                              │
+│     - Create auction config with deadline                                   │
+│     - Submit to Governance.auctionRegistry                                  │
+│     - Get assigned auctionId (nonce)                                        │
+│                                                                              │
+│         │                                                                    │
+│         ▼                                                                    │
+│                                                                              │
+│  2. ON-CHAIN: Register Auction                                               │
+│  ════════════════════════════════                                            │
+│                                                                              │
+│     Governance.auctionRegistry.registerAuction(                             │
+│         config: AuctionConfig                                                │
+│     )                                                                        │
+│                                                                              │
+│     Events:                                                                  │
+│     - AuctionRegistered(nonce, deadline, scuttleBlock)                      │
+│                                                                              │
+│         │                                                                    │
+│         ▼                                                                    │
+│                                                                              │
+│  3. USER: Deposit with Auction ID                                            │
+│  ═══════════════════════════════════                                         │
+│                                                                              │
+│     DepositBox.depositETH{value: amount}(                                   │
+│         auctionId: uint64,                                                   │
+│         nonce: uint256                                                       │
+│     )                                                                        │
+│                                                                              │
+│     Validation:                                                              │
+│     ✓ Auction exists                                                         │
+│     ✓ Auction is in OPEN state                                               │
+│     ✓ Deadline not passed                                                    │
+│     ✓ Nonce is unique for (auctionId, depositor)                             │
+│                                                                              │
+│         │                                                                    │
+│         ▼                                                                    │
+│                                                                              │
+│  4. RESULT: Deposit Stored                                                   │
+│  ════════════════════════════                                                │
+│                                                                              │
+│     Storage key: keccak256(abi.encode(auctionId, depositor, nonce))          │
+│     Status: PENDING                                                          │
+│     Link: deposit.auctionId = auctionId                                      │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2.4 Smart Contract Interface
+
+```solidity
+/**
+ * @title AuctionRegistry
+ * @notice Registry for auction configuration and deadline tracking
+ * @dev All deposits must reference a registered auction
+ */
+contract AuctionRegistry is Ownable {
+    /**
+     * @notice Auction configuration
+     * @param nonce Unique auction identifier
+     * @param description Human-readable auction description
+     * @param deadline Auction deadline (seconds since epoch)
+     * @param scuttleBlock Block number where auction auto-terminates
+     * @param state Current auction state
+     */
+    struct Auction {
+        uint64 nonce;
+        string description;
+        uint64 deadline;       // seconds since epoch
+        uint256 scuttleBlock;  // block number
+        AuctionState state;
+    }
+
+    /**
+     * @notice Auction states
+     */
+    enum AuctionState {
+        NONE,       // Not registered
+        OPEN,       // Accepting deposits
+        CLOSING,    // Auction ended, settling
+        SETTLED,    // Completed successfully
+        SCUTTLED    // Cancelled/expired
+    }
+
+    // Storage
+    mapping(uint64 => Auction) public auctions;
+    uint64 public nextAuctionNonce;
+
+    // Events
+    event AuctionRegistered(
+        uint64 indexed nonce,
+        string description,
+        uint64 deadline,
+        uint256 scuttleBlock
+    );
+    event AuctionStateChanged(uint64 indexed nonce, AuctionState newState);
+
+    /**
+     * @notice Register a new auction
+     * @param config AuctionConfig with deadline
+     * @return nonce The assigned auction ID
+     */
+    function registerAuction(AuctionConfig calldata config)
+        external
+        onlyOwner
+        returns (uint64 nonce)
+    {
+        nonce = nextAuctionNonce++;
+        
+        uint64 deadlineSeconds = config.deadlineMicro / 1_000_000;
+        uint256 scuttleBlock = block.number + 
+            ((deadlineSeconds > block.timestamp ? deadlineSeconds - block.timestamp : 0) / 12) + 10;
+        
+        auctions[nonce] = Auction({
+            nonce: nonce,
+            description: config.description,
+            deadline: deadlineSeconds,
+            scuttleBlock: scuttleBlock,
+            state: AuctionState.OPEN
+        });
+        
+        emit AuctionRegistered(nonce, config.description, deadlineSeconds, scuttleBlock);
+    }
+
+    /**
+     * @notice Validate deposit is allowed for auction
+     * @param auctionId The auction to deposit into
+     * @return True if deposit is allowed
+     */
+    function validateDeposit(uint64 auctionId) external view returns (bool) {
+        Auction storage auction = auctions[auctionId];
+        require(auction.state == AuctionState.OPEN, "Auction not open");
+        require(block.timestamp < auction.deadline, "Auction deadline passed");
+        return true;
+    }
+
+    /**
+     * @notice Get auction deadline
+     */
+    function getDeadline(uint64 auctionId) external view returns (uint64) {
+        return auctions[auctionId].deadline;
+    }
+}
+```
+
+### 2.5 DepositBox Integration
+
+```solidity
+/**
+ * @title DepositBox with Auction Support
+ * @notice Deposits must reference a registered auction
+ */
+contract DepositBox is ReentrancyGuard, Ownable {
+    IERC20 public immutable usdcToken;
+    AuctionRegistry public immutable auctionRegistry;
+
+    /**
+     * @notice Deposit with auction ID
+     * @param auctionId The auction to deposit into (required)
+     * @param nonce Unique deposit nonce for (auctionId, depositor)
+     */
+    function depositETH(uint64 auctionId, uint256 nonce)
+        external
+        payable
+        nonReentrant
+    {
+        // Rule 1: Auction must exist and be open
+        require(auctionId < auctionRegistry.nextAuctionNonce(), "Invalid auction");
+        require(auctionRegistry.validateDeposit(auctionId), "Auction not accepting deposits");
+
+        // Rule 3: Deadline check (redundant but defensive)
+        uint64 deadline = auctionRegistry.getDeadline(auctionId);
+        require(block.timestamp < deadline, "Auction deadline passed");
+
+        // Rule 2: Generate storage key with auctionId
+        bytes32 storageKey = keccak256(abi.encode(auctionId, msg.sender, nonce));
+        require(deposits[storageKey].amount == 0, "Nonce already used");
+
+        // Create deposit
+        deposits[storageKey] = Deposit({
+            auctionId: auctionId,
+            depositor: msg.sender,
+            assetType: AssetType.ETH,
+            amount: msg.value,
+            nonce: nonce,
+            status: DepositStatus.PENDING,
+            timestamp: block.timestamp
+        });
+
+        emit ETHDeposited(msg.sender, msg.value, auctionId, nonce);
+    }
+
+    /**
+     * @notice Deposit USDC with auction ID
+     */
+    function depositUSDC(uint64 auctionId, uint256 nonce, uint256 amount)
+        external
+        nonReentrant
+    {
+        require(auctionId < auctionRegistry.nextAuctionNonce(), "Invalid auction");
+        require(auctionRegistry.validateDeposit(auctionId), "Auction not accepting deposits");
+
+        uint64 deadline = auctionRegistry.getDeadline(auctionId);
+        require(block.timestamp < deadline, "Auction deadline passed");
+
+        bytes32 storageKey = keccak256(abi.encode(auctionId, msg.sender, nonce));
+        require(deposits[storageKey].amount == 0, "Nonce already used");
+
+        deposits[storageKey] = Deposit({
+            auctionId: auctionId,
+            depositor: msg.sender,
+            assetType: AssetType.USDC,
+            amount: amount,
+            nonce: nonce,
+            status: DepositStatus.PENDING,
+            timestamp: block.timestamp
+        });
+
+        require(
+            usdcToken.transferFrom(msg.sender, address(this), amount),
+            "USDC transfer failed"
+        );
+
+        emit USDCDeposited(msg.sender, amount, auctionId, nonce);
+    }
+}
+```
+
+### 2.6 Updated Deposit Struct
+
+```solidity
+/**
+ * @notice Deposit structure with auction reference
+ */
+struct Deposit {
+    uint64 auctionId;        // REQUIRED: Auction this deposit belongs to
+    address depositor;
+    AssetType assetType;
+    uint256 amount;
+    uint256 nonce;           // Unique for (auctionId, depositor)
+    DepositStatus status;
+    uint256 timestamp;
+}
+```
+
+### 2.7 Key Validation Rules
+
+| Rule | Condition | Error Message |
+|------|-----------|---------------|
+| Auction exists | `auctionId < nextAuctionNonce` | "Invalid auction" |
+| Auction open | `auction.state == OPEN` | "Auction not accepting deposits" |
+| Deadline not passed | `block.timestamp < auction.deadline` | "Auction deadline passed" |
+| Nonce unique | `deposit.amount == 0` | "Nonce already used" |
+
+### 2.8 Storage Key Format
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     DEPOSIT STORAGE KEY                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  OLD (pre-January 2026):                                                    │
+│  keccak256(abi.encode(depositor, nonce))                                    │
+│                                                                              │
+│  NEW (with auction support):                                                │
+│  keccak256(abi.encode(auctionId, depositor, nonce))                         │
+│                                                                              │
+│  This ensures:                                                              │
+│  - Same nonce can be used in different auctions                              │
+│  - Clear separation of deposits per auction                                  │
+│  - Compatible with eth_getProof for verification                             │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2.9 Integration with Settlement
+
+```solidity
+/**
+ * @notice Settlement with auction support
+ */
+contract Settlement is ReentrancyGuard, Ownable {
+    function settleAuction(uint64 auctionId)
+        external
+        onlyOwner
+    {
+        AuctionRegistry.Auction memory auction = 
+            auctionRegistry.getAuction(auctionId);
+        
+        require(auction.state == AuctionRegistry.AuctionState.OPEN, "Auction not open");
+        require(block.timestamp >= auction.deadline, "Auction still accepting deposits");
+
+        // ... settlement logic ...
+    }
+}
+```
+
+---
+
+### 2.10 Key Functions Summary
+
+| Function | Contract | Purpose | Access |
+|----------|----------|---------|--------|
+| `registerAuction()` | AuctionRegistry | Register new auction | Owner |
+| `validateDeposit()` | AuctionRegistry | Check if deposit allowed | External |
+| `depositETH()` | DepositBox | Deposit ETH with auction | External |
+| `depositUSDC()` | DepositBox | Deposit USDC with auction | External |
+| `getDeadline()` | AuctionRegistry | Get auction deadline | External |
+
+---
+
+## 3. Test Utilities for Mock BLS Keys and State Proofs
+
+### 3.1 Overview
+
+Test utilities for creating mock BLS validator keys, generating mock consensus proofs, and simulating the Atomica state proof flow. Used for integration testing, particularly for `genesis()` initialization and auction registration.
+
+### 3.2 Test Utilities Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    TEST UTILITIES ARCHITECTURE                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                     MockBLSKeyGenerator                                │  │
+│  │                                                                       │  │
+│  │  - Generate BLS12-381 key pairs for test validators                   │  │
+│  │  - Export public keys in compressed G2 format (48 bytes)              │  │
+│  │  - Export private keys for signature generation                       │  │
+│  │  - Support multiple validators for threshold signatures               │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                         │
+│                                    ▼                                         │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                     MockStateProofGenerator                            │  │
+│  │                                                                       │  │
+│  │  - Generate mock eth_getProof responses                               │  │
+│  │  - Create MPT proofs for deposit storage slots                        │  │
+│  │  - Generate stateRoot and blockHeader for genesis                     │  │
+│  │  - Support custom deposit states for testing edge cases               │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                         │
+│                                    ▼                                         │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                     MockConsensusProofGenerator                        │  │
+│  │                                                                       │  │
+│  │  - Aggregate BLS signatures from mock validators                      │  │
+│  │  - Generate consensus proofs for:                                     │  │
+│  │    * genesis() initialization                                         │  │
+│  │    * Auction registration                                             │  │
+│  │    * Settlement verification                                          │  │
+│  │  - Create signed block headers                                        │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                     TestAuctionOrchestrator                            │  │
+│  │                                                                       │  │
+│  │  - High-level API for end-to-end test flows                           │  │
+│  │  - Register auction via Governance.auctionRegistry                    │  │
+│  │  - Submit deposits with proper auction IDs                            │  │
+│  │  - Generate settlement proofs                                         │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.3 MockBLSKeyGenerator
+
+```typescript
+/**
+ * @title MockBLSKeyGenerator
+ * @notice Generates BLS12-381 key pairs for test validators
+ * @dev Uses deterministic derivation for reproducible tests
+ */
+export class MockBLSKeyGenerator {
+  private privateKeys: Uint8Array[] = [];
+  private publicKeys: Uint8Array[] = [];
+  private readonly CURVE_ORDER = BigInt("0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001");
+
+  /**
+   * Generate a new validator key pair
+   * @param seed Optional seed for deterministic generation
+   */
+  generateKeyPair(seed?: bigint): { privateKey: Uint8Array; publicKey: Uint8Array } {
+    const privateKey = this.derivePrivateKey(seed);
+    const publicKey = this.derivePublicKey(privateKey);
+    
+    this.privateKeys.push(privateKey);
+    this.publicKeys.push(publicKey);
+    
+    return { privateKey, publicKey };
+  }
+
+  /**
+   * Generate multiple validators
+   */
+  generateValidatorSet(count: number, startSeed: bigint = 1n): {
+    privateKeys: Uint8Array[];
+    publicKeys: Uint8Array[];
+  } {
+    const privateKeys: Uint8Array[] = [];
+    const publicKeys: Uint8Array[] = [];
+    
+    for (let i = 0; i < count; i++) {
+      const seed = startSeed + BigInt(i);
+      const { privateKey, publicKey } = this.generateKeyPair(seed);
+      privateKeys.push(privateKey);
+      publicKeys.push(publicKey);
+    }
+    
+    this.privateKeys.push(...privateKeys);
+    this.publicKeys.push(...publicKeys);
+    
+    return { privateKeys, publicKeys };
+  }
+
+  /**
+   * Sign a message with a validator's private key
+   */
+  sign(privateKey: Uint8Array, message: Uint8Array): Uint8Array {
+    // BLS12-381 G1 signature
+    const domain = new Uint8Array([0, 0, 0, 0]); // Default domain
+    return this.blsSign(privateKey, message, domain);
+  }
+
+  /**
+   * Aggregate multiple signatures
+   */
+  aggregateSignatures(signatures: Uint8Array[]): Uint8Array {
+    // G1 point addition for signature aggregation
+    return signatures.reduce((agg, sig) => this.addG1Points(agg, sig), new Uint8Array(48));
+  }
+
+  /**
+   * Get all generated keys (for initialization)
+   */
+  getValidatorKeys(): { privateKeys: Uint8Array[]; publicKeys: Uint8Array[] } {
+    return {
+      privateKeys: [...this.privateKeys],
+      publicKeys: [...this.publicKeys],
+    };
+  }
+}
+```
+
+### 3.4 MockStateProofGenerator
+
+```typescript
+/**
+ * @title MockStateProofGenerator
+ * @notice Generates mock EIP-1186 state proofs for testing
+ */
+export class MockStateProofGenerator {
+  private depositBoxAddress: string;
+  private deposits: Map<string, DepositState> = new Map();
+
+  constructor(depositBoxAddress: string) {
+    this.depositBoxAddress = depositBoxAddress;
+  }
+
+  /**
+   * Create a mock deposit state
+   */
+  createDeposit(
+    auctionId: bigint,
+    depositor: string,
+    nonce: bigint,
+    amount: bigint,
+    assetType: "ETH" | "USDC"
+  ): string {
+    const storageKey = this.computeStorageKey(auctionId, depositor, nonce);
+    
+    const deposit: DepositState = {
+      auctionId: Number(auctionId),
+      depositor,
+      assetType,
+      amount: amount.toString(),
+      nonce: nonce.toString(),
+      status: "PENDING",
+      timestamp: Math.floor(Date.now() / 1000).toString(),
+    };
+    
+    this.deposits.set(storageKey, deposit);
+    return storageKey;
+  }
+
+  /**
+   * Generate eth_getProof response for deposits
+   */
+  generateProof(
+    storageKeys: string[],
+    blockNumber: number
+  ): EthereumProofResponse {
+    const accountProof = this.generateAccountProof();
+    const storageProofs = storageKeys.map((key) =>
+      this.generateStorageProof(key)
+    );
+
+    return {
+      address: this.depositBoxAddress,
+      balance: "0x0",
+      codeHash: this.computeCodeHash(),
+      nonce: "0x0",
+      storageHash: this.computeStorageRoot(),
+      accountProof: [accountProof],
+      storageProof: storageProofs,
+    };
+  }
+
+  /**
+   * Generate mock stateRoot for genesis
+   */
+  generateGenesisStateRoot(): {
+    stateRoot: string;
+    blockHeader: BlockHeader;
+    proof: EthereumProofResponse;
+  } {
+    const blockNumber = 100; // Starting block
+    const storageKeys = []; // No deposits yet
+
+    const proof = this.generateProof(storageKeys, blockNumber);
+    const stateRoot = proof.storageHash;
+
+    const blockHeader: BlockHeader = {
+      parentHash: this.randomHash(),
+      uncleHash: this.randomHash(),
+      coinbase: this.depositBoxAddress,
+      stateRoot,
+      transactionsRoot: this.randomHash(),
+      receiptsRoot: this.randomHash(),
+      logsBloom: this.randomBloom(),
+      difficulty: "0x0",
+      number: `0x${blockNumber.toString(16)}`,
+      gasLimit: "0x1c9c380",
+      gasUsed: "0x0",
+      timestamp: `0x${Math.floor(Date.now() / 1000).toString(16)}`,
+      extraData: "0x",
+      mixHash: this.randomHash(),
+      nonce: "0x0000000000000000",
+      baseFeePerGas: "0x0",
+      withdrawalsHash: this.randomHash(),
+      blobGasUsed: "0x0",
+      excessBlobGas: "0x0",
+    };
+
+    return { stateRoot, blockHeader, proof };
+  }
+
+  /**
+   * Compute storage key for deposit
+   */
+  private computeStorageKey(auctionId: bigint, depositor: string, nonce: bigint): string {
+    const encoded = ethers.solidityPacked(
+      ["uint64", "address", "uint256"],
+      [auctionId, depositor, nonce]
+    );
+    return ethers.keccak256(encoded);
+  }
+
+  private generateAccountProof(): string {
+    // Mock RLP-encoded MPT proof
+    return "0x" + "00".repeat(500);
+  }
+
+  private generateStorageProof(storageKey: string): StorageProof {
+    return {
+      key: storageKey,
+      value: this.encodeDeposit(this.deposits.get(storageKey)),
+      proof: ["0x" + "00".repeat(256)],
+    };
+  }
+
+  private encodeDeposit(deposit?: DepositState): string {
+    if (!deposit) return "0x";
+    return ethers.AbiCoder.defaultAbiCoder().encode(
+      ["tuple(uint64 auctionId, address depositor, uint8 assetType, uint256 amount, uint256 nonce, uint8 status, uint256 timestamp)"],
+      [deposit]
+    );
+  }
+
+  private randomHash(): string {
+    return ethers.keccak256(ethers.randomBytes(32));
+  }
+
+  private randomBloom(): string {
+    return "0x" + "00".repeat(256);
+  }
+
+  private computeCodeHash(): string {
+    return ethers.keccak256("0x");
+  }
+
+  private computeStorageRoot(): string {
+    return this.randomHash();
+  }
+
+  private blsSign(
+    privateKey: Uint8Array,
+    message: Uint8Array,
+    domain: Uint8Array
+  ): Uint8Array {
+    // BLS12-381 G1 signing (simplified for testing)
+    const msgHash = ethers.keccak256(message);
+    return ethers.getBytes(msgHash).slice(0, 48);
+  }
+
+  private addG1Points(a: Uint8Array, b: Uint8Array): Uint8Array {
+    // Simplified point addition for aggregation
+    const result = new Uint8Array(48);
+    for (let i = 0; i < 48; i++) {
+      result[i] = (a[i] + b[i]) % 256;
+    }
+    return result;
+  }
+}
+```
+
+### 3.5 MockConsensusProofGenerator
+
+```typescript
+/**
+ * @title MockConsensusProofGenerator
+ * @notice Generates consensus proofs by aggregating BLS signatures
+ */
+export class MockConsensusProofGenerator {
+  private keyGenerator: MockBLSKeyGenerator;
+  private blockHeaders: Map<string, SignedBlockHeader> = new Map();
+
+  constructor(keyGenerator: MockBLSKeyGenerator) {
+    this.keyGenerator = keyGenerator;
+  }
+
+  /**
+   * Create a consensus proof for genesis initialization
+   */
+  createGenesisProof(
+    stateRoot: string,
+    blockNumber: number
+  ): ConsensusProof {
+    const blockHeader = this.createBlockHeader(stateRoot, blockNumber);
+    const { privateKeys, publicKeys } = this.keyGenerator.getValidatorKeys();
+    
+    const signature = this.aggregateSignatures(
+      privateKeys.map((priv) => this.signBlock(priv, blockHeader))
+    );
+
+    return {
+      blockHeader,
+      signature,
+      validatorIndices: publicKeys.map((_, i) => i),
+      publicKeys,
+    };
+  }
+
+  /**
+   * Create a consensus proof for auction registration
+   */
+  createAuctionRegistrationProof(
+    auctionRegistryAddress: string,
+    auctionId: bigint,
+    deadlineSeconds: number,
+    stateRoot: string
+  ): ConsensusProof {
+    const blockNumber = 100 + Number(auctionId);
+    const blockHeader = this.createBlockHeader(stateRoot, blockNumber);
+    
+    // Sign the auction data
+    const message = this.hashAuctionRegistration(auctionRegistryAddress, auctionId, deadlineSeconds);
+    const { privateKeys, publicKeys } = this.keyGenerator.getValidatorKeys();
+    
+    const signature = this.aggregateSignatures(
+      privateKeys.map((priv) => this.signMessage(priv, message))
+    );
+
+    return {
+      blockHeader,
+      signature,
+      validatorIndices: publicKeys.map((_, i) => i),
+      publicKeys,
+    };
+  }
+
+  /**
+   * Create a consensus proof for settlement
+   */
+  createSettlementProof(
+    stateRoot: string,
+    clearingPrice: bigint,
+    winners: string[],
+    amounts: bigint[]
+  ): SettlementProof {
+    const blockNumber = 200;
+    const blockHeader = this.createBlockHeader(stateRoot, blockNumber);
+    
+    const message = this.hashSettlement(stateRoot, clearingPrice, winners, amounts);
+    const { privateKeys, publicKeys } = this.keyGenerator.getValidatorKeys();
+    
+    const signature = this.aggregateSignatures(
+      privateKeys.map((priv) => this.signMessage(priv, message))
+    );
+
+    return {
+      blockHeader,
+      signature,
+      validatorIndices: publicKeys.map((_, i) => i),
+      publicKeys,
+      tradeData: {
+        clearingPrice,
+        winners,
+        amounts,
+      },
+    };
+  }
+
+  private createBlockHeader(stateRoot: string, blockNumber: number): BlockHeader {
+    const header: BlockHeader = {
+      parentHash: ethers.keccak256("parent"),
+      uncleHash: ethers.keccak256("uncles"),
+      coinbase: ethers.ZeroAddress,
+      stateRoot,
+      transactionsRoot: ethers.keccak256("txs"),
+      receiptsRoot: ethers.keccak256("receipts"),
+      logsBloom: "0x" + "00".repeat(256),
+      difficulty: "0x0",
+      number: `0x${blockNumber.toString(16)}`,
+      gasLimit: "0x1c9c380",
+      gasUsed: "0x0",
+      timestamp: `0x${Math.floor(Date.now() / 1000).toString(16)}`,
+      extraData: "0x",
+      mixHash: ethers.randomBytes(32),
+      nonce: "0x0000000000000000",
+      baseFeePerGas: "0x0",
+      withdrawalsHash: ethers.keccak256("withdrawals"),
+      blobGasUsed: "0x0",
+      excessBlobGas: "0x0",
+    };
+
+    return header;
+  }
+
+  private signBlock(privateKey: Uint8Array, header: BlockHeader): Uint8Array {
+    const headerHash = this.hashBlockHeader(header);
+    return this.keyGenerator.sign(privateKey, headerHash);
+  }
+
+  private signMessage(privateKey: Uint8Array, message: Uint8Array): Uint8Array {
+    return this.keyGenerator.sign(privateKey, message);
+  }
+
+  private aggregateSignatures(signatures: Uint8Array[]): Uint8Array {
+    return this.keyGenerator.aggregateSignatures(signatures);
+  }
+
+  private hashBlockHeader(header: BlockHeader): Uint8Array {
+    return ethers.getBytes(ethers.keccak256(this.encodeBlockHeader(header)));
+  }
+
+  private hashAuctionRegistration(
+    registry: string,
+    auctionId: bigint,
+    deadline: number
+  ): Uint8Array {
+    return ethers.getBytes(
+      ethers.keccak256(
+        ethers.solidityPacked(
+          ["address", "uint64", "uint64"],
+          [registry, auctionId, deadline]
+        )
+      )
+    );
+  }
+
+  private hashSettlement(
+    stateRoot: string,
+    clearingPrice: bigint,
+    winners: string[],
+    amounts: bigint[]
+  ): Uint8Array {
+    return ethers.getBytes(
+      ethers.keccak256(
+        ethers.solidityPacked(
+          ["bytes32", "uint256", "address[]", "uint256[]"],
+          [stateRoot, clearingPrice, winners, amounts]
+        )
+      )
+    );
+  }
+
+  private encodeBlockHeader(header: BlockHeader): string {
+    return ethers.solidityPacked(
+      [
+        "bytes32", "bytes32", "address", "bytes32", "bytes32", "bytes32",
+        "bytes32", "uint256", "uint256", "uint256", "uint64", "bytes32",
+        "uint64", "uint64", "uint64"
+      ],
+      [
+        header.parentHash, header.uncleHash, header.coinbase, header.stateRoot,
+        header.transactionsRoot, header.receiptsRoot, header.logsBloom,
+        header.difficulty, header.number, header.gasLimit, header.gasUsed,
+        header.timestamp, header.extraData, header.baseFeePerGas, header.withdrawalsHash
+      ]
+    );
+  }
+}
+```
+
+### 3.6 TestAuctionOrchestrator
+
+```typescript
+/**
+ * @title TestAuctionOrchestrator
+ * @notice High-level test orchestration for auction workflows
+ */
+export class TestAuctionOrchestrator {
+  private blsKeyGenerator: MockBLSKeyGenerator;
+  private stateProofGenerator: MockStateProofGenerator;
+  private consensusProofGenerator: MockConsensusProofGenerator;
+  
+  private governance: Governance;
+  private auctionRegistry: AuctionRegistry;
+  private depositBox: DepositBox;
+  private blsVerifier: BLSVerifier;
+
+  constructor(
+    governance: Governance,
+    auctionRegistry: AuctionRegistry,
+    depositBox: DepositBox,
+    blsVerifier: BLSVerifier
+  ) {
+    this.governance = governance;
+    this.auctionRegistry = auctionRegistry;
+    this.depositBox = depositBox;
+    this.blsVerifier = blsVerifier;
+    
+    this.blsKeyGenerator = new MockBLSKeyGenerator();
+    this.stateProofGenerator = new MockStateProofGenerator(depositBox.target as string);
+    this.consensusProofGenerator = new MockConsensusProofGenerator(this.blsKeyGenerator);
+  }
+
+  /**
+   * Initialize the system for testing
+   */
+  async initializeSystem(): Promise<void> {
+    // Generate test validator keys
+    const { privateKeys, publicKeys } = this.blsKeyGenerator.generateValidatorSet(4);
+    
+    // Initialize BLS verifier
+    const publicKeysCompressed = publicKeys.map(this.compressPublicKey);
+    await this.blsVerifier.initialize(publicKeysCompressed);
+    
+    // Create genesis proof with initial state
+    const genesisProof = this.consensusProofGenerator.createGenesisProof(
+      ethers.ZeroHash, // Empty state root for genesis
+      100
+    );
+    
+    // Call genesis via governance
+    await this.governance.genesis(
+      this.depositBox.target,
+      this.blsVerifier.target,
+      ethers.ZeroAddress, // Settlement set later
+      genesisProof.blockHeader.number,
+      genesisProof.blockHeader.stateRoot,
+      genesisProof.signature,
+      genesisProof.validatorIndices
+    );
+  }
+
+  /**
+   * Register a new auction
+   */
+  async registerAuction(
+    description: string,
+    deadlineMicroseconds: bigint
+  ): Promise<bigint> {
+    const deadlineSeconds = deadlineMicroseconds / 1_000_000n;
+    
+    // Create auction registration proof
+    const proof = this.consensusProofGenerator.createAuctionRegistrationProof(
+      this.auctionRegistry.target as string,
+      1n, // Will be assigned by registry
+      Number(deadlineSeconds),
+      ethers.ZeroHash
+    );
+    
+    // Register via auction registry
+    const config: AuctionConfig = {
+      nonce: 0, // Ignored, registry assigns
+      description,
+      deadlineMicro: Number(deadlineMicroseconds),
+      minPrice: 0n,
+      maxPrice: 0n,
+      minEthAmount: 0n,
+      minUsdcAmount: 0n,
+    };
+    
+    const tx = await this.auctionRegistry.registerAuction(config);
+    const receipt = await tx.wait();
+    
+    // Parse auction ID from event
+    const event = receipt.logs.find(
+      (log: any) => log.fragment?.name === "AuctionRegistered"
+    );
+    return event?.args[0] || 1n;
+  }
+
+  /**
+   * Submit a deposit to an auction
+   */
+  async submitDeposit(
+    auctionId: bigint,
+    depositor: ethers.Wallet,
+    amount: bigint,
+    assetType: "ETH" | "USDC"
+  ): Promise<{ nonce: bigint; storageKey: string }> {
+    const nonce = BigInt(Date.now());
+    
+    if (assetType === "ETH") {
+      const tx = await this.depositBox
+        .connect(depositor)
+        .depositETH(auctionId, nonce, { value: amount });
+      await tx.wait();
+    } else {
+      const tx = await this.depositBox
+        .connect(depositor)
+        .depositUSDC(auctionId, nonce, amount);
+      await tx.wait();
+    }
+    
+    const storageKey = ethers.solidityPackedKeccak256(
+      ["uint64", "address", "uint256"],
+      [auctionId, depositor.address, nonce]
+    );
+    
+    return { nonce, storageKey };
+  }
+
+  /**
+   * Create settlement proof for an auction
+   */
+  async createSettlementProof(
+    auctionId: bigint,
+    winners: string[],
+    amounts: bigint[],
+    clearingPrice: bigint
+  ): Promise<SettlementProof> {
+    // Generate state proof for deposits
+    const stateRoot = this.stateProofGenerator.generateGenesisStateRoot().stateRoot;
+    
+    return this.consensusProofGenerator.createSettlementProof(
+      stateRoot,
+      clearingPrice,
+      winners,
+      amounts
+    );
+  }
+
+  private compressPublicKey(uncompressed: Uint8Array): string {
+    // BLS G2 compression (simplified for testing)
+    return "0x" + Buffer.from(uncompressed).toString("hex");
+  }
+}
+```
+
+### 3.7 TypeScript Interfaces
+
+```typescript
+interface EthereumProofResponse {
+  address: string;
+  balance: string;
+  codeHash: string;
+  nonce: string;
+  storageHash: string;
+  accountProof: string[];
+  storageProof: StorageProof[];
+}
+
+interface StorageProof {
+  key: string;
+  value: string;
+  proof: string[];
+}
+
+interface BlockHeader {
+  parentHash: string;
+  uncleHash: string;
+  coinbase: string;
+  stateRoot: string;
+  transactionsRoot: string;
+  receiptsRoot: string;
+  logsBloom: string;
+  difficulty: string;
+  number: string;
+  gasLimit: string;
+  gasUsed: string;
+  timestamp: string;
+  extraData: string;
+  mixHash: string;
+  nonce: string;
+  baseFeePerGas: string;
+  withdrawalsHash: string;
+  blobGasUsed: string;
+  excessBlobGas: string;
+}
+
+interface ConsensusProof {
+  blockHeader: BlockHeader;
+  signature: Uint8Array;
+  validatorIndices: number[];
+  publicKeys: Uint8Array[];
+}
+
+interface SettlementProof extends ConsensusProof {
+  tradeData: {
+    clearingPrice: bigint;
+    winners: string[];
+    amounts: bigint[];
+  };
+}
+
+interface DepositState {
+  auctionId: number;
+  depositor: string;
+  assetType: "ETH" | "USDC";
+  amount: string;
+  nonce: string;
+  status: "PENDING" | "CONFIRMED" | "SETTLED" | "REFUNDED";
+  timestamp: string;
+}
+
+interface AuctionConfig {
+  nonce: number;
+  description: string;
+  deadlineMicro: number;
+  minPrice: bigint;
+  maxPrice: bigint;
+  minEthAmount: bigint;
+  minUsdcAmount: bigint;
+}
+```
+
+### 3.8 Usage Example
+
+```typescript
+describe("Auction Flow Integration Test", function () {
+  let orchestrator: TestAuctionOrchestrator;
+  let wallets: ethers.Wallet[];
+  
+  beforeEach(async function () {
+    // Deploy contracts
+    const [governance, auctionRegistry, depositBox, blsVerifier] = await deployContracts();
+    
+    // Create orchestrator
+    orchestrator = new TestAuctionOrchestrator(
+      governance,
+      auctionRegistry,
+      depositBox,
+      blsVerifier
+    );
+    
+    // Generate test wallets
+    wallets = await generateTestWallets(5);
+  });
+  
+  it("should register auction and accept deposits", async function () {
+    // 1. Initialize system with mock validators
+    await orchestrator.initializeSystem();
+    
+    // 2. Register auction
+    const deadline = BigInt(Date.now() + 3600_000_000) * 1000n; // 1 hour
+    const auctionId = await orchestrator.registerAuction(
+      "west-daily-btc-eth",
+      deadline
+    );
+    
+    // 3. Submit deposits
+    for (const wallet of wallets.slice(0, 3)) {
+      const { nonce } = await orchestrator.submitDeposit(
+        auctionId,
+        wallet,
+        ethers.parseEther("1.0"),
+        "ETH"
+      );
+      console.log(`Deposit from ${wallet.address} with nonce ${nonce}`);
+    }
+    
+    // 4. Verify deposits
+    const depositCount = await depositBox.getDepositCount();
+    expect(depositCount).to.equal(3);
+  });
+  
+  it("should create settlement proof for auction", async function () {
+    await orchestrator.initializeSystem();
+    
+    const auctionId = await orchestrator.registerAuction(
+      "test-auction",
+      BigInt(Date.now() + 3600_000_000) * 1000n
+    );
+    
+    // Submit deposits
+    const winners = wallets.map((w) => w.address);
+    const amounts = [ethers.parseEther("0.5"), ethers.parseEther("0.3"), ethers.parseEther("0.2")];
+    
+    for (let i = 0; i < 3; i++) {
+      await orchestrator.submitDeposit(
+        auctionId,
+        wallets[i],
+        amounts[i],
+        "ETH"
+      );
+    }
+    
+    // Create settlement proof
+    const proof = await orchestrator.createSettlementProof(
+      auctionId,
+      winners,
+      amounts,
+      2000n // $2000 clearing price
+    );
+    
+    expect(proof.signature.length).to.equal(48);
+    expect(proof.validatorIndices.length).to.equal(4);
+  });
+});
+```
+
+### 3.9 Integration with Foundry Tests
+
+```solidity
+// test/utils/MockProofs.sol
+pragma solidity ^0.8.19;
+
+import {Vm} from "forge-std/Vm.sol";
+
+library MockProofs {
+    Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+
+    function generateBlockHeader(bytes32 stateRoot, uint256 blockNumber) internal pure returns (
+        bytes32 parentHash,
+        bytes32 uncleHash,
+        address coinbase,
+        bytes32 newStateRoot,
+        bytes32 transactionsRoot,
+        bytes32 receiptsRoot,
+        bytes32 logsBloom,
+        uint256 difficulty,
+        uint256 number,
+        uint256 gasLimit,
+        uint256 gasUsed,
+        uint256 timestamp,
+        bytes32 extraData,
+        uint256 baseFeePerGas
+    ) {
+        parentHash = keccak256("parent");
+        uncleHash = keccak256("uncles");
+        coinbase = address(0);
+        newStateRoot = stateRoot;
+        transactionsRoot = keccak256("txs");
+        receiptsRoot = keccak256("receipts");
+        logsBloom = bytes32(0);
+        difficulty = 0;
+        number = blockNumber;
+        gasLimit = 30000000;
+        gasUsed = 0;
+        timestamp = block.timestamp;
+        extraData = bytes32(0);
+        baseFeePerGas = 0;
+    }
+
+    function signBlockHeader(
+        bytes32 stateRoot,
+        uint256 blockNumber,
+        uint256 privateKey
+    ) internal pure returns (bytes32 hash, bytes memory signature) {
+        // Simplified for testing - in production use proper BLS signing
+        hash = keccak256(abi.encode(stateRoot, blockNumber));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
+        signature = abi.encode(r, s, v);
+    }
+}
+```
+
+### 3.10 Key Functions Summary
+
+| Function | Class | Purpose |
+|----------|-------|---------|
+| `generateKeyPair()` | MockBLSKeyGenerator | Create validator BLS key pair |
+| `generateValidatorSet()` | MockBLSKeyGenerator | Create multiple validators |
+| `sign()` | MockBLSKeyGenerator | Sign message with private key |
+| `aggregateSignatures()` | MockBLSKeyGenerator | Aggregate BLS signatures |
+| `generateProof()` | MockStateProofGenerator | Create eth_getProof response |
+| `generateGenesisStateRoot()` | MockStateProofGenerator | Create initial state proof |
+| `createGenesisProof()` | MockConsensusProofGenerator | Create genesis consensus proof |
+| `createAuctionRegistrationProof()` | MockConsensusProofGenerator | Create auction registration proof |
+| `createSettlementProof()` | MockConsensusProofGenerator | Create settlement consensus proof |
+| `initializeSystem()` | TestAuctionOrchestrator | Initialize test system |
+| `registerAuction()` | TestAuctionOrchestrator | Register auction with proof |
+| `submitDeposit()` | TestAuctionOrchestrator | Submit deposit to auction |
+
+---
+
+This page was updated January 2026 to include test utilities for mock BLS keys and state proofs.
 
 ---
 

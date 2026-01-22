@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../../src/DepositBox.sol";
 import "../../src/Settlement.sol";
 import "../../src/BLSVerifier.sol";
 import "../../src/Governance.sol";
+import "../../src/AuctionRegistry.sol";
 import "../../src/libraries/DepositTypes.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -32,12 +33,14 @@ contract DeploymentVerificationTest is Test {
     address settlementAddr;
     address blsVerifierAddr;
     address governanceAddr;
+    address auctionRegistryAddr;
     address usdcTokenAddr;
 
     DepositBox depositBox;
     Settlement settlement;
     BLSVerifier blsVerifier;
     Governance governance;
+    AuctionRegistry auctionRegistry;
     IERC20 usdcToken;
 
     address deployer;
@@ -48,17 +51,17 @@ contract DeploymentVerificationTest is Test {
     string USDC_TOKEN_ADDR;
 
     function setUp() public {
-        ETH_RPC_URL = vm.envOr("ETH_RPC_URL", "http://localhost:8545");
-        USDC_TOKEN_ADDR = vm.envOr("USDC_TOKEN_ADDR", "");
+        ETH_RPC_URL = vm.envOr("ETH_RPC_URL", string("http://localhost:8545"));
+        USDC_TOKEN_ADDR = vm.envOr("USDC_TOKEN_ADDR", string(""));
 
         deployer = vm.addr(uint256(keccak256("deployer")));
-        alice = address(0x8943545177806ED17B9F23F0a21ee5948eCaa776);
-        bob = address(0x71bE63f3384f5fb98995898A86B02Fb2426c5788);
+        alice = makeAddr("alice");
+        bob = makeAddr("bob");
 
         // Read deployment file if it exists
         string memory deploymentPath = string.concat(vm.projectRoot(), "/test-results/deployment.json");
 
-        if (bytes(USDC_TOKEN_ADDR).length == 0 && exists(deploymentPath)) {
+        if (bytes(USDC_TOKEN_ADDR).length == 0 && vm.exists(deploymentPath)) {
             string memory json = vm.readFile(deploymentPath);
             usdcTokenAddr = vm.parseJsonAddress(json, ".USDCToken");
             USDC_TOKEN_ADDR = vm.toString(usdcTokenAddr);
@@ -66,13 +69,13 @@ contract DeploymentVerificationTest is Test {
             // Deploy mock USDC for testing
             USDC_TOKEN_ADDR = _deployMockUSDC();
         } else {
-            usdcTokenAddr = vm.parseJsonAddress(string.concat('"', USDC_TOKEN_ADDR, '"'));
+            usdcTokenAddr = vm.parseAddress(USDC_TOKEN_ADDR);
         }
 
         usdcToken = IERC20(usdcTokenAddr);
 
         // Read or deploy contracts
-        if (exists(deploymentPath)) {
+        if (vm.exists(deploymentPath)) {
             _loadDeployment(deploymentPath);
         } else {
             _deployContracts();
@@ -115,13 +118,18 @@ contract DeploymentVerificationTest is Test {
     function _deployContracts() internal {
         console.log("Deploying contracts to", ETH_RPC_URL);
 
+        // Deploy AuctionRegistry
+        auctionRegistry = new AuctionRegistry();
+        auctionRegistryAddr = address(auctionRegistry);
+        console.log("AuctionRegistry:", auctionRegistryAddr);
+
         // Deploy Governance
         governance = new Governance(usdcTokenAddr);
         governanceAddr = address(governance);
         console.log("Governance:", governanceAddr);
 
         // Deploy DepositBox
-        depositBox = new DepositBox(usdcTokenAddr);
+        depositBox = new DepositBox(usdcTokenAddr, auctionRegistryAddr);
         depositBoxAddr = address(depositBox);
         console.log("DepositBox:", depositBoxAddr);
 
@@ -147,8 +155,23 @@ contract DeploymentVerificationTest is Test {
         // Initialize system via governance
         governance.genesis(depositBoxAddr, blsVerifierAddr, settlementAddr);
 
+        // Register a test auction for E2E verification
+        DepositTypes.AuctionConfig memory config = DepositTypes.AuctionConfig({
+            nonce: 0,
+            description: "e2e-test-auction",
+            deadlineMicro: uint64(block.timestamp + 86400) * 1_000_000,
+            minPrice: 0,
+            maxPrice: 0,
+            minEthAmount: 0,
+            minUsdcAmount: 0
+        });
+        auctionRegistry.registerAuction(config);
+
         // Set settlement contract in deposit box
         depositBox.setSettlementContract(settlementAddr);
+
+        // Transfer AuctionRegistry ownership to governance
+        auctionRegistry.transferOwnership(governanceAddr);
 
         // Save deployment info
         _saveDeployment();
@@ -162,12 +185,16 @@ contract DeploymentVerificationTest is Test {
         string memory deploymentPath = string.concat(outputDir, "/deployment.json");
 
         // Ensure directory exists
-        string memory mkdirCmd = string.concat("mkdir -p ", outputDir);
-        vm.ffi(mkdirCmd);
+        string[] memory inputs = new string[](3);
+        inputs[0] = "mkdir";
+        inputs[1] = "-p";
+        inputs[2] = outputDir;
+        vm.ffi(inputs);
 
         string memory json = string.concat(
             "{\n",
             '  "Deployer": "', vm.toString(deployer), '",\n',
+            '  "AuctionRegistry": "', vm.toString(auctionRegistryAddr), '",\n',
             '  "Governance": "', vm.toString(governanceAddr), '",\n',
             '  "DepositBox": "', vm.toString(depositBoxAddr), '",\n',
             '  "BLSVerifier": "', vm.toString(blsVerifierAddr), '",\n',
@@ -275,7 +302,7 @@ contract DeploymentVerificationTest is Test {
         // The second call would revert
         // We can't easily test this without the private key
         assertTrue(governance.initialized(), "Genesis should have been called");
-        console.log("✓ Genesis was called (initialized = true)");
+        console.log("[OK] Genesis was called (initialized = true)");
     }
 
     /**
@@ -299,7 +326,7 @@ contract DeploymentVerificationTest is Test {
         assertEq(address(settlement.blsVerifier()), address(blsVerifier), "Settlement -> BLSVerifier link");
         assertEq(address(settlement.depositBox()), address(depositBox), "Settlement -> DepositBox link");
 
-        console.log("✓ All contract links verified");
+        console.log("[OK] All contract links verified");
     }
 
     /**
@@ -352,15 +379,16 @@ contract DeploymentVerificationTest is Test {
     function testBasicETHDeposit() public {
         uint256 depositAmount = 1 ether;
         uint256 initialBalance = address(depositBox).balance;
+        uint64 auctionId = 1;
 
         vm.deal(alice, depositAmount);
 
         vm.prank(alice);
-        depositBox.depositETH{value: depositAmount}();
+        depositBox.depositETH{value: depositAmount}(auctionId, 1);
 
         assertEq(address(depositBox).balance, initialBalance + depositAmount);
 
-        DepositTypes.Deposit memory deposit = depositBox.getDeposit(alice, 1);
+        DepositTypes.Deposit memory deposit = depositBox.getDeposit(auctionId, alice, 1);
         assertEq(deposit.amount, depositAmount);
         assertEq(deposit.depositor, alice);
         assertEq(uint256(deposit.status), 0); // PENDING
@@ -380,6 +408,7 @@ contract DeploymentVerificationTest is Test {
 
         uint256 depositAmount = 1000e6;
         uint256 initialBalance = usdcToken.balanceOf(address(depositBox));
+        uint64 auctionId = 1;
 
         // Check if we have USDC balance (might need to mint)
         uint256 aliceBalance = usdcToken.balanceOf(alice);
@@ -392,11 +421,11 @@ contract DeploymentVerificationTest is Test {
         usdcToken.approve(address(depositBox), depositAmount);
 
         vm.prank(alice);
-        depositBox.depositUSDC(depositAmount);
+        depositBox.depositUSDC(auctionId, 2, depositAmount);
 
         assertEq(usdcToken.balanceOf(address(depositBox)), initialBalance + depositAmount);
 
-        DepositTypes.Deposit memory deposit = depositBox.getDeposit(alice, 2);
+        DepositTypes.Deposit memory deposit = depositBox.getDeposit(auctionId, alice, 2);
         assertEq(deposit.amount, depositAmount);
         assertEq(deposit.depositor, alice);
         assertEq(uint256(deposit.assetType), 1); // USDC
@@ -408,23 +437,26 @@ contract DeploymentVerificationTest is Test {
      * @notice Test deposit confirmation
      */
     function testDepositConfirmation() public {
+        uint64 auctionId = 1;
         // Make a deposit
         vm.deal(bob, 2 ether);
         vm.prank(bob);
-        depositBox.depositETH{value: 1 ether}();
+        depositBox.depositETH{value: 1 ether}(auctionId, 3);
 
         // Confirm the deposit
+        uint64[] memory auctionIds = new uint64[](1);
         address[] memory depositors = new address[](1);
         uint256[] memory nonces = new uint256[](1);
+        auctionIds[0] = auctionId;
         depositors[0] = bob;
-        nonces[0] = 1;
+        nonces[0] = 3;
         bytes32 stateRoot = bytes32(uint256(keccak256("test_state_root")));
 
         vm.prank(settlementAddr);
-        depositBox.confirmDeposits(depositors, nonces, stateRoot);
+        depositBox.confirmDeposits(auctionIds, depositors, nonces, stateRoot);
 
         // Verify confirmed
-        DepositTypes.Deposit memory deposit = depositBox.getDeposit(bob, 1);
+        DepositTypes.Deposit memory deposit = depositBox.getDeposit(auctionId, bob, 3);
         assertEq(uint256(deposit.status), 1); // CONFIRMED
 
         console.log("Deposit confirmation verified");
@@ -434,8 +466,9 @@ contract DeploymentVerificationTest is Test {
      * @notice Test state proof storage key computation
      */
     function testStateProofStorageKey() public view {
-        bytes32 computedKey = depositBox.getStorageKey(alice, 1);
-        bytes32 expectedKey = keccak256(abi.encode(alice, 1));
+        uint64 auctionId = 1;
+        bytes32 computedKey = depositBox.getStorageKey(auctionId, alice, 1);
+        bytes32 expectedKey = keccak256(abi.encode(auctionId, alice, 1));
 
         assertEq(computedKey, expectedKey);
 

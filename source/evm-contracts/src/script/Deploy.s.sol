@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "../DepositBox.sol";
+import "../Settlement.sol";
+import "../BLSVerifier.sol";
+import "../Governance.sol";
+import "../AuctionRegistry.sol";
 
 /**
  * @title MockUSDC
@@ -35,19 +41,19 @@ contract MockUSDC is ERC20 {
  */
 contract Deploy is Script {
     string constant DEFAULT_RPC_URL = "http://localhost:8545";
-    string constant DEFAULT_PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+    string constant DEFAULT_PRIVATE_KEY = "0xbcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31";
 
     function run() public {
         string memory rpcUrl = vm.envOr("ETH_RPC_URL", DEFAULT_RPC_URL);
-        string memory privateKeyStr = vm.envOr("ETH_PRIVATE_KEY", DEFAULT_PRIVATE_KEY);
-        string memory usdcTokenAddr = vm.envOr("USDC_TOKEN_ADDR", "");
+        string memory privateKeyStr = vm.envOr("ETH_PRIVATE_KEY", string(DEFAULT_PRIVATE_KEY));
+        string memory usdcTokenAddr = vm.envOr("USDC_TOKEN_ADDR", string(""));
 
-        console.log("═".repeat(60));
+        console.log("============================================================");
         console.log("  Atomica EVM Contracts Deployment");
-        console.log("═".repeat(60));
+        console.log("============================================================");
         console.log("RPC URL:", rpcUrl);
 
-        uint256 deployerPrivateKey = vm.parsePrivateKey(privateKeyStr);
+        uint256 deployerPrivateKey = vm.parseUint(privateKeyStr);
         address deployer = vm.addr(deployerPrivateKey);
         console.log("Deployer:", deployer);
 
@@ -77,14 +83,19 @@ contract Deploy is Script {
             console.log("Using existing USDC token at:", usdcAddr);
         }
 
+        // Deploy AuctionRegistry
+        console.log("\nDeploying AuctionRegistry...");
+        AuctionRegistry auctionRegistry = new AuctionRegistry();
+        console.log("  AuctionRegistry:", address(auctionRegistry));
+
         // Deploy Governance
-        console.log("\nDeploying Governance...");
+        console.log("Deploying Governance...");
         Governance governance = new Governance(usdcAddr);
         console.log("  Governance:", address(governance));
 
         // Deploy DepositBox
         console.log("Deploying DepositBox...");
-        DepositBox depositBox = new DepositBox(usdcAddr);
+        DepositBox depositBox = new DepositBox(usdcAddr, address(auctionRegistry));
         console.log("  DepositBox:", address(depositBox));
 
         // Deploy BLSVerifier
@@ -121,22 +132,29 @@ contract Deploy is Script {
         depositBox.setSettlementContract(address(settlement));
         console.log("  Settlement contract set in DepositBox");
 
+        // Transfer AuctionRegistry ownership to governance
+        console.log("Transferring AuctionRegistry ownership to governance...");
+        auctionRegistry.transferOwnership(address(governance));
+        console.log("  AuctionRegistry ownership transferred");
+
         vm.stopBroadcast();
 
         // Print summary
-        console.log("\n" + "═".repeat(60));
+        console.log("\n============================================================");
         console.log("  DEPLOYMENT COMPLETE");
-        console.log("═".repeat(60));
+        console.log("============================================================");
         console.log("USDC Token:", usdcAddr);
+        console.log("AuctionRegistry:", address(auctionRegistry));
         console.log("Governance:", address(governance));
         console.log("DepositBox:", address(depositBox));
         console.log("BLSVerifier:", address(blsVerifier));
         console.log("Settlement:", address(settlement));
-        console.log("═".repeat(60));
+        console.log("============================================================");
 
         // Save deployment info
         _saveDeployment(
             deployer,
+            address(auctionRegistry),
             address(governance),
             address(depositBox),
             address(blsVerifier),
@@ -151,6 +169,7 @@ contract Deploy is Script {
 
     function _saveDeployment(
         address deployer,
+        address auctionRegistry,
         address governance,
         address depositBox,
         address blsVerifier,
@@ -160,20 +179,20 @@ contract Deploy is Script {
         string memory outputDir = string.concat(vm.projectRoot(), "/test-results");
 
         // Ensure directory exists
-        string memory mkdirCmd = string.concat("mkdir -p ", outputDir);
-        vm.ffi(mkdirCmd);
+        vm.createDir(outputDir, true);
 
         string memory deploymentPath = string.concat(outputDir, "/deployment.json");
 
         string memory json = string.concat(
             "{\n",
-            '  "Deployer": "', Strings.toHexString(deployer), '",\n',
-            '  "Governance": "', Strings.toHexString(governance), '",\n',
-            '  "DepositBox": "', Strings.toHexString(depositBox), '",\n',
-            '  "BLSVerifier": "', Strings.toHexString(blsVerifier), '",\n',
-            '  "Settlement": "', Strings.toHexString(settlement), '",\n',
-            '  "USDCToken": "', Strings.toHexString(usdcToken), '",\n',
-            '  "timestamp": "', Strings.toString(block.timestamp), '"\n',
+            '  "Deployer": "', vm.toString(deployer), '",\n',
+            '  "AuctionRegistry": "', vm.toString(auctionRegistry), '",\n',
+            '  "Governance": "', vm.toString(governance), '",\n',
+            '  "DepositBox": "', vm.toString(depositBox), '",\n',
+            '  "BLSVerifier": "', vm.toString(blsVerifier), '",\n',
+            '  "Settlement": "', vm.toString(settlement), '",\n',
+            '  "USDCToken": "', vm.toString(usdcToken), '",\n',
+            '  "timestamp": "', vm.toString(block.timestamp), '"\n',
             "}"
         );
 
@@ -181,9 +200,3 @@ contract Deploy is Script {
         console.log("\nDeployment info saved to:", deploymentPath);
     }
 }
-
-// Import statements for deployment
-import "../src/DepositBox.sol";
-import "../src/Settlement.sol";
-import "../src/BLSVerifier.sol";
-import "../src/Governance.sol";

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 /**
  * @title Atomica AuctionManager Contract
@@ -73,7 +73,7 @@ contract AuctionManager is Ownable {
      * @notice Constructor
      * @dev Initializes nonce counter to 1
      */
-    constructor() {
+    constructor() Ownable(msg.sender) {
         nextNonce = 1;
     }
 

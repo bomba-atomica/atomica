@@ -50,7 +50,7 @@ interface Config {
 }
 
 // Constants
-const CONTRACTS_DIR = pathResolve(import.meta.dir, "../src");
+const CONTRACTS_DIR = pathResolve(import.meta.dir, "../..");
 const OUTPUT_DIR = pathResolve(import.meta.dir, "../test-results");
 const FOUNDRY_PROFILE = "test";
 
@@ -143,6 +143,9 @@ export class TestOrchestrator {
         this.testnet = await EthereumDockerTestnet.start(4);
         await this.testnet.waitForHealthy(180);
 
+        console.log("Waiting 30 seconds for chain to stabilize...");
+        await new Promise(resolve => setTimeout(resolve, 30000));
+
         console.log(`✓ Testnet started at ${this.testnet.getExecutionRpcUrl()}`);
         console.log(`  - Geth RPC: ${this.testnet.getExecutionRpcUrl()}`);
         console.log(`  - Geth WS: ${this.testnet.getExecutionWsUrl()}`);
@@ -166,7 +169,7 @@ export class TestOrchestrator {
 
         await this.runCommand(
             "forge",
-            ["script", "script/Deploy.s.sol", "--rpc-url", rpcUrl, "--broadcast"],
+            ["script", "src/script/Deploy.s.sol:Deploy", "--rpc-url", rpcUrl, "--broadcast"],
             {
                 cwd: this.config.contractsDir,
                 env,
@@ -327,16 +330,9 @@ export class TestOrchestrator {
      * Get deployed contract addresses
      */
     private async getDeployedContracts(rpcUrl: string): Promise<Record<string, string>> {
-        // Run cast to get addresses from broadcast logs
-        await this.runCommand(
-            "forge",
-            ["script", "--dry-run", "--json", "script/Deploy.s.sol", "--rpc-url", rpcUrl],
-            {
-                cwd: this.config.contractsDir,
-                env: { ...process.env, ETH_RPC_URL: rpcUrl },
-            },
-        ).catch(() => "");
-
+        // Run script without broadcast to get addresses from logs if needed
+        // but we already have them from the broadcast run
+        
         // Parse deployment log
         const deployments: Record<string, string> = {};
         const deploymentsPath = pathResolve(
@@ -380,10 +376,14 @@ export class TestOrchestrator {
         args: string[],
         options: { cwd?: string; env?: Record<string, string> } = {},
     ): Promise<string> {
+        // Ensure foundry bin is in PATH
+        const foundryBin = pathResolve(process.env.HOME || "", ".foundry/bin");
+        const path = `${foundryBin}:${process.env.PATH}`;
+
         return new Promise((resolve, reject) => {
             const proc = spawn(command, args, {
                 cwd: options.cwd,
-                env: { ...process.env, ...options.env },
+                env: { ...process.env, ...options.env, PATH: path },
                 stdio: ["inherit", "pipe", "pipe"],
             });
 

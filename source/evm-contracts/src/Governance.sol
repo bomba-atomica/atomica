@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -147,6 +147,30 @@ contract Governance is Ownable {
     }
 
     /**
+     * @notice Requires system is not initialized
+     */
+    modifier notInitialized() {
+        require(!initialized, "Governance: already initialized");
+        _;
+    }
+
+    /**
+     * @notice Requires system is not bricked
+     */
+    modifier notBricked() {
+        require(!bricked, "Governance: already bricked");
+        _;
+    }
+
+    /**
+     * @notice Requires system is initialized
+     */
+    modifier onlyInitialized() {
+        require(initialized, "Governance: not initialized");
+        _;
+    }
+
+    /**
      * @notice Deployment timestamp
      * @dev Used for genesis window enforcement
      */
@@ -156,7 +180,7 @@ contract Governance is Ownable {
      * @notice Constructor
      * @param usdcTokenAddress Address of USDC token contract
      */
-    constructor(address usdcTokenAddress) {
+    constructor(address usdcTokenAddress) Ownable(msg.sender) {
         require(usdcTokenAddress != address(0), "Governance: invalid USDC");
         deployer = msg.sender;
         usdcToken = IERC20(usdcTokenAddress);
@@ -214,28 +238,31 @@ contract Governance is Ownable {
 
     /**
      * @notice Refund all pending deposits (only when bricked)
+     * @param auctionIds Array of auction IDs
      * @param depositors Array of depositor addresses
      * @param nonces Array of deposit nonces for each depositor
      * @dev Called by owner after brick to refund all depositors
      */
     function refundAllPendingDeposits(
+        uint64[] calldata auctionIds,
         address[] calldata depositors,
         uint256[][] calldata nonces
     ) external onlyOwner onlyInitialized {
         require(bricked, "Governance: not bricked");
-        require(depositors.length == nonces.length, "Governance: length mismatch");
+        require(auctionIds.length == depositors.length, "Governance: length mismatch");
+        require(depositors.length == nonces.length, "Governance: depositors nonces mismatch");
 
         DepositBox depositBoxContract = DepositBox(depositBox);
 
         for (uint256 i = 0; i < depositors.length; i++) {
             address depositor = depositors[i];
             uint256[] memory userNonces = nonces[i];
+            uint64 auctionId = auctionIds[i];
 
             for (uint256 j = 0; j < userNonces.length; j++) {
-                try depositBoxContract.refundDeposit(depositor, userNonces[j]) {
+                try depositBoxContract.refundDeposit(auctionId, depositor, userNonces[j]) {
                     emit RefundExecuted(depositor, 0, 0);
                 } catch {
-                    // Skip failed refunds
                 }
             }
         }

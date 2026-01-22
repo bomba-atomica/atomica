@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../../src/DepositBox.sol";
 import "../../src/Settlement.sol";
 import "../../src/BLSVerifier.sol";
 import "../../src/Governance.sol";
+import "../../src/AuctionRegistry.sol";
 import "../../src/libraries/DepositTypes.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -29,6 +30,7 @@ contract GovernanceGenesisTest is Test {
     DepositBox depositBox;
     BLSVerifier blsVerifier;
     Settlement settlement;
+    AuctionRegistry auctionRegistry;
 
     address deployer;
     address nonOwner;
@@ -53,17 +55,15 @@ contract GovernanceGenesisTest is Test {
     function _deployContracts() internal {
         vm.startPrank(deployer);
 
-        // Deploy Governance
+        auctionRegistry = new AuctionRegistry();
+
         governance = new Governance(usdcTokenAddr);
-        assertEq(address(governance), deployer); // Deployer is owner
+        assertEq(governance.deployer(), deployer);
 
-        // Deploy DepositBox
-        depositBox = new DepositBox(usdcTokenAddr);
+        depositBox = new DepositBox(usdcTokenAddr, address(auctionRegistry));
 
-        // Deploy BLSVerifier
         blsVerifier = new BLSVerifier();
 
-        // Deploy Settlement
         settlement = new Settlement(
             address(blsVerifier),
             address(depositBox),
@@ -106,7 +106,7 @@ contract GovernanceGenesisTest is Test {
         // Verify not bricked
         assertFalse(governance.bricked(), "Should not be bricked");
 
-        console.log("✓ genesis() succeeded for owner");
+        console.log("[PASS] genesis() succeeded for owner");
         console.log("  - initialized:", governance.initialized());
         console.log("  - genesisBlock:", governance.genesisBlock());
     }
@@ -122,7 +122,7 @@ contract GovernanceGenesisTest is Test {
         _deployContracts();
 
         vm.prank(nonOwner);
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert("Governance: not deployer");
         governance.genesis(
             address(depositBox),
             address(blsVerifier),
@@ -133,7 +133,7 @@ contract GovernanceGenesisTest is Test {
         assertFalse(governance.initialized(), "Should not be initialized");
         assertEq(governance.genesisBlock(), 0, "genesisBlock should be 0");
 
-        console.log("✓ genesis() correctly reverted for non-owner");
+        console.log("[PASS] genesis() correctly reverted for non-owner");
     }
 
     /**
@@ -164,7 +164,7 @@ contract GovernanceGenesisTest is Test {
             address(settlement)
         );
 
-        console.log("✓ genesis() correctly rejected on second call");
+        console.log("[PASS] genesis() correctly rejected on second call");
     }
 
     /**
@@ -203,7 +203,7 @@ contract GovernanceGenesisTest is Test {
             address(0)
         );
 
-        console.log("✓ genesis() correctly rejected zero addresses");
+        console.log("[PASS] genesis() correctly rejected zero addresses");
     }
 
     /**
@@ -236,7 +236,7 @@ contract GovernanceGenesisTest is Test {
         assertGt(genBlk, 0, "genesisBlock should be set");
         assertEq(brickBlk, 0, "brickBlock should be 0");
 
-        console.log("✓ getSystemState() returns correct values");
+        console.log("[PASS] getSystemState() returns correct values");
     }
 
     /**
@@ -247,27 +247,24 @@ contract GovernanceGenesisTest is Test {
      *   - All contracts are properly linked
      */
     function testFullDeploymentAndGenesisFlow() public {
-        console.log("\n╔════════════════════════════════════════════════════════════╗");
-        console.log("║  Full Deployment and Genesis Flow Test                    ║");
-        console.log("╚════════════════════════════════════════════════════════════╝");
+        console.log("\n+============================================================+");
+        console.log("|  Full Deployment and Genesis Flow Test                    |");
+        console.log("+============================================================+");
 
-        // Step 1: Deploy contracts
         console.log("\n[1] Deploying contracts...");
         _deployContracts();
-        console.log("   ✓ Governance deployed at:", address(governance));
-        console.log("   ✓ DepositBox deployed at:", address(depositBox));
-        console.log("   ✓ BLSVerifier deployed at:", address(blsVerifier));
-        console.log("   ✓ Settlement deployed at:", address(settlement));
+        console.log("   [OK] Governance deployed at:", address(governance));
+        console.log("   [OK] DepositBox deployed at:", address(depositBox));
+        console.log("   [OK] BLSVerifier deployed at:", address(blsVerifier));
+        console.log("   [OK] Settlement deployed at:", address(settlement));
 
-        // Step 2: Initialize BLS verifier
         console.log("\n[2] Initializing BLS verifier...");
         bytes[] memory pubkeys = new bytes[](1);
         pubkeys[0] = _getTestValidatorPubkey();
         vm.prank(deployer);
         blsVerifier.initialize(pubkeys);
-        console.log("   ✓ BLS verifier initialized with 1 validator");
+        console.log("   [OK] BLS verifier initialized with 1 validator");
 
-        // Step 3: Call genesis
         console.log("\n[3] Calling genesis()...");
         vm.prank(deployer);
         governance.genesis(
@@ -275,25 +272,23 @@ contract GovernanceGenesisTest is Test {
             address(blsVerifier),
             address(settlement)
         );
-        console.log("   ✓ genesis() succeeded");
+        console.log("   [OK] genesis() succeeded");
 
-        // Step 4: Set settlement contract in DepositBox
         console.log("\n[4] Setting settlement contract in DepositBox...");
         vm.prank(deployer);
         depositBox.setSettlementContract(address(settlement));
-        console.log("   ✓ Settlement contract set");
+        console.log("   [OK] Settlement contract set");
 
-        // Verify all links
         console.log("\n[5] Verifying all links...");
         assertEq(governance.depositBox(), address(depositBox));
         assertEq(governance.blsVerifier(), address(blsVerifier));
         assertEq(governance.settlement(), address(settlement));
         assertEq(depositBox.settlementContract(), address(settlement));
-        console.log("   ✓ All contracts properly linked");
+        console.log("   [OK] All contracts properly linked");
 
-        console.log("\n╔════════════════════════════════════════════════════════════╗");
-        console.log("║  ✓ Full deployment and genesis flow PASSED                ║");
-        console.log("╚════════════════════════════════════════════════════════════╝");
+        console.log("\n+============================================================+");
+        console.log("|  [PASS] Full deployment and genesis flow PASSED           |");
+        console.log("+============================================================+");
     }
 
     /**

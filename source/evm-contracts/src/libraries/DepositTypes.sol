@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 /**
  * @title DepositTypes
@@ -15,8 +15,6 @@ pragma solidity ^0.8.19;
  * - Ethereum stateRoot from block header is cryptographically authenticated
  * - BLS validators sign block headers for cross-chain verification
  * - MPT proof verifies storage slot against stateRoot
- *
- * @see https://eips.ethereum.org/EIPS/eip-1186
  */
 library DepositTypes {
     /**
@@ -39,15 +37,17 @@ library DepositTypes {
 
     /**
      * @notice Deposit structure with native storage proof support
+     * @param auctionId Auction this deposit belongs to (REQUIRED)
      * @param depositor User's Ethereum address
      * @param assetType Type of asset deposited
      * @param amount Deposit amount (in wei for ETH, decimals for USDC)
      * @param nonce Unique deposit identifier (used as storage key)
      * @param status Current deposit status
      * @param timestamp Deposit creation time
-     * @dev Storage key: keccak256(abi.encode(depositor, nonce)) for eth_getProof
+     * @dev Storage key: keccak256(abi.encode(auctionId, depositor, nonce)) for eth_getProof
      */
     struct Deposit {
+        uint64 auctionId;
         address depositor;
         AssetType assetType;
         uint256 amount;
@@ -211,13 +211,18 @@ library DepositTypes {
 
     /**
      * @notice Compute storage key for a deposit
+     * @param auctionId Auction this deposit belongs to
      * @param depositor Address of depositor
      * @param nonce Unique deposit identifier
      * @return Storage key for eth_getProof
-     * @dev Key format: keccak256(abi.encode(depositor, nonce))
+     * @dev Key format: keccak256(abi.encode(auctionId, depositor, nonce))
      */
-    function computeStorageKey(address depositor, uint256 nonce) internal pure returns (bytes32) {
-        return keccak256(abi.encode(depositor, nonce));
+    function computeStorageKey(uint64 auctionId, address depositor, uint256 nonce) 
+        internal 
+        pure 
+        returns (bytes32) 
+    {
+        return keccak256(abi.encode(auctionId, depositor, nonce));
     }
 
     /**

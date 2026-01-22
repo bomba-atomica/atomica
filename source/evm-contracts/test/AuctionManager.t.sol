@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../../src/AuctionManager.sol";
 
 contract AuctionManagerTest is Test {
     AuctionManager auctionManager;
-    address admin = address(0xADMIN);
+    address admin = makeAddr("admin");
 
     function setUp() public {
         auctionManager = new AuctionManager();

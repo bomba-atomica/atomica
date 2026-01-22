@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./libraries/DepositTypes.sol";
 import "./DepositBox.sol";
@@ -35,8 +35,6 @@ import "./BLSVerifier.sol";
  * - Trusted BLSVerifier for signature verification
  * - Trusted off-chain proof generation
  * - Ethereum consensus secures stateRoot
- *
- * @see https://eips.ethereum.org/EIPS/eip-1186
  */
 contract Settlement is ReentrancyGuard, Ownable {
     /**
@@ -76,20 +74,6 @@ contract Settlement is ReentrancyGuard, Ownable {
     mapping(bytes32 => bool) public processedTrades;
 
     /**
-     * @notice Emitted when a trade is executed
-     * @param tradeId Unique trade identifier
-     * @param recipient Winner address receiving funds
-     * @param ethAmount ETH transferred to winner
-     * @param usdcAmount USDC transferred to winner
-     */
-    event TradeExecuted(
-        bytes32 indexed tradeId,
-        address indexed recipient,
-        uint256 ethAmount,
-        uint256 usdcAmount
-    );
-
-    /**
      * @notice Emitted when settlement is verified and executed
      * @param blockHash BLS-signed Ethereum block hash
      * @param stateRoot Ethereum stateRoot from block header
@@ -118,7 +102,7 @@ contract Settlement is ReentrancyGuard, Ownable {
         address blsVerifierAddress,
         address depositBoxAddress,
         address usdcTokenAddress
-    ) {
+    ) Ownable(msg.sender) {
         require(blsVerifierAddress != address(0), "Settlement: invalid BLS verifier");
         require(depositBoxAddress != address(0), "Settlement: invalid deposit box");
         require(usdcTokenAddress != address(0), "Settlement: invalid USDC");
@@ -135,6 +119,7 @@ contract Settlement is ReentrancyGuard, Ownable {
      * @param tradeResult Auction clearing results with nonce range
      * @param blsSignature Aggregated BLS signature from validators
      * @param validatorIndices Which validators signed
+     * @param auctionIds Auction IDs for each winner
      * @param winners Winner addresses
      * @param depositors Depositor addresses for each winner
      * @param nonces Deposit nonces for each winner
@@ -160,12 +145,14 @@ contract Settlement is ReentrancyGuard, Ownable {
         DepositTypes.TradeResult calldata tradeResult,
         bytes calldata blsSignature,
         uint256[] calldata validatorIndices,
+        uint64[] calldata auctionIds,
         address[] calldata winners,
         address[] calldata depositors,
         uint256[] calldata nonces,
         uint256[] calldata ethAmounts,
         uint256[] calldata usdcAmounts
     ) external nonReentrant returns (bool) {
+        require(auctionIds.length == winners.length, "Settlement: auctionIds mismatch");
         require(winners.length == depositors.length, "Settlement: depositors mismatch");
         require(winners.length == nonces.length, "Settlement: nonces mismatch");
         require(winners.length == ethAmounts.length, "Settlement: ETH amounts mismatch");
@@ -196,31 +183,15 @@ contract Settlement is ReentrancyGuard, Ownable {
             "Settlement: stateRoot mismatch"
         );
 
-        // Execute transfers to winners
-        for (uint256 i = 0; i < winners.length; i++) {
-            address winner = winners[i];
-            uint256 ethAmount = ethAmounts[i];
-            uint256 usdcAmount = usdcAmounts[i];
-
-            require(ethAmount > 0 || usdcAmount > 0, "Settlement: zero amounts");
-
-            if (ethAmount > 0) {
-                (bool success, ) = winner.call{value: ethAmount}("");
-                require(success, "Settlement: ETH transfer failed");
-            }
-
-            if (usdcAmount > 0) {
-                require(
-                    usdcToken.transfer(winner, usdcAmount),
-                    "Settlement: USDC transfer failed"
-                );
-            }
-
-            emit TradeExecuted(tradeId, winner, ethAmount, usdcAmount);
-        }
-
-        // Mark deposits as settled in DepositBox
-        depositBox.markSettled(depositors, nonces);
+        // Execute transfers via DepositBox
+        depositBox.settleTransfers(
+            auctionIds,
+            depositors,
+            nonces,
+            winners,
+            ethAmounts,
+            usdcAmounts
+        );
 
         // Record settlement for idempotency
         processedTrades[tradeId] = true;

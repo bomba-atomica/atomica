@@ -1,33 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
-/**
- * @title Atomica DepositBox Contract
- * @notice Handles ETH and USDC deposits with Ethereum native state proof verification
- * @dev Part of Atomica's cross-chain atomic deposit system
- *
- * Architecture (Simplified - January 2026):
- * - Deposits stored directly in contract storage (no commitments)
- * - Verification via eth_getProof (EIP-1186) MPT proofs
- * - No separate Merkle tree - use Ethereum's state trie
- * - BLS validators sign Ethereum block headers
- *
- * Trust Model:
- * - Ethereum's stateRoot is cryptographically authenticated via consensus
- * - BLS signatures verify block headers for cross-chain use
- * - MPT proof verifies deposit against stateRoot
- *
- * Related Contracts:
- * - Settlement: Confirms deposits and executes trades
- * - BLSVerifier: Verifies BLS signatures on block headers
- * - Governance: Handles emergency brick() for refunds
- *
- * @see https://eips.ethereum.org/EIPS/eip-1186
- */
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./libraries/DepositTypes.sol";
+import "./AuctionRegistry.sol";
 
 /**
  * @title DepositBox
@@ -57,6 +35,12 @@ contract DepositBox is ReentrancyGuard, Ownable {
     IERC20 public immutable usdcToken;
 
     /**
+     * @notice Auction registry contract reference
+     * @dev Immutable after deployment - set in constructor
+     */
+    AuctionRegistry public immutable auctionRegistry;
+
+    /**
      * @notice Time period after which deposits can be refunded
      * @dev Fixed at 7 days - no way to modify
      */
@@ -64,7 +48,7 @@ contract DepositBox is ReentrancyGuard, Ownable {
 
     /**
      * @notice Maps storage key to deposit details
-     * @dev Storage key: keccak256(abi.encode(depositor, nonce))
+     * @dev Storage key: keccak256(abi.encode(auctionId, depositor, nonce))
      */
     mapping(bytes32 => DepositTypes.Deposit) public deposits;
 
@@ -93,12 +77,28 @@ contract DepositBox is ReentrancyGuard, Ownable {
     address public settlementContract;
 
     /**
+     * @notice Emitted when a trade is executed
+     * @param auctionId Auction ID
+     * @param recipient Winner address receiving funds
+     * @param ethAmount ETH transferred to winner
+     * @param usdcAmount USDC transferred to winner
+     */
+    event TradeExecuted(
+        uint64 indexed auctionId,
+        address indexed recipient,
+        uint256 ethAmount,
+        uint256 usdcAmount
+    );
+
+    /**
      * @notice Emitted when ETH is deposited
+     * @param auctionId Auction this deposit belongs to
      * @param depositor Address that made the deposit
      * @param amount Amount of ETH deposited (in wei)
      * @param nonce Unique deposit identifier
      */
     event ETHDeposited(
+        uint64 indexed auctionId,
         address indexed depositor,
         uint256 amount,
         uint256 nonce
@@ -106,11 +106,13 @@ contract DepositBox is ReentrancyGuard, Ownable {
 
     /**
      * @notice Emitted when USDC is deposited
+     * @param auctionId Auction this deposit belongs to
      * @param depositor Address that made the deposit
      * @param amount Amount of USDC deposited (in decimals)
      * @param nonce Unique deposit identifier
      */
     event USDCDeposited(
+        uint64 indexed auctionId,
         address indexed depositor,
         uint256 amount,
         uint256 nonce
@@ -118,11 +120,13 @@ contract DepositBox is ReentrancyGuard, Ownable {
 
     /**
      * @notice Emitted when deposit is confirmed by validators
+     * @param auctionId Auction this deposit belongs to
      * @param depositor The depositor address
      * @param nonce The deposit's unique identifier
      * @param stateRoot Ethereum stateRoot at confirmation time
      */
     event DepositConfirmed(
+        uint64 indexed auctionId,
         address indexed depositor,
         uint256 nonce,
         bytes32 stateRoot
@@ -130,12 +134,14 @@ contract DepositBox is ReentrancyGuard, Ownable {
 
     /**
      * @notice Emitted when deposit is refunded after timeout
+     * @param auctionId Auction this deposit belongs to
      * @param depositor Address that received the refund
      * @param amount Amount refunded
      * @param assetType Type of asset (ETH or USDC)
      * @param nonce The deposit's unique identifier
      */
     event DepositRefunded(
+        uint64 indexed auctionId,
         address indexed depositor,
         uint256 amount,
         DepositTypes.AssetType assetType,
@@ -160,11 +166,14 @@ contract DepositBox is ReentrancyGuard, Ownable {
     /**
      * @notice Constructor
      * @param usdcTokenAddress Address of USDC token contract
-     * @dev Sets immutable USDC reference and initializes nonce counter
+     * @param auctionRegistryAddress Address of AuctionRegistry contract
+     * @dev Sets immutable references and initializes nonce counter
      */
-    constructor(address usdcTokenAddress) {
+    constructor(address usdcTokenAddress, address auctionRegistryAddress) Ownable(msg.sender) {
         require(usdcTokenAddress != address(0), "DepositBox: invalid USDC address");
+        require(auctionRegistryAddress != address(0), "DepositBox: invalid auction registry");
         usdcToken = IERC20(usdcTokenAddress);
+        auctionRegistry = AuctionRegistry(auctionRegistryAddress);
         depositNonceCounter = 1;
     }
 
@@ -181,26 +190,34 @@ contract DepositBox is ReentrancyGuard, Ownable {
     }
 
     /**
-     * @notice Deposit ETH
+     * @notice Deposit ETH to a specific auction
+     * @param auctionId The auction to deposit into (required)
+     * @param nonce Unique deposit nonce for (auctionId, depositor)
      * @dev Creates deposit in PENDING status
      *
      * Requirements:
      * - Must send positive ETH amount
+     * - Auction must exist and be in OPEN state
+     * - Auction deadline must not have passed
      *
      * Emits:
      * - ETHDeposited event
      */
-    function depositETH()
+    function depositETH(uint64 auctionId, uint256 nonce)
         external
         payable
         nonReentrant
     {
         require(msg.value > 0, "DepositBox: zero deposit");
+        require(auctionId < auctionRegistry.nextAuctionNonce(), "DepositBox: invalid auction");
+        require(auctionRegistry.getAuctionState(auctionId) == DepositTypes.AuctionState.OPEN, "DepositBox: auction not open");
+        require(block.timestamp < auctionRegistry.getDeadline(auctionId), "DepositBox: auction deadline passed");
 
-        uint256 nonce = _generateNonce();
-        bytes32 storageKey = _computeStorageKey(msg.sender, nonce);
+        bytes32 storageKey = _computeStorageKey(auctionId, msg.sender, nonce);
+        require(deposits[storageKey].amount == 0, "DepositBox: nonce already used");
 
         deposits[storageKey] = DepositTypes.Deposit({
+            auctionId: auctionId,
             depositor: msg.sender,
             assetType: DepositTypes.AssetType.ETH,
             amount: msg.value,
@@ -212,31 +229,39 @@ contract DepositBox is ReentrancyGuard, Ownable {
         depositorNonces[msg.sender].push(nonce);
         totalDeposits[DepositTypes.AssetType.ETH] += msg.value;
 
-        emit ETHDeposited(msg.sender, msg.value, nonce);
+        emit ETHDeposited(auctionId, msg.sender, msg.value, nonce);
     }
 
     /**
-     * @notice Deposit USDC
+     * @notice Deposit USDC to a specific auction
+     * @param auctionId The auction to deposit into (required)
+     * @param nonce Unique deposit nonce for (auctionId, depositor)
      * @param amount Amount of USDC to deposit
      * @dev Creates deposit in PENDING status, transfers USDC
      *
      * Requirements:
      * - Must have approved USDC spending
      * - Amount must be positive
+     * - Auction must exist and be in OPEN state
+     * - Auction deadline must not have passed
      *
      * Emits:
      * - USDCDeposited event
      */
-    function depositUSDC(uint256 amount)
+    function depositUSDC(uint64 auctionId, uint256 nonce, uint256 amount)
         external
         nonReentrant
     {
         require(amount > 0, "DepositBox: zero deposit");
+        require(auctionId < auctionRegistry.nextAuctionNonce(), "DepositBox: invalid auction");
+        require(auctionRegistry.getAuctionState(auctionId) == DepositTypes.AuctionState.OPEN, "DepositBox: auction not open");
+        require(block.timestamp < auctionRegistry.getDeadline(auctionId), "DepositBox: auction deadline passed");
 
-        uint256 nonce = _generateNonce();
-        bytes32 storageKey = _computeStorageKey(msg.sender, nonce);
+        bytes32 storageKey = _computeStorageKey(auctionId, msg.sender, nonce);
+        require(deposits[storageKey].amount == 0, "DepositBox: nonce already used");
 
         deposits[storageKey] = DepositTypes.Deposit({
+            auctionId: auctionId,
             depositor: msg.sender,
             assetType: DepositTypes.AssetType.USDC,
             amount: amount,
@@ -253,11 +278,12 @@ contract DepositBox is ReentrancyGuard, Ownable {
             "DepositBox: USDC transfer failed"
         );
 
-        emit USDCDeposited(msg.sender, amount, nonce);
+        emit USDCDeposited(auctionId, msg.sender, amount, nonce);
     }
 
     /**
      * @notice Batch confirm deposits (called by settlement contract)
+     * @param auctionIds Array of auction IDs
      * @param depositors Array of depositor addresses
      * @param nonces Array of deposit nonces
      * @param stateRoot Ethereum stateRoot for verification
@@ -271,14 +297,16 @@ contract DepositBox is ReentrancyGuard, Ownable {
      * - DepositConfirmed event for each deposit
      */
     function confirmDeposits(
+        uint64[] calldata auctionIds,
         address[] calldata depositors,
         uint256[] calldata nonces,
         bytes32 stateRoot
     ) external onlySettlement {
+        require(auctionIds.length == depositors.length, "DepositBox: auctionIds length mismatch");
         require(depositors.length == nonces.length, "DepositBox: length mismatch");
 
         for (uint256 i = 0; i < depositors.length; i++) {
-            bytes32 storageKey = _computeStorageKey(depositors[i], nonces[i]);
+            bytes32 storageKey = _computeStorageKey(auctionIds[i], depositors[i], nonces[i]);
             DepositTypes.Deposit storage deposit = deposits[storageKey];
 
             require(
@@ -288,28 +316,80 @@ contract DepositBox is ReentrancyGuard, Ownable {
 
             deposit.status = DepositTypes.DepositStatus.CONFIRMED;
 
-            emit DepositConfirmed(depositors[i], nonces[i], stateRoot);
+            emit DepositConfirmed(auctionIds[i], depositors[i], nonces[i], stateRoot);
+        }
+    }
+
+    /**
+     * @notice Mark confirmed deposits as settled and transfer funds to winner
+     * @param auctionIds Array of auction IDs
+     * @param depositors Array of depositor addresses
+     * @param nonces Array of deposit nonces
+     * @param winners Array of winner addresses to receive funds
+     * @param ethAmounts Array of ETH amounts to transfer
+     * @param usdcAmounts Array of USDC amounts to transfer
+     * @dev Updates deposit status from CONFIRMED to SETTLED and executes transfers
+     */
+    function settleTransfers(
+        uint64[] calldata auctionIds,
+        address[] calldata depositors,
+        uint256[] calldata nonces,
+        address[] calldata winners,
+        uint256[] calldata ethAmounts,
+        uint256[] calldata usdcAmounts
+    ) external onlySettlement {
+        require(auctionIds.length == depositors.length, "DepositBox: auctionIds length mismatch");
+        require(depositors.length == nonces.length, "DepositBox: length mismatch");
+        require(winners.length == ethAmounts.length, "DepositBox: winners length mismatch");
+        require(ethAmounts.length == usdcAmounts.length, "DepositBox: amounts length mismatch");
+
+        for (uint256 i = 0; i < depositors.length; i++) {
+            bytes32 storageKey = _computeStorageKey(auctionIds[i], depositors[i], nonces[i]);
+            DepositTypes.Deposit storage deposit = deposits[storageKey];
+
+            if (deposit.status == DepositTypes.DepositStatus.CONFIRMED) {
+                deposit.status = DepositTypes.DepositStatus.SETTLED;
+            }
+        }
+
+        for (uint256 i = 0; i < winners.length; i++) {
+            address winner = winners[i];
+            uint256 ethAmount = ethAmounts[i];
+            uint256 usdcAmount = usdcAmounts[i];
+
+            if (ethAmount > 0) {
+                (bool success, ) = winner.call{value: ethAmount}("");
+                require(success, "DepositBox: ETH transfer failed");
+            }
+
+            if (usdcAmount > 0) {
+                require(
+                    usdcToken.transfer(winner, usdcAmount),
+                    "DepositBox: USDC transfer failed"
+                );
+            }
+
+            emit TradeExecuted(auctionIds[i], winner, ethAmount, usdcAmount);
         }
     }
 
     /**
      * @notice Mark confirmed deposits as settled after trade execution
+     * @param auctionIds Array of auction IDs
      * @param depositors Array of depositor addresses
      * @param nonces Array of deposit nonces
      * @dev Updates deposit status from CONFIRMED to SETTLED
-     *
-     * Requirements:
-     * - Can only be called by settlement contract
-     * - All deposits must exist and be in CONFIRMED status
      */
     function markSettled(
+        uint64[] calldata auctionIds,
         address[] calldata depositors,
         uint256[] calldata nonces
     ) external onlySettlement {
+        require(auctionIds.length == depositors.length, "DepositBox: auctionIds length mismatch");
         require(depositors.length == nonces.length, "DepositBox: length mismatch");
 
         for (uint256 i = 0; i < depositors.length; i++) {
-            bytes32 storageKey = _computeStorageKey(depositors[i], nonces[i]);
+            bytes32 storageKey = _computeStorageKey(auctionIds[i], depositors[i], nonces[i]);
             DepositTypes.Deposit storage deposit = deposits[storageKey];
 
             if (deposit.status == DepositTypes.DepositStatus.CONFIRMED) {
@@ -320,6 +400,7 @@ contract DepositBox is ReentrancyGuard, Ownable {
 
     /**
      * @notice Refund deposit after timeout period
+     * @param auctionId Auction the deposit belongs to
      * @param depositor Original depositor address
      * @param nonce Deposit nonce to refund
      * @dev Returns funds to depositor after DEPOSIT_TIMEOUT
@@ -332,11 +413,11 @@ contract DepositBox is ReentrancyGuard, Ownable {
      * Emits:
      * - DepositRefunded event
      */
-    function refundDeposit(address depositor, uint256 nonce)
+    function refundDeposit(uint64 auctionId, address depositor, uint256 nonce)
         external
         nonReentrant
     {
-        bytes32 storageKey = _computeStorageKey(depositor, nonce);
+        bytes32 storageKey = _computeStorageKey(auctionId, depositor, nonce);
         DepositTypes.Deposit storage deposit = deposits[storageKey];
 
         require(
@@ -365,6 +446,7 @@ contract DepositBox is ReentrancyGuard, Ownable {
         }
 
         emit DepositRefunded(
+            auctionId,
             msg.sender,
             deposit.amount,
             deposit.assetType,
@@ -373,71 +455,67 @@ contract DepositBox is ReentrancyGuard, Ownable {
     }
 
     /**
-     * @notice Get deposit details by depositor and nonce
+     * @notice Get deposit details by auction ID, depositor and nonce
+     * @param auctionId Auction the deposit belongs to
      * @param depositor Address of the depositor
      * @param nonce Deposit nonce
      * @return Deposit details including amount, status, etc.
      */
-    function getDeposit(address depositor, uint256 nonce)
+    function getDeposit(uint64 auctionId, address depositor, uint256 nonce)
         external
         view
         returns (DepositTypes.Deposit memory)
     {
-        bytes32 storageKey = _computeStorageKey(depositor, nonce);
+        bytes32 storageKey = _computeStorageKey(auctionId, depositor, nonce);
         return deposits[storageKey];
     }
 
     /**
      * @notice Get deposit storage key for proof generation
+     * @param auctionId Auction the deposit belongs to
      * @param depositor Address of the depositor
      * @param nonce Deposit nonce
      * @return Storage key for eth_getProof
      */
-    function getStorageKey(address depositor, uint256 nonce)
+    function getStorageKey(uint64 auctionId, address depositor, uint256 nonce)
         external
         pure
         returns (bytes32)
     {
-        return _computeStorageKey(depositor, nonce);
+        return _computeStorageKey(auctionId, depositor, nonce);
     }
 
     /**
      * @notice Get storage proof data for a deposit (off-chain use)
+     * @param auctionId Auction the deposit belongs to
      * @param depositor Address of the depositor
      * @param nonce Deposit nonce
-     * @return Storage key and encoded deposit for proof generation
+     * @return key Storage key for eth_getProof
+     * @return value Encoded deposit for proof generation
      */
-    function getDepositForProof(address depositor, uint256 nonce)
+    function getDepositForProof(uint64 auctionId, address depositor, uint256 nonce)
         external
         view
         returns (bytes32 key, bytes memory value)
     {
-        bytes32 storageKey = _computeStorageKey(depositor, nonce);
+        bytes32 storageKey = _computeStorageKey(auctionId, depositor, nonce);
         DepositTypes.Deposit memory deposit = deposits[storageKey];
         return (storageKey, abi.encode(deposit));
     }
 
     /**
-     * @notice Generate unique deposit nonce
-     * @return The new nonce value
-     * @dev Increments nonce counter
-     */
-    function _generateNonce() internal returns (uint256) {
-        return depositNonceCounter++;
-    }
-
-    /**
      * @notice Compute storage key for a deposit
+     * @param auctionId Auction this deposit belongs to
      * @param depositor Address of depositor
      * @param nonce Unique deposit identifier
      * @return Storage key for eth_getProof
-     * @dev Key format: keccak256(abi.encode(depositor, nonce))
+     * @dev Key format: keccak256(abi.encode(auctionId, depositor, nonce))
      */
-    function _computeStorageKey(address depositor, uint256 nonce)
+    function _computeStorageKey(uint64 auctionId, address depositor, uint256 nonce)
         internal
         pure
         returns (bytes32)
     {
-        return keccak256(abi.encode(depositor, nonce));
+        return keccak256(abi.encode(auctionId, depositor, nonce));
     }
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 /**
  * @title BLSVerifier
@@ -20,8 +20,6 @@ pragma solidity ^0.8.19;
  * - Genesis validator set trusted at deployment
  * - Subsequent updates verified by current trusted validators
  * - BLS signatures provide cryptographic guarantee
- *
- * @see https://eips.ethereum.org/EIPS/eip-2537
  */
 contract BLSVerifier {
     /**
@@ -163,7 +161,7 @@ contract BLSVerifier {
         bytes32 messageHash = keccak256(abi.encodePacked(
             "ATOMICA_VALIDATOR_UPDATE",
             newEpoch,
-            keccak256(abi.encodePacked(newPubkeys)),
+            keccak256(abi.encode(newPubkeys)),
             block.chainid
         ));
 
@@ -212,7 +210,7 @@ contract BLSVerifier {
      * @return True if signature is valid
      */
     function _verifyAggregatedSignature(
-        bytes[] calldata pubkeys,
+        bytes[] memory pubkeys,
         bytes calldata signature,
         bytes32 messageHash,
         uint256[] calldata validatorIndices
@@ -238,9 +236,9 @@ contract BLSVerifier {
      * @return Aggregated public key
      */
     function _aggregatePublicKeys(
-        bytes[] calldata pubkeys,
+        bytes[] memory pubkeys,
         uint256[] calldata indices
-    ) internal pure returns (bytes memory) {
+    ) internal view returns (bytes memory) {
         require(indices.length > 0, "BLS: no validators");
         bytes memory agg = pubkeys[indices[0]];
 
