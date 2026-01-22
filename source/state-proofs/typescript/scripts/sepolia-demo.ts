@@ -12,15 +12,12 @@ async function main() {
     console.log("🚀 Ethereum State Verification - Sepolia Demo");
     console.log("---------------------------------------------");
 
-    const rpcUrl = process.env.SEPOLIA_RPC_URL;
-    const beaconUrl = process.env.BEACON_API_URL || "https://checkpoint-sync.sepolia.beaconcha.in/api/v1";
+    const rpcUrl = process.env.SEPOLIA_RPC_URL || "https://gateway.tenderly.co/public/sepolia";
+    const beaconUrl = process.env.BEACON_API_URL || "https://lodestar-sepolia.chainsafe.io";
     const privateKey = process.env.PRIVATE_KEY;
 
-    if (!rpcUrl) {
-        console.error("❌ Error: SEPOLIA_RPC_URL environment variable is required.");
-        console.error("   Please run: SEPOLIA_RPC_URL=... bun run scripts/sepolia-demo.ts");
-        process.exit(1);
-    }
+    console.log(`📡 Using Execution RPC: ${rpcUrl}`);
+    console.log(`📡 Using Beacon API:    ${beaconUrl}`);
 
     // 1. Initialize Light Client
     console.log(`\n📡 Connecting to Beacon Node: ${beaconUrl}`);
