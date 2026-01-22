@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Beacon API Fetcher
  *
@@ -295,13 +296,16 @@ async function fetchLightClientUpdateByPeriod(
     const attestedHeader: LightClientHeader = {
         beacon: parseHeader(data.attested_header.beacon),
         execution: parseExecutionPayload(data.attested_header.execution),
-        executionBranch: data.attested_header_branch || (data.attested_header as any).execution_branch || [],
+        executionBranch:
+            data.attested_header_branch || (data.attested_header as any).execution_branch || [],
     };
 
-    const nextSyncCommittee: SyncCommittee | null = data.next_sync_committee ? {
-        pubkeys: data.next_sync_committee.pubkeys,
-        aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
-    } : null;
+    const nextSyncCommittee: SyncCommittee | null = data.next_sync_committee
+        ? {
+              pubkeys: data.next_sync_committee.pubkeys,
+              aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
+          }
+        : null;
 
     const syncAggregate: SyncAggregate = {
         syncCommitteeBits: hexToUint8Array(data.sync_aggregate.sync_committee_bits),
@@ -316,7 +320,10 @@ async function fetchLightClientUpdateByPeriod(
             ? {
                   beacon: parseHeader(data.finalized_header.beacon),
                   execution: parseExecutionPayload(data.finalized_header.execution),
-                  executionBranch: (data as any).finalized_header_branch || (data.finalized_header as any).execution_branch || [],
+                  executionBranch:
+                      (data as any).finalized_header_branch ||
+                      (data.finalized_header as any).execution_branch ||
+                      [],
               }
             : null,
         finalityBranch: data.finality_branch || [],
@@ -390,10 +397,12 @@ export async function fetchLightClientFinalityUpdate(apiUrl: string): Promise<Li
         executionBranch: (data.attested_header as any).execution_branch || [],
     };
 
-    const nextSyncCommittee: SyncCommittee | null = data.next_sync_committee ? {
-        pubkeys: data.next_sync_committee.pubkeys,
-        aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
-    } : null;
+    const nextSyncCommittee: SyncCommittee | null = data.next_sync_committee
+        ? {
+              pubkeys: data.next_sync_committee.pubkeys,
+              aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
+          }
+        : null;
 
     const syncAggregate: SyncAggregate = {
         syncCommitteeBits: hexToUint8Array(data.sync_aggregate.sync_committee_bits),
@@ -469,10 +478,12 @@ export async function fetchLightClientOptimisticUpdate(apiUrl: string): Promise<
         executionBranch: (data.attested_header as any).execution_branch || [],
     };
 
-    const nextSyncCommittee: SyncCommittee | null = data.next_sync_committee ? {
-        pubkeys: data.next_sync_committee.pubkeys,
-        aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
-    } : null;
+    const nextSyncCommittee: SyncCommittee | null = data.next_sync_committee
+        ? {
+              pubkeys: data.next_sync_committee.pubkeys,
+              aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
+          }
+        : null;
 
     const syncAggregate: SyncAggregate = {
         syncCommitteeBits: hexToUint8Array(data.sync_aggregate.sync_committee_bits),
