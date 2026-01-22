@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# Pre-commit hook: Check that staged .md files follow kebab-case naming
+
+echo "Checking markdown file naming convention..."
+
+# Get list of staged .md files, excluding build artifacts
+staged_md_files=$(git diff --cached --name-only -- '*.md' | \
+    grep -v 'node_modules/' | \
+    grep -v '/\.git/' | \
+    grep -v '/\.cache/' | \
+    grep -v '/dist/' | \
+    grep -v '/out/' | \
+    grep -v '/build/' | \
+    grep -v '/target/' | \
+    grep -v '/\.venv/' | \
+    grep -v '/__pycache__/' | \
+    grep -v '/\.next/' | \
+    grep -v '/\.astro/' | \
+    grep -v '/coverage/')
+
+non_kebab_count=0
+non_kebab_files=""
+
+for file in $staged_md_files; do
+    if [ ! -f "$file" ]; then
+        continue
+    fi
+
+    filename=$(basename "$file")
+
+    # Check if filename contains uppercase letters
+    if echo "$filename" | grep -E '[A-Z]' > /dev/null; then
+        echo "FAIL: $file (contains uppercase)"
+        non_kebab_count=$((non_kebab_count + 1))
+        new_name=$(echo "$filename" | tr '[:upper:]' '[:lower:]')
+        non_kebab_files="$non_kebab_files\n  $file -> $new_name"
+    fi
+done
+
+if [ $non_kebab_count -gt 0 ]; then
+    echo ""
+    echo "ERROR: Found $non_kebab_count .md file(s) not following kebab-case:"
+    echo -e "$non_kebab_files"
+    echo ""
+    echo "Rename these files before committing:"
+    echo "  git mv 'OLD_NAME.md' 'new-name.md'"
+    exit 1
+fi
+
+echo "All staged .md files follow kebab-case naming. ✓"
+exit 0
