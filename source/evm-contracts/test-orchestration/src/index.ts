@@ -7,6 +7,18 @@
  * 3. Runs Foundry tests (unit, integration, e2e)
  * 4. Collects and reports results
  *
+ * Success Criteria:
+ *   1. Docker testnet starts and is healthy (Geth + Lighthouse)
+ *   2. All contracts deploy without reverts
+ *   3. Unit tests pass (pure Solidity logic tests)
+ *   4. Integration tests pass (multi-contract flows)
+ *   5. E2E tests pass (deployment verification)
+ *   6. Results saved to test-results/
+ *
+ * Exit Codes:
+ *   0 - All tests passed
+ *   1 - Test failure or error
+ *
  * Usage:
  *   bun run src/index.ts                    # Run all tests
  *   bun run src/index.ts --test unit        # Unit tests only
@@ -14,6 +26,7 @@
  *   bun run src/index.ts --test e2e         # E2E tests
  *   bun run src/index.ts --test smoke       # Smoke tests
  *   bun run src/index.ts --deploy-only      # Only deploy contracts
+ *   bun run src/index.ts --keep-alive       # Don't tear down testnet
  */
 import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
 import { spawn } from "child_process";
@@ -60,27 +73,64 @@ export class TestOrchestrator {
 
   /**
    * Run the complete test suite
+   *
+   * Success = all of:
+   *   - Testnet starts and is healthy
+   *   - All contracts deploy successfully
+   *   - All test suites pass (exit code 0)
    */
   async runAll(): Promise<void> {
     console.log("═".repeat(60));
     console.log("  Atomica EVM Contracts - Full Test Suite");
     console.log("═".repeat(60));
+    console.log("\nSuccess Criteria:");
+    console.log("  [1] Docker testnet starts and is healthy");
+    console.log("  [2] All contracts deploy without reverts");
+    console.log("  [3] Unit tests pass");
+    console.log("  [4] Integration tests pass");
+    console.log("  [5] E2E deployment verification passes");
+    console.log("");
+
+    let success = true;
+    let step = 0;
 
     try {
+      // Step 1: Start testnet
+      step = 1;
       await this.startTestnet();
+
+      // Step 2: Deploy contracts
+      step = 2;
       await this.deployContracts();
+
+      // Step 3: Unit tests
+      step = 3;
       await this.runUnitTests();
+
+      // Step 4: Integration tests
+      step = 4;
       await this.runIntegrationTests();
+
+      // Step 5: E2E tests
+      step = 5;
       await this.runE2ETests();
+
       this.printSummary();
       await this.saveResults();
     } catch (error) {
-      console.error("\n✗ Test suite failed:", error);
+      console.error(`\n✗ Failed at step ${step}: ${error}`);
+      success = false;
       process.exitCode = 1;
     } finally {
       if (!this.config.keepAlive) {
         await this.teardown();
       }
+    }
+
+    if (success) {
+      console.log("\n✓ All success criteria met!");
+    } else {
+      console.log(`\n✗ Failed at step ${step}`);
     }
   }
 
