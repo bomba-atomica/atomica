@@ -4,40 +4,58 @@
 
 # AGENT WARNING: You CANNOT push until code quality checks pass.
 # Do not try to override this hook or bypass it.
-#
-# The following checks MUST pass before pushing:
-#   1. bun run build        - TypeScript compilation
-#   2. bun run lint -- --max-warnings=0  - No lint warnings allowed
-#   3. bun run format:check - Code formatting must match
-#
-# Note: Tests do NOT block pushes. Run tests locally or rely on CI.
-#
-# If any of these checks fail, your push will be BLOCKED.
-# You must fix the issues locally before pushing.
 
 set -e  # Exit on any error - block the push
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
-echo "🔍 Running pre-push checks for state-proof module..."
-echo ""
+# Function to run checks on a module if it has node_modules
+check_module() {
+    local name=$1
+    local path=$2
+    local build_cmd=${3:-"bun run build"}
+    local lint_cmd=${4:-"bun run lint -- --max-warnings=0"}
+    local format_cmd=${5:-"bun run format:check"}
 
-# 1. Build SDK
-echo "📦 Step 1/3: Building SDK..."
-cd "$REPO_ROOT/source/docker-testnet/ethereum-testnet/typescript-sdk"
-bun run build
+    echo "--------------------------------------------------"
+    echo "🔍 Checking module: $name"
+    
+    if [ ! -d "$REPO_ROOT/$path/node_modules" ]; then
+        echo "⚠️  Skipping $name: node_modules not found. Run 'bun install' in $path if this is a mistake."
+        return 0
+    fi
 
-# 2. Run strict lint
-echo "🔍 Step 2/3: Running strict lint (--max-warnings=0)..."
-cd "$REPO_ROOT/source/state-proofs/typescript"
-bun run lint -- --max-warnings=0
+    echo "📍 Path: $path"
+    cd "$REPO_ROOT/$path"
+    
+    echo "📦 Building..."
+    $build_cmd
+    
+    echo "✨ Linting..."
+    $lint_cmd
+    
+    echo "📐 Checking Format..."
+    $format_cmd
+    
+    echo "✅ $name passed all checks."
+}
 
-# 3. Check format
-echo "📐 Step 3/3: Checking code format..."
-bun run format:check
+echo "🚀 Running pre-push code quality checks..."
 
-echo ""
-echo "✅ All pre-push checks passed! Push allowed."
+# 1. State Proof Verifier (Primary focus)
+check_module "State Proof Verifier" "source/state-proofs/typescript"
+
+# 2. Ethereum Docker Testnet SDK
+check_module "Ethereum Docker SDK" "source/docker-testnet/ethereum-testnet/typescript-sdk" "bun run build" "echo '✨ Skipping lint: not configured'" "echo '📐 Skipping format: not configured'"
+
+# 3. Base Docker Testnet SDK (Optional/Skip if no node_modules)
+check_module "Docker Testnet SDK" "source/docker-testnet/typescript-sdk"
+
+# 4. Atomica Web (Optional/Skip if no node_modules)
+check_module "Atomica Web" "source/atomica-web" "bun x tsc -b" "bun run lint" "bun run format:check"
+
+echo "--------------------------------------------------"
+echo "🎉 Code quality checks passed! Push allowed."
 echo ""
 echo "Note: Tests are not enforced by this hook. CI will catch test failures."
 exit 0

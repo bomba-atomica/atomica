@@ -25,14 +25,20 @@ import { isUpdateNewer, saveState, loadState, clearState } from "./state";
 export interface LightClientConfig {
     /** Beacon API URL */
     beaconApiUrl: string;
-    /** Beacon chain network (mainnet, sepolia, holesky) */
+    /** Beacon chain network (mainnet, sepolia, holesky, local) */
     chain: string;
     /** Checkpoint block root to bootstrap from (optional, uses genesis if not provided) */
     checkpointRoot?: string;
-    /** Path to persist light client state */
+    /** Path to persist light client state (optional, if not provided and persist is true, uses default) */
     statePath?: string;
+    /** Whether to persist light client state to disk */
+    persist?: boolean;
     /** Verbose output */
     verbose?: boolean;
+    /** Genesis validators root (optional, fetched if not provided) */
+    genesisValidatorsRoot?: string;
+    /** Genesis fork version (optional) */
+    genesisForkVersion?: string;
 }
 
 export interface TrustedStateRoots {
@@ -62,23 +68,29 @@ export async function initLightClient(config: LightClientConfig): Promise<LightC
     const chainConfig = BEACON_CONFIGS[config.chain as keyof typeof BEACON_CONFIGS];
 
     if (!chainConfig) {
-        throw new Error(`Unknown chain: ${config.chain}. Supported: mainnet, sepolia, holesky`);
+        throw new Error(
+            `Unknown chain: ${config.chain}. Supported: mainnet, sepolia, holesky, local`,
+        );
     }
 
     if (config.verbose) {
         console.log(`[LightClient] Initializing for ${config.chain}...`);
     }
 
-    // Try to load persisted state first
-    const loadedStore = await loadState();
-    if (loadedStore) {
-        if (config.verbose) {
-            console.log(`[LightClient] Loaded persisted state`);
-            console.log(
-                `[LightClient] Current period: ${loadedStore.state.period}, Slot: ${loadedStore.state.header.beacon.slot}`,
-            );
+    // Try to load persisted state first if persistence is enabled
+    if (config.persist !== false) {
+        const loadedStore = await loadState(config.statePath);
+        if (loadedStore) {
+            if (config.verbose) {
+                console.log(
+                    `[LightClient] Loaded persisted state from ${config.statePath || "default location"}`,
+                );
+                console.log(
+                    `[LightClient] Current period: ${loadedStore.state.period}, Slot: ${loadedStore.state.header.beacon.slot}`,
+                );
+            }
+            return loadedStore.state;
         }
-        return loadedStore.state;
     }
 
     // Initialize from genesis bootstrap
@@ -103,17 +115,25 @@ export async function initLightClient(config: LightClientConfig): Promise<LightC
         console.log(`[LightClient] Slot: ${bootstrap.header.beacon.slot}, Period: ${period}`);
     }
 
-    const state = initializeLightClient(bootstrap.header, bootstrap.currentSyncCommittee, period);
+    const state = initializeLightClient(
+        bootstrap.header,
+        bootstrap.currentSyncCommittee,
+        period,
+        config.genesisValidatorsRoot,
+        config.genesisForkVersion,
+    );
 
     const store: LightClientStore = {
         state,
         lastUpdated: Date.now(),
     };
 
-    // Persist initial state
-    await saveState(store);
-    if (config.verbose) {
-        console.log(`[LightClient] Saved initial state`);
+    // Persist initial state if enabled
+    if (config.persist !== false) {
+        await saveState(store, config.statePath);
+        if (config.verbose) {
+            console.log(`[LightClient] Saved initial state`);
+        }
     }
 
     return state;
@@ -239,15 +259,37 @@ export async function syncLightClient(
         }
     }
 
-    // Persist updated state
-    if (synced) {
+    // 4. Try optimistic update for the very latest head
+    try {
+        const { fetchLightClientOptimisticUpdate } = await import("./fetch");
+        const optimisticUpdate = await fetchLightClientOptimisticUpdate(config.beaconApiUrl);
+        if (optimisticUpdate && isUpdateNewer(optimisticUpdate, currentState)) {
+            if (config.verbose) {
+                console.log(
+                    `[LightClient] Processing optimistic update for slot ${optimisticUpdate.attestedHeader.beacon.slot}...`,
+                );
+            }
+            // Optimistic updates are not finalized
+            currentState = await processLightClientUpdate(currentState, optimisticUpdate, false);
+            synced = true;
+        }
+    } catch (error) {
+        if (config.verbose) {
+            console.log(`[LightClient] Could not fetch optimistic update: ${error}`);
+        }
+    }
+
+    // Persist updated state if enabled
+    if (synced && config.persist !== false) {
         const store: LightClientStore = {
             state: currentState,
             lastUpdated: Date.now(),
         };
-        await saveState(store);
+        await saveState(store, config.statePath);
         if (config.verbose) {
-            console.log(`[LightClient] Updated persisted state`);
+            console.log(
+                `[LightClient] Updated persisted state at ${config.statePath || "default location"}`,
+            );
         }
     }
 

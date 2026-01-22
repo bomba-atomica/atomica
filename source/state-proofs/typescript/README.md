@@ -2,6 +2,38 @@
 
 A self-sufficient TypeScript library and CLI tool for fetching and cryptographically verifying Ethereum state proofs using Merkle-Patricia Trie (MPT) verification.
 
+## 🚀 Quick Start: Live Demo (Sepolia)
+
+Run a complete end-to-end verification demo on Sepolia testnet:
+
+```bash
+# 1. Install dependencies
+bun install
+
+# 2. Run the demo
+bun run demo
+```
+
+This demo initializes a trustless light client, syncs to the head of Sepolia, and cryptographically verifies an account state.
+
+### 🐳 Local Docker Demo
+
+You can also run the demo using a local Docker-based Ethereum cluster:
+
+```bash
+bun run demo:docker
+```
+
+This will automatically start a local 4-validator Ethereum testnet, initialize a light client, perform a transaction, and verify the resulting state. (Requires Docker)
+
+### Overriding Defaults
+
+You can override the default RPC and Beacon endpoints using environment variables:
+
+```bash
+SEPOLIA_RPC_URL="your_rpc_url" BEACON_API_URL="your_beacon_url" bun run demo
+```
+
 ## Overview
 
 This tool implements **EIP-1186** (`eth_getProof`) proof verification, allowing you to:
@@ -168,28 +200,6 @@ Verify a transfer transaction affected account states correctly.
 
 ```bash
 eth-verify verify-transfer <txHash> --rpc <url> [options]
-```
-
-## Live Demo (Sepolia)
-
-Run a complete end-to-end verification demo on Sepolia testnet. This script:
-1. Syncs the light client to the latest finalized header.
-2. Sends a self-transfer transaction (if private key provided).
-3. Verifies account state, transaction inclusion, and receipt inclusion against the light client root.
-
-### Setup
-
-1. Copy example environment file:
-   ```bash
-   cp .env.example .env
-   ```
-2. Edit `.env` and add your `SEPOLIA_RPC_URL` (e.g. from Infura/Alchemy).
-3. (Optional) Add a `PRIVATE_KEY` with some Sepolia ETH to verify a live transaction.
-
-### Run
-
-```bash
-bun run demo:sepolia
 ```
 
 ## Library API

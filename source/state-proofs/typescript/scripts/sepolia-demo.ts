@@ -3,32 +3,43 @@ import { createWalletClient, createPublicClient, http, formatEther, type Hex } f
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import { initLightClient, syncLightClient, type LightClientConfig } from "../src/beacon/cli";
-import { fetchProof, fetchBlockTransactions, fetchBlockReceipts } from "../src/fetcher";
+import { fetchProof, fetchBlockTransactions } from "../src/fetcher";
 import { verifyAccountProof } from "../src/verifier";
 import { verifyTransactionProof } from "../src/transaction";
-import { verifyReceiptProof } from "../src/receipt";
 
 async function main() {
     console.log("🚀 Ethereum State Verification - Sepolia Demo");
     console.log("---------------------------------------------");
 
-    const rpcUrl = process.env.SEPOLIA_RPC_URL;
-    const beaconUrl = process.env.BEACON_API_URL || "https://checkpoint-sync.sepolia.beaconcha.in/api/v1";
+    const rpcUrl = process.env.SEPOLIA_RPC_URL || "https://gateway.tenderly.co/public/sepolia";
+    const beaconUrl = process.env.BEACON_API_URL || "https://lodestar-sepolia.chainsafe.io";
     const privateKey = process.env.PRIVATE_KEY;
 
-    if (!rpcUrl) {
-        console.error("❌ Error: SEPOLIA_RPC_URL environment variable is required.");
-        console.error("   Please run: SEPOLIA_RPC_URL=... bun run scripts/sepolia-demo.ts");
-        process.exit(1);
-    }
+    console.log(`📡 Using Execution RPC: ${rpcUrl}`);
+    console.log(`📡 Using Beacon API:    ${beaconUrl}`);
 
     // 1. Initialize Light Client
     console.log(`\n📡 Connecting to Beacon Node: ${beaconUrl}`);
+    
+    // Fetch latest finalized checkpoint root for bootstrap
+    let checkpointRoot = process.env.CHECKPOINT_ROOT;
+    if (!checkpointRoot) {
+        try {
+            const resp = await fetch(`${beaconUrl}/eth/v1/beacon/blocks/finalized/root`);
+            const data = await resp.json() as any;
+            checkpointRoot = data.data.root;
+            console.log(`   Fetched latest finalized block root: ${checkpointRoot}`);
+        } catch (e) {
+            console.warn("   Failed to fetch finalized checkpoint root, using default.");
+        }
+    }
+
     const config: LightClientConfig = {
         beaconApiUrl: beaconUrl,
         chain: "sepolia",
+        checkpointRoot,
         verbose: false, // We'll handle logging
-        statePath: "./light-client-state.json"
+        persist: false // Keep state in memory only
     };
 
     let state;
@@ -114,93 +125,77 @@ async function main() {
         console.log(`   At Block: ${targetBlockNumber}`);
     }
 
-    // 3. Verify Account State
-    console.log("\n🔍 Verifying Account State...");
-    try {
-        const proof = await fetchProof(rpcUrl, targetAddress, [], targetBlockNumber);
+    // 3. Refresh Loop
+    console.log("\n🚀 Starting 60s Refresh Loop (10s intervals)...");
+    const demoStartTime = Date.now();
+    let iteration = 1;
+
+    while (Date.now() - demoStartTime < 60000) {
+        console.log(`\n--- Refresh #${iteration} (${Math.round((Date.now() - demoStartTime) / 1000)}s elapsed) ---`);
         
-        // Ensure we use the trusted root for the SPECIFIC block we are verifying
-        // The Light Client state tracks the *latest* trusted header.
-        // If we just synced, state.header is likely the head.
-        // If targetBlockNumber != state.header.execution.blockNumber, we have a mismatch.
-        // However, for this demo, if we sent a tx, we synced up to it.
-        // If we didn't, we used state.header.blockNumber.
-        // So they should match.
-        
-        if (state.header.execution.blockNumber !== targetBlockNumber) {
-            console.warn(`⚠️  Warning: Light client head (${state.header.execution.blockNumber}) != Target block (${targetBlockNumber})`);
-            // We can't cryptographically verify an old block with just the latest light client header
-            // unless we had historical roots.
-            // But if we synced PAST it, maybe we have it in history? 
-            // Our minimal light client state implementation only stores current head.
-            // So we must rely on the fact that we synced TO this block.
+        try {
+            // Sync to latest
+            state = await syncLightClient(state, config);
+            const currentBlock = state.header.execution.blockNumber;
+            console.log(`📡 Light Client Head: Block ${currentBlock}, Slot ${state.header.beacon.slot}`);
+
+            // 4. Verify Account State
+            console.log("🔍 Verifying Account State...");
+            
+            // If we sent a tx, we might want to verify state at that block
+            // Otherwise verify at current head
+            const verifyBlock = targetTxHash ? targetBlockNumber : currentBlock;
+            
+            if (currentBlock < verifyBlock) {
+                console.log(`   Waiting for Light Client to reach target block ${verifyBlock}...`);
+            } else {
+                const proof = await fetchProof(rpcUrl, targetAddress, [], verifyBlock);
+
+                // For the demo, we use the root we have if it matches, or we warn
+                const rootToUse = (verifyBlock === currentBlock) 
+                    ? state.header.execution.stateRoot
+                    : state.header.execution.stateRoot; // Fallback for demo simplicity
+                
+                if (verifyBlock !== currentBlock) {
+                    console.warn(`   ⚠️ Verifying block ${verifyBlock} using LC root from ${currentBlock}`);
+                }
+
+                const result = await verifyAccountProof(proof.accountProof, rootToUse, targetAddress);
+                
+                if (result.valid && result.accountState) {
+                    console.log("   ✅ Account Proof Verified!");
+                    console.log(`   Balance: ${formatEther(result.accountState.balance)} ETH`);
+                } else {
+                    console.error("   ❌ Account Verification Failed:", result.error);
+                }
+
+                // 5. Verify Transaction (if available)
+                if (targetTxHash && iteration === 1) {
+                    // Only verify inclusion once to keep output clean, or every time?
+                    // Let's verify it every time if it's ready
+                    console.log("🔍 Verifying Transaction Inclusion...");
+                    const txs = await fetchBlockTransactions(rpcUrl, verifyBlock);
+                    const targetTx = txs.find(tx => tx.hash === targetTxHash);
+                    
+                    if (targetTx) {
+                        const isValid = await verifyTransactionProof(targetTx, { transactionsRoot: state.header.execution.transactionsRoot } as any, txs);
+                        if (isValid) console.log("   ✅ Transaction Inclusion Verified!");
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("   ❌ Refresh Error:", e);
         }
 
-        const trustedRoot = state.header.execution.stateRoot;
-        
-        const result = await verifyAccountProof(proof.accountProof, trustedRoot, targetAddress);
-        
-        if (result.valid && result.accountState) {
-            console.log("   ✅ Account Proof Verified!");
-            console.log(`   Nonce: ${result.accountState.nonce}`);
-            console.log(`   Balance: ${formatEther(result.accountState.balance)} ETH`);
-            console.log(`   Storage Hash: ${result.accountState.storageHash}`);
+        iteration++;
+        if (Date.now() - demoStartTime < 50000) {
+            await new Promise(r => setTimeout(r, 10000));
         } else {
-            console.error("   ❌ Account Verification Failed:", result.error);
-        }
-
-    } catch (e) {
-        console.error("   ❌ Verification Error:", e);
-    }
-
-    // 4. Verify Transaction (if available)
-    if (targetTxHash) {
-        console.log("\n🔍 Verifying Transaction Inclusion...");
-        try {
-            const txs = await fetchBlockTransactions(rpcUrl, targetBlockNumber);
-            const targetTx = txs.find(tx => tx.hash === targetTxHash);
-            
-            if (!targetTx) throw new Error("Tx not found in block");
-            
-            const trustedTxRoot = state.header.execution.transactionsRoot;
-            
-            const isValid = await verifyTransactionProof(targetTx, { transactionsRoot: trustedTxRoot } as any, txs);
-            
-            if (isValid) {
-                console.log("   ✅ Transaction Inclusion Verified!");
-                console.log(`   Tx Hash: ${targetTxHash}`);
-                console.log(`   In Block: ${targetBlockNumber}`);
-            } else {
-                console.error("   ❌ Tx Verification Failed: Root mismatch");
-            }
-            
-        } catch (e) {
-             console.error("   ❌ Tx Verification Error:", e);
-        }
-
-        console.log("\n🔍 Verifying Receipt Inclusion...");
-        try {
-            const receipts = await fetchBlockReceipts(rpcUrl, targetBlockNumber);
-            const targetReceipt = receipts.find(r => r.transactionHash === targetTxHash);
-
-            if (!targetReceipt) throw new Error("Receipt not found");
-
-            const trustedReceiptsRoot = state.header.execution.receiptsRoot;
-
-            const isValid = await verifyReceiptProof(targetReceipt, { receiptsRoot: trustedReceiptsRoot } as any, receipts);
-
-            if (isValid) {
-                console.log("   ✅ Receipt Inclusion Verified!");
-                console.log(`   Status: ${targetReceipt.status === '0x1' ? 'Success' : 'Failure'}`);
-                console.log(`   Gas Used: ${BigInt(targetReceipt.gasUsed)}`);
-            } else {
-                console.error("   ❌ Receipt Verification Failed: Root mismatch");
-            }
-
-        } catch (e) {
-            console.error("   ❌ Receipt Verification Error:", e);
+            break;
         }
     }
+
+    console.log("\n✅ Sepolia Demo Completed!");
 }
 
 main();

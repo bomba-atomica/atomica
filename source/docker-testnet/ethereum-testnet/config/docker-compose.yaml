@@ -89,6 +89,7 @@ services:
       - --staking
       - --subscribe-all-subnets
       - --always-prepare-payload
+      - --light-client-server
     volumes:
       - testnet-data:/data
     ports:
