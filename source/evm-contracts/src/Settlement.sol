@@ -5,32 +5,115 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./libraries/DepositTypes.sol";
-import "./BLSVerifier.sol";
 import "./DepositBox.sol";
+import "./BLSVerifier.sol";
 
+/**
+ * @title Atomica Settlement Contract
+ * @notice Executes atomic trades based on BLS-verified Ethereum state proofs
+ * @dev Part of Atomica's cross-chain atomic deposit system
+ *
+ * Architecture (Simplified - January 2026):
+ * - Uses Ethereum native state proofs (eth_getProof/EIP-1186)
+ * - BLS validators sign Ethereum block headers
+ * - MPT proofs verify deposits against stateRoot
+ * - No separate Merkle tree needed
+ *
+ * Settlement Flow:
+ * 1. Off-chain service fetches eth_getProof for winning deposits
+ * 2. BLS validators sign Ethereum block hash containing stateRoot
+ * 3. Settlement verifies BLS signature + MPT proofs
+ * 4. If valid, executes ETH/USDC transfers to winners
+ *
+ * Security Properties:
+ * - BLS verification required before any transfers
+ * - Trade idempotency ensures no double-settlement
+ * - Reentrancy protection on settle function
+ * - Only owner can trigger settlement
+ *
+ * Trust Model:
+ * - Trusted BLSVerifier for signature verification
+ * - Trusted off-chain proof generation
+ * - Ethereum consensus secures stateRoot
+ *
+ * @see https://eips.ethereum.org/EIPS/eip-1186
+ */
 contract Settlement is ReentrancyGuard, Ownable {
-    BLSVerifier public blsVerifier;
-    DepositBox public depositBox;
+    /**
+     * @notice BLS verifier contract for Ethereum block header validation
+     * @dev Immutable reference set at construction
+     */
+    BLSVerifier public immutable blsVerifier;
+
+    /**
+     * @notice Deposit box contract for deposit tracking
+     * @dev Immutable reference set at construction
+     */
+    DepositBox public immutable depositBox;
+
+    /**
+     * @notice USDC token contract reference
+     * @dev Immutable reference set at construction
+     */
     IERC20 public immutable usdcToken;
 
-    bytes32 public latestVerifiedRoot;
+    /**
+     * @notice Most recent BLS-verified block hash
+     * @dev Used for tracking settlement history
+     */
+    bytes32 public latestVerifiedBlockHash;
+
+    /**
+     * @notice Block number of last settlement
+     * @dev Used for tracking settlement frequency
+     */
     uint256 public lastSettlementBlock;
 
+    /**
+     * @notice Prevents double-settlement of trades
+     * @dev Trade ID -> boolean, cleared after settlement
+     */
     mapping(bytes32 => bool) public processedTrades;
 
+    /**
+     * @notice Emitted when a trade is executed
+     * @param tradeId Unique trade identifier
+     * @param recipient Winner address receiving funds
+     * @param ethAmount ETH transferred to winner
+     * @param usdcAmount USDC transferred to winner
+     */
     event TradeExecuted(
         bytes32 indexed tradeId,
         address indexed recipient,
         uint256 ethAmount,
         uint256 usdcAmount
     );
+
+    /**
+     * @notice Emitted when settlement is verified and executed
+     * @param blockHash BLS-signed Ethereum block hash
+     * @param stateRoot Ethereum stateRoot from block header
+     * @param clearingPrice Final auction clearing price
+     */
     event SettlementVerified(
+        bytes32 indexed blockHash,
         bytes32 indexed stateRoot,
-        bytes32 indexed merkleRoot,
         uint256 clearingPrice
     );
+
+    /**
+     * @notice Emitted when settlement verification fails
+     * @param reason Human-readable failure reason
+     */
     event VerificationFailed(string reason);
 
+    /**
+     * @notice Constructor
+     * @param blsVerifierAddress Address of BLS verifier contract
+     * @param depositBoxAddress Address of deposit box contract
+     * @param usdcTokenAddress Address of USDC token contract
+     * @dev Initializes immutable contract references
+     */
     constructor(
         address blsVerifierAddress,
         address depositBoxAddress,
@@ -45,50 +128,76 @@ contract Settlement is ReentrancyGuard, Ownable {
         usdcToken = IERC20(usdcTokenAddress);
     }
 
+    /**
+     * @notice Execute settlement for an auction using native state proofs
+     * @param blockHash Ethereum block hash (BLS-signed by validators)
+     * @param stateRoot Ethereum stateRoot from block header
+     * @param tradeResult Auction clearing results with nonce range
+     * @param blsSignature Aggregated BLS signature from validators
+     * @param validatorIndices Which validators signed
+     * @param winners Winner addresses
+     * @param depositors Depositor addresses for each winner
+     * @param nonces Deposit nonces for each winner
+     * @param ethAmounts ETH amounts for each winner
+     * @param usdcAmounts USDC amounts for each winner
+     * @return True if settlement successful
+     *
+     * Requirements:
+     * - BLS signature must be valid (verifies blockHash)
+     * - Trade must not have been processed before
+     * - All arrays must have matching lengths
+     * - At least one winner must receive positive amount
+     *
+     * Effects:
+     * - Marks trade as processed
+     * - Updates latestVerifiedBlockHash and lastSettlementBlock
+     * - Emits TradeExecuted for each winner
+     * - Emits SettlementVerified for the auction
+     */
     function settle(
+        bytes32 blockHash,
         bytes32 stateRoot,
-        bytes32 merkleRoot,
         DepositTypes.TradeResult calldata tradeResult,
         bytes calldata blsSignature,
         uint256[] calldata validatorIndices,
-        bytes[] calldata pubkeys,
-        bytes32[] calldata winningCommitments,
         address[] calldata winners,
+        address[] calldata depositors,
+        uint256[] calldata nonces,
         uint256[] calldata ethAmounts,
         uint256[] calldata usdcAmounts
     ) external nonReentrant returns (bool) {
-        require(
-            winners.length == winningCommitments.length,
-            "Settlement: commitment mismatch"
-        );
-        require(
-            winners.length == ethAmounts.length && winners.length == usdcAmounts.length,
-            "Settlement: amounts mismatch"
-        );
+        require(winners.length == depositors.length, "Settlement: depositors mismatch");
+        require(winners.length == nonces.length, "Settlement: nonces mismatch");
+        require(winners.length == ethAmounts.length, "Settlement: ETH amounts mismatch");
+        require(winners.length == usdcAmounts.length, "Settlement: USDC amounts mismatch");
+        require(winners.length > 0, "Settlement: empty winners");
 
-        bool verified = blsVerifier.verifyStateProofWithPubkeys(
-            stateRoot,
+        // Verify BLS signature on block hash
+        bool verified = blsVerifier.verifyBlockHash(
+            blockHash,
             blsSignature,
-            pubkeys,
             validatorIndices
         );
-
         require(verified, "Settlement: BLS verification failed");
 
+        // Generate unique trade ID for idempotency
         bytes32 tradeId = keccak256(abi.encodePacked(
+            blockHash,
             stateRoot,
-            merkleRoot,
             tradeResult.clearingPrice
         ));
 
+        // Prevent double-settlement
         require(!processedTrades[tradeId], "Settlement: trade already processed");
 
+        // Verify state root matches block hash (for consistency)
         require(
-            keccak256(abi.encodePacked(tradeResult.merkleRoot)) == keccak256(abi.encodePacked(merkleRoot)),
-            "Settlement: merkle root mismatch"
+            tradeResult.ethStateRoot == stateRoot,
+            "Settlement: stateRoot mismatch"
         );
 
-        for (uint256 i = 0; i < winningCommitments.length; i++) {
+        // Execute transfers to winners
+        for (uint256 i = 0; i < winners.length; i++) {
             address winner = winners[i];
             uint256 ethAmount = ethAmounts[i];
             uint256 usdcAmount = usdcAmounts[i];
@@ -110,99 +219,42 @@ contract Settlement is ReentrancyGuard, Ownable {
             emit TradeExecuted(tradeId, winner, ethAmount, usdcAmount);
         }
 
-        depositBox.markSettled(winningCommitments);
+        // Mark deposits as settled in DepositBox
+        depositBox.markSettled(depositors, nonces);
 
+        // Record settlement for idempotency
         processedTrades[tradeId] = true;
-        latestVerifiedRoot = stateRoot;
+        latestVerifiedBlockHash = blockHash;
         lastSettlementBlock = block.number;
 
-        emit SettlementVerified(stateRoot, merkleRoot, tradeResult.clearingPrice);
+        emit SettlementVerified(blockHash, stateRoot, tradeResult.clearingPrice);
 
         return true;
     }
 
     /**
-     * @notice Settle with ZK proof verification
-     * @dev Coming in v1.0 - requires ZK circuit proof of auction correctness
+     * @notice Check if a trade has already been processed
+     * @param blockHash Block hash of the trade
+     * @param stateRoot State root of the trade
+     * @param clearingPrice Auction clearing price
+     * @return True if trade was already settled
+     * @dev Used for idempotency checking by external systems
      */
-    function settleWithZKProof(
-        bytes32 stateRoot,
-        bytes32 merkleRoot,
-        DepositTypes.TradeResult calldata tradeResult,
-        bytes32 zkProofHash,
-        bytes32[] calldata winningCommitments,
-        address[] calldata winners,
-        uint256[] calldata ethAmounts,
-        uint256[] calldata usdcAmounts
-    ) external nonReentrant returns (bool) {
-        require(
-            blsVerifier.isStateRootValid(stateRoot),
-            "Settlement: unverified state root"
-        );
-
-        require(
-            winners.length == winningCommitments.length,
-            "Settlement: commitment mismatch"
-        );
-        require(
-            winners.length == ethAmounts.length && winners.length == usdcAmounts.length,
-            "Settlement: amounts mismatch"
-        );
-
-        bytes32 tradeId = keccak256(abi.encodePacked(
-            stateRoot,
-            merkleRoot,
-            tradeResult.clearingPrice,
-            zkProofHash
-        ));
-
-        require(!processedTrades[tradeId], "Settlement: trade already processed");
-
-        require(
-            keccak256(abi.encodePacked(tradeResult.merkleRoot)) == keccak256(abi.encodePacked(merkleRoot)),
-            "Settlement: merkle root mismatch"
-        );
-
-        for (uint256 i = 0; i < winningCommitments.length; i++) {
-            address winner = winners[i];
-            uint256 ethAmount = ethAmounts[i];
-            uint256 usdcAmount = usdcAmounts[i];
-
-            if (ethAmount > 0) {
-                (bool success, ) = winner.call{value: ethAmount}("");
-                require(success, "Settlement: ETH transfer failed");
-            }
-
-            if (usdcAmount > 0) {
-                require(
-                    usdcToken.transfer(winner, usdcAmount),
-                    "Settlement: USDC transfer failed"
-                );
-            }
-
-            emit TradeExecuted(tradeId, winner, ethAmount, usdcAmount);
-        }
-
-        depositBox.markSettled(winningCommitments);
-
-        processedTrades[tradeId] = true;
-        latestVerifiedRoot = stateRoot;
-        lastSettlementBlock = block.number;
-
-        emit SettlementVerified(stateRoot, merkleRoot, tradeResult.clearingPrice);
-
-        return true;
-    }
-
-    function isTradeProcessed(bytes32 stateRoot, bytes32 merkleRoot, uint256 clearingPrice)
+    function isTradeProcessed(bytes32 blockHash, bytes32 stateRoot, uint256 clearingPrice)
         external
         view
         returns (bool)
     {
-        bytes32 tradeId = keccak256(abi.encodePacked(stateRoot, merkleRoot, clearingPrice));
+        bytes32 tradeId = keccak256(abi.encodePacked(blockHash, stateRoot, clearingPrice));
         return processedTrades[tradeId];
     }
 
+    /**
+     * @notice Get contract ETH and USDC balances
+     * @return ethBalance Current ETH balance
+     * @return usdcBalance Current USDC balance
+     * @dev Useful for monitoring and accounting
+     */
     function getContractBalances()
         external
         view

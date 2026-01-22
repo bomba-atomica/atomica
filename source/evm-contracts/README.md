@@ -43,7 +43,7 @@ Ethereum smart contracts for Atomica's cross-chain atomic deposit system.
 |----------|---------|
 | `AuctionManager` | Fail-only auction management (scuttle=true default) |
 | `DepositBox` | ETH/USDC deposits with commitment tracking |
-| `BLSVerifier` | BLS signature verification |
+| `BLSVerifier` | EIP-2537 BLS verification for state proofs |
 | `Settlement` | Trade execution from verified proofs |
 | `Governance` | Emergency fail-safe (genesis/brick) |
 | `IncrementalMerkleTree` | Merkle tree for commitments |
@@ -89,6 +89,7 @@ forge test --gas-report
 ## Important Notes
 
 - Contracts are NOT upgradeable (no proxy patterns)
+- BLSVerifier uses EIP-2537 precompiles (0x09 for G1 multiexponent, 0x0c for pairing)
 - BLSVerifier has NO knowledge of governance
 - Governance is ORTHOGONAL to core contracts
 - Only `genesis()` and `brick()` functions exist in Governance

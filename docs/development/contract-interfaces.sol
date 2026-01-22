@@ -28,22 +28,23 @@ interface IDepositBox {
 
 /**
  * @title IBLSVerifier
- * @notice Interface for BLS verification
+ * @notice Interface for BLS verification using EIP-2537 precompiles
  */
 interface IBLSVerifier {
-    function verifyAggregatedSignature(
-        bytes[] calldata pubkeys,
-        bytes calldata signature,
-        bytes32 messageHash,
-        uint256[] calldata validatorIndices
-    ) external returns (bool);
-    
     function verifyStateProof(
         bytes32 stateRoot,
         bytes calldata signature,
-        bytes[] calldata pubkeys,
         uint256[] calldata validatorIndices
     ) external returns (bool);
+
+    function updateValidatorSet(
+        bytes[] calldata newPubkeys,
+        uint64 newEpoch,
+        bytes calldata signature,
+        uint256[] calldata validatorIndices
+    ) external returns (bool);
+
+    function isStateRootValid(bytes32 stateRoot) external view returns (bool);
 }
 
 /**

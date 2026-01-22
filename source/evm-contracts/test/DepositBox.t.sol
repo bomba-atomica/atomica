@@ -5,6 +5,11 @@ import "forge-std/Test.sol";
 import "../../src/DepositBox.sol";
 import "@openzeppelin/contracts/mocks/ERC20Mock.sol";
 
+/**
+ * @title DepositBoxTest
+ * @notice Tests for the simplified DepositBox contract (no commitments)
+ * @dev Updated January 2026 - uses native Ethereum state proofs
+ */
 contract DepositBoxTest is Test {
     DepositBox depositBox;
     ERC20Mock usdcMock;
@@ -26,10 +31,8 @@ contract DepositBoxTest is Test {
     function testDepositETH() public {
         vm.deal(alice, 10 ether);
 
-        bytes32 commitment = keccak256("test commitment");
-
         vm.prank(alice);
-        depositBox.depositETH{value: 1 ether}(commitment);
+        depositBox.depositETH{value: 1 ether}();
 
         assertEq(address(depositBox).balance, 1 ether);
         assertEq(depositBox.totalDeposits(0), 1 ether);
@@ -37,54 +40,27 @@ contract DepositBoxTest is Test {
 
     function testDepositETHZeroAmount() public {
         vm.deal(alice, 10 ether);
-        bytes32 commitment = keccak256("test");
 
         vm.prank(alice);
         vm.expectRevert("DepositBox: zero deposit");
-        depositBox.depositETH{value: 0}(commitment);
-    }
-
-    function testDepositETHZeroCommitment() public {
-        vm.deal(alice, 10 ether);
-
-        vm.prank(alice);
-        vm.expectRevert("DepositBox: zero commitment");
-        depositBox.depositETH{value: 1 ether}(bytes32(0));
+        depositBox.depositETH{value: 0}();
     }
 
     function testDepositUSDC() public {
         usdcMock.mint(alice, 1000e6);
 
-        bytes32 commitment = keccak256("test commitment");
-
         vm.prank(alice);
         usdcMock.approve(address(depositBox), 500e6);
-        depositBox.depositUSDC(500e6, commitment);
+        depositBox.depositUSDC(500e6);
 
         assertEq(usdcMock.balanceOf(address(depositBox)), 500e6);
         assertEq(depositBox.totalDeposits(1), 500e6);
     }
 
     function testDepositUSDCZeroAmount() public {
-        bytes32 commitment = keccak256("test");
-
         vm.prank(alice);
         vm.expectRevert("DepositBox: zero deposit");
-        depositBox.depositUSDC(0, commitment);
-    }
-
-    function testCommitmentsCannotBeReused() public {
-        usdcMock.mint(alice, 1000e6);
-        bytes32 commitment = keccak256("test commitment");
-
-        vm.prank(alice);
-        usdcMock.approve(address(depositBox), 500e6);
-        depositBox.depositUSDC(500e6, commitment);
-
-        vm.prank(alice);
-        usdcMock.approve(address(depositBox), 500e6);
-        vm.expectRevert("DepositBox: commitment used");
-        depositBox.depositUSDC(500e6, commitment);
+        depositBox.depositUSDC(0);
     }
 
     function testSetSettlementContract() public {
@@ -104,38 +80,72 @@ contract DepositBoxTest is Test {
 
     function testConfirmDeposits() public {
         usdcMock.mint(alice, 1000e6);
-        bytes32 commitment = keccak256("test commitment");
 
         vm.prank(alice);
         usdcMock.approve(address(depositBox), 500e6);
-        depositBox.depositUSDC(500e6, commitment);
+        depositBox.depositUSDC(500e6);
 
         vm.prank(address(this));
         depositBox.setSettlementContract(settlement);
 
-        bytes32 newStateRoot = keccak256("new state root");
+        address[] memory depositors = new address[](1);
+        uint256[] memory nonces = new uint256[](1);
+        depositors[0] = alice;
+        nonces[0] = 1;
+
+        bytes32 stateRoot = keccak256("new state root");
 
         vm.prank(settlement);
-        depositBox.confirmDeposits(commitment, newStateRoot);
+        depositBox.confirmDeposits(depositors, nonces, stateRoot);
 
-        assertEq(depositBox.latestStateRoot(), newStateRoot);
+        // Verify deposit is confirmed
+        DepositTypes.Deposit memory deposit = depositBox.getDeposit(alice, 1);
+        assertEq(uint256(deposit.status), 1); // CONFIRMED
     }
 
     function testConfirmDepositsOnlySettlement() public {
-        bytes32 commitment = keccak256("test");
-        bytes32 newStateRoot = keccak256("root");
+        address[] memory depositors = new address[](1);
+        uint256[] memory nonces = new uint256[](1);
+        bytes32 stateRoot = keccak256("root");
 
         vm.prank(alice);
         vm.expectRevert("DepositBox: only settlement");
-        depositBox.confirmDeposits(commitment, newStateRoot);
+        depositBox.confirmDeposits(depositors, nonces, stateRoot);
+    }
+
+    function testMarkSettled() public {
+        usdcMock.mint(alice, 1000e6);
+
+        vm.prank(alice);
+        usdcMock.approve(address(depositBox), 500e6);
+        depositBox.depositUSDC(500e6);
+
+        vm.prank(address(this));
+        depositBox.setSettlementContract(settlement);
+
+        // Confirm deposit
+        address[] memory depositors = new address[](1);
+        uint256[] memory nonces = new uint256[](1);
+        depositors[0] = alice;
+        nonces[0] = 1;
+
+        vm.prank(settlement);
+        depositBox.confirmDeposits(depositors, nonces, keccak256("root"));
+
+        // Mark as settled
+        vm.prank(settlement);
+        depositBox.markSettled(depositors, nonces);
+
+        // Verify deposit is settled
+        DepositTypes.Deposit memory deposit = depositBox.getDeposit(alice, 1);
+        assertEq(uint256(deposit.status), 2); // SETTLED
     }
 
     function testRefundDeposit() public {
         vm.deal(alice, 10 ether);
-        bytes32 commitment = keccak256("test commitment");
 
         vm.prank(alice);
-        depositBox.depositETH{value: 1 ether}(commitment);
+        depositBox.depositETH{value: 1 ether}();
 
         assertEq(address(depositBox).balance, 1 ether);
 
@@ -149,10 +159,9 @@ contract DepositBoxTest is Test {
 
     function testRefundDepositBeforeTimeout() public {
         vm.deal(alice, 10 ether);
-        bytes32 commitment = keccak256("test commitment");
 
         vm.prank(alice);
-        depositBox.depositETH{value: 1 ether}(commitment);
+        depositBox.depositETH{value: 1 ether}();
 
         vm.warp(block.timestamp + 1 days);
 
@@ -163,10 +172,9 @@ contract DepositBoxTest is Test {
 
     function testRefundDepositNotOwner() public {
         vm.deal(alice, 10 ether);
-        bytes32 commitment = keccak256("test commitment");
 
         vm.prank(alice);
-        depositBox.depositETH{value: 1 ether}(commitment);
+        depositBox.depositETH{value: 1 ether}();
 
         vm.warp(block.timestamp + 8 days);
 
@@ -177,17 +185,21 @@ contract DepositBoxTest is Test {
 
     function testGetDeposit() public view {
         vm.deal(alice, 10 ether);
-        bytes32 commitment = keccak256("test commitment");
 
         vm.prank(alice);
-        depositBox.depositETH{value: 1 ether}(commitment);
+        depositBox.depositETH{value: 1 ether}();
 
         DepositTypes.Deposit memory deposit = depositBox.getDeposit(alice, 1);
 
         assertEq(deposit.depositor, alice);
         assertEq(deposit.amount, 1 ether);
-        assertEq(uint256(deposit.assetType), 0);
-        assertEq(uint256(deposit.status), 0);
+        assertEq(uint256(deposit.assetType), 0); // ETH
+        assertEq(uint256(deposit.status), 0); // PENDING
+    }
+
+    function testGetStorageKey() public pure {
+        bytes32 key = depositBox.getStorageKey(alice, 1);
+        assertEq(key, keccak256(abi.encode(alice, 1)));
     }
 
     receive() external payable {}

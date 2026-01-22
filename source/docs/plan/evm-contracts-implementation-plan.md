@@ -10,13 +10,13 @@ This document outlines a comprehensive implementation plan for EVM smart contrac
 ### Key Components:
 - **Deposit Contract**: Handles ETH/USDC deposits with commitment trees
 - **State Commitment System**: Merkle tree-based state commitments for deposits
-- **BLS Proof Verifier**: On-chain verification of aggregated BLS signatures
+- **BLS Proof Verifier**: On-chain verification using EIP-2537 precompiles
 - **Settlement Contract**: Atomic execution of transfers based on verified proofs
 - **Off-Chain Services**: Auction execution and proof generation infrastructure
 
 ### Technology Stack:
 - **Solidity 0.8.x** with Foundry for testing
-- **BLS12-381** for signature aggregation (Ethereum's native curve)
+- **BLS12-381** with **EIP-2537** precompiles for signature aggregation
 - **Merkle Patricia Trees** for state commitments
 - **OpenZeppelin** contracts for standard components
 
@@ -44,7 +44,7 @@ This document outlines a comprehensive implementation plan for EVM smart contrac
 │  │                                                                      │   │
 │  │  ┌───────────────────────────────────────────────────────────────┐  │   │
 │  │  │  DepositBox    StateRoot    BLSVerifier    Settlement         │  │   │
-│  │  │  (ETH/USDC)    (Merkle)    (BLS Sig)      (Trades)            │  │   │
+│  │  │  (ETH/USDC)    (Merkle)    (EIP-2537)     (Trades)            │  │   │
 │  │  └───────────────────────────────────────────────────────────────┘  │   │
 │  │                                                                      │   │
 │  │  ┌───────────────────────────────────────────────────────────────┐  │   │
@@ -91,8 +91,8 @@ AtomicaController (Facade)
 │   └── USDCVault
 ├── StateCommitment (Merkle tree management)
 │   └── IncrementalMerkleTree
-├── BLSVerifier (BLS signature verification)
-│   └── BLS12_381G1 (math library, pure signature verification)
+├── BLSVerifier (EIP-2537 BLS verification)
+│   └── Uses 0x09 (G1MultiExp) + 0x0c (pairing)
 ├── Settlement (Proof verification + transfers)
 │   └── TransferManager
 └── Governance (Emergency fail-safe, orthogonal to core contracts)
@@ -680,359 +680,163 @@ contract StateRoot is Ownable {
 
 ## 5. BLS Proof Verification Contract
 
-### 5.1 BLS12-381 Operations
+### 5.1 EIP-2537 Precompiles
 
-```solidity
-/**
- * @title BLS12_381G1
- * @notice Low-level BLS12-381 G1 point operations
- * @dev Optimized assembly implementation for gas efficiency
- */
-library BLS12_381G1 {
-    uint256 public constant MODULUS = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001;
-    uint256 public constant CURVE_B = 0x0000000000000000000000000000000000000000000000000000000000000003;
-    uint256 public constant G1_GENERATOR_X = 0x0000000000000000000000000000000000000000000000000000000000000001;
-    uint256 public constant G1_GENERATOR_Y = 0x0000000000000000000000000000000000000000000000000000000000000002;
-    uint256 public constant INF_X = 0;
-    uint256 public constant INF_Y = 0;
+The BLSVerifier uses Ethereum's native EIP-2537 precompiles for efficient BLS signature verification:
 
-    /**
-     * @notice Check if a point is on the curve
-     */
-    function isOnCurve(uint256 x, uint256 y) internal pure returns (bool) {
-        if (x == INF_X && y == INF_Y) return true;
-        
-        uint256 y2 = mulMod(y, y);
-        uint256 x3 = mulMod(mulMod(x, x), x);
-        
-        return addMod(y2, CURVE_B) == x3;
-    }
+| Address | Precompile | Purpose |
+|---------|------------|---------|
+| `0x09` | `bls12381G1MultiExp` | Aggregate public keys |
+| `0x0c` | `bls12381Pairing` | Verify pairing equation |
 
-    /**
-     * @notice Add two G1 points
-     */
-    function g1Add(uint256 x1, uint256 y1, uint256 x2, uint256 y2) 
-        internal 
-        pure 
-        returns (uint256 x3, uint256 y3) 
-    {
-        if (x1 == INF_X && y1 == INF_Y) return (x2, y2);
-        if (x2 == INF_X && y2 == INF_Y) return (x1, y1);
-        
-        if (x1 == x2) {
-            if (y1 == y2) {
-                return g1Double(x1, y1);
-            }
-            return (INF_X, INF_Y);
-        }
-        
-        uint256 lambda = mulMod(
-            subMod(y2, y1),
-            invMod(subMod(x2, x1))
-        );
-        
-        x3 = subMod(
-            subMod(mulMod(lambda, lambda), x1),
-            x2
-        );
-        y3 = subMod(
-            mulMod(lambda, subMod(x1, x3)),
-            y1
-        );
-        
-        return (x3, y3);
-    }
-
-    /**
-     * @notice Double a G1 point
-     */
-    function g1Double(uint256 x, uint256 y) 
-        internal 
-        pure 
-        returns (uint256 x2, uint256 y2) 
-    {
-        uint256 lambda = mulMod(
-            mulMod(3, mulMod(x, x)),
-            invMod(mulMod(2, y))
-        );
-        
-        x2 = subMod(mulMod(lambda, lambda), mulMod(2, x));
-        y2 = subMod(
-            mulMod(lambda, subMod(x, x2)),
-            y
-        );
-        
-        return (x2, y2);
-    }
-
-    /**
-     * @notice Multiply G1 point by scalar
-     */
-    function g1Mul(uint256 x, uint256 y, uint256 scalar) 
-        internal 
-        pure 
-        returns (uint256 resultX, uint256 resultY) 
-    {
-        (resultX, resultY) = (INF_X, INF_Y);
-        uint256 baseX = x;
-        uint256 baseY = y;
-        
-        while (scalar > 0) {
-            if (scalar & 1 == 1) {
-                (resultX, resultY) = g1Add(resultX, resultY, baseX, baseY);
-            }
-            (baseX, baseY) = g1Double(baseX, baseY);
-            scalar >>= 1;
-        }
-        
-        return (resultX, resultY);
-    }
-
-    /**
-     * @notice Aggregate multiple G1 points (BLS signature aggregation)
-     */
-    function aggregateG1(bytes[] calldata points) 
-        internal 
-        pure 
-        returns (uint256 x, uint256 y) 
-    {
-        (x, y) = (INF_X, INF_Y);
-        
-        for (uint256 i = 0; i < points.length; i++) {
-            (uint256 px, uint256 py) = decodePoint(points[i]);
-            (x, y) = g1Add(x, y, px, py);
-        }
-    }
-
-    /**
-     * @notice Decode compressed BLS point from bytes
-     */
-    function decodePoint(bytes calldata point) 
-        internal 
-        pure 
-        returns (uint256 x, uint256 y) 
-    {
-        require(point.length == 48, "Invalid point length");
-        
-        uint256 header = uint256(bytes32(point)[0]);
-        require((header >> 7) == 0, "Invalid encoding");
-        
-        x = 0;
-        for (uint256 i = 1; i < 33; i++) {
-            x = (x << 8) | uint256(uint8(point[i]));
-        }
-        
-        y = 0;
-        for (uint256 i = 33; i < 65; i++) {
-            y = (y << 8) | uint256(uint8(point[i]));
-        }
-        
-        require(isOnCurve(x, y), "Point not on curve");
-    }
-
-    // Helper math functions
-    function addMod(uint256 a, uint256 b) internal pure returns (uint256) {
-        uint256 c = a + b;
-        return c >= MODULUS ? c - MODULUS : c;
-    }
-
-    function subMod(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a >= b ? a - b : MODULUS + a - b;
-    }
-
-    function mulMod(uint256 a, uint256 b) internal pure returns (uint256) {
-        return mulmod(a, b, MODULUS);
-    }
-
-    function invMod(uint256 a) internal pure returns (uint256) {
-        return powMod(a, MODULUS - 2);
-    }
-
-    function powMod(uint256 base, uint256 exp) internal pure returns (uint256) {
-        uint256 result = 1;
-        while (exp > 0) {
-            if (exp & 1 == 1) {
-                result = mulMod(result, base);
-            }
-            base = mulMod(base, base);
-            exp >>= 1;
-        }
-        return result;
-    }
-}
-```
+This approach avoids implementing elliptic curve math in Solidity, using battle-tested native code instead.
 
 ### 5.2 BLS Verifier Contract
 
 ```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
 /**
  * @title BLSVerifier
  * @notice Verifies BLS aggregated signatures for state proofs
+ * @dev Uses EIP-2537 precompiles (0x09 for aggregation, 0x0c for pairing)
  */
 contract BLSVerifier {
-    using BLS12_381G1 for uint256;
-    
-    // G2 generator point for verification
-    bytes public constant G2_GENERATOR = abi.encodePacked(
-        // G2 generator X (real and imaginary parts)
-        bytes32(0x14fca8701308a2091b6b0b87bf640f3007f9f42f01a8e38d1adfd73e0b375a4e5c5d10a40),
-        bytes32(0x05cb8437535e20ecffaef7752baddf98034139c38452458baeefab379ba13dff6ff),
-        // G2 generator Y (real and imaginary parts)
-        bytes32(0x02af5c4732c8f5f2d4d1aff4f1c5b8b4c4b8f8f8f8f8f8f8f8f8f8f8f8f8f8f),
-        bytes32(0x03d0c120a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a)
-    );
-    
-    // Domain separator for BLS signatures
-    uint256 public constant BLS_DOMAIN = 0x0100000000000000000000000000000000000000000000000000000000000000;
-    
-    mapping(bytes => bool) public verifiedSignatures;
-    mapping(bytes => uint256) public signatureExpiry;
-    
-    event SignatureVerified(bytes indexed signatureHash, uint256 timestamp);
-    event VerificationFailed(string reason);
+    bytes[] public trustedPubkeys;
+    uint64 public currentEpoch;
+    uint256 public constant SIGNATURE_EXPIRY = 1 hours;
+    mapping(bytes32 => bool) public verifiedStateRoots;
+    mapping(bytes32 => uint256) public stateRootExpiry;
 
-    /**
-     * @notice Verify an aggregated BLS signature
-     * @param pubkeys Array of validator public keys (G2 points)
-     * @param signature Aggregated signature (G1 point)
-     * @param messageHash Hash of the signed message
-     * @param validatorIndices Indices of validators who signed
-     * @return Whether the signature is valid
-     */
-    function verifyAggregatedSignature(
-        bytes[] calldata pubkeys,
-        bytes calldata signature,
-        bytes32 messageHash,
-        uint256[] calldata validatorIndices
-    ) external returns (bool) {
-        require(pubkeys.length > 0, "No public keys");
-        require(signature.length == 48, "Invalid signature length");
-        
-        // Aggregate public keys
-        (uint256 aggPkX, uint256 aggPkY) = (0, 0);
-        
-        for (uint256 i = 0; i < validatorIndices.length; i++) {
-            uint256 idx = validatorIndices[i];
-            require(idx < pubkeys.length, "Invalid validator index");
-            
-            (uint256 pkX, uint256 pkY) = BLS12_381G1.decodePoint(pubkeys[idx]);
-            
-            if (i == 0) {
-                (aggPkX, aggPkY) = (pkX, pkY);
-            } else {
-                (aggPkX, aggPkY) = BLS12_381G1.g1Add(aggPkX, aggPkY, pkX, pkY);
-            }
-        }
-        
-        // Verify signature using pairing
-        bool isValid = _verifyPairing(
-            aggPkX, aggPkY,
-            signature,
-            messageHash
-        );
-        
-        if (isValid) {
-            verifiedSignatures[signature] = true;
-            signatureExpiry[signature] = block.timestamp + 1 hours;
-            
-            emit SignatureVerified(signature, block.timestamp);
-        } else {
-            emit VerificationFailed("Pairing check failed");
-        }
-        
-        return isValid;
+    event StateRootVerified(bytes32 indexed stateRoot, uint256 timestamp);
+    event VerificationFailed(string reason);
+    event ValidatorSetUpdated(uint64 indexed epoch, uint256 validatorCount);
+
+    modifier onlyInitialized() {
+        require(trustedPubkeys.length > 0, "BLS: not initialized");
+        _;
     }
 
-    /**
-     * @notice Verify state proof with BLS signature
-     * @param stateRoot The state root being proven
-     * @param signature Aggregated BLS signature over the state root
-     * @param pubkeys Validator public keys
-     * @param validatorIndices Indices of signing validators
-     * @return Whether the proof is valid
-     */
+    function initialize(bytes[] calldata genesisPubkeys) external {
+        require(trustedPubkeys.length == 0, "BLS: already initialized");
+        require(genesisPubkeys.length > 0, "BLS: no validators");
+        trustedPubkeys = genesisPubkeys;
+        currentEpoch = 0;
+        emit ValidatorSetUpdated(0, genesisPubkeys.length);
+    }
+
     function verifyStateProof(
         bytes32 stateRoot,
         bytes calldata signature,
-        bytes[] calldata pubkeys,
         uint256[] calldata validatorIndices
-    ) external returns (bool) {
+    ) external onlyInitialized returns (bool) {
+        require(stateRoot != bytes32(0), "BLS: invalid state root");
+        require(signature.length == 48, "BLS: invalid signature length");
+        require(validatorIndices.length > 0, "BLS: no validators");
+
         bytes32 messageHash = keccak256(abi.encodePacked(
             "ATOMICA_STATE_PROOF",
             stateRoot,
             block.chainid
         ));
-        
-        return verifyAggregatedSignature(
-            pubkeys,
+
+        bool isValid = _verifyAggregatedSignature(
+            trustedPubkeys,
             signature,
             messageHash,
             validatorIndices
         );
+
+        if (isValid) {
+            verifiedStateRoots[stateRoot] = true;
+            stateRootExpiry[stateRoot] = block.timestamp + SIGNATURE_EXPIRY;
+            emit StateRootVerified(stateRoot, block.timestamp);
+        } else {
+            emit VerificationFailed("BLS: signature verification failed");
+        }
+
+        return isValid;
     }
 
-    /**
-     * @notice Batch verify multiple signatures
-     * @param signatures Array of signatures to verify
-     * @param messages Array of message hashes
-     * @param pubkeys Validator public keys for each signature
-     * @param validatorIndices Validator indices for each signature
-     * @return Whether all signatures are valid
-     */
-    function batchVerify(
-        bytes[] calldata signatures,
-        bytes32[] calldata messages,
-        bytes[] calldata pubkeys,
-        uint256[][] calldata validatorIndices
-    ) external returns (bool) {
-        require(
-            signatures.length == messages.length &&
-            signatures.length == validatorIndices.length,
-            "Array length mismatch"
+    function updateValidatorSet(
+        bytes[] calldata newPubkeys,
+        uint64 newEpoch,
+        bytes calldata signature,
+        uint256[] calldata validatorIndices
+    ) external onlyInitialized returns (bool) {
+        require(newEpoch > currentEpoch, "BLS: epoch must increase");
+        require(newPubkeys.length > 0, "BLS: must have validators");
+        require(signature.length == 48, "BLS: invalid signature length");
+
+        bytes32 messageHash = keccak256(abi.encodePacked(
+            "ATOMICA_VALIDATOR_UPDATE",
+            newEpoch,
+            keccak256(abi.encodePacked(newPubkeys)),
+            block.chainid
+        ));
+
+        bool isValid = _verifyAggregatedSignature(
+            trustedPubkeys,
+            signature,
+            messageHash,
+            validatorIndices
         );
-        
-        for (uint256 i = 0; i < signatures.length; i++) {
-            if (!verifyAggregatedSignature(
-                pubkeys,
-                signatures[i],
-                messages[i],
-                validatorIndices[i]
-            )) {
-                return false;
-            }
-        }
-        
+
+        require(isValid, "BLS: invalid validator update signature");
+
+        trustedPubkeys = newPubkeys;
+        currentEpoch = newEpoch;
+        emit ValidatorSetUpdated(newEpoch, newPubkeys.length);
+
         return true;
     }
 
-    /**
-     * @notice Perform pairing check for verification
-     */
-    function _verifyPairing(
-        uint256 pkX, uint256 pkY,
-        bytes calldata signature,
-        bytes32 messageHash
-    ) internal pure returns (bool) {
-        // Simplified pairing check
-        // In production, use precompiled contracts or optimized libraries
-        
-        (uint256 sigX, uint256 sigY) = BLS12_381G1.decodePoint(signature);
-        
-        // e(sig, G2) == e(pk, H(message))
-        // For production, implement full pairing math using EIP-2537 precompiles
-        
-        return true; // Placeholder - implement full pairing check
+    function isStateRootValid(bytes32 stateRoot) external view returns (bool) {
+        return verifiedStateRoots[stateRoot] &&
+               block.timestamp < stateRootExpiry[stateRoot];
     }
 
-    /**
-     * @notice Hash message to G1 point for BLS signing
-     */
-    function hashToG1(bytes32 message) external pure returns (bytes32) {
-        // Implement hash-to-curve following IETF draft
-        return bytes32(0); // Placeholder
+    function getValidatorCount() external view returns (uint256) {
+        return trustedPubkeys.length;
+    }
+
+    function _verifyAggregatedSignature(
+        bytes[] calldata pubkeys,
+        bytes calldata signature,
+        bytes32 messageHash,
+        uint256[] calldata validatorIndices
+    ) internal view returns (bool) {
+        require(validatorIndices.length <= pubkeys.length, "BLS: too many validators");
+
+        bytes memory aggPubkey = _aggregatePublicKeys(pubkeys, validatorIndices);
+
+        (bool success, bytes memory result) = address(0x0c).staticcall(
+            abi.encodePacked(signature, aggPubkey, messageHash)
+        );
+
+        return success && result.length == 32 && result[31] != 0;
+    }
+
+    function _aggregatePublicKeys(
+        bytes[] calldata pubkeys,
+        uint256[] calldata indices
+    ) internal pure returns (bytes memory) {
+        require(indices.length > 0, "BLS: no validators");
+        bytes memory agg = pubkeys[indices[0]];
+        
+        for (uint256 i = 1; i < indices.length; i++) {
+            require(indices[i] < pubkeys.length, "BLS: invalid validator index");
+            (bool success, bytes memory result) = address(0x09).staticcall(
+                abi.encodePacked(agg, pubkeys[indices[i]])
+            );
+            require(success, "BLS: pubkey aggregation failed");
+            agg = result;
+        }
+        
+        return agg;
     }
 }
-```
 
 ### 5.3 Validator Set Management
 
@@ -1089,104 +893,9 @@ Atomica chain validators sign epoch boundaries containing the new validator set.
 - Genesis validator set: Trusted at deployment (off-chain verification required)
 - Subsequent updates: Cryptographically verified using CURRENT trusted keys
 
-```solidity
-/**
- * @title BLSVerifier
- * @notice Verifies BLS aggregated signatures for state proofs
- * @dev Orthogonal to governance. Pure signature verification logic.
- */
-contract BLSVerifier {
-    using BLS12_381G1 for uint256;
-    
-    // Trusted validator BLS public keys (G2 points)
-    bytes[] public trustedPubkeys;
-    
-    // Epoch tracking
-    uint64 public currentEpoch;
-    
-    event ValidatorSetUpdated(uint64 indexed epoch, uint256 validatorCount);
-    
-    /**
-     * @notice Initialize with genesis validator set
-     * @param genesisPubkeys Initial trusted validator BLS public keys
-     */
-    function initialize(bytes[] calldata genesisPubkeys) external {
-        require(trustedPubkeys.length == 0, "Already initialized");
-        
-        trustedPubkeys = genesisPubkeys;
-        currentEpoch = 0;
-        
-        emit ValidatorSetUpdated(0, genesisPubkeys.length);
-    }
-    
-    /**
-     * @notice Update validator set for new epoch
-     * @dev Verifies current validators signed the new validator set
-     * @param newPubkeys New validator BLS public keys
-     * @param newEpoch The epoch these keys become active
-     * @param signature BLS signature over the new validator set
-     * @param validatorIndices Indices of validators who signed
-     */
-    function updateValidatorSet(
-        bytes[] calldata newPubkeys,
-        uint64 newEpoch,
-        bytes calldata signature,
-        uint256[] calldata validatorIndices
-    ) external {
-        require(newEpoch > currentEpoch, "Epoch must increase");
-        require(newPubkeys.length > 0, "Must have validators");
-        require(signature.length == 48, "Invalid signature length");
-        
-        // Create message: new epoch + hash of new pubkeys
-        bytes32 messageHash = keccak256(abi.encodePacked(
-            "ATOMICA_VALIDATOR_UPDATE",
-            newEpoch,
-            keccak256(abi.encodePacked(newPubkeys)),
-            block.chainid
-        ));
-        
-        // Verify signature from CURRENT trusted validators
-        bool isValid = verifyAggregatedSignature(
-            trustedPubkeys,
-            signature,
-            messageHash,
-            validatorIndices
-        );
-        
-        require(isValid, "Invalid validator update signature");
-        
-        // Update trusted keys
-        trustedPubkeys = newPubkeys;
-        currentEpoch = newEpoch;
-        
-        emit ValidatorSetUpdated(newEpoch, newPubkeys.length);
-    }
-    
-    /**
-     * @notice Get current validator count
-     */
-    function getValidatorCount() external view returns (uint256) {
-        return trustedPubkeys.length;
-    }
-}
 ```
 
-**Validator Public Key Format:**
-- BLS12-381 G2 point compressed format (48 bytes)
-- First byte: sign bit (0x80 for positive y)
-- Remaining 47 bytes: x-coordinate big-endian
-
-**Update Message Format:**
-```
-keccak256(
-    "ATOMICA_VALIDATOR_UPDATE" ||
-    newEpoch (uint64) ||
-    keccak256(newPubkeys) (bytes32) ||
-    chainId (uint256)
-)
-```
-
----
+The BLSVerifier contract is implemented at `source/evm-contracts/src/BLSVerifier.sol`.
 
 ### 5.4 Governance and Emergency Bricking
 
@@ -3935,13 +3644,12 @@ forge test
 ### Phase 2: BLS Verification (Weeks 3-4)
 
 **Goals:**
-- Implement BLS12-381 operations library
+- Integrate EIP-2537 precompiles for BLS verification
 - Deploy BLSVerifier contract
 - Integrate with Docker testnet validators
 
 **Deliverables:**
-- [ ] BLS12_381G1 library for Solidity
-- [ ] BLSVerifier contract for signature aggregation
+- [x] BLSVerifier contract using EIP-2537 (0x09, 0x0c)
 - [ ] BLS signature collection from testnet validators
 - [ ] Integration tests
 
@@ -3955,7 +3663,7 @@ const testnet = await EthereumDockerTestnet.start(4);
 ```
 
 **Key Milestones:**
-- [ ] Week 3: BLS library + basic verifier
+- [x] Week 3: BLSVerifier with EIP-2537 precompiles
 - [ ] Week 4: Validator signature integration
 
 ### Phase 3: State Proof SDK Integration (Weeks 5-6)
@@ -4326,7 +4034,7 @@ This implementation plan provides a comprehensive blueprint for building Atomica
 
 1. **DepositBox Contract** - Handles ETH/USDC deposits with commitment-based privacy and Merkle tree integration
 
-2. **BLSVerifier Contract** - Implements BLS12-381 signature aggregation and verification using Ethereum's native curve
+2. **BLSVerifier Contract** - Implements BLS12-381 signature verification using Ethereum's EIP-2537 precompiles (0x09, 0x0c)
 
 3. **Settlement Contract** - Executes atomic trades based on verified BLS proofs with allocation Merkle trees
 

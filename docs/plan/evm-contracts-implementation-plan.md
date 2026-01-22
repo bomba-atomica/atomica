@@ -3,6 +3,132 @@
 
 ---
 
+## IMPLEMENTATION STATUS UPDATE (January 2026)
+
+**IMPORTANT ARCHITECTURE CHANGE (January 2026)**:
+
+The implementation has been **SIGNIFICANTLY SIMPLIFIED** by removing the custom Merkle tree and commitment system in favor of **native Ethereum state proofs** (EIP-1186).
+
+### Why This Change?
+
+1. **Redundancy Removed**: Ethereum already has a Merkle Patricia Trie for all contract state
+2. **Native Support**: `eth_getProof` provides cryptographic proofs of any storage slot
+3. **No Custom Cryptography**: Use Ethereum's battle-tested state proof system
+4. **Simpler Trust Model**: BLS signs Ethereum block headers directly
+
+### What Changed
+
+| Component | Old (Commitment-Based) | New (Native State Proofs) |
+|-----------|------------------------|---------------------------|
+| **Deposit Storage** | Commitments in custom Merkle tree | Direct storage + eth_getProof |
+| **Deposit Structure** | `commitment` field + `commitmentUsed` | Removed - simpler Deposit struct |
+| **State Verification** | Custom IncrementalMerkleTree | Ethereum's MPT via eth_getProof |
+| **BLS Verification** | Signs state root | Signs Ethereum block hash |
+| **Merkle Tree** | IncrementalMerkleTree.sol | REMOVED - not needed |
+
+### New Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    ATOMICA SIMPLIFIED ARCHITECTURE                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────┐  │
+│  │   ETH Depositors│    │  USDC Depositors│    │   Off-Chain Auction     │  │
+│  │   (Sellers)     │    │   (Buyers)      │    │   Coordinator           │  │
+│  └────────┬────────┘    └────────┬────────┘    └────────────┬────────────┘  │
+│           │                      │                           │                │
+│           └──────────────────────┼───────────────────────────┘                │
+│                                  │                                          │
+│                                  ▼                                          │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                    EVM SMART CONTRACTS                               │   │
+│  │                                                                      │   │
+│  │  ┌───────────────────────────────────────────────────────────────┐  │   │
+│  │  │  DepositBox           BLSVerifier          Settlement          │  │   │
+│  │  │  (ETH/USDC)          (BLS Sig)            (Trades)            │  │   │
+│  │  │   - Deposits          - Block hash         - Execute           │  │   │
+│  │  │   - Storage           - verification       - Transfers         │  │   │
+│  │  └───────────────────────────────────────────────────────────────┘  │   │
+│  │                                                                      │   │
+│  └──────────────────────────────────┬───────────────────────────────────┘   │
+│                                     │                                        │
+│  ┌──────────────────────────────────┼───────────────────────────────────┐   │
+│  │                                  ▼                                     │   │
+│  │  ┌────────────────────────────────────────────────────────────────┐  │   │
+│  │  │              OFF-CHAIN VERIFICATION FLOW                       │  │   │
+│  │  │                                                             │  │   │
+│  │  │   1. Fetch eth_getProof(depositBox, storageKey)             │  │   │
+│  │  │      └─ Returns: accountProof, storageProof, stateRoot      │  │   │
+│  │  │                                                             │  │   │
+│  │  │   2. Verify MPT proof against stateRoot                     │  │   │
+│  │  │      └─ Cryptographic guarantee deposit exists              │  │   │
+│  │  │                                                             │  │   │
+│  │  │   3. BLS validators sign Ethereum block hash                │  │   │
+│  │  │      └─ Block hash → stateRoot (implicitly)                 │  │   │
+│  │  │                                                             │  │   │
+│  │  │   4. Settlement verifies:                                   │  │   │
+│  │  │      - BLS signature on block hash ✓                        │  │   │
+│  │  │      - StateRoot from block header ✓                        │  │   │
+│  │  │      - Off-chain MPT proof (trusted)                        │  │   │
+│  │  │                                                             │  │   │
+│  │  └────────────────────────────────────────────────────────────────┘  │   │
+│  │                                                                     │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  Key Benefits:                                                              │
+│  - No custom Merkle tree needed                                             │
+│  - eth_getProof provides cryptographic proofs                               │
+│  - BLS only needs to sign block headers                                     │
+│  - Simpler contracts, fewer attack surfaces                                 │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### What Was Removed
+
+1. ~~`IncrementalMerkleTree.sol`~~ - Deleted (uses Ethereum's MPT)
+2. ~~`commitment` field from Deposit~~ - Removed
+3. ~~`commitmentUsed` mapping~~ - Removed
+4. ~~`latestStateRoot` tracking in DepositBox~~ - Uses Ethereum's native stateRoot
+5. ~~Commitment-related functions~~ - Removed
+
+### Implementation Files (Current)
+
+```
+source/evm-contracts/src/
+├── DepositBox.sol              # ETH/USDC deposits (simplified)
+├── Settlement.sol              # Trade execution (uses block hash)
+├── Governance.sol              # Emergency shutdown + initialization
+├── BLSVerifier.sol             # BLS block hash verification (EIP-2537)
+└── libraries/
+    └── DepositTypes.sol        # Shared data structures (simplified)
+
+source/atomica-zkp/solidity/src/
+└── Verifier.sol                # Halo2 ZK proof verifier (assembly)
+
+source/evm-contracts/test/
+├── DepositBox.t.sol            # Updated tests
+└── Verifier.t.sol              # Verifier tests
+
+source/state-proofs/typescript/  # EIP-1186 proof verification
+└── README.md                   # Native state proof library
+```
+
+### Trust Model (Updated)
+
+1. **Ethereum Consensus**: StateRoot is authenticated via PoS consensus
+2. **BLS Signatures**: Validators sign block hashes for cross-chain use
+3. **MPT Proofs**: eth_getProof provides storage proofs (verified off-chain)
+4. **Settlement**: Trusts BLS-verified block hash → stateRoot
+
+This is simpler because:
+- No custom cryptographic primitives needed
+- Uses battle-tested Ethereum infrastructure
+- Fewer contracts = fewer security risks
+
+---
+
 ## 1. Executive Summary
 
 This document outlines a comprehensive implementation plan for EVM smart contracts that will power Atomica's cross-chain deposit system. The system enables users to deposit ETH and USDC, participate in an offline auction mechanism, and execute atomic trades based on BLS-aggregated state proofs verified on Ethereum.
