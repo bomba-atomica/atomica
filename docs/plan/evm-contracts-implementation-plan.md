@@ -79,7 +79,7 @@ AtomicaController (Facade)
 │   └── USDCVault
 ├── StateCommitment (Merkle tree management)
 │   └── IncrementalMerkleTree
-├── BLSVerifierWithGovernance (BLS verification + validator set management)
+├── BLSVerifierWithBricking (BLS verification + validator set management)
 │   ├── BLS12_381G1 (math library)
 │   └── Validator set governance (epoch tracking, key updates)
 └── Settlement (Proof verification + transfers)
@@ -1008,6 +1008,11 @@ contract BLSVerifier {
 
 Atomica chain validators sign epoch boundaries containing the new validator set. This allows the EVM contract to trustlessly update its trusted validator keys.
 
+**IMPORTANT: No Governance or Upgradability**
+- The contracts are NOT upgradeable
+- There is NO governance that can modify contract behavior
+- The ONLY exception is "bricking" (emergency shutdown)
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                    VALIDATOR SET UPDATE FLOW                                 │
@@ -1033,7 +1038,6 @@ Atomica chain validators sign epoch boundaries containing the new validator set.
 │  3. PROOF SUBMISSION                                                         │
 │     ┌─────────────────────────────────────────────────────────────────┐     │
 │     │  submitValidatorUpdate(                                         │     │
-│     │      epochProof,        // Signed epoch boundary                 │     │
 │     │      newPubkeys,        // Incoming validator BLS keys           │     │
 │     │      signature,         // BLS signature from current validators │     │
 │     │      validatorIndices   // Which validators signed               │     │
@@ -1059,45 +1063,55 @@ Atomica chain validators sign epoch boundaries containing the new validator set.
 **Trust Model:**
 - Genesis validator set: Trusted at deployment (off-chain verification required)
 - Subsequent updates: Cryptographically verified using CURRENT trusted keys
-- No single point of trust after initial deployment
+- No governance or admin can modify contract logic
+- NO upgradability - code is immutable after deployment
+
+**Bricking (Emergency Fail-Safe):**
+- Only mechanism to "change" contract behavior
+- One-way operation that BREAKS the contract
+- Returns all locked assets to depositors
+- Used when a critical issue requires contract migration to new address
+- No shared code paths with normal operation
+- After bricking, all deposits are refunded and contract is disabled
 
 ```solidity
 /**
- * @title BLSVerifierWithGovernance
- * @notice BLS Verifier with validator set governance
+ * @title BLSVerifierWithBricking
+ * @notice BLS Verifier with emergency brick capability
+ * @dev NO governance or upgradability. Only bricking for fund recovery.
  */
-contract BLSVerifierWithGovernance is BLSVerifier {
+contract BLSVerifierWithBricking is BLSVerifier {
     // Trusted validator BLS public keys (G2 points)
     bytes[] public trustedPubkeys;
     
     // Epoch tracking
     uint64 public currentEpoch;
     
-    // Governance
-    address public governance;
+    // Brick state
+    bool public isBricked;
+    
+    // Bricking admin (single address, no multisig for simplicity)
+    address public brickAdmin;
     
     event ValidatorSetUpdated(uint64 indexed epoch, uint256 validatorCount);
-    event GovernanceTransferred(address indexed newGovernance);
-    
-    modifier onlyGovernance() {
-        require(msg.sender == governance, "Not governance");
-        _;
-    }
+    event ContractBricked(uint256 timestamp, uint256 ethBalance, uint256 usdcBalance);
     
     /**
      * @notice Initialize with genesis validator set
      * @param genesisPubkeys Initial trusted validator BLS public keys
-     * @param _governance Governance address for future updates
+     * @param _brickAdmin Admin who can brick the contract
      */
     function initialize(
         bytes[] calldata genesisPubkeys,
-        address _governance
+        address _brickAdmin
     ) external {
         require(trustedPubkeys.length == 0, "Already initialized");
+        require(_brickAdmin != address(0), "Invalid admin");
         
         trustedPubkeys = genesisPubkeys;
-        governance = _governance;
+        brickAdmin = _brickAdmin;
         currentEpoch = 0;
+        isBricked = false;
         
         emit ValidatorSetUpdated(0, genesisPubkeys.length);
     }
@@ -1115,7 +1129,8 @@ contract BLSVerifierWithGovernance is BLSVerifier {
         uint64 newEpoch,
         bytes calldata signature,
         uint256[] calldata validatorIndices
-    ) external onlyGovernance {
+    ) external {
+        require(!isBricked, "Contract is bricked");
         require(newEpoch > currentEpoch, "Epoch must increase");
         require(newPubkeys.length > 0, "Must have validators");
         require(signature.length == 48, "Invalid signature length");
@@ -1146,6 +1161,36 @@ contract BLSVerifierWithGovernance is BLSVerifier {
     }
     
     /**
+     * @notice BRICK the contract - emergency shutdown only
+     * @dev Returns all funds to depositors and disables contract
+     *      This is a ONE-WAY operation that cannot be undone
+     *      Only used when migrating to a new contract address
+     * @param depositBox Address of deposit box to refund
+     * @param usdcToken Address of USDC token
+     */
+    function brick(
+        address depositBox,
+        address usdcToken
+    ) external {
+        require(msg.sender == brickAdmin, "Not brick admin");
+        require(!isBricked, "Already bricked");
+        
+        isBricked = true;
+        
+        // Get all deposited ETH and return to depositors via DepositBox
+        // Implementation: call DepositBox.brick() which refunds all deposits
+        
+        // Get USDC balance and approve for refund
+        // Implementation: transfer USDC toDepositBox for refund distribution
+        
+        emit ContractBricked(
+            block.timestamp,
+            address(this).balance,
+            IERC20(usdcToken).balanceOf(address(this))
+        );
+    }
+    
+    /**
      * @notice Get current validator count
      */
     function getValidatorCount() external view returns (uint256) {
@@ -1153,15 +1198,21 @@ contract BLSVerifierWithGovernance is BLSVerifier {
     }
     
     /**
-     * @notice Transfer governance
+     * @notice Check if contract is operational
      */
-    function transferGovernance(address newGovernance) external onlyGovernance {
-        require(newGovernance != address(0), "Invalid address");
-        governance = newGovernance;
-        emit GovernanceTransferred(newGovernance);
+    function isOperational() external view returns (bool) {
+        return !isBricked;
     }
 }
 ```
+
+**Key Points:**
+1. **NO upgradability** - Contract code is immutable after deployment
+2. **NO governance** - Authors cannot change contract behavior
+3. **Bricking is one-way** - Once bricked, cannot be un-bricked
+4. **Bricking is a fail-safe** - Used to recover funds when critical issues arise
+5. **New contract on new address** - Bricking indicates migration to new deployment
+6. **No shared code paths** - Bricking uses separate code paths from normal operation
 
 **Validator Public Key Format:**
 - BLS12-381 G2 point compressed format (48 bytes)
@@ -1194,7 +1245,7 @@ contract Settlement is Ownable, ReentrancyGuard {
     using DepositTypes for DepositTypes.AssetType;
     using DepositTypes for DepositTypes.TradeResult;
     
-    BLSVerifierWithGovernance public blsVerifier;
+    BLSVerifierWithBricking public blsVerifier;
     address public depositBoxAddress;
     
     // Settlement data
@@ -1232,7 +1283,7 @@ contract Settlement is Ownable, ReentrancyGuard {
      * @param depositBoxAddress Deposit box contract address
      */
     constructor(address blsVerifierAddress, address depositBoxAddress) {
-        blsVerifier = BLSVerifierWithGovernance(blsVerifierAddress);
+        blsVerifier = BLSVerifierWithBricking(blsVerifierAddress);
         depositBoxAddress = depositBoxAddress;
     }
 
@@ -1599,7 +1650,7 @@ contract TransferManager {
 contract AtomicaController is Ownable {
     DepositBox public depositBox;
     StateRoot public stateRoot;
-    BLSVerifierWithGovernance public blsVerifier;
+    BLSVerifierWithBricking public blsVerifier;
     Settlement public settlement;
     TransferManager public transferManager;
 
@@ -1624,7 +1675,7 @@ contract AtomicaController is Ownable {
     ) {
         depositBox = DepositBox(depositBoxAddress);
         stateRoot = StateRoot(stateRootAddress);
-        blsVerifier = BLSVerifierWithGovernance(blsVerifierAddress);
+        blsVerifier = BLSVerifierWithBricking(blsVerifierAddress);
         settlement = Settlement(settlementAddress);
         transferManager = TransferManager(transferManagerAddress);
     }
