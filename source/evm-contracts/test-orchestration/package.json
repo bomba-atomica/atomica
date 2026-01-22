@@ -1,7 +1,7 @@
 {
   "name": "@atomica/evm-contracts-test-orchestrator",
   "version": "1.0.0",
-  "description: "Test orchestration for Atomica EVM contracts using Docker testnet",
+  "description": "Test orchestration for Atomica EVM contracts using Docker testnet",
   "type": "module",
   "scripts": {
     "start": "bun run src/index.ts",
@@ -11,13 +11,24 @@
     "test:e2e": "bun run src/index.ts --test e2e",
     "test:smoke": "bun run src/index.ts --test smoke",
     "deploy": "bun run src/deploy.ts",
-    "clean": "bun run src/clean.ts"
+    "clean": "bun run src/clean.ts",
+    "lint": "eslint 'src/**/*.ts'",
+    "lint:fix": "eslint 'src/**/*.ts' --fix",
+    "format": "prettier 'src/**/*.ts' --write",
+    "format:check": "prettier 'src/**/*.ts' --check"
   },
   "dependencies": {
     "@atomica/ethereum-docker-testnet": "workspace:*",
     "viem": "^2.21.0"
   },
   "devDependencies": {
-    "bun-types": "^1.1.0"
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^20.8.2",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "bun-types": "^1.1.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.2.2"
   }
 }
