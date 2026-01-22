@@ -24,7 +24,7 @@ import type {
  * Beacon chain configuration
  */
 export interface BeaconConfig {
-    name: "mainnet" | "sepolia" | "holesky";
+    name: "mainnet" | "sepolia" | "holesky" | "local";
     genesisTime: number;
     secondsPerSlot: number;
     slotsPerEpoch: number;
@@ -49,6 +49,13 @@ export const BEACON_CONFIGS: Record<string, BeaconConfig> = {
     holesky: {
         name: "holesky",
         genesisTime: 1695907200,
+        secondsPerSlot: 12,
+        slotsPerEpoch: 32,
+        epochsPerSyncCommitteePeriod: 256,
+    },
+    local: {
+        name: "local",
+        genesisTime: 0, // Should be set dynamically for local testnet
         secondsPerSlot: 12,
         slotsPerEpoch: 32,
         epochsPerSyncCommitteePeriod: 256,
@@ -151,7 +158,8 @@ export async function fetchLightClientBootstrap(
                     state_root: string;
                     body_root: string;
                 };
-                signature: string;
+                execution: any;
+                execution_branch?: string[];
             };
             current_sync_committee: {
                 pubkeys: string[];
@@ -172,7 +180,7 @@ export async function fetchLightClientBootstrap(
             bodyRoot: data.header.beacon.body_root,
         },
         execution: parseExecutionPayload(data.header.execution),
-        executionBranch: data.header_branch || [],
+        executionBranch: (data as any).header_branch || data.header.execution_branch || [],
     };
 
     const syncCommittee: SyncCommittee = {
@@ -237,14 +245,15 @@ async function fetchLightClientUpdateByPeriod(
                 state_root: string;
                 body_root: string;
             };
-            signature: string;
+            execution: any;
+            execution_branch?: string[];
         };
-        next_sync_committee: {
+        next_sync_committee?: {
             pubkeys: string[];
             aggregate_pubkey: string;
         };
-        next_sync_committee_branch: string[];
-        finalized_header: {
+        next_sync_committee_branch?: string[];
+        finalized_header?: {
             beacon: {
                 slot: string;
                 proposer_index: string;
@@ -252,9 +261,10 @@ async function fetchLightClientUpdateByPeriod(
                 state_root: string;
                 body_root: string;
             };
-            signature: string;
-        } | null;
-        finality_branch: string[];
+            execution: any;
+            execution_branch?: string[];
+        };
+        finality_branch?: string[];
         sync_aggregate: {
             sync_committee_bits: string;
             sync_committee_signature: string;
@@ -285,13 +295,13 @@ async function fetchLightClientUpdateByPeriod(
     const attestedHeader: LightClientHeader = {
         beacon: parseHeader(data.attested_header.beacon),
         execution: parseExecutionPayload(data.attested_header.execution),
-        executionBranch: data.attested_header_branch || [],
+        executionBranch: data.attested_header_branch || (data.attested_header as any).execution_branch || [],
     };
 
-    const nextSyncCommittee: SyncCommittee = {
+    const nextSyncCommittee: SyncCommittee | null = data.next_sync_committee ? {
         pubkeys: data.next_sync_committee.pubkeys,
         aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
-    };
+    } : null;
 
     const syncAggregate: SyncAggregate = {
         syncCommitteeBits: hexToUint8Array(data.sync_aggregate.sync_committee_bits),
@@ -301,15 +311,15 @@ async function fetchLightClientUpdateByPeriod(
     return {
         attestedHeader,
         nextSyncCommittee,
-        nextSyncCommitteeBranch: data.next_sync_committee_branch,
+        nextSyncCommitteeBranch: data.next_sync_committee_branch || [],
         finalizedHeader: data.finalized_header
             ? {
                   beacon: parseHeader(data.finalized_header.beacon),
                   execution: parseExecutionPayload(data.finalized_header.execution),
-                  executionBranch: data.finalized_header_branch || [],
+                  executionBranch: (data as any).finalized_header_branch || (data.finalized_header as any).execution_branch || [],
               }
             : null,
-        finalityBranch: data.finality_branch,
+        finalityBranch: data.finality_branch || [],
         syncAggregate,
         signatureSlot: parseInt(data.signature_slot, 10),
     };
@@ -332,13 +342,13 @@ export async function fetchLightClientFinalityUpdate(apiUrl: string): Promise<Li
                     state_root: string;
                     body_root: string;
                 };
-                signature: string;
+                execution: any;
             };
-            next_sync_committee: {
+            next_sync_committee?: {
                 pubkeys: string[];
                 aggregate_pubkey: string;
             };
-            next_sync_committee_branch: string[];
+            next_sync_committee_branch?: string[];
             finalized_header: {
                 beacon: {
                     slot: string;
@@ -347,7 +357,7 @@ export async function fetchLightClientFinalityUpdate(apiUrl: string): Promise<Li
                     state_root: string;
                     body_root: string;
                 };
-                signature: string;
+                execution: any;
             };
             finality_branch: string[];
             sync_aggregate: {
@@ -377,13 +387,13 @@ export async function fetchLightClientFinalityUpdate(apiUrl: string): Promise<Li
     const attestedHeader: LightClientHeader = {
         beacon: parseHeader(data.attested_header.beacon),
         execution: parseExecutionPayload(data.attested_header.execution),
-        executionBranch: data.attested_header_branch || [],
+        executionBranch: (data.attested_header as any).execution_branch || [],
     };
 
-    const nextSyncCommittee: SyncCommittee = {
+    const nextSyncCommittee: SyncCommittee | null = data.next_sync_committee ? {
         pubkeys: data.next_sync_committee.pubkeys,
         aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
-    };
+    } : null;
 
     const syncAggregate: SyncAggregate = {
         syncCommitteeBits: hexToUint8Array(data.sync_aggregate.sync_committee_bits),
@@ -393,11 +403,11 @@ export async function fetchLightClientFinalityUpdate(apiUrl: string): Promise<Li
     return {
         attestedHeader,
         nextSyncCommittee,
-        nextSyncCommitteeBranch: data.next_sync_committee_branch,
+        nextSyncCommitteeBranch: data.next_sync_committee_branch || [],
         finalizedHeader: {
             beacon: parseHeader(data.finalized_header.beacon),
             execution: parseExecutionPayload(data.finalized_header.execution),
-            executionBranch: data.finalized_header_branch || [],
+            executionBranch: (data.finalized_header as any).execution_branch || [],
         },
         finalityBranch: data.finality_branch,
         syncAggregate,
@@ -422,13 +432,13 @@ export async function fetchLightClientOptimisticUpdate(apiUrl: string): Promise<
                     state_root: string;
                     body_root: string;
                 };
-                signature: string;
+                execution: any;
             };
-            next_sync_committee: {
+            next_sync_committee?: {
                 pubkeys: string[];
                 aggregate_pubkey: string;
             };
-            next_sync_committee_branch: string[];
+            next_sync_committee_branch?: string[];
             sync_aggregate: {
                 sync_committee_bits: string;
                 sync_committee_signature: string;
@@ -456,13 +466,13 @@ export async function fetchLightClientOptimisticUpdate(apiUrl: string): Promise<
     const attestedHeader: LightClientHeader = {
         beacon: parseHeader(data.attested_header.beacon),
         execution: parseExecutionPayload(data.attested_header.execution),
-        executionBranch: data.attested_header_branch || [],
+        executionBranch: (data.attested_header as any).execution_branch || [],
     };
 
-    const nextSyncCommittee: SyncCommittee = {
+    const nextSyncCommittee: SyncCommittee | null = data.next_sync_committee ? {
         pubkeys: data.next_sync_committee.pubkeys,
         aggregatePubkey: data.next_sync_committee.aggregate_pubkey,
-    };
+    } : null;
 
     const syncAggregate: SyncAggregate = {
         syncCommitteeBits: hexToUint8Array(data.sync_aggregate.sync_committee_bits),
@@ -472,7 +482,7 @@ export async function fetchLightClientOptimisticUpdate(apiUrl: string): Promise<
     return {
         attestedHeader,
         nextSyncCommittee,
-        nextSyncCommitteeBranch: data.next_sync_committee_branch,
+        nextSyncCommitteeBranch: data.next_sync_committee_branch || [],
         finalizedHeader: null,
         finalityBranch: [],
         syncAggregate,

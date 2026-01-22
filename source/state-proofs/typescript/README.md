@@ -16,6 +16,16 @@ bun run demo
 
 This demo initializes a trustless light client, syncs to the head of Sepolia, and cryptographically verifies an account state.
 
+### 🐳 Local Docker Demo
+
+You can also run the demo using a local Docker-based Ethereum cluster:
+
+```bash
+bun run demo:docker
+```
+
+This will automatically start a local 4-validator Ethereum testnet, initialize a light client, perform a transaction, and verify the resulting state. (Requires Docker)
+
 ### Overriding Defaults
 
 You can override the default RPC and Beacon endpoints using environment variables:

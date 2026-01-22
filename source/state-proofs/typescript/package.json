@@ -15,6 +15,7 @@
     "benchmark": "bun test test/benchmark.test.ts",
     "demo": "bun run scripts/sepolia-demo.ts",
     "demo:sepolia": "bun run scripts/sepolia-demo.ts",
+    "demo:docker": "bun run scripts/docker-demo.ts",
     "clean": "rm -rf dist",
     "lint": "eslint 'src/**/*.ts' 'test/**/*.ts'",
     "lint:fix": "eslint 'src/**/*.ts' 'test/**/*.ts' --fix",

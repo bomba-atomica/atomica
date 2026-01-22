@@ -87,7 +87,7 @@ export interface SyncCommittee {
  */
 export interface LightClientUpdate {
     attestedHeader: LightClientHeader;
-    nextSyncCommittee: SyncCommittee;
+    nextSyncCommittee: SyncCommittee | null;
     nextSyncCommitteeBranch: string[];
     finalizedHeader: LightClientHeader | null;
     finalityBranch: string[];
@@ -121,13 +121,17 @@ export interface LightClientState {
     /** Current sync committee */
     currentSyncCommittee: SyncCommittee;
     /** Next sync committee */
-    nextSyncCommittee: SyncCommittee;
+    nextSyncCommittee: SyncCommittee | null;
     /** Finalized header */
     finalizedHeader: LightClientHeader | null;
     /** Current period */
     period: number;
     /** Previous period update timestamp */
     previousSlot: number;
+    /** Genesis validators root */
+    genesisValidatorsRoot?: string;
+    /** Genesis fork version */
+    genesisForkVersion?: string;
 }
 
 /**

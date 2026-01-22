@@ -89,10 +89,10 @@ COMMANDS:
   verify-transfer <txHash>
       Verify a transfer transaction affected account states
 
-  light-client-init [--beacon-rpc <url>] [--chain <mainnet|sepolia|holesky>]
+  light-client-init [--beacon-rpc <url>] [--chain <mainnet|sepolia|holesky|local>]
       Initialize light client from beacon checkpoint
 
-  light-client-sync [--beacon-rpc <url>] [--chain <mainnet|sepolia|holesky>]
+  light-client-sync [--beacon-rpc <url>] [--chain <mainnet|sepolia|holesky|local>]
       Sync light client to latest beacon state
 
   light-client-status
@@ -101,7 +101,7 @@ COMMANDS:
 OPTIONS:
   --rpc <url>           Ethereum RPC endpoint (required for verify commands)
   --beacon-rpc <url>    Beacon API endpoint (required for light client commands)
-  --chain <name>        Beacon chain: mainnet, sepolia, holesky (default: mainnet)
+  --chain <name>        Beacon chain: mainnet, sepolia, holesky, local (default: mainnet)
   --state-path <path>   Path to persist light client state
   --checkpoint <root>   Checkpoint block root for bootstrap
   --light-client        Use light client verified headers instead of RPC
