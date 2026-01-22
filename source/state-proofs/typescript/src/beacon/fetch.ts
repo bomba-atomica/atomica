@@ -14,6 +14,7 @@ import type {
     LightClientBootstrap,
     LightClientUpdate,
     BeaconBlockHeader,
+    ExecutionPayloadHeader,
     LightClientHeader,
     SyncCommittee,
     SyncAggregate,
@@ -91,6 +92,29 @@ async function fetchBeaconApi<T>(apiUrl: string, endpoint: string): Promise<T> {
 }
 
 /**
+ * Parse execution payload header from beacon API
+ */
+function parseExecutionPayload(exec: any): ExecutionPayloadHeader {
+    return {
+        parentHash: exec.parent_hash,
+        feeRecipient: exec.fee_recipient,
+        stateRoot: exec.state_root,
+        receiptsRoot: exec.receipts_root,
+        logsBloom: exec.logs_bloom,
+        prevRandao: exec.prev_randao,
+        blockNumber: parseInt(exec.block_number, 10),
+        gasLimit: parseInt(exec.gas_limit, 10),
+        gasUsed: parseInt(exec.gas_used, 10),
+        timestamp: parseInt(exec.timestamp, 10),
+        extraData: exec.extra_data,
+        baseFeePerGas: BigInt(exec.base_fee_per_gas || 0),
+        blockHash: exec.block_hash,
+        transactionsRoot: exec.transactions_root,
+        withdrawalsRoot: exec.withdrawals_root,
+    };
+}
+
+/**
  * Fetch light client bootstrap for initial sync
  *
  * @param apiUrl - Beacon API URL
@@ -104,7 +128,7 @@ export async function fetchLightClientBootstrap(
     const response = await fetchBeaconApi<
         BeaconAPIResponse<{
             header: {
-                message: {
+                beacon: {
                     slot: string;
                     proposer_index: string;
                     parent_root: string;
@@ -125,30 +149,14 @@ export async function fetchLightClientBootstrap(
 
     const header: LightClientHeader = {
         beacon: {
-            slot: parseInt(data.header.message.slot, 10),
-            proposerIndex: parseInt(data.header.message.proposer_index, 10),
-            parentRoot: data.header.message.parent_root,
-            stateRoot: data.header.message.state_root,
-            bodyRoot: data.header.message.body_root,
+            slot: parseInt(data.header.beacon.slot, 10),
+            proposerIndex: parseInt(data.header.beacon.proposer_index, 10),
+            parentRoot: data.header.beacon.parent_root,
+            stateRoot: data.header.beacon.state_root,
+            bodyRoot: data.header.beacon.body_root,
         },
-        execution: {
-            parentHash: "0x" + "00".repeat(32),
-            feeRecipient: "0x" + "00".repeat(20),
-            stateRoot: "0x" + "00".repeat(32),
-            receiptsRoot: "0x" + "00".repeat(32),
-            logsBloom: "0x" + "00".repeat(256),
-            prevRandao: "0x" + "00".repeat(32),
-            blockNumber: 0,
-            gasLimit: 0,
-            gasUsed: 0,
-            timestamp: 0,
-            extraData: "0x",
-            baseFeePerGas: 0n,
-            blockHash: "0x" + "00".repeat(32),
-            transactionsRoot: "0x" + "00".repeat(32),
-            withdrawalsRoot: "0x" + "00".repeat(32),
-        },
-        executionBranch: [],
+        execution: parseExecutionPayload(data.header.execution),
+        executionBranch: data.header_branch || [],
     };
 
     const syncCommittee: SyncCommittee = {
@@ -206,7 +214,7 @@ async function fetchLightClientUpdateByPeriod(
     const response = await fetchBeaconApi<BeaconAPIResponse<{
         version: string;
         attested_header: {
-            message: {
+            beacon: {
                 slot: string;
                 proposer_index: string;
                 parent_root: string;
@@ -221,7 +229,7 @@ async function fetchLightClientUpdateByPeriod(
         };
         next_sync_committee_branch: string[];
         finalized_header: {
-            message: {
+            beacon: {
                 slot: string;
                 proposer_index: string;
                 parent_root: string;
@@ -259,25 +267,9 @@ async function fetchLightClientUpdateByPeriod(
     });
 
     const attestedHeader: LightClientHeader = {
-        beacon: parseHeader(data.attested_header.message),
-        execution: {
-            parentHash: "0x" + "00".repeat(32),
-            feeRecipient: "0x" + "00".repeat(20),
-            stateRoot: "0x" + "00".repeat(32),
-            receiptsRoot: "0x" + "00".repeat(32),
-            logsBloom: "0x" + "00".repeat(256),
-            prevRandao: "0x" + "00".repeat(32),
-            blockNumber: 0,
-            gasLimit: 0,
-            gasUsed: 0,
-            timestamp: 0,
-            extraData: "0x",
-            baseFeePerGas: 0n,
-            blockHash: "0x" + "00".repeat(32),
-            transactionsRoot: "0x" + "00".repeat(32),
-            withdrawalsRoot: "0x" + "00".repeat(32),
-        },
-        executionBranch: [],
+        beacon: parseHeader(data.attested_header.beacon),
+        execution: parseExecutionPayload(data.attested_header.execution),
+        executionBranch: data.attested_header_branch || [],
     };
 
     const nextSyncCommittee: SyncCommittee = {
@@ -296,9 +288,9 @@ async function fetchLightClientUpdateByPeriod(
         nextSyncCommitteeBranch: data.next_sync_committee_branch,
         finalizedHeader: data.finalized_header
             ? {
-                  beacon: parseHeader(data.finalized_header.message),
-                  execution: attestedHeader.execution,
-                  executionBranch: [],
+                  beacon: parseHeader(data.finalized_header.beacon),
+                  execution: parseExecutionPayload(data.finalized_header.execution),
+                  executionBranch: data.finalized_header_branch || [],
               }
             : null,
         finalityBranch: data.finality_branch,
@@ -317,7 +309,7 @@ export async function fetchLightClientFinalityUpdate(apiUrl: string): Promise<Li
     const response = await fetchBeaconApi<
         BeaconAPIResponse<{
             attested_header: {
-                message: {
+                beacon: {
                     slot: string;
                     proposer_index: string;
                     parent_root: string;
@@ -332,7 +324,7 @@ export async function fetchLightClientFinalityUpdate(apiUrl: string): Promise<Li
             };
             next_sync_committee_branch: string[];
             finalized_header: {
-                message: {
+                beacon: {
                     slot: string;
                     proposer_index: string;
                     parent_root: string;
@@ -367,25 +359,9 @@ export async function fetchLightClientFinalityUpdate(apiUrl: string): Promise<Li
     });
 
     const attestedHeader: LightClientHeader = {
-        beacon: parseHeader(data.attested_header.message),
-        execution: {
-            parentHash: "0x" + "00".repeat(32),
-            feeRecipient: "0x" + "00".repeat(20),
-            stateRoot: "0x" + "00".repeat(32),
-            receiptsRoot: "0x" + "00".repeat(32),
-            logsBloom: "0x" + "00".repeat(256),
-            prevRandao: "0x" + "00".repeat(32),
-            blockNumber: 0,
-            gasLimit: 0,
-            gasUsed: 0,
-            timestamp: 0,
-            extraData: "0x",
-            baseFeePerGas: 0n,
-            blockHash: "0x" + "00".repeat(32),
-            transactionsRoot: "0x" + "00".repeat(32),
-            withdrawalsRoot: "0x" + "00".repeat(32),
-        },
-        executionBranch: [],
+        beacon: parseHeader(data.attested_header.beacon),
+        execution: parseExecutionPayload(data.attested_header.execution),
+        executionBranch: data.attested_header_branch || [],
     };
 
     const nextSyncCommittee: SyncCommittee = {
@@ -403,9 +379,9 @@ export async function fetchLightClientFinalityUpdate(apiUrl: string): Promise<Li
         nextSyncCommittee,
         nextSyncCommitteeBranch: data.next_sync_committee_branch,
         finalizedHeader: {
-            beacon: parseHeader(data.finalized_header.message),
-            execution: attestedHeader.execution,
-            executionBranch: [],
+            beacon: parseHeader(data.finalized_header.beacon),
+            execution: parseExecutionPayload(data.finalized_header.execution),
+            executionBranch: data.finalized_header_branch || [],
         },
         finalityBranch: data.finality_branch,
         syncAggregate,
@@ -423,7 +399,7 @@ export async function fetchLightClientOptimisticUpdate(apiUrl: string): Promise<
     const response = await fetchBeaconApi<
         BeaconAPIResponse<{
             attested_header: {
-                message: {
+                beacon: {
                     slot: string;
                     proposer_index: string;
                     parent_root: string;
@@ -462,25 +438,9 @@ export async function fetchLightClientOptimisticUpdate(apiUrl: string): Promise<
     });
 
     const attestedHeader: LightClientHeader = {
-        beacon: parseHeader(data.attested_header.message),
-        execution: {
-            parentHash: "0x" + "00".repeat(32),
-            feeRecipient: "0x" + "00".repeat(20),
-            stateRoot: "0x" + "00".repeat(32),
-            receiptsRoot: "0x" + "00".repeat(32),
-            logsBloom: "0x" + "00".repeat(256),
-            prevRandao: "0x" + "00".repeat(32),
-            blockNumber: 0,
-            gasLimit: 0,
-            gasUsed: 0,
-            timestamp: 0,
-            extraData: "0x",
-            baseFeePerGas: 0n,
-            blockHash: "0x" + "00".repeat(32),
-            transactionsRoot: "0x" + "00".repeat(32),
-            withdrawalsRoot: "0x" + "00".repeat(32),
-        },
-        executionBranch: [],
+        beacon: parseHeader(data.attested_header.beacon),
+        execution: parseExecutionPayload(data.attested_header.execution),
+        executionBranch: data.attested_header_branch || [],
     };
 
     const nextSyncCommittee: SyncCommittee = {
@@ -517,7 +477,7 @@ export async function fetchBeaconBlockHeader(
 ): Promise<BeaconBlockHeader> {
     const response = await fetchBeaconApi<
         BeaconAPIResponse<{
-            message: {
+            beacon: {
                 slot: string;
                 proposer_index: string;
                 parent_root: string;
@@ -531,11 +491,11 @@ export async function fetchBeaconBlockHeader(
     const data = response.data;
 
     return {
-        slot: parseInt(data.message.slot, 10),
-        proposerIndex: parseInt(data.message.proposer_index, 10),
-        parentRoot: data.message.parent_root,
-        stateRoot: data.message.state_root,
-        bodyRoot: data.message.body_root,
+        slot: parseInt(data.beacon.slot, 10),
+        proposerIndex: parseInt(data.beacon.proposer_index, 10),
+        parentRoot: data.beacon.parent_root,
+        stateRoot: data.beacon.state_root,
+        bodyRoot: data.beacon.body_root,
     };
 }
 

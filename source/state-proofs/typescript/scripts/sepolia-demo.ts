@@ -24,9 +24,24 @@ async function main() {
 
     // 1. Initialize Light Client
     console.log(`\n📡 Connecting to Beacon Node: ${beaconUrl}`);
+    
+    // Fetch latest finalized checkpoint root for bootstrap
+    let checkpointRoot = process.env.CHECKPOINT_ROOT;
+    if (!checkpointRoot) {
+        try {
+            const resp = await fetch(`${beaconUrl}/eth/v1/beacon/blocks/finalized/root`);
+            const data = await resp.json() as any;
+            checkpointRoot = data.data.root;
+            console.log(`   Fetched latest finalized block root: ${checkpointRoot}`);
+        } catch (e) {
+            console.warn("   Failed to fetch finalized checkpoint root, using default.");
+        }
+    }
+
     const config: LightClientConfig = {
         beaconApiUrl: beaconUrl,
         chain: "sepolia",
+        checkpointRoot,
         verbose: false, // We'll handle logging
         statePath: "./light-client-state.json"
     };
