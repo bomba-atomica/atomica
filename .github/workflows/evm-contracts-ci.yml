@@ -63,8 +63,8 @@ jobs:
         run: bun install
 
       - name: Build Ethereum Docker Testnet SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
         run: |
-          cd source/docker-testnet/ethereum-testnet/typescript-sdk
           bun install
           bun run build
 
