@@ -68,6 +68,9 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Check local dependency
+        run: ls -la node_modules/@atomica/ 2>/dev/null || echo "Local dependency not linked"
+
       - name: Run e2e tests
         run: bun run test:docker
         env:
