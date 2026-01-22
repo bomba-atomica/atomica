@@ -166,7 +166,7 @@ library DepositTypes {
      * @param maxPrice Maximum acceptable ETH/USDC ratio
      * @param totalEthDeposits Sum of ETH deposits
      * @param totalUsdcDeposits Sum of USDC deposits
-     * @param finalized Whether auction results are finalized
+      * @param finalized Whether auction results are finalized
      */
     struct AuctionParams {
         uint256 startTime;
@@ -176,6 +176,22 @@ library DepositTypes {
         uint256 totalEthDeposits;
         uint256 totalUsdcDeposits;
         bool finalized;
+    }
+
+    /**
+     * @notice Auction metadata for identification and deadlines
+     * @param nonce Monotonically increasing auction identifier
+     * @param description Human-readable auction description (e.g., "west-daily-btc-eth")
+     * @param deadline Unix timestamp in microseconds when auction ends
+     * @param scuttleBlock Ethereum block height where auction automatically scuttles
+     * @param stateRootHash BLS-signed state root containing this metadata
+     */
+    struct AuctionMetadata {
+        uint64 nonce;
+        string description;
+        uint64 deadline;      // Unix microseconds
+        uint256 scuttleBlock; // Ethereum block height
+        bytes32 stateRootHash; // BLS-signed state proof
     }
 
     /**
@@ -2009,12 +2025,270 @@ contract TransferManager {
 
 ---
 
+### 6.5 Auction Lifecycle and Validator-Governed Starts
+
+Each auction is identified by a monotonically increasing nonce and includes metadata for venue, deadline, and scuttle block. Atomica validators govern when new auctions start by submitting BLS-signed state proofs.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    AUCTION LIFECYCLE AND VALIDATOR GOVERNANCE                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. VALIDATOR GOVERNANCE                                                     │
+│     ┌─────────────────────────────────────────────────────────────────┐     │
+│     │  Atomica validators agree on auction parameters:                │     │
+│     │  - nonce: monotonically increasing identifier                   │     │
+│     │  - description: "west-daily-btc-eth" (human-readable)          │     │
+│     │  - deadline: Unix timestamp in microseconds                     │     │
+│     │  - scuttleBlock: Ethereum block height for auto-terminate       │     │
+│     │                                                                 │     │
+│     │  Validators sign: nonce || description || deadline || scuttle   │     │
+│     │  and include in Atomica state root                              │     │
+│     └─────────────────────────────────────────────────────────────────┘     │
+│                                    │                                          │
+│                                    ▼                                          │
+│  2. STATE PROOF SUBMISSION                                                   │
+│     ┌─────────────────────────────────────────────────────────────────┐     │
+│     │  submitAuctionStart(                                           │     │
+│     │      metadata,          // AuctionMetadata struct               │     │
+│     │      stateProof,       // BLS proof of metadata in state       │     │
+│     │      validatorIndices   // Which validators signed              │     │
+│     │  )                                                                 │     │
+│     └─────────────────────────────────────────────────────────────────┘     │
+│                                    │                                          │
+│                                    ▼                                          │
+│  3. ON-CHAIN VERIFICATION                                                    │
+│     ┌─────────────────────────────────────────────────────────────────┐     │
+│     │  Verify BLS signature over:                                     │     │
+│     │  - metadata.nonce                                               │     │
+│     │  - metadata.description                                         │     │
+│     │  - metadata.deadline                                            │     │
+│     │  - metadata.scuttleBlock                                        │     │
+│     │                                                                  │     │
+│     │  If valid: Create auction with nonce = metadata.nonce          │     │
+│     └─────────────────────────────────────────────────────────────────┘     │
+│                                    │                                          │
+│                                    ▼                                          │
+│  4. AUCTION EXECUTION                                                        │
+│     ┌─────────────────────────────────────────────────────────────────┐     │
+│     │  - Deposits accepted during auction window                      │     │
+│     │  - Auction runs until deadline (microseconds)                  │     │
+│     │  - Auto-scuttles if reaching scuttleBlock without settlement   │     │
+│     │  - Settlement after auction completes                           │     │
+│     └─────────────────────────────────────────────────────────────────┘     │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Auction State Machine:**
+```
+┌─────────────┐
+│   CREATED   │ ← BLS-signed metadata submitted
+└──────┬──────┘
+       │ startAuction()
+       ▼
+┌─────────────┐
+│    OPEN     │ ← Deposits accepted
+└──────┬──────┘
+       │ deadline passed OR scuttleBlock reached
+       ▼
+┌─────────────┐
+│  CLOSING    │ ← Auction ended, settlement in progress
+└──────┬──────┘
+       │ settlement complete
+       ▼
+┌─────────────┐
+│  SETTLED    │ ← All trades executed
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│   SCUTTLED  │ ← Auto-terminated (scuttleBlock reached)
+└─────────────┘
+```
+
+```solidity
+/**
+ * @title AuctionRegistry
+ * @notice Manages auction metadata and validator-governed auction starts
+ */
+contract AuctionRegistry {
+    using DepositTypes for DepositTypes.AssetType;
+    
+    // Auction state
+    enum AuctionState {
+        NONE,
+        CREATED,
+        OPEN,
+        CLOSING,
+        SETTLED,
+        SCUTTLED
+    }
+    
+    // Auction information
+    struct Auction {
+        uint64 nonce;              // Monotonically increasing identifier
+        string description;        // Human-readable (e.g., "west-daily-btc-eth")
+        uint64 deadline;           // Unix microseconds
+        uint256 scuttleBlock;      // Ethereum block for auto-termination
+        AuctionState state;
+        uint256 openBlock;         // Block when auction opened
+        uint256 totalEthDeposits;
+        uint256 totalUsdcDeposits;
+    }
+    
+    // Storage
+    mapping(uint64 => Auction) public auctions;
+    uint64 public nextNonce;
+    
+    // BLS Verifier for validator signatures
+    BLSVerifier public blsVerifier;
+    
+    // Events
+    event AuctionCreated(
+        uint64 indexed nonce,
+        string description,
+        uint64 deadline,
+        uint256 scuttleBlock
+    );
+    event AuctionOpened(uint64 indexed nonce);
+    event AuctionSettled(uint64 indexed nonce);
+    event AuctionScuttled(uint64 indexed nonce);
+    
+    /**
+     * @notice Start a new auction with validator-signed metadata
+     * @dev Validators govern auction creation via BLS-signed state proof
+     * @param nonce Monotonically increasing auction identifier
+     * @param description Human-readable auction description
+     * @param deadline Unix timestamp in microseconds for auction end
+     * @param scuttleBlock Ethereum block height for auto-termination
+     * @param signature BLS signature over auction parameters
+     * @param validatorIndices Indices of validators who signed
+     */
+    function startAuction(
+        uint64 nonce,
+        string calldata description,
+        uint64 deadline,
+        uint256 scuttleBlock,
+        bytes calldata signature,
+        uint256[] calldata validatorIndices
+    ) external {
+        require(auctions[nonce].state == AuctionState.NONE, "Auction exists");
+        require(nonce == nextNonce, "Invalid nonce order");
+        require(bytes(description).length > 0, "Empty description");
+        require(deadline > block.timestamp * 1_000_000, "Deadline in past");
+        require(scuttleBlock > block.number, "ScuttleBlock in past");
+        require(signature.length == 48, "Invalid signature");
+        
+        // Verify BLS signature over auction parameters
+        bytes32 messageHash = keccak256(abi.encodePacked(
+            "ATOMICA_AUCTION_START",
+            nonce,
+            keccak256(bytes(description)),
+            deadline,
+            scuttleBlock,
+            block.chainid
+        ));
+        
+        bool isValid = blsVerifier.verifyAggregatedSignature(
+            blsVerifier.trustedPubkeys(),
+            signature,
+            messageHash,
+            validatorIndices
+        );
+        
+        require(isValid, "Invalid validator signature");
+        
+        // Create auction
+        Auction storage auction = auctions[nonce];
+        auction.nonce = nonce;
+        auction.description = description;
+        auction.deadline = deadline;
+        auction.scuttleBlock = scuttleBlock;
+        auction.state = AuctionState.CREATED;
+        auction.openBlock = 0;
+        auction.totalEthDeposits = 0;
+        auction.totalUsdcDeposits = 0;
+        
+        nextNonce = nonce + 1;
+        
+        emit AuctionCreated(nonce, description, deadline, scuttleBlock);
+    }
+    
+    /**
+     * @notice Open auction for deposits
+     */
+    function openAuction(uint64 nonce) external {
+        Auction storage auction = auctions[nonce];
+        require(auction.state == AuctionState.CREATED, "Not in CREATED state");
+        
+        auction.state = AuctionState.OPEN;
+        auction.openBlock = block.number;
+        
+        emit AuctionOpened(nonce);
+    }
+    
+    /**
+     * @notice Check if auction is still open
+     */
+    function isAuctionOpen(uint64 nonce) external view returns (bool) {
+        Auction storage auction = auctions[nonce];
+        if (auction.state != AuctionState.OPEN) return false;
+        if (block.timestamp * 1_000_000 > auction.deadline) return false;
+        if (block.number >= auction.scuttleBlock) return false;
+        return true;
+    }
+    
+    /**
+     * @notice Auto-scuttle auction at scuttleBlock
+     */
+    function scuttle(uint64 nonce) external {
+        Auction storage auction = auctions[nonce];
+        require(auction.state == AuctionState.OPEN, "Not open");
+        require(block.number >= auction.scuttleBlock, "Not at scuttleBlock");
+        
+        auction.state = AuctionState.SCUTTLED;
+        
+        emit AuctionScuttled(nonce);
+    }
+    
+    /**
+     * @notice Get auction deadline in seconds (for compatibility)
+     */
+    function getDeadlineSeconds(uint64 nonce) external view returns (uint256) {
+        return auctions[nonce].deadline / 1_000_000;
+    }
+}
+```
+
+**Message Format for Validator Signing:**
+```
+keccak256(
+    "ATOMICA_AUCTION_START" ||
+    nonce (uint64) ||
+    keccak256(description) (bytes32) ||
+    deadline (uint64 microseconds) ||
+    scuttleBlock (uint256) ||
+    chainId (uint256)
+)
+```
+
+**Key Properties:**
+- **Monotonic Nonce**: Each auction has a unique, sequentially increasing identifier
+- **Human-Readable Description**: Enables market identification (e.g., "west-daily-btc-eth")
+- **Microsecond Precision**: Deadline uses microseconds for precise timing
+- **Auto-Scuttle**: Auction terminates at specified Ethereum block height
+- **Validator Governance**: Only validators can initiate new auctions via BLS signatures
+
+---
+
 ## 7. Controller Contract
 
 ```solidity
 /**
  * @title AtomicaController
  * @notice Main controller contract coordinating all Atomica contracts
+ * @dev Uses auction nonces for auction identification (monotonically increasing)
  */
 contract AtomicaController is Ownable {
     DepositBox public depositBox;
@@ -2022,16 +2296,18 @@ contract AtomicaController is Ownable {
     BLSVerifier public blsVerifier;
     Settlement public settlement;
     TransferManager public transferManager;
-
-    bool public paused;
-    uint256 public currentRound;
+    AuctionRegistry public auctionRegistry;
     
-    mapping(uint256 => bytes32) public roundTradeIds;
-    mapping(uint256 => bool) public roundSettled;
-
-    event RoundStarted(uint256 indexed roundId, bytes32 tradeId);
-    event RoundSettled(uint256 indexed roundId);
-
+    bool public paused;
+    uint64 public currentAuctionNonce;
+    
+    mapping(uint64 => bytes32) public auctionTradeIds;
+    mapping(uint64 => bool) public auctionSettled;
+    
+    event AuctionStarted(uint64 indexed nonce, string description, uint64 deadline);
+    event AuctionSettled(uint64 indexed nonce);
+    event AuctionScuttled(uint64 indexed nonce);
+    
     /**
      * @notice Constructor
      */
@@ -2040,47 +2316,73 @@ contract AtomicaController is Ownable {
         address stateRootAddress,
         address blsVerifierAddress,
         address settlementAddress,
-        address transferManagerAddress
+        address transferManagerAddress,
+        address auctionRegistryAddress
     ) {
         depositBox = DepositBox(depositBoxAddress);
         stateRoot = StateRoot(stateRootAddress);
         blsVerifier = BLSVerifier(blsVerifierAddress);
         settlement = Settlement(settlementAddress);
         transferManager = TransferManager(transferManagerAddress);
+        auctionRegistry = AuctionRegistry(auctionRegistryAddress);
     }
 
     /**
-     * @notice Start a new trading round
+     * @notice Start a new auction (proxies to AuctionRegistry with BLS verification)
      */
-    function startRound(bytes32 tradeId) external onlyOwner {
+    function startAuction(
+        uint64 nonce,
+        string calldata description,
+        uint64 deadline,
+        uint256 scuttleBlock,
+        bytes calldata signature,
+        uint256[] calldata validatorIndices
+    ) external onlyOwner {
         require(!paused, "System paused");
-        require(roundTradeIds[currentRound] == bytes32(0), "Round already started");
         
-        currentRound++;
-        roundTradeIds[currentRound] = tradeId;
+        // Delegate to AuctionRegistry for validator signature verification
+        auctionRegistry.startAuction(
+            nonce,
+            description,
+            deadline,
+            scuttleBlock,
+            signature,
+            validatorIndices
+        );
         
-        emit RoundStarted(currentRound, tradeId);
+        emit AuctionStarted(nonce, description, deadline);
     }
 
     /**
-     * @notice Complete settlement for a round
+     * @notice Complete settlement for an auction
      */
-    function completeRound(uint256 roundId) external onlyOwner {
-        require(roundId <= currentRound, "Invalid round");
-        require(!roundSettled[roundId], "Round already settled");
+    function settleAuction(uint64 nonce) external {
+        require(nonce <= currentAuctionNonce, "Invalid nonce");
+        require(!auctionSettled[nonce], "Already settled");
         
-        roundSettled[roundId] = true;
+        auctionSettled[nonce] = true;
         
-        emit RoundSettled(roundId);
+        emit AuctionSettled(nonce);
     }
 
+    /**
+     * @notice Scuttle an auction (auto-terminate at scuttleBlock)
+     */
+    function scuttleAuction(uint64 nonce) external {
+        require(!auctionSettled[nonce], "Already settled");
+        
+        auctionRegistry.scuttle(nonce);
+        
+        emit AuctionScuttled(nonce);
+    }
+    
     /**
      * @notice Emergency pause
      */
     function setPaused(bool status) external onlyOwner {
         paused = status;
     }
-
+    
     /**
      * @notice Withdraw protocol fees
      */
@@ -2482,11 +2784,19 @@ interface UserAllocation {
     allocationProof: string[];
 }
 
+interface AuctionMetadata {
+    nonce: uint64;
+    description: string;
+    deadline: uint64;       // Unix microseconds
+    scuttleBlock: uint256;
+}
+
 class AuctionCoordinator {
     private testnet: EthereumDockerTestnet;
     private proofGenerator: StateProofGenerator;
     private signatureCollector: BLSSignatureCollector;
     private config: AuctionConfig;
+    private auctionNonce: uint64 = 0;
 
     constructor(
         testnet: EthereumDockerTestnet,
@@ -2501,38 +2811,59 @@ class AuctionCoordinator {
     }
 
     /**
-     * Run complete auction flow
+     * Create auction metadata (called by validators off-chain)
+     */
+    createAuctionMetadata(
+        description: string,
+        deadlineMicroseconds: uint64,
+        scuttleBlock: uint256
+    ): AuctionMetadata {
+        this.auctionNonce++;
+        
+        return {
+            nonce: this.auctionNonce,
+            description: description,
+            deadline: deadlineMicroseconds,
+            scuttleBlock: scuttleBlock
+        };
+    }
+
+    /**
+     * Run complete auction flow with validator-signed metadata
      */
     async runAuction(
         depositBoxAddress: string,
-        auctionId: string
+        metadata: AuctionMetadata,
+        validatorIndices: number[]
     ): Promise<AuctionResult> {
-        // Phase 1: Wait for minimum deposits
+        // Phase 1: Submit auction metadata (validators already signed this)
+        // On-chain: Controller.startAuction(metadata, signature, validatorIndices)
+        
+        // Phase 2: Wait for minimum deposits during auction window
         await this.waitForDeposits(depositBoxAddress, this.config.minDeposits);
 
-        // Phase 2: Capture state at auction start
-        const startBlock = await this.testnet.getBlockNumber();
-        const stateProof = await this.proofGenerator.generateStateRootProof(
-            depositBoxAddress,
-            startBlock
-        );
+        // Phase 3: Check auction deadline
+        if (await this.isPastDeadline(metadata.deadline)) {
+            throw new Error("Auction deadline passed");
+        }
 
-        // Phase 3: Run auction algorithm
+        // Phase 4: Run auction algorithm
         const auctionResult = await this.runAuctionAlgorithm(
             depositBoxAddress,
-            auctionId
+            metadata.nonce
         );
 
-        // Phase 4: Collect validator signatures
+        // Phase 5: Collect validator signatures for trade finalization
         const tradeMessage = this.createTradeMessage(auctionResult);
         const signatures = await this.signatureCollector.collectSignatures(tradeMessage);
         const aggregatedSignature = this.signatureCollector.aggregateSignatures(signatures);
 
-        // Phase 5: Generate allocation Merkle tree
+        // Phase 6: Generate allocation Merkle tree
         const allocationResult = this.generateAllocationTree(auctionResult);
 
         return {
-            tradeId: auctionId,
+            nonce: metadata.nonce,
+            tradeId: ethers.utils.id(`${metadata.description}-${metadata.nonce}`),
             clearingPrice: auctionResult.clearingPrice,
             ethDeposited: auctionResult.totalEth,
             usdcDeposited: auctionResult.totalUsdc,
