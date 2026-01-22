@@ -1,0 +1,16 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+test = "test"
+script = "script"
+ffi = true
+gas_reports = ["*"]
+solc_version = "0.8.19"
+optimizer = true
+optimizer_runs = 200
+```
+
+[profile.release]
+libraries = ["src/libraries"]
+```

@@ -1,0 +1,27 @@
+{
+  "name": "@atomica/evm-contracts",
+  "version": "0.1.0",
+  "description": "Atomica EVM smart contracts for cross-chain atomic deposits",
+  "main": "index.js",
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test",
+    "test:gas": "forge test --gas-report",
+    "lint": "solhint --config .solhint.json 'src/**/*.sol'",
+    "fmt": "forge fmt"
+  },
+  "keywords": [
+    "ethereum",
+    "smart-contracts",
+    "atomica",
+    "bls",
+    "cross-chain"
+  ],
+  "author": "Atomica",
+  "license": "MIT",
+  "devDependencies": {
+    "@openzeppelin/contracts": "^5.0.0",
+    "forge-std": "^1.7.0",
+    "solhint": "^4.1.1"
+  }
+}

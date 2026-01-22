@@ -1,0 +1,18 @@
+# Compiler cache
+cache/
+out/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Test outputs
+gas-report.txt
