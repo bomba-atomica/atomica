@@ -19,6 +19,7 @@
     "format:check": "prettier 'src/**/*.ts' --check"
   },
   "dependencies": {
+    "@atomica/docker-testnet": "../docker-testnet/typescript-sdk",
     "viem": "^2.21.0"
   },
   "devDependencies": {
