@@ -2,9 +2,9 @@ name: EVM Contracts CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, debug-e2e]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, debug-e2e]
     types: [opened, synchronize]
 
 jobs:
