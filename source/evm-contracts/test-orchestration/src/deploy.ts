@@ -8,7 +8,11 @@
  */
 import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
 import { spawn } from "child_process";
-import { resolve as pathResolve } from "path";
+import { resolve as pathResolve, dirname } from "path";
+import { parseArgs } from "util";
+import { fileURLToPath } from "url";
+
+const REPO_ROOT = pathResolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 
 const CONTRACTS_DIR = pathResolve(import.meta.dir, "../src");
 
@@ -40,10 +44,20 @@ async function deploy(config: DeployConfig): Promise<void> {
 
         if (!testnetRunning) {
             console.log("Starting Docker testnet...");
-            testnet = await EthereumDockerTestnet.start(4);
-            await testnet.waitForHealthy(180);
-            rpcUrl = testnet.getExecutionRpcUrl();
-            console.log(`✓ Testnet started at ${rpcUrl}`);
+            // Change to repo root for SDK to find config
+            const originalCwd = process.cwd();
+            console.log(`Changing cwd from ${originalCwd} to ${REPO_ROOT}`);
+            process.chdir(REPO_ROOT);
+            console.log(`New cwd: ${process.cwd()}`);
+            try {
+                testnet = await EthereumDockerTestnet.start(4);
+                await testnet.waitForHealthy(180);
+                rpcUrl = testnet.getExecutionRpcUrl();
+                console.log(`✓ Testnet started at ${rpcUrl}`);
+            } finally {
+                process.chdir(originalCwd);
+                console.log(`Restored cwd to ${process.cwd()}`);
+            }
         } else {
             console.log("✓ Testnet already running at", rpcUrl);
         }
@@ -52,7 +66,7 @@ async function deploy(config: DeployConfig): Promise<void> {
     try {
         // Build contracts first
         console.log("\nBuilding contracts...");
-        await _runForge("build", { cwd: CONTRACTS_DIR });
+        await _runForge("build", [], { cwd: CONTRACTS_DIR });
         console.log("✓ Contracts built");
 
         // Run deployment
@@ -175,7 +189,21 @@ async function _isTestnetRunning(rpcUrl: string): Promise<boolean> {
  */
 async function _runForge(subcommand: string, args: string[], options: { cwd?: string; env?: Record<string, string> } = {}): Promise<void> {
     return new Promise((resolve, reject) => {
-        const proc = spawn("forge", [subcommand, ...args], {
+        // Check if forge is available
+        try {
+            const { existsSync } = require("fs");
+            const { spawnSync } = require("child_process");
+            const which = spawnSync("which", ["forge"]);
+            if (which.status !== 0) {
+                throw new Error("forge not found");
+            }
+        } catch {
+            reject(new Error("forge not found. Install Foundry: curl -L https://foundry.paradigm.xyz | bash"));
+            return;
+        }
+
+        const fullArgs = [subcommand, ...args];
+        const proc = spawn("forge", fullArgs, {
             cwd: options.cwd,
             env: { ...process.env, ...options.env },
             stdio: "inherit",
@@ -192,7 +220,7 @@ async function _runForge(subcommand: string, args: string[], options: { cwd?: st
 
 // CLI
 if (import.meta.main) {
-    const { values, positionals } = Bun.parseArgs({
+    const { values } = parseArgs({
         args: process.argv.slice(2),
         options: {
             network: { type: "string", default: "http://localhost:8545" },

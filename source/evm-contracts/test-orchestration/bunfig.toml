@@ -1,4 +1,4 @@
-{
-  "scan": false,
-  "external:bun-types": true
-}
+scan = false
+
+[dev]
+external = ["bun-types"]

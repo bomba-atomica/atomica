@@ -18,7 +18,6 @@
     "format:check": "prettier 'src/**/*.ts' --check"
   },
   "dependencies": {
-    "@atomica/ethereum-docker-testnet": "workspace:*",
     "viem": "^2.21.0"
   },
   "devDependencies": {
