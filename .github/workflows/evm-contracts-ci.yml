@@ -59,14 +59,14 @@ jobs:
           curl -fsSL https://bun.sh/install | bash
           echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
-      - name: Install dependencies
-        run: bun install
-
       - name: Build SDK
         run: |
           cd ../docker-testnet/ethereum-testnet/typescript-sdk
           bun install
           bun run build
+
+      - name: Install dependencies
+        run: bun install
 
       - name: Run e2e tests
         run: bun run test:docker
