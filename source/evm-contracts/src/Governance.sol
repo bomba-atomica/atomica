@@ -19,18 +19,25 @@ import "./Settlement.sol";
  *
  * Lifecycle:
  * 1. Deploy all contracts (Governance, DepositBox, BLSVerifier, Settlement)
- * 2. Owner calls genesis() to link contracts
+ * 2. Deployer calls genesis() to link contracts (only deployer can call)
  * 3. System operates normally
  * 4. If emergency, owner calls brick() to refund all deposits
  *
  * Security:
- * - Only owner can call genesis() and brick()
+ * - Only deployer can call genesis() (checked via stored deployer address)
+ * - Only owner can call brick()
  * - genesis() can only be called once
  * - brick() is irreversible
  *
  * @author Atomica
  */
 contract Governance is Ownable {
+    /**
+     * @notice Original deployer address (immutable)
+     * @dev Set in constructor, used for genesis() access control
+     */
+    address public immutable deployer;
+
     /**
      * @notice USDC token contract reference
      * @dev Immutable, set in constructor
@@ -80,6 +87,12 @@ contract Governance is Ownable {
     uint256 public brickBlock;
 
     /**
+     * @notice Time window for calling genesis after deployment
+     * @dev 1 hour - must be called shortly after deployment
+     */
+    uint256 public constant GENESIS_WINDOW = 1 hours;
+
+    /**
      * @notice Emitted when system is initialized
      * @param depositBox Address of DepositBox contract
      * @param blsVerifier Address of BLSVerifier contract
@@ -118,28 +131,26 @@ contract Governance is Ownable {
     );
 
     /**
-     * @notice Requires system is not initialized
+     * @notice Requires caller is the original deployer
      */
-    modifier notInitialized() {
-        require(!initialized, "Governance: already initialized");
+    modifier onlyDeployer() {
+        require(msg.sender == deployer, "Governance: not deployer");
         _;
     }
 
     /**
-     * @notice Requires system is initialized
+     * @notice Requires genesis window is still open
      */
-    modifier onlyInitialized() {
-        require(initialized, "Governance: not initialized");
+    modifier onlyWithinGenesisWindow() {
+        require(block.timestamp <= deploymentTime + GENESIS_WINDOW, "Governance: genesis window closed");
         _;
     }
 
     /**
-     * @notice Requires system is not bricked
+     * @notice Deployment timestamp
+     * @dev Used for genesis window enforcement
      */
-    modifier notBricked() {
-        require(!bricked, "Governance: system bricked");
-        _;
-    }
+    uint256 public deploymentTime;
 
     /**
      * @notice Constructor
@@ -147,7 +158,9 @@ contract Governance is Ownable {
      */
     constructor(address usdcTokenAddress) {
         require(usdcTokenAddress != address(0), "Governance: invalid USDC");
+        deployer = msg.sender;
         usdcToken = IERC20(usdcTokenAddress);
+        deploymentTime = block.timestamp;
     }
 
     /**
@@ -155,14 +168,21 @@ contract Governance is Ownable {
      * @param depositBoxAddress Address of DepositBox contract
      * @param blsVerifierAddress Address of BLSVerifier contract
      * @param settlementAddress Address of Settlement contract
-     * @dev Can only be called once by owner
+     * @dev Can only be called by original deployer within genesis window
      * @dev Sets up links between all system contracts
+     * @dev Reverts if called by non-deployer or after genesis window
      */
     function genesis(
         address depositBoxAddress,
         address blsVerifierAddress,
         address settlementAddress
-    ) external onlyOwner notInitialized {
+    )
+        external
+        onlyDeployer
+        onlyOwner
+        notInitialized
+        onlyWithinGenesisWindow
+    {
         require(depositBoxAddress != address(0), "Governance: invalid deposit box");
         require(blsVerifierAddress != address(0), "Governance: invalid BLS verifier");
         require(settlementAddress != address(0), "Governance: invalid settlement");

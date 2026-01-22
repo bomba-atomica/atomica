@@ -175,7 +175,13 @@ async function _runGenesisTests(rpcUrl: string): Promise<void> {
     try {
         await _runForge(
             "test",
-            ["--match-path", "test/integration/GovernanceGenesis.t.sol", "--rpc-url", rpcUrl, "--summary"],
+            [
+                "--match-path",
+                "test/integration/GovernanceGenesis.t.sol",
+                "--rpc-url",
+                rpcUrl,
+                "--summary",
+            ],
             {
                 cwd: CONTRACTS_DIR,
                 env,
