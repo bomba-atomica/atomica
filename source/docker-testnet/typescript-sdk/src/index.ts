@@ -185,7 +185,7 @@ export class DockerTestnet {
                     // Timeout for log fetch
                     setTimeout(() => resolve(), 5000);
                 });
-            } catch (_logError) {
+            } catch {
                 console.error("Failed to fetch logs.");
             }
             throw error;
@@ -984,7 +984,7 @@ async function waitForHealthy(numValidators: number, timeoutSecs: number): Promi
                 } else {
                     statuses.push(`V${i}:HTTP${response.status}`);
                 }
-            } catch (_e: any) {
+            } catch {
                 statuses.push(`V${i}:ERR`);
                 // Validator not ready yet
             }

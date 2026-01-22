@@ -37,7 +37,7 @@
  */
 
 import { existsSync, statSync } from "fs";
-import { join, resolve as pathResolve, dirname } from "path";
+import { join, resolve as pathResolve } from "path";
 import { spawnSync } from "child_process";
 
 interface BinaryCandidate {
