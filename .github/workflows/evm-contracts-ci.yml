@@ -65,6 +65,7 @@ jobs:
       - name: Build SDK
         run: |
           cd ../docker-testnet/ethereum-testnet/typescript-sdk
+          bun install
           bun run build
 
       - name: Run e2e tests
