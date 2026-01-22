@@ -1642,11 +1642,24 @@ submit_sealed_bid(auction_id, encrypted_bid);
 
 See [Plan Evolution](../PLAN-EVOLUTION.md) for the multi-phase trust reduction roadmap:
 
-| Phase | Trust Model | Security Improvement |
-|-------|-------------|---------------------|
-| **v0.1 Beta** | Trusted validator set | BLS signatures |
-| **v1.0** | Reduced trust | ZK auction verification |
-| **v2.0** | Minimal trust | Cross-chain + BitVM |
+| Phase | Trust Model | Key Innovation |
+|-------|-------------|----------------|
+| **v0.1 Beta** | 2/3 validator threshold | BLS signatures (current) |
+| **v1.0** | Same validator assumption + ZK | ZK auction verification |
+| **v2.0** | Same validator assumption + ratchet | Cross-chain + BitVM |
+
+**Key Points:**
+- **Validator honesty is constant**: 2/3 threshold assumption across all versions
+- **v1 adds ZK verification**: Validators only need to generate bid receipts
+- **v2 adds cross-chain**: Ratchet mechanism for atomic releases
+
+**Trust Reduction Summary:**
+| Property | v0.1 Beta | v1.0 | v2.0 |
+|----------|-----------|------|------|
+| Validator honesty (2/3) | ✓ Trust assumption | ✓ Trust assumption | ✓ Trust assumption |
+| Cross-chain trust | N/A | N/A | ✓ Ratchet |
+| Auction logic | Trust MoveVM | ZK verified | ZK verified |
+| Bid validity | Trust validators | ZK verified | ZK verified |
 
 **v1 Trust Reduction:**
 - Validators only need to generate bid receipts (no trust in auction logic)

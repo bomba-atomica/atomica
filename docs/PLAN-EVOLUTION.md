@@ -175,255 +175,51 @@ circuit AuctionZKProof {
 
 ### Trust Reduction Properties
 
-| Property | v0 Trust | v1 Trust | Reduction |
-|----------|----------|----------|-----------|
-| Validator honesty | Full trust | Receipt generation only | ~90% |
-| MoveVM correctness | Full trust | Isolated ZK verification | ~95% |
-| Auction logic | Full trust | ZK double-check | ~99% |
-| Bid validity | Unverified | Verified in ZK | 100% |
+| Property | v0.1 Beta | v1.0 | v2.0 |
+|----------|-----------|------|------|
+| **Validator Honesty** (2/3 threshold) | Trust assumption | Trust assumption | Trust assumption |
+| **Cross-Chain Trust** | N/A | N/A | Ratchet mechanism |
+| **Auction Logic** | Trust MoveVM | ZK verified | ZK verified |
+| **Bid Validity** | Trust validators | ZK verified | ZK verified |
+| **MoveVM Correctness** | Trust implementation | ZK isolation | ZK isolation |
 
-### Implementation Requirements
+**Key Observations:**
+- **Validator honesty is a constant assumption** across all versions: We trust that 2/3 of validators are not colluding (standard BLS threshold security)
+- **v1 reduces trust in auction logic**: Validators can't manipulate auction outcome because ZK circuit independently verifies
+- **v2 adds cross-chain trust**: Ratchet mechanism ensures funds only release when other chain has committed
 
-1. **Isolated ZK Source Code**
-   - No shared Rust components with MoveVM
-   - Independent circuit implementation
-   - Audit-friendly separation
+### Security Comparison
 
-2. **Proof System**
-   - Choice of: PLONK, Groth16, or STARK
-   - Ethereum on-chain verification
-   - Efficient recursion for scalability
-
-3. **Trusted Setup** (if applicable)
-   - Ceremony for initial setup
-   - Transparent setup preferred
-   - Backup mechanisms
-
-### Security Properties
-
-- **Valid Receipts**: Validators must have actually received bids
-- **Correct Clearing**: ZK circuit independently verifies
-- **No Manipulation**: Even colluding validators can't fake
-- **Isolated Trust**: No shared code = no shared bugs
-
----
-
-## v2.0 (Future)
-
-### Cross-Chain Auctions
-
-Extending the protocol to support auctions across multiple blockchains:
-
-```
-v2 Cross-Chain Architecture:
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                                                              │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │                    Atomica Hub (Aptos-based)                        │    │
-│  │                                                                      │    │
-│  │  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────────┐    │    │
-│  │  │   BTC     │  │   ETH     │  │   USDC    │  │   (Future)    │    │    │
-│  │  │  Bridge   │  │  Bridge   │  │  Bridge   │  │   Chains      │    │    │
-│  │  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └───────┬───────┘    │    │
-│  │        │              │              │                  │            │    │
-│  │        ▼              ▼              ▼                  ▼            │    │
-│  │  ┌─────────────────────────────────────────────────────────────┐    │    │
-│  │  │              Cross-Chain Auction Coordinator                  │    │    │
-│  │  │                                                              │    │    │
-│  │  │  - Match bids across chains                                  │    │    │
-│  │  │  - Generate cross-chain settlement                           │    │    │
-│  │  │  - Coordinate multi-step releases                            │    │    │
-│  │  └──────────────────────────────────────────────────────────────┘    │    │
-│  │                                                                      │    │
-│  └─────────────────────────────────────┬───────────────────────────────┘    │
-│                                        │                                        │
-│            ┌───────────────────────────┼───────────────────────────┐        │
-│            ▼                           ▼                           ▼        │
-│  ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐      │
-│  │   Bitcoin       │     │   Ethereum      │     │    Solana       │      │
-│  │   (BitVM)       │     │   (EVM)         │     │    (Anchor)     │      │
-│  │                 │     │                 │     │                 │      │
-│  │ - Taproot       │     │ - BLS proofs    │     │ - SeaLevel      │      │
-│  │ - STARK proofs  │     │ - ZK auction    │     │ - (Future)      │      │
-│  │ - Covenant-based│     │ - Settlement    │     │                 │      │
-│  │   releases      │     │                 │     │                 │      │
-│  └─────────────────┘     └─────────────────┘     └─────────────────┘      │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Chain-Specific Verification
-
-| Chain | v2 Verification Method | Notes |
-|-------|------------------------|-------|
-| **Bitcoin** | BitVM + STARK proofs | Fraud proofs, covenant-based releases |
-| **Ethereum** | BLS + ZK auction proof | Existing v1 verification + cross-chain |
-| **Solana** | SeaLevel + ZK proofs | Future integration |
-| **Aptos** | Native Move | Hub chain, already trusted |
-
-### Bitcoin Integration (BitVM)
-
-```
-Bitcoin Cross-Chain Settlement:
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                                                              │
-│  1. DEPOSIT PHASE                                                            │
-│     ┌─────────────┐     ┌─────────────────┐     ┌─────────────────────────┐ │
-│     │   User      │────▶│  Atomica Hub    │────▶│   Bitcoin               │ │
-│     │   locks BTC │     │  (records UTXO) │     │   (P2SH output)         │ │
-│     └─────────────┘     └─────────────────┘     └─────────────────────────┘ │
-│                                                                              │
-│  2. AUCTION PHASE                                                            │
-│     ┌─────────────┐     ┌─────────────────┐     ┌─────────────────────────┐ │
-│     │   Cross-    │────▶│  ZK Auction     │────▶│   Cross-chain           │ │
-│     │   chain bid │     │  Clearing       │     │   allocation            │ │
-│     └─────────────┘     └─────────────────┘     └─────────────────────────┘ │
-│                                                                              │
-│  3. SETTLEMENT PHASE (Multi-Step Ratchet)                                    │
-│                                                                              │
-│     Step A: Atomica confirms auction                                         │
-│     ┌─────────────────────────────────────────────────────────────────────┐  │
-│     │  Atomica Hub ──(ZK proof)──▶ BitVM Challenge Program               │  │
-│     │  - Auction results verified                                         │  │
-│     │  - No fraud detected (challenge window)                             │  │
-│     └─────────────────────────────────────────────────────────────────────┘  │
-│                                      │                                       │
-│                                      ▼                                       │
-│     Step B: Bitcoin release commitment                                       │
-│     ┌─────────────────────────────────────────────────────────────────────┐  │
-│     │  Covenant tx ──▶ Time-locked release tx                            │  │
-│     │  - Recipient must prove Atomica confirmed                          │  │
-│     │  - Timeout allows anyone to broadcast                               │  │
-│     └─────────────────────────────────────────────────────────────────────┘  │
-│                                      │                                       │
-│                                      ▼                                       │
-│     Step C: Completion or Challenge                                          │
-│     ┌─────────────────────────────────────────────────────────────────────┐  │
-│     │  IF no challenge:                                                   │  │
-│     │    - Release tx becomes valid after timeout                         │  │
-│     │    - User claims BTC                                                │  │
-│     │                                                                      │  │
-│     │  IF challenge:                                                      │  │
-│     │    - BitVM resolves via STARK proof                                 │  │
-│     │    - Winner takes all                                               │  │
-│     └─────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Multi-Step Ratchet Design
-
-Each chain uses a ratchet mechanism to ensure funds are only released when the other chain has irreversibly committed:
-
-```rust
-// Generic ratchet interface
-trait CrossChainRatchet<ChainState, Proof> {
-    // Initiate release on this chain
-    fn initiate_release(
-        &self,
-        amount: Coin,
-        recipient: Address,
-        other_chain_commitment: Commitment
-    ) -> Result<RatchetTransaction>;
-    
-    // Prove the other chain has committed
-    fn prove_other_commitment(
-        &self,
-        commitment: Commitment,
-        proof: Proof
-    ) -> Result<ConfirmedRelease>;
-    
-    // Finalize after timeout (no challenges)
-    fn finalize(&self, tx: RatchetTransaction);
-    
-    // Challenge a fraudulent release
-    fn challenge(
-        &self,
-        tx: RatchetTransaction,
-        fraud_proof: FraudProof
-    );
-}
-```
-
-### Trust Properties
-
-| Property | v0 | v1 | v2 |
-|----------|----|----|-----|
-| Single-chain security | Validator trust | ZK verified | ZK + BitVM |
-| Cross-chain atomicity | N/A | N/A | Multi-step ratchet |
-| Chain-specific trust | MoveVM | ZK circuit | Isolated proof systems |
-| Liveness assumptions | Validators | Validators | All chains must be live |
-
----
-
-## Implementation Roadmap
-
-```
-Timeline:
-─────────────────────────────────────────────────────────────────────────────────▶
-
-v0.1 Beta          v1.0                       v2.0
-   │                │                          │
-   │    ┌───────────┴───────────┐             │
-   │    │                       │             │
-   │    │  ZK Circuit Dev       │             │
-   │    │  - Circuit design     │             │
-   │    │  - Proof system eval  │             │
-   │    │  - Trusted setup      │             │
-   │    │                       │             │
-   │    └───────────────────────┘             │
-   │                                          │
-   │  ┌───────────────────────────────────────┴───────────────────┐
-   │  │                                                           │
-   │  │  v1: ZK Auction Verification                              │
-   │  │  - BLS signature verification (Gate 1)                    │
-   │  │  - ZK proof verification (Gate 2 - FINAL)                 │
-   │  │  - Isolated Rust implementation                           │
-   │  │                                                           │
-   │  └───────────────────────────────────────────────────────────┘
-   │                                                     │
-   │                                                     ┌───────────────────────┐
-   │                                                     │                       │
-   │                                                     │  v2: Cross-Chain      │
-   │                                                     │  - Bitcoin BitVM      │
-   │                                                     │  - Multi-chain        │
-   │                                                     │    ratchets           │
-   │                                                     │  - STARK proofs       │
-   │                                                     │                       │
-   │                                                     └───────────────────────┘
-```
-
----
-
-## Security Comparison
-
-### Trust Thickness (lower = less trust required)
+#### Trust Thickness (lower = less trust required)
 
 ```
 v0.1 Beta:
-██████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-Validator    MoveVM    Auction Logic    Bid Validity    MoveVM
-  Trust       Trust       Trust           None          (all bids verified in ZK)
+████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+Validator     Auction Logic    Bid Validity    MoveVM        Cross-Chain
+Honesty       (2/3 thresh)    Trust validrs   (all bids verified in ZK)
+(2/3 thresh)
 
 v1.0:
-██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-Receipt Gen    ZK Circuit   ZK Circuit    ZK Circuit
-  (receipts)    (isolated)   (correct)    (complete)
+███░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+Validator     ZK Circuit      ZK Circuit     ZK Circuit
+Honesty       (isolated)      (correct)      (complete)
+(2/3 thresh)
 
 v2.0:
-█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-Receipt Gen   ZK Circuit   BitVM       STARK       Multi-chain
-  + liveness   (isolated)  (fraud)     (valid)     (ratchet)
+███░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+Validator     ZK Circuit      ZK Circuit     ZK Circuit     Ratchet
+Honesty       (isolated)      (correct)      (complete)    (atomic)
+(2/3 thresh)
 ```
 
 ### Attack Surface Reduction
 
 | Attack Vector | v0.1 Severity | v1 Mitigation | v2 Mitigation |
 |---------------|---------------|---------------|---------------|
-| Validator collusion | Critical | ZK verification | ZK + BitVM |
-| MoveVM bug | Critical | ZK isolation | ZK isolation + circuits |
+| Validator collusion (2/3) | Critical | ZK verification | ZK + BitVM |
 | Auction manipulation | High | ZK double-check | ZK + multi-chain |
 | Cross-chain rollback | N/A | N/A | Ratchet mechanism |
+| MoveVM bug | Critical | ZK isolation | ZK isolation + circuits |
 | ZK circuit bug | N/A | Audit + testing | Audit + multi-proof |
 
 ---

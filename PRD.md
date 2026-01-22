@@ -326,19 +326,25 @@ See [Plan Evolution](docs/PLAN-EVOLUTION.md) for the multi-phase roadmap from v0
 
 | Phase | Trust Model | Key Innovation |
 |-------|-------------|----------------|
-| **v0.1 Beta** | Trusted validator set | Working system (current) |
-| **v1.0** | Reduced validator trust | ZK auction verification |
-| **v2.0** | Minimal trust | Cross-chain auctions + BitVM |
+| **v0.1 Beta** | 2/3 validator threshold | Working system (current) |
+| **v1.0** | Same validator assumption + ZK | ZK auction verification |
+| **v2.0** | Same validator assumption + ratchet | Cross-chain auctions + BitVM |
 
 **v0 → v1 Trust Reduction:**
-- Validators only need to generate receipts for received bids
+- Same validator honesty assumption (2/3 threshold)
+- Validators only need to generate receipts for bids
 - ZK circuit independently verifies auction clearing
 - Isolated Rust implementation (no shared code with MoveVM)
 
 **v1 → v2 Cross-Chain:**
+- Same validator honesty assumption
 - Bitcoin support via BitVM + STARK proofs
 - Multi-step ratchet for atomic cross-chain releases
 - Extension to additional chains (Solana, etc.)
+
+**Cross-Chain Trust (v2 only):**
+- Ratchet mechanism ensures funds release only when other chain has committed
+- No trust in bridge liveness - atomicity enforced cryptographically
 
 ## References
 
