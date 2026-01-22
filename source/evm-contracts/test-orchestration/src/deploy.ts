@@ -142,16 +142,14 @@ async function _runE2ETests(rpcUrl: string): Promise<void> {
     };
 
     try {
-        await _runForge("test", [
-            "--match-path",
-            "test/e2e/*.sol",
-            "--rpc-url",
-            rpcUrl,
-            "--summary",
-        ], {
-            cwd: CONTRACTS_DIR,
-            env,
-        });
+        await _runForge(
+            "test",
+            ["--match-path", "test/e2e/*.sol", "--rpc-url", rpcUrl, "--summary"],
+            {
+                cwd: CONTRACTS_DIR,
+                env,
+            },
+        );
 
         console.log("✓ E2E tests passed");
     } catch (error) {
@@ -187,21 +185,12 @@ async function _isTestnetRunning(rpcUrl: string): Promise<boolean> {
 /**
  * Run a forge command
  */
-async function _runForge(subcommand: string, args: string[], options: { cwd?: string; env?: Record<string, string> } = {}): Promise<void> {
+async function _runForge(
+    subcommand: string,
+    args: string[],
+    options: { cwd?: string; env?: Record<string, string> } = {},
+): Promise<void> {
     return new Promise((resolve, reject) => {
-        // Check if forge is available
-        try {
-            const { existsSync } = require("fs");
-            const { spawnSync } = require("child_process");
-            const which = spawnSync("which", ["forge"]);
-            if (which.status !== 0) {
-                throw new Error("forge not found");
-            }
-        } catch {
-            reject(new Error("forge not found. Install Foundry: curl -L https://foundry.paradigm.xyz | bash"));
-            return;
-        }
-
         const fullArgs = [subcommand, ...args];
         const proc = spawn("forge", fullArgs, {
             cwd: options.cwd,
@@ -232,7 +221,8 @@ if (import.meta.main) {
     });
 
     // Default private key for testing (Anvil default)
-    const privateKey = values.key || "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+    const privateKey =
+        values.key || "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
     await deploy({
         rpcUrl: values.network,
