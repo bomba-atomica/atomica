@@ -62,6 +62,12 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Build Ethereum Docker Testnet SDK
+        run: |
+          cd source/docker-testnet/ethereum-testnet/typescript-sdk
+          bun install
+          bun run build
+
       - name: Run e2e tests
         run: bun run test:docker
         env:
