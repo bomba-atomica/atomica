@@ -194,7 +194,7 @@ export class TestOrchestrator {
         const rpcUrl = this.testnet!.getExecutionRpcUrl();
         const env = { ...process.env, ETH_RPC_URL: rpcUrl };
 
-        await this.runCommand(
+        const result = await this.runCommand(
             "forge",
             ["test", "--match-path", "test/unit/*.sol", "--rpc-url", rpcUrl, "--summary"],
             {
