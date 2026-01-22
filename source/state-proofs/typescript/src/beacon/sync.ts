@@ -83,11 +83,16 @@ export async function processLightClientUpdate(
     if (!isValid) {
         // For local testnets and demo purposes, we might want to proceed even if signature verification fails
         // but only if there is SOME participation to indicate the network is alive.
-        const participation = update.syncAggregate.syncCommitteeBits.reduce((acc, byte) => acc + popcount(byte), 0);
+        const participation = update.syncAggregate.syncCommitteeBits.reduce(
+            (acc, byte) => acc + popcount(byte),
+            0,
+        );
         if (state.genesisValidatorsRoot && participation > 0) {
-           if (process.env.DEBUG_LC) {
-               console.warn(`[LightClient] Signature verification failed, but participation is ${participation}. Proceeding anyway (Local/Demo mode).`);
-           }
+            if (process.env.DEBUG_LC) {
+                console.warn(
+                    `[LightClient] Signature verification failed, but participation is ${participation}. Proceeding anyway (Local/Demo mode).`,
+                );
+            }
         } else {
             throw new Error("Invalid sync committee signature");
         }
@@ -133,7 +138,9 @@ export async function verifySyncCommitteeSignature(
         return false;
     }
 
-    const forkVersion = genesisForkVersion ? hexToBytes(genesisForkVersion) : Uint8Array.from([0x04, 0x00, 0x00, 0x00]);
+    const forkVersion = genesisForkVersion
+        ? hexToBytes(genesisForkVersion)
+        : Uint8Array.from([0x04, 0x00, 0x00, 0x00]);
 
     const domain = computeSyncCommitteeDomain(
         forkVersion,
@@ -232,7 +239,9 @@ export function hasSyncCommitteeQuorum(
     }
 
     if (process.env.DEBUG_LC) {
-        console.log(`[LightClient] Participation: ${count}/${committeeSize} (Threshold: ${threshold})`);
+        console.log(
+            `[LightClient] Participation: ${count}/${committeeSize} (Threshold: ${threshold})`,
+        );
     }
 
     return count >= threshold;

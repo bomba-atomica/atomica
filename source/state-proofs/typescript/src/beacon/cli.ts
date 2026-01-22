@@ -68,7 +68,9 @@ export async function initLightClient(config: LightClientConfig): Promise<LightC
     const chainConfig = BEACON_CONFIGS[config.chain as keyof typeof BEACON_CONFIGS];
 
     if (!chainConfig) {
-        throw new Error(`Unknown chain: ${config.chain}. Supported: mainnet, sepolia, holesky, local`);
+        throw new Error(
+            `Unknown chain: ${config.chain}. Supported: mainnet, sepolia, holesky, local`,
+        );
     }
 
     if (config.verbose) {
@@ -80,7 +82,9 @@ export async function initLightClient(config: LightClientConfig): Promise<LightC
         const loadedStore = await loadState(config.statePath);
         if (loadedStore) {
             if (config.verbose) {
-                console.log(`[LightClient] Loaded persisted state from ${config.statePath || "default location"}`);
+                console.log(
+                    `[LightClient] Loaded persisted state from ${config.statePath || "default location"}`,
+                );
                 console.log(
                     `[LightClient] Current period: ${loadedStore.state.period}, Slot: ${loadedStore.state.header.beacon.slot}`,
                 );
@@ -116,7 +120,7 @@ export async function initLightClient(config: LightClientConfig): Promise<LightC
         bootstrap.currentSyncCommittee,
         period,
         config.genesisValidatorsRoot,
-        config.genesisForkVersion
+        config.genesisForkVersion,
     );
 
     const store: LightClientStore = {
@@ -261,14 +265,12 @@ export async function syncLightClient(
         const optimisticUpdate = await fetchLightClientOptimisticUpdate(config.beaconApiUrl);
         if (optimisticUpdate && isUpdateNewer(optimisticUpdate, currentState)) {
             if (config.verbose) {
-                console.log(`[LightClient] Processing optimistic update for slot ${optimisticUpdate.attestedHeader.beacon.slot}...`);
+                console.log(
+                    `[LightClient] Processing optimistic update for slot ${optimisticUpdate.attestedHeader.beacon.slot}...`,
+                );
             }
             // Optimistic updates are not finalized
-            currentState = await processLightClientUpdate(
-                currentState,
-                optimisticUpdate,
-                false
-            );
+            currentState = await processLightClientUpdate(currentState, optimisticUpdate, false);
             synced = true;
         }
     } catch (error) {
@@ -285,7 +287,9 @@ export async function syncLightClient(
         };
         await saveState(store, config.statePath);
         if (config.verbose) {
-            console.log(`[LightClient] Updated persisted state at ${config.statePath || "default location"}`);
+            console.log(
+                `[LightClient] Updated persisted state at ${config.statePath || "default location"}`,
+            );
         }
     }
 
