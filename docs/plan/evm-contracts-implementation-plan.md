@@ -4361,12 +4361,23 @@ We leverage existing infrastructure:
 - **Phase 4 (Weeks 7-8)**: Settlement - Trade finalization
 - **Phase 5 (Weeks 9-12)**: Security Audit and Mainnet Deployment
 
+### Protocol Evolution
+
+This EVM implementation plan covers the v0.1 Beta phase. See [Plan Evolution](docs/PLAN-EVOLUTION.md) for the full roadmap:
+
+| Phase | Focus | This Document |
+|-------|-------|---------------|
+| **v0.1 Beta** | Trusted validator set | ✅ Core contracts |
+| **v1.0** | ZK auction verification | 📋 Future update |
+| **v2.0** | Cross-chain + BitVM | 📋 Future design |
+
 ### Created Files
 
 - `/home/lucas/atomica/docs/plan/evm-contracts-implementation-plan.md` - Complete implementation plan (updated with SDK integration)
 - `/home/lucas/atomica/docs/development/docker-testnet-sdk-integration.md` - Comprehensive Docker and SDK integration guide
 - `/home/lucas/atomica/docs/development/quick-reference.md` - Quick reference guide
 - `/home/lucas/atomica/docs/development/contract-interfaces.sol` - Solidity interfaces for all contracts
+- `/home/lucas/atomica/docs/PLAN-EVOLUTION.md` - Protocol evolution roadmap (v0 → v1 → v2)
 
 ### Next Steps
 
@@ -4374,10 +4385,12 @@ We leverage existing infrastructure:
 2. Begin Phase 1 implementation (DepositBox)
 3. Set up Docker testnet for local testing
 4. Integrate State Proof SDK for proof verification
-5. Engage security auditors for Phase 5
+5. Plan v1.0 ZK circuit development
+6. Engage security auditors for Phase 5
 
 ---
 
 *Document Version: 2.0*
 *Last Updated: January 2026*
 *Uses: Docker Testnet SDK + State Proof SDK*
+*See also: [Plan Evolution](docs/PLAN-EVOLUTION.md) for v0 → v1 → v2 roadmap*

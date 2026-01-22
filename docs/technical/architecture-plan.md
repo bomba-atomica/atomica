@@ -1638,6 +1638,26 @@ submit_sealed_bid(auction_id, encrypted_bid);
 
 **Analysis**: See [Bid Validity Simplification Decision](../decisions/bid-validity-simplification.md).
 
+### Protocol Evolution
+
+See [Plan Evolution](../PLAN-EVOLUTION.md) for the multi-phase trust reduction roadmap:
+
+| Phase | Trust Model | Security Improvement |
+|-------|-------------|---------------------|
+| **v0.1 Beta** | Trusted validator set | BLS signatures |
+| **v1.0** | Reduced trust | ZK auction verification |
+| **v2.0** | Minimal trust | Cross-chain + BitVM |
+
+**v1 Trust Reduction:**
+- Validators only need to generate bid receipts (no trust in auction logic)
+- ZK circuit independently verifies auction clearing
+- Isolated Rust implementation (no shared code with MoveVM)
+
+**v2 Cross-Chain:**
+- Bitcoin support via BitVM + STARK proofs
+- Multi-step ratchet for atomic cross-chain releases
+- Extension to additional chains
+
 ---
 
 ## Implementation Roadmap

@@ -320,6 +320,26 @@ Atomica prioritizes:
 - [Bear Market Analysis](docs/analysis/bear-market.md) - Performance in low-liquidity conditions
 - [Continuous vs Auction Markets](docs/analysis/continuous-vs-auction-markets.md) - Historical evidence
 
+## Protocol Evolution Roadmap
+
+See [Plan Evolution](docs/PLAN-EVOLUTION.md) for the multi-phase roadmap from v0.1 Beta to v2.0:
+
+| Phase | Trust Model | Key Innovation |
+|-------|-------------|----------------|
+| **v0.1 Beta** | Trusted validator set | Working system (current) |
+| **v1.0** | Reduced validator trust | ZK auction verification |
+| **v2.0** | Minimal trust | Cross-chain auctions + BitVM |
+
+**v0 → v1 Trust Reduction:**
+- Validators only need to generate receipts for received bids
+- ZK circuit independently verifies auction clearing
+- Isolated Rust implementation (no shared code with MoveVM)
+
+**v1 → v2 Cross-Chain:**
+- Bitcoin support via BitVM + STARK proofs
+- Multi-step ratchet for atomic cross-chain releases
+- Extension to additional chains (Solana, etc.)
+
 ## References
 
 **Nobel Prize Winners in Auction Theory:**
