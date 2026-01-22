@@ -2,6 +2,20 @@
 
 A self-sufficient TypeScript library and CLI tool for fetching and cryptographically verifying Ethereum state proofs using Merkle-Patricia Trie (MPT) verification.
 
+## 🚀 Quick Start: Live Demo (Sepolia)
+
+Run a complete end-to-end verification demo on Sepolia testnet:
+
+```bash
+# 1. Install dependencies
+bun install
+
+# 2. Run the demo with your Sepolia RPC URL
+SEPOLIA_RPC_URL="https://ethereum-sepolia-rpc.publicnode.com" bun run demo:sepolia
+```
+
+This demo initializes a trustless light client, syncs to the head of Sepolia, and cryptographically verifies an account state.
+
 ## Overview
 
 This tool implements **EIP-1186** (`eth_getProof`) proof verification, allowing you to:
