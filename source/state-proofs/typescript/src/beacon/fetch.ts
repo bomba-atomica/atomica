@@ -249,6 +249,7 @@ async function fetchLightClientUpdateByPeriod(
             execution: any;
             execution_branch?: string[];
         };
+        attested_header_branch?: string[];
         next_sync_committee?: {
             pubkeys: string[];
             aggregate_pubkey: string;

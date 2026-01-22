@@ -116,7 +116,7 @@ export async function processLightClientUpdate(
 
         // If the finalized header proves we are in a new period, rotate committees
         // We can only rotate if we have the NEXT committee (which this update provides)
-        if (updatePeriod > state.period) {
+        if (updatePeriod > state.period && state.nextSyncCommittee) {
             newState.currentSyncCommittee = state.nextSyncCommittee;
             newState.nextSyncCommittee = update.nextSyncCommittee;
             newState.period = updatePeriod;

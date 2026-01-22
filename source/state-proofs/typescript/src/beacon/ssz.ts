@@ -287,7 +287,9 @@ function convertSyncCommitteeFromSSZ(ssz: SSZSerializedSyncCommittee): SyncCommi
 function convertUpdateToSSZ(update: LightClientUpdate): SSZSerializedLightClientUpdate {
     return {
         attestedHeader: convertHeaderToSSZ(update.attestedHeader),
-        nextSyncCommittee: convertSyncCommitteeToSSZ(update.nextSyncCommittee),
+        nextSyncCommittee: update.nextSyncCommittee
+            ? convertSyncCommitteeToSSZ(update.nextSyncCommittee)
+            : (SyncCommitteeType.defaultValue() as SSZSerializedSyncCommittee),
         nextSyncCommitteeBranch: update.nextSyncCommitteeBranch.map(hexToBytes),
         finalizedHeader: update.finalizedHeader
             ? convertHeaderToSSZ(update.finalizedHeader)
@@ -301,10 +303,16 @@ function convertUpdateToSSZ(update: LightClientUpdate): SSZSerializedLightClient
     };
 }
 
+function isDefaultSyncCommittee(ssz: SSZSerializedSyncCommittee): boolean {
+    return ssz.aggregatePubkey.every((b) => b === 0);
+}
+
 function convertUpdateFromSSZ(ssz: SSZSerializedLightClientUpdate): LightClientUpdate {
     return {
         attestedHeader: convertHeaderFromSSZ(ssz.attestedHeader),
-        nextSyncCommittee: convertSyncCommitteeFromSSZ(ssz.nextSyncCommittee),
+        nextSyncCommittee: isDefaultSyncCommittee(ssz.nextSyncCommittee)
+            ? null
+            : convertSyncCommitteeFromSSZ(ssz.nextSyncCommittee),
         nextSyncCommitteeBranch: ssz.nextSyncCommitteeBranch.map(bytesToHex),
         finalizedHeader:
             ssz.finalizedHeader && "beacon" in ssz.finalizedHeader
@@ -339,7 +347,9 @@ function convertStateToSSZ(state: LightClientState): SSZSerializedLightClientSta
     return {
         header: convertHeaderToSSZ(state.header),
         currentSyncCommittee: convertSyncCommitteeToSSZ(state.currentSyncCommittee),
-        nextSyncCommittee: convertSyncCommitteeToSSZ(state.nextSyncCommittee),
+        nextSyncCommittee: state.nextSyncCommittee
+            ? convertSyncCommitteeToSSZ(state.nextSyncCommittee)
+            : (SyncCommitteeType.defaultValue() as SSZSerializedSyncCommittee),
         finalizedHeader: state.finalizedHeader
             ? convertHeaderToSSZ(state.finalizedHeader)
             : (LightClientHeaderType.defaultValue() as SSZSerializedLightClientHeader),
@@ -352,7 +362,9 @@ function convertStateFromSSZ(ssz: SSZSerializedLightClientState): LightClientSta
     return {
         header: convertHeaderFromSSZ(ssz.header),
         currentSyncCommittee: convertSyncCommitteeFromSSZ(ssz.currentSyncCommittee),
-        nextSyncCommittee: convertSyncCommitteeFromSSZ(ssz.nextSyncCommittee),
+        nextSyncCommittee: isDefaultSyncCommittee(ssz.nextSyncCommittee)
+            ? null
+            : convertSyncCommitteeFromSSZ(ssz.nextSyncCommittee),
         finalizedHeader:
             ssz.finalizedHeader && "beacon" in ssz.finalizedHeader
                 ? convertHeaderFromSSZ(ssz.finalizedHeader)

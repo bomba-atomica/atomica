@@ -3,10 +3,9 @@ import { createWalletClient, createPublicClient, http, formatEther, type Hex } f
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import { initLightClient, syncLightClient, type LightClientConfig } from "../src/beacon/cli";
-import { fetchProof, fetchBlockTransactions, fetchBlockReceipts } from "../src/fetcher";
+import { fetchProof, fetchBlockTransactions } from "../src/fetcher";
 import { verifyAccountProof } from "../src/verifier";
 import { verifyTransactionProof } from "../src/transaction";
-import { verifyReceiptProof } from "../src/receipt";
 
 async function main() {
     console.log("🚀 Ethereum State Verification - Sepolia Demo");
@@ -151,9 +150,6 @@ async function main() {
                 console.log(`   Waiting for Light Client to reach target block ${verifyBlock}...`);
             } else {
                 const proof = await fetchProof(rpcUrl, targetAddress, [], verifyBlock);
-                const trustedRoot = verifyBlock === currentBlock 
-                    ? state.header.execution.stateRoot 
-                    : undefined; // In a real LC we'd need historical roots
 
                 // For the demo, we use the root we have if it matches, or we warn
                 const rootToUse = (verifyBlock === currentBlock) 

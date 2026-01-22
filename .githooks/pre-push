@@ -22,9 +22,14 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 echo "🔍 Running pre-push checks for state-proof module..."
 echo ""
 
-# 1. Build SDK
-echo "📦 Step 1/3: Building SDK..."
+# 1. Build modules
+echo "📦 Step 1/3: Building modules..."
+echo "   - Building Docker Testnet SDK..."
 cd "$REPO_ROOT/source/docker-testnet/ethereum-testnet/typescript-sdk"
+bun run build
+
+echo "   - Building State Proof Verifier..."
+cd "$REPO_ROOT/source/state-proofs/typescript"
 bun run build
 
 # 2. Run strict lint

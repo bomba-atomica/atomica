@@ -4,10 +4,9 @@ import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
 import { initLightClient, syncLightClient, type LightClientConfig } from "../src/beacon/cli";
 import { BEACON_CONFIGS } from "../src/beacon/fetch";
-import { fetchProof, fetchBlockTransactions, fetchBlockReceipts } from "../src/fetcher";
+import { fetchProof, fetchBlockTransactions } from "../src/fetcher";
 import { verifyAccountProof } from "../src/verifier";
 import { verifyTransactionProof } from "../src/transaction";
-import { verifyReceiptProof } from "../src/receipt";
 import { startTestnet, stopTestnet, getRpcUrl, getTestAccounts } from "../test/helpers/testnet";
 
 async function main() {
