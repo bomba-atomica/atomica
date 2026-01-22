@@ -94,7 +94,23 @@ async function fetchBeaconApi<T>(apiUrl: string, endpoint: string): Promise<T> {
 /**
  * Parse execution payload header from beacon API
  */
-function parseExecutionPayload(exec: any): ExecutionPayloadHeader {
+function parseExecutionPayload(exec: {
+    parent_hash: string;
+    fee_recipient: string;
+    state_root: string;
+    receipts_root: string;
+    logs_bloom: string;
+    prev_randao: string;
+    block_number: string;
+    gas_limit: string;
+    gas_used: string;
+    timestamp: string;
+    extra_data: string;
+    base_fee_per_gas: string;
+    block_hash: string;
+    transactions_root: string;
+    withdrawals_root: string;
+}): ExecutionPayloadHeader {
     return {
         parentHash: exec.parent_hash,
         feeRecipient: exec.fee_recipient,
