@@ -67,6 +67,11 @@ jobs:
         run: |
           bun install
           bun run build
+          ls -la dist/
+
+      - name: Debug: Check SDK dist folder
+        run: |
+          ls -la ../../docker-testnet/ethereum-testnet/typescript-sdk/dist/ || echo "Dist folder not found!"
 
       - name: Run e2e tests
         run: bun run test:docker
