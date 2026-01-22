@@ -1546,58 +1546,13 @@ contract BLSVerifier {
     }
     
     /**
-     * @notice BRICK the contract - emergency shutdown only
-     * @dev Returns all funds to depositors and disables contract
-     *      This is a ONE-WAY operation that cannot be undone
-     *      Only used when migrating to a new contract address
-     * @param depositBox Address of deposit box to refund
-     * @param usdcToken Address of USDC token
-     */
-    function brick(
-        address depositBox,
-        address usdcToken
-    ) external {
-        require(msg.sender == brickAdmin, "Not brick admin");
-        require(!isBricked, "Already bricked");
-        
-        isBricked = true;
-        
-        // Get all deposited ETH and return to depositors via DepositBox
-        // Implementation: call DepositBox.brick() which refunds all deposits
-        
-        // Get USDC balance and approve for refund
-        // Implementation: transfer USDC toDepositBox for refund distribution
-        
-        emit ContractBricked(
-            block.timestamp,
-            address(this).balance,
-            IERC20(usdcToken).balanceOf(address(this))
-        );
-    }
-    
-    /**
      * @notice Get current validator count
      */
     function getValidatorCount() external view returns (uint256) {
         return trustedPubkeys.length;
     }
-    
-    /**
-     * @notice Check if contract is operational
-     */
-    function isOperational() external view returns (bool) {
-        return !isBricked;
-    }
 }
 ```
-
-**Key Points:**
-1. **NO upgradability** - Contract code is immutable after deployment
-2. **NO governance** - Authors cannot change contract behavior
-3. **Bricking is one-way** - Once bricked, cannot be un-bricked
-4. **Bricking is a fail-safe** - Used to recover funds when critical issues arise
-5. **New contract on new address** - Bricking indicates migration to new deployment
-6. **No shared code paths** - Bricking uses separate code paths from normal operation
 
 **Validator Public Key Format:**
 - BLS12-381 G2 point compressed format (48 bytes)
@@ -1613,6 +1568,144 @@ keccak256(
     chainId (uint256)
 )
 ```
+
+---
+
+### 5.4 Simplified Governance
+
+Governance has a single responsibility: initialize the system with the correct starting nonce from Atomica, and provide emergency bricking capability. BLS public keys are trusted at genesis.
+
+```solidity
+/**
+ * @title Governance
+ * @notice Simple governance for initialization and emergency shutdown
+ * @dev BLS public keys are TRUSTED at genesis. Only nonce is verified.
+ */
+contract Governance {
+    // System contracts
+    address public depositBox;
+    address public blsVerifier;
+    address public settlement;
+    address public auctionRegistry;
+    
+    // State
+    bool public initialized;
+    bool public bricked;
+    
+    // Admin for bricking
+    address public admin;
+    
+    // Initial nonce from Atomica (proven at genesis)
+    uint64 public initialAuctionNonce;
+    
+    // Events
+    event Initialized(
+        uint64 initialNonce,
+        address depositBox,
+        address blsVerifier,
+        address settlement,
+        address auctionRegistry
+    );
+    event ContractBricked(uint256 timestamp);
+    
+    modifier onlyAdmin() {
+        require(msg.sender == admin, "Not admin");
+        _;
+    }
+    
+    modifier notInitialized() {
+        require(!initialized, "Already initialized");
+        _;
+    }
+    
+    /**
+     * @notice Initialize system with trusted BLS keys and starting nonce
+     * @dev BLS public keys are TRUSTED at deployment. Only nonce comes from proof.
+     * @param _blsVerifier BLSVerifier with trusted public keys already set
+     * @param _initialNonce Starting auction nonce from Atomica state proof
+     */
+    function genesis(
+        address _blsVerifier,
+        uint64 _initialNonce
+    ) external notInitialized {
+        require(_blsVerifier != address(0), "Invalid BLSVerifier");
+        require(_initialNonce > 0, "Invalid initial nonce");
+        
+        // BLS keys in BLSVerifier are TRUSTED at genesis
+        // We only verify the starting nonce came from Atomica
+        // This is done OFF-CHAIN: verify Atomica state proof contains _initialNonce
+        
+        blsVerifier = _blsVerifier;
+        initialAuctionNonce = _initialNonce;
+        initialized = true;
+        
+        emit Initialized(
+            _initialNonce,
+            depositBox,
+            _blsVerifier,
+            settlement,
+            auctionRegistry
+        );
+    }
+    
+    /**
+     * @notice Set system contracts (after genesis)
+     */
+    function setSystemContracts(
+        address _depositBox,
+        address _settlement,
+        address _auctionRegistry
+    ) external onlyAdmin notInitialized {
+        require(_depositBox != address(0), "Invalid DepositBox");
+        require(_settlement != address(0), "Invalid Settlement");
+        require(_auctionRegistry != address(0), "Invalid AuctionRegistry");
+        
+        depositBox = _depositBox;
+        settlement = _settlement;
+        auctionRegistry = _auctionRegistry;
+    }
+    
+    /**
+     * @notice BRICK the contract - emergency shutdown (ONE-WAY)
+     * @dev Refunds all depositors and disables contract permanently
+     */
+    function brick() external onlyAdmin {
+        require(!bricked, "Already bricked");
+        require(initialized, "Not initialized");
+        
+        bricked = true;
+        
+        // Refund all deposits
+        IDepositBox(depositBox).refundAllDeposits();
+        
+        // Neutralize settlement
+        ISettlement(settlement).neutralize();
+        
+        emit ContractBricked(block.timestamp);
+    }
+    
+    /**
+     * @notice Check if system is operational
+     */
+    function isOperational() external view returns (bool) {
+        return initialized && !bricked;
+    }
+    
+    /**
+     * @notice Get initial auction nonce
+     */
+    function getInitialNonce() external view returns (uint64) {
+        return initialAuctionNonce;
+    }
+}
+```
+
+**Key Points:**
+1. **BLS keys trusted at genesis** - No verification, just trust the deployment
+2. **Nonce from state proof** - Only the starting auction nonce is proven via Atomica state
+3. **Simple governance** - Just `genesis()` and `brick()`
+4. **No upgrade path** - New contract on new address after brick
+5. **Orthogonal to core contracts** - BLSVerifier has no governance knowledge
 
 ---
 
