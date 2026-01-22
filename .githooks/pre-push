@@ -49,7 +49,7 @@ check_module "State Proof Verifier" "source/state-proofs/typescript"
 check_module "Ethereum Docker SDK" "source/docker-testnet/ethereum-testnet/typescript-sdk" "bun run build" "echo '✨ Skipping lint: not configured'" "echo '📐 Skipping format: not configured'"
 
 # 3. EVM Contracts Test Orchestrator
-check_module "EVM Contracts Test Orchestrator" "source/evm-contracts/test-orchestration"
+check_module "EVM Contracts Test Orchestrator" "source/evm-contracts/test-orchestration" "bun run build" "bun run lint" "bun run format:check"
 
 # 4. Base Docker Testnet SDK (Optional/Skip if no node_modules)
 check_module "Docker Testnet SDK" "source/docker-testnet/typescript-sdk"
