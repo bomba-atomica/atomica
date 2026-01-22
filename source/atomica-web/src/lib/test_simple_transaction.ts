@@ -49,6 +49,6 @@ export async function testSimpleTransaction(ethAddress: string) {
       );
     }
 
-    return { success: false, error: e.message };
+    return { success: false, error: errorMessage };
   }
 }
