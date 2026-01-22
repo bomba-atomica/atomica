@@ -32,6 +32,10 @@ cd "$REPO_ROOT/source/state-proofs/typescript"
 bun run format 2>/dev/null
 bun run lint:fix 2>/dev/null
 
+cd "$REPO_ROOT/source/evm-contracts/test-orchestration"
+bun run format 2>/dev/null
+bun run lint:fix 2>/dev/null
+
 echo ""
 echo "⚠️  Auto-cleanup complete. Commit allowed."
 echo "⚠️  BEFORE PUSHING, run these checks:"

@@ -45,13 +45,16 @@ echo "🚀 Running pre-push code quality checks..."
 # 1. State Proof Verifier (Primary focus)
 check_module "State Proof Verifier" "source/state-proofs/typescript"
 
-# 2. Ethereum Docker Testnet SDK
+# 2. EVM Contracts Test Orchestrator
+check_module "EVM Contracts Test Orchestrator" "source/evm-contracts/test-orchestration"
+
+# 3. Ethereum Docker Testnet SDK
 check_module "Ethereum Docker SDK" "source/docker-testnet/ethereum-testnet/typescript-sdk" "bun run build" "echo '✨ Skipping lint: not configured'" "echo '📐 Skipping format: not configured'"
 
-# 3. Base Docker Testnet SDK (Optional/Skip if no node_modules)
+# 4. Base Docker Testnet SDK (Optional/Skip if no node_modules)
 check_module "Docker Testnet SDK" "source/docker-testnet/typescript-sdk"
 
-# 4. Atomica Web (Optional/Skip if no node_modules)
+# 5. Atomica Web (Optional/Skip if no node_modules)
 check_module "Atomica Web" "source/atomica-web" "bun x tsc -b" "bun run lint" "bun run format:check"
 
 echo "--------------------------------------------------"
