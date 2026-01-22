@@ -42,6 +42,9 @@ jobs:
         image: ethereum/client-go:latest
         ports:
           - 8545:8545
+    defaults:
+      run:
+        working-directory: source/evm-contracts
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
