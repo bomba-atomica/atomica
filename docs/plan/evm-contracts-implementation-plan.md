@@ -42,16 +42,30 @@ This document outlines a comprehensive implementation plan for EVM smart contrac
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
 │  │                    EVM SMART CONTRACTS                               │   │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │   │
-│  │  │ DepositBox  │  │ StateRoot   │  │ BLSVerifier │  │ Settlement  │ │   │
-│  │  │  Contract   │  │  Contract   │  │  Contract   │  │  Contract   │ │   │
+│  │  │ DepositBox  │  │ StateRoot   │  │BLSVerifier  │  │ Settlement  │ │   │
+│  │  │  Contract   │  │  Contract   │  │   + Govt    │  │  Contract   │ │   │
 │  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘ │   │
-│  └──────────────────────────────────────────────────────────────────────┘   │
-│                                  │                                          │
-│                                  ▼                                          │
-│  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │                    APTOS VALIDATOR SET                               │   │
-│  │              (BLS Key Aggregation & Auction Finalization)            │   │
-│  └──────────────────────────────────────────────────────────────────────┘   │
+│  │        │              │              │                │              │   │
+│  │        └──────────────┴──────────────┴────────────────┘              │   │
+│  │                                  │                                      │   │
+│  └──────────────────────────────────┼──────────────────────────────────────┘   │
+│                                     │                                           │
+│  ┌──────────────────────────────────┼──────────────────────────────────────┐   │
+│  │                                  ▼                                       │   │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │   │
+│  │  │              EPOCH BOUNDARY PROOF FLOW                            │  │   │
+│  │  │                                                                  │  │   │
+│  │  │   Atomica Validators ──sign(epoch+N, newKeys)──► BLSVerifier    │  │   │
+│  │  │          │                                               ▲        │  │   │
+│  │  │          │                                               │        │  │   │
+│  │  │          │              Trusted Key Set                   │        │  │   │
+│  │  │          └───────────────────────────────────────────────┘        │  │   │
+│  │  │                                                                  │  │   │
+│  │  │   1. Genesis: Trusted at deployment                             │  │   │
+│  │  │   2. Update: Verify CURRENT keys sign NEW keys                  │  │   │
+│  │  └──────────────────────────────────────────────────────────────────┘  │   │
+│  │                                                                     │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -65,8 +79,9 @@ AtomicaController (Facade)
 │   └── USDCVault
 ├── StateCommitment (Merkle tree management)
 │   └── IncrementalMerkleTree
-├── BLSVerifier (BLS signature verification)
-│   └── BLS12_381G1
+├── BLSVerifierWithGovernance (BLS verification + validator set management)
+│   ├── BLS12_381G1 (math library)
+│   └── Validator set governance (epoch tracking, key updates)
 └── Settlement (Proof verification + transfers)
     └── TransferManager
 ```
@@ -989,6 +1004,180 @@ contract BLSVerifier {
 }
 ```
 
+### 5.3 Validator Set Management
+
+Atomica chain validators sign epoch boundaries containing the new validator set. This allows the EVM contract to trustlessly update its trusted validator keys.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    VALIDATOR SET UPDATE FLOW                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. INITIAL DEPLOYMENT                                                       │
+│     ┌─────────────────────────────────────────────────────────────────┐     │
+│     │  Deploy BLSVerifier with initial trusted validator set          │     │
+│     │  Genesis proof verified OFF-CHAIN (trusted at deployment)       │     │
+│     │  = Trusted setup                                                  │     │
+│     └─────────────────────────────────────────────────────────────────┘     │
+│                                    │                                          │
+│                                    ▼                                          │
+│  2. EPOCH CHANGE (On-Chain Update)                                           │
+│     ┌─────────────────────────────────────────────────────────────────┐     │
+│     │  Atomica validators sign:                                        │     │
+│     │  - Epoch N state root                                            │     │
+│     │  - Epoch N+1 validator set (new BLS public keys)                 │     │
+│     │  - Aggregated BLS signature                                      │     │
+│     └─────────────────────────────────────────────────────────────────┘     │
+│                                    │                                          │
+│                                    ▼                                          │
+│  3. PROOF SUBMISSION                                                         │
+│     ┌─────────────────────────────────────────────────────────────────┐     │
+│     │  submitValidatorUpdate(                                         │     │
+│     │      epochProof,        // Signed epoch boundary                 │     │
+│     │      newPubkeys,        // Incoming validator BLS keys           │     │
+│     │      signature,         // BLS signature from current validators │     │
+│     │      validatorIndices   // Which validators signed               │     │
+│     │  )                                                                 │     │
+│     └─────────────────────────────────────────────────────────────────┘     │
+│                                    │                                          │
+│                                    ▼                                          │
+│  4. ON-CHAIN VERIFICATION                                                    │
+│     ┌─────────────────────────────────────────────────────────────────┐     │
+│     │  verifyAggregatedSignature(                                     │     │
+│     │      trustedPubkeys,       // CURRENT trusted keys              │     │
+│     │      signature,             // Signature over new set            │     │
+│     │      messageHash,           // Hash of new validator set         │     │
+│     │      validatorIndices       // Signers of the update             │     │
+│     │  )                                                                 │     │
+│     │                                                                    │     │
+│     │  IF valid: Update trustedPubkeys = newPubkeys                   │     │
+│     └─────────────────────────────────────────────────────────────────┘     │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Trust Model:**
+- Genesis validator set: Trusted at deployment (off-chain verification required)
+- Subsequent updates: Cryptographically verified using CURRENT trusted keys
+- No single point of trust after initial deployment
+
+```solidity
+/**
+ * @title BLSVerifierWithGovernance
+ * @notice BLS Verifier with validator set governance
+ */
+contract BLSVerifierWithGovernance is BLSVerifier {
+    // Trusted validator BLS public keys (G2 points)
+    bytes[] public trustedPubkeys;
+    
+    // Epoch tracking
+    uint64 public currentEpoch;
+    
+    // Governance
+    address public governance;
+    
+    event ValidatorSetUpdated(uint64 indexed epoch, uint256 validatorCount);
+    event GovernanceTransferred(address indexed newGovernance);
+    
+    modifier onlyGovernance() {
+        require(msg.sender == governance, "Not governance");
+        _;
+    }
+    
+    /**
+     * @notice Initialize with genesis validator set
+     * @param genesisPubkeys Initial trusted validator BLS public keys
+     * @param _governance Governance address for future updates
+     */
+    function initialize(
+        bytes[] calldata genesisPubkeys,
+        address _governance
+    ) external {
+        require(trustedPubkeys.length == 0, "Already initialized");
+        
+        trustedPubkeys = genesisPubkeys;
+        governance = _governance;
+        currentEpoch = 0;
+        
+        emit ValidatorSetUpdated(0, genesisPubkeys.length);
+    }
+    
+    /**
+     * @notice Update validator set for new epoch
+     * @dev Verifies current validators signed the new validator set
+     * @param newPubkeys New validator BLS public keys
+     * @param newEpoch The epoch these keys become active
+     * @param signature BLS signature over the new validator set
+     * @param validatorIndices Indices of validators who signed
+     */
+    function updateValidatorSet(
+        bytes[] calldata newPubkeys,
+        uint64 newEpoch,
+        bytes calldata signature,
+        uint256[] calldata validatorIndices
+    ) external onlyGovernance {
+        require(newEpoch > currentEpoch, "Epoch must increase");
+        require(newPubkeys.length > 0, "Must have validators");
+        require(signature.length == 48, "Invalid signature length");
+        
+        // Create message: new epoch + hash of new pubkeys
+        bytes32 messageHash = keccak256(abi.encodePacked(
+            "ATOMICA_VALIDATOR_UPDATE",
+            newEpoch,
+            keccak256(abi.encodePacked(newPubkeys)),
+            block.chainid
+        ));
+        
+        // Verify signature from CURRENT trusted validators
+        bool isValid = verifyAggregatedSignature(
+            trustedPubkeys,
+            signature,
+            messageHash,
+            validatorIndices
+        );
+        
+        require(isValid, "Invalid validator update signature");
+        
+        // Update trusted keys
+        trustedPubkeys = newPubkeys;
+        currentEpoch = newEpoch;
+        
+        emit ValidatorSetUpdated(newEpoch, newPubkeys.length);
+    }
+    
+    /**
+     * @notice Get current validator count
+     */
+    function getValidatorCount() external view returns (uint256) {
+        return trustedPubkeys.length;
+    }
+    
+    /**
+     * @notice Transfer governance
+     */
+    function transferGovernance(address newGovernance) external onlyGovernance {
+        require(newGovernance != address(0), "Invalid address");
+        governance = newGovernance;
+        emit GovernanceTransferred(newGovernance);
+    }
+}
+```
+
+**Validator Public Key Format:**
+- BLS12-381 G2 point compressed format (48 bytes)
+- First byte: sign bit (0x80 for positive y)
+- Remaining 47 bytes: x-coordinate big-endian
+
+**Update Message Format:**
+```
+keccak256(
+    "ATOMICA_VALIDATOR_UPDATE" ||
+    newEpoch (uint64) ||
+    keccak256(newPubkeys) (bytes32) ||
+    chainId (uint256)
+)
+```
+
 ---
 
 ## 6. Settlement Contract Design
@@ -1005,7 +1194,7 @@ contract Settlement is Ownable, ReentrancyGuard {
     using DepositTypes for DepositTypes.AssetType;
     using DepositTypes for DepositTypes.TradeResult;
     
-    BLSVerifier public blsVerifier;
+    BLSVerifierWithGovernance public blsVerifier;
     address public depositBoxAddress;
     
     // Settlement data
@@ -1043,7 +1232,7 @@ contract Settlement is Ownable, ReentrancyGuard {
      * @param depositBoxAddress Deposit box contract address
      */
     constructor(address blsVerifierAddress, address depositBoxAddress) {
-        blsVerifier = BLSVerifier(blsVerifierAddress);
+        blsVerifier = BLSVerifierWithGovernance(blsVerifierAddress);
         depositBoxAddress = depositBoxAddress;
     }
 
@@ -1410,7 +1599,7 @@ contract TransferManager {
 contract AtomicaController is Ownable {
     DepositBox public depositBox;
     StateRoot public stateRoot;
-    BLSVerifier public blsVerifier;
+    BLSVerifierWithGovernance public blsVerifier;
     Settlement public settlement;
     TransferManager public transferManager;
 
@@ -1435,7 +1624,7 @@ contract AtomicaController is Ownable {
     ) {
         depositBox = DepositBox(depositBoxAddress);
         stateRoot = StateRoot(stateRootAddress);
-        blsVerifier = BLSVerifier(blsVerifierAddress);
+        blsVerifier = BLSVerifierWithGovernance(blsVerifierAddress);
         settlement = Settlement(settlementAddress);
         transferManager = TransferManager(transferManagerAddress);
     }
