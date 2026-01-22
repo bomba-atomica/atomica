@@ -97,6 +97,9 @@ async function deploy(config: DeployConfig): Promise<void> {
         if (config.runTests) {
             console.log("\nRunning E2E tests...");
             await _runE2ETests(rpcUrl);
+
+            console.log("\nRunning genesis integration tests...");
+            await _runGenesisTests(rpcUrl);
         }
     } finally {
         if (testnet) {
@@ -154,6 +157,34 @@ async function _runE2ETests(rpcUrl: string): Promise<void> {
         console.log("✓ E2E tests passed");
     } catch (error) {
         console.error("✗ E2E tests failed:", error);
+        throw error;
+    }
+}
+
+/**
+ * Run genesis integration tests
+ */
+async function _runGenesisTests(rpcUrl: string): Promise<void> {
+    console.log("\nRunning genesis access control tests...");
+
+    const env = {
+        ...process.env,
+        ETH_RPC_URL: rpcUrl,
+    };
+
+    try {
+        await _runForge(
+            "test",
+            ["--match-path", "test/integration/GovernanceGenesis.t.sol", "--rpc-url", rpcUrl, "--summary"],
+            {
+                cwd: CONTRACTS_DIR,
+                env,
+            },
+        );
+
+        console.log("✓ Genesis integration tests passed");
+    } catch (error) {
+        console.error("✗ Genesis integration tests failed:", error);
         throw error;
     }
 }
