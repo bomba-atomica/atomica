@@ -3,10 +3,13 @@ name: EVM Contracts CI
 on:
   workflow_dispatch:
   push:
-    branches: [debug-e2e]
+    branches: [main, master, debug-e2e]
+  pull_request:
+    branches: [main, master, debug-e2e]
+    types: [opened, synchronize]
 
 jobs:
-  test:
+  e2e-tests:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -25,11 +28,17 @@ jobs:
           curl -fsSL https://bun.sh/install | bash
           echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
+      - name: Install test-orchestration dependencies
+        working-directory: source/evm-contracts
+        run: bun install
+
       - name: Build SDK
         run: |
           cd source/docker-testnet/ethereum-testnet/typescript-sdk
           bun install && bun run build
-          ls -la dist/
 
-      - name: Check dist from root
-        run: ls -la source/docker-testnet/ethereum-testnet/typescript-sdk/dist/
+      - name: Run e2e tests
+        working-directory: source/evm-contracts
+        run: bun run test:docker
+        env:
+          ETH_RPC_URL: http://localhost:8545
