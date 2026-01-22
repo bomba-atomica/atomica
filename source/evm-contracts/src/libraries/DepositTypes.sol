@@ -93,6 +93,57 @@ library DepositTypes {
     }
 
     /**
+     * @notice Auction configuration with deadline handling
+     * @dev Deadline is specified in Unix microseconds, converted to seconds/block for EVM
+     */
+    struct AuctionConfig {
+        uint64 nonce;
+        string description;
+        uint64 deadlineMicro;
+        uint256 minPrice;
+        uint256 maxPrice;
+        uint256 minEthAmount;
+        uint256 minUsdcAmount;
+    }
+
+    /**
+     * @notice Auction deadline information
+     * @dev Derived from AuctionConfig for on-chain deadline checking
+     */
+    struct AuctionDeadline {
+        uint64 deadlineMicro;
+        uint64 deadlineSeconds;
+        uint256 scuttleBlock;
+        bool deadlinePassed;
+    }
+
+    /**
+     * @notice Auction state for deadline tracking
+     */
+    enum AuctionState {
+        NONE,
+        OPEN,
+        CLOSING,
+        SETTLED,
+        SCUTTLED
+    }
+
+    /**
+     * @notice Complete auction information
+     */
+    struct Auction {
+        uint64 nonce;
+        string description;
+        AuctionDeadline deadline;
+        AuctionState state;
+        uint256 startNonce;
+        uint256 endNonce;
+        uint256 clearingPrice;
+        uint256 totalEthDeposits;
+        uint256 totalUsdcDeposits;
+    }
+
+    /**
      * @notice Trade execution results with state proof reference
      * @param clearingPrice Final ETH/USDC price
      * @param ethToTrade Amount of ETH to trade
@@ -167,5 +218,74 @@ library DepositTypes {
      */
     function computeStorageKey(address depositor, uint256 nonce) internal pure returns (bytes32) {
         return keccak256(abi.encode(depositor, nonce));
+    }
+
+    /**
+     * @notice Convert microsecond deadline to AuctionDeadline
+     * @param deadlineMicro Unix timestamp in microseconds
+     * @param currentBlock Current block number
+     * @return AuctionDeadline struct
+     */
+    function deadlineFromMicroseconds(uint64 deadlineMicro, uint256 currentBlock) 
+        internal 
+        view 
+        returns (AuctionDeadline memory) 
+    {
+        // Convert microseconds to seconds
+        uint64 deadlineSeconds = deadlineMicro / 1_000_000;
+        
+        // Calculate time remaining
+        uint256 secondsRemaining = 0;
+        if (block.timestamp < deadlineSeconds) {
+            secondsRemaining = deadlineSeconds - block.timestamp;
+        }
+        
+        // Estimate scuttle block (12s per block average + 10 block buffer)
+        uint256 blocksRemaining = (secondsRemaining / 12) + 10;
+        uint256 scuttleBlock = block.number + blocksRemaining;
+        
+        bool deadlinePassed = block.timestamp >= deadlineSeconds || block.number >= scuttleBlock;
+        
+        return AuctionDeadline({
+            deadlineMicro: deadlineMicro,
+            deadlineSeconds: deadlineSeconds,
+            scuttleBlock: scuttleBlock,
+            deadlinePassed: deadlinePassed
+        });
+    }
+
+    /**
+     * @notice Check if auction deadline has passed
+     * @param deadline AuctionDeadline struct
+     * @return True if deadline passed
+     */
+    function isDeadlinePassed(AuctionDeadline memory deadline) 
+        internal 
+        view 
+        returns (bool) 
+    {
+        // Check wall clock time first
+        if (block.timestamp >= deadline.deadlineSeconds) {
+            return true;
+        }
+        
+        // Check block-based scuttle as backup
+        if (block.number >= deadline.scuttleBlock) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * @notice Get auction state string for debugging
+     */
+    function getAuctionStateString(AuctionState state) internal pure returns (string memory) {
+        if (state == AuctionState.NONE) return "NONE";
+        if (state == AuctionState.OPEN) return "OPEN";
+        if (state == AuctionState.CLOSING) return "CLOSING";
+        if (state == AuctionState.SETTLED) return "SETTLED";
+        if (state == AuctionState.SCUTTLED) return "SCUTTLED";
+        return "UNKNOWN";
     }
 }

@@ -129,6 +129,263 @@ This is simpler because:
 
 ---
 
+## 1. Auction Configuration and Deadline Handling
+
+### 1.1 Overview
+
+Auctions require a hard deadline to ensure timely settlement and enable automatic scuttling if the deadline passes. This section describes how auction deadlines are configured, converted, and enforced.
+
+### 1.2 Auction Configuration
+
+```solidity
+/**
+ * @notice Auction configuration with deadline handling
+ * @dev Deadline is specified in Unix microseconds, converted to seconds/block for EVM
+ */
+struct AuctionConfig {
+    uint64 nonce;              // Unique auction identifier
+    string description;        // Human-readable (e.g., "west-daily-btc-eth")
+    uint64 deadlineMicro;      // Unix timestamp in MICROSECONDS (10^-6 seconds)
+    uint256 minPrice;          // Minimum ETH/USDC price (in USD terms)
+    uint256 maxPrice;          // Maximum ETH/USDC price
+    uint256 minEthAmount;      // Minimum ETH deposits to start auction
+    uint256 minUsdcAmount;     // Minimum USDC deposits to start auction
+}
+
+/**
+ * @notice Auction deadline information
+ * @dev Derived from AuctionConfig for on-chain deadline checking
+ */
+struct AuctionDeadline {
+    uint64 deadlineMicro;      // Original microsecond deadline
+    uint64 deadlineSeconds;    // Converted to seconds (deadlineMicro / 10^6)
+    uint256 scuttleBlock;      // Block number where auction auto-scuttles
+    bool deadlinePassed;       // Current status
+}
+```
+
+### 1.3 Time Conversion
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     AUCTION DEADLINE CONVERSION                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Off-Chain Input (Auction Coordinator)                                       │
+│  ════════════════════════════════                                            │
+│                                                                              │
+│  deadline_microseconds = 1769111356000000  (example)                        │
+│                                                                              │
+│         │                                                                    │
+│         ▼                                                                    │
+│  ┌───────────────────────────────────────────┐                              │
+│  │  Convert microseconds to seconds          │                              │
+│  │  deadline_seconds = deadline_micro / 10^6 │                              │
+│  │  = 1769111356                              │                              │
+│  └───────────────────────────────────────────┘                              │
+│         │                                                                    │
+│         ▼                                                                    │
+│  ┌───────────────────────────────────────────┐                              │
+│  │  Estimate scuttle block                    │                              │
+│  │  scuttle_block = current_block +           │                              │
+│  │                   (seconds_remaining / 12) │  // 12s per block average    │
+│  └───────────────────────────────────────────┘                              │
+│         │                                                                    │
+│         ▼                                                                    │
+│  ┌───────────────────────────────────────────┐                              │
+│  │  Store on-chain:                           │                              │
+│  │  - deadline (seconds)                      │                              │
+│  │  - scuttleBlock (block number)             │                              │
+│  └───────────────────────────────────────────┘                              │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1.4 Scuttle Mechanism
+
+The scuttle mechanism ensures auctions terminate at their deadline:
+
+```solidity
+/**
+ * @notice Check if auction deadline has passed
+ * @param deadline AuctionDeadline struct
+ * @return True if deadline passed or block >= scuttleBlock
+ */
+function isDeadlinePassed(AuctionDeadline memory deadline) 
+    internal 
+    view 
+    returns (bool) 
+{
+    // Check wall clock time first
+    if (block.timestamp >= deadline.deadlineSeconds) {
+        return true;
+    }
+    
+    // Check block-based scuttle as backup
+    if (block.number >= deadline.scuttleBlock) {
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * @notice Attempt to settle auction before deadline
+ * @param deadline Auction deadline info
+ * @return True if settled successfully
+ */
+function settleBeforeDeadline(AuctionDeadline memory deadline) 
+    external 
+    returns (bool) 
+{
+    require(!isDeadlinePassed(deadline), "Auction: deadline passed");
+    
+    // ... settlement logic ...
+    
+    return true;
+}
+
+/**
+ * @notice Scuttle auction after deadline
+ * @param nonce Auction identifier
+ * @dev Can be called by anyone after deadline
+ */
+function scuttleAuction(uint64 nonce) external {
+    Auction storage auction = auctions[nonce];
+    require(auction.state == AuctionState.OPEN, "Auction not open");
+    
+    AuctionDeadline memory deadline = auction.deadline;
+    require(isDeadlinePassed(deadline), "Auction: not past deadline");
+    
+    auction.state = AuctionState.SCUTTLED;
+    auction.settledAt = block.timestamp;
+    
+    emit AuctionScuttled(nonce, block.timestamp);
+}
+```
+
+### 1.5 Deadline Conversion Implementation
+
+```solidity
+/**
+ * @title AuctionDeadlineConverter
+ * @notice Utilities for converting auction deadlines
+ */
+library AuctionDeadlineConverter {
+    uint64 public constant MICROSECONDS_PER_SECOND = 1_000_000;
+    uint256 public constant SECONDS_PER_BLOCK_ESTIMATE = 12;
+    
+    /**
+     * @notice Convert microsecond deadline to AuctionDeadline
+     * @param deadlineMicro Unix timestamp in microseconds
+     * @param currentBlock Current block number
+     * @return AuctionDeadline struct
+     */
+    function fromMicroseconds(
+        uint64 deadlineMicro, 
+        uint256 currentBlock
+    ) internal view returns (AuctionDeadline memory) {
+        // Convert microseconds to seconds
+        uint64 deadlineSeconds = deadlineMicro / MICROSECONDS_PER_SECOND;
+        
+        // Calculate time remaining
+        uint256 secondsRemaining = 0;
+        if (block.timestamp < deadlineSeconds) {
+            secondsRemaining = deadlineSeconds - block.timestamp;
+        }
+        
+        // Estimate scuttle block (with buffer)
+        uint256 blocksRemaining = (secondsRemaining / SECONDS_PER_BLOCK_ESTIMATE) + 10; // +10 block buffer
+        uint256 scuttleBlock = block.number + blocksRemaining;
+        
+        return AuctionDeadline({
+            deadlineMicro: deadlineMicro,
+            deadlineSeconds: deadlineSeconds,
+            scuttleBlock: scuttleBlock,
+            deadlinePassed: block.timestamp >= deadlineSeconds || block.number >= scuttleBlock
+        });
+    }
+    
+    /**
+     * @notice Get deadline status
+     * @param deadline AuctionDeadline struct
+     * @return status String describing deadline status
+     */
+    function getStatus(AuctionDeadline memory deadline) 
+        internal 
+        pure 
+        returns (string memory) 
+    {
+        if (deadline.deadlinePassed) {
+            return "DEADLINE_PASSED";
+        }
+        
+        uint256 secondsUntil = deadline.deadlineSeconds > block.timestamp 
+            ? deadline.deadlineSeconds - block.timestamp 
+            : 0;
+            
+        if (secondsUntil > 86400) { // More than 1 day
+            return "MORE_THAN_1_DAY";
+        } else if (secondsUntil > 3600) { // More than 1 hour
+            return "LESS_THAN_1_DAY";
+        } else if (secondsUntil > 60) { // More than 1 minute
+            return "LESS_THAN_1_HOUR";
+        } else {
+            return "LESS_THAN_1_MINUTE";
+        }
+    }
+}
+```
+
+### 1.6 Usage Example
+
+```solidity
+// Off-chain (TypeScript)
+const deadlineMicro = BigInt(Date.now() + 3600_000_000); // 1 hour from now
+// deadlineMicro = 1769114956000000 (microseconds)
+
+// On-chain deployment
+AuctionDeadline memory deadline = AuctionDeadlineConverter.fromMicroseconds(
+    deadlineMicro,
+    block.number
+);
+
+// Check deadline status
+string memory status = AuctionDeadlineConverter.getStatus(deadline);
+// Returns: "LESS_THAN_1_HOUR"
+
+// At deadline
+if (AuctionDeadlineConverter.isDeadlinePassed(deadline)) {
+    // Auction can be scuttled
+    scuttleAuction(nonce);
+}
+```
+
+### 1.7 Security Considerations
+
+1. **Block Time Variance**: Block times vary, so `scuttleBlock` is an estimate. Always check wall clock time first.
+2. **Front-Running**: Scuttle can be front-run. Consider adding a grace period.
+3. **Clock Drift**: Use `block.timestamp` (consensus-driven) rather than external time sources.
+4. **Microsecond Precision**: Auction coordinator must handle microsecond precision correctly.
+
+---
+
+### 1.8 Key Functions Summary
+
+| Function | Purpose | Access |
+|----------|---------|--------|
+| `fromMicroseconds()` | Convert deadline to struct | Public |
+| `isDeadlinePassed()` | Check if deadline passed | Internal |
+| `scuttleAuction()` | Cancel expired auction | External |
+| `settleBeforeDeadline()` | Settle before deadline | External |
+| `getStatus()` | Get human-readable status | Public view |
+
+---
+
+This page was updated January 2026 to reflect the simplified architecture using native Ethereum state proofs instead of custom commitment trees.
+
+---
+
 ## 1. Executive Summary
 
 This document outlines a comprehensive implementation plan for EVM smart contracts that will power Atomica's cross-chain deposit system. The system enables users to deposit ETH and USDC, participate in an offline auction mechanism, and execute atomic trades based on BLS-aggregated state proofs verified on Ethereum.
