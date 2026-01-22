@@ -14,7 +14,6 @@ contract DepositBox is ReentrancyGuard, Ownable {
     IERC20 public immutable usdcToken;
 
     uint256 public constant DEPOSIT_TIMEOUT = 7 days;
-    uint256 public constant AUCTION_BUFFER = 1 hours;
 
     mapping(bytes32 => DepositTypes.Deposit) public deposits;
     mapping(address => uint256[]) public depositorNonces;
@@ -25,7 +24,6 @@ contract DepositBox is ReentrancyGuard, Ownable {
     bytes32 public latestStateRoot;
     uint256 public lastDepositBlock;
 
-    bool public bricked;
     address public settlementContract;
 
     event ETHDeposited(
@@ -56,15 +54,9 @@ contract DepositBox is ReentrancyGuard, Ownable {
     );
 
     event SettlementContractSet(address indexed settlement);
-    event Bricked(address indexed caller, uint256 timestamp);
 
     modifier onlySettlement() {
         require(msg.sender == settlementContract, "DepositBox: only settlement");
-        _;
-    }
-
-    modifier notBricked() {
-        require(!bricked, "DepositBox: system bricked");
         _;
     }
 
@@ -85,7 +77,6 @@ contract DepositBox is ReentrancyGuard, Ownable {
         external
         payable
         nonReentrant
-        notBricked
     {
         require(msg.value > 0, "DepositBox: zero deposit");
         require(commitment != bytes32(0), "DepositBox: zero commitment");
@@ -120,7 +111,6 @@ contract DepositBox is ReentrancyGuard, Ownable {
     function depositUSDC(uint256 amount, bytes32 commitment)
         external
         nonReentrant
-        notBricked
     {
         require(amount > 0, "DepositBox: zero deposit");
         require(commitment != bytes32(0), "DepositBox: zero commitment");
@@ -160,7 +150,7 @@ contract DepositBox is ReentrancyGuard, Ownable {
     function confirmDeposits(
         bytes32[] calldata commitments,
         bytes32 newStateRoot
-    ) external onlySettlement notBricked {
+    ) external onlySettlement {
         require(commitments.length > 0, "DepositBox: empty commitments");
 
         for (uint256 i = 0; i < commitments.length; i++) {
@@ -184,7 +174,7 @@ contract DepositBox is ReentrancyGuard, Ownable {
         lastDepositBlock = block.number;
     }
 
-    function markTrading(bytes32[] calldata commitments) external onlySettlement notBricked {
+    function markSettled(bytes32[] calldata commitments) external onlySettlement {
         for (uint256 i = 0; i < commitments.length; i++) {
             bytes32 commitment = commitments[i];
             require(commitmentUsed[commitment], "DepositBox: unknown commitment");
@@ -193,20 +183,6 @@ contract DepositBox is ReentrancyGuard, Ownable {
             DepositTypes.Deposit storage deposit = deposits[depositHash];
 
             if (deposit.status == DepositTypes.DepositStatus.CONFIRMED) {
-                deposit.status = DepositTypes.DepositStatus.TRADING;
-            }
-        }
-    }
-
-    function markSettled(bytes32[] calldata commitments) external onlySettlement notBricked {
-        for (uint256 i = 0; i < commitments.length; i++) {
-            bytes32 commitment = commitments[i];
-            require(commitmentUsed[commitment], "DepositBox: unknown commitment");
-
-            bytes32 depositHash = _computeDepositHashFromCommitment(commitment);
-            DepositTypes.Deposit storage deposit = deposits[depositHash];
-
-            if (deposit.status == DepositTypes.DepositStatus.TRADING) {
                 deposit.status = DepositTypes.DepositStatus.SETTLED;
             }
         }
@@ -215,7 +191,6 @@ contract DepositBox is ReentrancyGuard, Ownable {
     function refundDeposit(address depositor, uint256 nonce)
         external
         nonReentrant
-        notBricked
     {
         bytes32 depositHash = _computeDepositHash(
             depositor,
@@ -257,18 +232,6 @@ contract DepositBox is ReentrancyGuard, Ownable {
             deposit.assetType,
             nonce
         );
-    }
-
-    function batchRefund(address[] calldata depositors, uint256[] calldata nonces)
-        external
-        nonReentrant
-        notBricked
-    {
-        require(depositors.length == nonces.length, "DepositBox: length mismatch");
-
-        for (uint256 i = 0; i < depositors.length; i++) {
-            refundDeposit(depositors[i], nonces[i]);
-        }
     }
 
     function getDeposit(address depositor, uint256 nonce)

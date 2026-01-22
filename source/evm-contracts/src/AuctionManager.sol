@@ -13,14 +13,10 @@ contract AuctionManager is Ownable {
     mapping(uint64 => Auction) public auctions;
     uint64 public nextNonce;
 
-    bool public systemScuttled;
-
     event AuctionInitialized(uint64 indexed nonce, uint64 deadline, uint256 scuttleBlock);
-    event SystemScuttled();
 
     constructor() {
         nextNonce = 1;
-        systemScuttled = false;
     }
 
     function initializeAuction(
@@ -50,7 +46,6 @@ contract AuctionManager is Ownable {
     function isValid(uint64 nonce) external view returns (bool) {
         Auction storage auction = auctions[nonce];
         if (auction.scuttleBlock == 0) return false;
-        if (systemScuttled) return false;
         if (auction.scuttle) return false;
         if (block.timestamp > auction.deadline) return false;
         if (block.number > auction.scuttleBlock) return false;

@@ -2,8 +2,8 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
-import "@openzeppelin/contracts/mocks/ERC20Mock.sol";
 import "../../src/DepositBox.sol";
+import "@openzeppelin/contracts/mocks/ERC20Mock.sol";
 
 contract DepositBoxTest is Test {
     DepositBox depositBox;

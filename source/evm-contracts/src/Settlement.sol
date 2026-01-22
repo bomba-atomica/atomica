@@ -16,8 +16,6 @@ contract Settlement is ReentrancyGuard, Ownable {
     bytes32 public latestVerifiedRoot;
     uint256 public lastSettlementBlock;
 
-    bool public bricked;
-
     mapping(bytes32 => bool) public processedTrades;
 
     event TradeExecuted(
@@ -32,20 +30,6 @@ contract Settlement is ReentrancyGuard, Ownable {
         uint256 clearingPrice
     );
     event VerificationFailed(string reason);
-    event Bricked(address indexed caller, uint256 timestamp);
-
-    modifier onlyVerifiedStateRoot(bytes32 stateRoot) {
-        require(
-            blsVerifier.isStateRootValid(stateRoot),
-            "Settlement: unverified state root"
-        );
-        _;
-    }
-
-    modifier notBricked() {
-        require(!bricked, "Settlement: system bricked");
-        _;
-    }
 
     constructor(
         address blsVerifierAddress,
@@ -72,7 +56,7 @@ contract Settlement is ReentrancyGuard, Ownable {
         address[] calldata winners,
         uint256[] calldata ethAmounts,
         uint256[] calldata usdcAmounts
-    ) external nonReentrant notBricked returns (bool) {
+    ) external nonReentrant returns (bool) {
         require(
             winners.length == winningCommitments.length,
             "Settlement: commitment mismatch"
@@ -105,7 +89,6 @@ contract Settlement is ReentrancyGuard, Ownable {
         );
 
         for (uint256 i = 0; i < winningCommitments.length; i++) {
-            bytes32 commitment = winningCommitments[i];
             address winner = winners[i];
             uint256 ethAmount = ethAmounts[i];
             uint256 usdcAmount = usdcAmounts[i];
@@ -138,6 +121,10 @@ contract Settlement is ReentrancyGuard, Ownable {
         return true;
     }
 
+    /**
+     * @notice Settle with ZK proof verification
+     * @dev Coming in v1.0 - requires ZK circuit proof of auction correctness
+     */
     function settleWithZKProof(
         bytes32 stateRoot,
         bytes32 merkleRoot,
@@ -147,7 +134,7 @@ contract Settlement is ReentrancyGuard, Ownable {
         address[] calldata winners,
         uint256[] calldata ethAmounts,
         uint256[] calldata usdcAmounts
-    ) external nonReentrant notBricked returns (bool) {
+    ) external nonReentrant returns (bool) {
         require(
             blsVerifier.isStateRootValid(stateRoot),
             "Settlement: unverified state root"
@@ -203,63 +190,6 @@ contract Settlement is ReentrancyGuard, Ownable {
         lastSettlementBlock = block.number;
 
         emit SettlementVerified(stateRoot, merkleRoot, tradeResult.clearingPrice);
-
-        return true;
-    }
-
-    function executeTransfers(
-        bytes32 stateRoot,
-        DepositTypes.TradeResult calldata tradeResult,
-        bytes32[] calldata commitments,
-        address[] calldata recipients,
-        uint256[] calldata ethAmounts,
-        uint256[] calldata usdcAmounts
-    ) external onlyOwner notBricked returns (bool) {
-        require(
-            blsVerifier.isStateRootValid(stateRoot),
-            "Settlement: unverified state root"
-        );
-
-        require(
-            commitments.length == recipients.length &&
-            recipients.length == ethAmounts.length &&
-            ethAmounts.length == usdcAmounts.length,
-            "Settlement: array length mismatch"
-        );
-
-        bytes32 tradeId = keccak256(abi.encodePacked(
-            stateRoot,
-            tradeResult.merkleRoot,
-            tradeResult.clearingPrice
-        ));
-
-        require(!processedTrades[tradeId], "Settlement: trade already processed");
-
-        for (uint256 i = 0; i < commitments.length; i++) {
-            address recipient = recipients[i];
-            uint256 ethAmount = ethAmounts[i];
-            uint256 usdcAmount = usdcAmounts[i];
-
-            if (ethAmount > 0) {
-                (bool success, ) = recipient.call{value: ethAmount}("");
-                require(success, "Settlement: ETH transfer failed");
-            }
-
-            if (usdcAmount > 0) {
-                require(
-                    usdcToken.transfer(recipient, usdcAmount),
-                    "Settlement: USDC transfer failed"
-                );
-            }
-
-            emit TradeExecuted(tradeId, recipient, ethAmount, usdcAmount);
-        }
-
-        depositBox.markSettled(commitments);
-
-        processedTrades[tradeId] = true;
-        latestVerifiedRoot = stateRoot;
-        lastSettlementBlock = block.number;
 
         return true;
     }
