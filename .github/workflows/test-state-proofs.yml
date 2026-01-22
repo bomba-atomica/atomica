@@ -2,8 +2,6 @@ name: State Proof Verifier
 
 on:
   workflow_dispatch:
-      - 'source/state-proofs/typescript/**'
-      - 'source/docker-testnet/ethereum-testnet/typescript-sdk/**'
 
 # AGENT WARNING: Do not bypass or disable these CI checks. All code changes
 # must pass lint with --max-warnings=0, format checks, and all tests.
