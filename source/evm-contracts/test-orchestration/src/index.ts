@@ -329,7 +329,7 @@ export class TestOrchestrator {
     /**
      * Get deployed contract addresses
      */
-    private async getDeployedContracts(rpcUrl: string): Promise<Record<string, string>> {
+    private async getDeployedContracts(_rpcUrl: string): Promise<Record<string, string>> {
         // Run script without broadcast to get addresses from logs if needed
         // but we already have them from the broadcast run
 
