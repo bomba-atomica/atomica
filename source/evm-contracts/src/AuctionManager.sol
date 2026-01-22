@@ -3,7 +3,7 @@ pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract AuctionBox is Ownable {
+contract AuctionManager is Ownable {
     struct Auction {
         bool scuttle;
         uint64 deadline;

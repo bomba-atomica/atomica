@@ -41,7 +41,7 @@ Ethereum smart contracts for Atomica's cross-chain atomic deposit system.
 
 | Contract | Purpose |
 |----------|---------|
-| `AuctionBox` | Fail-only auction management (scuttle=true default) |
+| `AuctionManager` | Fail-only auction management (scuttle=true default) |
 | `DepositBox` | ETH/USDC deposits with commitment tracking |
 | `BLSVerifier` | BLS signature verification |
 | `Settlement` | Trade execution from verified proofs |
