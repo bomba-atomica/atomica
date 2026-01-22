@@ -4,6 +4,7 @@
   "description": "Test orchestration for Atomica EVM contracts using Docker testnet",
   "type": "module",
   "scripts": {
+    "build": "echo 'No build step required for TypeScript scripts'",
     "start": "bun run src/index.ts",
     "test": "bun run src/index.ts --test all",
     "test:unit": "bun run src/index.ts --test unit",
