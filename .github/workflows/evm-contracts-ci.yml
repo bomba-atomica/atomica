@@ -8,33 +8,6 @@ on:
     types: [opened, synchronize]
 
 jobs:
-  # lint-and-build:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
-
-  #     - name: Install Foundry
-  #       uses: foundry-rs/foundry-toolchain@v1
-
-  #     - name: Run lint
-  #       run: forge lint
-
-  #     - name: Run build
-  #       run: forge build
-
-  # unit-tests:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
-
-  #     - name: Install Foundry
-  #       uses: foundry-rs/foundry-toolchain@v1
-
-  #     - name: Run unit tests
-  #       run: forge test
-
   e2e-tests:
     runs-on: ubuntu-latest
     services:
@@ -64,14 +37,10 @@ jobs:
 
       - name: Build Ethereum Docker Testnet SDK
         working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
-        run: |
-          bun install
-          bun run build
-          ls -la dist/
+        run: bun install && bun run build
 
       - name: Debug: Check SDK dist folder
-        run: |
-          ls -la ../../docker-testnet/ethereum-testnet/typescript-sdk/dist/ || echo "Dist folder not found!"
+        run: ls -la ../../docker-testnet/ethereum-testnet/typescript-sdk/dist/
 
       - name: Run e2e tests
         run: bun run test:docker
