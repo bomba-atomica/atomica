@@ -6,7 +6,7 @@
  *   bun run src/deploy.ts --network <url>    # Deploy to custom network
  *   bun run src/deploy.ts --test             # Deploy and run E2E tests
  */
-import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
+import { EthereumDockerTestnet } from "../../docker-testnet/ethereum-testnet/typescript-sdk/dist/index.js";
 import { spawn } from "child_process";
 import { resolve as pathResolve, dirname } from "path";
 import { parseArgs } from "util";

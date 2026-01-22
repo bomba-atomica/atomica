@@ -28,7 +28,7 @@
  *   bun run src/index.ts --deploy-only      # Only deploy contracts
  *   bun run src/index.ts --keep-alive       # Don't tear down testnet
  */
-import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
+import { EthereumDockerTestnet } from "../../docker-testnet/ethereum-testnet/typescript-sdk/dist/index.js";
 import { spawn } from "child_process";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { resolve as pathResolve } from "path";

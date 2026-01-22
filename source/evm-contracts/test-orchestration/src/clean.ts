@@ -3,7 +3,7 @@
  *
  * Usage: bun run src/clean.ts
  */
-import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
+import { EthereumDockerTestnet } from "../../docker-testnet/ethereum-testnet/typescript-sdk/dist/index.js";
 import { spawn } from "child_process";
 import { resolve as pathResolve } from "path";
 
