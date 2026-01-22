@@ -1,6 +1,7 @@
 name: EVM Contracts CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, master, debug-e2e]
   pull_request:
