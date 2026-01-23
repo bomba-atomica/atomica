@@ -130,7 +130,7 @@ export function Faucet({
             <TxButton
               label="10 ETH"
               accountAddress={account}
-              prepareTransaction={() => getMintFakeEthPayload(account)}
+              prepareTransaction={() => getMintFakeEthPayload()}
               onSuccess={(hash) => handleMintSuccess(hash, "eth")}
               disabled={!contractsDeployed}
               className="w-full"
@@ -147,7 +147,7 @@ export function Faucet({
             <TxButton
               label="10k USD"
               accountAddress={account}
-              prepareTransaction={() => getMintFakeUsdPayload(account)}
+              prepareTransaction={() => getMintFakeUsdPayload()}
               onSuccess={(hash) => handleMintSuccess(hash, "usd")}
               disabled={!contractsDeployed}
               className="w-full"

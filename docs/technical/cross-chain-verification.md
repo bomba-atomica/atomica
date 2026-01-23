@@ -745,6 +745,438 @@ Annual example:
 - **Rejected**: Individual instant settlement per auction
 - **Rationale**: 100x cost reduction through batching enables sustainable economics
 
+## Bloom Filter Pre-Flight Verification
+
+### Overview: Belt and Suspenders Cross-Chain Verification
+
+In addition to the ZK-proven settlement mechanism described above, Atomica implements an additional "belt and suspenders" verification layer using bloom filters. This provides an extra consistency check between the Atomica chain and EVM chains before settlement transactions are executed.
+
+**Purpose**: Ensure that the set of depositors on the EVM chain exactly matches the set of recipients in the Atomica auction settlement, preventing any mismatch or discrepancy before funds are transferred.
+
+### Architecture
+
+**Two-Way Bloom Filter Matching**:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    EVM Chain (Away Chain)                     │
+│                                                               │
+│  Deposit Bloom Filter:                                       │
+│  • Maintains bloom filter of all depositor addresses         │
+│  • Updated with each new deposit transaction                 │
+│  • Stored on-chain in deposit contract                       │
+│  • Hash: H_deposits = hash(bloom_filter_deposits)           │
+│                                                               │
+│  State: H_deposits committed on-chain                        │
+└───────────────────────────┬──────────────────────────────────┘
+                            │
+                            │ Pre-Flight Check
+                            │ (State Proof Verification)
+                            ▼
+┌──────────────────────────────────────────────────────────────┐
+│                 Atomica Chain (Home Chain)                    │
+│                                                               │
+│  Settlement Recipient Bloom Filter:                          │
+│  • Created at auction clearing time                          │
+│  • Contains all accounts receiving funds in settlement       │
+│  • Hash: H_recipients = hash(bloom_filter_recipients)       │
+│                                                               │
+│  Pre-Flight Verification:                                    │
+│  • Atomica validators submit state proof of H_recipients    │
+│  • EVM chain verifies: H_deposits == H_recipients           │
+│  • If match: Allow settlement transactions to proceed       │
+│  • If mismatch: Reject settlement, trigger investigation    │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Details
+
+#### EVM Chain: Deposit Bloom Filter
+
+**Smart Contract State**:
+```solidity
+contract AtomicaDepositEscrow {
+    // Bloom filter tracking all depositors
+    BloomFilter public depositorsBloomFilter;
+    
+    // Hash of the bloom filter for efficient comparison
+    bytes32 public depositorsBloomHash;
+    
+    // Auction-specific tracking
+    mapping(uint256 => AuctionDeposits) public auctionDeposits;
+    
+    struct AuctionDeposits {
+        uint256 auctionId;
+        address[] depositors;
+        uint256 totalDeposited;
+        bytes32 bloomFilterHash;
+    }
+    
+    function deposit(
+        uint256 auctionId,
+        address token,
+        uint256 amount
+    ) external {
+        // Record deposit
+        auctionDeposits[auctionId].depositors.push(msg.sender);
+        auctionDeposits[auctionId].totalDeposited += amount;
+        
+        // Update bloom filter
+        depositorsBloomFilter.add(msg.sender);
+        
+        // Update hash
+        depositorsBloomHash = keccak256(
+            abi.encode(depositorsBloomFilter.bits)
+        );
+        
+        emit Deposit(msg.sender, auctionId, amount, depositorsBloomHash);
+    }
+    
+    function verifySettlementRecipients(
+        uint256 auctionId,
+        bytes32 recipientsBloomHash,
+        bytes calldata stateProof
+    ) external returns (bool) {
+        // Verify state proof from Atomica chain
+        require(
+            verifyAtomicaStateProof(stateProof),
+            "Invalid state proof"
+        );
+        
+        // Extract recipients bloom hash from proof
+        bytes32 provenRecipientHash = extractRecipientHash(stateProof);
+        
+        // Verify it matches what was submitted
+        require(
+            provenRecipientHash == recipientsBloomHash,
+            "Proof mismatch"
+        );
+        
+        // Critical check: Depositors must match recipients
+        bytes32 expectedDepositorHash = auctionDeposits[auctionId].bloomFilterHash;
+        
+        if (expectedDepositorHash != recipientsBloomHash) {
+            emit SettlementMismatch(
+                auctionId,
+                expectedDepositorHash,
+                recipientsBloomHash
+            );
+            return false;
+        }
+        
+        // Hashes match - approve settlement
+        auctionDeposits[auctionId].settlementApproved = true;
+        emit SettlementApproved(auctionId, recipientsBloomHash);
+        return true;
+    }
+    
+    function executeSettlement(
+        uint256 auctionId,
+        bytes32[] calldata merkleProof,
+        address recipient,
+        uint256 amount
+    ) external {
+        // Pre-condition: Settlement must be approved via bloom filter check
+        require(
+            auctionDeposits[auctionId].settlementApproved,
+            "Settlement not approved - bloom filter mismatch"
+        );
+        
+        // Proceed with merkle-proof-based settlement
+        // ... (existing settlement logic)
+    }
+}
+```
+
+#### Atomica Chain: Settlement Recipient Bloom Filter
+
+**Move Contract**:
+```move
+module atomica::settlement_verification {
+    use std::hash;
+    use aptos_std::bloom_filter::{Self, BloomFilter};
+    
+    struct SettlementRecipients has key {
+        auction_id: u64,
+        recipients: vector<address>,
+        bloom_filter: BloomFilter,
+        bloom_hash: vector<u8>,
+    }
+    
+    /// Called during auction clearing to prepare settlement
+    public fun prepare_settlement(
+        auction_id: u64,
+        settlement_allocations: vector<SettlementAllocation>
+    ) {
+        // Create bloom filter of all recipients
+        let bloom = bloom_filter::new(
+            /* size */ 1024,
+            /* hash_count */ 3
+        );
+        
+        let recipients = vector::empty<address>();
+        
+        // Add all settlement recipients to bloom filter
+        for allocation in &settlement_allocations {
+            let recipient = allocation.recipient;
+            vector::push_back(&mut recipients, recipient);
+            bloom_filter::add(&mut bloom, &recipient);
+        };
+        
+        // Compute hash of bloom filter
+        let bloom_bits = bloom_filter::get_bits(&bloom);
+        let bloom_hash = hash::sha3_256(bloom_bits);
+        
+        // Store on-chain
+        move_to(
+            &get_signer(),
+            SettlementRecipients {
+                auction_id,
+                recipients,
+                bloom_filter: bloom,
+                bloom_hash,
+            }
+        );
+        
+        // Emit event for validators to relay
+        event::emit(SettlementRecipientsReady {
+            auction_id,
+            bloom_hash,
+            recipient_count: vector::length(&recipients),
+        });
+    }
+    
+    /// Generate state proof of settlement recipients for EVM verification
+    public fun generate_settlement_proof(
+        auction_id: u64
+    ): StateProof {
+        let settlement = borrow_global<SettlementRecipients>(@atomica);
+        
+        // Generate state proof containing bloom hash
+        let proof = state_proof::generate(
+            settlement.bloom_hash,
+            get_current_block_height()
+        );
+        
+        proof
+    }
+}
+```
+
+### Verification Flow
+
+**Step-by-Step Process**:
+
+1. **Auction Execution on Atomica**:
+   - Auction clears and determines winners
+   - Settlement allocations computed
+   - Bloom filter created from all recipient addresses
+   - Bloom filter hash `H_recipients` stored on-chain
+
+2. **Pre-Flight Check Preparation**:
+   - Atomica validators create state proof of `H_recipients`
+   - State proof includes BLS signatures from validator set
+   - Proof demonstrates that `H_recipients` is committed in Atomica state
+
+3. **Submission to EVM Chain**:
+   - Validator (or any relayer) submits state proof to EVM deposit contract
+   - Includes: `auctionId`, `H_recipients`, `stateProof`, `blsSignature`
+
+4. **Verification on EVM Chain**:
+   ```solidity
+   function verifyAndApproveSettlement(
+       uint256 auctionId,
+       bytes32 recipientsHash,
+       bytes calldata stateProof,
+       bytes calldata blsSignature
+   ) external {
+       // Step 1: Verify BLS signature
+       require(
+           verifyBLSSignature(stateProof, blsSignature, validatorSet),
+           "Invalid BLS signature"
+       );
+       
+       // Step 2: Extract hash from state proof
+       bytes32 provenHash = extractHashFromProof(stateProof);
+       require(provenHash == recipientsHash, "Hash mismatch");
+       
+       // Step 3: Compare with depositor bloom hash
+       bytes32 depositorHash = auctionDeposits[auctionId].bloomFilterHash;
+       
+       if (depositorHash != recipientsHash) {
+           // MISMATCH DETECTED
+           revert SettlementBloomMismatch(
+               auctionId,
+               depositorHash,
+               recipientsHash
+           );
+       }
+       
+       // Step 4: Hashes match - approve settlement
+       auctionDeposits[auctionId].settlementApproved = true;
+       emit SettlementApproved(auctionId);
+   }
+   ```
+
+5. **Settlement Execution**:
+   - Only proceeds if `settlementApproved == true`
+   - Provides additional safety check before any funds move
+   - If bloom filters don't match, settlement is blocked pending investigation
+
+### Security Properties
+
+**What This Verification Catches**:
+
+1. **Missing Depositors**: If someone deposited on EVM but isn't in settlement recipients
+2. **Extra Recipients**: If settlement includes addresses that never deposited
+3. **Address Mismatches**: If there's any discrepancy in the account sets
+4. **Data Corruption**: If state was corrupted or tampered with on either chain
+
+**Bloom Filter Parameters**:
+
+**Critical**: Both chains must use **identical** parameters for bloom filter hashes to match:
+
+- **Size**: 1024 bits (fixed, not configurable per-auction)
+- **Hash Functions**: 3 independent hash functions (using keccak256 with different seeds)
+- **Hash Seeds**: `[0x00, 0x01, 0x02]` (deterministic, same on both chains)
+- **Encoding**: Standard address encoding (20 bytes, no padding)
+- **False Positive Rate**: ~0.1% (acceptable for pre-flight check)
+- **False Negative Rate**: 0% (bloom filters never have false negatives)
+
+**Order Independence**: Bloom filters are order-independent. The same set of addresses will produce the same bit array and hash regardless of insertion order, because:
+```
+hash(A) OR hash(B) OR hash(C) = hash(C) OR hash(A) OR hash(B)
+```
+
+This is critical for cross-chain verification since:
+- EVM depositors add addresses in arrival order (async)
+- Atomica settlement recipients are ordered by auction clearing algorithm
+- Despite different orders, identical sets produce identical bloom hashes
+
+**Why Bloom Filters**:
+- **Efficiency**: Constant size regardless of participant count
+- **Gas Cost**: Cheap to store and compare hashes on EVM
+- **Deterministic**: Same set always produces same hash
+- **Order Independent**: Insertion order doesn't matter - same set of addresses produces identical bloom filter regardless of order added
+- **Verifiable**: Can prove membership with low overhead
+
+### Edge Cases and Handling
+
+#### Case 1: Bloom Filter Mismatch
+
+**Scenario**: `H_deposits ≠ H_recipients`
+
+**Response**:
+```solidity
+// Settlement blocked
+auctionDeposits[auctionId].settlementApproved = false;
+
+// Emit detailed event for investigation
+emit SettlementBloomMismatch(
+    auctionId,
+    depositorHash,
+    recipientHash,
+    depositorCount,
+    recipientCount
+);
+
+// Possible causes:
+// 1. Depositor didn't win anything (expected if not enough bids)
+// 2. Non-depositor winning (CRITICAL ERROR - should never happen)
+// 3. State desync between chains (CRITICAL ERROR)
+```
+
+**Resolution**:
+- Protocol halts settlement for this auction
+- Governance/validator investigation triggered
+- Users can reclaim deposits after timeout period
+- Root cause analysis required before resuming
+
+#### Case 2: Partial Participation
+
+**Scenario**: Some depositors don't win any allocation (legitimate)
+
+**Solution**: 
+- Bloom filter contains all depositors, even non-winners
+- Settlement recipients may be a subset
+- **Refinement**: Use two bloom filters:
+  - `depositors_bloom`: All who deposited
+  - `winners_bloom`: Subset who won allocations
+- Check: `winners_bloom ⊆ depositors_bloom`
+
+**Updated Implementation**:
+```solidity
+struct AuctionDeposits {
+    BloomFilter allDepositors;
+    bytes32 allDepositorsHash;
+    // Settlement recipients must be subset
+}
+
+function verifySettlementRecipients(...) external {
+    // Recipients must be subset of depositors
+    require(
+        isSubset(recipientsBloom, allDepositorsBloom),
+        "Recipients contain non-depositors"
+    );
+    // ... continue verification
+}
+```
+
+### Cost Analysis
+
+**Gas Costs on EVM**:
+- Bloom filter update per deposit: +~5K gas
+- Hash computation: ~3K gas
+- State proof verification: ~250K gas (existing ZK verification)
+- Bloom comparison: ~5K gas
+- **Total overhead**: ~263K gas per auction
+
+**Amortization**:
+- With 100 deposits per auction: ~50 gas per deposit (negligible)
+- Pre-flight check: One-time ~250K gas per auction
+- **Trade-off**: Small gas cost for significant safety guarantee
+
+### Benefits
+
+**Defense in Depth**:
+1. **Primary Security**: ZK proofs verify computation correctness
+2. **Secondary Check**: Bloom filters verify set consistency
+3. **Fail-Safe**: Settlement blocked if any mismatch detected
+
+**Operational Confidence**:
+- Catches bugs in settlement logic before funds move
+- Provides early warning of cross-chain desyncs
+- Enables graceful degradation (halt & investigate vs. wrong settlement)
+
+**User Protection**:
+- Prevents sending funds to wrong addresses
+- Ensures depositors are the only recipients
+- Transparent verification (bloom hashes visible on-chain)
+
+### Limitations
+
+**Bloom Filter Constraints**:
+- Cannot identify *which* addresses differ, only *that* they differ
+- False positives possible (~0.1%) but acceptable for pre-flight check
+- Not a replacement for merkle proofs, only an additional check
+
+**Not a Substitute for ZK Proofs**:
+- Bloom filters verify sets match
+- ZK proofs verify computation correctness
+- Both are needed for complete security
+
+### Summary
+
+The bloom filter pre-flight verification provides an additional safety layer:
+
+- **EVM chain** maintains bloom filter of all depositors → `H_deposits`
+- **Atomica chain** creates bloom filter of settlement recipients → `H_recipients`
+- **Pre-flight check**: Atomica validators submit state proof of `H_recipients` to EVM
+- **Verification**: EVM contract checks `H_deposits == H_recipients`
+- **Gate**: Settlement only proceeds if hashes match
+
+This "belt and suspenders" approach catches potential issues before settlement executes, providing defense in depth on top of the core ZK-proven settlement mechanism.
+
 ## Summary: Why Full ZK-Proven Settlement with Batching
 
 This full ZK-proven atomic guarantee mechanism provides:

@@ -1,0 +1,4 @@
+scan = false
+
+[dev]
+external = ["bun-types"]

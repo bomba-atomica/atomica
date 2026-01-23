@@ -177,7 +177,7 @@ class DockerTestnet {
                     setTimeout(() => resolve(), 5000);
                 });
             }
-            catch (_logError) {
+            catch {
                 console.error("Failed to fetch logs.");
             }
             throw error;
@@ -807,7 +807,7 @@ async function waitForHealthy(numValidators, timeoutSecs) {
                     statuses.push(`V${i}:HTTP${response.status}`);
                 }
             }
-            catch (_e) {
+            catch {
                 statuses.push(`V${i}:ERR`);
                 // Validator not ready yet
             }

@@ -1,0 +1,31 @@
+{
+  "name": "@atomica/evm-contracts",
+  "version": "0.1.0",
+  "description": "Atomica EVM smart contracts for cross-chain atomic deposits",
+  "main": "index.js",
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test",
+    "test:gas": "forge test --gas-report",
+    "test:docker": "cd test-orchestration && bun run src/index.ts --test all",
+    "test:docker:smoke": "cd test-orchestration && bun run src/index.ts --test smoke",
+    "test:docker:unit": "cd test-orchestration && bun run src/index.ts --test unit",
+    "test:docker:e2e": "cd test-orchestration && bun run src/index.ts --test e2e",
+    "test:docker:deploy": "cd test-orchestration && bun run src/deploy.ts --test",
+     "lint": "forge lint",
+    "fmt": "forge fmt"
+  },
+  "keywords": [
+    "ethereum",
+    "smart-contracts",
+    "atomica",
+    "bls",
+    "cross-chain"
+  ],
+  "author": "Atomica",
+  "license": "MIT",
+  "devDependencies": {
+    "@openzeppelin/contracts": "^5.0.0",
+    "solhint": "^4.1.1"
+  }
+}

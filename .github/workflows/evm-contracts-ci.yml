@@ -1,0 +1,51 @@
+name: EVM Contracts CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+    types: [opened, synchronize]
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: /home/runner/work/atomica/atomica
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install Forge dependencies
+        working-directory: source/evm-contracts
+        run: forge install
+
+      - name: Install Bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> $GITHUB_PATH
+
+      - name: Install test-orchestration dependencies
+        working-directory: source/evm-contracts
+        run: bun install
+
+      - name: Build SDK
+        run: |
+          cd source/docker-testnet/ethereum-testnet/typescript-sdk
+          bun install && bun run build
+
+      - name: Run e2e tests
+        working-directory: source/evm-contracts
+        run: bun run test:docker
+        env:
+          ETH_RPC_URL: http://localhost:8545
