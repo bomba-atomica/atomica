@@ -469,11 +469,14 @@ export class DockerTestnet {
      * @returns Transaction hash
      */
     async faucet(address: string | HexString, amount: bigint = 100_000_000n): Promise<string> {
-        // Wait for previous faucet operation to complete (serialization)
-        await this.faucetLock;
+        // Capture previous lock to wait for it inside the scoped operation
+        const previousLock = this.faucetLock;
 
         // Create the current faucet operation
         const currentOperation = (async () => {
+            // Wait for previous faucet operation to complete (serialization)
+            await previousLock;
+
             const faucetAccount = this.getFaucetAccount();
             const client = new AptosClient(this.validatorApiUrl(0));
 
