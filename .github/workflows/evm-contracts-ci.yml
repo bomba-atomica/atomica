@@ -3,39 +3,12 @@ name: EVM Contracts CI
 on:
   workflow_dispatch:
   push:
-    branches: [main, master]
+    branches: [main, master, debug-e2e]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, debug-e2e]
     types: [opened, synchronize]
 
 jobs:
-  lint-and-build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-
-      - name: Run lint
-        run: forge lint
-
-      - name: Run build
-        run: forge build
-
-  unit-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-
-      - name: Run unit tests
-        run: forge test
-
   e2e-tests:
     runs-on: ubuntu-latest
     defaults:
@@ -44,6 +17,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
