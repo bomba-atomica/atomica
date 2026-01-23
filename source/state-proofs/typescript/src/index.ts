@@ -35,6 +35,9 @@ export { verifyReceiptProof } from "./receipt";
 // Re-export beacon/light client functions
 export * from "./beacon";
 
+// Re-export IBE (Identity-Based Encryption) functions
+export * from "./ibe";
+
 // Re-export MPT core functions (advanced usage)
 
 export {

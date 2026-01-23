@@ -4,6 +4,18 @@
   "description": "Self-sufficient TypeScript library and CLI for fetching and verifying Ethereum state proofs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./ibe": {
+      "types": "./dist/ibe/index.d.ts",
+      "import": "./dist/ibe/index.js",
+      "require": "./dist/ibe/index.js"
+    }
+  },
   "bin": {
     "eth-verify": "dist/cli.js"
   },
@@ -43,6 +55,8 @@
     "@ethereumjs/rlp": "^5.0.0",
     "@ethereumjs/trie": "^6.0.0",
     "@ethereumjs/util": "^9.0.0",
+    "@noble/bls12-381": "^1.4.0",
+    "ethers": "^6.16.0",
     "viem": "^2.0.0"
   },
   "devDependencies": {

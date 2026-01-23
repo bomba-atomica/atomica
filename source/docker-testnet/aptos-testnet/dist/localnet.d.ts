@@ -1,0 +1,154 @@
+/**
+ * Localnet Management - Docker-based Single Validator Testnet
+ *
+ * This module provides a simplified interface for managing a single-validator
+ * Docker testnet for development and testing. It wraps the @atomica/docker-testnet SDK.
+ *
+ * KEY CHANGES FROM OLD VERSION:
+ * - ✅ No longer requires local `aptos` binary
+ * - ✅ Uses Docker instead of `aptos node run-local-testnet`
+ * - ✅ Production-like account funding (no HTTP faucet on port 8081)
+ * - ✅ More reliable and portable
+ *
+ * USAGE PATTERNS:
+ *
+ * Meta Tests (Node.js):
+ *   import { setupLocalnet, fundAccount, deployContracts } from "../../test-utils/localnet";
+ *   await setupLocalnet();
+ *   await fundAccount(address, 1_000_000_000);
+ *   await deployContracts();
+ *
+ * Browser Tests (via commands):
+ *   import { commands } from 'vitest/browser';
+ *   await commands.setupLocalnet();
+ *   await commands.fundAccount(address, 1_000_000_000);
+ *   await commands.deployContracts();
+ *
+ * MIGRATION GUIDE:
+ * - `setupLocalnet()` - Works the same, but uses Docker (1 validator)
+ * - `fundAccount(address, amount)` - Now uses Core Resources account (not HTTP)
+ * - `deployContracts()` - Works the same, uses AptosClient API
+ * - `runAptosCmd()` - REMOVED (use AptosClient API instead)
+ * - `killZombies()` - REMOVED (Docker handles cleanup)
+ * - Ports: Validator on 8080 (no faucet on 8081 anymore)
+ *
+ * See: ../docker-testnet/typescript-sdk/README.md
+ */
+import { DockerTestnet } from "./index";
+/**
+ * Start Docker-based local testnet with a single validator.
+ *
+ * THIS IS THE MAIN ENTRY POINT for test infrastructure setup.
+ *
+ * WHAT IT DOES:
+ * 1. Creates a fresh Docker testnet with 1 validator
+ * 2. Waits for validator to be healthy (~30-45 seconds)
+ * 3. Sets setupComplete = true
+ *
+ * IDEMPOTENCY:
+ * - setupComplete flag prevents duplicate startup
+ * - Safe to call multiple times
+ *
+ * PORTS:
+ * - Validator API: http://127.0.0.1:8080
+ * - No faucet service (funding via Core Resources account)
+ *
+ * USAGE:
+ *   Meta Tests:
+ *     import { setupLocalnet } from "../../test-utils/localnet";
+ *
+ *     describe.sequential("My Test", () => {
+ *       beforeAll(async () => {
+ *         await setupLocalnet();
+ *       }, 120000);  // 2 min timeout
+ *     });
+ *
+ *   Browser Tests:
+ *     import { commands } from 'vitest/browser';
+ *
+ *     describe.sequential("My Browser Test", () => {
+ *       beforeAll(async () => {
+ *         await commands.setupLocalnet();
+ *       }, 120000);
+ *     });
+ *
+ * @throws Error if testnet fails to start
+ */
+export declare function setupLocalnet(): Promise<void>;
+/**
+ * Fund an account using the Core Resources account (0xA550C18).
+ *
+ * WHAT IT DOES:
+ * - Uses testnet.faucet() from docker-testnet SDK
+ * - Transfers funds from Core Resources account
+ * - Creates account if it doesn't exist
+ * - Waits for balance to be queryable
+ *
+ * MIGRATION NOTE:
+ * - Old: HTTP POST to http://127.0.0.1:8081/mint
+ * - New: Direct blockchain transaction from Core Resources account
+ * - More production-like and reliable
+ *
+ * USAGE:
+ *   Meta Tests:
+ *     import { fundAccount } from "../../test-utils/localnet";
+ *     await fundAccount(account.accountAddress.toString(), 1_000_000_000);
+ *
+ *   Browser Tests:
+ *     import { commands } from 'vitest/browser';
+ *     await commands.fundAccount(address, 1_000_000_000);
+ *
+ * @param address - Aptos account address (0x... format)
+ * @param amount - Amount in octas (default: 100_000_000 = 1 APT)
+ * @returns Transaction hash from faucet
+ * @throws Error if testnet not running or funding fails
+ */
+export declare function fundAccount(address: string, amount?: number): Promise<string>;
+/**
+ * Deploy Atomica contracts to localnet.
+ *
+ * WHAT IT DOES:
+ * 1. Uses Docker container's aptos CLI (no local binary needed!)
+ * 2. Copies contracts into validator container
+ * 3. Publishes atomica-move-contracts package
+ * 4. Initializes registry module
+ * 5. Initializes fake_eth module
+ * 6. Initializes fake_usd module
+ *
+ * KEY BENEFIT:
+ * - No local `aptos` binary needed AT ALL! ✅
+ * - Uses aptos CLI from inside the Docker validator container
+ * - Completely self-contained
+ *
+ * IMPORTANT:
+ * - Localnet must be running first (call setupLocalnet())
+ * - Takes ~30-60 seconds to complete
+ * - Modules deployed: registry, fake_eth, fake_usd
+ * - Contracts deployed to DEPLOYER_ADDR
+ *
+ * @throws Error if localnet not running or deployment fails
+ */
+export declare function deployContracts(): Promise<void>;
+/**
+ * Tear down the localnet and clean up all resources.
+ *
+ * WHAT IT DOES:
+ * - Stops Docker testnet
+ * - Removes all containers and volumes
+ * - Resets state flags
+ *
+ * USAGE:
+ *   await teardownLocalnet();
+ *
+ * NOTE: Usually not needed in tests (automatic cleanup on process exit)
+ */
+export declare function teardownLocalnet(): Promise<void>;
+/**
+ * Get the underlying Docker testnet instance.
+ *
+ * This is useful for advanced operations that need direct access to the testnet.
+ *
+ * @returns Docker testnet instance
+ * @throws Error if testnet not running
+ */
+export declare function getTestnet(): DockerTestnet;
