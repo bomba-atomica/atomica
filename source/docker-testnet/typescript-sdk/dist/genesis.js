@@ -63,6 +63,10 @@ function runGenesisScript(config) {
     return new Promise((resolve, reject) => {
         console.log(`  Running genesis script in Docker container...`);
         // Get the validator image name from environment or use default
+        // We use a tools image for genesis because the validator image might not have the aptos CLI
+        const genesisImage = process.env.GENESIS_IMAGE_NAME ||
+            process.env.TOOLS_IMAGE_NAME ||
+            "aptoslabs/tools:devnet";
         const validatorImage = process.env.IMAGE_NAME ||
             `${process.env.VALIDATOR_IMAGE_REPO || "ghcr.io/bomba-atomica/atomica-aptos/validator"}:${process.env.IMAGE_TAG || "latest"}`;
         // Find the framework.mrb file - try multiple possible locations relative to workspaceDir
@@ -113,7 +117,7 @@ function runGenesisScript(config) {
         if (process.env.ATOMICA_DEBUG_TESTNET) {
             dockerArgs.push("-e", `ATOMICA_DEBUG_TESTNET=${process.env.ATOMICA_DEBUG_TESTNET}`);
         }
-        dockerArgs.push(validatorImage, "/genesis-script.sh", numValidators.toString(), chainId.toString(), baseIp);
+        dockerArgs.push(genesisImage, "/genesis-script.sh", numValidators.toString(), chainId.toString(), baseIp);
         debug("Starting docker run with args:", { dockerArgs });
         const proc = (0, child_process_1.spawn)(DOCKER_BIN, dockerArgs, {
             stdio: ["ignore", "pipe", "pipe"],

@@ -89,6 +89,12 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         console.log(`  Running genesis script in Docker container...`);
 
         // Get the validator image name from environment or use default
+        // We use a tools image for genesis because the validator image might not have the aptos CLI
+        const genesisImage =
+            process.env.GENESIS_IMAGE_NAME ||
+            process.env.TOOLS_IMAGE_NAME ||
+            "aptoslabs/tools:devnet";
+
         const validatorImage =
             process.env.IMAGE_NAME ||
             `${process.env.VALIDATOR_IMAGE_REPO || "ghcr.io/bomba-atomica/atomica-aptos/validator"}:${process.env.IMAGE_TAG || "latest"}`;
@@ -152,7 +158,7 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         }
 
         dockerArgs.push(
-            validatorImage,
+            genesisImage,
             "/genesis-script.sh",
             numValidators.toString(),
             chainId.toString(),
