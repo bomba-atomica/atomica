@@ -30,7 +30,7 @@
  */
 import { EthereumDockerTestnet } from "../../../docker-testnet/ethereum-testnet/typescript-sdk/dist/index.js";
 import { spawn } from "child_process";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { resolve as pathResolve } from "path";
 import { parseArgs } from "util";
 
@@ -312,6 +312,10 @@ export class TestOrchestrator {
      */
     private async saveResults(): Promise<void> {
         const resultsPath = pathResolve(this.config.outputDir, "test-results.json");
+        // Ensure directory exists
+        if (!existsSync(this.config.outputDir)) {
+            mkdirSync(this.config.outputDir, { recursive: true });
+        }
         writeFileSync(
             resultsPath,
             JSON.stringify(
