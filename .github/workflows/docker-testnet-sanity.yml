@@ -1,7 +1,13 @@
 name: Ethereum Docker Testnet Tests
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - ethereum-docker
+    paths:
+      - 'source/docker-testnet/ethereum-testnet/**'
+      - '.github/workflows/docker-testnet-sanity.yml'
   pull_request:
     paths:
       - 'source/docker-testnet/ethereum-testnet/**'
