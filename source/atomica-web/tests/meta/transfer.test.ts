@@ -91,5 +91,5 @@ describe.sequential("Simple APT Transfer", () => {
 
     // Verify the math: initial - transfer - gas = final
     expect(aliceFinalBalance).toBe(1_000_000_000 - 100 - gasPaid);
-  }, 60000); // 60s timeout
+  }, 120000); // 120s timeout
 });

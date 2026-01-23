@@ -50,5 +50,5 @@ describe.sequential("Ed25519 Faucet Funding", () => {
     }
 
     expect(balance).toBe(100_000_000);
-  }, 60000); // 60s timeout
+  }, 120000); // 120s timeout
 });

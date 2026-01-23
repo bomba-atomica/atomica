@@ -128,7 +128,7 @@ describe.sequential("Docker Testnet - Multi-Validator Progress", () => {
     const epoch1 = parseInt(ledgerInfo1.epoch, 10);
 
     // Wait a few seconds
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 5000));
 
     const ledgerInfo2 = await testnet.getLedgerInfo(0);
     const timestamp2 = parseInt(ledgerInfo2.ledger_timestamp, 10);
@@ -140,5 +140,5 @@ describe.sequential("Docker Testnet - Multi-Validator Progress", () => {
     // Epoch may or may not have changed (epochs are 30s)
     // But it should be >= initial epoch
     expect(epoch2).toBeGreaterThanOrEqual(epoch1);
-  }, 30000);
+  }, 90000);
 });

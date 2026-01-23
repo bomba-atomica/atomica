@@ -88,10 +88,15 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
     return new Promise((resolve, reject) => {
         console.log(`  Running genesis script in Docker container...`);
 
-        // Get the validator image name from environment or use default.
-        // We use the same image for genesis as we do for validators because it contains
-        // the required aptos CLI and ensures version compatibility.
+        // Use the tools image for genesis by default as it contains git and other necessary tools.
+        // We still allow overriding via IMAGE_NAME or GENESIS_IMAGE_NAME.
         const genesisImage =
+            process.env.GENESIS_IMAGE_NAME ||
+            process.env.TOOLS_IMAGE_NAME ||
+            process.env.IMAGE_NAME ||
+            "aptoslabs/tools:devnet";
+
+        const validatorImage =
             process.env.IMAGE_NAME ||
             `${process.env.VALIDATOR_IMAGE_REPO || "ghcr.io/bomba-atomica/atomica-aptos/validator"}:${process.env.IMAGE_TAG || "latest"}`;
 
@@ -118,6 +123,7 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
 
         debug("Using framework at: " + frameworkPath);
         debug("Using genesis image: " + genesisImage);
+        debug("Using validator image: " + validatorImage);
 
         // Run the script inside Docker container with the same image that will run validators
         // This ensures aptos CLI version matches the Move framework version
