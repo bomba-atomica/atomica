@@ -44,9 +44,7 @@ services:
       - type: bind
         source: ./validators/validator-0/node-config.yaml
         target: /opt/aptos/var/etc/node-config.yaml
-    command: >
-      /usr/local/bin/aptos-node
-      -f /opt/aptos/var/etc/node-config.yaml
+    command: ["-f", "/opt/aptos/var/etc/node-config.yaml"]
     ports:
       - "8080:8080"  # REST API
       - "9101:9101"  # Metrics
@@ -92,9 +90,7 @@ services:
       - type: bind
         source: ./validators/validator-1/node-config.yaml
         target: /opt/aptos/var/etc/node-config.yaml
-    command: >
-      /usr/local/bin/aptos-node
-      -f /opt/aptos/var/etc/node-config.yaml
+    command: ["-f", "/opt/aptos/var/etc/node-config.yaml"]
     ports:
       - "8081:8080"  # REST API
       - "9102:9101"  # Metrics
@@ -134,9 +130,7 @@ services:
       - type: bind
         source: ./validators/validator-2/node-config.yaml
         target: /opt/aptos/var/etc/node-config.yaml
-    command: >
-      /usr/local/bin/aptos-node
-      -f /opt/aptos/var/etc/node-config.yaml
+    command: ["-f", "/opt/aptos/var/etc/node-config.yaml"]
     ports:
       - "8082:8080"  # REST API
       - "9103:9101"  # Metrics
@@ -176,9 +170,7 @@ services:
       - type: bind
         source: ./validators/validator-3/node-config.yaml
         target: /opt/aptos/var/etc/node-config.yaml
-    command: >
-      /usr/local/bin/aptos-node
-      -f /opt/aptos/var/etc/node-config.yaml
+    command: ["-f", "/opt/aptos/var/etc/node-config.yaml"]
     ports:
       - "8083:8080"  # REST API
       - "9104:9101"  # Metrics

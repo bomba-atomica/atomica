@@ -62,12 +62,10 @@ function runGenesisScript(config) {
     const { workspaceDir, scriptPath, numValidators, chainId, baseIp } = config;
     return new Promise((resolve, reject) => {
         console.log(`  Running genesis script in Docker container...`);
-        // Get the validator image name from environment or use default
-        // We use a tools image for genesis because the validator image might not have the aptos CLI
-        const genesisImage = process.env.GENESIS_IMAGE_NAME ||
-            process.env.TOOLS_IMAGE_NAME ||
-            "aptoslabs/tools:devnet";
-        const validatorImage = process.env.IMAGE_NAME ||
+        // Get the validator image name from environment or use default.
+        // We use the same image for genesis as we do for validators because it contains
+        // the required aptos CLI and ensures version compatibility.
+        const genesisImage = process.env.IMAGE_NAME ||
             `${process.env.VALIDATOR_IMAGE_REPO || "ghcr.io/bomba-atomica/atomica-aptos/validator"}:${process.env.IMAGE_TAG || "latest"}`;
         // Find the framework.mrb file - try multiple possible locations relative to workspaceDir
         const possiblePaths = [
@@ -88,7 +86,7 @@ function runGenesisScript(config) {
             return;
         }
         debug("Using framework at: " + frameworkPath);
-        debug("Using validator image: " + validatorImage);
+        debug("Using genesis image: " + genesisImage);
         // Run the script inside Docker container with the same image that will run validators
         // This ensures aptos CLI version matches the Move framework version
         const dockerArgs = [
