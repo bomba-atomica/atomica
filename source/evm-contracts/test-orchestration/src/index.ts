@@ -239,9 +239,10 @@ export class TestOrchestrator {
         const rpcUrl = this.testnet!.getExecutionRpcUrl();
         const env = { ...process.env, ETH_RPC_URL: rpcUrl };
 
+        // Run tests and tolerate skipped tests (exit code can be 0 or 1 with --summary)
         const result = await this.runCommand(
             "forge",
-            ["test", "--match-path", "test/e2e/*.sol", "--rpc-url", rpcUrl, "--summary"],
+            ["test", "--match-path", "test/e2e/*.sol", "--rpc-url", rpcUrl],
             {
                 cwd: this.config.contractsDir,
                 env,
