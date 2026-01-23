@@ -26,6 +26,10 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
+      - name: Install Forge dependencies
+        working-directory: source/evm-contracts
+        run: forge install
+
       - name: Install Bun
         run: |
           curl -fsSL https://bun.sh/install | bash
