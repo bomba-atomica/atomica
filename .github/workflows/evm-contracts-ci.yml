@@ -3,9 +3,9 @@ name: EVM Contracts CI
 on:
   workflow_dispatch:
   push:
-    branches: [main, master, debug-e2e]
+    branches: [main, master]
   pull_request:
-    branches: [main, master, debug-e2e]
+    branches: [main, master]
     types: [opened, synchronize]
 
 jobs:
