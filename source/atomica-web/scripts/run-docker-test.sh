@@ -22,7 +22,8 @@ echo "✓ Docker is running"
 echo ""
 
 # Pull the image if not present
-IMAGE="ghcr.io/bomba-atomica/atomica-aptos/validator:latest"
+IMAGE="ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda"
+
 
 if docker image inspect "$IMAGE" > /dev/null 2>&1; then
   echo "✓ Image already cached: $IMAGE"
