@@ -401,10 +401,12 @@ class DockerTestnet {
      * @returns Transaction hash
      */
     async faucet(address, amount = 100000000n) {
-        // Wait for previous faucet operation to complete (serialization)
-        await this.faucetLock;
+        // Capture previous lock to wait for it inside the scoped operation
+        const previousLock = this.faucetLock;
         // Create the current faucet operation
         const currentOperation = (async () => {
+            // Wait for previous faucet operation to complete (serialization)
+            await previousLock;
             const faucetAccount = this.getFaucetAccount();
             const client = new aptos_1.AptosClient(this.validatorApiUrl(0));
             const targetAddr = typeof address === "string" ? address : address.hex();
@@ -766,15 +768,23 @@ class DockerTestnet {
                     resolve();
                 }
                 else {
-                    reject(new Error("Docker Daemon is not running. Please start Docker and try again."));
+                    reject(new Error("❌ Docker Daemon is not responding.\n\n" +
+                        "HOW TO FIX THIS:\n" +
+                        "  1. Check if Docker is running: `docker info`\n" +
+                        "  2. Start Docker Desktop (macOS/Windows) or the docker service (Linux)\n" +
+                        "  3. Verify permissions: You may need to add your user to the 'docker' group\n" +
+                        "  4. On Linux: `sudo systemctl start docker`"));
                 }
             });
             proc.on("error", (err) => {
                 if (err.code === "ENOENT") {
-                    reject(new Error(`Docker binary '${DOCKER_BIN}' not found in PATH.`));
+                    reject(new Error(`❌ Docker binary '${DOCKER_BIN}' not found in PATH.\n\n` +
+                        "HOW TO FIX THIS:\n" +
+                        "  1. Install Docker: https://docs.docker.com/get-docker/\n" +
+                        "  2. Ensure 'docker' is in your system $PATH"));
                 }
                 else {
-                    reject(new Error(`Failed to check Docker status: ${err.message}`));
+                    reject(new Error(`❌ Failed to check Docker status: ${err.message}`));
                 }
             });
         });

@@ -85,13 +85,20 @@ export function findAptosBinary(): string {
     // If no candidates found, throw error
     if (candidates.length === 0) {
         throw new Error(
-            `aptos binary not found. Checked:\n` +
-                `  - ${releasePath}\n` +
-                `  - ${debugPath}\n` +
-                `  - $PATH\n\n` +
-                `Please build the aptos CLI:\n` +
-                `  cd ${sourceDir} && cargo build -p aptos\n` +
-                `Or ensure aptos is installed in your $PATH.`,
+            `❌ Aptos CLI binary ('aptos') not found in any expected location.\n\n` +
+                `SEARCHED LOCATIONS:\n` +
+                `  1. Workspace Release: ${releasePath}\n` +
+                `  2. Workspace Debug:   ${debugPath}\n` +
+                `  3. System $PATH:      (Global installation)\n\n` +
+                `HOW TO FIX THIS:\n\n` +
+                `  Option A: Build from source (Recommended for developers)\n` +
+                `    cd ${sourceDir}\n` +
+                `    cargo build -p aptos --release\n\n` +
+                `  Option B: Install globally via Cargo\n` +
+                `    cargo install --git https://github.com/aptos-labs/aptos-core aptos\n\n` +
+                `  Option C: Download pre-built binary\n` +
+                `    Visit: https://github.com/aptos-labs/aptos-core/releases\n` +
+                `    And add the binary to your $PATH.\n`,
         );
     }
 

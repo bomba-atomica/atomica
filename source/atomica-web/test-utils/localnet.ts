@@ -117,8 +117,9 @@ export async function setupLocalnet(): Promise<void> {
     return;
   }
 
-  // Read NUM_VALIDATORS from environment, default to 2
-  const numValidators = parseInt(process.env.NUM_VALIDATORS || "2", 10);
+  // Read NUM_VALIDATORS from environment, default to 4
+  // DKG requires a minimum of 4 validators for quorum
+  const numValidators = parseInt(process.env.NUM_VALIDATORS || "4", 10);
 
   // Create testnet with configured number of validators
   // Note: DockerTestnet.new() automatically registers cleanup handlers

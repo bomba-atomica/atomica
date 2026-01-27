@@ -22,7 +22,7 @@ name: atomica-testnet
 services:
   # Validator 0
   validator-0:
-    image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
+    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda}"
     container_name: atomica-validator-0
     hostname: validator-0
     user: root
@@ -44,8 +44,7 @@ services:
       - type: bind
         source: ./validators/validator-0/node-config.yaml
         target: /opt/aptos/var/etc/node-config.yaml
-    command: >
-      -f /opt/aptos/var/etc/node-config.yaml
+    command: ["-f", "/opt/aptos/var/etc/node-config.yaml"]
     ports:
       - "8080:8080"  # REST API
       - "9101:9101"  # Metrics
@@ -66,7 +65,7 @@ services:
 
   # Validator 1
   validator-1:
-    image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
+    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda}"
     container_name: atomica-validator-1
     hostname: validator-1
     user: root
@@ -91,8 +90,7 @@ services:
       - type: bind
         source: ./validators/validator-1/node-config.yaml
         target: /opt/aptos/var/etc/node-config.yaml
-    command: >
-      -f /opt/aptos/var/etc/node-config.yaml
+    command: ["-f", "/opt/aptos/var/etc/node-config.yaml"]
     ports:
       - "8081:8080"  # REST API
       - "9102:9101"  # Metrics
@@ -107,7 +105,7 @@ services:
 
   # Validator 2
   validator-2:
-    image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
+    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda}"
     container_name: atomica-validator-2
     hostname: validator-2
     user: root
@@ -132,8 +130,7 @@ services:
       - type: bind
         source: ./validators/validator-2/node-config.yaml
         target: /opt/aptos/var/etc/node-config.yaml
-    command: >
-      -f /opt/aptos/var/etc/node-config.yaml
+    command: ["-f", "/opt/aptos/var/etc/node-config.yaml"]
     ports:
       - "8082:8080"  # REST API
       - "9103:9101"  # Metrics
@@ -148,7 +145,7 @@ services:
 
   # Validator 3
   validator-3:
-    image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
+    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda}"
     container_name: atomica-validator-3
     hostname: validator-3
     user: root
@@ -173,8 +170,7 @@ services:
       - type: bind
         source: ./validators/validator-3/node-config.yaml
         target: /opt/aptos/var/etc/node-config.yaml
-    command: >
-      -f /opt/aptos/var/etc/node-config.yaml
+    command: ["-f", "/opt/aptos/var/etc/node-config.yaml"]
     ports:
       - "8083:8080"  # REST API
       - "9104:9101"  # Metrics
@@ -189,7 +185,7 @@ services:
 
   # Optional: Faucet service (useful for testing)
   faucet:
-    image: "${IMAGE_NAME:-${VALIDATOR_IMAGE_REPO:-ghcr.io/bomba-atomica/atomica-aptos/validator}:${IMAGE_TAG:-latest}}"
+    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda}"
     container_name: atomica-faucet
     depends_on:
       validator-0:
