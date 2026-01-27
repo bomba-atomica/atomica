@@ -23,7 +23,7 @@ name: atomica-testnet
 services:
   # Validator 0 - Primary (starts first, generates genesis)
   validator-0:
-    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda}"
+    image: "${IMAGE_NAME:-aptoslabs/validator:devnet}"
     container_name: atomica-validator-0
     hostname: validator-0
     user: root
@@ -77,7 +77,7 @@ services:
 
   # Validator 1
   validator-1:
-    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda}"
+    image: "${IMAGE_NAME:-aptoslabs/validator:devnet}"
     container_name: atomica-validator-1
     hostname: validator-1
     user: root
@@ -128,7 +128,7 @@ services:
 
   # Validator 2
   validator-2:
-    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda}"
+    image: "${IMAGE_NAME:-aptoslabs/validator:devnet}"
     container_name: atomica-validator-2
     hostname: validator-2
     user: root
@@ -179,7 +179,7 @@ services:
 
   # Validator 3
   validator-3:
-    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda}"
+    image: "${IMAGE_NAME:-aptoslabs/validator:devnet}"
     container_name: atomica-validator-3
     hostname: validator-3
     user: root
