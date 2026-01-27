@@ -25,24 +25,18 @@
  * await fundAccount("0xabc123...", 1_000_000_000);
  * ```
  */
-export async function fundAccount(
-  address: string,
-  amount: number = 100_000_000,
-): Promise<string> {
-  const response = await fetch(
-    `http://127.0.0.1:8081/mint?amount=${amount}&address=${address}`,
-    { method: "POST" },
-  );
+export async function fundAccount(address: string, amount: number = 100_000_000): Promise<string> {
+    const response = await fetch(`http://127.0.0.1:8081/mint?amount=${amount}&address=${address}`, {
+        method: "POST",
+    });
 
-  const data = await response.text();
+    const data = await response.text();
 
-  if (response.ok) {
-    return data;
-  } else {
-    throw new Error(
-      `Funding failed with status: ${response.status} Body: ${data}`,
-    );
-  }
+    if (response.ok) {
+        return data;
+    } else {
+        throw new Error(`Funding failed with status: ${response.status} Body: ${data}`);
+    }
 }
 
 /**
@@ -51,12 +45,12 @@ export async function fundAccount(
  * @returns Promise<boolean> - True if faucet is accessible
  */
 export async function isFaucetReady(): Promise<boolean> {
-  try {
-    const response = await fetch("http://127.0.0.1:8081/", {
-      method: "GET",
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
+    try {
+        const response = await fetch("http://127.0.0.1:8081/", {
+            method: "GET",
+        });
+        return response.ok;
+    } catch {
+        return false;
+    }
 }

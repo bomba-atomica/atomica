@@ -7,13 +7,13 @@
 import { teardownLocalnet } from "./localnet";
 
 export async function teardown() {
-  // Give async operations time to complete
-  await new Promise((resolve) => setTimeout(resolve, 100));
+    // Give async operations time to complete
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
-  // Tear down the Docker testnet if it's running
-  try {
-    await teardownLocalnet();
-  } catch {
-    // Silently handle teardown errors
-  }
+    // Tear down the Docker testnet if it's running
+    try {
+        await teardownLocalnet();
+    } catch {
+        // Silently handle teardown errors
+    }
 }

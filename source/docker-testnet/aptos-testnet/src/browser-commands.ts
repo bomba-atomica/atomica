@@ -101,11 +101,11 @@
 
 import type { BrowserCommand } from "vitest/node";
 import {
-  setupLocalnet,
-  // teardownLocalnet, // Unused in persistent mode
-  deployContracts,
-  fundAccount,
-  // killZombies, // Unused - setupLocalnet handles cleanup internally
+    setupLocalnet,
+    // teardownLocalnet, // Unused in persistent mode
+    deployContracts,
+    fundAccount,
+    // killZombies, // Unused - setupLocalnet handles cleanup internally
 } from "./localnet";
 
 /**
@@ -113,15 +113,15 @@ import {
  * This provides TypeScript autocomplete and type checking in browser tests.
  */
 declare module "vitest/browser" {
-  interface BrowserCommands {
-    setupLocalnet(): Promise<{ success: boolean }>;
-    teardownLocalnet(): Promise<{ success: boolean }>;
-    deployContracts(): Promise<{ success: boolean }>;
-    fundAccount(
-      address: string,
-      amount?: number,
-    ): Promise<{ success: boolean; txHash: string }>;
-  }
+    interface BrowserCommands {
+        setupLocalnet(): Promise<{ success: boolean }>;
+        teardownLocalnet(): Promise<{ success: boolean }>;
+        deployContracts(): Promise<{ success: boolean }>;
+        fundAccount(
+            address: string,
+            amount?: number,
+        ): Promise<{ success: boolean; txHash: string }>;
+    }
 }
 
 /**
@@ -148,9 +148,9 @@ declare module "vitest/browser" {
  * See: tests/README.md#browser-commands for architecture
  */
 export const setupLocalnetCommand: BrowserCommand<[]> = async () => {
-  // setupLocalnet internally calls killZombies to ensure ports are free
-  await setupLocalnet();
-  return { success: true };
+    // setupLocalnet internally calls killZombies to ensure ports are free
+    await setupLocalnet();
+    return { success: true };
 };
 
 /**
@@ -166,10 +166,10 @@ export const setupLocalnetCommand: BrowserCommand<[]> = async () => {
  * @returns Promise resolving to { success: true }
  */
 export const teardownLocalnetCommand: BrowserCommand<[]> = async () => {
-  // Only teardown if this is the last test file running
-  // In persistent mode, we skip teardown between individual test files
-  // but still need to cleanup when all tests are done
-  return { success: true };
+    // Only teardown if this is the last test file running
+    // In persistent mode, we skip teardown between individual test files
+    // but still need to cleanup when all tests are done
+    return { success: true };
 };
 
 /**
@@ -196,8 +196,8 @@ export const teardownLocalnetCommand: BrowserCommand<[]> = async () => {
  * See: test-utils/localnet.ts#deployContracts for implementation
  */
 export const deployContractsCommand: BrowserCommand<[]> = async () => {
-  await deployContracts();
-  return { success: true };
+    await deployContracts();
+    return { success: true };
 };
 
 /**
@@ -226,9 +226,11 @@ export const deployContractsCommand: BrowserCommand<[]> = async () => {
  *
  * See: test-utils/localnet.ts#fundAccount for implementation
  */
-export const fundAccountCommand: BrowserCommand<
-  [address: string, amount?: number]
-> = async (_context, address: string, amount: number = 100_000_000) => {
-  const result = await fundAccount(address, amount);
-  return { success: true, txHash: result };
+export const fundAccountCommand: BrowserCommand<[address: string, amount?: number]> = async (
+    _context,
+    address: string,
+    amount: number = 100_000_000,
+) => {
+    const result = await fundAccount(address, amount);
+    return { success: true, txHash: result };
 };

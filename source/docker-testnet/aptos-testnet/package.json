@@ -38,7 +38,7 @@
         "test": "bun test",
         "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
         "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
-        "lint": "eslint .",
+        "lint": "ESLINT_USE_FLAT_CONFIG=false eslint .",
         "lint:fix": "eslint . --fix"
     },
     "dependencies": {

@@ -60,15 +60,13 @@ const SOURCE_DIR = pathResolve(TEST_SETUP_DIR, "../../../");
  * Fixed deployer private key for deployContracts() function.
  * This is a TEST KEY - never use in production!
  */
-const DEPLOYER_PK =
-  "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
+const DEPLOYER_PK = "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
 
 /**
  * Address derived from DEPLOYER_PK.
  * Used as the deployment address for Atomica contracts.
  */
-const DEPLOYER_ADDR =
-  "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
+const DEPLOYER_ADDR = "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 
 /** Path to atomica-move-contracts directory (relative to SOURCE_DIR) */
 const CONTRACTS_DIR = pathResolve(SOURCE_DIR, "atomica-move-contracts");
@@ -113,19 +111,19 @@ const CONTRACTS_DIR = pathResolve(SOURCE_DIR, "atomica-move-contracts");
  * @throws Error if testnet fails to start
  */
 export async function setupLocalnet(): Promise<void> {
-  // Guard against double setup
-  if (setupComplete && testnet) {
-    return;
-  }
+    // Guard against double setup
+    if (setupComplete && testnet) {
+        return;
+    }
 
-  // Read NUM_VALIDATORS from environment, default to 2
-  const numValidators = parseInt(process.env.NUM_VALIDATORS || "2", 10);
+    // Read NUM_VALIDATORS from environment, default to 2
+    const numValidators = parseInt(process.env.NUM_VALIDATORS || "2", 10);
 
-  // Create testnet with configured number of validators
-  // Note: DockerTestnet.new() automatically registers cleanup handlers
-  testnet = await DockerTestnet.new(numValidators);
+    // Create testnet with configured number of validators
+    // Note: DockerTestnet.new() automatically registers cleanup handlers
+    testnet = await DockerTestnet.new(numValidators);
 
-  setupComplete = true;
+    setupComplete = true;
 }
 
 /**
@@ -156,18 +154,15 @@ export async function setupLocalnet(): Promise<void> {
  * @returns Transaction hash from faucet
  * @throws Error if testnet not running or funding fails
  */
-export async function fundAccount(
-  address: string,
-  amount: number = 100_000_000,
-): Promise<string> {
-  if (!testnet) {
-    throw new Error("Localnet not running. Call setupLocalnet() first.");
-  }
+export async function fundAccount(address: string, amount: number = 100_000_000): Promise<string> {
+    if (!testnet) {
+        throw new Error("Localnet not running. Call setupLocalnet() first.");
+    }
 
-  // Convert number to bigint for SDK
-  const txHash = await testnet.faucet(address, BigInt(amount));
+    // Convert number to bigint for SDK
+    const txHash = await testnet.faucet(address, BigInt(amount));
 
-  return txHash;
+    return txHash;
 }
 
 /** Guard flag to prevent duplicate contract deployments */
@@ -198,39 +193,39 @@ let contractsDeployed = false;
  * @throws Error if localnet not running or deployment fails
  */
 export async function deployContracts(): Promise<void> {
-  if (!testnet) {
-    throw new Error("Localnet not running. Call setupLocalnet() first.");
-  }
+    if (!testnet) {
+        throw new Error("Localnet not running. Call setupLocalnet() first.");
+    }
 
-  // Guard against double deployment
-  if (contractsDeployed) {
-    return;
-  }
+    // Guard against double deployment
+    if (contractsDeployed) {
+        return;
+    }
 
-  // Use SDK's deployContracts method - it uses aptos CLI from inside the container!
-  await testnet.deployContracts({
-    contractsDir: CONTRACTS_DIR,
-    deployerPrivateKey: DEPLOYER_PK,
-    deployerAddress: DEPLOYER_ADDR,
-    namedAddresses: { atomica: DEPLOYER_ADDR },
-    initFunctions: [
-      {
-        functionId: `${DEPLOYER_ADDR}::registry::initialize`,
-        args: ["hex:0123456789abcdef"],
-      },
-      {
-        functionId: `${DEPLOYER_ADDR}::fake_eth::initialize`,
-        args: [],
-      },
-      {
-        functionId: `${DEPLOYER_ADDR}::fake_usd::initialize`,
-        args: [],
-      },
-    ],
-    fundAmount: 10_000_000_000n, // 100 APT
-  });
+    // Use SDK's deployContracts method - it uses aptos CLI from inside the container!
+    await testnet.deployContracts({
+        contractsDir: CONTRACTS_DIR,
+        deployerPrivateKey: DEPLOYER_PK,
+        deployerAddress: DEPLOYER_ADDR,
+        namedAddresses: { atomica: DEPLOYER_ADDR },
+        initFunctions: [
+            {
+                functionId: `${DEPLOYER_ADDR}::registry::initialize`,
+                args: ["hex:0123456789abcdef"],
+            },
+            {
+                functionId: `${DEPLOYER_ADDR}::fake_eth::initialize`,
+                args: [],
+            },
+            {
+                functionId: `${DEPLOYER_ADDR}::fake_usd::initialize`,
+                args: [],
+            },
+        ],
+        fundAmount: 10_000_000_000n, // 100 APT
+    });
 
-  contractsDeployed = true;
+    contractsDeployed = true;
 }
 
 /**
@@ -247,15 +242,15 @@ export async function deployContracts(): Promise<void> {
  * NOTE: Usually not needed in tests (automatic cleanup on process exit)
  */
 export async function teardownLocalnet(): Promise<void> {
-  if (!testnet) {
-    return;
-  }
+    if (!testnet) {
+        return;
+    }
 
-  await testnet.teardown();
+    await testnet.teardown();
 
-  testnet = null;
-  setupComplete = false;
-  contractsDeployed = false;
+    testnet = null;
+    setupComplete = false;
+    contractsDeployed = false;
 }
 
 /**
@@ -267,8 +262,8 @@ export async function teardownLocalnet(): Promise<void> {
  * @throws Error if testnet not running
  */
 export function getTestnet(): DockerTestnet {
-  if (!testnet) {
-    throw new Error("Localnet not running. Call setupLocalnet() first.");
-  }
-  return testnet;
+    if (!testnet) {
+        throw new Error("Localnet not running. Call setupLocalnet() first.");
+    }
+    return testnet;
 }
