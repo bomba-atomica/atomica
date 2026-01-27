@@ -1,4 +1,4 @@
-import { Serializer, } from "@aptos-labs/ts-sdk";
+import { Serializer } from "@aptos-labs/ts-sdk";
 import { ethers } from "ethers";
 import { sha3_256 } from "@noble/hashes/sha3";
 import { aptos } from "./config";

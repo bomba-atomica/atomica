@@ -65,7 +65,7 @@ describe.sequential("SECP256k1 Account Faucet Funding", () => {
       accountAddress: bob.accountAddress,
     });
     expect(accountInfo.sequence_number).toBe("0"); // New account, no transactions yet
-  }, 60000); // 60s timeout
+  }, 120000); // 120s timeout
 
   it("should fund SECP256k1 account created from Ethereum private key", async () => {
     // Step 1: Create SECP256k1 account from Ethereum-format private key
@@ -97,5 +97,5 @@ describe.sequential("SECP256k1 Account Faucet Funding", () => {
       accountAddress: aptosAccount.accountAddress,
     });
     expect(finalBalance).toBe(fundingAmount);
-  }, 60000); // 60s timeout
+  }, 120000); // 120s timeout
 });

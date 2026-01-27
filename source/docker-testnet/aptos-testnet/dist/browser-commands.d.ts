@@ -207,7 +207,4 @@ export declare const deployContractsCommand: BrowserCommand<[]>;
  *
  * See: test-utils/localnet.ts#fundAccount for implementation
  */
-export declare const fundAccountCommand: BrowserCommand<[
-    address: string,
-    amount?: number
-]>;
+export declare const fundAccountCommand: BrowserCommand<[address: string, amount?: number]>;

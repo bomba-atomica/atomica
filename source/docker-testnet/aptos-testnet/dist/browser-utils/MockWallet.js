@@ -5,8 +5,7 @@ export class MockWallet {
     constructor(privateKey, chainId = 31337) {
         this.wallet = new ethers.Wallet(privateKey);
         // Ensure hex string format
-        this.chainId =
-            typeof chainId === "number" ? `0x${chainId.toString(16)}` : chainId;
+        this.chainId = typeof chainId === "number" ? `0x${chainId.toString(16)}` : chainId;
     }
     get address() {
         return this.wallet.address;
@@ -15,7 +14,7 @@ export class MockWallet {
     getProvider() {
         return {
             isMetaMask: true,
-            request: async ({ method, params, }) => {
+            request: async ({ method, params }) => {
                 // console.log(`[MockWallet] handling ${method}`, params);
                 switch (method) {
                     case "eth_requestAccounts":

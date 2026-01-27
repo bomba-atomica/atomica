@@ -25,7 +25,9 @@
  * ```
  */
 export async function fundAccount(address, amount = 100_000_000) {
-    const response = await fetch(`http://127.0.0.1:8081/mint?amount=${amount}&address=${address}`, { method: "POST" });
+    const response = await fetch(`http://127.0.0.1:8081/mint?amount=${amount}&address=${address}`, {
+        method: "POST",
+    });
     const data = await response.text();
     if (response.ok) {
         return data;

@@ -1,4 +1,4 @@
-import { Serializer, AccountAuthenticator, AccountAddress, } from "@aptos-labs/ts-sdk";
+import { Serializer, AccountAuthenticator, AccountAddress } from "@aptos-labs/ts-sdk";
 import { sha3_256 } from "@noble/hashes/sha3";
 function sha3(bytes) {
     return sha3_256(bytes);
@@ -31,8 +31,7 @@ export async function getDerivedAddress(ethAddress, domain) {
     // not the raw bytes of the address.
     const ethBytes = new TextEncoder().encode(ethAddress);
     // Use provided domain or fallback to window.location.host (or localhost default)
-    const actualDomain = domain ||
-        (typeof window !== "undefined" ? window.location.host : "localhost:3000");
+    const actualDomain = domain || (typeof window !== "undefined" ? window.location.host : "localhost:3000");
     const serializedPubKey = serializeSIWEAbstractPublicKey(ethBytes, actualDomain);
     // FIXED: Move's derive_account_address calls bcs::to_bytes(abstract_public_key).
     // abstract_public_key is passed as a vector<u8>.

@@ -370,9 +370,13 @@ export class DockerTestnet {
     }
 
     async faucet(address: string | HexString, amount: bigint = 100_000_000n): Promise<string> {
-        await this.faucetLock;
+        // Capture previous lock to wait for it inside the scoped operation
+        const previousLock = this.faucetLock;
 
         const currentOperation = (async () => {
+            // Wait for previous faucet operation to complete (serialization)
+            await previousLock;
+
             const faucetAccount = this.getFaucetAccount();
             const client = new AptosClient(this.validatorApiUrl(0));
 
@@ -759,7 +763,12 @@ export class DockerTestnet {
                 } else {
                     reject(
                         new Error(
-                            "Docker Daemon is not running. Please start Docker and try again.",
+                            "❌ Docker Daemon is not responding.\n\n" +
+                                "HOW TO FIX THIS:\n" +
+                                "  1. Check if Docker is running: `docker info`\n" +
+                                "  2. Start Docker Desktop (macOS/Windows) or the docker service (Linux)\n" +
+                                "  3. Verify permissions: You may need to add your user to the 'docker' group\n" +
+                                "  4. On Linux: `sudo systemctl start docker`",
                         ),
                     );
                 }
@@ -767,9 +776,16 @@ export class DockerTestnet {
 
             proc.on("error", (err: any) => {
                 if (err.code === "ENOENT") {
-                    reject(new Error(`Docker binary '${DOCKER_BIN}' not found in PATH.`));
+                    reject(
+                        new Error(
+                            `❌ Docker binary '${DOCKER_BIN}' not found in PATH.\n\n` +
+                                "HOW TO FIX THIS:\n" +
+                                "  1. Install Docker: https://docs.docker.com/get-docker/\n" +
+                                "  2. Ensure 'docker' is in your system $PATH",
+                        ),
+                    );
                 } else {
-                    reject(new Error(`Failed to check Docker status: ${err.message}`));
+                    reject(new Error(`❌ Failed to check Docker status: ${err.message}`));
                 }
             });
         });

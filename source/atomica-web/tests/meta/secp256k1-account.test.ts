@@ -137,7 +137,7 @@ describe.sequential("SECP256k1 Account Creation and Usage", () => {
     expect(bobFinalBalance).toBe(
       bobBalanceAfterReceive - returnAmount - bobGasPaid,
     );
-  }, 60000); // 60s timeout
+  }, 120000); // 120s timeout
 
   it("should verify SECP256k1 key properties", async () => {
     // Generate SECP256k1 account

@@ -6,7 +6,7 @@ export declare class MockWallet {
     get address(): string;
     getProvider(): {
         isMetaMask: boolean;
-        request: ({ method, params, }: {
+        request: ({ method, params }: {
             method: string;
             params: unknown[];
         }) => Promise<string | string[]>;

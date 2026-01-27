@@ -52,7 +52,9 @@ export async function requestAPT(ethAddress) {
     console.log("  Ethereum Address:", ethAddress);
     console.log("  Aptos Derived Address:", derived.toString());
     console.log("  Funding address:", derived.toString());
-    const res = await fetch(`${FAUCET_URL}/mint?amount=100000000&address=${derived.toString()}`, { method: "POST" });
+    const res = await fetch(`${FAUCET_URL}/mint?amount=100000000&address=${derived.toString()}`, {
+        method: "POST",
+    });
     if (!res.ok) {
         const text = await res.text().catch(() => "No response text");
         console.error(`Faucet API Failed: ${res.status} ${res.statusText} - ${text}`);

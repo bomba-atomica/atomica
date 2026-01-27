@@ -88,11 +88,13 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
     return new Promise((resolve, reject) => {
         console.log(`  Running genesis script in Docker container...`);
 
-        // Get the validator image name from environment or use default
-        const validatorImage =
+        // Use the specific SHA pinned image for stability in CI and production.
+        const genesisImage =
             process.env.IMAGE_NAME_GENESIS ||
             process.env.IMAGE_NAME ||
-            "ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda";
+            `${process.env.VALIDATOR_IMAGE_REPO || "ghcr.io/bomba-atomica/atomica-aptos/validator"}@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda`;
+
+        const validatorImage = genesisImage;
 
         // Find the framework.mrb file - try multiple possible locations relative to workspaceDir
         const possiblePaths = [
@@ -117,6 +119,7 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         }
 
         debug("Using framework at: " + frameworkPath);
+        debug("Using genesis image: " + genesisImage);
         debug("Using validator image: " + validatorImage);
 
         // Run the script inside Docker container with the same image that will run validators
@@ -154,7 +157,7 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         }
 
         dockerArgs.push(
-            validatorImage,
+            genesisImage,
             "/genesis-script.sh",
             numValidators.toString(),
             chainId.toString(),
