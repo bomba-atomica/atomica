@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { commands } from "vitest/browser";
-import { getDerivedAddress } from "../../../src/lib/aptos/siwe";
-import { submitNativeTransaction } from "../../../src/lib/aptos/transaction";
+import { getDerivedAddress } from "../../../test-utils/index";
+import { submitNativeTransaction } from "../../../test-utils/index";
 import { setupBrowserWalletMock } from "../../../test-utils/browser-utils/wallet-mock";
 
 const DEPLOYER_ADDR =

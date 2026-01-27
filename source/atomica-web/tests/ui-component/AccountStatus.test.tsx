@@ -6,7 +6,7 @@ import { MockWallet } from "../../test-utils/browser-utils/MockWallet";
 import { useTokenBalances } from "../../src/hooks/useTokenBalances";
 
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { setAptosInstance } from "../../src/lib/aptos";
+import { setAptosInstance } from "../../test-utils/index";
 
 describe.sequential("AccountStatus Integration", () => {
   const TEST_PK =
@@ -81,7 +81,7 @@ describe.sequential("AccountStatus Integration", () => {
       console.log("✓ Initial state: Account not found warning displayed");
 
       // Step 2: Fund the account via faucet
-      const { getDerivedAddress } = await import("../../src/lib/aptos");
+      const { getDerivedAddress } = await import("../../test-utils/index");
       const derivedAddr = await getDerivedAddress(
         mockWallet.address.toLowerCase(),
       );

@@ -28,7 +28,7 @@ import {
   Network,
   InputEntryFunctionData,
 } from "@aptos-labs/ts-sdk";
-import { setAptosInstance } from "../../src/lib/aptos";
+import { setAptosInstance } from "../../test-utils/index";
 
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
@@ -59,7 +59,7 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     setupBrowserWalletMock(TEST_ACCOUNT, TEST_PK);
 
     // 4. Get derived address and fund it via browser command
-    const { getDerivedAddress } = await import("../../src/lib/aptos/siwe");
+    const { getDerivedAddress } = await import("../../test-utils/index");
     derivedAddr = (
       await getDerivedAddress(TEST_ACCOUNT.toLowerCase())
     ).toString();

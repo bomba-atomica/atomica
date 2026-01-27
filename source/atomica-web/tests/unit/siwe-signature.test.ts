@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from "vitest";
 import { ethers } from "ethers";
-import { constructSIWEMessage } from "../../src/lib/aptos";
+import { constructSIWEMessage } from "../../test-utils/index";
 
 describe("SIWE Message Construction", () => {
   it("should construct message matching Move contract format", () => {

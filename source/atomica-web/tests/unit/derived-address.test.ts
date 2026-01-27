@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getDerivedAddress } from "../../src/lib/aptos";
+import { getDerivedAddress } from "../../test-utils/index";
 
 describe("Address Derivation Helpers", () => {
   describe("getDerivedAddress", () => {
