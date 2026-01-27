@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "test": "vitest run",
-    "test:ui": "vitest run tests/ui-component",
+    "build": "bun run prepare:deps && tsc -b && vite build",
+    "test": "bun run prepare:deps && vitest run",
+    "test:ui": "bun run prepare:deps && vitest run tests/ui-component",
+    "prepare:deps": "cd ../docker-testnet/ethereum-testnet/typescript-sdk && bun install && bun run build && cd ../../aptos-testnet && bun install && bun run build && cd ../../state-proofs/typescript && bun install && bun run build && cd ../../atomica-web-ui && bun install && bun run build",
+    "demo": "bun run prepare:deps && bun scripts/orchestrator.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

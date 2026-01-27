@@ -13,6 +13,7 @@ export { Aptos, AptosConfig, Network, type InputGenerateTransactionPayloadData }
 export { constructSIWEMessage, getDerivedAddress, calculateAbstractDigest, serializeSIWEAbstractSignature, serializeSIWEAbstractPublicKey, SIWEAccountAuthenticator, } from "./siwe";
 export { CONTRACT_ADDR, testSimpleAPTTransfer, requestAPT, getMintFakeEthPayload, getMintFakeUsdPayload, requestTestTokens, areContractsDeployed, submitFaucet, getCreateAuctionPayload, submitCreateAuction, getBidPayload, submitBid, } from "./payloads";
 export { prepareNativeTransaction, simulateNativeTransaction, submitPreparedTransaction, submitNativeTransaction, } from "./transaction";
+export type { PreparedTransaction } from "./transaction";
 export { aptos, setAptosInstance, } from "./config";
 export { MockWallet } from "./browser-utils/MockWallet";
 export { setupBrowserWalletMock } from "./browser-utils/wallet-mock";

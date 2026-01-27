@@ -62,7 +62,7 @@ function runGenesisScript(config) {
         // Get the validator image name from environment or use default
         const validatorImage = process.env.IMAGE_NAME_GENESIS ||
             process.env.IMAGE_NAME ||
-            `${process.env.VALIDATOR_IMAGE_REPO || "ghcr.io/bomba-atomica/atomica-aptos/validator"}:${process.env.IMAGE_TAG || "latest"}`;
+            "aptoslabs/tools:devnet";
         // Find the framework.mrb file - try multiple possible locations relative to workspaceDir
         const possiblePaths = [
             pathResolve(workspaceDir, "..", "move-framework-fixtures", "head.mrb"),

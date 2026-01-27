@@ -42,6 +42,7 @@ export {
   submitPreparedTransaction,
   submitNativeTransaction,
 } from "./transaction";
+export type { PreparedTransaction } from "./transaction";
 
 export {
   aptos,

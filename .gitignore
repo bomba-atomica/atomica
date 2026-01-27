@@ -35,3 +35,7 @@ tests/Cargo.lock
 # Bun
 bun.lockb
 bun.lock
+
+# Build artifacts
+dist/
+node_modules/
