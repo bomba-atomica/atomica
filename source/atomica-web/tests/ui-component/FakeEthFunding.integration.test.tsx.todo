@@ -7,7 +7,7 @@ import {
   aptos,
   getDerivedAddress,
   setAptosInstance,
-} from "../../test-utils/index";
+} from "../../test-utils/browser-index";
 import { Faucet } from "../../src/components/Faucet";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 
@@ -21,9 +21,9 @@ const TEST_ACCOUNT = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Hardhat Ac
 
 import { vi } from "vitest";
 // Mock the CONTRACT_ADDR to match our localnet deployer
-vi.mock("../../test-utils/index", async (importOriginal) => {
+vi.mock("../../test-utils/browser-index", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("../../test-utils/index")>();
+    await importOriginal<typeof import("../../test-utils/browser-index")>();
   return {
     ...actual,
     CONTRACT_ADDR:

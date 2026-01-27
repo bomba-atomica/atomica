@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import {
   SIWEAccountAuthenticator,
   serializeSIWEAbstractSignature,
-} from "../../test-utils/index";
+} from "../../test-utils/browser-index";
 import { Serializer } from "@aptos-labs/ts-sdk";
 import goldenVectors from "../fixtures/golden_vectors.json";
 

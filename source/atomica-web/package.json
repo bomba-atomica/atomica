@@ -16,7 +16,7 @@
     "test:meta": "vitest run --config vitest.config.nodejs.ts",
     "test:docker": "bun run prepare:testnet && vitest run --config vitest.config.nodejs.ts tests/meta/docker-testnet.test.ts",
     "demo": "bun run prepare:testnet && npx tsx scripts/orchestrator.ts",
-    "prepare:testnet": "cd ../docker-testnet/typescript-sdk && bun install && bun run build",
+    "prepare:testnet": "cd ../docker-testnet/aptos-testnet && bun install && bun run build",
     "prepare": "../../scripts/install-hooks.sh"
   },
   "dependencies": {

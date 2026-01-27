@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getDerivedAddress } from "../../test-utils/index";
+import { getDerivedAddress } from "../../test-utils/browser-index";
 
 describe("Address Derivation Helpers", () => {
   describe("getDerivedAddress", () => {
