@@ -1,81 +1,136 @@
-name: Lint Web
+name: Lint Web Packages
 
 on:
   pull_request:
     branches: [main]
     paths:
-      - 'source/atomica-web/**'
+      - 'source/atomica-sdk/**'
+      - 'source/atomica-web-ui/**'
+      - 'source/atomica-web-demo/**'
       - '.github/workflows/lint-web.yaml'
   push:
     branches: [main]
     paths:
-      - 'source/atomica-web/**'
+      - 'source/atomica-sdk/**'
+      - 'source/atomica-web-ui/**'
+      - 'source/atomica-web-demo/**'
       - '.github/workflows/lint-web.yaml'
   workflow_dispatch:
 
 jobs:
-  eslint:
-    name: ESLint Check
+  lint-sdk:
+    name: Lint SDK
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: '20'
-
+          bun-version: latest
+      
       - name: Install dependencies
-        run: |
-          cd source/atomica-web
-          npm install
+        working-directory: source/atomica-sdk
+        run: bun install
 
-      - name: Run ESLint
-        run: |
-          cd source/atomica-web
-          npm run lint
+      - name: Lint
+        working-directory: source/atomica-sdk
+        run: bun run lint
 
-  prettier:
-    name: Prettier Format Check
+      - name: Format Check
+        working-directory: source/atomica-sdk
+        run: bun run format:check
+
+      - name: Type Check
+        working-directory: source/atomica-sdk
+        run: bun run build
+
+  lint-web-ui:
+    name: Lint Web UI
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: '20'
+          bun-version: latest
+
+      - name: Build Atomica SDK
+        working-directory: source/atomica-sdk
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Aptos Testnet SDK
+        working-directory: source/docker-testnet/aptos-testnet
+        run: |
+          bun install
+          bun run build
 
       - name: Install dependencies
-        run: |
-          cd source/atomica-web
-          npm install
+        working-directory: source/atomica-web-ui
+        run: bun install
 
-      - name: Check Prettier formatting
-        run: |
-          cd source/atomica-web
-          npm run format:check
+      - name: Lint
+        working-directory: source/atomica-web-ui
+        run: bun run lint
 
-  typescript:
-    name: TypeScript Compilation Check
+      - name: Format Check
+        working-directory: source/atomica-web-ui
+        run: bun run format:check
+
+      - name: Type Check
+        working-directory: source/atomica-web-ui
+        run: bun run build
+
+  lint-web-demo:
+    name: Lint Web Demo
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: '20'
+          bun-version: latest
+
+      - name: Build Ethereum Testnet SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Atomica SDK
+        working-directory: source/atomica-sdk
+        run: |
+          bun install
+          bun run build
+
+      - name: Build State Proofs
+        working-directory: source/state-proofs/typescript
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Aptos Testnet SDK
+        working-directory: source/docker-testnet/aptos-testnet
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Web UI
+        working-directory: source/atomica-web-ui
+        run: |
+          bun install
+          bun run build
 
       - name: Install dependencies
-        run: |
-          cd source/atomica-web
-          npm install
+        working-directory: source/atomica-web-demo
+        run: bun install
 
-      - name: Check TypeScript compilation
-        run: |
-          cd source/atomica-web
-          npx tsc --noEmit
+      - name: Lint
+        working-directory: source/atomica-web-demo
+        run: bun run lint
+
+      - name: Format Check
+        working-directory: source/atomica-web-demo
+        run: bun run format:check
+
+      - name: Type Check
+        working-directory: source/atomica-web-demo
+        run: bun run build
