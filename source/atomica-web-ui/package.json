@@ -6,6 +6,8 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "pretest": "bun run prepare:deps",
+    "prepare:deps": "cd ../atomica-sdk && bun install && bun run build && cd ../docker-testnet/aptos-testnet && bun install && bun run build && cd ../../state-proofs/typescript && bun install && bun run build",
     "lint": "eslint src/**/*.ts src/**/*.tsx",
     "lint:fix": "eslint src/**/*.ts src/**/*.tsx --fix",
     "format": "prettier --write 'src/**/*.ts' 'src/**/*.tsx'",

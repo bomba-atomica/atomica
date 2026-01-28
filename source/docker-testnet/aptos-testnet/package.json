@@ -35,6 +35,8 @@
     },
     "scripts": {
         "build": "tsc",
+        "pretest": "bun run prepare:deps",
+        "prepare:deps": "cd ../../atomica-sdk && bun install && bun run build",
         "test": "bun test",
         "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
         "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
