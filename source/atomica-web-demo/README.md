@@ -9,12 +9,14 @@ This is a reference implementation demonstrating how to build Aptos dApps that u
 ## What's Inside
 
 ### Demo Application
+
 - **Auction Interface**: Create and bid on sealed-bid auctions
 - **Token Faucet**: Request test tokens (APT, FAKEETH, FAKEUSD)
 - **Account Dashboard**: View balances and account status
 - **Sanity Tests**: Developer tools for testing signature verification
 
 ### Integration Tests
+
 - **Wallet Integration**: MetaMask connection and account management
 - **Fake Token Minting**: FAKEETH and FAKEUSD minting with both Ed25519 and SIWE
 - **End-to-End Flows**: Complete user journeys from connection to transaction
@@ -22,6 +24,7 @@ This is a reference implementation demonstrating how to build Aptos dApps that u
 ## Architecture
 
 ### Tech Stack
+
 - **React 19**: UI framework
 - **Vite**: Build tool and dev server
 - **TailwindCSS**: Styling
@@ -29,6 +32,7 @@ This is a reference implementation demonstrating how to build Aptos dApps that u
 - **Aptos TS SDK**: Blockchain interaction
 
 ### Dependencies
+
 - `@atomica/atomica-web-ui`: Reusable UI components
 - `@atomica/sdk`: Core account and transaction logic
 - `@atomica/aptos-docker-testnet`: Local testnet for development
@@ -37,6 +41,7 @@ This is a reference implementation demonstrating how to build Aptos dApps that u
 ## Running the Demo
 
 ### Development Mode
+
 ```bash
 # Start local testnet
 cd ../docker-testnet/aptos-testnet
@@ -52,6 +57,7 @@ bun run dev
 Access at http://localhost:5173
 
 ### Testing
+
 ```bash
 # Run integration tests
 bun run test
@@ -63,24 +69,28 @@ bun run test:ui
 ## Features
 
 ### 1. Account Management
+
 - Connect MetaMask wallet
 - Display Ethereum address
 - Show derived Aptos address
 - Real-time balance updates
 
 ### 2. Token Faucet
+
 - Request APT tokens (gas)
 - Mint FAKEETH test tokens
 - Mint FAKEUSD test tokens
 - Transaction status feedback
 
 ### 3. Auction System
+
 - **Create Auction**: Lock FAKEETH and set minimum price
 - **Place Bid**: Submit encrypted bids using IBE
 - **Sealed-Bid**: Bids hidden until reveal phase
 - **MPK Generation**: Automatic master public key creation
 
 ### 4. Developer Tools
+
 - **Sanity Test**: Verify signature verification with simple APT transfer
 - **Network Status**: Real-time block height monitoring
 - **Debug Logging**: Detailed transaction and signature info
@@ -88,18 +98,23 @@ bun run test:ui
 ## Test Strategy
 
 ### Unit Tests (Simple)
+
 - Import validation
 - Component rendering
 - Mock wallet creation
 
 ### Integration Tests (E2E)
+
 Located in `tests/integration/`:
+
 - **Wallet Adapter**: MetaMask integration
 - **Fake Token Minting**: Complete minting flows
 - **Multi-signature Support**: Both Ed25519 and SIWE paths
 
 ### UI Component Tests
+
 Located in `tests/` (basic component tests):
+
 - App rendering
 - Import verification
 - SDK availability
@@ -109,12 +124,14 @@ Located in `tests/` (basic component tests):
 ## Configuration
 
 ### Vite Config
+
 - React plugin
 - Node polyfills for browser crypto
 - Tailwind CSS
 - Path aliases
 
 ### Vitest Config
+
 - Browser mode with Playwright
 - Sequential test execution (testnet ports)
 - Browser commands for testnet lifecycle
@@ -123,6 +140,7 @@ Located in `tests/` (basic component tests):
 ## Deployment
 
 Build for production:
+
 ```bash
 bun run build
 ```
@@ -132,6 +150,7 @@ Output in `dist/` directory, ready for static hosting.
 ## Environment
 
 No environment variables required for local development. The app auto-detects:
+
 - MetaMask presence
 - Aptos testnet at `localhost:8080`
 - Current network from chain ID

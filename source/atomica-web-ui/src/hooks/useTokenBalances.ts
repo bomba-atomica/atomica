@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { aptos, CONTRACT_ADDR, getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
+import {
+  aptos,
+  CONTRACT_ADDR,
+  getDerivedAddress,
+} from "@atomica/aptos-docker-testnet/browser";
 
 import { areContractsDeployed } from "@atomica/aptos-docker-testnet/browser";
 

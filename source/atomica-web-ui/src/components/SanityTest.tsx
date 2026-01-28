@@ -1,5 +1,9 @@
 import { useState, useEffect } from "react";
-import { testSimpleAPTTransfer, getDerivedAddress, aptos } from "@atomica/aptos-docker-testnet/browser";
+import {
+  testSimpleAPTTransfer,
+  getDerivedAddress,
+  aptos,
+} from "@atomica/aptos-docker-testnet/browser";
 
 export function SanityTest({ account }: { account: string }) {
   const [loading, setLoading] = useState(false);

@@ -1,12 +1,5 @@
-import { AccountAuthenticator, AccountAddress } from "@aptos-labs/ts-sdk";
-import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
-export interface PreparedTransaction {
-    transaction: any;
-    auth: AccountAuthenticator;
-    senderAddress: AccountAddress;
-    debugState: any;
-    payload: InputGenerateTransactionPayloadData;
-}
+import { type PreparedTransaction, type InputGenerateTransactionPayloadData } from "@atomica/sdk";
+export type { PreparedTransaction };
 export declare function prepareNativeTransaction(ethAddress: string, payload: InputGenerateTransactionPayloadData): Promise<PreparedTransaction>;
 export declare function simulateNativeTransaction(preparedTx: PreparedTransaction): Promise<import("@aptos-labs/ts-sdk").UserTransactionResponse>;
 export declare function submitPreparedTransaction(preparedTx: PreparedTransaction): Promise<import("@aptos-labs/ts-sdk").PendingTransactionResponse>;

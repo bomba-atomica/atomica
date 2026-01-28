@@ -15,8 +15,9 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@atomica/atomica-web-ui": "file:../atomica-web-ui",
     "@atomica/aptos-docker-testnet": "file:../docker-testnet/aptos-testnet",
+    "@atomica/atomica-web-ui": "file:../atomica-web-ui",
+    "@atomica/sdk": "../atomica-sdk",
     "@atomica/state-proof-verifier": "file:../state-proofs/typescript",
     "@heroicons/react": "^2.2.0",
     "@tailwindcss/postcss": "^4.1.18",
@@ -26,23 +27,29 @@
     "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.0",
+    "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^25.1.0",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "@vitest/browser": "^4.0.16",
     "@vitest/browser-playwright": "^4.0.16",
     "@vitest/browser-preview": "^4.0.16",
+    "eslint": "^9.39.2",
     "happy-dom": "^20.0.11",
+    "jsdom": "^27.4.0",
     "playwright": "^1.57.0",
+    "prettier": "^3.8.1",
     "rollup-plugin-polyfill-node": "^0.13.0",
     "typescript": "~5.9.3",
+    "typescript-eslint": "^8.54.0",
     "vite": "^7.2.4",
     "vite-plugin-node-polyfills": "^0.25.0",
-    "vitest": "^4.0.15",
+    "vitest": "^4.0.18",
     "vitest-browser-react": "^2.0.2"
   }
 }

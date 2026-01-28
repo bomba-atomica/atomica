@@ -47,14 +47,14 @@
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { setupBrowserWalletMock } from "../../../test-utils/browser-utils/wallet-mock";
+import { setupBrowserWalletMock } from "@atomica/aptos-docker-testnet/browser";
 import { commands } from "vitest/browser";
 import {
   aptos,
   getDerivedAddress,
   setAptosInstance,
   submitNativeTransaction,
-} from "../../../test-utils/browser-index";
+} from "@atomica/aptos-docker-testnet/browser";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 
 const TEST_ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"; // Hardhat Account 0

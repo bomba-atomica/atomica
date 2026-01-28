@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Constants
-const WORKSPACE_ROOT = join(__dirname, "../../.."); 
+const WORKSPACE_ROOT = join(__dirname, "../../..");
 const ZAPATOS_DIR = join(WORKSPACE_ROOT, "source/atomica-aptos");
 const CONTRACTS_DIR = join(WORKSPACE_ROOT, "source/atomica-move-contracts");
 const WEB_DIR = join(WORKSPACE_ROOT, "source/atomica-web-demo");
@@ -74,7 +74,7 @@ async function main() {
 
   // 2. Find Aptos CLI
   console.log("🔍 Looking for 'aptos' binary...");
-  
+
   // Try system path first
   let aptosBin = null;
   try {

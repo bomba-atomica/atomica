@@ -4,6 +4,7 @@ import {
   AccountAddress,
   Aptos,
 } from "@aptos-labs/ts-sdk";
+export type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
 import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
 import { ethers } from "ethers";
 import { sha3_256 } from "@noble/hashes/sha3";

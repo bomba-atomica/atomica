@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { commands } from "vitest/browser";
-import { getDerivedAddress } from "../../../test-utils/browser-index";
-import { submitNativeTransaction } from "../../../test-utils/browser-index";
-import { setupBrowserWalletMock } from "../../../test-utils/browser-utils/wallet-mock";
+import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
+import { submitNativeTransaction } from "@atomica/aptos-docker-testnet/browser";
+import { setupBrowserWalletMock } from "@atomica/aptos-docker-testnet/browser";
 
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";

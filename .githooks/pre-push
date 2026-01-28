@@ -57,6 +57,13 @@ check_module "Aptos Docker Testnet SDK" "source/docker-testnet/aptos-testnet"
 # 5. Atomica SDK
 check_module "Atomica SDK" "source/atomica-sdk"
 
+# 6. Atomica Web UI
+check_module "Atomica Web UI" "source/atomica-web-ui" "bun run build" "bun run lint" "bun run format:check"
+
+# 7. Atomica Web Demo
+check_module "Atomica Web Demo" "source/atomica-web-demo" "bun run build" "bun run lint" "bun run format:check"
+
+
 echo "--------------------------------------------------"
 echo "🎉 Code quality checks passed! Push allowed."
 echo ""
