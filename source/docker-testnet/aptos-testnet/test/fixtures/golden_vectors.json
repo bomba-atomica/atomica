@@ -1,0 +1,33 @@
+{
+  "abstract_public_key": [
+    {
+      "name": "Standard Public Key",
+      "input": {
+        "domain": "example.com",
+        "ethereum_address": "0x1234567890123456789012345678901234567890"
+      },
+      "bcs_hex": "1412345678901234567890123456789012345678900b6578616d706c652e636f6d"
+    }
+  ],
+  "abstract_signature": [
+    {
+      "name": "MessageV2 Standard",
+      "input": {
+        "issued_at": "2023-01-01T00:00:00Z",
+        "scheme": "https",
+        "signature": "0xaabbcc",
+        "variant": "MessageV2"
+      },
+      "bcs_hex": "0105687474707314323032332d30312d30315430303a30303a30305a03aabbcc"
+    },
+    {
+      "name": "MessageV1 Standard",
+      "input": {
+        "issued_at": "2023-01-01T00:00:00Z",
+        "signature": "0xaabbcc",
+        "variant": "MessageV1"
+      },
+      "bcs_hex": "0014323032332d30312d30315430303a30303a30305a03aabbcc"
+    }
+  ]
+}
