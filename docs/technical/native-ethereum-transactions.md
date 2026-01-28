@@ -137,7 +137,7 @@ Browser → Sign SIWE → Submit to Zapatos RPC → Validators Verify → Execut
 **No pre-existing account required!** The FeePayer transaction implicitly creates the account.
 
 ## Implementation Requirements
-*   **Frontend**: Update the Atomica Web SDK to support SIWE signing flow (hash tx -> create SIWE -> sign -> send to FeePayer API or submit P2P).
+*   **Frontend**: Update the Atomica SDK to support SIWE signing flow (hash tx -> create SIWE -> sign -> send to FeePayer API or submit P2P).
 *   **Node/Framework**: Ensure `ethereum_derivable_account` is deployed (part of framework).
 *   **Backend**: FeePayer service required for gasless onboarding:
     - Single server (can be serverless)
