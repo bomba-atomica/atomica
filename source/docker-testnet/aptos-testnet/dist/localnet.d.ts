@@ -13,7 +13,7 @@
  * USAGE PATTERNS:
  *
  * Meta Tests (Node.js):
- *   import { setupLocalnet, fundAccount, deployContracts } from "../../test-utils/localnet";
+ *   import { setupLocalnet, fundAccount, deployContracts } from "../src/localnet";
  *   await setupLocalnet();
  *   await fundAccount(address, 1_000_000_000);
  *   await deployContracts();
@@ -55,7 +55,7 @@ import { DockerTestnet } from "./index";
  *
  * USAGE:
  *   Meta Tests:
- *     import { setupLocalnet } from "../../test-utils/localnet";
+ *     import { setupLocalnet } from "../src/localnet";
  *
  *     describe.sequential("My Test", () => {
  *       beforeAll(async () => {
@@ -91,7 +91,7 @@ export declare function setupLocalnet(): Promise<void>;
  *
  * USAGE:
  *   Meta Tests:
- *     import { fundAccount } from "../../test-utils/localnet";
+ *     import { fundAccount } from "../src/localnet";
  *     await fundAccount(account.accountAddress.toString(), 1_000_000_000);
  *
  *   Browser Tests:

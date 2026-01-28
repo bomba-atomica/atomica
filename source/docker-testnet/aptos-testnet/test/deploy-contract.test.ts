@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { setupLocalnet, fundAccount, getTestnet } from "../../test-utils/localnet";
+import { setupLocalnet, fundAccount, getTestnet } from "../src/localnet";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 import { resolve as pathResolve } from "path";
 

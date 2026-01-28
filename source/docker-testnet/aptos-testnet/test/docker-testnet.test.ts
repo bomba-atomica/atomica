@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { DockerTestnet } from "../../test-utils/index";
+import { DockerTestnet } from "../src/index";
 
 /**
  * Test: Docker Testnet - Multi-Validator Blockchain Progress
