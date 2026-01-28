@@ -52,8 +52,20 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Build Ethereum Testnet SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: |
+          bun install
+          bun run build
+
       - name: Build Atomica SDK
         working-directory: source/atomica-sdk
+        run: |
+          bun install
+          bun run build
+
+      - name: Build State Proofs
+        working-directory: source/state-proofs/typescript
         run: |
           bun install
           bun run build
