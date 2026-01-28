@@ -102,30 +102,33 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Build dependencies
+      - name: Build Ethereum Testnet SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
         run: |
-          # Build Ethereum Testnet SDK (Dependency for state-proofs)
-          cd source/docker-testnet/ethereum-testnet/typescript-sdk
           bun install
           bun run build
 
-          # Build Atomica SDK (Core Dependency)
-          cd ../../../../source/atomica-sdk
+      - name: Build Atomica SDK
+        working-directory: source/atomica-sdk
+        run: |
           bun install
           bun run build
 
-          # Build aptos-testnet SDK
-          cd ../docker-testnet/aptos-testnet
+      - name: Build State Proofs
+        working-directory: source/state-proofs/typescript
+        run: |
           bun install
           bun run build
-          
-          # Build atomica-web-ui
-          cd ../../../source/atomica-web-ui
+
+      - name: Build Aptos Testnet SDK
+        working-directory: source/docker-testnet/aptos-testnet
+        run: |
           bun install
           bun run build
-          
-          # Build state-proofs
-          cd ../state-proofs/typescript
+
+      - name: Build Atomica Web UI
+        working-directory: source/atomica-web-ui
+        run: |
           bun install
           bun run build
 
@@ -173,20 +176,21 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Build dependencies
+      - name: Build Ethereum Testnet SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
         run: |
-          # Build Ethereum Testnet SDK
-          cd source/docker-testnet/ethereum-testnet/typescript-sdk
           bun install
           bun run build
 
-          # Build Atomica SDK (Core Dependency)
-          cd ../../../../source/atomica-sdk
+      - name: Build Atomica SDK
+        working-directory: source/atomica-sdk
+        run: |
           bun install
           bun run build
 
-          # Build State Proofs (IBE Tests need this)
-          cd ../state-proofs/typescript
+      - name: Build State Proofs
+        working-directory: source/state-proofs/typescript
+        run: |
           bun install
           bun run build
 
