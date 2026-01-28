@@ -32,6 +32,12 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Build SDK
+        working-directory: source/atomica-sdk
+        run: |
+          bun install
+          bun run build
+
       - name: Install dependencies
         working-directory: source/docker-testnet/aptos-testnet
         run: bun install
@@ -98,8 +104,18 @@ jobs:
 
       - name: Build dependencies
         run: |
+          # Build Ethereum Testnet SDK (Dependency for state-proofs)
+          cd source/docker-testnet/ethereum-testnet/typescript-sdk
+          bun install
+          bun run build
+
+          # Build Atomica SDK (Core Dependency)
+          cd ../../../../source/atomica-sdk
+          bun install
+          bun run build
+
           # Build aptos-testnet SDK
-          cd source/docker-testnet/aptos-testnet
+          cd ../docker-testnet/aptos-testnet
           bun install
           bun run build
           
@@ -157,13 +173,22 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install dependencies
-        working-directory: source/state-proofs/typescript
-        run: bun install
+      - name: Build dependencies
+        run: |
+          # Build Ethereum Testnet SDK
+          cd source/docker-testnet/ethereum-testnet/typescript-sdk
+          bun install
+          bun run build
 
-      - name: Build
-        working-directory: source/state-proofs/typescript
-        run: bun run build
+          # Build Atomica SDK (Core Dependency)
+          cd ../../../../source/atomica-sdk
+          bun install
+          bun run build
+
+          # Build State Proofs (IBE Tests need this)
+          cd ../state-proofs/typescript
+          bun install
+          bun run build
 
       - name: Run IBE tests
         working-directory: source/state-proofs/typescript
