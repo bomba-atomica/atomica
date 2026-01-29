@@ -101,8 +101,9 @@ export class DockerTestnet {
         try {
             await DockerTestnet.ensureDockerRunning();
             debug("Docker daemon is running");
-        } catch (error: any) {
-            throw new Error(`Prerequisite check failed: ${error.message}`);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(`Prerequisite check failed: ${message}`);
         }
 
         const envVars = loadEnvVariables();
@@ -144,7 +145,7 @@ export class DockerTestnet {
                 envVars,
                 300000,
             );
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Failed to start testnet. Fetching logs...");
             try {
                 const proc = spawn(DOCKER_BIN, ["compose", "logs", "--tail=200"], {
@@ -162,7 +163,7 @@ export class DockerTestnet {
                     });
                     setTimeout(() => resolve(), 5000);
                 });
-            } catch (_logError) {
+            } catch {
                 console.error("Failed to fetch logs.");
             }
             throw error;
@@ -210,11 +211,13 @@ export class DockerTestnet {
             try {
                 await this.teardown();
                 console.log(`[${signal}] ✓ Docker testnet cleaned up`);
-            } catch (error: any) {
-                console.error(`[${signal}] Failed to cleanup testnet:`, error.message);
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(`[${signal}] Failed to cleanup testnet:`, message);
             }
         };
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (this as any)._signalHandlers = {
             SIGINT: async () => {
                 await handleCleanup("SIGINT");
@@ -229,22 +232,30 @@ export class DockerTestnet {
             },
         };
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         process.on("SIGINT", (this as any)._signalHandlers.SIGINT);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         process.on("SIGTERM", (this as any)._signalHandlers.SIGTERM);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         process.on("beforeExit", (this as any)._signalHandlers.beforeExit);
 
         debug("Cleanup handlers registered for SIGINT, SIGTERM, and beforeExit");
     }
 
     private unregisterCleanupHandlers(): void {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (!this.cleanupHandlersRegistered || !(this as any)._signalHandlers) {
             return;
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         process.off("SIGINT", (this as any)._signalHandlers.SIGINT);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         process.off("SIGTERM", (this as any)._signalHandlers.SIGTERM);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         process.off("beforeExit", (this as any)._signalHandlers.beforeExit);
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete (this as any)._signalHandlers;
         this.cleanupHandlersRegistered = false;
 
@@ -360,8 +371,9 @@ export class DockerTestnet {
                     amount: amountPerValidator.toString(),
                     txn: transferPending.hash,
                 });
-            } catch (error: any) {
-                console.error(`  ✗ Failed to fund validator ${i}: ${error.message}`);
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(`  ✗ Failed to fund validator ${i}: ${message}`);
                 throw error;
             }
         }
@@ -433,14 +445,15 @@ export class DockerTestnet {
                         if (retries < maxRetries) {
                             await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
                         }
-                    } catch (e: any) {
+                    } catch (e: unknown) {
                         retries++;
                         if (retries < maxRetries) {
                             await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
                         } else {
+                            const message = e instanceof Error ? e.message : String(e);
                             debug(`Warning: Could not confirm balance after ${retries} retries`, {
                                 targetAddr,
-                                error: e.message,
+                                error: message,
                             });
                             break;
                         }
@@ -455,8 +468,9 @@ export class DockerTestnet {
                 });
 
                 return txnResponse.hash;
-            } catch (error: any) {
-                throw new Error(`Faucet transfer failed: ${error.message}`);
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : String(error);
+                throw new Error(`Faucet transfer failed: ${message}`);
             }
         })();
 
@@ -774,8 +788,9 @@ export class DockerTestnet {
                 }
             });
 
-            proc.on("error", (err: any) => {
-                if (err.code === "ENOENT") {
+            proc.on("error", (err: unknown) => {
+                const nodeError = err as NodeJS.ErrnoException;
+                if (nodeError.code === "ENOENT") {
                     reject(
                         new Error(
                             `❌ Docker binary '${DOCKER_BIN}' not found in PATH.\n\n` +
@@ -785,7 +800,8 @@ export class DockerTestnet {
                         ),
                     );
                 } else {
-                    reject(new Error(`❌ Failed to check Docker status: ${err.message}`));
+                    const message = err instanceof Error ? err.message : String(err);
+                    reject(new Error(`❌ Failed to check Docker status: ${message}`));
                 }
             });
         });
@@ -815,7 +831,7 @@ async function waitForHealthy(numValidators: number, timeoutSecs: number): Promi
                 } else {
                     statuses.push(`V${i}:HTTP${response.status}`);
                 }
-            } catch (_e: any) {
+            } catch {
                 statuses.push(`V${i}:ERR`);
             }
         }
@@ -892,9 +908,10 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
                 result.apiError = `HTTP ${response.status}`;
                 console.log(`    ✗ API returned: ${response.status}`);
             }
-        } catch (error: any) {
-            result.apiError = error.message;
-            console.log(`    ✗ API unreachable: ${error.message}`);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            result.apiError = message;
+            console.log(`    ✗ API unreachable: ${message}`);
         }
 
         const portsToScan = [
@@ -916,14 +933,15 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
                     reachable: true,
                 });
                 console.log(`    ✓ Port ${port} (${name}) reachable`);
-            } catch (error: any) {
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : String(error);
                 result.portScans.push({
                     port,
                     name,
                     reachable: false,
-                    error: error.message,
+                    error: message,
                 });
-                console.log(`    ✗ Port ${port} (${name}) unreachable: ${error.message}`);
+                console.log(`    ✗ Port ${port} (${name}) unreachable: ${message}`);
             }
         }
 
@@ -954,8 +972,9 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
             } else {
                 console.log(`    ✗ Container cannot reach other validators`);
             }
-        } catch (error: any) {
-            console.log(`    ? Could not test container networking: ${error.message}`);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.log(`    ? Could not test container networking: ${message}`);
         }
 
         results.push(result);

@@ -47,11 +47,11 @@ describe("Faucet Mechanism", () => {
         try {
             const resources = await client.getAccountResources(faucetAddr);
             const coinResource = resources.find(
-                (r: any) => r.type === "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>",
+                (r) => r.type === "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>",
             );
 
             if (coinResource) {
-                const balance = (coinResource.data as any).coin.value;
+                const balance = (coinResource.data as { coin: { value: string } }).coin.value;
                 console.log(`Faucet balance: ${balance} octas`);
                 expect(BigInt(balance)).toBeGreaterThan(0n);
             } else {

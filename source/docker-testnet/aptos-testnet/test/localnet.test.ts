@@ -47,8 +47,9 @@ describe.sequential("Localnet Health Check", () => {
             });
             resourceCount = resources.length;
             expect(resourceCount).toBeGreaterThan(0);
-        } catch (e: any) {
-            throw new Error(`Failed to query account resources: ${e.message}`);
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : String(e);
+            throw new Error(`Failed to query account resources: ${message}`);
         }
     }, 60000); // 60s timeout
 });

@@ -14,6 +14,13 @@ export default tseslint.config(
             tsconfigRootDir: import.meta.dirname,
         },
     },
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_" },
+      ],
+      "@typescript-eslint/no-explicit-any": "error",
+    },
   },
   {
     files: ["src/global.d.ts"],

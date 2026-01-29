@@ -17,8 +17,8 @@ export default tseslint.config(
     rules: {
         // React-specific rules could go here if we added the react plugin,
         // but for now we'll stick to basic TS rules to get it passing.
-        "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
-        "@typescript-eslint/no-explicit-any": "warn" 
+        "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+        "@typescript-eslint/no-explicit-any": "error"
     }
   }
 );

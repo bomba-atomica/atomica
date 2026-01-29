@@ -250,8 +250,9 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
             }
         });
 
-        proc.on("error", (err: any) => {
-            reject(new Error(`Failed to run genesis script in Docker: ${err.message}`));
+        proc.on("error", (err: unknown) => {
+            const message = err instanceof Error ? err.message : String(err);
+            reject(new Error(`Failed to run genesis script in Docker: ${message}`));
         });
     });
 }

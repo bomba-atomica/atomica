@@ -18,8 +18,9 @@ async function main() {
                 "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>",
             );
             console.log("Faucet CoinStore:", faucetBalance);
-        } catch (e: any) {
-            console.log("Faucet CoinStore error:", e.message);
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : String(e);
+            console.log("Faucet CoinStore error:", message);
         }
 
         // Try to create a new account
@@ -55,8 +56,9 @@ async function main() {
             const account = await client.getAccount(newAccount.address());
             console.log("\n✓ Account created!");
             console.log("Account sequence number:", account.sequence_number);
-        } catch (e: any) {
-            console.log("\n✗ Account not created:", e.message);
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : String(e);
+            console.log("\n✗ Account not created:", message);
         }
 
         // Check new account balance
@@ -67,8 +69,9 @@ async function main() {
             );
             console.log("\n✓ New account CoinStore created!");
             console.log("Balance data:", JSON.stringify(balance.data, null, 2));
-        } catch (e: any) {
-            console.log("\n✗ Failed to get new account CoinStore:", e.message);
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : String(e);
+            console.log("\n✗ Failed to get new account CoinStore:", message);
         }
     } finally {
         await testnet.teardown();
