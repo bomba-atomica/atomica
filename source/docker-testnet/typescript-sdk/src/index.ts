@@ -573,7 +573,7 @@ export class DockerTestnet {
         })();
 
         // Update lock to wait for this operation (catch errors so they don't block the queue)
-        this.faucetLock = currentOperation.catch(() => { });
+        this.faucetLock = currentOperation.catch(() => {});
 
         // Return the actual result (which may throw)
         return currentOperation;
@@ -947,11 +947,11 @@ export class DockerTestnet {
                     reject(
                         new Error(
                             "❌ Docker Daemon is not responding.\n\n" +
-                            "HOW TO FIX THIS:\n" +
-                            "  1. Check if Docker is running: `docker info`\n" +
-                            "  2. Start Docker Desktop (macOS/Windows) or the docker service (Linux)\n" +
-                            "  3. Verify permissions: You may need to add your user to the 'docker' group\n" +
-                            "  4. On Linux: `sudo systemctl start docker`",
+                                "HOW TO FIX THIS:\n" +
+                                "  1. Check if Docker is running: `docker info`\n" +
+                                "  2. Start Docker Desktop (macOS/Windows) or the docker service (Linux)\n" +
+                                "  3. Verify permissions: You may need to add your user to the 'docker' group\n" +
+                                "  4. On Linux: `sudo systemctl start docker`",
                         ),
                     );
                 }
@@ -962,9 +962,9 @@ export class DockerTestnet {
                     reject(
                         new Error(
                             `❌ Docker binary '${DOCKER_BIN}' not found in PATH.\n\n` +
-                            "HOW TO FIX THIS:\n" +
-                            "  1. Install Docker: https://docs.docker.com/get-docker/\n" +
-                            "  2. Ensure 'docker' is in your system $PATH",
+                                "HOW TO FIX THIS:\n" +
+                                "  1. Install Docker: https://docs.docker.com/get-docker/\n" +
+                                "  2. Ensure 'docker' is in your system $PATH",
                         ),
                     );
                 } else {
