@@ -1,6 +1,9 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  resolve: {
+    extensions: [".ts", ".js", ".json"],
+  },
   test: {
     globals: true,
     environment: "node",
@@ -9,5 +12,6 @@ export default defineConfig({
     sequence: {
       concurrent: false, // Run test files sequentially by default
     },
+    include: ["test/**/*.test.ts"],
   },
 });
