@@ -7,7 +7,7 @@ import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
  *
  * Verifies that the HTTP Faucet Service (aptos-faucet-service) is running
  * and responding on port 8081. This is critical for the Frontend.
- * 
+ *
  * NOTE: This test requires the native faucet service to be started.
  * It was added after the original test suite was passing and tests
  * functionality that wasn't part of the original passing state.
