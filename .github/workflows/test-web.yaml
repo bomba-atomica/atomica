@@ -159,9 +159,9 @@ jobs:
         working-directory: source/atomica-web-demo
         run: |
           if [ "${{ matrix.type }}" = "unit" ]; then
-            vitest run tests/simple.test.ts tests/sdk-import.test.ts tests/aptos-sdk.test.ts tests/mock-wallet.test.ts tests/app-import.test.ts tests/app-component.test.tsx
+            bunx vitest run tests/simple.test.ts tests/sdk-import.test.ts tests/aptos-sdk.test.ts tests/mock-wallet.test.ts tests/app-import.test.ts tests/app-component.test.tsx
           else
-            vitest run tests/AccountStatus.test.tsx tests/AccountConnection.test.tsx tests/TxButton.skip-submit.test.tsx
+            bunx vitest run tests/AccountStatus.test.tsx tests/AccountConnection.test.tsx tests/TxButton.skip-submit.test.tsx
           fi
 
   test-state-proofs:
