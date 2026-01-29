@@ -124,7 +124,9 @@ async function main() {
   }
 
   // 5. Start Docker Testnet
-  console.log("chains⛓️ Starting Docker Testnet (expecting 4 validators + faucet)...");
+  console.log(
+    "chains⛓️ Starting Docker Testnet (expecting 4 validators + faucet)...",
+  );
 
   // Create and wait for testnet readiness
   const testnet = await DockerTestnet.new(4);
