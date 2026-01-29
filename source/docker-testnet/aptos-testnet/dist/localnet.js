@@ -13,7 +13,7 @@
  * USAGE PATTERNS:
  *
  * Meta Tests (Node.js):
- *   import { setupLocalnet, fundAccount, deployContracts } from "../../test-utils/localnet";
+ *   import { setupLocalnet, fundAccount, deployContracts } from "../src/localnet";
  *   await setupLocalnet();
  *   await fundAccount(address, 1_000_000_000);
  *   await deployContracts();
@@ -83,7 +83,7 @@ const CONTRACTS_DIR = pathResolve(SOURCE_DIR, "atomica-move-contracts");
  *
  * USAGE:
  *   Meta Tests:
- *     import { setupLocalnet } from "../../test-utils/localnet";
+ *     import { setupLocalnet } from "../src/localnet";
  *
  *     describe.sequential("My Test", () => {
  *       beforeAll(async () => {
@@ -131,7 +131,7 @@ export async function setupLocalnet() {
  *
  * USAGE:
  *   Meta Tests:
- *     import { fundAccount } from "../../test-utils/localnet";
+ *     import { fundAccount } from "../src/localnet";
  *     await fundAccount(account.accountAddress.toString(), 1_000_000_000);
  *
  *   Browser Tests:

@@ -20,7 +20,7 @@ import {
   cleanup,
 } from "@testing-library/react";
 import { commands } from "vitest/browser";
-import { TxButton } from "@atomica/atomica-web-ui";
+import { TxButton } from "../src/index";
 import { setupBrowserWalletMock } from "@atomica/aptos-docker-testnet/browser-utils/wallet-mock";
 import {
   Aptos,

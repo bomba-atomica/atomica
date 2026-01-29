@@ -77,17 +77,28 @@ const provider = wallet.getProvider();
 
 ## Testing
 
-Integration tests cover:
-- Validator connectivity
-- Block production
-- Faucet functionality
+**Test Environment**: Node.js (Meta Tests)
+
+These are infrastructure validation tests that verify the testnet setup works correctly. They run in a **Node.js environment** (not browser) because they:
+- Spawn child processes (`aptos` CLI)
+- Manage Docker containers
+- Access filesystem and system resources
+- Test platform infrastructure, not application code
+
+Test coverage:
+- Validator connectivity and health checks
+- Block production and consensus
+- Faucet functionality (Ed25519 and SECP256k1)
 - Account creation and funding
-- Contract deployment
+- Contract deployment (simple and Atomica contracts)
+- Multi-validator network progress
 
 Run tests:
 ```bash
-bun test
+bun run test
 ```
+
+**Important**: Tests use Vitest runner with `describe.sequential` to run sequentially. This prevents port conflicts since each test starts its own localnet on ports 8080/8081.
 
 ## Configuration
 
