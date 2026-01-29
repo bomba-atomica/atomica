@@ -5,6 +5,16 @@ import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { submitNativeTransaction } from "@atomica/aptos-docker-testnet/browser";
 import { setupBrowserWalletMock } from "@atomica/aptos-docker-testnet/browser";
 
+// Type augmentation for browser commands
+interface BrowserCommands {
+  setupLocalnet: () => Promise<void>;
+  deployContracts: () => Promise<void>;
+  fundAccount: (address: string, amount: number) => Promise<void>;
+  teardownLocalnet: () => Promise<void>;
+}
+
+const browserCommands = commands as unknown as BrowserCommands;
+
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 const TEST_ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"; // Hardhat Account 0
@@ -16,7 +26,7 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
 
   beforeAll(async () => {
     console.log("Starting Localnet...");
-    await (commands as any).setupLocalnet();
+    await browserCommands.setupLocalnet();
 
     // Initialize Aptos client
     const config = new AptosConfig({
@@ -27,7 +37,7 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
 
     // Deploy contracts
     console.log("Deploying contracts...");
-    await (commands as any).deployContracts();
+    await browserCommands.deployContracts();
 
     console.log(`Ethereum Address: ${TEST_ACCOUNT}`);
 
@@ -36,7 +46,7 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
     console.log(`Derived Aptos Address: ${derivedAddr.toString()}`);
 
     // Fund the derived account with APT for gas
-    await (commands as any).fundAccount(derivedAddr.toString(), 100_000_000); // 1 APT
+    await browserCommands.fundAccount(derivedAddr.toString(), 100_000_000); // 1 APT
 
     // Wait for funding to be indexed
     await new Promise((r) => setTimeout(r, 2000));
@@ -49,7 +59,7 @@ describe.sequential("FakeEth SIWE Integration Test (Secp256k1)", () => {
 
   afterAll(async () => {
     console.log("Stopping Localnet...");
-    await (commands as any).teardownLocalnet();
+    await browserCommands.teardownLocalnet();
   });
 
   it("should mint FakeEth using SIWE authentication", async () => {
