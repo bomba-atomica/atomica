@@ -1,6 +1,6 @@
 import { DockerTestnet } from "@atomica/docker-testnet";
 import { spawn, execSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27,7 +27,7 @@ async function main() {
   // 0. Docker Check
   try {
     execSync("docker info", { stdio: "ignore" });
-  } catch (e) {
+  } catch (_e) {
     console.error("\n========================================================");
     console.error("⛔️  ABORTING: Docker Not Running");
     console.error("========================================================");
@@ -91,7 +91,7 @@ async function main() {
       aptosBin = pathBin;
       console.log(`✅ Found 'aptos' binary in $PATH at: ${aptosBin}`);
     }
-  } catch (e) {
+  } catch (_e) {
     // Ignore error if not found in PATH
   }
 

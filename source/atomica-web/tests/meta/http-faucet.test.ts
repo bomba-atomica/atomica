@@ -29,7 +29,7 @@ describe.sequential("HTTP Faucet Service", () => {
     });
 
     it("should be reachable and healthy", async () => {
-        const response = await fetch("http://127.0.0.1:8081");
+        await fetch("http://127.0.0.1:8081");
         // Faucet root often returns 404 or welcome strings, but if it connects, it's alive.
         // The health endpoint is better.
         // aptos-faucet-service usually has /health or just responds to /mint.
