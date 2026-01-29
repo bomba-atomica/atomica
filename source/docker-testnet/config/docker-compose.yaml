@@ -183,45 +183,6 @@ services:
       - RUST_LOG=info
       - RUST_BACKTRACE=1
 
-  # Optional: Faucet service (useful for testing)
-  faucet:
-    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda}"
-    container_name: atomica-faucet
-    depends_on:
-      validator-0:
-        condition: service_healthy
-    networks:
-      atomica-testnet:
-        ipv4_address: 172.19.0.20
-    volumes:
-      - type: volume
-        source: atomica-genesis
-        target: /opt/aptos/var
-        read_only: true
-    command:
-      - /bin/bash
-      - -c
-      - |
-        echo 'Waiting for validator mint.key...'
-        for i in {1..30}; do
-          if [[ -s /opt/aptos/var/mint.key ]]; then
-            echo 'Found mint.key, starting faucet...'
-            sleep 2
-            exec /usr/local/bin/aptos-faucet-service run-simple \
-              --key-file-path /opt/aptos/var/mint.key \
-              --chain-id TESTING \
-              --node-url http://172.19.0.10:8080
-          fi
-          sleep 2
-        done
-        echo 'ERROR: Validator did not generate mint.key'
-        exit 1
-    ports:
-      - "8000:8081"  # Faucet service
-    restart: unless-stopped
-    profiles:
-      - with-faucet
-
 networks:
   atomica-testnet:
     name: atomica-testnet
