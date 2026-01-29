@@ -149,8 +149,8 @@ class DockerTestnet {
         }
         // Start the testnet
         // Use 5 minute timeout for 'up' command (image pull can be slow)
-        // Only start the requested number of validators
-        const validatorServices = [];
+        // Only start the requested number of validators plus the faucet
+        const validatorServices = ["faucet"];
         for (let i = 0; i < numValidators; i++) {
             validatorServices.push(`validator-${i}`);
         }
@@ -187,7 +187,9 @@ class DockerTestnet {
         // Discover validator endpoints
         const validatorUrls = [];
         for (let i = 0; i < numValidators; i++) {
-            validatorUrls.push(`http://127.0.0.1:${BASE_API_PORT + i}`);
+            // Port 8081 is reserved for the faucet service
+            const portOffset = i > 0 ? i + 1 : i;
+            validatorUrls.push(`http://127.0.0.1:${BASE_API_PORT + portOffset}`);
         }
         await new Promise((resolve) => setTimeout(resolve, 2000));
         console.log(`✓ Docker testnet ready with ${numValidators} validators`);
@@ -801,7 +803,9 @@ async function waitForHealthy(numValidators, timeoutSecs) {
         let healthyCount = 0;
         const statuses = [];
         for (let i = 0; i < numValidators; i++) {
-            const url = `http://127.0.0.1:${BASE_API_PORT + i}/v1`;
+            // Port 8081 is reserved for the faucet service
+            const portOffset = i > 0 ? i + 1 : i;
+            const url = `http://127.0.0.1:${BASE_API_PORT + portOffset}/v1`;
             try {
                 const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
                 if (response.ok) {
