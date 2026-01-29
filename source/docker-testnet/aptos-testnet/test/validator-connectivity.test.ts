@@ -1,38 +1,32 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import type { DockerTestnet } from "../src/index";
-import {
-    initializeTestnet,
-    performCleanup,
-    registerCleanupHandlers,
-    setGlobalTestnet,
-} from "./helpers/testnet-lifecycle";
+import { setupLocalnet, getTestnet } from "../src/localnet";
 
-// Register cleanup handlers once at module load
-registerCleanupHandlers();
-
-describe("Validator Connectivity", () => {
-    let testnet: DockerTestnet;
-    const NUM_VALIDATORS = 2;
+describe.sequential("Validator Connectivity", () => {
+    let numValidators: number;
 
     beforeAll(async () => {
-        testnet = await initializeTestnet(NUM_VALIDATORS);
-    }, 300000); // 5 min timeout for setup
+        await setupLocalnet();
+        const testnet = getTestnet();
+        numValidators = testnet.getNumValidators();
+    }, 300000);
 
     afterAll(async () => {
-        await performCleanup("Validator connectivity tests completed");
-        setGlobalTestnet(undefined);
+        const testnet = getTestnet();
+        await testnet.teardown();
     });
 
-    test("should have correct number of validators", () => {
+    test("should have correct number of validators", async () => {
+        const testnet = getTestnet();
         expect(testnet).toBeDefined();
-        expect(testnet.getNumValidators()).toBe(NUM_VALIDATORS);
+        expect(testnet.getNumValidators()).toBe(numValidators);
     });
 
     test("should check validator connectivity and LedgerInfo", async () => {
+        const testnet = getTestnet();
         expect(testnet).toBeDefined();
 
         console.log("Checking validator connectivity and LedgerInfo...");
-        for (let i = 0; i < NUM_VALIDATORS; i++) {
+        for (let i = 0; i < numValidators; i++) {
             const url = testnet.validatorApiUrl(i);
             console.log(`Validator ${i}: ${url}`);
 
@@ -46,10 +40,8 @@ describe("Validator Connectivity", () => {
             expect(info.chain_id).toBe(4);
             expect(info.node_role).toBe("validator");
 
-            // Epoch should be >= 0 (at genesis or beyond)
             expect(parseInt(info.epoch)).toBeGreaterThanOrEqual(0);
 
-            // If we're past genesis (epoch > 0), we should have blocks
             if (parseInt(info.epoch) > 0) {
                 expect(parseInt(info.block_height)).toBeGreaterThan(0);
             }

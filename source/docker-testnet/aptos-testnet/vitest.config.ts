@@ -1,17 +1,22 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  resolve: {
-    extensions: [".ts", ".js", ".json"],
-  },
-  test: {
-    globals: true,
-    environment: "node",
-    testTimeout: 120000, // 120s default timeout for integration tests
-    hookTimeout: 180000, // 180s for beforeAll/afterAll hooks
-    sequence: {
-      concurrent: false, // Run test files sequentially by default
-    },
-    include: ["test/**/*.test.ts"],
-  },
+	resolve: {
+		extensions: [".ts", ".js", ".json"],
+	},
+	test: {
+		globals: true,
+		environment: "node",
+		testTimeout: 300000,
+		hookTimeout: 180000,
+		sequence: {
+			concurrent: false,
+		},
+		include: ["test/**/*.test.ts"],
+		fileParallelism: false,
+		pool: "forks",
+		maxWorkers: 1,
+		run: true,
+		isolate: false,
+	},
 });

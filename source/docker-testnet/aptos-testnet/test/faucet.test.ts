@@ -1,34 +1,23 @@
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import { AptosAccount, AptosClient } from "aptos";
-import type { DockerTestnet } from "../src/index";
-import {
-    registerCleanupHandlers,
-    setGlobalTestnet,
-    initializeTestnet,
-    performCleanup,
-    waitForNetworkStabilization,
-} from "./helpers/testnet-lifecycle";
+import { setupLocalnet, getTestnet } from "../src/localnet";
 
-// Register cleanup handlers once at module load
-registerCleanupHandlers();
-
-describe("Faucet Mechanism", () => {
-    let testnet: DockerTestnet;
+describe.sequential("Faucet Mechanism", () => {
     let client: AptosClient;
-    const NUM_VALIDATORS = 2;
 
     beforeAll(async () => {
-        testnet = await initializeTestnet(NUM_VALIDATORS);
+        await setupLocalnet();
+        const testnet = getTestnet();
         client = new AptosClient(testnet.validatorApiUrl(0));
-        await waitForNetworkStabilization(testnet);
-    }, 300000); // 5 min timeout for setup
+    }, 300000);
 
     afterAll(async () => {
-        await performCleanup("Faucet tests completed");
-        setGlobalTestnet(undefined);
+        const testnet = getTestnet();
+        await testnet.teardown();
     });
 
     test("should verify faucet account exists and has balance", async () => {
+        const testnet = getTestnet();
         expect(testnet).toBeDefined();
 
         const faucetAccount = testnet.getFaucetAccount();
@@ -36,14 +25,12 @@ describe("Faucet Mechanism", () => {
 
         console.log(`Faucet account address: ${faucetAddr}`);
 
-        // Verify the faucet account exists on-chain
         const accountInfo = await client.getAccount(faucetAddr);
         expect(accountInfo).toBeDefined();
         expect(accountInfo.authentication_key).toBeDefined();
 
         console.log(`Faucet account sequence number: ${accountInfo.sequence_number}`);
 
-        // Check faucet balance
         try {
             const resources = await client.getAccountResources(faucetAddr);
             const coinResource = resources.find(
@@ -65,30 +52,26 @@ describe("Faucet Mechanism", () => {
     });
 
     test("can fund a new account using faucet", async () => {
+        const testnet = getTestnet();
         expect(testnet).toBeDefined();
 
-        // Create a new account
         const newAccount = new AptosAccount();
         const newAddr = newAccount.address().hex();
-        const amount = 100_000_000n; // 1 APT
+        const amount = 100_000_000n;
 
         console.log(`\nCreating and funding new account: ${newAddr.slice(0, 10)}...`);
         console.log(`Funding amount: ${amount} octas (1 APT)`);
 
-        // Use the faucet to create and fund the account
         const txnHash = await testnet.faucet(newAccount.address(), amount);
         console.log(`✓ Faucet transaction submitted: ${txnHash}`);
 
-        // Wait a bit for the transaction to be fully processed
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
-        // Verify the account was created
         const accountInfo = await client.getAccount(newAddr);
         expect(accountInfo).toBeDefined();
         expect(accountInfo.sequence_number).toBe("0");
         console.log(`✓ Account created with sequence number: ${accountInfo.sequence_number}`);
 
-        // Verify the account has the correct balance using view function
         const result = await client.view({
             function: "0x1::coin::balance",
             type_arguments: ["0x1::aptos_coin::AptosCoin"],
@@ -100,13 +83,14 @@ describe("Faucet Mechanism", () => {
         console.log(`✓ Account balance verified: ${balance} octas`);
 
         console.log("✓ Faucet funding test passed!");
-    }, 120000); // 2 min timeout
+    }, 120000);
 
     test("faucet can fund multiple accounts", async () => {
+        const testnet = getTestnet();
         expect(testnet).toBeDefined();
 
         const numAccounts = 3;
-        const amount = 50_000_000n; // 0.5 APT each
+        const amount = 50_000_000n;
 
         console.log(`\nFunding ${numAccounts} accounts with ${amount} octas each...`);
 
@@ -121,12 +105,10 @@ describe("Faucet Mechanism", () => {
                 `  ✓ Account ${i + 1} funded: ${newAccount.address().hex().slice(0, 10)}... (txn: ${txnHash.slice(0, 10)}...)`,
             );
 
-            // Verify account was created and funded
             const accountInfo = await client.getAccount(newAccount.address());
             expect(accountInfo).toBeDefined();
             expect(accountInfo.sequence_number).toBe("0");
 
-            // Get balance using view function (faucet already polled for availability)
             const result = await client.view({
                 function: "0x1::coin::balance",
                 type_arguments: ["0x1::aptos_coin::AptosCoin"],
@@ -138,20 +120,19 @@ describe("Faucet Mechanism", () => {
         }
 
         console.log(`✓ All ${numAccounts} accounts successfully funded and verified`);
-    }, 180000); // 3 min timeout
+    }, 180000);
 
     test("can fund existing account with additional funds", async () => {
+        const testnet = getTestnet();
         expect(testnet).toBeDefined();
 
-        // Create and fund initial account
         const account = new AptosAccount();
-        const initialAmount = 100_000_000n; // 1 APT
-        const additionalAmount = 50_000_000n; // 0.5 APT
+        const initialAmount = 100_000_000n;
+        const additionalAmount = 50_000_000n;
 
         console.log(`\nFunding account with initial ${initialAmount} octas...`);
         await testnet.faucet(account.address(), initialAmount);
 
-        // Verify initial balance using view function (faucet already polled for availability)
         let result = await client.view({
             function: "0x1::coin::balance",
             type_arguments: ["0x1::aptos_coin::AptosCoin"],
@@ -161,11 +142,9 @@ describe("Faucet Mechanism", () => {
         expect(balance).toBe(initialAmount);
         console.log(`✓ Initial balance: ${balance} octas`);
 
-        // Fund again with additional amount
         console.log(`Adding ${additionalAmount} more octas...`);
         await testnet.faucet(account.address(), additionalAmount);
 
-        // Verify new balance
         result = await client.view({
             function: "0x1::coin::balance",
             type_arguments: ["0x1::aptos_coin::AptosCoin"],

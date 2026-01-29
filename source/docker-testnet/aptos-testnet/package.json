@@ -35,9 +35,8 @@
     },
     "scripts": {
         "build": "tsc",
-        "pretest": "bun run prepare:deps",
         "prepare:deps": "cd ../../atomica-sdk && bun install && bun run build",
-        "test": "vitest run",
+        "test": "vitest run --no-file-parallelism --pool=forks --maxWorkers=1",
         "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
         "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
         "lint": "ESLINT_USE_FLAT_CONFIG=false eslint .",
