@@ -26,17 +26,29 @@ echo "⚠️  Running pre-commit auto-cleanups..."
 echo "⚠️  NOTE: This hook allows commits. Strict checks run in pre-push."
 echo ""
 
+# Function to ensure dependencies are installed
+ensure_deps() {
+    if [ ! -d "node_modules" ]; then
+        echo "📦 node_modules not found in $(pwd). Running 'bun install'..."
+        bun install >/dev/null 2>&1
+    fi
+}
+
 # Run automatic cleanups
 echo "🧹 Auto-fixing formatting and lint issues..."
+
 cd "$REPO_ROOT/source/state-proofs/typescript"
+ensure_deps
 bun run format 2>/dev/null
 bun run lint:fix 2>/dev/null
 
 cd "$REPO_ROOT/source/evm-contracts/test-orchestration"
+ensure_deps
 bun run format 2>/dev/null
 bun run lint:fix 2>/dev/null
 
 cd "$REPO_ROOT/source/docker-testnet/ethereum-testnet/typescript-sdk"
+ensure_deps
 bun run format 2>/dev/null || true
 
 echo ""

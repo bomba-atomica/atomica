@@ -165,6 +165,11 @@ aptos genesis generate-genesis \
 # Save root account keys for TypeScript SDK faucet
 cp root-account/private-keys.yaml output/root-account-private-keys.yaml
 
+# Extract raw private key to mint.key for Faucet Service
+# Expected format: Hex string without 0x prefix (or with, depending on faucet service, but usually raw hex or file reference)
+# The YAML has 'account_private_key: "0x..."'
+grep "account_private_key:" root-account/private-keys.yaml | awk '{print $2}' | tr -d '"' | sed 's/^0x//' | tr -d '\n' > output/mint.key
+
 # Create node configs for each validator
 # These are placed in each validator's directory and will be copied to /opt/aptos/var/etc/node-config.yaml
 for i in $(seq 0 $((NUM_VALIDATORS - 1))); do

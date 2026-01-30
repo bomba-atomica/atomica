@@ -20,13 +20,13 @@ check_module() {
     echo "--------------------------------------------------"
     echo "🔍 Checking module: $name"
     
-    if [ ! -d "$REPO_ROOT/$path/node_modules" ]; then
-        echo "⚠️  Skipping $name: node_modules not found. Run 'bun install' in $path if this is a mistake."
-        return 0
-    fi
-
     echo "📍 Path: $path"
     cd "$REPO_ROOT/$path"
+
+    if [ ! -d "node_modules" ]; then
+        echo "📦 node_modules not found. Running 'bun install'..."
+        bun install
+    fi
     
     echo "📦 Building..."
     $build_cmd

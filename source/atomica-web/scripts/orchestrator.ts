@@ -1,5 +1,6 @@
+import { DockerTestnet } from "@atomica/docker-testnet";
 import { spawn, execSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,21 +14,7 @@ const ZAPATOS_DIR = join(WORKSPACE_ROOT, "source/atomica-aptos");
 const CONTRACTS_DIR = join(WORKSPACE_ROOT, "source/atomica-move-contracts");
 const WEB_DIR = join(WORKSPACE_ROOT, "source/atomica-web");
 
-// Ensure atomica-aptos repo is cloned
-if (!existsSync(ZAPATOS_DIR)) {
-  console.log("📦 Cloning atomica-aptos repository...");
-  await runCommand(
-    "git",
-    [
-      "clone",
-      "https://github.com/bomba-atomica/atomica-aptos.git",
-      ZAPATOS_DIR,
-    ],
-    WORKSPACE_ROOT,
-  );
-  await runCommand("git", ["checkout", "dev-atomica"], ZAPATOS_DIR);
-}
-
+// Test Keys (NOT FOR MAINNET)
 const DEPLOYER_PK =
   "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
 const DEPLOYER_ADDR =
@@ -37,28 +24,33 @@ async function main() {
   console.log("🚀 Starting Atomica Demo Orchestrator (Node.js)...");
   console.log(`📂 Workspace Root: ${WORKSPACE_ROOT}`);
 
-  // 0. Environment Setup
+  // 0. Docker Check
+  try {
+    execSync("docker info", { stdio: "ignore" });
+  } catch (_e) {
+    console.error("\n========================================================");
+    console.error("⛔️  ABORTING: Docker Not Running");
+    console.error("========================================================");
+    console.error("Docker is required to run the local testnet.");
+    console.error("Please start Docker Desktop or the Docker daemon.");
+    console.error("========================================================\n");
+    process.exit(1);
+  }
+
+  // 1. Environment Setup
   // Force Aptos CLI to use a local isolated config directory to avoid global config issues
   const ISOLATED_CONFIG_DIR = join(CONTRACTS_DIR, ".aptos_isolated");
-  if (!existsSync(ISOLATED_CONFIG_DIR)) {
-    // node:fs needed mkdirSync? Imported?
-    // Let's rely on aptos init creating it? No, aptos init creates config.yaml inside.
-    // We need to ensure the dir exists?
-    // Actually invoke mkdirSync if imported.
-    // I need to import mkdirSync.
-  }
   process.env.APTOS_GLOBAL_CONFIG_DIR = ISOLATED_CONFIG_DIR;
   process.env.APTOS_DISABLE_TELEMETRY = "true";
 
   console.log(`🔒 Using isolated Aptos Config: ${ISOLATED_CONFIG_DIR}`);
 
-  // 0. Cleanup Zombies
-  cleanupPorts([8080, 8081, 4173]);
+  // 2. Cleanup Zombies (Webapp port only, Docker handles its own ports)
+  cleanupPorts([4173]);
 
-  // 1. Start Webapp (Dev Mode)
+  // 3. Start Webapp (Dev Mode)
   console.log("🌐 Starting Webapp (Dev Mode)...");
   await runCommand("npm", ["install"], WEB_DIR);
-  // runCommand("npm", ["run", "build"], WEB_DIR); // SKIP BUILD
 
   console.log("👉 OPEN IN BROWSER: http://localhost:4173");
 
@@ -80,8 +72,7 @@ async function main() {
   await waitForUrl("http://localhost:4173");
   console.log("✅ Webapp is Live!");
 
-  // 2. Find Aptos CLI
-  console.log("🔍 Looking for 'aptos' binary...");
+  // 4. Find Aptos CLI (Keep check for clarity, required by SDK)
   const candidatePaths = [
     join(ZAPATOS_DIR, "target/debug/aptos"),
     join(ZAPATOS_DIR, "target/release/aptos"),
@@ -91,174 +82,96 @@ async function main() {
     join(WORKSPACE_ROOT, "target/release/aptos"),
   ];
 
-  let aptosBin = null;
-  for (const p of candidatePaths) {
-    if (existsSync(p)) {
-      aptosBin = p;
-      break;
+  let aptosBin: string | null = null;
+
+  // Check PATH
+  try {
+    const pathBin = execSync("which aptos").toString().trim();
+    if (pathBin && existsSync(pathBin)) {
+      aptosBin = pathBin;
+      console.log(`✅ Found 'aptos' binary in $PATH at: ${aptosBin}`);
+    }
+  } catch (_e) {
+    // Ignore error if not found in PATH
+  }
+
+  // If not in PATH, check candidates
+  if (!aptosBin) {
+    console.log("🔍 Looking for 'aptos' binary in workspace...");
+    for (const p of candidatePaths) {
+      if (existsSync(p)) {
+        aptosBin = p;
+        break;
+      }
     }
   }
 
   if (!aptosBin) {
     console.error(
-      "❌ 'aptos' binary NOT found in any of the following locations:",
+      "❌ 'aptos' binary NOT found in PATH or any of the following locations:",
     );
     candidatePaths.forEach((p) => console.error(`   - ${p}`));
-    console.error(
-      "💡 Please build the CLI first (e.g. 'cargo build -p aptos')",
-    );
+    console.error("\n========================================================");
+    console.error("⛔️  ABORTING: Developer Environment Not Configured");
+    console.error("========================================================");
+    console.error("You are missing the 'aptos' CLI tool.");
+    console.error("Please do one of the following:");
+    console.error("  1. Install it globally (e.g. brew install aptos)");
+    console.error("  2. Build it from source:");
+    console.error("     cd source/atomica-aptos && cargo build -p aptos");
+    console.error("========================================================\n");
     process.exit(1);
   }
-  console.log(`✅ Found 'aptos' binary at: ${aptosBin}`);
 
-  // 3. Start Local Testnet
-  console.log("⛓️ Starting Local Testnet...");
-  const nodeProcess = spawn(
-    aptosBin,
-    [
-      "node",
-      "run-local-testnet",
-      "--with-faucet",
-      "--force-restart",
-      "--assume-yes",
-    ],
-    {
-      stdio: ["ignore", "pipe", "inherit"], // Pipe stdout to detect readiness or just ignore?
-      // Let's inherit stderr to see errors, pipe stdout to avoid spam but maybe we want to see it?
-      // Inheriting everything is easiest for debug.
-      stdio: "inherit",
-    },
+  // 5. Start Docker Testnet
+  console.log(
+    "chains⛓️ Starting Docker Testnet (expecting 4 validators + faucet)...",
   );
 
-  // Wait for network ready (simplistic sleep)
-  // Wait for network ready
-  console.log(
-    "⏳ Waiting for network to be ready (Poll http://127.0.0.1:8080/v1)...",
-  );
-  await waitForUrl("http://127.0.0.1:8080/v1");
-  // Wait for Faucet
-  console.log(
-    "⏳ Waiting for Faucet to be ready (Poll http://127.0.0.1:8081)...",
-  );
+  // Create and wait for testnet readiness
+  const testnet = await DockerTestnet.new(4);
+  console.log("✅ Docker Testnet is Ready!");
+
+  // Wait for Faucet Service (now provided by Docker on port 8081)
+  console.log("⏳ Waiting for Faucet Service (http://127.0.0.1:8081)...");
   await waitForUrl("http://127.0.0.1:8081");
-  console.log("✅ Network & Faucet are Ready!");
+  console.log("✅ Faucet Service is Ready!");
 
-  // 3. Setup Contracts
-  console.log("📜 Setting up Contracts...");
+  // 6. Deploy Contracts using SDK
+  console.log("📜 Deploying Contracts...");
 
-  // Clean .aptos dir
-  const aptosConfigDir = join(CONTRACTS_DIR, ".aptos");
-  if (existsSync(aptosConfigDir)) {
-    console.log("🧹 Cleaning old .aptos config...");
-    rmSync(aptosConfigDir, { recursive: true, force: true });
-  }
-
-  // Init
-  await runCommand(
-    aptosBin,
-    [
-      "init",
-      "--network",
-      "local",
-      "--profile",
-      "default",
-      "--private-key",
-      DEPLOYER_PK,
-      "--assume-yes",
+  await testnet.deployContracts({
+    contractsDir: CONTRACTS_DIR,
+    deployerPrivateKey: DEPLOYER_PK,
+    deployerAddress: DEPLOYER_ADDR,
+    namedAddresses: { atomica: DEPLOYER_ADDR },
+    initFunctions: [
+      {
+        functionId: `${DEPLOYER_ADDR}::registry::initialize`,
+        args: ["hex:0123456789abcdef"],
+      },
+      {
+        functionId: `${DEPLOYER_ADDR}::fake_eth::initialize`,
+        args: [],
+      },
+      {
+        functionId: `${DEPLOYER_ADDR}::fake_usd::initialize`,
+        args: [],
+      },
     ],
-    CONTRACTS_DIR,
-  );
-
-  // Fund
-  console.log(`💸 Funding Deployer: ${DEPLOYER_ADDR}`);
-  try {
-    await fetch(
-      `http://127.0.0.1:8081/mint?amount=1000000000&address=${DEPLOYER_ADDR}`,
-      { method: "POST" },
-    );
-    console.log("✅ Funded.");
-  } catch (e) {
-    console.error("⚠️ Failed to fund (is faucet running?)", e);
-  }
-
-  // Publish
-  console.log("🚀 Publishing Contracts...");
-  await runCommand(
-    aptosBin,
-    [
-      "move",
-      "publish",
-      "--named-addresses",
-      `atomica=${DEPLOYER_ADDR}`,
-      "--profile",
-      "default",
-      "--assume-yes",
-    ],
-    CONTRACTS_DIR,
-  );
-
-  // Init Registry
-  console.log("⚙️  Initializing Registry...");
-  await runCommand(
-    aptosBin,
-    [
-      "move",
-      "run",
-      "--function-id",
-      "default::registry::initialize",
-      "--args",
-      "hex:0123456789abcdef",
-      "--profile",
-      "default",
-      "--assume-yes",
-    ],
-    CONTRACTS_DIR,
-  );
-
-  // Init FAKEETH
-  console.log("💰 Initializing FAKEETH...");
-  await runCommand(
-    aptosBin,
-    [
-      "move",
-      "run",
-      "--function-id",
-      "default::fake_eth::initialize",
-      "--profile",
-      "default",
-      "--assume-yes",
-    ],
-    CONTRACTS_DIR,
-  );
-
-  // Init FAKEUSD
-  console.log("💵 Initializing FAKEUSD...");
-  await runCommand(
-    aptosBin,
-    [
-      "move",
-      "run",
-      "--function-id",
-      "default::fake_usd::initialize",
-      "--profile",
-      "default",
-      "--assume-yes",
-    ],
-    CONTRACTS_DIR,
-  );
-
-  // 5. Host Webapp (Moved to start)
+    fundAmount: 10_000_000_000n, // 100 APT
+  });
 
   // Handle Cleanup on Exit
+  // Note: DockerTestnet handles its own cleanup on signal, but we also want to stop webapp.
   process.on("SIGINT", () => {
     console.log("\n🛑 Shutting down...");
-    nodeProcess.kill();
     webProcess.kill();
-    process.exit();
+    // testnet.teardown() will be called by SDK's own handler
   });
 }
 
-async function waitForUrl(url) {
+async function waitForUrl(url: string) {
   while (true) {
     try {
       await fetch(url);
@@ -269,7 +182,7 @@ async function waitForUrl(url) {
   }
 }
 
-function runCommand(cmd, args, cwd): Promise<void> {
+function runCommand(cmd: string, args: string[], cwd: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const process = spawn(cmd, args, { cwd, stdio: "inherit" });
     process.on("close", (code) => {
@@ -285,7 +198,7 @@ function runCommand(cmd, args, cwd): Promise<void> {
   });
 }
 
-function cleanupPorts(ports) {
+function cleanupPorts(ports: number[]) {
   for (const port of ports) {
     try {
       const output = execSync(`lsof -t -i tcp:${port}`).toString().trim();
@@ -306,7 +219,7 @@ function cleanupPorts(ports) {
   }
 }
 
-function sleep(ms) {
+function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
