@@ -35,3 +35,4 @@ tests/Cargo.lock
 # Bun
 bun.lockb
 bun.lock
+**/dist/

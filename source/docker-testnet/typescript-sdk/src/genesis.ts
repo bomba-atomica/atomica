@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { existsSync, mkdirSync, rmSync } from "fs";
+import { existsSync, mkdirSync, rmSync, readFileSync } from "fs";
 import { resolve as pathResolve } from "path";
 
 /**
@@ -78,6 +78,23 @@ interface ScriptConfig {
     baseIp: string;
 }
 
+function extractImageFromCompose(configDir: string): string | null {
+    try {
+        const composePath = pathResolve(configDir, "docker-compose.yaml");
+        if (!existsSync(composePath)) return null;
+        
+        const content = readFileSync(composePath, "utf-8");
+        // Look for image: "${IMAGE_NAME:-...}"
+        const match = content.match(/image:\s*"?\$\{IMAGE_NAME:-([^"}]+)\}"?/);
+        if (match && match[1]) {
+            return match[1];
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
 /**
  * Run the genesis generation script inside Docker container
  * This ensures the aptos CLI version matches the Move framework version
@@ -89,9 +106,17 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         console.log(`  Running genesis script in Docker container...`);
 
         // Use the specific SHA pinned image for stability in CI and production.
+        // Priority: Env Var > Docker Compose Default > Hardcoded Fallback
+        
+        // Try to extract from docker-compose to ensure consistency
+        const configDir = pathResolve(workspaceDir, "..", "config");
+        const composeImage = extractImageFromCompose(configDir);
+        
         const genesisImage =
             process.env.IMAGE_NAME ||
-            `${process.env.VALIDATOR_IMAGE_REPO || "ghcr.io/bomba-atomica/atomica-aptos/validator"}@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda`;
+            composeImage ||
+            process.env.VALIDATOR_IMAGE_REPO || 
+            "ghcr.io/bomba-atomica/atomica-aptos/validator:latest";
 
         const validatorImage = genesisImage;
 
