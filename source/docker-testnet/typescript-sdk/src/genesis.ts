@@ -96,27 +96,34 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         const validatorImage = genesisImage;
 
         // Find the framework.mrb file - try multiple possible locations relative to workspaceDir
-        const possiblePaths = [
-            pathResolve(workspaceDir, "..", "..", "..", "move-framework-fixtures", "head.mrb"),
-            pathResolve(workspaceDir, "..", "..", "move-framework-fixtures", "head.mrb"),
-            pathResolve(process.cwd(), "..", "move-framework-fixtures", "head.mrb"),
-            "/Users/lucas/code/rust/atomica-docker-infra/source/move-framework-fixtures/head.mrb",
-        ];
-
+        // Note: We prefer using the framework embedded in the Docker image to ensure
+        // compatibility between the genesis and the validator binary.
         let frameworkPath = "";
-        for (const p of possiblePaths) {
-            if (existsSync(p)) {
-                frameworkPath = p;
-                break;
+        
+        if (process.env.FORCE_LOCAL_FRAMEWORK) {
+            const possiblePaths = [
+                pathResolve(workspaceDir, "..", "..", "..", "move-framework-fixtures", "head.mrb"),
+                pathResolve(workspaceDir, "..", "..", "move-framework-fixtures", "head.mrb"),
+                pathResolve(process.cwd(), "..", "move-framework-fixtures", "head.mrb"),
+                "/Users/lucas/code/rust/atomica-docker-infra/source/move-framework-fixtures/head.mrb",
+            ];
+
+            for (const p of possiblePaths) {
+                if (existsSync(p)) {
+                    frameworkPath = p;
+                    break;
+                }
             }
+
+            if (!frameworkPath) {
+                 console.warn(`Warning: FORCE_LOCAL_FRAMEWORK set but file not found. Checked: ${possiblePaths.join(", ")}`);
+            } else {
+                 debug("Using local framework override at: " + frameworkPath);
+            }
+        } else {
+             debug("Using framework from Docker image (default)");
         }
 
-        if (!frameworkPath) {
-            reject(new Error(`Framework file not found. Tried: ${possiblePaths.join(", ")}`));
-            return;
-        }
-
-        debug("Using framework at: " + frameworkPath);
         debug("Using genesis image: " + genesisImage);
         debug("Using validator image: " + validatorImage);
 
@@ -129,13 +136,18 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
             `${workspaceDir}:/workspace`,
             "-v",
             `${scriptPath}:/genesis-script.sh:ro`,
-            "-v",
-            `${frameworkPath}:/framework.mrb:ro`,
+        ];
+
+        if (frameworkPath) {
+             dockerArgs.push("-v", `${frameworkPath}:/framework.mrb:ro`);
+        }
+            
+        dockerArgs.push(
             "-w",
             "/workspace",
             "--entrypoint",
             "/bin/bash",
-        ];
+        );
 
         // Run as current user to avoid permission issues with bind mounts
         if (

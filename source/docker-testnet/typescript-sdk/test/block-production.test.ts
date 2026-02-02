@@ -12,7 +12,7 @@ registerCleanupHandlers();
 
 describe("Block Production", () => {
     let testnet: DockerTestnet;
-    const NUM_VALIDATORS = 2;
+    const NUM_VALIDATORS = 4;
 
     beforeAll(async () => {
         testnet = await initializeTestnet(NUM_VALIDATORS);
