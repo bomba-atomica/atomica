@@ -99,29 +99,24 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         // Note: We prefer using the framework embedded in the Docker image to ensure
         // compatibility between the genesis and the validator binary.
         let frameworkPath = "";
-        
+
         if (process.env.FORCE_LOCAL_FRAMEWORK) {
-            const possiblePaths = [
-                pathResolve(workspaceDir, "..", "..", "..", "move-framework-fixtures", "head.mrb"),
-                pathResolve(workspaceDir, "..", "..", "move-framework-fixtures", "head.mrb"),
-                pathResolve(process.cwd(), "..", "move-framework-fixtures", "head.mrb"),
-                "/Users/lucas/code/rust/atomica-docker-infra/source/move-framework-fixtures/head.mrb",
-            ];
-
-            for (const p of possiblePaths) {
-                if (existsSync(p)) {
-                    frameworkPath = p;
-                    break;
-                }
-            }
-
-            if (!frameworkPath) {
-                 console.warn(`Warning: FORCE_LOCAL_FRAMEWORK set but file not found. Checked: ${possiblePaths.join(", ")}`);
+            const overridePath = process.env.FORCE_LOCAL_FRAMEWORK;
+            // Basic check if it's a path or just a boolean flag
+            if (overridePath === "true" || overridePath === "1") {
+                console.warn(
+                    "Warning: FORCE_LOCAL_FRAMEWORK set to 'true', but expected a file path. Using default image framework.",
+                );
+            } else if (existsSync(overridePath)) {
+                frameworkPath = overridePath;
+                debug("Using local framework override at: " + frameworkPath);
             } else {
-                 debug("Using local framework override at: " + frameworkPath);
+                console.warn(
+                    `Warning: FORCE_LOCAL_FRAMEWORK path not found: ${overridePath}. Using default image framework.`,
+                );
             }
         } else {
-             debug("Using framework from Docker image (default)");
+            debug("Using framework from Docker image (default)");
         }
 
         debug("Using genesis image: " + genesisImage);
@@ -139,15 +134,10 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         ];
 
         if (frameworkPath) {
-             dockerArgs.push("-v", `${frameworkPath}:/framework.mrb:ro`);
+            dockerArgs.push("-v", `${frameworkPath}:/framework.mrb:ro`);
         }
-            
-        dockerArgs.push(
-            "-w",
-            "/workspace",
-            "--entrypoint",
-            "/bin/bash",
-        );
+
+        dockerArgs.push("-w", "/workspace", "--entrypoint", "/bin/bash");
 
         // Run as current user to avoid permission issues with bind mounts
         if (
