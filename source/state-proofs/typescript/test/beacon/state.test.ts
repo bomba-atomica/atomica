@@ -5,17 +5,7 @@ import type {
     SyncCommittee,
     LightClientStore,
 } from "../../src/beacon/types";
-import {
-    createInitialState,
-    updateState,
-    isUpdateNewer,
-    transitionPeriod,
-    serializeState,
-    deserializeState,
-    saveState,
-    loadState,
-    clearState,
-} from "../../src/beacon/state";
+import { isUpdateNewer, saveState, loadState, clearState } from "../../src/beacon/state";
 
 import { promises as fs } from "fs";
 import * as _path from "path";
@@ -87,27 +77,6 @@ describe("Light Client State", () => {
         }
     });
 
-    describe("createInitialState", () => {
-        test("should throw not implemented error", () => {
-            expect(() => createInitialState()).toThrow("Not implemented");
-        });
-    });
-
-    describe("updateState", () => {
-        test("should throw not implemented error", () => {
-            const state: LightClientState = {
-                header: createMockHeader(100),
-                currentSyncCommittee: createMockSyncCommittee(0),
-                nextSyncCommittee: createMockSyncCommittee(1),
-                finalizedHeader: null,
-                period: 0,
-                previousSlot: 100,
-            };
-
-            expect(() => updateState(state, createMockUpdate(200))).toThrow("Not implemented");
-        });
-    });
-
     describe("isUpdateNewer", () => {
         test("should return true if update is newer than state", () => {
             const state: LightClientState = {
@@ -133,45 +102,6 @@ describe("Light Client State", () => {
             };
             const update = createMockUpdate(100);
             expect(isUpdateNewer(update, state)).toBe(false);
-        });
-    });
-
-    describe("transitionPeriod", () => {
-        test("should throw not implemented error", () => {
-            expect(() =>
-                transitionPeriod(
-                    {
-                        header: createMockHeader(100),
-                        currentSyncCommittee: createMockSyncCommittee(0),
-                        nextSyncCommittee: createMockSyncCommittee(1),
-                        finalizedHeader: null,
-                        period: 0,
-                        previousSlot: 100,
-                    },
-                    createMockSyncCommittee(2),
-                ),
-            ).toThrow("Not implemented");
-        });
-    });
-
-    describe("serializeState", () => {
-        test("should throw not implemented error", () => {
-            expect(() =>
-                serializeState({
-                    header: createMockHeader(100),
-                    currentSyncCommittee: createMockSyncCommittee(0),
-                    nextSyncCommittee: createMockSyncCommittee(1),
-                    finalizedHeader: null,
-                    period: 0,
-                    previousSlot: 100,
-                }),
-            ).toThrow("Not implemented");
-        });
-    });
-
-    describe("deserializeState", () => {
-        test("should throw not implemented error", () => {
-            expect(() => deserializeState("{}")).toThrow("Not implemented");
         });
     });
 
