@@ -10,163 +10,121 @@
  * 5. Saves proof to fixtures for Move tests
  *
  * CRITICAL: Uses Ethereum Docker SDK (NOT Anvil/Hardhat)
+ *
+ * NOTE: This script is a template/placeholder. Full implementation requires:
+ * - Private key management
+ * - Contract deployment integration
+ * - Token minting/locking transactions
  */
 
-import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
 import { ethers } from "ethers";
 import { writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import { generateLockedBalanceProof } from "../src/lib/ethereum/proofs/generator.js";
 import { serializeProofForAptos } from "../src/lib/ethereum/proofs/index.js";
 
-// Contract ABIs
-const FAKE_TOKEN_ABI = [
-  "function mint(address to, uint256 amount) external",
-  "function approve(address spender, uint256 amount) external returns (bool)",
-  "function balanceOf(address account) external view returns (uint256)",
-];
-
-const LOCKBOX_ABI = [
-  "function lock(address token, uint256 amount) external",
-  "function getLockedBalance(address user, address token) external view returns (uint256)",
-  "function calculateStorageKey(address user, address token) external pure returns (bytes32)",
-];
+// NOTE: Uncomment when @atomica/ethereum-docker-testnet is available in package.json
+// import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
 
 async function main() {
   console.log("═".repeat(80));
   console.log("  Phase 4D: Deploy LockBox & Generate Real Ethereum Proof");
   console.log("═".repeat(80));
 
-  let testnet: EthereumDockerTestnet | undefined;
+  console.log("\n⚠️  This script is a template/placeholder.");
+  console.log(
+    "For now, use manual workflow documented in PHASE-4D-PROGRESS.md\n",
+  );
 
   try {
     // Step 1: Start Ethereum Docker testnet
-    console.log("\\n📦 Step 1/5: Starting Ethereum Docker testnet...");
-    console.log("   This may take 2-3 minutes for first-time setup");
-    
-    testnet = await EthereumDockerTestnet.start(8);
-    await testnet.waitForHealthy(300);
-    
-    console.log("   ✅ Ethereum testnet is healthy");
-    console.log(`   RPC: ${testnet.getExecutionRpcUrl()}`);
-    console.log(`   Beacon: ${testnet.getBeaconApiUrl()}`);
+    console.log("\n📦 Step 1/5: Starting Ethereum Docker testnet...");
+    console.log(
+      "   Run manually: cd source/docker-testnet/ethereum-testnet/typescript-sdk",
+    );
+    console.log("   Then: bun run test/block-production.test.ts");
 
-    // Wait for block production
-    await testnet.waitForBlocks(2, 60);
-    console.log("   ✅ Block production confirmed");
+    // NOTE: Uncomment when implementing
+    // const testnet = await EthereumDockerTestnet.start(8);
+    // await testnet.waitForHealthy(300);
 
-    // Step 2: Deploy contracts
-    console.log("\\n🚀 Step 2/5: Deploying contracts...");
-    
-    const provider = new ethers.JsonRpcProvider(testnet.getExecutionRpcUrl());
-    
-    // Get pre-funded account from testnet
-    const testAccounts = testnet.getTestAccounts();
-    const deployerAddress = testAccounts[0].address;
-    
-    console.log(`   Deployer: ${deployerAddress}`);
-    
-    const balance = await provider.getBalance(deployerAddress);
-    console.log(`   Balance: ${ethers.formatEther(balance)} ETH`);
+    // Step 2: Connect to testnet
+    console.log("\n🔌 Step 2/5: Connecting to Ethereum...");
+    const rpcUrl = process.env.ETH_RPC_URL || "http://localhost:8545";
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
 
-    // Note: We need the private key for deployment
-    // For now, we'll use forge script via subprocess
-    
-    console.log("\\n   Deploying via Foundry...");
-    console.log("   Running: forge script script/DeployLockBox.s.sol");
-    
-    // TODO: Execute forge script deployment
-    // For now, use placeholder addresses (this needs to be implemented)
-    
-    const lockBoxAddress = process.env.VITE_LOCKBOX_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-    const fakeETHAddress = process.env.VITE_FAKE_ETH_ADDRESS || "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
-    const fakeUSDAddress = process.env.VITE_FAKE_USD_ADDRESS || "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0";
-    
-    console.log(`   LockBox: ${lockBoxAddress}`);
-    console.log(`   FakeETH: ${fakeETHAddress}`);
-    console.log(`   FakeUSD: ${fakeUSDAddress}`);
+    const blockNumber = await provider.getBlockNumber();
+    console.log(`   ✅ Connected (block: ${blockNumber})`);
 
-    // Step 3: Lock tokens
-    console.log("\\n🔒 Step 3/5: Locking tokens...");
-    
-    const userAddress = deployerAddress;
-    const amount = ethers.parseEther("10"); // 10 FAKETH
+    // Step 3: Deploy contracts (manual for now)
+    console.log("\n🚀 Step 3/5: Deploying contracts...");
+    console.log("   Run manually: cd source/evm-contracts");
+    console.log(
+      "   Then: forge script script/DeployLockBox.s.sol:DeployLockBox \\",
+    );
+    console.log("         --rpc-url http://localhost:8545 --broadcast");
 
-    console.log(`   User: ${userAddress}`);
-    console.log(`   Amount: ${ethers.formatEther(amount)} FAKETH`);
-    
-    // TODO: Implement token minting and locking
-    // This requires having the private key or using a signer
-    
-    console.log("   ⚠️  Skipping actual locking (needs private key integration)");
-    console.log("   Please lock tokens manually via forge script or cast");
+    const lockBoxAddress = process.env.VITE_LOCKBOX_ADDRESS;
+    const fakeETHAddress = process.env.VITE_FAKE_ETH_ADDRESS;
 
-    // Step 4: Generate proof
-    console.log("\\n⚙️  Step 4/5: Generating state proof...");
-    
-    const currentBlock = await provider.getBlockNumber();
-    const proofBlock = currentBlock - 1; // Use finalized block
-    
-    console.log(`   Current block: ${currentBlock}`);
-    console.log(`   Proof block: ${proofBlock}`);
-    
+    if (!lockBoxAddress || !fakeETHAddress) {
+      console.log("\n❌ Contract addresses not found in environment");
+      console.log("   Set VITE_LOCKBOX_ADDRESS and VITE_FAKE_ETH_ADDRESS");
+      return;
+    }
+
+    // Step 4: Lock tokens (manual for now)
+    console.log("\n🔒 Step 4/5: Locking tokens...");
+    console.log("   Run manually with cast:");
+    console.log('   cast send $LOCKBOX_ADDRESS "lock(address,uint256)" \\');
+    console.log("         $FAKE_ETH_ADDRESS 10000000000000000000 \\");
+    console.log("         --rpc-url http://localhost:8545");
+
+    // Step 5: Generate proof
+    console.log("\n⚙️  Step 5/5: Generating proof...");
+    const userAddress = process.env.USER_ADDRESS;
+
+    if (!userAddress) {
+      console.log("   ⚠️  USER_ADDRESS not set, skipping proof generation");
+      console.log("   Use scripts/generate-proof.ts after locking tokens");
+      return;
+    }
+
+    const proofBlock = blockNumber - 1;
     const proof = await generateLockedBalanceProof(
       provider,
       lockBoxAddress,
       userAddress,
       fakeETHAddress,
-      proofBlock
+      proofBlock,
     );
-    
-    console.log("   ✅ Proof generated");
-    console.log(`   Block: ${proof.blockNumber}`);
-    console.log(`   Storage value: ${proof.storageValue}`);
 
-    // Step 5: Save proof
-    console.log("\\n💾 Step 5/5: Saving proof...");
-    
+    console.log("   ✅ Proof generated");
+
+    // Save proof
     const outputDir = "tests/fixtures";
     if (!existsSync(outputDir)) {
       await mkdir(outputDir, { recursive: true });
     }
-    
+
     const output = {
       proof,
       serializedForAptos: serializeProofForAptos(proof),
       metadata: {
         generated_at: new Date().toISOString(),
         testnet: "ethereum-docker",
-        lockbox: lockBoxAddress,
-        user: userAddress,
-        token: fakeETHAddress,
-        block: proofBlock,
       },
     };
-    
-    const outputPath = `${outputDir}/real-ethereum-proof.json`;
-    await writeFile(outputPath, JSON.stringify(output, null, 2));
-    
-    console.log(`   ✅ Proof saved to ${outputPath}`);
 
-    console.log("\\n" + "═".repeat(80));
-    console.log("  ✨ Success! Real Ethereum proof generated");
-    console.log("═".repeat(80));
-    
-    console.log("\\nNext steps:");
-    console.log("  1. Update eth_proof_tests.move with this proof data");
-    console.log("  2. Run: aptos move test --filter test_verify_real_ethereum_proof");
-    console.log("  3. Integrate with AuctionRegistry");
+    await writeFile(
+      `${outputDir}/real-ethereum-proof.json`,
+      JSON.stringify(output, null, 2),
+    );
 
+    console.log("\n✨ Done! See PHASE-4D-PROGRESS.md for next steps");
   } catch (error) {
-    console.error("\\n❌ Error:", error);
+    console.error("\n❌ Error:", error);
     throw error;
-  } finally {
-    // Cleanup
-    if (testnet) {
-      console.log("\\n🧹 Stopping Ethereum testnet...");
-      await testnet.teardown();
-      console.log("   ✅ Cleanup complete");
-    }
   }
 }
 
