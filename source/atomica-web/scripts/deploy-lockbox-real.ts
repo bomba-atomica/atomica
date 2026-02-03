@@ -22,14 +22,14 @@ import { generateLockedBalanceProof } from "../src/lib/ethereum/proofs/generator
 import { serializeProofForAptos } from "../src/lib/ethereum/proofs/index";
 
 interface TokenContract {
-  mint(to: string, amount: bigint): Promise<unknown>;
-  approve(spender: string, amount: bigint): Promise<unknown>;
+  mint(to: string, amount: bigint): Promise<ethers.ContractTransactionResponse>;
+  approve(spender: string, amount: bigint): Promise<ethers.ContractTransactionResponse>;
   balanceOf(account: string): Promise<bigint>;
   getAddress(): Promise<string>;
 }
 
 interface LockBoxContract {
-  lock(token: string, amount: bigint): Promise<unknown>;
+  lock(token: string, amount: bigint): Promise<ethers.ContractTransactionResponse>;
   getLockedBalance(user: string, token: string): Promise<bigint>;
   getAddress(): Promise<string>;
 }
