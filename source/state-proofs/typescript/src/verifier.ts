@@ -10,6 +10,10 @@ import { bytesToBigInt, bytesToHex, hexToBytes } from "@ethereumjs/util";
 import { verifyMerkleProof, decodeNode } from "./mpt";
 import type { VerificationResult, AccountState } from "./types";
 
+function ensureHex(value: string): `0x${string}` {
+    return value.startsWith("0x") ? (value as `0x${string}`) : (`0x${value}` as `0x${string}`);
+}
+
 /**
  * Cryptographically verify an account proof against a state root
  *
@@ -24,9 +28,9 @@ export async function verifyAccountProof(
     address: string,
 ): Promise<VerificationResult> {
     try {
-        const rootBuffer = hexToBytes(stateRoot);
-        const addressBuffer = hexToBytes(address);
-        const proofBuffers = accountProof.map((p) => hexToBytes(p));
+        const rootBuffer = hexToBytes(ensureHex(stateRoot));
+        const addressBuffer = hexToBytes(ensureHex(address));
+        const proofBuffers = accountProof.map((p) => hexToBytes(ensureHex(p)));
 
         const keyHash = keccak256(addressBuffer);
         const key = Buffer.from(keyHash);
@@ -124,11 +128,11 @@ export async function verifyStorageProof(
     key: string,
 ): Promise<VerificationResult> {
     try {
-        const rootBuffer = hexToBytes(storageRoot);
+        const rootBuffer = hexToBytes(ensureHex(storageRoot));
         // Storage keys are hashed with Keccak256
-        const keyBuffer = hexToBytes(key);
+        const keyBuffer = hexToBytes(ensureHex(key));
         const pathKey = Buffer.from(keccak256(keyBuffer));
-        const proofBuffers = storageProof.map((p) => hexToBytes(p));
+        const proofBuffers = storageProof.map((p) => hexToBytes(ensureHex(p)));
 
         // Same logic as account proof: find the claimed value from the last node
         let claimedValue: Buffer | null = null;

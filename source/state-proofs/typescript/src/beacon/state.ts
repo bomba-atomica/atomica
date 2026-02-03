@@ -5,7 +5,7 @@
  * including sync committee tracking and trusted headers.
  */
 
-import type { LightClientState, LightClientUpdate, SyncCommittee, LightClientStore } from "./types";
+import type { LightClientState, LightClientUpdate, LightClientStore } from "./types";
 import { promises as fs } from "fs";
 import * as path from "path";
 
@@ -21,51 +21,10 @@ export function getStatePath(configPath?: string): string {
 }
 
 /**
- * Create initial light client state
- */
-export function createInitialState(): LightClientState {
-    throw new Error("Not implemented");
-}
-
-/**
- * Update light client state with new update
- */
-export function updateState(
-    _current: LightClientState,
-    _update: LightClientUpdate,
-): LightClientState {
-    throw new Error("Not implemented");
-}
-
-/**
  * Check if update is newer than current state
  */
 export function isUpdateNewer(update: LightClientUpdate, current: LightClientState): boolean {
     return update.attestedHeader.beacon.slot > current.header.beacon.slot;
-}
-
-/**
- * Transition to next sync committee period
- */
-export function transitionPeriod(
-    _state: LightClientState,
-    _nextSyncCommittee: SyncCommittee,
-): LightClientState {
-    throw new Error("Not implemented");
-}
-
-/**
- * Serialize state for storage
- */
-export function serializeState(_state: LightClientState): string {
-    throw new Error("Not implemented");
-}
-
-/**
- * Deserialize state from storage
- */
-export function deserializeState(_data: string): LightClientState {
-    throw new Error("Not implemented");
 }
 
 /**
