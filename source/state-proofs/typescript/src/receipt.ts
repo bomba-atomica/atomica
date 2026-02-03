@@ -70,17 +70,17 @@ export function encodeReceipt(receipt: Receipt): Buffer {
             statusOrRoot = Buffer.from([statusInt]);
         }
     } else if (receipt.root) {
-        statusOrRoot = Buffer.from(hexToBytes(receipt.root));
+        statusOrRoot = Buffer.from(hexToBytes(receipt.root as `0x${string}`));
     } else {
         statusOrRoot = Buffer.from([1]);
     }
 
     const cumulativeGas = BigInt(receipt.cumulativeGasUsed);
-    const bloom = Buffer.from(hexToBytes(receipt.logsBloom));
+    const bloom = Buffer.from(hexToBytes(receipt.logsBloom as `0x${string}`));
     const logs = receipt.logs.map((log) => [
         Buffer.from(hexToBytes(log.address)),
-        log.topics.map((t) => Buffer.from(hexToBytes(t))),
-        Buffer.from(hexToBytes(log.data)),
+        log.topics.map((t) => Buffer.from(hexToBytes(t as `0x${string}`))),
+        Buffer.from(hexToBytes(log.data as `0x${string}`)),
     ]);
 
     const receiptData = [statusOrRoot, cumulativeGas, bloom, logs];

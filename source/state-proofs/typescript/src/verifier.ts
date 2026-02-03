@@ -24,9 +24,9 @@ export async function verifyAccountProof(
     address: string,
 ): Promise<VerificationResult> {
     try {
-        const rootBuffer = hexToBytes(stateRoot);
-        const addressBuffer = hexToBytes(address);
-        const proofBuffers = accountProof.map((p) => hexToBytes(p));
+        const rootBuffer = hexToBytes(stateRoot as `0x${string}`);
+        const addressBuffer = hexToBytes(address as `0x${string}`);
+        const proofBuffers = accountProof.map((p) => hexToBytes(p as `0x${string}`));
 
         const keyHash = keccak256(addressBuffer);
         const key = Buffer.from(keyHash);
@@ -124,11 +124,11 @@ export async function verifyStorageProof(
     key: string,
 ): Promise<VerificationResult> {
     try {
-        const rootBuffer = hexToBytes(storageRoot);
+        const rootBuffer = hexToBytes(storageRoot as `0x${string}`);
         // Storage keys are hashed with Keccak256
-        const keyBuffer = hexToBytes(key);
+        const keyBuffer = hexToBytes(key as `0x${string}`);
         const pathKey = Buffer.from(keccak256(keyBuffer));
-        const proofBuffers = storageProof.map((p) => hexToBytes(p));
+        const proofBuffers = storageProof.map((p) => hexToBytes(p as `0x${string}`));
 
         // Same logic as account proof: find the claimed value from the last node
         let claimedValue: Buffer | null = null;

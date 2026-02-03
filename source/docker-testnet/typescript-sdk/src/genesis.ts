@@ -82,7 +82,7 @@ function extractImageFromCompose(configDir: string): string | null {
     try {
         const composePath = pathResolve(configDir, "docker-compose.yaml");
         if (!existsSync(composePath)) return null;
-        
+
         const content = readFileSync(composePath, "utf-8");
         // Look for image: "${IMAGE_NAME:-...}"
         const match = content.match(/image:\s*"?\$\{IMAGE_NAME:-([^"}]+)\}"?/);
@@ -107,15 +107,15 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
 
         // Use the specific SHA pinned image for stability in CI and production.
         // Priority: Env Var > Docker Compose Default > Hardcoded Fallback
-        
+
         // Try to extract from docker-compose to ensure consistency
         const configDir = pathResolve(workspaceDir, "..", "config");
         const composeImage = extractImageFromCompose(configDir);
-        
+
         const genesisImage =
             process.env.IMAGE_NAME ||
             composeImage ||
-            process.env.VALIDATOR_IMAGE_REPO || 
+            process.env.VALIDATOR_IMAGE_REPO ||
             "ghcr.io/bomba-atomica/atomica-aptos/validator:latest";
 
         const validatorImage = genesisImage;
