@@ -48,23 +48,35 @@ Complete Phase 4D: End-to-End Integration. This involves deploying contracts, ge
 
 ### Step 1: Deploy LockBox Contract
 
+**IMPORTANT:** Always use the Ethereum Docker SDK (`@atomica/ethereum-docker-testnet`) for local testing. NEVER use Anvil, Hardhat, or Forge's built-in testnets.
+
+**First, start the Ethereum Docker testnet:**
+```bash
+cd source/docker-testnet/ethereum-testnet/typescript-sdk
+bun run test/block-production.test.ts
+# This starts Geth + Lighthouse validators in Docker
+# Testnet will be available at http://localhost:8545
+```
+
 **File to Create:** `source/evm-contracts/script/DeployLockBox.s.sol`
 
 ```solidity
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/Script.sol";
-import "../src/escrow/LockBox.sol";
-import "../src/tokens/FakeETH.sol";
-import "../src/tokens/FakeUSD.sol";
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
+import {LockBox} from "../src/escrow/LockBox.sol";
+import {FakeETH} from "../src/tokens/FakeETH.sol";
+import {FakeUSD} from "../src/tokens/FakeUSD.sol";
 
 contract DeployLockBox is Script {
     function run() external {
+        // Use the pre-funded account from Ethereum Docker testnet
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        // Deploy tokens (or use existing)
+        // Deploy tokens
         FakeETH fakeETH = new FakeETH();
         FakeUSD fakeUSD = new FakeUSD();
 
@@ -80,13 +92,14 @@ contract DeployLockBox is Script {
 }
 ```
 
-**Deploy to Ethereum testnet:**
+**Deploy to Ethereum Docker testnet:**
 ```bash
 cd source/evm-contracts
+# Ethereum Docker testnet must be running first!
 forge script script/DeployLockBox.s.sol:DeployLockBox \
   --rpc-url http://localhost:8545 \
   --broadcast \
-  --private-key <key>
+  --private-key <key-from-ethereum-docker-testnet>
 ```
 
 **Record addresses** in `source/atomica-web/.env`:
@@ -100,50 +113,82 @@ VITE_FAKE_USD_ADDRESS=0x...
 
 ### Step 2: Generate Real Ethereum Proof
 
+**IMPORTANT:** Ethereum Docker testnet must be running.
+
 **File to Create:** `source/atomica-web/scripts/generate-test-proof.ts`
 
 ```typescript
 import { generateLockedBalanceProof } from '../src/lib/ethereum/proofs/generator';
-import { serializeProofForAptos } from '../src/lib/ethereum/proofs/serializer';
+import { ethers } from 'ethers';
 import fs from 'fs';
 
 async function main() {
-  // 1. Start Ethereum testnet (or use running instance)
+  // 1. Connect to Ethereum Docker testnet
   const ETH_RPC_URL = "http://localhost:8545";
+  const provider = new ethers.JsonRpcProvider(ETH_RPC_URL);
+  
+  // Contract addresses from deployment
   const LOCKBOX_ADDRESS = process.env.VITE_LOCKBOX_ADDRESS!;
   const FAKE_ETH_ADDRESS = process.env.VITE_FAKE_ETH_ADDRESS!;
-
-  // 2. Get test account
-  const userAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Anvil default
+  
+  // 2. Use pre-funded account from Ethereum Docker testnet
+  // Get the account from the testnet SDK
+  const userAddress = "0x..."; // From testnet.getAccounts()
 
   // 3. Lock tokens (via ethers.js)
-  // ... mint and lock 10 FAKETH ...
+  const lockBoxAbi = [
+    "function lock(address token, uint256 amount) external"
+  ];
+  const fakeEthAbi = [
+    "function mint(address to, uint256 amount) external"
+  ];
+  
+  const signer = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
+  const lockBox = new ethers.Contract(LOCKBOX_ADDRESS, lockBoxAbi, signer);
+  const fakeEth = new ethers.Contract(FAKE_ETH_ADDRESS, fakeEthAbi, signer);
+  
+  // Mint tokens
+  console.log("Minting 10 FAKETH...");
+  let tx = await fakeEth.mint(userAddress, ethers.parseEther("10"));
+  await tx.wait();
+  
+  // Approve LockBox
+  console.log("Approving LockBox...");
+  tx = await fakeEth.approve(LOCKBOX_ADDRESS, ethers.parseEther("10"));
+  await tx.wait();
+  
+  // Lock tokens
+  console.log("Locking 10 FAKETH...");
+  tx = await lockBox.lock(FAKE_ETH_ADDRESS, ethers.parseEther("10"));
+  await tx.wait();
 
-  // 4. Wait for block to be mined
+  // 4. Wait for block finality (use block - 1 for safety)
   await new Promise(resolve => setTimeout(resolve, 15000));
+  
+  const blockNumber = await provider.getBlockNumber();
+  const proofBlock = blockNumber - 1;
 
   // 5. Generate proof
-  const blockNumber = await provider.getBlockNumber();
+  console.log(`Generating proof at block ${proofBlock}...`);
   const proof = await generateLockedBalanceProof(
     ETH_RPC_URL,
     LOCKBOX_ADDRESS,
     userAddress,
     FAKE_ETH_ADDRESS,
-    blockNumber - 1 // Use previous block for finality
+    proofBlock
   );
 
-  // 6. Serialize for Move
-  const moveProof = serializeProofForAptos(proof);
-
-  // 7. Save to file
+  // 6. Save to file
+  fs.mkdirSync('tests/fixtures', { recursive: true });
   fs.writeFileSync(
     'tests/fixtures/real-ethereum-proof.json',
-    JSON.stringify(moveProof, null, 2)
+    JSON.stringify(proof, null, 2)
   );
 
   console.log("✓ Real proof generated and saved");
-  console.log("  Block:", blockNumber - 1);
-  console.log("  Locked amount:", proof.storageValue);
+  console.log("  Block:", proofBlock);
+  console.log("  Locked amount:", proof.storageValue.toString());
+  console.log("  Storage key:", proof.storageKey);
 }
 
 main().catch(console.error);
@@ -152,6 +197,7 @@ main().catch(console.error);
 **Run:**
 ```bash
 cd source/atomica-web
+# Ethereum Docker testnet must be running!
 bun run scripts/generate-test-proof.ts
 ```
 
@@ -306,6 +352,8 @@ fun test_create_auction_with_proof(seller: &signer) {
 
 ### Step 5: End-to-End Integration Test
 
+**CRITICAL:** Always use Ethereum Docker SDK, not Anvil/Hardhat/Forge testnets.
+
 **File to Create:** `source/atomica-web/tests/e2e/cross-chain-auction.test.ts`
 
 ```typescript
@@ -314,72 +362,99 @@ import { EthereumDockerTestnet } from '@atomica/ethereum-docker-testnet';
 import { DockerTestnet } from '@atomica/docker-testnet';
 import { generateLockedBalanceProof } from '../../src/lib/ethereum/proofs/generator';
 import { Aptos } from '@aptos-labs/ts-sdk';
+import { ethers } from 'ethers';
 
 describe('Cross-Chain Auction Flow', () => {
   it('should create auction after locking FAKETH on Ethereum', async () => {
-    // 1. Start both testnets
-    const [ethTestnet, aptosTestnet] = await Promise.all([
-      EthereumDockerTestnet.start(8),
-      DockerTestnet.new(4)
-    ]);
+    // 1. Start both testnets using Docker SDKs
+    console.log("Starting Ethereum Docker testnet...");
+    const ethTestnet = await EthereumDockerTestnet.start(8);
     
-    // 2. Deploy contracts
-    const lockBox = await deployLockBox(ethTestnet);
-    const registry = await deployAptosContracts(aptosTestnet);
+    console.log("Starting Aptos Docker testnet...");
+    const aptosTestnet = await DockerTestnet.new(4);
     
-    // 3. Seller locks 10 FAKETH
-    const seller = await ethTestnet.getAccount(0);
-    await lockBox.lock(fakeETHAddress, ethers.parseEther("10"));
-    
-    // 4. Wait for block finality
-    await ethTestnet.waitForBlocks(2);
-    
-    // 5. Generate proof
-    const proof = await generateLockedBalanceProof(
-      ethTestnet.rpcUrl,
-      lockBox.address,
-      seller.address,
-      fakeETHAddress,
-      await ethTestnet.getBlockNumber() - 1
-    );
-    
-    // 6. Submit proof to Aptos and create auction
-    const aptos = new Aptos(aptosTestnet.aptosConfig);
-    const tx = await aptos.transaction.build.simple({
-      sender: sellerAptosAddress,
-      data: {
-        function: `${registry}::registry::create_auction_with_proof`,
-        functionArguments: [
-          proof.blockNumber,
-          proof.blockHash,
-          proof.stateRoot,
-          // ... all proof fields ...
-          10, // 10 FAKETH
-          1000, // min 1000 FAKEUSD
-          3600, // 1 hour
-          mpk
-        ]
-      }
-    });
-    
-    const result = await aptos.signAndSubmitTransaction({
-      signer: sellerAptosSigner,
-      transaction: tx
-    });
-    
-    await aptos.waitForTransaction({ transactionHash: result.hash });
-    
-    // 7. Verify auction was created
-    const auctions = await registry.getAuctions();
-    expect(auctions.length).toBe(1);
-    expect(auctions[0].amount).toBe(10);
-    
-    // 8. Cleanup
-    await Promise.all([
-      ethTestnet.stop(),
-      aptosTestnet.stop()
-    ]);
-  }, 300000); // 5 minute timeout
+    try {
+      // 2. Wait for networks to be healthy
+      await ethTestnet.waitForHealthy(180);
+      await aptosTestnet.waitForBlocks(1, 120);
+      
+      // 3. Deploy contracts to Ethereum
+      const provider = new ethers.JsonRpcProvider(ethTestnet.rpcUrl);
+      const deployer = new ethers.Wallet(ethTestnet.getPrivateKey(0), provider);
+      
+      // Deploy FakeETH, FakeUSD, LockBox
+      const lockBox = await deployLockBoxContracts(deployer);
+      
+      // 4. Deploy Aptos contracts
+      const registry = await deployAptosContracts(aptosTestnet);
+      
+      // 5. Seller locks 10 FAKETH
+      const seller = deployer;
+      await lockBox.fakeETH.mint(seller.address, ethers.parseEther("10"));
+      await lockBox.fakeETH.approve(lockBox.address, ethers.parseEther("10"));
+      await lockBox.lock(lockBox.fakeETH.address, ethers.parseEther("10"));
+      
+      // 6. Wait for block finality
+      await new Promise(resolve => setTimeout(resolve, 15000));
+      
+      // 7. Generate proof
+      const blockNumber = await provider.getBlockNumber();
+      const proof = await generateLockedBalanceProof(
+        ethTestnet.rpcUrl,
+        lockBox.address,
+        seller.address,
+        lockBox.fakeETH.address,
+        blockNumber - 1 // Use finalized block
+      );
+      
+      // 8. Submit proof to Aptos and create auction
+      const aptos = new Aptos(aptosTestnet.aptosConfig);
+      const tx = await aptos.transaction.build.simple({
+        sender: sellerAptosAddress,
+        data: {
+          function: `${registry}::registry::create_auction_with_proof`,
+          functionArguments: [
+            proof.blockNumber,
+            proof.blockHash,
+            proof.stateRoot,
+            proof.contractAddress,
+            proof.userAddress,
+            proof.tokenAddress,
+            proof.storageKey,
+            proof.storageValue,
+            proof.accountProof,
+            proof.storageProof,
+            10, // 10 FAKETH
+            1000, // min 1000 FAKEUSD
+            3600, // 1 hour
+            mpk
+          ]
+        }
+      });
+      
+      const result = await aptos.signAndSubmitTransaction({
+        signer: sellerAptosSigner,
+        transaction: tx
+      });
+      
+      await aptos.waitForTransaction({ transactionHash: result.hash });
+      
+      // 9. Verify auction was created
+      const auctions = await registry.getAuctions();
+      expect(auctions.length).toBe(1);
+      expect(auctions[0].amount).toBe(10);
+      
+      console.log("✓ Cross-chain auction created successfully!");
+      
+    } finally {
+      // 10. Cleanup - always stop Docker containers
+      console.log("Stopping testnets...");
+      await Promise.all([
+        ethTestnet.stop(),
+        aptosTestnet.stop()
+      ]);
+    }
+  }, 300000); // 5 minute timeout for Docker startup
 });
 ```
 

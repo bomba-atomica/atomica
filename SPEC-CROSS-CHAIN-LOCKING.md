@@ -589,23 +589,32 @@ To make these tests pass, we need real Ethereum proofs generated from the testne
 
 ---
 
-### Phase 4D: End-to-End Integration ⏳ PENDING
+### Phase 4D: End-to-End Integration ⏳ IN PROGRESS
 **Deliverable:** Full cross-chain auction flow
-**Status:** Not started (blocked by 4C)
+**Status:** In progress (2026-02-03)
+
+**CRITICAL REQUIREMENT:** 
+- **ALWAYS use Ethereum Docker SDK** (`@atomica/ethereum-docker-testnet`)
+- **NEVER use Anvil, Hardhat, or Forge's built-in testnets**
+- The Ethereum Docker testnet provides a production-like environment with Geth + Lighthouse
 
 **Tasks:**
-- [ ] Update AuctionRegistry to accept proofs
-- [ ] Create TypeScript orchestration script
-- [ ] Write E2E test: lock → proof → auction
+- [x] Create DeployLockBox.s.sol deployment script
+- [ ] Start Ethereum Docker testnet
+- [ ] Deploy LockBox to Ethereum Docker testnet
+- [ ] Create generate-test-proof.ts script
+- [ ] Generate real proof from Ethereum Docker testnet
+- [ ] Update Move tests with real proof data
+- [ ] Integrate proof verification into AuctionRegistry
+- [ ] Create E2E test with both Docker testnets
 - [ ] Update UI to show locked balances
-- [ ] Add proof generation to UI flow
 
 **Test Cases:**
-- Seller locks FAKETH on Ethereum
-- Generate proof of lock
-- Submit proof to Aptos
+- Seller locks FAKETH on Ethereum Docker testnet
+- Generate proof from Ethereum Docker testnet
+- Submit proof to Aptos Docker testnet
 - Create auction successfully
-- Buyer locks FAKEUSD
+- Buyer locks FAKEUSD on Ethereum Docker testnet
 - Generate proof
 - Place bid successfully
 
