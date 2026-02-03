@@ -9,7 +9,7 @@
  * 4. Generates a REAL state proof
  * 5. Saves proof for Move tests
  * 
- * NO MOCKING - Uses real contracts and real proofs
+ * NO MOCKING - Uses real production Solidity contracts
  */
 
 import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
@@ -17,43 +17,37 @@ import { ethers } from "ethers";
 import { writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import { readFileSync } from "fs";
-import { generateLockedBalanceProof } from "../src/lib/ethereum/proofs/generator.ts";
-import { serializeProofForAptos } from "../src/lib/ethereum/proofs/index.ts";
+import { execSync } from "child_process";
+import { generateLockedBalanceProof } from "../src/lib/ethereum/proofs/generator";
+import { serializeProofForAptos } from "../src/lib/ethereum/proofs/index";
 
-const FAKE_ETH_ABI = [
-  "constructor()",
-  "function mint(address to, uint256 amount) external",
-  "function approve(address spender, uint256 amount) external returns (bool)",
-  "function balanceOf(address account) external view returns (uint256)",
-];
+interface TokenContract {
+  mint(to: string, amount: bigint): Promise<unknown>;
+  approve(spender: string, amount: bigint): Promise<unknown>;
+  balanceOf(account: string): Promise<bigint>;
+  getAddress(): Promise<string>;
+}
 
-const FAKE_USD_ABI = [
-  "constructor()",
-  "function mint(address to, uint256 amount) external",
-  "function approve(address spender, uint256 amount) external returns (bool)",
-  "function balanceOf(address account) external view returns (uint256)",
-];
+interface LockBoxContract {
+  lock(token: string, amount: bigint): Promise<unknown>;
+  getLockedBalance(user: string, token: string): Promise<bigint>;
+  getAddress(): Promise<string>;
+}
 
-const LOCKBOX_ABI = [
-  "constructor(address _fakeETH, address _fakeUSD)",
-  "function lock(address token, uint256 amount) external",
-  "function getLockedBalance(address user, address token) external view returns (uint256)",
-];
-
-async function deployContract(
+async function deployContract<T>(
   signer: ethers.Wallet,
   contractName: string,
   abi: ethers.InterfaceAbi,
   bytecode: string,
   args: unknown[] = []
-) {
+): Promise<T> {
   console.log(`   Deploying ${contractName}...`);
   const factory = new ethers.ContractFactory(abi, bytecode, signer);
   const contract = await factory.deploy(...args);
   await contract.waitForDeployment();
   const address = await contract.getAddress();
   console.log(`   ✅ ${contractName} deployed at: ${address}`);
-  return contract;
+  return contract as unknown as T;
 }
 
 async function main() {
@@ -92,10 +86,11 @@ async function main() {
     console.log(`   Balance: ${ethers.formatEther(balance)} ETH`);
 
     console.log("\n🚀 Step 3/6: Compiling contracts...");
-    // Use real production Solidity contracts from evm-contracts
-    const compilerOutput = Bun.spawnSync(["sh", "-c", "cd ../evm-contracts && forge build"]);
-    if (!compilerOutput.success) {
-      throw new Error("Forge build failed: " + Buffer.from(compilerOutput.stderr).toString());
+    console.log("   Compiling production Solidity contracts...");
+    try {
+      execSync("cd ../evm-contracts && forge build", { stdio: "inherit" });
+    } catch {
+      throw new Error("Forge build failed");
     }
       
     const fakeEthArtifact = JSON.parse(
@@ -108,22 +103,23 @@ async function main() {
       readFileSync("../evm-contracts/out/LockBox.sol/LockBox.json", "utf-8")
     );
       
-    const fakeETH = await deployContract(
-      deployer, "FakeETH", FAKE_ETH_ABI, fakeEthArtifact.bytecode.object
+    const fakeETH = await deployContract<TokenContract>(
+      deployer, "FakeETH", fakeEthArtifact.abi, fakeEthArtifact.bytecode.object
     );
       
-    const fakeUSD = await deployContract(
-      deployer, "FakeUSD", FAKE_USD_ABI, fakeUsdArtifact.bytecode.object
+    const fakeUSD = await deployContract<TokenContract>(
+      deployer, "FakeUSD", fakeUsdArtifact.abi, fakeUsdArtifact.bytecode.object
     );
       
-    const lockBox = await deployContract(
-      deployer, "LockBox", LOCKBOX_ABI, lockBoxArtifact.bytecode.object,
-      [await fakeETH.getAddress(), await fakeUSD.getAddress()]
+    const fakeETHAddress = await fakeETH.getAddress();
+    const fakeUSDAddress = await fakeUSD.getAddress();
+      
+    const lockBox = await deployContract<LockBoxContract>(
+      deployer, "LockBox", lockBoxArtifact.abi, lockBoxArtifact.bytecode.object,
+      [fakeETHAddress, fakeUSDAddress]
     );
       
     const lockBoxAddress = await lockBox.getAddress();
-    const fakeETHAddress = await fakeETH.getAddress();
-    const fakeUSDAddress = await fakeUSD.getAddress();
 
     console.log("\n🪙 Step 4/6: Minting and locking tokens...");
       
@@ -209,7 +205,7 @@ async function main() {
       
     const outputPath = `${outputDir}/real-ethereum-proof.json`;
     await writeFile(outputPath, JSON.stringify(output, (_key: string, value: unknown) =>
-      typeof value === 'bigint' ? value.toString() : value
+      typeof value === "bigint" ? value.toString() : value
     , 2));
       
     console.log(`   ✅ Proof saved to ${outputPath}`);
