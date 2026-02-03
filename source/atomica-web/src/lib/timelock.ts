@@ -1,5 +1,5 @@
 import { sha3_256 } from '@noble/hashes/sha3';
-import { bytesToHex, hexToBytes, concatBytes } from '@noble/hashes/utils';
+import { bytesToHex, concatBytes } from '@noble/hashes/utils';
 import { PointG1, PointG2, pairing, utils as blsUtils } from '@noble/bls12-381';
 
 export const IBE_IDENTITY_DST = "APTOS_IBE_IDENTITY_DST";

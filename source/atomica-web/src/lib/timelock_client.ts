@@ -1,12 +1,13 @@
 import { Aptos } from "@aptos-labs/ts-sdk";
 import { TimelockCrypto, type Ciphertext } from "./timelock";
 import { PointG1, PointG2 } from "@noble/bls12-381";
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 
 export class TimelockClient {
-    private crypto: TimelockCrypto;
+    crypto: TimelockCrypto;
+    aptos: Aptos;
     
-    constructor(private aptos: Aptos) {
+    constructor(aptos: Aptos) {
+        this.aptos = aptos;
         this.crypto = new TimelockCrypto();
     }
 
