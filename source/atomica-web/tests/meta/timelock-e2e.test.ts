@@ -56,8 +56,10 @@ describe.skip.sequential("E2E: Timelock Round Trip", () => {
         for(let i=0; i<30; i++) {
             try {
                 mpk = await client.getMpk();
+                const info = await aptos.getLedgerInfo();
+                console.log(`Current Epoch: ${info.epoch}`);
                 break;
-            } catch(e) {
+            } catch(_e) {
                 await new Promise(r => setTimeout(r, 1000));
             }
         }
@@ -96,7 +98,7 @@ describe.skip.sequential("E2E: Timelock Round Trip", () => {
         // 4. Wait for Reveal
         console.log("Waiting for decryption...");
         // This will throw if validators don't reveal
-        const dk = await client.waitForDecryption(timelockId, 1000, 30000); 
+        const _dk = await client.waitForDecryption(timelockId, 1000, 30000); 
         console.log("Decryption key revealed");
 
         // 5. Decrypt

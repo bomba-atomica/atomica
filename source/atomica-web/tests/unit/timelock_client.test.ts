@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { TimelockClient } from '../../src/lib/timelock_client';
 import { Aptos } from "@aptos-labs/ts-sdk";
 import goldenVectors from './ibe_golden_vectors.json';
-import { PointG2, PointG1 } from '@noble/bls12-381';
+import { PointG2 } from '@noble/bls12-381';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 
 // Mock Aptos

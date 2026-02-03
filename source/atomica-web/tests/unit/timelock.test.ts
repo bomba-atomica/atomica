@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { TimelockCrypto } from '../../src/lib/timelock';
 import goldenVectors from './ibe_golden_vectors.json';
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils';
-import { PointG1, PointG2, pairing } from '@noble/bls12-381';
+import { PointG1, PointG2 } from '@noble/bls12-381';
 
 describe('TimelockCrypto Golden Vectors', () => {
   const crypto = new TimelockCrypto();

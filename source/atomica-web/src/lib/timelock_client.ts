@@ -109,7 +109,7 @@ export class TimelockClient {
                 if (isRevealedRes[0] === true) {
                     return await this.getDecryptionKey(timelockId);
                 }
-            } catch (e) {
+            } catch (_e) {
                 // Ignore errors (e.g. timelock not found yet) and retry
             }
             

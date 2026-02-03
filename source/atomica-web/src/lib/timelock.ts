@@ -70,6 +70,7 @@ export class TimelockCrypto {
     /**
      * Derives a symmetric key stream from a pairing result (Gt).
      */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private deriveKey(gt: any, length: number): Uint8Array {
         const gtBytes = this.serializeGt(gt);
         const keyStream = new Uint8Array(length);
@@ -101,6 +102,7 @@ export class TimelockCrypto {
      * Structure: 12 coefficients of 48 bytes each.
      * Order: Recursive traversal (c0 -> c1).
      */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private serializeGt(gt: any): Uint8Array {
         const coeffs: bigint[] = [];
         const fp12 = [gt.c0, gt.c1];
