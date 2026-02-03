@@ -5,8 +5,14 @@
  */
 
 import { spawn, ChildProcess } from "child_process";
-import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
-import { DockerTestnet } from "@atomica/docker-testnet";
+import type { EthereumDockerTestnet } from "../../docker-testnet/ethereum-testnet/typescript-sdk/dist/index.js";
+import type { DockerTestnet } from "../../docker-testnet/typescript-sdk/dist/index.js";
+
+// Dynamic imports to avoid module resolution issues
+const { EthereumDockerTestnet: EthTestnet } =
+  await import("../../docker-testnet/ethereum-testnet/typescript-sdk/dist/index.js");
+const { DockerTestnet: AptosTestnet } =
+  await import("../../docker-testnet/typescript-sdk/dist/index.js");
 
 // Configuration
 const DEPLOYER_ADDR =
@@ -37,16 +43,20 @@ async function main() {
     // Step 2: Start both testnets in parallel
     console.log("\n🚀 Starting both testnets in parallel...");
     console.log(
-      `  - Ethereum: ${NUM_ETH_VALIDATORS} validators (Geth + Lighthouse)`
+      `  - Ethereum: ${NUM_ETH_VALIDATORS} validators (Geth + Lighthouse)`,
     );
     console.log(`  - Aptos: ${NUM_APTOS_VALIDATORS} validators`);
 
     [ethTestnet, aptosTestnet] = await Promise.all([
-      EthereumDockerTestnet.start(NUM_ETH_VALIDATORS),
-      DockerTestnet.new(NUM_APTOS_VALIDATORS),
+      EthTestnet.start(NUM_ETH_VALIDATORS),
+      AptosTestnet.new(NUM_APTOS_VALIDATORS),
     ]);
 
     console.log("\n⏳ Waiting for networks to be healthy...");
+
+    if (!ethTestnet || !aptosTestnet) {
+      throw new Error("Failed to initialize testnets");
+    }
 
     await Promise.all([
       ethTestnet.waitForHealthy(180),
@@ -92,7 +102,7 @@ async function main() {
  * Deploy ERC20 contracts to Ethereum testnet
  */
 async function deployEthereumContracts(
-  testnet: EthereumDockerTestnet
+  testnet: EthereumDockerTestnet,
 ): Promise<void> {
   // Get test account for deployment
   const testAccounts = testnet.getTestAccounts();
@@ -153,19 +163,28 @@ async function deployAptosContracts(testnet: DockerTestnet): Promise<void> {
  */
 async function launchWebapp(): Promise<void> {
   return new Promise((resolve, reject) => {
-    webappProcess = spawn("bun", ["run", "dev", "--port", String(WEBAPP_PORT)], {
-      cwd: process.cwd(),
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    webappProcess = spawn(
+      "bun",
+      ["run", "dev", "--port", String(WEBAPP_PORT)],
+      {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
 
-    let startupTimeout: NodeJS.Timeout;
+    const startupTimeout = setTimeout(() => {
+      reject(new Error("Webapp startup timeout (30s)"));
+    }, 30000);
 
     webappProcess.stdout?.on("data", (data: Buffer) => {
       const output = data.toString();
       process.stdout.write(`  [webapp] ${output}`);
 
       // Detect successful startup
-      if (output.includes("Local:") || output.includes(`localhost:${WEBAPP_PORT}`)) {
+      if (
+        output.includes("Local:") ||
+        output.includes(`localhost:${WEBAPP_PORT}`)
+      ) {
         clearTimeout(startupTimeout);
         resolve();
       }
@@ -186,11 +205,6 @@ async function launchWebapp(): Promise<void> {
         reject(new Error(`Webapp exited with code ${code}`));
       }
     });
-
-    // Timeout if webapp doesn't start in 30 seconds
-    startupTimeout = setTimeout(() => {
-      reject(new Error("Webapp startup timeout (30s)"));
-    }, 30000);
   });
 }
 
@@ -209,7 +223,9 @@ async function killPortProcesses(port: number): Promise<void> {
     lsofProcess.on("close", (code) => {
       if (code === 0 && pids.trim()) {
         const pidList = pids.trim().split("\n");
-        console.log(`  Found zombie processes on port ${port}: ${pidList.join(", ")}`);
+        console.log(
+          `  Found zombie processes on port ${port}: ${pidList.join(", ")}`,
+        );
 
         pidList.forEach((pid) => {
           try {
@@ -252,18 +268,18 @@ async function cleanup(): Promise<void> {
   if (ethTestnet) {
     console.log("  Tearing down Ethereum testnet...");
     cleanupPromises.push(
-      ethTestnet.teardown().catch((err) => {
+      ethTestnet.teardown().catch((err: unknown) => {
         console.error("  Error tearing down Ethereum testnet:", err);
-      })
+      }),
     );
   }
 
   if (aptosTestnet) {
     console.log("  Tearing down Aptos testnet...");
     cleanupPromises.push(
-      aptosTestnet.teardown().catch((err) => {
+      aptosTestnet.teardown().catch((err: unknown) => {
         console.error("  Error tearing down Aptos testnet:", err);
-      })
+      }),
     );
   }
 

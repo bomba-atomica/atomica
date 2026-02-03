@@ -68,7 +68,7 @@ describe("Dual Testnet Startup Integration", () => {
     const aptosStartBlock = await aptosTestnet.getBlockHeight(0);
 
     console.log(
-      `Initial blocks - ETH: ${ethStartBlock}, Aptos: ${aptosStartBlock}`
+      `Initial blocks - ETH: ${ethStartBlock}, Aptos: ${aptosStartBlock}`,
     );
 
     // Wait for new blocks on both chains
