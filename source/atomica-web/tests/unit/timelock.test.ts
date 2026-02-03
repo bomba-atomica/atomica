@@ -1,13 +1,13 @@
-import { describe, it, expect } from 'vitest';
-import { TimelockCrypto } from '../../src/lib/timelock';
-import goldenVectors from './ibe_golden_vectors.json';
-import { hexToBytes, bytesToHex } from '@noble/hashes/utils';
-import { PointG1, PointG2 } from '@noble/bls12-381';
+import { describe, it, expect } from "vitest";
+import { TimelockCrypto } from "../../src/lib/timelock";
+import goldenVectors from "./ibe_golden_vectors.json";
+import { hexToBytes, bytesToHex } from "@noble/hashes/utils";
+import { PointG1, PointG2 } from "@noble/bls12-381";
 
-describe('TimelockCrypto Golden Vectors', () => {
+describe("TimelockCrypto Golden Vectors", () => {
   const crypto = new TimelockCrypto();
 
-  describe('Identity Computation', () => {
+  describe("Identity Computation", () => {
     goldenVectors.identity_vectors.forEach((vector) => {
       it(vector.description, () => {
         let tid = BigInt(vector.timelock_id);
@@ -15,8 +15,8 @@ describe('TimelockCrypto Golden Vectors', () => {
 
         // Fix JSON parsing precision loss for max u64
         if (vector.description === "Maximum u64 values") {
-             tid = 18446744073709551615n;
-             deadline = 18446744073709551615n;
+          tid = 18446744073709551615n;
+          deadline = 18446744073709551615n;
         }
 
         const identity = crypto.computeIdentity(tid, deadline);
@@ -25,17 +25,19 @@ describe('TimelockCrypto Golden Vectors', () => {
     });
   });
 
-  describe('Hash To Curve (G1)', () => {
+  describe("Hash To Curve (G1)", () => {
     goldenVectors.identity_vectors.forEach((vector) => {
       it(`Hashes identity to G1: ${vector.description}`, async () => {
-        const point = await crypto.hashToG1(hexToBytes(vector.identity_hash_hex));
+        const point = await crypto.hashToG1(
+          hexToBytes(vector.identity_hash_hex),
+        );
         const hex = bytesToHex(point.toRawBytes(true));
         expect(hex).toBe(vector.h_identity_g1_hex);
       });
     });
   });
 
-  describe('IBE Roundtrip', () => {
+  describe("IBE Roundtrip", () => {
     goldenVectors.ibe_roundtrip_vectors.forEach((vector) => {
       it(vector.description, async () => {
         // 1. Verify Decryption with Golden Ciphertext
@@ -52,9 +54,13 @@ describe('TimelockCrypto Golden Vectors', () => {
         // but we can decrypt our own ciphertext with the golden key)
         const mpk = PointG2.fromHex(vector.mpk_g2_hex);
         const identity = hexToBytes(vector.identity_hash_hex);
-        
-        const myCiphertext = await crypto.encrypt(mpk, identity, expectedPlaintext);
-        
+
+        const myCiphertext = await crypto.encrypt(
+          mpk,
+          identity,
+          expectedPlaintext,
+        );
+
         // Decrypt my ciphertext with golden DK
         const myDecrypted = await crypto.decrypt(dk, myCiphertext);
         expect(bytesToHex(myDecrypted)).toBe(vector.plaintext_hex);

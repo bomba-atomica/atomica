@@ -49,20 +49,8 @@
       "h_identity_g1_hex": "8ee74013044887e31110186f2f90d556e8780998295c69821011707562e44bf9fa28d8c331fa41aaacec7f5f8368b41e",
       "threshold": 3,
       "total_weight": 5,
-      "validator_indices": [
-        0,
-        1,
-        2,
-        3,
-        4
-      ],
-      "validator_weights": [
-        1,
-        1,
-        1,
-        1,
-        1
-      ],
+      "validator_indices": [0, 1, 2, 3, 4],
+      "validator_weights": [1, 1, 1, 1, 1],
       "dk_shares_g1_hex": [
         [
           "9722f3fe074ff0467af66bbb6564aaeec41ac369dbc55a520e1197e2cabd01489fac2b5260c049e9ed26fdd872391d2d"
@@ -94,18 +82,8 @@
       "h_identity_g1_hex": "8a8a5697ed766fd6d60dceef333ccd432ee3a22e286f964a3c0ad7407eccb965454c0aedb04db714ebc0aed08916d021",
       "threshold": 2,
       "total_weight": 4,
-      "validator_indices": [
-        0,
-        1,
-        2,
-        3
-      ],
-      "validator_weights": [
-        1,
-        1,
-        1,
-        1
-      ],
+      "validator_indices": [0, 1, 2, 3],
+      "validator_weights": [1, 1, 1, 1],
       "dk_shares_g1_hex": [
         [
           "b60d3ddf9b0a596918276b9016723540aab31e024153a3f5b214150022e34444c2a8c6a08f2bc68f289f715ffdb93192"
@@ -134,16 +112,8 @@
       "h_identity_g1_hex": "81d2a7a38c3852f64b1faf838f55a55fd03df97d8012b82f04e9925098516ac6bf6d8eb3fae98147ef41f522422b2a0d",
       "threshold": 3,
       "total_weight": 5,
-      "validator_indices": [
-        0,
-        1,
-        2
-      ],
-      "validator_weights": [
-        2,
-        1,
-        2
-      ],
+      "validator_indices": [0, 1, 2],
+      "validator_weights": [2, 1, 2],
       "dk_shares_g1_hex": [
         [
           "8723f166aabb441baeb0df1eddfd332c3f5ec3a0b41ae92c54aee283021deb98ac79248dbabd5244bde583b553a4222b",
@@ -171,18 +141,8 @@
       "h_identity_g1_hex": "a62edbe7b9728a6569fc67d2d6558c2295eef25a83588ab008f58fb641dc59b613cbb967f602ee722641cf10123121d3",
       "threshold": 3,
       "total_weight": 8,
-      "validator_indices": [
-        0,
-        1,
-        2,
-        3
-      ],
-      "validator_weights": [
-        2,
-        3,
-        2,
-        1
-      ],
+      "validator_indices": [0, 1, 2, 3],
+      "validator_weights": [2, 3, 2, 1],
       "dk_shares_g1_hex": [
         [
           "89034bbd72ce9be382e9441f2a44b9c362fa0300fcc4e800ca3a9f6f9d74700dfce3909f28f56ae073722c1c6725c2b8",
