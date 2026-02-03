@@ -129,8 +129,12 @@ export async function hasAnyBalance(address: string): Promise<boolean> {
  */
 export function pollBalances(
   address: string,
-  callback: (balances: { eth: bigint; fakeETH: bigint; fakeUSD: bigint }) => void,
-  intervalMs: number = 5000
+  callback: (balances: {
+    eth: bigint;
+    fakeETH: bigint;
+    fakeUSD: bigint;
+  }) => void,
+  intervalMs: number = 5000,
 ): () => void {
   let stopped = false;
 

@@ -46,7 +46,9 @@ export function getMetaMaskProvider(): ethers.BrowserProvider | null {
  * Check if MetaMask is installed
  */
 export function isMetaMaskInstalled(): boolean {
-  return typeof window !== "undefined" && typeof window.ethereum !== "undefined";
+  return (
+    typeof window !== "undefined" && typeof window.ethereum !== "undefined"
+  );
 }
 
 /**
@@ -91,9 +93,10 @@ export async function switchToTestnet(): Promise<void> {
       method: "wallet_switchEthereumChain",
       params: [{ chainId: `0x${ETH_CHAIN_ID.toString(16)}` }],
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as { code?: number };
     // Chain not added yet, add it
-    if (error.code === 4902) {
+    if (err.code === 4902) {
       await window.ethereum!.request({
         method: "wallet_addEthereumChain",
         params: [
@@ -116,8 +119,11 @@ export async function switchToTestnet(): Promise<void> {
 }
 
 // Type augmentation for window.ethereum
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type EthereumProvider = any;
+
 declare global {
   interface Window {
-    ethereum?: any;
+    ethereum?: EthereumProvider;
   }
 }

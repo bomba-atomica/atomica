@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
-import { ethers } from "ethers";
 
 /**
  * Integration test for ERC20 token deployment
@@ -8,7 +7,6 @@ import { ethers } from "ethers";
  */
 describe("ERC20 Deployment Integration", () => {
   let testnet: EthereumDockerTestnet;
-  let provider: ethers.Provider;
   let fakeETHAddress: string;
   let fakeUSDAddress: string;
 
@@ -17,28 +15,7 @@ describe("ERC20 Deployment Integration", () => {
     testnet = await EthereumDockerTestnet.start(4);
     await testnet.waitForHealthy(180);
 
-    provider = new ethers.JsonRpcProvider(testnet.getExecutionRpcUrl());
-
-    // Get test accounts (pre-funded at genesis)
-    const testAccounts = testnet.getTestAccounts();
-    const deployer = testAccounts[0];
-
     console.log("Deploying FakeETH and FakeUSD...");
-
-    // FakeETH bytecode (OpenZeppelin ERC20)
-    // For now we'll use a simple deployment, later we'll integrate with Foundry
-    const FakeETHFactory = new ethers.ContractFactory(
-      [
-        "constructor()",
-        "function name() view returns (string)",
-        "function symbol() view returns (string)",
-        "function decimals() view returns (uint8)",
-        "function mint(address to, uint256 amount)",
-        "function balanceOf(address) view returns (uint256)",
-      ],
-      "0x", // Placeholder - will be replaced with actual deployment via Foundry
-      deployer
-    );
 
     // TODO: Actually deploy via Foundry script
     // For now, record placeholder addresses

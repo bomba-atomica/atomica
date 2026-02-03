@@ -39,9 +39,7 @@ async function ensureConnected(): Promise<string> {
  * @param amount Amount to mint in wei (e.g., 10n * 10n**18n for 10 ETH)
  * @returns Transaction result
  */
-export async function mintFakeETH(
-  amount: bigint
-): Promise<TransactionResult> {
+export async function mintFakeETH(amount: bigint): Promise<TransactionResult> {
   const address = await ensureConnected();
 
   const contract = await getFakeETHContractWithSigner();
@@ -62,9 +60,7 @@ export async function mintFakeETH(
  * @param amount Amount to mint in smallest units (e.g., 10_000n * 10n**6n for 10,000 USD)
  * @returns Transaction result
  */
-export async function mintFakeUSD(
-  amount: bigint
-): Promise<TransactionResult> {
+export async function mintFakeUSD(amount: bigint): Promise<TransactionResult> {
   const address = await ensureConnected();
 
   const contract = await getFakeUSDContractWithSigner();
@@ -104,7 +100,7 @@ export async function mint10kFakeUSD(): Promise<TransactionResult> {
  */
 export async function waitForTransaction(
   txHash: string,
-  confirmations: number = 1
+  confirmations: number = 1,
 ): Promise<ethers.TransactionReceipt | null> {
   const provider = (await getFakeETHContractWithSigner()).runner?.provider;
 
@@ -121,7 +117,7 @@ export async function waitForTransaction(
  * @returns Transaction receipt or null if not mined
  */
 export async function getTransactionStatus(
-  txHash: string
+  txHash: string,
 ): Promise<ethers.TransactionReceipt | null> {
   const provider = (await getFakeETHContractWithSigner()).runner?.provider;
 
