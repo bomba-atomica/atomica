@@ -1,0 +1,210 @@
+{
+  "version": "2.0.0",
+  "generated_at": "2026-01-22T22:18:19.282890022+00:00",
+  "description": "Golden test vectors for IBE identity computation and DK reconstruction",
+  "identity_vectors": [
+    {
+      "description": "Basic timelock with ID 0",
+      "timelock_id": 0,
+      "deadline_us": 1000000000000,
+      "identity_hash_hex": "cd2f0ecdda375c87027bcbd9a8b429057062065239267bfd2496e844b81f7355",
+      "h_identity_g1_hex": "95502e8ee330870f5002c4cfc834467a507fcadaa49f9da04c539f322858284e627937fb234993f78dd5869b57419aa9"
+    },
+    {
+      "description": "Different ID, same deadline (should differ)",
+      "timelock_id": 1,
+      "deadline_us": 1000000000000,
+      "identity_hash_hex": "1235cfe3eb61fd7c5aa850477532822bbef4d9ca30decc2ca4405ebb30d5cab1",
+      "h_identity_g1_hex": "aa5dffd79cb804f313d5c2e882183fd8477d3f9a6424cb56fa373e2c7ce0d0904383af53a5680538423d02ac61eaa210"
+    },
+    {
+      "description": "Same ID, different deadline (should differ)",
+      "timelock_id": 0,
+      "deadline_us": 2000000000000,
+      "identity_hash_hex": "ee623d0d70b0a085f0e91a197853c627a9cd7b24cdac79d2782e912e35ddefe6",
+      "h_identity_g1_hex": "b6ef562742ce6af3dcd6335b07bbbd38a36c51d8f13a470a6da39f916ffa41ad3651f454820244a8a38308ef99ec3521"
+    },
+    {
+      "description": "Large values",
+      "timelock_id": 999999,
+      "deadline_us": 9999999999999,
+      "identity_hash_hex": "f355ee7d4a1e1cca0bb037f35b74c0d317e745366a8beae1f6bc21828c7208e6",
+      "h_identity_g1_hex": "83159ae14da9468dd33921ec97931d4eeaeff0cbab82964e039aae06aa193456df1f045483bc614ace017ec02d4878dd"
+    },
+    {
+      "description": "Maximum u64 values",
+      "timelock_id": 18446744073709551615,
+      "deadline_us": 18446744073709551615,
+      "identity_hash_hex": "dfc6bbb77b5a21d8f42ce5a0db83131fa75d65a2fad956d47e107ae9218682b1",
+      "h_identity_g1_hex": "99a37d949342db3a11bd4c37ad76716977d27e4b31ad5aae214aef6a4c5a842cec9a25c42c21bd7fcb2a9d389f54c5fb"
+    }
+  ],
+  "ibe_roundtrip_vectors": [
+    {
+      "description": "5 validators, threshold 3, equal weights (PVSS-based)",
+      "rng_seed": 12345,
+      "msk_hex": "3fea0be5546f8322489b371987d8097874e8caa1f5e54314f40ad3d56e4c2f6c",
+      "mpk_g2_hex": "82fb16f4572daf7bd95e9c208eb29f4e43fd78df7f4a7129ef438b03b4da1ade521cd25b1eaeec7398bc8e74dd371b5213e87029507649495dc9cf02ace2ca040e79af59d9c380a1bfafa619e511452516e1719ae917265bc87a7b1236a5b0be",
+      "identity_hash_hex": "e3fb053eedce65f62fcbbfd56fe9bbec0abe3bfcc3c5ec54a913bd50c51a5dfe",
+      "h_identity_g1_hex": "8ee74013044887e31110186f2f90d556e8780998295c69821011707562e44bf9fa28d8c331fa41aaacec7f5f8368b41e",
+      "threshold": 3,
+      "total_weight": 5,
+      "validator_indices": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "validator_weights": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "dk_shares_g1_hex": [
+        [
+          "9722f3fe074ff0467af66bbb6564aaeec41ac369dbc55a520e1197e2cabd01489fac2b5260c049e9ed26fdd872391d2d"
+        ],
+        [
+          "b0cc6092fc45df1b1318952c08dd2a877b5b19deb725b63cfc41c48e84da6e8f77600efe4d38aac33273a87775112a31"
+        ],
+        [
+          "ac20a63c6b62ed15a3424d85af25eb006795eba2172996529afbb70d29d1a57066a37ee1c98dea843fa2c998cb6b3919"
+        ],
+        [
+          "b42700b02c7997b35f244481afa657a601e915046aed0dee5dcde214e91efdecbf3fcc9d21c11907aac23a84c43927d2"
+        ],
+        [
+          "891c64345686bd154a277a7540ed7c32ad7a0abe30a40586515bf07738e6f63f054b6a55d6d5a2288da37f15335618bf"
+        ]
+      ],
+      "reconstructed_dk_g1_hex": "a46066de7604d2d51825cd139d720523d5584654cda567f80c3779304d2dec8842b41a7feec0db2a202409f45492593c",
+      "plaintext_hex": "48656c6c6f2049424520676f6c64656e20766563746f7220746573742077697468205056535321",
+      "ciphertext_u_g2_hex": "b33b839deddaab78e2819a94b74aade57aab61ec3ce41eaa45775eedcc0ea6d51994701e4021e2517f8c3d522ee0c8fb020471a9582fc4e6f64428d833c4ec0eceabfddb11c3c3c11c1829191bc18ccc71ecf9628301bc38ecd0d1f71baa12b1",
+      "ciphertext_v_hex": "509a8a216f2d56cd243bb83b91b107bb9f495ec1ecb7c4a2d48b9a6b214f42c4136d341ffb8079"
+    },
+    {
+      "description": "4 validators, threshold 2, equal weights",
+      "rng_seed": 67890,
+      "msk_hex": "f5473a7e34fdbb238794a9a78a62cbe20f5f445fc2d5a5e9d27f0ad59b102f71",
+      "mpk_g2_hex": "874774c6f8fc9d169328bd85db98d06147d6cf84706f341f43377fa19934b0b423ce2ce1df95bf9b607a8ef54c16468007b34e34540de15866b0a89503c777c898b863ed1772bd1e0c47122d1c248eb19f670b5263bd99e096841804e4cbd983",
+      "identity_hash_hex": "fe35f39be89aa3d57c43d37f0a4ecb02908c7a82c877eaf5c6517224aa09c46c",
+      "h_identity_g1_hex": "8a8a5697ed766fd6d60dceef333ccd432ee3a22e286f964a3c0ad7407eccb965454c0aedb04db714ebc0aed08916d021",
+      "threshold": 2,
+      "total_weight": 4,
+      "validator_indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "validator_weights": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "dk_shares_g1_hex": [
+        [
+          "b60d3ddf9b0a596918276b9016723540aab31e024153a3f5b214150022e34444c2a8c6a08f2bc68f289f715ffdb93192"
+        ],
+        [
+          "864b4a9211b0eb77dab0df356f124a86f946ed9004de11e0c0ae1ac529301eef9adf443373f9ab0a33d393db38528337"
+        ],
+        [
+          "8f6e359c3d6d94ba5420695da8b441f1268d0bbe616bad8820125730a60eb589ddbf94e33c425e0a7871ec3d1a2ef520"
+        ],
+        [
+          "a6edf2ef32d2e25a10b1374dd1c758545036f743f556252ae3451a489d454414820e4d9e287965a2c4a318e3d409c6c0"
+        ]
+      ],
+      "reconstructed_dk_g1_hex": "9266dbe7f2c3a699fa1767d30c56507f792ee751fe457c6958f04dd8e0b6333d71fa609664b2cfada489547761effeb1",
+      "plaintext_hex": "5365636f6e6420746573742063617365207769746820342076616c696461746f7273",
+      "ciphertext_u_g2_hex": "8b6111ff088b03482f90b5bd55c3224c286964c1612749af366f9826ffacca8ffcef749a796097febd6d09c647a3ef6111ad5b6688b9c696f66c0489980f2cbd4a139518d606ddac4135db2a141bf54cb75ee8c83f6a897de0b4925933eac29e",
+      "ciphertext_v_hex": "9b0eaa53e097b8ffd0978f238be9b256cea118c5e7221d74a00b3197fafcbdfef2c5"
+    },
+    {
+      "description": "3 validators, threshold 3, unequal weights [2,1,2]",
+      "rng_seed": 99999,
+      "msk_hex": "54efc669c86a245a0b3e15b52e957a432474d664ca824513cc3e489e1cb14007",
+      "mpk_g2_hex": "986e5dc6d6b494fa5a5e8e1e2f1c5ddb22a021fd24c2117e3be5f2f9a844c04aa02c4270c09c0a7044c0f7e9780316a4102870266aab226c49949f8c069ac4858c9d1f5edb8ca90815e219072fe884b0a03fea5494a3e505498d3b1128996cb4",
+      "identity_hash_hex": "de8e8b23a9e541393a1835326e2e07e51571d61dd42a0c9dd1c2dab16186986d",
+      "h_identity_g1_hex": "81d2a7a38c3852f64b1faf838f55a55fd03df97d8012b82f04e9925098516ac6bf6d8eb3fae98147ef41f522422b2a0d",
+      "threshold": 3,
+      "total_weight": 5,
+      "validator_indices": [
+        0,
+        1,
+        2
+      ],
+      "validator_weights": [
+        2,
+        1,
+        2
+      ],
+      "dk_shares_g1_hex": [
+        [
+          "8723f166aabb441baeb0df1eddfd332c3f5ec3a0b41ae92c54aee283021deb98ac79248dbabd5244bde583b553a4222b",
+          "aff1dc2c26fcb7f48a61f27e34933e8818c3e8f3905ee9cda4956b89d343bc751ed39be795a7762a5aefe742ef192836"
+        ],
+        [
+          "8a96fb8faed4eedb44496140cf2a47c09a56eca0da3a61e8306d11554ca90ba06493ec1d4523cf39326451dbb67d4549"
+        ],
+        [
+          "aff15e922d0418a29c420f384db7524fdf52bfdb16b34710c07b38a40167711c660af07d6261a031a264b78acc63214f",
+          "a24237a89cf507e05553e93950cac155d24496c8d7b5568d4443223826916141c1517ff43873b0fec0a03613f90bec0a"
+        ]
+      ],
+      "reconstructed_dk_g1_hex": "afbaa0adb5ab4ef5d1c72e1aab6497f1fabd61d8f24a7c642593978e4ff18a080c10228fa8a61a8ec9f5ad0e15de1a76",
+      "plaintext_hex": "556e657175616c20776569676874732074657374205b322c312c325d",
+      "ciphertext_u_g2_hex": "94078b8f4d68ebfaa8f568badfd271f99013fecdc37c48a320b2e768c38ee61d510971efffd3d07b223bf00fd809ee6906a8a0029f44ba15597aa8c695088fb0c040a03f1ffae76513f0c200c386653e80dcab242fedf535c53867f2f1cef812",
+      "ciphertext_v_hex": "c577135d44e15ef14761ae4d7857faece4a4c5287f57ae6f6969351b"
+    },
+    {
+      "description": "4 validators, threshold 3, unequal weights [2,3,2,1]",
+      "rng_seed": 11111,
+      "msk_hex": "7f97d8fbbd275b2b59753888b49c4bb2cf8910cf6621959ff5c146d224a50214",
+      "mpk_g2_hex": "b71acf0e8a5c46a29ed8803219fc90d9ea8aa6b92c511fadadfab7e86a8a53839fbd4fcf47be51fb04c05b54f3e721d20da1f2f9e2d5c0b3f641a3cf2873344fd05d2d6cb6ec48d7e6a379d974b0cdf23aa9175b336f36916ec7f9dc0823fde7",
+      "identity_hash_hex": "5758871061dc3844df56aa064d31f0bc171b005ea70e9b1f866d17308e7db2a1",
+      "h_identity_g1_hex": "a62edbe7b9728a6569fc67d2d6558c2295eef25a83588ab008f58fb641dc59b613cbb967f602ee722641cf10123121d3",
+      "threshold": 3,
+      "total_weight": 8,
+      "validator_indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "validator_weights": [
+        2,
+        3,
+        2,
+        1
+      ],
+      "dk_shares_g1_hex": [
+        [
+          "89034bbd72ce9be382e9441f2a44b9c362fa0300fcc4e800ca3a9f6f9d74700dfce3909f28f56ae073722c1c6725c2b8",
+          "b407665ba45951d24b1f77e2ac8ca13c73a61f3a84a7151021c7bd21bc40c2afb1d107aa91cb33b4d60d4de96aec93d3"
+        ],
+        [
+          "9250c34552b6fc46dc9f0ebb3e74c513b8bee8263cb51375b880c1c011841dc0f06f036dacd8ce1ec9255910d0c89c59",
+          "a278603fcd8b53580bf6e5f220399cf3babb8e4dae4722c1f16863728488cdf5ee8d003b00d1cba54647d33733434ab2",
+          "899cb3ae08d459005e7c0dd1a89ffff1ef27c8b5c0a71d5f8c6cac56a5ceeb40934b652147cd16ed8c4e520a80dd7d92"
+        ],
+        [
+          "af0cda59649a9ca324c33ae5d903bc5487c49678a88c19be4eaea73e4bcb0c497275427955c47b0c3d31cca83ce60eeb",
+          "af1ced40168c252b4937229e8e28ecd61ab4aacfaf2b1790aa65368f4b96f1d799739ec8471f98767617bd658f80d260"
+        ],
+        [
+          "b3119a32f5b4d0ac7fa283e13cb7e09e971778d889b02e281e74d5b56b2eb73f6a0ca0d30549717bad57f3e8102b1079"
+        ]
+      ],
+      "reconstructed_dk_g1_hex": "af3b251c96136842613b45d09a222986330395b5699449526fca7405e8d6bb2743306b193cf10bfdbcfe8cdc468eaa8d",
+      "plaintext_hex": "556e657175616c2077656967687473205b322c332c322c315d20342076616c696461746f7273",
+      "ciphertext_u_g2_hex": "b13212a23d6f148499fa94c3c0994ba0fe5886a5d82247de8c3dccea06b6bff8326e59ab3009aa1fe9cec17faa6896af0989d078c87f42399efbbd48ce44308558b835e10bb17337dea70fe8387a3b3275e38282bca87bbb95c0ca934a47f584",
+      "ciphertext_v_hex": "11050ed8b7027dedc1c064b7d39a059e7ddfd029d0410fa4c7be068b78f162cada64b21315a4"
+    }
+  ]
+}
