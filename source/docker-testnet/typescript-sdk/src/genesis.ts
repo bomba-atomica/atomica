@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { existsSync, mkdirSync, rmSync } from "fs";
+import { existsSync, mkdirSync, rmSync, readFileSync } from "fs";
 import { resolve as pathResolve } from "path";
 
 /**
@@ -78,6 +78,23 @@ interface ScriptConfig {
     baseIp: string;
 }
 
+function extractImageFromCompose(configDir: string): string | null {
+    try {
+        const composePath = pathResolve(configDir, "docker-compose.yaml");
+        if (!existsSync(composePath)) return null;
+        
+        const content = readFileSync(composePath, "utf-8");
+        // Look for image: "${IMAGE_NAME:-...}"
+        const match = content.match(/image:\s*"?\$\{IMAGE_NAME:-([^"}]+)\}"?/);
+        if (match && match[1]) {
+            return match[1];
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
 /**
  * Run the genesis generation script inside Docker container
  * This ensures the aptos CLI version matches the Move framework version
@@ -89,34 +106,44 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         console.log(`  Running genesis script in Docker container...`);
 
         // Use the specific SHA pinned image for stability in CI and production.
+        // Priority: Env Var > Docker Compose Default > Hardcoded Fallback
+        
+        // Try to extract from docker-compose to ensure consistency
+        const configDir = pathResolve(workspaceDir, "..", "config");
+        const composeImage = extractImageFromCompose(configDir);
+        
         const genesisImage =
             process.env.IMAGE_NAME ||
-            `${process.env.VALIDATOR_IMAGE_REPO || "ghcr.io/bomba-atomica/atomica-aptos/validator"}@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda`;
+            composeImage ||
+            process.env.VALIDATOR_IMAGE_REPO || 
+            "ghcr.io/bomba-atomica/atomica-aptos/validator:latest";
 
         const validatorImage = genesisImage;
 
         // Find the framework.mrb file - try multiple possible locations relative to workspaceDir
-        const possiblePaths = [
-            pathResolve(workspaceDir, "..", "..", "..", "move-framework-fixtures", "head.mrb"),
-            pathResolve(workspaceDir, "..", "..", "move-framework-fixtures", "head.mrb"),
-            pathResolve(process.cwd(), "..", "move-framework-fixtures", "head.mrb"),
-            "/Users/lucas/code/rust/atomica-docker-infra/source/move-framework-fixtures/head.mrb",
-        ];
-
+        // Note: We prefer using the framework embedded in the Docker image to ensure
+        // compatibility between the genesis and the validator binary.
         let frameworkPath = "";
-        for (const p of possiblePaths) {
-            if (existsSync(p)) {
-                frameworkPath = p;
-                break;
+
+        if (process.env.FORCE_LOCAL_FRAMEWORK) {
+            const overridePath = process.env.FORCE_LOCAL_FRAMEWORK;
+            // Basic check if it's a path or just a boolean flag
+            if (overridePath === "true" || overridePath === "1") {
+                console.warn(
+                    "Warning: FORCE_LOCAL_FRAMEWORK set to 'true', but expected a file path. Using default image framework.",
+                );
+            } else if (existsSync(overridePath)) {
+                frameworkPath = overridePath;
+                debug("Using local framework override at: " + frameworkPath);
+            } else {
+                console.warn(
+                    `Warning: FORCE_LOCAL_FRAMEWORK path not found: ${overridePath}. Using default image framework.`,
+                );
             }
+        } else {
+            debug("Using framework from Docker image (default)");
         }
 
-        if (!frameworkPath) {
-            reject(new Error(`Framework file not found. Tried: ${possiblePaths.join(", ")}`));
-            return;
-        }
-
-        debug("Using framework at: " + frameworkPath);
         debug("Using genesis image: " + genesisImage);
         debug("Using validator image: " + validatorImage);
 
@@ -129,13 +156,13 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
             `${workspaceDir}:/workspace`,
             "-v",
             `${scriptPath}:/genesis-script.sh:ro`,
-            "-v",
-            `${frameworkPath}:/framework.mrb:ro`,
-            "-w",
-            "/workspace",
-            "--entrypoint",
-            "/bin/bash",
         ];
+
+        if (frameworkPath) {
+            dockerArgs.push("-v", `${frameworkPath}:/framework.mrb:ro`);
+        }
+
+        dockerArgs.push("-w", "/workspace", "--entrypoint", "/bin/bash");
 
         // Run as current user to avoid permission issues with bind mounts
         if (
