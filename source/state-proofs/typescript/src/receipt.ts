@@ -10,6 +10,10 @@ import { Trie } from "@ethereumjs/trie";
 import { hexToBytes } from "@ethereumjs/util";
 import type { Block, Receipt } from "./types";
 
+function ensureHex(value: string): `0x${string}` {
+    return value.startsWith("0x") ? (value as `0x${string}`) : (`0x${value}` as `0x${string}`);
+}
+
 /**
  * Verify a receipt inclusion proof
  *
@@ -70,17 +74,17 @@ export function encodeReceipt(receipt: Receipt): Buffer {
             statusOrRoot = Buffer.from([statusInt]);
         }
     } else if (receipt.root) {
-        statusOrRoot = Buffer.from(hexToBytes(receipt.root));
+        statusOrRoot = Buffer.from(hexToBytes(ensureHex(receipt.root)));
     } else {
         statusOrRoot = Buffer.from([1]);
     }
 
     const cumulativeGas = BigInt(receipt.cumulativeGasUsed);
-    const bloom = Buffer.from(hexToBytes(receipt.logsBloom));
+    const bloom = Buffer.from(hexToBytes(ensureHex(receipt.logsBloom)));
     const logs = receipt.logs.map((log) => [
-        Buffer.from(hexToBytes(log.address)),
-        log.topics.map((t) => Buffer.from(hexToBytes(t))),
-        Buffer.from(hexToBytes(log.data)),
+        Buffer.from(hexToBytes(ensureHex(log.address))),
+        log.topics.map((t) => Buffer.from(hexToBytes(ensureHex(t)))),
+        Buffer.from(hexToBytes(ensureHex(log.data))),
     ]);
 
     const receiptData = [statusOrRoot, cumulativeGas, bloom, logs];
