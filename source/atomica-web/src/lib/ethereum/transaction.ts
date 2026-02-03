@@ -42,17 +42,12 @@ async function ensureConnected(): Promise<string> {
 export async function mintFakeETH(
   amount: bigint
 ): Promise<TransactionResult> {
-  await ensureConnected();
+  const address = await ensureConnected();
 
   const contract = await getFakeETHContractWithSigner();
-  const signer = await contract.runner?.getAddress();
 
-  if (!signer) {
-    throw new Error("No signer available");
-  }
-
-  // Call mint function
-  const tx = await contract.mint(signer, amount);
+  // Call mint function (mint to the connected address)
+  const tx = await contract.mint(address, amount);
 
   return {
     hash: tx.hash,
@@ -70,17 +65,12 @@ export async function mintFakeETH(
 export async function mintFakeUSD(
   amount: bigint
 ): Promise<TransactionResult> {
-  await ensureConnected();
+  const address = await ensureConnected();
 
   const contract = await getFakeUSDContractWithSigner();
-  const signer = await contract.runner?.getAddress();
 
-  if (!signer) {
-    throw new Error("No signer available");
-  }
-
-  // Call mint function
-  const tx = await contract.mint(signer, amount);
+  // Call mint function (mint to the connected address)
+  const tx = await contract.mint(address, amount);
 
   return {
     hash: tx.hash,
@@ -146,30 +136,20 @@ export async function getTransactionStatus(
  * Estimate gas for minting FakeETH
  */
 export async function estimateMintFakeETHGas(amount: bigint): Promise<bigint> {
-  await ensureConnected();
+  const address = await ensureConnected();
 
   const contract = await getFakeETHContractWithSigner();
-  const signer = await contract.runner?.getAddress();
 
-  if (!signer) {
-    throw new Error("No signer available");
-  }
-
-  return contract.mint.estimateGas(signer, amount);
+  return contract.mint.estimateGas(address, amount);
 }
 
 /**
  * Estimate gas for minting FakeUSD
  */
 export async function estimateMintFakeUSDGas(amount: bigint): Promise<bigint> {
-  await ensureConnected();
+  const address = await ensureConnected();
 
   const contract = await getFakeUSDContractWithSigner();
-  const signer = await contract.runner?.getAddress();
 
-  if (!signer) {
-    throw new Error("No signer available");
-  }
-
-  return contract.mint.estimateGas(signer, amount);
+  return contract.mint.estimateGas(address, amount);
 }

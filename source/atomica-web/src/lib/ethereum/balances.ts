@@ -68,39 +68,27 @@ export async function getAllBalances(address: string): Promise<{
 /**
  * Format ETH balance for display
  * @param balance Balance in wei
- * @param decimals Number of decimal places to show (default: 4)
  * @returns Formatted string (e.g., "10.5000")
  */
-export function formatETHBalance(
-  balance: bigint,
-  decimals: number = 4
-): string {
+export function formatETHBalance(balance: bigint): string {
   return ethers.formatEther(balance);
 }
 
 /**
  * Format FakeUSD balance for display
  * @param balance Balance in smallest units (6 decimals)
- * @param decimals Number of decimal places to show (default: 2)
  * @returns Formatted string (e.g., "10000.00")
  */
-export function formatUSDBalance(
-  balance: bigint,
-  decimals: number = 2
-): string {
+export function formatUSDBalance(balance: bigint): string {
   return ethers.formatUnits(balance, 6);
 }
 
 /**
  * Format FakeETH balance for display
  * @param balance Balance in smallest units (18 decimals)
- * @param decimals Number of decimal places to show (default: 4)
  * @returns Formatted string (e.g., "10.5000")
  */
-export function formatFakeETHBalance(
-  balance: bigint,
-  decimals: number = 4
-): string {
+export function formatFakeETHBalance(balance: bigint): string {
   return ethers.formatEther(balance);
 }
 
