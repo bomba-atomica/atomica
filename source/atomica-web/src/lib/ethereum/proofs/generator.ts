@@ -111,7 +111,7 @@ export async function generateLockedBalanceProof(
   // We need to decode the RLP value from the storage proof nodes
   const storageProofData = proof.storageProof[0];
   let storageValue = BigInt(0);
-  
+
   // Try direct parsing first
   const directValue = BigInt(storageProofData.value);
   if (directValue > 0n) {
@@ -290,17 +290,17 @@ export function validateProof(proof: LockedBalanceProof): void {
 
 /**
  * Decode the storage value from RLP-encoded storage proof nodes
- * 
+ *
  * Ethereum's eth_getProof may return value=0 even when the actual value
  * exists in the MPT proof nodes. This function decodes the RLP to extract
  * the real value.
- * 
+ *
  * @param proofNodes - RLP-encoded storage proof nodes from eth_getProof
  * @returns The decoded storage value as BigInt
  */
 function decodeValueFromStorageProof(proofNodes: string[]): bigint {
   for (const node of proofNodes) {
-    const data = Buffer.from(node.slice(2), 'hex');
+    const data = Buffer.from(node.slice(2), "hex");
     const result = decodeValueFromRlp(data);
     if (result !== null) return result;
   }
@@ -320,7 +320,7 @@ function decodeValueFromRlp(data: Buffer): bigint | null {
   if (firstByte >= 0xc0 && firstByte <= 0xf7) {
     // Short list: header = 0xc0 + payload_length
     const payloadLen = firstByte - 0xc0;
-    
+
     // Parse list items - storage leaf node has [key, value]
     let pos = 1;
     const items: Buffer[] = [];
@@ -335,7 +335,7 @@ function decodeValueFromRlp(data: Buffer): bigint | null {
     // If we have 2 items, the second is the value
     if (items.length >= 2) {
       let value = items[1];
-      
+
       // Value might be RLP-encoded
       if (value.length > 0 && value[0] >= 0x80 && value[0] <= 0xb7) {
         // Short string RLP encoding
@@ -344,9 +344,9 @@ function decodeValueFromRlp(data: Buffer): bigint | null {
           value = value.slice(1, 1 + strLen);
         }
       }
-      
+
       try {
-        return BigInt('0x' + value.toString('hex'));
+        return BigInt("0x" + value.toString("hex"));
       } catch {
         return null;
       }
@@ -355,8 +355,10 @@ function decodeValueFromRlp(data: Buffer): bigint | null {
     // Long list
     const lenBytes = firstByte - 0xf7;
     if (data.length < 1 + lenBytes) return null;
-    
-    const payloadLen = Number('0x' + data.slice(1, 1 + lenBytes).toString('hex'));
+
+    const payloadLen = Number(
+      "0x" + data.slice(1, 1 + lenBytes).toString("hex"),
+    );
     let pos = 1 + lenBytes;
     const items: Buffer[] = [];
 
@@ -376,7 +378,7 @@ function decodeValueFromRlp(data: Buffer): bigint | null {
         }
       }
       try {
-        return BigInt('0x' + value.toString('hex'));
+        return BigInt("0x" + value.toString("hex"));
       } catch {
         return null;
       }
@@ -389,7 +391,9 @@ function decodeValueFromRlp(data: Buffer): bigint | null {
 /**
  * Decode a single RLP item (simplified)
  */
-function decodeRlpItemSimple(data: Buffer): { buffer: Buffer; consumed: number } | null {
+function decodeRlpItemSimple(
+  data: Buffer,
+): { buffer: Buffer; consumed: number } | null {
   if (data.length === 0) return null;
 
   const firstByte = data[0];
@@ -409,9 +413,12 @@ function decodeRlpItemSimple(data: Buffer): { buffer: Buffer; consumed: number }
   // Long string (0xb8+)
   const lenBytes = firstByte - 0xb7;
   if (data.length < 1 + lenBytes) return null;
-  const strLen = Number('0x' + data.slice(1, 1 + lenBytes).toString('hex'));
+  const strLen = Number("0x" + data.slice(1, 1 + lenBytes).toString("hex"));
   if (data.length < 1 + lenBytes + strLen) return null;
-  return { buffer: data.slice(1 + lenBytes, 1 + lenBytes + strLen), consumed: 1 + lenBytes + strLen };
+  return {
+    buffer: data.slice(1 + lenBytes, 1 + lenBytes + strLen),
+    consumed: 1 + lenBytes + strLen,
+  };
 }
 
 /**
