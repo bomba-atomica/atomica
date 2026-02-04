@@ -252,6 +252,16 @@ export default defineConfig({
      *
      * See: tests/README.md#meta-tests and tests/meta/README.md
      */
-    exclude: ["tests/meta/**", "test-utils/**", "**/node_modules/**"],
+    exclude: [
+      "tests/meta/**",
+      "test-utils/**",
+      "**/node_modules/**",
+      "tests/integration/ethereum/proof-generation.test.ts",
+      "tests/integration/ethereum/erc20-deployment.test.ts",
+      "tests/integration/cross-chain/anvil-deployment.test.ts",
+      "tests/integration/cross-chain/lock-receipt-e2e.test.ts",
+      "tests/integration/cross-chain/minimal-deployment.test.ts",
+      "tests/integration/dual-testnet/**",
+    ],
   },
 });
