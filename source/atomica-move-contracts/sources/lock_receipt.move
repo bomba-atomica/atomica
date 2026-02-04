@@ -354,8 +354,8 @@ module atomica::lock_receipt {
 
     // ===================== View Functions =====================
 
-    /// Check if a lock has been claimed
     #[view]
+    /// Check if a lock has been claimed
     public fun is_lock_claimed<Chain, Asset>(lock_id: vector<u8>): bool acquires ReceiptRegistry {
         if (!exists<ReceiptRegistry<Chain, Asset>>(@atomica)) {
             return false
@@ -365,8 +365,8 @@ module atomica::lock_receipt {
         simple_map::contains_key(&registry.claimed_locks, &lock_id)
     }
 
-    /// Get total locked value for a Chain/Asset pair
     #[view]
+    /// Get total locked value for a Chain/Asset pair
     public fun get_total_locked<Chain, Asset>(): u256 acquires ReceiptRegistry {
         if (!exists<ReceiptRegistry<Chain, Asset>>(@atomica)) {
             return 0
@@ -376,8 +376,8 @@ module atomica::lock_receipt {
         registry.total_locked
     }
 
-    /// Get total receipt count for a Chain/Asset pair
     #[view]
+    /// Get total receipt count for a Chain/Asset pair
     public fun get_receipt_count<Chain, Asset>(): u64 acquires ReceiptRegistry {
         if (!exists<ReceiptRegistry<Chain, Asset>>(@atomica)) {
             return 0
@@ -387,8 +387,8 @@ module atomica::lock_receipt {
         registry.receipt_count
     }
 
-    /// Get receipt details
     #[view]
+    /// Get receipt details
     public fun get_receipt<Chain, Asset>(
         lock_id: vector<u8>
     ): (address, u256, u64, u8) acquires ReceiptRegistry {
@@ -409,8 +409,8 @@ module atomica::lock_receipt {
         (receipt.user, receipt.amount, receipt.block_number, receipt.status)
     }
 
-    /// Check if registry is initialized for a Chain/Asset pair
     #[view]
+    /// Check if registry is initialized for a Chain/Asset pair
     public fun is_registry_initialized<Chain, Asset>(): bool {
         exists<ReceiptRegistry<Chain, Asset>>(@atomica)
     }
