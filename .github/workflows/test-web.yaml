@@ -31,26 +31,37 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '20'
+          bun-version: latest
 
-      - name: Build Ethereum Docker Testnet SDK
+      - name: Build local TypeScript packages
         run: |
-          cd source/docker-testnet/ethereum-testnet/typescript-sdk
-          npm install
-          npm run build
+          # Build @atomica/docker-testnet
+          cd source/docker-testnet/typescript-sdk
+          bun install
+          bun run build
 
-      - name: Install dependencies
+          # Build @atomica/ethereum-docker-testnet
+          cd ../ethereum-testnet/typescript-sdk
+          bun install
+          bun run build
+
+          # Build @atomica/state-proof-verifier
+          cd ../../../state-proofs/typescript
+          bun install
+          bun run build
+
+      - name: Install atomica-web dependencies
         run: |
           cd source/atomica-web
-          npm install
+          bun install
 
       - name: Install Playwright browsers
         run: |
           cd source/atomica-web
-          npx playwright install --with-deps
+          bunx playwright install --with-deps
 
       - name: Install Aptos CLI
         if: matrix.type == 'meta' || matrix.type == 'integration' || matrix.type == 'ui'
@@ -76,4 +87,4 @@ jobs:
       - name: Run TypeScript tests with Vitest
         run: |
           cd source/atomica-web
-          npm run test:${{ matrix.type }}
+          bun run test:${{ matrix.type }}
