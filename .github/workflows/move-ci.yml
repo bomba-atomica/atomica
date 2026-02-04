@@ -23,13 +23,13 @@ jobs:
       - name: Configure Git credentials
         run: |
           git config --global credential.helper store
-          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Run Move Tests
         run: |
-          aptos move test --package-dir source/atomica-move-contracts
+          /home/runner/.local/bin/aptos move test --package-dir source/atomica-move-contracts
 
   lint:
     name: Check Lint Warnings
@@ -47,7 +47,7 @@ jobs:
       - name: Configure Git credentials
         run: |
           git config --global credential.helper store
-          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
            
