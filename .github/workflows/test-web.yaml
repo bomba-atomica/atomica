@@ -50,7 +50,7 @@ jobs:
         if: matrix.type == 'meta' || matrix.type == 'integration' || matrix.type == 'ui'
         run: |
           # Download aptos binary from atomica-aptos releases
-          APTOS_VERSION="binary-fac20096d4"
+          APTOS_VERSION="binary-125d36b957"
           # Extract hash from version tag (format: binary-HASH)
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
