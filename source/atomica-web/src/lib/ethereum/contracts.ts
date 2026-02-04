@@ -68,7 +68,8 @@ export async function areContractsDeployed(): Promise<boolean> {
 
     // "0x" means no code deployed
     return fakeETHCode !== "0x" && fakeUSDCode !== "0x";
-  } catch {
+  } catch (error) {
+    console.warn("Failed to check contract deployment:", error);
     return false;
   }
 }

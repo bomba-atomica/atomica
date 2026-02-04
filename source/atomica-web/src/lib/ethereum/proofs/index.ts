@@ -20,6 +20,5 @@ export {
   validateProof,
   formatProof,
   type StorageProof,
-  type AccountProof,
   type LockedBalanceProof,
 } from "./generator.js";

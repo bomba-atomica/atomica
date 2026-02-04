@@ -9,7 +9,12 @@ import {
   getFakeETHContractWithSigner,
   getFakeUSDContractWithSigner,
 } from "./contracts";
-import { connectMetaMask, isCorrectNetwork, switchToTestnet } from "./config";
+import {
+  connectMetaMask,
+  isCorrectNetwork,
+  switchToTestnet,
+  getEthereumProvider,
+} from "./config";
 
 export interface TransactionResult {
   hash: string;
@@ -102,12 +107,7 @@ export async function waitForTransaction(
   txHash: string,
   confirmations: number = 1,
 ): Promise<ethers.TransactionReceipt | null> {
-  const provider = (await getFakeETHContractWithSigner()).runner?.provider;
-
-  if (!provider) {
-    throw new Error("No provider available");
-  }
-
+  const provider = getEthereumProvider();
   return provider.waitForTransaction(txHash, confirmations);
 }
 
@@ -119,12 +119,7 @@ export async function waitForTransaction(
 export async function getTransactionStatus(
   txHash: string,
 ): Promise<ethers.TransactionReceipt | null> {
-  const provider = (await getFakeETHContractWithSigner()).runner?.provider;
-
-  if (!provider) {
-    throw new Error("No provider available");
-  }
-
+  const provider = getEthereumProvider();
   return provider.getTransactionReceipt(txHash);
 }
 

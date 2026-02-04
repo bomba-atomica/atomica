@@ -20,25 +20,10 @@ import { readFileSync } from "fs";
 import { execSync } from "child_process";
 import { generateLockedBalanceProof } from "../src/lib/ethereum/proofs/generator";
 import { serializeProofForAptos } from "../src/lib/ethereum/proofs/index";
-
-interface TokenContract {
-  mint(to: string, amount: bigint): Promise<ethers.ContractTransactionResponse>;
-  approve(
-    spender: string,
-    amount: bigint,
-  ): Promise<ethers.ContractTransactionResponse>;
-  balanceOf(account: string): Promise<bigint>;
-  getAddress(): Promise<string>;
-}
-
-interface LockBoxContract {
-  lock(
-    token: string,
-    amount: bigint,
-  ): Promise<ethers.ContractTransactionResponse>;
-  getLockedBalance(user: string, token: string): Promise<bigint>;
-  getAddress(): Promise<string>;
-}
+import type {
+  TokenContract,
+  LockBoxContract,
+} from "../src/lib/ethereum/types.js";
 
 async function deployContract<T>(
   signer: ethers.Wallet,
@@ -53,7 +38,7 @@ async function deployContract<T>(
   await contract.waitForDeployment();
   const address = await contract.getAddress();
   console.log(`   ✅ ${contractName} deployed at: ${address}`);
-  return contract as unknown as T;
+  return contract as T;
 }
 
 async function main() {
@@ -96,19 +81,22 @@ async function main() {
     console.log("\n🚀 Step 3/6: Compiling contracts...");
     console.log("   Compiling production Solidity contracts...");
     try {
-      execSync("cd ../evm-contracts && forge build", { stdio: "inherit" });
-    } catch {
-      throw new Error("Forge build failed");
+      execSync("cd evm-contracts && forge build", { stdio: "inherit" });
+    } catch (error) {
+      console.error("Forge build output:", error);
+      throw new Error(
+        `Forge build failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
 
     const fakeEthArtifact = JSON.parse(
-      readFileSync("../evm-contracts/out/FakeETH.sol/FakeETH.json", "utf-8"),
+      readFileSync("evm-contracts/out/FakeETH.sol/FakeETH.json", "utf-8"),
     );
     const fakeUsdArtifact = JSON.parse(
-      readFileSync("../evm-contracts/out/FakeUSD.sol/FakeUSD.json", "utf-8"),
+      readFileSync("evm-contracts/out/FakeUSD.sol/FakeUSD.json", "utf-8"),
     );
     const lockBoxArtifact = JSON.parse(
-      readFileSync("../evm-contracts/out/LockBox.sol/LockBox.json", "utf-8"),
+      readFileSync("evm-contracts/out/LockBox.sol/LockBox.json", "utf-8"),
     );
 
     const fakeETH = await deployContract<TokenContract>(
