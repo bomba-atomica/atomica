@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+interface IERC20 {
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+}
+
 abstract contract Ownable {
     address public owner;
 
@@ -26,6 +31,8 @@ contract LockBox is Ownable {
     address public fakeETH;
     address public fakeUSD;
 
+    event TokensLocked(address indexed user, address indexed token, uint256 amount);
+
     constructor(address _fakeETH, address _fakeUSD) {
         fakeETH = _fakeETH;
         fakeUSD = _fakeUSD;
@@ -33,7 +40,16 @@ contract LockBox is Ownable {
 
     function lock(address token, uint256 amount) external {
         require(token == fakeETH || token == fakeUSD, "Invalid token");
+        require(amount > 0, "Amount must be greater than 0");
+        
+        // Actually transfer tokens to this contract
+        bool success = IERC20(token).transferFrom(msg.sender, address(this), amount);
+        require(success, "Transfer failed");
+        
+        // Update locked balance
         lockedBalances[msg.sender][token] += amount;
+        
+        emit TokensLocked(msg.sender, token, amount);
     }
 
     function getLockedBalance(address user, address token) external view returns (uint256) {

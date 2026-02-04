@@ -14,6 +14,13 @@ import {
   calculateStorageKey,
 } from "../../../src/lib/ethereum/proofs/generator";
 import { ethereumToAptosAddress } from "../../../src/lib/ethereum/address-converter";
+import {
+  compileContracts,
+  getFakeETHArtifact,
+  getFakeUSDArtifact,
+  getLockBoxArtifact,
+  deployWithRetry,
+} from "../ethereum/solidity-compiler";
 
 /**
  * End-to-End Cross-Chain Lock Receipt Test
@@ -82,16 +89,49 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     // Deploy Ethereum contracts
     console.log("\n  Deploying Ethereum contracts...");
 
-    // Note: These would be deployed via Foundry scripts
-    // For now, using pre-deployed addresses from docker testnet
-    // TODO: Implement actual deployment or use docker-compose pre-deployment
-    fakeEthAddress = "0xb4B46bdAA835F8E4b4d8e208B6559cD267851051"; // From golden vectors
-    fakeUsdAddress = "0x17435ccE3d1B4fA2e5f8A08eD921D57C6762A180";
-    lockBoxAddress = "0x703848F4c85f18e3acd8196c8eC91eb0b7Bd0797";
+    // Compile contracts
+    await compileContracts();
 
-    console.log(`  FakeETH: ${fakeEthAddress}`);
-    console.log(`  FakeUSD: ${fakeUsdAddress}`);
-    console.log(`  LockBox: ${lockBoxAddress}`);
+    // Deploy FakeETH
+    console.log("  Deploying FakeETH...");
+    const fakeETHArtifact = getFakeETHArtifact();
+    const FakeETHFactory = new ethers.ContractFactory(
+      fakeETHArtifact.abi,
+      fakeETHArtifact.bytecode.object,
+      ethSigner,
+    );
+    const fakeEthContract = await deployWithRetry(FakeETHFactory, ethSigner);
+    fakeEthAddress = await fakeEthContract.getAddress();
+
+    // Deploy FakeUSD
+    console.log("  Deploying FakeUSD...");
+    const fakeUSDArtifact = getFakeUSDArtifact();
+    const FakeUSDFactory = new ethers.ContractFactory(
+      fakeUSDArtifact.abi,
+      fakeUSDArtifact.bytecode.object,
+      ethSigner,
+    );
+    const fakeUsdContract = await deployWithRetry(FakeUSDFactory, ethSigner);
+    fakeUsdAddress = await fakeUsdContract.getAddress();
+
+    // Deploy LockBox
+    console.log("  Deploying LockBox...");
+    const lockBoxArtifact = getLockBoxArtifact();
+    const LockBoxFactory = new ethers.ContractFactory(
+      lockBoxArtifact.abi,
+      lockBoxArtifact.bytecode.object,
+      ethSigner,
+    );
+    const lockBoxContract = await deployWithRetry(
+      LockBoxFactory,
+      ethSigner,
+      [fakeEthAddress, fakeUsdAddress],
+    );
+    lockBoxAddress = await lockBoxContract.getAddress();
+
+    console.log(`  ✓ FakeETH: ${fakeEthAddress}`);
+    console.log(`  ✓ FakeUSD: ${fakeUsdAddress}`);
+    console.log(`  ✓ LockBox: ${lockBoxAddress}`);
 
     // ========== PHASE 3: Setup Aptos ==========
     console.log("\n[PHASE 3] Setting up Aptos...");
@@ -157,13 +197,11 @@ describe("Cross-Chain Lock Receipt E2E", () => {
   it("should mint FakeETH and FakeUSD on Ethereum", async () => {
     console.log("\n[TEST 1] Minting FakeETH and FakeUSD...");
 
-    // Mint FakeETH
+    // Mint FakeETH - use full ABI from compiled artifact
+    const fakeETHArtifact = getFakeETHArtifact();
     const fakeEthContract = new ethers.Contract(
       fakeEthAddress,
-      [
-        "function mint(uint256 amount)",
-        "function balanceOf(address) view returns (uint256)",
-      ],
+      fakeETHArtifact.abi,
       ethSigner,
     );
 
@@ -171,6 +209,30 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     const mintEthTx = await fakeEthContract.mint(MINT_AMOUNT_ETH);
     await mintEthTx.wait();
     console.log(`  ✓ Tx hash: ${mintEthTx.hash}`);
+
+    // Wait for transaction indexing
+    await new Promise((r) => setTimeout(r, 2000));
+
+    const ethBalance = await fakeEthContract.balanceOf(ethSigner.address);
+    expect(ethBalance).toBe(MINT_AMOUNT_ETH);
+    console.log(`  ✓ Balance: ${ethers.formatEther(ethBalance)} FakeETH`);
+
+    // Mint FakeUSD - use full ABI from compiled artifact
+    const fakeUSDArtifact = getFakeUSDArtifact();
+    const fakeUsdContract = new ethers.Contract(
+      fakeUsdAddress,
+      fakeUSDArtifact.abi,
+      ethSigner,
+    );
+
+    console.log(`  Minting ${ethers.formatEther(MINT_AMOUNT_ETH)} FakeETH...`);
+    const mintEthTx = await fakeEthContract.mint(MINT_AMOUNT_ETH);
+    await mintEthTx.wait();
+    console.log(`  ✓ Tx hash: ${mintEthTx.hash}`)
+
+;
+    // Wait for transaction indexing
+    await new Promise((r) => setTimeout(r, 2000));
 
     const ethBalance = await fakeEthContract.balanceOf(ethSigner.address);
     expect(ethBalance).toBe(MINT_AMOUNT_ETH);
@@ -193,6 +255,9 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     await mintUsdTx.wait();
     console.log(`  ✓ Tx hash: ${mintUsdTx.hash}`);
 
+    // Wait for transaction indexing
+    await new Promise((r) => setTimeout(r, 2000));
+
     const usdBalance = await fakeUsdContract.balanceOf(ethSigner.address);
     expect(usdBalance).toBe(MINT_AMOUNT_USD);
     console.log(`  ✓ Balance: ${ethers.formatUnits(usdBalance, 6)} FakeUSD`);
@@ -204,18 +269,17 @@ describe("Cross-Chain Lock Receipt E2E", () => {
   it("should lock FakeETH in LockBox contract", async () => {
     console.log("\n[TEST 2] Locking FakeETH...");
 
+    const fakeETHArtifact = getFakeETHArtifact();
     const fakeEthContract = new ethers.Contract(
       fakeEthAddress,
-      ["function approve(address spender, uint256 amount)"],
+      fakeETHArtifact.abi,
       ethSigner,
     );
 
+    const lockBoxArtifact = getLockBoxArtifact();
     const lockBoxContract = new ethers.Contract(
       lockBoxAddress,
-      [
-        "function lock(address token, uint256 amount)",
-        "function getLockedBalance(address user, address token) view returns (uint256)",
-      ],
+      lockBoxArtifact.abi,
       ethSigner,
     );
 
@@ -230,12 +294,18 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     await approveTx.wait();
     console.log(`  ✓ Approved`);
 
+    // Wait for transaction indexing
+    await new Promise((r) => setTimeout(r, 2000));
+
     // Lock
     console.log(`  Locking ${ethers.formatEther(LOCK_AMOUNT_ETH)} FakeETH...`);
     const lockTx = await lockBoxContract.lock(fakeEthAddress, LOCK_AMOUNT_ETH);
     const lockReceipt = await lockTx.wait();
     console.log(`  ✓ Tx hash: ${lockTx.hash}`);
     console.log(`  ✓ Block: ${lockReceipt!.blockNumber}`);
+
+    // Wait for transaction indexing
+    await new Promise((r) => setTimeout(r, 2000));
 
     // Verify locked balance
     const lockedBalance = await lockBoxContract.getLockedBalance(
@@ -257,18 +327,17 @@ describe("Cross-Chain Lock Receipt E2E", () => {
   it("should lock FakeUSD in LockBox contract", async () => {
     console.log("\n[TEST 3] Locking FakeUSD...");
 
+    const fakeUSDArtifact = getFakeUSDArtifact();
     const fakeUsdContract = new ethers.Contract(
       fakeUsdAddress,
-      ["function approve(address spender, uint256 amount)"],
+      fakeUSDArtifact.abi,
       ethSigner,
     );
 
+    const lockBoxArtifact = getLockBoxArtifact();
     const lockBoxContract = new ethers.Contract(
       lockBoxAddress,
-      [
-        "function lock(address token, uint256 amount)",
-        "function getLockedBalance(address user, address token) view returns (uint256)",
-      ],
+      lockBoxArtifact.abi,
       ethSigner,
     );
 
@@ -283,6 +352,9 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     await approveTx.wait();
     console.log(`  ✓ Approved`);
 
+    // Wait for transaction indexing
+    await new Promise((r) => setTimeout(r, 2000));
+
     // Lock
     console.log(
       `  Locking ${ethers.formatUnits(LOCK_AMOUNT_USD, 6)} FakeUSD...`,
@@ -291,6 +363,9 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     const lockReceipt = await lockTx.wait();
     console.log(`  ✓ Tx hash: ${lockTx.hash}`);
     console.log(`  ✓ Block: ${lockReceipt!.blockNumber}`);
+
+    // Wait for transaction indexing
+    await new Promise((r) => setTimeout(r, 2000));
 
     // Verify locked balance
     const lockedBalance = await lockBoxContract.getLockedBalance(
