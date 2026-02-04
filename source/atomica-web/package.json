@@ -31,7 +31,7 @@
     "@aptos-labs/ts-sdk": "^6.0.0",
     "@atomica/docker-testnet": "file:../docker-testnet/typescript-sdk",
     "@atomica/ethereum-docker-testnet": "file:../docker-testnet/ethereum-testnet/typescript-sdk",
-    "@atomica/state-proof-verifier": "file:../../state-proofs/typescript",
+    "@atomica/state-proof-verifier": "file:../state-proofs/typescript",
     "@heroicons/react": "^2.2.0",
     "@noble/bls12-381": "^1.4.0",
     "@tailwindcss/postcss": "^4.1.18",
