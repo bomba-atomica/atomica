@@ -10,7 +10,7 @@
   "scripts": {
     "prebuild": "cd ../../docker-testnet/ethereum-testnet/typescript-sdk && bun run build",
     "build": "tsc && tsc --project tsconfig.check.json",
-    "postinstall": "cd ../../docker-testnet/ethereum-testnet/typescript-sdk && bun install && bun run build && tsc && tsc --project tsconfig.check.json",
+    "postinstall": "cd ../../docker-testnet/ethereum-testnet/typescript-sdk && bun install && bun run build && bun run build",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "test:integration": "bun test test/integration.test.ts",
