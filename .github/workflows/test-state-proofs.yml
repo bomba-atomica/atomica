@@ -41,7 +41,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - name: Install dependencies
+      # We need to build SDK first because `bun install` in verifier might resolve types/dist
+      - name: Install SDK dependencies
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: bun install
+      - name: Build SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: bun run build
+      - name: Install Verifier dependencies
         working-directory: source/state-proofs/typescript
         run: bun install
       - name: Check Formatting
