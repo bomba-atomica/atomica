@@ -21,6 +21,8 @@ import {
   getLockBoxArtifact,
   deployWithRetry,
 } from "../ethereum/solidity-compiler";
+import { sendAndWaitForTx } from "../helpers/transaction-utils.js";
+import { stripHexPrefix } from "../helpers/hex-utils.js";
 
 /**
  * End-to-End Cross-Chain Lock Receipt Test
@@ -235,17 +237,16 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     );
 
     console.log(`  Minting ${ethers.formatEther(MINT_AMOUNT_ETH)} FakeETH...`);
-    const mintEthTx = await fakeEthContract.mint(MINT_AMOUNT_ETH);
-    const mintEthReceipt = await mintEthTx.wait();
-    if (mintEthReceipt.status === 0) {
-      throw new Error(`Mint transaction reverted: ${mintEthTx.hash}`);
-    }
+    const mintEthReceipt = await sendAndWaitForTx(
+      fakeEthContract.mint(MINT_AMOUNT_ETH),
+      1
+    );
     console.log(
-      `  ✓ Tx hash: ${mintEthTx.hash} (status: ${mintEthReceipt.status})`,
+      `  ✓ Tx hash: ${mintEthReceipt.hash} (status: ${mintEthReceipt.status})`,
     );
 
-    // Wait for transaction indexing
-    await new Promise((r) => setTimeout(r, 2000));
+    // Wait for block confirmation
+    await ethProvider.waitForBlock(mintEthReceipt.blockNumber! + 1);
 
     // Debug: Try direct eth_call to see raw response
     try {
@@ -279,17 +280,16 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     console.log(
       `  Minting ${ethers.formatUnits(MINT_AMOUNT_USD, 6)} FakeUSD...`,
     );
-    const mintUsdTx = await fakeUsdContract.mint(MINT_AMOUNT_USD);
-    const mintUsdReceipt = await mintUsdTx.wait();
-    if (mintUsdReceipt.status === 0) {
-      throw new Error(`Mint transaction reverted: ${mintUsdTx.hash}`);
-    }
+    const mintUsdReceipt = await sendAndWaitForTx(
+      fakeUsdContract.mint(MINT_AMOUNT_USD),
+      1
+    );
     console.log(
-      `  ✓ Tx hash: ${mintUsdTx.hash} (status: ${mintUsdReceipt.status})`,
+      `  ✓ Tx hash: ${mintUsdReceipt.hash} (status: ${mintUsdReceipt.status})`,
     );
 
-    // Wait for transaction indexing
-    await new Promise((r) => setTimeout(r, 2000));
+    // Wait for block confirmation
+    await ethProvider.waitForBlock(mintUsdReceipt.blockNumber! + 1);
 
     const usdBalance = await fakeUsdContract.balanceOf(ethSigner.address);
     expect(usdBalance).toBe(MINT_AMOUNT_USD);
@@ -316,35 +316,30 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       ethSigner,
     );
 
+    // Use nonce management for sequential transactions
+    let nonce = await ethSigner.getNonce();
+
     // Approve
     console.log(
       `  Approving LockBox to spend ${ethers.formatEther(LOCK_AMOUNT_ETH)} FakeETH...`,
     );
-    const approveTx = await fakeEthContract.approve(
-      lockBoxAddress,
-      LOCK_AMOUNT_ETH,
+    const approveReceipt = await sendAndWaitForTx(
+      fakeEthContract.approve(lockBoxAddress, LOCK_AMOUNT_ETH, { nonce: nonce++ }),
+      1
     );
-    const approveReceipt = await approveTx.wait();
-    if (approveReceipt.status === 0) {
-      throw new Error(`Approve transaction reverted: ${approveTx.hash}`);
-    }
     console.log(`  ✓ Approved (status: ${approveReceipt.status})`);
-
-    // Wait for transaction indexing
-    await new Promise((r) => setTimeout(r, 2000));
 
     // Lock
     console.log(`  Locking ${ethers.formatEther(LOCK_AMOUNT_ETH)} FakeETH...`);
-    const lockTx = await lockBoxContract.lock(fakeEthAddress, LOCK_AMOUNT_ETH);
-    const lockReceipt = await lockTx.wait();
-    if (lockReceipt.status === 0) {
-      throw new Error(`Lock transaction reverted: ${lockTx.hash}`);
-    }
-    console.log(`  ✓ Tx hash: ${lockTx.hash} (status: ${lockReceipt.status})`);
-    console.log(`  ✓ Block: ${lockReceipt!.blockNumber}`);
+    const lockReceipt = await sendAndWaitForTx(
+      lockBoxContract.lock(fakeEthAddress, LOCK_AMOUNT_ETH, { nonce: nonce++ }),
+      1
+    );
+    console.log(`  ✓ Tx hash: ${lockReceipt.hash} (status: ${lockReceipt.status})`);
+    console.log(`  ✓ Block: ${lockReceipt.blockNumber}`);
 
-    // Wait for transaction indexing
-    await new Promise((r) => setTimeout(r, 2000));
+    // Wait for block confirmation
+    await ethProvider.waitForBlock(lockReceipt.blockNumber! + 1);
 
     // Verify locked balance
     const lockedBalance = await lockBoxContract.getLockedBalance(
@@ -357,7 +352,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     );
 
     // Store block number for proof generation
-    (global as any).lockEthBlockNumber = lockReceipt!.blockNumber;
+    (global as any).lockEthBlockNumber = lockReceipt.blockNumber;
   }, 60000);
 
   // ============================================================
@@ -380,37 +375,32 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       ethSigner,
     );
 
+    // Use nonce management for sequential transactions
+    let nonce = await ethSigner.getNonce();
+
     // Approve
     console.log(
       `  Approving LockBox to spend ${ethers.formatUnits(LOCK_AMOUNT_USD, 6)} FakeUSD...`,
     );
-    const approveTx = await fakeUsdContract.approve(
-      lockBoxAddress,
-      LOCK_AMOUNT_USD,
+    const approveReceipt = await sendAndWaitForTx(
+      fakeUsdContract.approve(lockBoxAddress, LOCK_AMOUNT_USD, { nonce: nonce++ }),
+      1
     );
-    const approveReceipt = await approveTx.wait();
-    if (approveReceipt.status === 0) {
-      throw new Error(`Approve transaction reverted: ${approveTx.hash}`);
-    }
     console.log(`  ✓ Approved (status: ${approveReceipt.status})`);
-
-    // Wait for transaction indexing
-    await new Promise((r) => setTimeout(r, 2000));
 
     // Lock
     console.log(
       `  Locking ${ethers.formatUnits(LOCK_AMOUNT_USD, 6)} FakeUSD...`,
     );
-    const lockTx = await lockBoxContract.lock(fakeUsdAddress, LOCK_AMOUNT_USD);
-    const lockReceipt = await lockTx.wait();
-    if (lockReceipt.status === 0) {
-      throw new Error(`Lock transaction reverted: ${lockTx.hash}`);
-    }
-    console.log(`  ✓ Tx hash: ${lockTx.hash} (status: ${lockReceipt.status})`);
-    console.log(`  ✓ Block: ${lockReceipt!.blockNumber}`);
+    const lockReceipt = await sendAndWaitForTx(
+      lockBoxContract.lock(fakeUsdAddress, LOCK_AMOUNT_USD, { nonce: nonce++ }),
+      1
+    );
+    console.log(`  ✓ Tx hash: ${lockReceipt.hash} (status: ${lockReceipt.status})`);
+    console.log(`  ✓ Block: ${lockReceipt.blockNumber}`);
 
-    // Wait for transaction indexing
-    await new Promise((r) => setTimeout(r, 2000));
+    // Wait for block confirmation
+    await ethProvider.waitForBlock(lockReceipt.blockNumber! + 1);
 
     // Verify locked balance
     const lockedBalance = await lockBoxContract.getLockedBalance(
@@ -422,7 +412,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       `  ✓ Locked balance: ${ethers.formatUnits(lockedBalance, 6)} FakeUSD`,
     );
 
-    (global as any).lockUsdBlockNumber = lockReceipt!.blockNumber;
+    (global as any).lockUsdBlockNumber = lockReceipt.blockNumber;
   }, 60000);
 
   // ============================================================
@@ -488,20 +478,21 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     // Submit proof to Aptos
     console.log("  Submitting proof transaction...");
 
+    // Strip 0x prefix from all hex strings for Aptos
     const payload = {
       function: "atomica::lock_receipt::register_ethereum_lock",
       typeArguments: ["atomica::lock_receipt::FakeETH"],
       functionArguments: [
         proof.blockNumber,
-        proof.blockHash,
-        proof.stateRoot,
-        lockBoxAddress,
-        ethSigner.address,
-        fakeEthAddress,
-        storageKey,
+        stripHexPrefix(proof.blockHash),
+        stripHexPrefix(proof.stateRoot),
+        stripHexPrefix(lockBoxAddress),
+        stripHexPrefix(ethSigner.address),
+        stripHexPrefix(fakeEthAddress),
+        stripHexPrefix(storageKey),
         proof.storageValue,
-        proof.accountProof,
-        proof.storageProof,
+        proof.accountProof.map(stripHexPrefix),
+        proof.storageProof.map(stripHexPrefix),
       ],
     };
 
@@ -515,10 +506,12 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       transaction: txn,
     });
 
-    await aptosClient.waitForTransaction({
+    const result = await aptosClient.waitForTransaction({
       transactionHash: committedTxn.hash,
+      options: { checkSuccess: true },
     });
     console.log(`  ✓ Tx hash: ${committedTxn.hash}`);
+    console.log(`  ✓ Transaction confirmed in block ${result.version}`);
 
     // Verify receipt was created
     console.log("  Verifying receipt...");
@@ -595,20 +588,21 @@ describe("Cross-Chain Lock Receipt E2E", () => {
 
     console.log("  Attempting to submit same proof again...");
 
+    // Strip 0x prefix from all hex strings for Aptos
     const payload = {
       function: "atomica::lock_receipt::register_ethereum_lock",
       typeArguments: ["atomica::lock_receipt::FakeETH"],
       functionArguments: [
         proof.blockNumber,
-        proof.blockHash,
-        proof.stateRoot,
-        lockBoxAddress,
-        ethSigner.address,
-        fakeEthAddress,
-        storageKey,
+        stripHexPrefix(proof.blockHash),
+        stripHexPrefix(proof.stateRoot),
+        stripHexPrefix(lockBoxAddress),
+        stripHexPrefix(ethSigner.address),
+        stripHexPrefix(fakeEthAddress),
+        stripHexPrefix(storageKey),
         proof.storageValue,
-        proof.accountProof,
-        proof.storageProof,
+        proof.accountProof.map(stripHexPrefix),
+        proof.storageProof.map(stripHexPrefix),
       ],
     };
 

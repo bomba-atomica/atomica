@@ -16,6 +16,7 @@ import {
   getLockBoxArtifact,
   deployWithRetry,
 } from "./solidity-compiler.js";
+import { sendAndWaitForTx } from "../helpers/transaction-utils.js";
 
 /**
  * Integration tests for state proof generation
@@ -125,12 +126,30 @@ describe("Ethereum State Proof Generation", () => {
     // Mint and lock some tokens
     const lockAmount = ethers.parseEther("10");
 
-    await fakeETH.mint(deployer.address, lockAmount);
-    await fakeETH.approve(lockBoxAddress, lockAmount);
-    await lockBox.lock(fakeETHAddress, lockAmount);
+    // Use explicit nonce management for sequential transactions
+    let nonce = await deployer.getNonce();
 
-    // Wait for transaction to be mined
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const mintReceipt = await sendAndWaitForTx(
+      fakeETH.mint(deployer.address, lockAmount, { nonce: nonce++ }),
+      1
+    );
+    console.log(`✓ Minted FakeETH: ${mintReceipt.hash}`);
+
+    const approveReceipt = await sendAndWaitForTx(
+      fakeETH.approve(lockBoxAddress, lockAmount, { nonce: nonce++ }),
+      1
+    );
+    console.log(`✓ Approved FakeETH: ${approveReceipt.hash}`);
+
+    const lockReceipt = await sendAndWaitForTx(
+      lockBox.lock(fakeETHAddress, lockAmount, { nonce: nonce++ }),
+      1
+    );
+    console.log(`✓ Locked FakeETH: ${lockReceipt.hash}`);
+
+    // Wait for at least one block confirmation after lock
+    const targetBlock = lockReceipt.blockNumber! + 1;
+    await provider.waitForBlock(targetBlock);
 
     // Generate proof
     const proof = await generateLockedBalanceProof(
@@ -159,11 +178,13 @@ describe("Ethereum State Proof Generation", () => {
     // Lock tokens
     const lockAmount = ethers.parseEther("5");
 
-    await fakeETH.mint(deployer.address, lockAmount);
-    await fakeETH.approve(lockBoxAddress, lockAmount);
-    await lockBox.lock(fakeETHAddress, lockAmount);
+    let nonce = await deployer.getNonce();
+    await sendAndWaitForTx(fakeETH.mint(deployer.address, lockAmount, { nonce: nonce++ }), 1);
+    await sendAndWaitForTx(fakeETH.approve(lockBoxAddress, lockAmount, { nonce: nonce++ }), 1);
+    const lockReceipt = await sendAndWaitForTx(lockBox.lock(fakeETHAddress, lockAmount, { nonce: nonce++ }), 1);
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Wait for block confirmation
+    await provider.waitForBlock(lockReceipt.blockNumber! + 1);
 
     // Generate proof
     const proof = await generateLockedBalanceProof(
@@ -181,11 +202,13 @@ describe("Ethereum State Proof Generation", () => {
     // Lock FakeUSD
     const lockAmount = BigInt(10_000 * 10 ** 6); // 10k USD
 
-    await fakeUSD.mint(deployer.address, lockAmount);
-    await fakeUSD.approve(lockBoxAddress, lockAmount);
-    await lockBox.lock(fakeUSDAddress, lockAmount);
+    let nonce = await deployer.getNonce();
+    await sendAndWaitForTx(fakeUSD.mint(deployer.address, lockAmount, { nonce: nonce++ }), 1);
+    await sendAndWaitForTx(fakeUSD.approve(lockBoxAddress, lockAmount, { nonce: nonce++ }), 1);
+    const lockReceipt = await sendAndWaitForTx(lockBox.lock(fakeUSDAddress, lockAmount, { nonce: nonce++ }), 1);
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Wait for block confirmation
+    await provider.waitForBlock(lockReceipt.blockNumber! + 1);
 
     // Generate proof
     const proof = await generateLockedBalanceProof(
@@ -203,11 +226,13 @@ describe("Ethereum State Proof Generation", () => {
     // Lock tokens
     const lockAmount = ethers.parseEther("1");
 
-    await fakeETH.mint(deployer.address, lockAmount);
-    await fakeETH.approve(lockBoxAddress, lockAmount);
-    await lockBox.lock(fakeETHAddress, lockAmount);
+    let nonce = await deployer.getNonce();
+    await sendAndWaitForTx(fakeETH.mint(deployer.address, lockAmount, { nonce: nonce++ }), 1);
+    await sendAndWaitForTx(fakeETH.approve(lockBoxAddress, lockAmount, { nonce: nonce++ }), 1);
+    const lockReceipt = await sendAndWaitForTx(lockBox.lock(fakeETHAddress, lockAmount, { nonce: nonce++ }), 1);
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Wait for block confirmation
+    await provider.waitForBlock(lockReceipt.blockNumber! + 1);
 
     // Generate proof at current block
     const proof = await generateLockedBalanceProof(
@@ -230,11 +255,13 @@ describe("Ethereum State Proof Generation", () => {
     // Lock tokens
     const lockAmount = ethers.parseEther("3");
 
-    await fakeETH.mint(deployer.address, lockAmount);
-    await fakeETH.approve(lockBoxAddress, lockAmount);
-    await lockBox.lock(fakeETHAddress, lockAmount);
+    let nonce = await deployer.getNonce();
+    await sendAndWaitForTx(fakeETH.mint(deployer.address, lockAmount, { nonce: nonce++ }), 1);
+    await sendAndWaitForTx(fakeETH.approve(lockBoxAddress, lockAmount, { nonce: nonce++ }), 1);
+    const lockReceipt = await sendAndWaitForTx(lockBox.lock(fakeETHAddress, lockAmount, { nonce: nonce++ }), 1);
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Wait for block confirmation
+    await provider.waitForBlock(lockReceipt.blockNumber! + 1);
 
     // Generate proof
     const proof = await generateLockedBalanceProof(
