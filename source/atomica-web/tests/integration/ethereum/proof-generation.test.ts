@@ -9,6 +9,13 @@ import {
   isProofFinalized,
   serializeProofForAptos,
 } from "../../../src/lib/ethereum/proofs/index.js";
+import {
+  compileContracts,
+  getFakeETHArtifact,
+  getFakeUSDArtifact,
+  getLockBoxArtifact,
+  deployWithRetry,
+} from "./solidity-compiler.js";
 
 /**
  * Integration tests for state proof generation
@@ -43,55 +50,47 @@ describe("Ethereum State Proof Generation", () => {
     const testAccounts = testnet.getTestAccounts();
     deployer = new ethers.Wallet(testAccounts[0].privateKey, provider);
 
+    console.log("Compiling contracts...");
+    await compileContracts();
+
     console.log("Deploying contracts...");
 
     // Deploy FakeETH
+    const fakeETHArtifact = getFakeETHArtifact();
     const FakeETHFactory = new ethers.ContractFactory(
-      [
-        "constructor()",
-        "function mint(address to, uint256 amount)",
-        "function approve(address spender, uint256 amount) returns (bool)",
-        "function balanceOf(address) view returns (uint256)",
-      ],
-      // Simple ERC20 bytecode for testing
-      // In production, use actual compiled bytecode from Foundry
-      await getTestERC20Bytecode("FakeETH", "FETH", 18),
+      fakeETHArtifact.abi,
+      fakeETHArtifact.bytecode.object,
       deployer,
     );
 
-    fakeETH = await FakeETHFactory.deploy();
+    fakeETH = await deployWithRetry(FakeETHFactory, deployer);
     await fakeETH.waitForDeployment();
     fakeETHAddress = await fakeETH.getAddress();
 
     // Deploy FakeUSD
+    const fakeUSDArtifact = getFakeUSDArtifact();
     const FakeUSDFactory = new ethers.ContractFactory(
-      [
-        "constructor()",
-        "function mint(address to, uint256 amount)",
-        "function approve(address spender, uint256 amount) returns (bool)",
-        "function balanceOf(address) view returns (uint256)",
-      ],
-      await getTestERC20Bytecode("FakeUSD", "FUSD", 6),
+      fakeUSDArtifact.abi,
+      fakeUSDArtifact.bytecode.object,
       deployer,
     );
 
-    fakeUSD = await FakeUSDFactory.deploy();
+    fakeUSD = await deployWithRetry(FakeUSDFactory, deployer);
     await fakeUSD.waitForDeployment();
     fakeUSDAddress = await fakeUSD.getAddress();
 
     // Deploy LockBox
+    const lockBoxArtifact = getLockBoxArtifact();
     const LockBoxFactory = new ethers.ContractFactory(
-      [
-        "constructor(address _fakeETH, address _fakeUSD)",
-        "function lock(address token, uint256 amount)",
-        "function getLockedBalance(address user, address token) view returns (uint256)",
-        "function calculateStorageKey(address user, address token) pure returns (bytes32)",
-      ],
-      await getLockBoxBytecode(),
+      lockBoxArtifact.abi,
+      lockBoxArtifact.bytecode.object,
       deployer,
     );
 
-    lockBox = await LockBoxFactory.deploy(fakeETHAddress, fakeUSDAddress);
+    lockBox = await deployWithRetry(LockBoxFactory, deployer, [
+      fakeETHAddress,
+      fakeUSDAddress,
+    ]);
     await lockBox.waitForDeployment();
     lockBoxAddress = await lockBox.getAddress();
 
@@ -276,25 +275,3 @@ describe("Ethereum State Proof Generation", () => {
     expect(proof.storageProof.length).toBeGreaterThan(0);
   });
 });
-
-/**
- * Helper: Get test ERC20 bytecode
- * In production, this would load compiled Solidity bytecode
- */
-async function getTestERC20Bytecode(
-  name: string,
-  symbol: string,
-  decimals: number,
-): Promise<string> {
-  // Placeholder - in real implementation, compile Solidity contracts
-  // For now, return empty bytecode (tests will be skipped in CI)
-  return "0x";
-}
-
-/**
- * Helper: Get LockBox bytecode
- */
-async function getLockBoxBytecode(): Promise<string> {
-  // Placeholder - in real implementation, compile Solidity contracts
-  return "0x";
-}

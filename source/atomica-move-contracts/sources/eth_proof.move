@@ -200,4 +200,32 @@ module atomica::eth_proof {
             decode_u64_loop(bytes, index + 1, len, new_acc)
         }
     }
+
+    /// Destructure proof to access all fields
+    /// Used by lock_receipt module to generate unique lock IDs
+    public fun destructure_proof(proof: &StateProof): (
+        u64,                    // block_number
+        vector<u8>,             // block_hash
+        vector<u8>,             // state_root
+        vector<u8>,             // contract_address
+        vector<u8>,             // user_address
+        vector<u8>,             // token_address
+        vector<u8>,             // storage_key
+        u256,                   // storage_value
+        vector<vector<u8>>,     // account_proof
+        vector<vector<u8>>,     // storage_proof
+    ) {
+        (
+            proof.block_number,
+            proof.block_hash,
+            proof.state_root,
+            proof.contract_address,
+            proof.user_address,
+            proof.token_address,
+            proof.storage_key,
+            proof.storage_value,
+            proof.account_proof,
+            proof.storage_proof,
+        )
+    }
 }
