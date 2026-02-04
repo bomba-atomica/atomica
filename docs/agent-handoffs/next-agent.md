@@ -1,185 +1,149 @@
-# Next Agent - Final Step: Storage Proof Value Mystery
+# Next Agent - Fix CI Test Failures
 
-## ✅ MAJOR PROGRESS - All Blockers Resolved Except One
+## 🚨 CI Build Broken - Integration Tests Failing
 
-### 1. Storage Slot Fix ✅ VERIFIED
-- Updated to slot 1 (verified with `forge inspect` and manual calculation)
-- Storage key calculation confirmed correct: `0x7db06b6b60069292205003b91e71b0d3d2ba80b4475e40e6aaeda15b014b9208`
+**CI Run**: https://github.com/bomba-atomica/atomica/actions/runs/21685723000
 
-### 2. Contract Deployment Fix ✅ COMPLETE
-- **Root cause**: Using `factory.getDeployTransaction()` incorrectly
-- **Solution**: Changed to `factory.deploy()` method
-- **Result**: All contracts deploy successfully with bytecode
-  - MinimalTest: 122,332 gas, 434 bytes ✓
-  - FakeETH: 817,573 gas, 6,320 bytes ✓
-  - FakeUSD: 817,573 gas, 6,320 bytes ✓
-  - LockBox: 775,050 gas, 6,014 bytes ✓
+### Issue Summary
 
-### 3. E2E Test Status ✅ 3 of 7 Tests Passing
-- ✅ TEST 1: Minting works (1000 FakeETH, 5000 FakeUSD)
-- ✅ TEST 2: Locking FakeETH works (10 ETH locked, balance confirmed)
-- ✅ TEST 3: Locking FakeUSD works (100 USD locked, balance confirmed)
-- ❌ TEST 4: Storage proof shows value 0 (expected 10 ETH)
-- ❌ TESTS 5-7: Fail due to TEST 4 failure
+The integration tests are failing in CI with a Vite/esbuild dependency resolution error:
 
-## 🎯 LAST REMAINING ISSUE: Storage Proof Returns 0
-
-### The Mystery
-
-**Confirmed Facts:**
-1. ✅ Lock transaction succeeds (block 8, status: 1)
-2. ✅ `getLockedBalance(user, token)` returns 10 ETH
-3. ✅ Storage slot calculation is correct (slot 1)
-4. ✅ Storage key matches: `0x7db06b...9208`
-5. ✅ Storage proof has 2 nodes (proof traverses storage trie)
-6. ❌ Storage proof value: 0 (but should be 10 ETH)
-
-**Test Output:**
 ```
-[TEST 2] Locking FakeETH...
-  ✓ Locked balance: 10.0 FakeETH  ← getLockedBalance() works!
-
-[TEST 4] Generating FakeETH lock proof...
-  ✓ Proof generated for block 9
-    Storage proof nodes: 2  ← Proof exists!
-    Storage value: 0 (0.0 ETH)  ← But value is 0!
+Failed to resolve entry for package "@atomica/ethereum-docker-testnet"
+The package may have incorrect main/module/exports specified in its package.json
 ```
 
-### Possible Causes
+This is affecting multiple test files that import `@atomica/ethereum-docker-testnet`:
+- `tests/integration/cross-chain/minimal-deployment.test.ts`
+- `tests/integration/cross-chain/lock-receipt-e2e.test.ts`
+- `tests/integration/cross-chain/anvil-deployment.test.ts`
+- `tests/integration/ethereum/erc20-deployment.test.ts`
+- `tests/integration/dual-testnet/dual-testnet-startup.test.ts`
+- `tests/integration/ethereum/proof-generation.test.ts`
 
-#### A. Block State Query Timing
-The proof is generated at block 9 (one after lock block 8). The storage might not be visible yet due to:
-- State trie not fully propagated
-- eth_getProof RPC returning stale state
-- Need to query at a later block (e.g., block 10 or 11)
+### Root Cause
 
-**Next Step**: Try querying at block 10, 11, or even 20
+The `@atomica/ethereum-docker-testnet` package is a local workspace package (`file:../docker-testnet/ethereum-testnet/typescript-sdk`), but Vite cannot resolve its entry point in the CI environment. This might be due to:
+1. Missing `package.json` exports configuration
+2. Build artifacts not being generated before tests run
+3. Vite configuration not properly handling workspace packages
 
-#### B. Storage Encoding Issue
-The value might be stored but encoded differently than expected:
-- Padding/alignment issue
-- BigInt vs Number conversion
-- RLP encoding problem in the proof
+### Quick Diagnosis Steps
 
-**Next Step**: Use `cast storage` to directly query the storage slot
+1. **Check package.json exports**:
+   ```bash
+   cat source/docker-testnet/ethereum-testnet/typescript-sdk/package.json
+   ```
+   Verify it has proper `main`, `module`, or `exports` fields.
 
-#### C. Contract Bytecode Issue
-The deployed contract might have a bug:
-- Optimization settings affecting storage layout
-- Compiler version mismatch
-- Storage collision
+2. **Check if package is built in CI**:
+   Look at the CI workflow to see if `ethereum-docker-testnet` is built before tests run.
 
-**Next Step**: Deploy with `--via-ir false` and check if it helps
+3. **Check Vite config**:
+   ```bash
+   cat source/atomica-web/vitest.config.ts
+   ```
+   See if there are special resolvers needed for workspace packages.
 
-#### D. Proof Library Bug
-The `@atomica/state-proof-verifier` might have an issue:
-- Parsing the RLP proof incorrectly
-- Extracting the wrong field
-- Endianness problem
+## 🔧 Likely Fixes
 
-**Next Step**: Log raw proof data from `eth_getProof` RPC call
+### Option 1: Fix package.json Exports (Most Likely)
 
-## 🔍 Immediate Debugging Steps
+The `@atomica/ethereum-docker-testnet` package may be missing proper exports:
 
-### Step 1: Query Storage Directly with Cast
-
-```bash
-# Start testnet (or use running one)
-# Get the storage value directly
-cast storage <LOCKBOX_ADDRESS> 0x7db06b6b60069292205003b91e71b0d3d2ba80b4475e40e6aaeda15b014b9208 \\
-  --rpc-url http://localhost:8545 \\
-  --block 9
-```
-
-This will show if the storage actually contains the value at that slot.
-
-### Step 2: Add Debug Logging to Proof Generator
-
-In `generator.ts`, after fetching the proof:
-
-```typescript
-// After line 93
-console.log("DEBUG: Raw Ethereum Proof:", JSON.stringify(ethereumProof, null, 2));
-console.log("DEBUG: Storage proof data:", storageProofData);
-console.log("DEBUG: Storage value (raw):", storageProofData.value);
-console.log("DEBUG: Storage value (BigInt):", BigInt(storageProofData.value));
-```
-
-This will show what the RPC is actually returning.
-
-### Step 3: Try Different Block Numbers
-
-Modify the test to try multiple blocks:
-
-```typescript
-for (let blockOffset = 0; blockOffset <= 5; blockOffset++) {
-  const proof = await generateLockProof(
-    ethProvider,
-    lockBoxAddress,
-    ethSigner.address,
-    fakeEthAddress,
-    lockBlockNumber + blockOffset,
-  );
-  console.log(`Block ${lockBlockNumber + blockOffset}: value = ${proof.storageValue}`);
+```json
+// source/docker-testnet/ethereum-testnet/typescript-sdk/package.json
+{
+  "name": "@atomica/ethereum-docker-testnet",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  }
 }
 ```
 
-### Step 4: Check Contract's calculateStorageKey
+### Option 2: Ensure Build Order in CI
 
-The LockBox contract has a `calculateStorageKey` helper. Call it and compare:
+Check `.github/workflows/*.yml` and ensure:
+```yaml
+- name: Build ethereum-docker-testnet
+  run: cd source/docker-testnet/ethereum-testnet/typescript-sdk && npm run build
 
-```typescript
-const contractKey = await lockBoxContract.calculateStorageKey(
-  ethSigner.address,
-  fakeEthAddress
-);
-const ourKey = calculateStorageKey(ethSigner.address, fakeEthAddress);
-console.log("Contract key:", contractKey);
-console.log("Our key:", ourKey);
-console.log("Match:", contractKey === ourKey);
+- name: Run tests
+  run: cd source/atomica-web && npm run test:integration
 ```
 
-## 📋 Files Modified (Session Summary)
+### Option 3: Add Vite Resolve Alias
 
-### Contracts
-- `evm-contracts/src/Lock Box.sol` - Fixed storage slot to 1 (line 64)
-- `evm-contracts/src/MinimalTest.sol` - Created for testing ✅
+In `vitest.config.ts`, explicitly resolve the workspace package:
 
-### TypeScript/Tests
-- `src/lib/ethereum/proofs/storage-key.ts` - Fixed default slot to 1 ✅
-- `tests/integration/ethereum/solidity-compiler.ts` - **CRITICAL FIX**: Changed to use `factory.deploy()` ✅
-- `tests/integration/cross-chain/lock-receipt-e2e.test.ts`:
-  - Added transaction status checks ✅
-  - Added bytecode verification ✅
-  - Added eth_call debugging ✅
-  - Fixed duplicate code ✅
-  - Changed proof query to lockBlock + 1 ✅
-- `tests/integration/cross-chain/minimal-deployment.test.ts` - Created for isolation testing ✅
-- `tests/integration/cross-chain/anvil-deployment.test.ts` - Created to test Anvil ✅
+```typescript
+resolve: {
+  alias: {
+    '@atomica/ethereum-docker-testnet': path.resolve(__dirname, '../docker-testnet/ethereum-testnet/typescript-sdk/dist/index.js')
+  }
+}
+```
 
-## 🎉 Achievement Summary
+### Option 4: Skip Docker Tests in CI (Temporary)
 
-**What We Fixed:**
-1. Storage slot mismatch (slot 0 → slot 1) ✅
-2. Contract deployment bug (`getDeployTransaction` → `deploy`) ✅
-3. Test infrastructure (status checks, verification, debugging) ✅
+If the tests require Docker and CI doesn't support it, skip them:
+```typescript
+// In affected test files
+const isCI = process.env.CI === 'true';
 
-**What Works Now:**
-- Contract deployment on both Docker testnet and Anvil ✅
-- Token minting (FakeETH, FakeUSD) ✅
-- Token locking in LockBox ✅
-- Storage proof generation (finds storage, but value is 0) 🟡
+describe.skipIf(isCI)('Minimal Contract Deployment Test', () => {
+  // ...
+});
+```
 
-**Final Hurdle:**
-- Storage proof returns 0 instead of the locked amount
-- This is likely a state query timing issue or RPC caching problem
-- All the infrastructure is correct, just need to find where the value is
+## 📋 Previous Session Work (Now in Main Branch)
 
-## 💡 High Confidence Next Steps
+### ✅ Completed - Storage Slot & Deployment Fixes
+- Fixed storage slot mismatch (slot 0 → 1) in `LockBox.sol` and `storage-key.ts`
+- Fixed critical deployment bug: changed `factory.getDeployTransaction()` → `factory.deploy()`
+- Contracts now deploy successfully with bytecode
+- 3 of 7 E2E tests passing locally (minting, locking work)
 
-1. **Use `cast storage`** to verify the actual storage content
-2. **Add debug logging** to see raw RPC response
-3. **Try querying later blocks** (10, 11, 12, etc.)
-4. **Compare contract's storage key** with our calculation
+### ✅ Completed - Test Infrastructure
+- Added transaction status verification
+- Added bytecode verification after deployments
+- Created MinimalTest.sol for isolation testing
+- Created anvil-deployment.test.ts and minimal-deployment.test.ts
 
-The system is 95% working. The last 5% is understanding why `eth_getProof` returns 0 when the storage definitely contains 10 ETH.
+### 🟡 Known Issue - Storage Proof Value Mystery
+The storage proof generates correctly (2 nodes, correct storage key) but returns value 0 instead of the locked amount (10 ETH). This is documented but not blocking CI - it's a separate issue to debug later.
+
+**Test output shows:**
+- Lock succeeds: `✓ Locked balance: 10.0 FakeETH` (getLockedBalance works)
+- Proof generates: `Storage proof nodes: 2` (finds storage location)
+- But: `Storage value: 0` (should be 10 ETH)
+
+Likely causes: state query timing, RPC caching, or need to query at later block.
+
+## 🎯 Immediate Action for CI Fix
+
+1. Check `@atomica/ethereum-docker-testnet` package.json for exports
+2. Verify build order in CI workflow
+3. Fix package exports or add Vite resolver
+4. Re-run CI to confirm tests pass
+
+## 📁 Key Files
+
+- **CI Workflow**: `.github/workflows/*.yml`
+- **Package**: `source/docker-testnet/ethereum-testnet/typescript-sdk/package.json`
+- **Vite Config**: `source/atomica-web/vitest.config.ts`
+- **Failing Tests**: `source/atomica-web/tests/integration/cross-chain/*.test.ts`
+- **This handoff**: `docs/agent-handoffs/next-agent.md`
+
+## 📊 Branch Status
+
+**Branch**: `atomica-eth-testnet`
+**Latest commit**: `67fa512` - chore: ignore Foundry artifacts and clean up docs
+**CI Status**: ❌ Failing - integration tests cannot resolve ethereum-docker-testnet package
+
+**All code changes are pushed and ready**. Just need to fix the CI dependency resolution issue.
