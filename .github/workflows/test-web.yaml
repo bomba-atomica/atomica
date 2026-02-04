@@ -67,6 +67,10 @@ jobs:
           aptos --version
           which aptos
 
+      - name: Install Foundry
+        if: matrix.type == 'meta' || matrix.type == 'integration' || matrix.type == 'ui'
+        uses: foundry-rs/foundry-toolchain@v1
+
       - name: Run TypeScript tests with Vitest
         run: |
           cd source/atomica-web
