@@ -23,7 +23,7 @@ export const FAKE_USD_ADDRESS =
   "0x0000000000000000000000000000000000000000";
 
 // Chain ID for local testnet
-export const ETH_CHAIN_ID = 1337;
+export const ETH_CHAIN_ID = 32382;
 
 /**
  * Get a JSON-RPC provider for the Ethereum testnet

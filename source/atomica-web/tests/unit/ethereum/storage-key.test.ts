@@ -13,10 +13,10 @@ import {
  * matches Solidity's storage layout for nested mappings.
  */
 describe("Storage Key Calculation", () => {
-  const ALICE = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
-  const BOB = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
-  const FAKE_ETH = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-  const FAKE_USD = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
+  const ALICE = "0x0000000000000000000000000000000000000001";
+  const BOB = "0x0000000000000000000000000000000000000002";
+  const FAKE_ETH = "0x0000000000000000000000000000000000000010";
+  const FAKE_USD = "0x0000000000000000000000000000000000000020";
 
   describe("calculateLockedBalanceStorageKey", () => {
     it("should calculate storage key for Alice + FakeETH", () => {
@@ -178,30 +178,26 @@ describe("Storage Key Calculation", () => {
 
   describe("Consistency with Solidity", () => {
     it("should produce same key as Solidity calculateStorageKey", () => {
-      // These test vectors should match the output of
-      // LockBox.calculateStorageKey(user, token) in Solidity
-
-      // Test vector 1
-      const key1 = calculateLockedBalanceStorageKey(
-        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-        "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-      );
+      // These test vectors verify the math against known manual calculations
+      const user = "0x0000000000000000000000000000000000000001";
+      const token = "0x0000000000000000000000000000000000000010";
+      const key = calculateLockedBalanceStorageKey(user, token);
 
       // Calculate manually
-      const inner1 = ethers.keccak256(
+      const inner = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
           ["address", "uint256"],
-          ["0x5FbDB2315678afecb367f032d93F642f64180aa3", 0],
+          [token, 0],
         ),
       );
-      const expected1 = ethers.keccak256(
+      const expected = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
           ["address", "bytes32"],
-          ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", inner1],
+          [user, inner],
         ),
       );
 
-      expect(key1).toBe(expected1);
+      expect(key).toBe(expected);
     });
   });
 });
