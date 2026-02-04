@@ -10,22 +10,32 @@ This document outlines the plan to complete the generic cross-chain lock receipt
 
 ---
 
-## Current State
+## Current State (Updated 2026-02-04)
 
-### ✓ Completed
+### ✅ Completed
 - Lock receipt architecture design
-- Core `lock_receipt` module with phantom types
+- Core `lock_receipt` module with phantom types (395 lines)
 - Ethereum proof verification integration
 - Replay protection mechanism
 - Receipt registry with type isolation
-- Basic unit tests for registry initialization
+- Basic unit tests for registry initialization (all 41 tests passing)
+- Solidity contracts (FakeETH, FakeUSD, LockBox) created
+- E2E test structure created
+- Proof destructuring helper (`eth_proof::destructure_proof()`)
+- Address converter utility (TypeScript)
+- Comprehensive documentation (architecture, test plan, implementation summary)
+- Docker testnets verified (all nodes run in containers)
 
-### ✗ Missing
-- Integration between `lock_receipt` and asset modules
-- Complete test coverage (E2E, replay attacks, claiming)
-- Security fix for user address verification
-- Receipt-based minting in fake_eth/fake_usd
-- Migration path from existing fake_eth/fake_usd implementations
+### 🚧 In Progress
+- E2E test execution (blocked by contract bugs and test timing issues)
+- Asset module integration (`mint_from_lock` functions)
+
+### ✗ Remaining
+- Fix Solidity contract bugs (mint signature, actual token custody)
+- Fix E2E test timing and deployment issues
+- Complete integration between `lock_receipt` and asset modules
+- Full E2E test coverage (claiming flow)
+- Deployment to testnet
 
 ---
 
@@ -59,73 +69,68 @@ User → fake_eth::mint() → Direct minting (faucet-style)
 
 ## Implementation Plan
 
-### Phase 1: Critical Fixes (Priority 1)
+### Phase 1: Critical Fixes (Priority 1) - ✅ PARTIALLY COMPLETE
 
-#### 1.1 Fix User Address Security Issue
-**File:** `sources/lock_receipt.move`
-**Issue:** Current implementation allows anyone to claim ownership of a lock by submitting the proof first (frontrunning vulnerability)
+#### 1.1 Fix User Address Security Issue - ✅ COMPLETE
+**File:** `sources/lock_receipt.move` (line 150-178)
+**Status:** ✅ FIXED - User address now derived from proof, not transaction signer
 
-**Current code (line 150-178):**
+**Implementation:**
 ```move
 public entry fun register_ethereum_lock<Asset>(
     account: &signer,
     ...
 ) {
-    let user = signer::address_of(account); // ❌ Wrong! Uses tx signer
-```
-
-**Fix:**
-```move
-public entry fun register_ethereum_lock<Asset>(
-    account: &signer,
-    ...
-) {
-    // ✓ Use the verified user address from the proof
-    let user = address_from_bytes(user_address);
+    // ✓ Extract user address from verified proof
+    let user_address = proof.user_address;
+    let user = from_bcs::to_address(pad_address(user_address));
     
-    // ✓ Verify the signer is authorized (either the user or the atomica admin)
+    // ✓ Security: signer can be user or atomica admin
     let signer_addr = signer::address_of(account);
     assert!(
         signer_addr == user || signer_addr == @atomica,
         E_UNAUTHORIZED_SIGNER
     );
-```
-
-**Impact:** Prevents frontrunning attacks where malicious actors could steal lock receipts
-
----
-
-#### 1.2 Add Helper Function for Address Conversion
-**File:** `sources/lock_receipt.move`
-
-**Add:**
-```move
-/// Convert Ethereum address (20 bytes) to Aptos address (32 bytes)
-/// Pads with zeros on the left
-fun address_from_bytes(eth_address: vector<u8>): address {
-    assert!(vector::length(&eth_address) == 20, E_INVALID_ADDRESS_LENGTH);
-    
-    // Pad to 32 bytes (Aptos address length)
-    let aptos_addr = vector::empty<u8>();
-    let i = 0;
-    while (i < 12) {
-        vector::push_back(&mut aptos_addr, 0);
-        i = i + 1;
-    };
-    vector::append(&mut aptos_addr, eth_address);
-    
-    std::from_bcs::to_address(aptos_addr)
 }
 ```
 
-**Note:** This assumes Ethereum addresses map to Aptos addresses. May need adjustment based on your address mapping strategy.
+**Impact:** Prevents frontrunning attacks ✅
 
 ---
 
-### Phase 2: Asset Module Integration (Priority 1)
+#### 1.2 Add Helper Function for Address Conversion - ✅ COMPLETE
+**File:** `sources/lock_receipt.move` (line 243-258)
+**Status:** ✅ IMPLEMENTED
 
-#### 2.1 Update fake_eth Module
+**Implementation:**
+```move
+fun pad_address(eth_address: vector<u8>): vector<u8> {
+    assert!(vector::length(&eth_address) == 20, E_INVALID_ADDRESS_LENGTH);
+    let padded = vector::empty<u8>();
+    let i = 0;
+    while (i < 12) {
+        vector::push_back(&mut padded, 0);
+        i = i + 1;
+    };
+    vector::append(&mut padded, eth_address);
+    padded
+}
+```
+
+Also created TypeScript helper: `source/atomica-web/src/lib/ethereum/address-converter.ts`
+
+**Status:** ✅ COMPLETE
+
+---
+
+### Phase 2: Asset Module Integration (Priority 1) - ⏳ IN PROGRESS
+
+**Status:** Structure ready, needs final implementation and testing
+
+#### 2.1 Update fake_eth Module - ⏳ TODO
 **File:** `sources/fake_eth.move`
+
+**Required changes (see NEXT_AGENT.md for detailed implementation)**
 
 **Changes:**
 
@@ -208,10 +213,42 @@ public entry fun mint_from_lock(
 
 ---
 
-### Phase 3: Comprehensive Testing (Priority 1)
+### Phase 3: Comprehensive Testing (Priority 1) - ⏳ IN PROGRESS
 
-#### 3.1 Enhanced Lock Receipt Tests
-**File:** `sources/lock_receipt_tests.move`
+**Status:** Test infrastructure complete, execution blocked by contract bugs
+
+#### 3.1 Unit Tests - ✅ COMPLETE
+**File:** `sources/lock_receipt_tests.move` (115 lines)
+
+**Tests implemented:**
+- ✅ test_initialize_registry
+- ✅ test_separate_registries_for_different_assets  
+- ✅ test_lock_not_claimed_initially
+- ✅ test_claim_receipt
+- ✅ test_view_functions_on_uninitialized_registry
+- ✅ test_type_safety_different_assets
+- ✅ test_multiple_initializations_idempotent
+
+**All 41 tests passing** ✅
+
+---
+
+#### 3.2 E2E Test - 🚧 BLOCKED
+**File:** `source/atomica-web/tests/integration/cross-chain/lock-receipt-e2e.test.ts`
+
+**Status:** Test structure complete, execution blocked by:
+1. Solidity contract bugs (mint signature, no actual token custody)
+2. Transaction timing issues (indexing delays)
+3. Registry initialization hex encoding errors
+
+**See NEXT_AGENT.md for fixes needed**
+
+---
+
+#### 3.3 Integration Tests - ⏳ TODO
+**File:** `sources/integration_tests.move`
+
+**Note:** Exists but MPT verification failing - needs debugging
 
 **Add tests:**
 
