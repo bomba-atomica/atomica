@@ -19,6 +19,13 @@ jobs:
         run: |
           curl -fsSL "https://aptos.dev/scripts/install_cli.py" | python3
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Configure Git credentials
+        run: |
+          git config --global credential.helper store
+          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Run Move Tests
         run: |
@@ -36,7 +43,14 @@ jobs:
         run: |
           curl -fsSL "https://aptos.dev/scripts/install_cli.py" | python3
           echo "$HOME/.local/bin" >> $GITHUB_PATH
-          
+
+      - name: Configure Git credentials
+        run: |
+          git config --global credential.helper store
+          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+           
       - name: Check for Lint Warnings
         run: |
           aptos move compile --package-dir source/atomica-move-contracts --fail-on-warning --named-addresses atomica=0xcafe
