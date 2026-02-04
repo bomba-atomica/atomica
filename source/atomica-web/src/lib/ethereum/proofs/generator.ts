@@ -265,3 +265,7 @@ LockBox Proof:
   Timestamp: ${new Date(proof.timestamp * 1000).toISOString()}
 `.trim();
 }
+
+// Alias for backwards compatibility / simpler naming
+export const generateLockProof = generateLockedBalanceProof;
+export const calculateStorageKey = calculateLockedBalanceStorageKey;
