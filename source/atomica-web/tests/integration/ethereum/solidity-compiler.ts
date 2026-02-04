@@ -39,6 +39,10 @@ export function getLockBoxArtifact(): Artifact {
   return getArtifact("LockBox");
 }
 
+export function getMinimalTestArtifact(): Artifact {
+  return getArtifact("MinimalTest");
+}
+
 export async function compileContracts(): Promise<void> {
   console.log("Ensuring contracts are compiled...");
   if (!existsSync(join(EVM_CONTRACTS_DIR, "out"))) {
@@ -58,41 +62,45 @@ export async function deployWithRetry(
     try {
       console.log(`   Deployment attempt ${attempt}/${maxRetries}...`);
 
-      // First, send the deployment transaction without waiting for receipt
-      const tx = factory.getDeployTransaction(...args);
-      const sentTx = await deployer.sendTransaction(tx);
-      console.log(`   Transaction sent: ${sentTx.hash}`);
+      // Deploy using factory.deploy() which handles everything correctly
+      console.log(`   Debug: Deploying with factory.deploy()...`);
+      const contract = await factory.deploy(...args);
+      console.log(`   Transaction sent: ${contract.deploymentTransaction()?.hash}`);
 
-      // Poll for the transaction receipt manually
+      // Wait for deployment to complete
       console.log(`   Waiting for confirmation...`);
-      let receipt = null;
-      const maxAttempts = 30;
-      for (let i = 0; i < maxAttempts; i++) {
-        try {
-          receipt = await deployer.provider.getTransactionReceipt(sentTx.hash);
-          if (receipt) {
-            console.log(`   Confirmed in block ${receipt.blockNumber}`);
-            break;
-          }
-        } catch (e: any) {
-          // Ignore indexing errors during polling
-          if (!e.message?.includes("transaction indexing is in progress")) {
-            throw e;
-          }
-        }
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
+      const deployedContract = await contract.waitForDeployment();
+      const deployedAddress = await deployedContract.getAddress();
 
-      if (!receipt) {
-        throw new Error("Transaction receipt not found after polling");
-      }
-
-      const deployedAddress = receipt.contractAddress;
       console.log(`   Contract deployed at: ${deployedAddress}`);
 
-      // Create contract instance with the known address
-      const contract = factory.attach(deployedAddress);
-      return contract;
+      // Get the deployment transaction receipt for debugging
+      const deployTx = contract.deploymentTransaction();
+      if (deployTx) {
+        const receipt = await deployTx.wait();
+        if (receipt) {
+          console.log(`   Confirmed in block ${receipt.blockNumber}`);
+          console.log(`   Receipt details:`);
+          console.log(`     - Status: ${receipt.status}`);
+          console.log(`     - Gas used: ${receipt.gasUsed.toString()}`);
+
+          if (receipt.status === 0) {
+            throw new Error(`Deployment transaction reverted (tx: ${deployTx.hash})`);
+          }
+
+          // Debug: Check if bytecode exists
+          const code = await deployer.provider.getCode(deployedAddress);
+          console.log(`   Bytecode check:`);
+          console.log(`     - Length: ${code.length} characters`);
+          if (code === '0x' || code === '0x0') {
+            console.log(`     ⚠️  WARNING: No bytecode at address!`);
+          } else {
+            console.log(`     ✓ Bytecode exists!`);
+          }
+        }
+      }
+
+      return deployedContract;
     } catch (error: any) {
       lastError = error;
       console.log(`   Attempt ${attempt} failed: ${error.message}`);

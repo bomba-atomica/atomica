@@ -11,20 +11,20 @@ import { ethers } from "ethers";
  * Calculate storage key for LockBox.lockedBalances[user][token]
  *
  * For a nested mapping: mapping(address => mapping(address => uint256))
- * at storage slot 0, the key is calculated as:
+ * at storage slot 1, the key is calculated as:
  *
  * innerKey = keccak256(abi.encode(token, slot))
  * storageKey = keccak256(abi.encode(user, innerKey))
  *
  * @param userAddress - Address of the user who locked tokens
  * @param tokenAddress - Address of the token (FakeETH or FakeUSD)
- * @param slot - Storage slot of the mapping (default: 0 for lockedBalances)
+ * @param slot - Storage slot of the mapping (default: 1 for lockedBalances)
  * @returns Storage key as hex string
  */
 export function calculateLockedBalanceStorageKey(
   userAddress: string,
   tokenAddress: string,
-  slot: number = 0,
+  slot: number = 1,
 ): string {
   // Ensure addresses are checksummed and lowercase
   const user = ethers.getAddress(userAddress);
@@ -54,7 +54,7 @@ export function calculateLockedBalanceStorageKey(
 /**
  * Calculate storage key for LockBox.unlockTimes[user][token]
  *
- * Same as lockedBalances but at slot 1
+ * Same as lockedBalances but at slot 2
  *
  * @param userAddress - Address of the user
  * @param tokenAddress - Address of the token
@@ -64,7 +64,7 @@ export function calculateUnlockTimeStorageKey(
   userAddress: string,
   tokenAddress: string,
 ): string {
-  return calculateLockedBalanceStorageKey(userAddress, tokenAddress, 1);
+  return calculateLockedBalanceStorageKey(userAddress, tokenAddress, 2);
 }
 
 /**

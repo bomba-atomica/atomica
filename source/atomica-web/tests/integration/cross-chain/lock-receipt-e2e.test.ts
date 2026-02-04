@@ -103,6 +103,16 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     const fakeEthContract = await deployWithRetry(FakeETHFactory, ethSigner);
     fakeEthAddress = await fakeEthContract.getAddress();
 
+    // Wait for state to be indexed
+    await new Promise((r) => setTimeout(r, 3000));
+
+    // Verify FakeETH deployed correctly
+    const fakeEthCode = await ethProvider.getCode(fakeEthAddress);
+    if (fakeEthCode === '0x') {
+      throw new Error(`FakeETH contract not deployed at ${fakeEthAddress}`);
+    }
+    console.log(`  ✓ FakeETH bytecode verified (${fakeEthCode.length} bytes)`);
+
     // Deploy FakeUSD
     console.log("  Deploying FakeUSD...");
     const fakeUSDArtifact = getFakeUSDArtifact();
@@ -113,6 +123,16 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     );
     const fakeUsdContract = await deployWithRetry(FakeUSDFactory, ethSigner);
     fakeUsdAddress = await fakeUsdContract.getAddress();
+
+    // Wait for state to be indexed
+    await new Promise((r) => setTimeout(r, 3000));
+
+    // Verify FakeUSD deployed correctly
+    const fakeUsdCode = await ethProvider.getCode(fakeUsdAddress);
+    if (fakeUsdCode === '0x') {
+      throw new Error(`FakeUSD contract not deployed at ${fakeUsdAddress}`);
+    }
+    console.log(`  ✓ FakeUSD bytecode verified (${fakeUsdCode.length} bytes)`);
 
     // Deploy LockBox
     console.log("  Deploying LockBox...");
@@ -128,6 +148,16 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       [fakeEthAddress, fakeUsdAddress],
     );
     lockBoxAddress = await lockBoxContract.getAddress();
+
+    // Wait for state to be indexed
+    await new Promise((r) => setTimeout(r, 3000));
+
+    // Verify LockBox deployed correctly
+    const lockBoxCode = await ethProvider.getCode(lockBoxAddress);
+    if (lockBoxCode === '0x') {
+      throw new Error(`LockBox contract not deployed at ${lockBoxAddress}`);
+    }
+    console.log(`  ✓ LockBox bytecode verified (${lockBoxCode.length} bytes)`);
 
     console.log(`  ✓ FakeETH: ${fakeEthAddress}`);
     console.log(`  ✓ FakeUSD: ${fakeUsdAddress}`);
@@ -207,11 +237,26 @@ describe("Cross-Chain Lock Receipt E2E", () => {
 
     console.log(`  Minting ${ethers.formatEther(MINT_AMOUNT_ETH)} FakeETH...`);
     const mintEthTx = await fakeEthContract.mint(MINT_AMOUNT_ETH);
-    await mintEthTx.wait();
-    console.log(`  ✓ Tx hash: ${mintEthTx.hash}`);
+    const mintEthReceipt = await mintEthTx.wait();
+    if (mintEthReceipt.status === 0) {
+      throw new Error(`Mint transaction reverted: ${mintEthTx.hash}`);
+    }
+    console.log(`  ✓ Tx hash: ${mintEthTx.hash} (status: ${mintEthReceipt.status})`);
 
     // Wait for transaction indexing
     await new Promise((r) => setTimeout(r, 2000));
+
+    // Debug: Try direct eth_call to see raw response
+    try {
+      const callData = fakeEthContract.interface.encodeFunctionData('balanceOf', [ethSigner.address]);
+      const rawResult = await ethProvider.call({
+        to: fakeEthAddress,
+        data: callData,
+      });
+      console.log(`  Debug: Raw balanceOf result: ${rawResult} (length: ${rawResult.length})`);
+    } catch (error: any) {
+      console.log(`  Debug: Direct eth_call failed: ${error.message}`);
+    }
 
     const ethBalance = await fakeEthContract.balanceOf(ethSigner.address);
     expect(ethBalance).toBe(MINT_AMOUNT_ETH);
@@ -225,35 +270,15 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       ethSigner,
     );
 
-    console.log(`  Minting ${ethers.formatEther(MINT_AMOUNT_ETH)} FakeETH...`);
-    const mintEthTx = await fakeEthContract.mint(MINT_AMOUNT_ETH);
-    await mintEthTx.wait();
-    console.log(`  ✓ Tx hash: ${mintEthTx.hash}`)
-
-;
-    // Wait for transaction indexing
-    await new Promise((r) => setTimeout(r, 2000));
-
-    const ethBalance = await fakeEthContract.balanceOf(ethSigner.address);
-    expect(ethBalance).toBe(MINT_AMOUNT_ETH);
-    console.log(`  ✓ Balance: ${ethers.formatEther(ethBalance)} FakeETH`);
-
-    // Mint FakeUSD
-    const fakeUsdContract = new ethers.Contract(
-      fakeUsdAddress,
-      [
-        "function mint(uint256 amount)",
-        "function balanceOf(address) view returns (uint256)",
-      ],
-      ethSigner,
-    );
-
     console.log(
       `  Minting ${ethers.formatUnits(MINT_AMOUNT_USD, 6)} FakeUSD...`,
     );
     const mintUsdTx = await fakeUsdContract.mint(MINT_AMOUNT_USD);
-    await mintUsdTx.wait();
-    console.log(`  ✓ Tx hash: ${mintUsdTx.hash}`);
+    const mintUsdReceipt = await mintUsdTx.wait();
+    if (mintUsdReceipt.status === 0) {
+      throw new Error(`Mint transaction reverted: ${mintUsdTx.hash}`);
+    }
+    console.log(`  ✓ Tx hash: ${mintUsdTx.hash} (status: ${mintUsdReceipt.status})`);
 
     // Wait for transaction indexing
     await new Promise((r) => setTimeout(r, 2000));
@@ -291,8 +316,11 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       lockBoxAddress,
       LOCK_AMOUNT_ETH,
     );
-    await approveTx.wait();
-    console.log(`  ✓ Approved`);
+    const approveReceipt = await approveTx.wait();
+    if (approveReceipt.status === 0) {
+      throw new Error(`Approve transaction reverted: ${approveTx.hash}`);
+    }
+    console.log(`  ✓ Approved (status: ${approveReceipt.status})`);
 
     // Wait for transaction indexing
     await new Promise((r) => setTimeout(r, 2000));
@@ -301,7 +329,10 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     console.log(`  Locking ${ethers.formatEther(LOCK_AMOUNT_ETH)} FakeETH...`);
     const lockTx = await lockBoxContract.lock(fakeEthAddress, LOCK_AMOUNT_ETH);
     const lockReceipt = await lockTx.wait();
-    console.log(`  ✓ Tx hash: ${lockTx.hash}`);
+    if (lockReceipt.status === 0) {
+      throw new Error(`Lock transaction reverted: ${lockTx.hash}`);
+    }
+    console.log(`  ✓ Tx hash: ${lockTx.hash} (status: ${lockReceipt.status})`);
     console.log(`  ✓ Block: ${lockReceipt!.blockNumber}`);
 
     // Wait for transaction indexing
@@ -349,8 +380,11 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       lockBoxAddress,
       LOCK_AMOUNT_USD,
     );
-    await approveTx.wait();
-    console.log(`  ✓ Approved`);
+    const approveReceipt = await approveTx.wait();
+    if (approveReceipt.status === 0) {
+      throw new Error(`Approve transaction reverted: ${approveTx.hash}`);
+    }
+    console.log(`  ✓ Approved (status: ${approveReceipt.status})`);
 
     // Wait for transaction indexing
     await new Promise((r) => setTimeout(r, 2000));
@@ -361,7 +395,10 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     );
     const lockTx = await lockBoxContract.lock(fakeUsdAddress, LOCK_AMOUNT_USD);
     const lockReceipt = await lockTx.wait();
-    console.log(`  ✓ Tx hash: ${lockTx.hash}`);
+    if (lockReceipt.status === 0) {
+      throw new Error(`Lock transaction reverted: ${lockTx.hash}`);
+    }
+    console.log(`  ✓ Tx hash: ${lockTx.hash} (status: ${lockReceipt.status})`);
     console.log(`  ✓ Block: ${lockReceipt!.blockNumber}`);
 
     // Wait for transaction indexing
@@ -396,13 +433,14 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     console.log("  ✓ Block finalized");
 
     // Generate proof
-    console.log("  Generating state proof...");
+    // Note: Query state at lockBlock + 1 to ensure transaction state is included
+    console.log(`  Generating state proof for block ${lockBlockNumber + 1}...`);
     const proof = await generateLockProof(
       ethProvider,
       lockBoxAddress,
       ethSigner.address,
       fakeEthAddress,
-      lockBlockNumber,
+      lockBlockNumber + 1,
     );
 
     console.log(`  ✓ Proof generated for block ${proof.blockNumber}`);

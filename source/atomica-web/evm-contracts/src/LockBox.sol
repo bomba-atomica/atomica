@@ -61,7 +61,7 @@ contract LockBox is Ownable {
     }
 
     function _calculateStorageKey(address user, address token) internal pure returns (bytes32) {
-        bytes32 innerKey = keccak256(abi.encode(token, uint256(0)));
+        bytes32 innerKey = keccak256(abi.encode(token, uint256(1)));
         return keccak256(abi.encode(user, innerKey));
     }
 }
