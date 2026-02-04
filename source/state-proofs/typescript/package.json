@@ -23,7 +23,7 @@
     "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
     "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.ts'",
     "prepublishOnly": "bun run build",
-    "prepare": "cd ../../docker-testnet/ethereum-testnet/typescript-sdk && bun run build && cd ../../state-proofs/typescript && tsc && tsc --project tsconfig.check.json && ../../../scripts/install-hooks.sh"
+    "prepare": "cd ../../docker-testnet/ethereum-testnet/typescript-sdk && bun run build && cd ../../../state-proofs/typescript && tsc && tsc --project tsconfig.check.json && ../../../scripts/install-hooks.sh"
   },
   "keywords": [
     "ethereum",
