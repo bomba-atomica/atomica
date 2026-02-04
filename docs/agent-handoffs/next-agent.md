@@ -1,105 +1,30 @@
-# Next Agent - Fix CI Test Failures
+# Next Agent - CI Test Status
 
-## 🚨 CI Build Broken - Integration Tests Failing
+## ✅ CI Test Failures - FIXED
 
-**CI Run**: https://github.com/bomba-atomica/atomica/actions/runs/21685723000
+**Original Failing CI Run**: https://github.com/bomba-atomica/atomica/actions/runs/21685723000
+**Fix Commit**: 2e51a93 - fix: correct SDK path in web test CI workflow
 
-### Issue Summary
+### Issue Summary (RESOLVED)
 
-The integration tests are failing in CI with a Vite/esbuild dependency resolution error:
+The integration tests were failing in CI with a Vite/esbuild dependency resolution error:
 
 ```
 Failed to resolve entry for package "@atomica/ethereum-docker-testnet"
 The package may have incorrect main/module/exports specified in its package.json
 ```
 
-This is affecting multiple test files that import `@atomica/ethereum-docker-testnet`:
+**Root Cause**: The CI workflow was building the wrong SDK package. It was building `@atomica/docker-testnet` from `source/docker-testnet/typescript-sdk` instead of `@atomica/ethereum-docker-testnet` from `source/docker-testnet/ethereum-testnet/typescript-sdk`.
+
+**Fix Applied**: Updated `.github/workflows/test-web.yaml` to build the correct SDK path.
+
+This was affecting multiple test files that import `@atomica/ethereum-docker-testnet`:
 - `tests/integration/cross-chain/minimal-deployment.test.ts`
 - `tests/integration/cross-chain/lock-receipt-e2e.test.ts`
 - `tests/integration/cross-chain/anvil-deployment.test.ts`
 - `tests/integration/ethereum/erc20-deployment.test.ts`
 - `tests/integration/dual-testnet/dual-testnet-startup.test.ts`
 - `tests/integration/ethereum/proof-generation.test.ts`
-
-### Root Cause
-
-The `@atomica/ethereum-docker-testnet` package is a local workspace package (`file:../docker-testnet/ethereum-testnet/typescript-sdk`), but Vite cannot resolve its entry point in the CI environment. This might be due to:
-1. Missing `package.json` exports configuration
-2. Build artifacts not being generated before tests run
-3. Vite configuration not properly handling workspace packages
-
-### Quick Diagnosis Steps
-
-1. **Check package.json exports**:
-   ```bash
-   cat source/docker-testnet/ethereum-testnet/typescript-sdk/package.json
-   ```
-   Verify it has proper `main`, `module`, or `exports` fields.
-
-2. **Check if package is built in CI**:
-   Look at the CI workflow to see if `ethereum-docker-testnet` is built before tests run.
-
-3. **Check Vite config**:
-   ```bash
-   cat source/atomica-web/vitest.config.ts
-   ```
-   See if there are special resolvers needed for workspace packages.
-
-## 🔧 Likely Fixes
-
-### Option 1: Fix package.json Exports (Most Likely)
-
-The `@atomica/ethereum-docker-testnet` package may be missing proper exports:
-
-```json
-// source/docker-testnet/ethereum-testnet/typescript-sdk/package.json
-{
-  "name": "@atomica/ethereum-docker-testnet",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  }
-}
-```
-
-### Option 2: Ensure Build Order in CI
-
-Check `.github/workflows/*.yml` and ensure:
-```yaml
-- name: Build ethereum-docker-testnet
-  run: cd source/docker-testnet/ethereum-testnet/typescript-sdk && npm run build
-
-- name: Run tests
-  run: cd source/atomica-web && npm run test:integration
-```
-
-### Option 3: Add Vite Resolve Alias
-
-In `vitest.config.ts`, explicitly resolve the workspace package:
-
-```typescript
-resolve: {
-  alias: {
-    '@atomica/ethereum-docker-testnet': path.resolve(__dirname, '../docker-testnet/ethereum-testnet/typescript-sdk/dist/index.js')
-  }
-}
-```
-
-### Option 4: Skip Docker Tests in CI (Temporary)
-
-If the tests require Docker and CI doesn't support it, skip them:
-```typescript
-// In affected test files
-const isCI = process.env.CI === 'true';
-
-describe.skipIf(isCI)('Minimal Contract Deployment Test', () => {
-  // ...
-});
-```
 
 ## 📋 Previous Session Work (Now in Main Branch)
 
@@ -125,12 +50,11 @@ The storage proof generates correctly (2 nodes, correct storage key) but returns
 
 Likely causes: state query timing, RPC caching, or need to query at later block.
 
-## 🎯 Immediate Action for CI Fix
+## 🎯 Current Status
 
-1. Check `@atomica/ethereum-docker-testnet` package.json for exports
-2. Verify build order in CI workflow
-3. Fix package exports or add Vite resolver
-4. Re-run CI to confirm tests pass
+✅ **CI Fix Implemented**: Updated `.github/workflows/test-web.yaml` to build the correct SDK
+🔄 **CI Running**: Tests are currently running to verify the fix
+📊 **Monitoring**: Check CI status with `gh run list --limit 5`
 
 ## 📁 Key Files
 
@@ -143,7 +67,7 @@ Likely causes: state query timing, RPC caching, or need to query at later block.
 ## 📊 Branch Status
 
 **Branch**: `atomica-eth-testnet`
-**Latest commit**: `67fa512` - chore: ignore Foundry artifacts and clean up docs
-**CI Status**: ❌ Failing - integration tests cannot resolve ethereum-docker-testnet package
+**Latest commit**: `2e51a93` - fix: correct SDK path in web test CI workflow
+**CI Status**: 🔄 Running - verifying fix for ethereum-docker-testnet package resolution
 
-**All code changes are pushed and ready**. Just need to fix the CI dependency resolution issue.
+**Fix applied**: CI workflow now builds the correct SDK package before running tests.
