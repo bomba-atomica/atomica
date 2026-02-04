@@ -12,6 +12,7 @@
     },
     "scripts": {
         "build": "tsc",
+        "postinstall": "if [ -d ../node_modules ]; then rm -rf ../node_modules/@atomica/ethereum-docker-testnet && cp -r . ../node_modules/@atomica/ethereum-docker-testnet; fi",
         "test": "bun test",
         "clean": "rm -rf dist",
         "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
