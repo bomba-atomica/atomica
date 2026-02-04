@@ -1,0 +1,42 @@
+name: Test Move Contracts
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Aptos CLI
+        run: |
+          curl -fsSL "https://aptos.dev/scripts/install_cli.py" | python3
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          
+      - name: Run Move Tests
+        run: |
+          aptos move test --package-dir source/atomica-move-contracts
+
+  lint:
+    name: Check Lint Warnings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Aptos CLI
+        run: |
+          curl -fsSL "https://aptos.dev/scripts/install_cli.py" | python3
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          
+      - name: Check for Lint Warnings
+        run: |
+          aptos move compile --package-dir source/atomica-move-contracts --fail-on-warning --named-addresses atomica=0xcafe
