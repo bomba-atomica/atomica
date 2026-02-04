@@ -147,6 +147,9 @@ describe("Ethereum State Proof Generation", () => {
     );
     console.log(`✓ Locked FakeETH: ${lockReceipt.hash}`);
 
+    // Wait for state to be indexed (PoS testnet needs time)
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
     // Generate proof
     const proof = await generateLockedBalanceProof(
       provider,
@@ -199,6 +202,9 @@ describe("Ethereum State Proof Generation", () => {
     await sendAndWaitForTx(fakeUSD.mint(deployer.address, lockAmount, { nonce: nonce++ }), 1);
     await sendAndWaitForTx(fakeUSD.approve(lockBoxAddress, lockAmount, { nonce: nonce++ }), 1);
     await sendAndWaitForTx(lockBox.lock(fakeUSDAddress, lockAmount, { nonce: nonce++ }), 1);
+
+    // Wait for state to be indexed
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Generate proof
     const proof = await generateLockedBalanceProof(
