@@ -36,24 +36,7 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Build local TypeScript packages
-        run: |
-          # Build @atomica/docker-testnet
-          cd source/docker-testnet/typescript-sdk
-          bun install
-          bun run build
-
-          # Build @atomica/ethereum-docker-testnet
-          cd ../ethereum-testnet/typescript-sdk
-          bun install
-          bun run build
-
-          # Build @atomica/state-proof-verifier
-          cd ../../../state-proofs/typescript
-          bun install
-          bun run build
-
-      - name: Install atomica-web dependencies
+      - name: Install dependencies (auto-builds local packages via prepare scripts)
         run: |
           cd source/atomica-web
           bun install
