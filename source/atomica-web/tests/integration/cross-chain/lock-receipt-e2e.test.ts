@@ -108,7 +108,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
 
     // Verify FakeETH deployed correctly
     const fakeEthCode = await ethProvider.getCode(fakeEthAddress);
-    if (fakeEthCode === '0x') {
+    if (fakeEthCode === "0x") {
       throw new Error(`FakeETH contract not deployed at ${fakeEthAddress}`);
     }
     console.log(`  ✓ FakeETH bytecode verified (${fakeEthCode.length} bytes)`);
@@ -129,7 +129,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
 
     // Verify FakeUSD deployed correctly
     const fakeUsdCode = await ethProvider.getCode(fakeUsdAddress);
-    if (fakeUsdCode === '0x') {
+    if (fakeUsdCode === "0x") {
       throw new Error(`FakeUSD contract not deployed at ${fakeUsdAddress}`);
     }
     console.log(`  ✓ FakeUSD bytecode verified (${fakeUsdCode.length} bytes)`);
@@ -142,11 +142,10 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       lockBoxArtifact.bytecode.object,
       ethSigner,
     );
-    const lockBoxContract = await deployWithRetry(
-      LockBoxFactory,
-      ethSigner,
-      [fakeEthAddress, fakeUsdAddress],
-    );
+    const lockBoxContract = await deployWithRetry(LockBoxFactory, ethSigner, [
+      fakeEthAddress,
+      fakeUsdAddress,
+    ]);
     lockBoxAddress = await lockBoxContract.getAddress();
 
     // Wait for state to be indexed
@@ -154,7 +153,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
 
     // Verify LockBox deployed correctly
     const lockBoxCode = await ethProvider.getCode(lockBoxAddress);
-    if (lockBoxCode === '0x') {
+    if (lockBoxCode === "0x") {
       throw new Error(`LockBox contract not deployed at ${lockBoxAddress}`);
     }
     console.log(`  ✓ LockBox bytecode verified (${lockBoxCode.length} bytes)`);
@@ -241,19 +240,26 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     if (mintEthReceipt.status === 0) {
       throw new Error(`Mint transaction reverted: ${mintEthTx.hash}`);
     }
-    console.log(`  ✓ Tx hash: ${mintEthTx.hash} (status: ${mintEthReceipt.status})`);
+    console.log(
+      `  ✓ Tx hash: ${mintEthTx.hash} (status: ${mintEthReceipt.status})`,
+    );
 
     // Wait for transaction indexing
     await new Promise((r) => setTimeout(r, 2000));
 
     // Debug: Try direct eth_call to see raw response
     try {
-      const callData = fakeEthContract.interface.encodeFunctionData('balanceOf', [ethSigner.address]);
+      const callData = fakeEthContract.interface.encodeFunctionData(
+        "balanceOf",
+        [ethSigner.address],
+      );
       const rawResult = await ethProvider.call({
         to: fakeEthAddress,
         data: callData,
       });
-      console.log(`  Debug: Raw balanceOf result: ${rawResult} (length: ${rawResult.length})`);
+      console.log(
+        `  Debug: Raw balanceOf result: ${rawResult} (length: ${rawResult.length})`,
+      );
     } catch (error: any) {
       console.log(`  Debug: Direct eth_call failed: ${error.message}`);
     }
@@ -278,7 +284,9 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     if (mintUsdReceipt.status === 0) {
       throw new Error(`Mint transaction reverted: ${mintUsdTx.hash}`);
     }
-    console.log(`  ✓ Tx hash: ${mintUsdTx.hash} (status: ${mintUsdReceipt.status})`);
+    console.log(
+      `  ✓ Tx hash: ${mintUsdTx.hash} (status: ${mintUsdReceipt.status})`,
+    );
 
     // Wait for transaction indexing
     await new Promise((r) => setTimeout(r, 2000));

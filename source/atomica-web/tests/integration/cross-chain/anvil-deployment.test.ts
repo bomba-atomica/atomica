@@ -28,12 +28,18 @@ describe("Anvil Deployment Test", () => {
     // Start Anvil
     console.log("\n[PHASE 1] Starting Anvil...");
     anvilProcess = spawn("anvil", [
-      "--port", "8545",
-      "--accounts", "10",
-      "--balance", "10000",
-      "--gas-limit", "30000000",
-      "--code-size-limit", "100000",
-      "--block-time", "1",
+      "--port",
+      "8545",
+      "--accounts",
+      "10",
+      "--balance",
+      "10000",
+      "--gas-limit",
+      "30000000",
+      "--code-size-limit",
+      "100000",
+      "--block-time",
+      "1",
     ]);
 
     // Wait for Anvil to start
@@ -54,7 +60,8 @@ describe("Anvil Deployment Test", () => {
     ethProvider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
 
     // Anvil provides test accounts with known private keys
-    const testPrivateKey = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+    const testPrivateKey =
+      "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
     ethSigner = new ethers.Wallet(testPrivateKey, ethProvider);
 
     console.log(`✓ Ethereum signer: ${ethSigner.address}`);
@@ -90,7 +97,10 @@ describe("Anvil Deployment Test", () => {
       ethSigner,
     );
 
-    const minimalContract = await deployWithRetry(MinimalTestFactory, ethSigner);
+    const minimalContract = await deployWithRetry(
+      MinimalTestFactory,
+      ethSigner,
+    );
     const minimalAddress = await minimalContract.getAddress();
 
     console.log(`\n✓ Deployed at: ${minimalAddress}`);
@@ -99,7 +109,7 @@ describe("Anvil Deployment Test", () => {
     const code = await ethProvider.getCode(minimalAddress);
     console.log(`✓ Bytecode length: ${code.length} characters`);
 
-    if (code === '0x') {
+    if (code === "0x") {
       throw new Error("MinimalTest has no bytecode on Anvil!");
     }
 
@@ -130,7 +140,7 @@ describe("Anvil Deployment Test", () => {
     const code = await ethProvider.getCode(fakeEthAddress);
     console.log(`✓ Bytecode length: ${code.length} characters`);
 
-    if (code === '0x') {
+    if (code === "0x") {
       throw new Error("FakeETH has no bytecode on Anvil!");
     }
 
@@ -140,7 +150,9 @@ describe("Anvil Deployment Test", () => {
     const mintTx = await fakeEthContract.mint(mintAmount);
     const receipt = await mintTx.wait();
 
-    console.log(`✓ Mint transaction: ${mintTx.hash} (status: ${receipt.status})`);
+    console.log(
+      `✓ Mint transaction: ${mintTx.hash} (status: ${receipt.status})`,
+    );
 
     // Check balance
     const balance = await fakeEthContract.balanceOf(ethSigner.address);

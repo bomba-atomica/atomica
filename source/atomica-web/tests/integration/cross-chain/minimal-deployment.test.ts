@@ -68,7 +68,9 @@ describe("Minimal Contract Deployment Test", () => {
 
     // Get artifact
     const minimalTestArtifact = getMinimalTestArtifact();
-    console.log(`✓ Artifact loaded (ABI has ${minimalTestArtifact.abi.length} entries)`);
+    console.log(
+      `✓ Artifact loaded (ABI has ${minimalTestArtifact.abi.length} entries)`,
+    );
 
     // Create factory
     const MinimalTestFactory = new ethers.ContractFactory(
@@ -78,11 +80,16 @@ describe("Minimal Contract Deployment Test", () => {
     );
 
     console.log(`✓ Factory created`);
-    console.log(`  Bytecode length: ${minimalTestArtifact.bytecode.object.length} characters\n`);
+    console.log(
+      `  Bytecode length: ${minimalTestArtifact.bytecode.object.length} characters\n`,
+    );
 
     // Deploy
     console.log("Attempting deployment...");
-    const minimalContract = await deployWithRetry(MinimalTestFactory, ethSigner);
+    const minimalContract = await deployWithRetry(
+      MinimalTestFactory,
+      ethSigner,
+    );
     const minimalAddress = await minimalContract.getAddress();
 
     console.log(`\n✓ Deployment function returned`);
@@ -98,7 +105,7 @@ describe("Minimal Contract Deployment Test", () => {
     console.log(`  Bytecode at address: ${code}`);
     console.log(`  Length: ${code.length} characters`);
 
-    if (code === '0x') {
+    if (code === "0x") {
       console.log("\n❌ FAILURE: Contract deployed but no bytecode exists!");
       console.log("This indicates a TESTNET/EVM ISSUE, not a contract issue.");
       throw new Error("Contract has no bytecode despite successful deployment");
@@ -116,7 +123,9 @@ describe("Minimal Contract Deployment Test", () => {
 
     console.log("\n" + "=".repeat(80));
     console.log("RESULT: MinimalTest deployed and works correctly!");
-    console.log("This means the issue is with FakeETH/LockBox contracts, not the testnet.");
+    console.log(
+      "This means the issue is with FakeETH/LockBox contracts, not the testnet.",
+    );
     console.log("=".repeat(80));
   }, 120000); // 2 minute timeout
 });

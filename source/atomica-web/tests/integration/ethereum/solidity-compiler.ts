@@ -65,7 +65,9 @@ export async function deployWithRetry(
       // Deploy using factory.deploy() which handles everything correctly
       console.log(`   Debug: Deploying with factory.deploy()...`);
       const contract = await factory.deploy(...args);
-      console.log(`   Transaction sent: ${contract.deploymentTransaction()?.hash}`);
+      console.log(
+        `   Transaction sent: ${contract.deploymentTransaction()?.hash}`,
+      );
 
       // Wait for deployment to complete
       console.log(`   Waiting for confirmation...`);
@@ -85,14 +87,16 @@ export async function deployWithRetry(
           console.log(`     - Gas used: ${receipt.gasUsed.toString()}`);
 
           if (receipt.status === 0) {
-            throw new Error(`Deployment transaction reverted (tx: ${deployTx.hash})`);
+            throw new Error(
+              `Deployment transaction reverted (tx: ${deployTx.hash})`,
+            );
           }
 
           // Debug: Check if bytecode exists
           const code = await deployer.provider.getCode(deployedAddress);
           console.log(`   Bytecode check:`);
           console.log(`     - Length: ${code.length} characters`);
-          if (code === '0x' || code === '0x0') {
+          if (code === "0x" || code === "0x0") {
             console.log(`     ⚠️  WARNING: No bytecode at address!`);
           } else {
             console.log(`     ✓ Bytecode exists!`);
