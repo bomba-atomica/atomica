@@ -36,9 +36,9 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Build Docker Testnet SDK
+      - name: Build Ethereum Docker Testnet SDK
         run: |
-          cd source/docker-testnet/typescript-sdk
+          cd source/docker-testnet/ethereum-testnet/typescript-sdk
           npm install
           npm run build
 
