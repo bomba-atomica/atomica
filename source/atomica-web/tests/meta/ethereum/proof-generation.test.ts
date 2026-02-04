@@ -147,10 +147,6 @@ describe("Ethereum State Proof Generation", () => {
     );
     console.log(`✓ Locked FakeETH: ${lockReceipt.hash}`);
 
-    // Wait for at least one block confirmation after lock
-    const targetBlock = lockReceipt.blockNumber! + 1;
-    await provider.waitForBlock(targetBlock);
-
     // Generate proof
     const proof = await generateLockedBalanceProof(
       provider,
@@ -181,10 +177,7 @@ describe("Ethereum State Proof Generation", () => {
     let nonce = await deployer.getNonce();
     await sendAndWaitForTx(fakeETH.mint(deployer.address, lockAmount, { nonce: nonce++ }), 1);
     await sendAndWaitForTx(fakeETH.approve(lockBoxAddress, lockAmount, { nonce: nonce++ }), 1);
-    const lockReceipt = await sendAndWaitForTx(lockBox.lock(fakeETHAddress, lockAmount, { nonce: nonce++ }), 1);
-
-    // Wait for block confirmation
-    await provider.waitForBlock(lockReceipt.blockNumber! + 1);
+    await sendAndWaitForTx(lockBox.lock(fakeETHAddress, lockAmount, { nonce: nonce++ }), 1);
 
     // Generate proof
     const proof = await generateLockedBalanceProof(
@@ -205,10 +198,7 @@ describe("Ethereum State Proof Generation", () => {
     let nonce = await deployer.getNonce();
     await sendAndWaitForTx(fakeUSD.mint(deployer.address, lockAmount, { nonce: nonce++ }), 1);
     await sendAndWaitForTx(fakeUSD.approve(lockBoxAddress, lockAmount, { nonce: nonce++ }), 1);
-    const lockReceipt = await sendAndWaitForTx(lockBox.lock(fakeUSDAddress, lockAmount, { nonce: nonce++ }), 1);
-
-    // Wait for block confirmation
-    await provider.waitForBlock(lockReceipt.blockNumber! + 1);
+    await sendAndWaitForTx(lockBox.lock(fakeUSDAddress, lockAmount, { nonce: nonce++ }), 1);
 
     // Generate proof
     const proof = await generateLockedBalanceProof(
@@ -229,10 +219,7 @@ describe("Ethereum State Proof Generation", () => {
     let nonce = await deployer.getNonce();
     await sendAndWaitForTx(fakeETH.mint(deployer.address, lockAmount, { nonce: nonce++ }), 1);
     await sendAndWaitForTx(fakeETH.approve(lockBoxAddress, lockAmount, { nonce: nonce++ }), 1);
-    const lockReceipt = await sendAndWaitForTx(lockBox.lock(fakeETHAddress, lockAmount, { nonce: nonce++ }), 1);
-
-    // Wait for block confirmation
-    await provider.waitForBlock(lockReceipt.blockNumber! + 1);
+    await sendAndWaitForTx(lockBox.lock(fakeETHAddress, lockAmount, { nonce: nonce++ }), 1);
 
     // Generate proof at current block
     const proof = await generateLockedBalanceProof(
@@ -258,10 +245,7 @@ describe("Ethereum State Proof Generation", () => {
     let nonce = await deployer.getNonce();
     await sendAndWaitForTx(fakeETH.mint(deployer.address, lockAmount, { nonce: nonce++ }), 1);
     await sendAndWaitForTx(fakeETH.approve(lockBoxAddress, lockAmount, { nonce: nonce++ }), 1);
-    const lockReceipt = await sendAndWaitForTx(lockBox.lock(fakeETHAddress, lockAmount, { nonce: nonce++ }), 1);
-
-    // Wait for block confirmation
-    await provider.waitForBlock(lockReceipt.blockNumber! + 1);
+    await sendAndWaitForTx(lockBox.lock(fakeETHAddress, lockAmount, { nonce: nonce++ }), 1);
 
     // Generate proof
     const proof = await generateLockedBalanceProof(

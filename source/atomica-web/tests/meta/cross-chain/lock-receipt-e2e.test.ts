@@ -245,9 +245,6 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       `  ✓ Tx hash: ${mintEthReceipt.hash} (status: ${mintEthReceipt.status})`,
     );
 
-    // Wait for block confirmation
-    await ethProvider.waitForBlock(mintEthReceipt.blockNumber! + 1);
-
     // Debug: Try direct eth_call to see raw response
     try {
       const callData = fakeEthContract.interface.encodeFunctionData(
@@ -287,9 +284,6 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     console.log(
       `  ✓ Tx hash: ${mintUsdReceipt.hash} (status: ${mintUsdReceipt.status})`,
     );
-
-    // Wait for block confirmation
-    await ethProvider.waitForBlock(mintUsdReceipt.blockNumber! + 1);
 
     const usdBalance = await fakeUsdContract.balanceOf(ethSigner.address);
     expect(usdBalance).toBe(MINT_AMOUNT_USD);
@@ -337,9 +331,6 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     );
     console.log(`  ✓ Tx hash: ${lockReceipt.hash} (status: ${lockReceipt.status})`);
     console.log(`  ✓ Block: ${lockReceipt.blockNumber}`);
-
-    // Wait for block confirmation
-    await ethProvider.waitForBlock(lockReceipt.blockNumber! + 1);
 
     // Verify locked balance
     const lockedBalance = await lockBoxContract.getLockedBalance(
@@ -398,9 +389,6 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     );
     console.log(`  ✓ Tx hash: ${lockReceipt.hash} (status: ${lockReceipt.status})`);
     console.log(`  ✓ Block: ${lockReceipt.blockNumber}`);
-
-    // Wait for block confirmation
-    await ethProvider.waitForBlock(lockReceipt.blockNumber! + 1);
 
     // Verify locked balance
     const lockedBalance = await lockBoxContract.getLockedBalance(
