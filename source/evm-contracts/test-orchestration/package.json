@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "echo 'No build step required for TypeScript scripts'",
+    "postinstall": "cd ../../docker-testnet/ethereum-testnet/typescript-sdk && bun install && bun run build",
     "start": "bun run src/index.ts",
     "test": "bun run src/index.ts --test all",
     "test:unit": "bun run src/index.ts --test unit",

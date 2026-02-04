@@ -16,8 +16,7 @@
         "test": "bun test",
         "clean": "rm -rf dist",
         "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
-        "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.ts'",
-        "prepare": "tsc && ../../../../scripts/install-hooks.sh"
+        "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.ts'"
     },
     "dependencies": {
         "dotenv": "^16.3.1"
