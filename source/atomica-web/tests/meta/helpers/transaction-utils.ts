@@ -1,4 +1,9 @@
-import type { TransactionResponse, TransactionReceipt, Signer, Contract } from "ethers";
+import type {
+  TransactionResponse,
+  TransactionReceipt,
+  Signer,
+  Contract,
+} from "ethers";
 
 /**
  * Sends a transaction and waits for confirmation with explicit timeout and status checks.
@@ -59,7 +64,12 @@ export async function pollForValue<T>(
   while (true) {
     const value = await contract[method](...args);
 
-    if (value === expectedValue || (typeof value === 'bigint' && typeof expectedValue === 'bigint' && value === expectedValue)) {
+    if (
+      value === expectedValue ||
+      (typeof value === "bigint" &&
+        typeof expectedValue === "bigint" &&
+        value === expectedValue)
+    ) {
       return value;
     }
 

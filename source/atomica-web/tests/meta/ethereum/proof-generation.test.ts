@@ -16,7 +16,10 @@ import {
   getLockBoxArtifact,
   deployWithRetry,
 } from "./solidity-compiler.js";
-import { sendAndWaitForTx, pollForValue } from "../helpers/transaction-utils.js";
+import {
+  sendAndWaitForTx,
+  pollForValue,
+} from "../helpers/transaction-utils.js";
 
 /**
  * Integration tests for state proof generation
