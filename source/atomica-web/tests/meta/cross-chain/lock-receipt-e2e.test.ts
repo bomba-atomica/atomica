@@ -213,8 +213,18 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     });
     console.log("  ✓ Contracts deployed");
 
-    // Wait extra time for Aptos indexing
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    // Wait for modules to be indexed and verify they exist
+    console.log("\n  Waiting for lock_receipt module to be indexed...");
+    const moduleReady = await waitForModuleIndexed(
+      aptosClient,
+      aptosModuleAddress,
+      "lock_receipt",
+      30000, // Wait up to 30 seconds
+    );
+
+    if (!moduleReady) {
+      throw new Error("lock_receipt module failed to index within 30 seconds");
+    }
 
     // Initialize registries
     console.log("\n  Initializing Aptos registries...");
@@ -374,7 +384,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     );
     console.log(`  ✓ Block: ${lockReceipt.blockNumber}`);
 
-    // Verify locked balance
+    // Verify locked balance using contract getter
     const lockedBalance = await lockBoxContract.getLockedBalance(
       ethSigner.address,
       fakeEthAddress,
@@ -383,6 +393,39 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     console.log(
       `  ✓ Locked balance: ${ethers.formatEther(lockedBalance)} FakeETH`,
     );
+
+    // Verify storage key calculation
+    console.log("\n  Verifying storage layout...");
+    const lockKey = await lockBoxContract.getLockKey(
+      ethSigner.address,
+      fakeEthAddress,
+    );
+    console.log(`    Lock key (composite): ${lockKey}`);
+
+    const storageKey = await lockBoxContract.calculateStorageKey(
+      ethSigner.address,
+      fakeEthAddress,
+    );
+    console.log(`    Storage key (slot 0): ${storageKey}`);
+
+    // Try to read storage directly using eth_getStorageAt
+    const storageValue = await ethProvider.getStorage(
+      lockBoxAddress,
+      storageKey,
+    );
+    console.log(`    Direct storage read: ${storageValue}`);
+    const storageValueBigInt = BigInt(storageValue);
+    console.log(
+      `    Storage value as uint256: ${storageValueBigInt} (${ethers.formatEther(storageValueBigInt)} ETH)`,
+    );
+
+    if (storageValueBigInt !== LOCK_AMOUNT_ETH) {
+      console.error(`  ✗ Storage value mismatch!`);
+      console.error(`    Expected: ${LOCK_AMOUNT_ETH}`);
+      console.error(`    Got: ${storageValueBigInt}`);
+    } else {
+      console.log(`  ✓ Storage value verified via eth_getStorageAt`);
+    }
 
     // Store block number for proof generation
     (global as any).lockEthBlockNumber = lockReceipt.blockNumber;
@@ -436,7 +479,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     );
     console.log(`  ✓ Block: ${lockReceipt.blockNumber}`);
 
-    // Verify locked balance
+    // Verify locked balance using contract getter
     const lockedBalance = await lockBoxContract.getLockedBalance(
       ethSigner.address,
       fakeUsdAddress,
@@ -445,6 +488,39 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     console.log(
       `  ✓ Locked balance: ${ethers.formatUnits(lockedBalance, 6)} FakeUSD`,
     );
+
+    // Verify storage key calculation
+    console.log("\n  Verifying storage layout...");
+    const lockKey = await lockBoxContract.getLockKey(
+      ethSigner.address,
+      fakeUsdAddress,
+    );
+    console.log(`    Lock key (composite): ${lockKey}`);
+
+    const storageKey = await lockBoxContract.calculateStorageKey(
+      ethSigner.address,
+      fakeUsdAddress,
+    );
+    console.log(`    Storage key (slot 0): ${storageKey}`);
+
+    // Try to read storage directly
+    const storageValue = await ethProvider.getStorage(
+      lockBoxAddress,
+      storageKey,
+    );
+    console.log(`    Direct storage read: ${storageValue}`);
+    const storageValueBigInt = BigInt(storageValue);
+    console.log(
+      `    Storage value as uint256: ${storageValueBigInt} (${ethers.formatUnits(storageValueBigInt, 6)} USD)`,
+    );
+
+    if (storageValueBigInt !== LOCK_AMOUNT_USD) {
+      console.error(`  ✗ Storage value mismatch!`);
+      console.error(`    Expected: ${LOCK_AMOUNT_USD}`);
+      console.error(`    Got: ${storageValueBigInt}`);
+    } else {
+      console.log(`  ✓ Storage value verified via eth_getStorageAt`);
+    }
 
     (global as any).lockUsdBlockNumber = lockReceipt.blockNumber;
   }, 60000);
@@ -462,10 +538,100 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       `  Waiting for finalization (12 blocks from ${lockBlockNumber})...`,
     );
     await ethTestnet.waitForBlocks(12, 180);
-    console.log("  ✓ Block finalized");
+
+    const currentBlock = await ethProvider.getBlockNumber();
+    console.log(
+      `  ✓ Block finalized (current: ${currentBlock}, confirmations: ${currentBlock - lockBlockNumber})`,
+    );
+
+    // Verify storage key calculation BEFORE generating proof
+    console.log("\n  Verifying storage key calculation...");
+    const lockBoxArtifact = getLockBoxArtifact();
+    const lockBoxContract = new ethers.Contract(
+      lockBoxAddress,
+      lockBoxArtifact.abi,
+      ethSigner,
+    );
+
+    // Get storage key from contract's helper function
+    const onChainStorageKey = await lockBoxContract.calculateStorageKey(
+      ethSigner.address,
+      fakeEthAddress,
+    );
+    console.log(`    On-chain storage key: ${onChainStorageKey}`);
+
+    // Calculate off-chain
+    const offChainStorageKey = calculateStorageKey(
+      ethSigner.address,
+      fakeEthAddress,
+    );
+    console.log(`    Off-chain storage key: ${offChainStorageKey}`);
+
+    if (onChainStorageKey !== offChainStorageKey) {
+      console.error("  ✗ STORAGE KEY MISMATCH!");
+      throw new Error(
+        `Storage key mismatch: on-chain=${onChainStorageKey}, off-chain=${offChainStorageKey}`,
+      );
+    }
+    console.log("  ✓ Storage keys match!");
+
+    // Verify we can read the locked balance directly from contract
+    const lockedBalanceFromContract = await lockBoxContract.getLockedBalance(
+      ethSigner.address,
+      fakeEthAddress,
+    );
+    console.log(
+      `    Locked balance from contract: ${ethers.formatEther(lockedBalanceFromContract)} FakeETH`,
+    );
+    expect(lockedBalanceFromContract).toBe(LOCK_AMOUNT_ETH);
+
+    // Test eth_getProof directly BEFORE using our generator
+    console.log(
+      `\n  Testing eth_getProof directly at block ${lockBlockNumber}...`,
+    );
+    try {
+      // Format block number without leading zeros (Geth requirement)
+      const blockHex = "0x" + lockBlockNumber.toString(16);
+      const rawProof = await ethProvider.send("eth_getProof", [
+        lockBoxAddress,
+        [offChainStorageKey],
+        blockHex,
+      ]);
+      console.log(`    Raw eth_getProof response:`);
+      console.log(`      Address: ${rawProof.address}`);
+      console.log(`      Balance: ${rawProof.balance}`);
+      console.log(`      Storage hash: ${rawProof.storageHash}`);
+      console.log(`      Account proof: ${rawProof.accountProof.length} nodes`);
+      console.log(
+        `      Storage proofs: ${rawProof.storageProof.length} items`,
+      );
+      if (rawProof.storageProof[0]) {
+        console.log(`      Storage key: ${rawProof.storageProof[0].key}`);
+        console.log(`      Storage value: ${rawProof.storageProof[0].value}`);
+        console.log(
+          `      Storage proof: ${rawProof.storageProof[0].proof.length} nodes`,
+        );
+
+        const rawStorageValue = BigInt(rawProof.storageProof[0].value);
+        if (rawStorageValue === 0n) {
+          console.error(
+            `    ✗ WARNING: eth_getProof returned 0! Storage layout may still be broken.`,
+          );
+        } else if (rawStorageValue !== LOCK_AMOUNT_ETH) {
+          console.error(`    ✗ WARNING: eth_getProof returned wrong value!`);
+          console.error(`      Expected: ${LOCK_AMOUNT_ETH}`);
+          console.error(`      Got: ${rawStorageValue}`);
+        } else {
+          console.log(`    ✓ eth_getProof returned correct value!`);
+        }
+      }
+    } catch (error: any) {
+      console.error(`    ✗ eth_getProof failed: ${error.message}`);
+      throw error;
+    }
 
     // Generate proof at the lock block (not +1, that was the bug!)
-    console.log(`  Generating state proof at lock block ${lockBlockNumber}...`);
+    console.log(`\n  Generating state proof using our generator...`);
     const proof = await generateLockProof(
       ethProvider,
       lockBoxAddress,
@@ -479,14 +645,30 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     console.log(`    State root: ${proof.stateRoot}`);
     console.log(`    Account proof nodes: ${proof.accountProof.length}`);
     console.log(`    Storage proof nodes: ${proof.storageProof.length}`);
+    console.log(`    Storage key: ${proof.storageKey}`);
     console.log(
       `    Storage value: ${proof.storageValue} (${ethers.formatEther(proof.storageValue)} ETH)`,
     );
 
-    // Verify proof locally (optional)
+    // Detailed validation
+    console.log("\n  Validating proof structure...");
     expect(proof.accountProof.length).toBeGreaterThan(0);
+    console.log(`    ✓ Account proof has ${proof.accountProof.length} nodes`);
+
     expect(proof.storageProof.length).toBeGreaterThan(0);
+    console.log(`    ✓ Storage proof has ${proof.storageProof.length} nodes`);
+
     expect(BigInt(proof.storageValue)).toBe(LOCK_AMOUNT_ETH);
+    console.log(`    ✓ Storage value matches locked amount`);
+
+    if (proof.storageValue === 0n) {
+      console.error(
+        "  ✗ WARNING: Storage value is 0! This indicates eth_getProof returned 0.",
+      );
+      console.error(
+        `     This might mean the storage layout is still incorrect.`,
+      );
+    }
 
     // Store for next test
     (global as any).fakeEthProof = proof;
@@ -504,17 +686,26 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     const storageKey = calculateStorageKey(ethSigner.address, fakeEthAddress);
     console.log(`  Storage key: ${storageKey}`);
 
+    // Verify storage key matches proof
+    if (storageKey !== proof.storageKey) {
+      console.error(`  ✗ Storage key mismatch!`);
+      console.error(`    Expected: ${storageKey}`);
+      console.error(`    From proof: ${proof.storageKey}`);
+      throw new Error("Storage key mismatch between test and proof");
+    }
+    console.log(`  ✓ Storage key verified`);
+
     // Convert Ethereum address to Aptos format
     const aptosUserAddress = ethereumToAptosAddress(ethSigner.address);
     console.log(`  Aptos user address: ${aptosUserAddress}`);
 
     // Submit proof to Aptos
-    console.log("  Submitting proof transaction...");
+    console.log("\n  Building proof transaction...");
 
     // Strip 0x prefix from all hex strings for Aptos
     const payload = {
-      function: "atomica::lock_receipt::register_ethereum_lock",
-      typeArguments: ["atomica::lock_receipt::FakeETH"],
+      function: `${aptosModuleAddress}::lock_receipt::register_ethereum_lock`,
+      typeArguments: [`${aptosModuleAddress}::lock_receipt::FakeETH`],
       functionArguments: [
         proof.blockNumber,
         stripHexPrefix(proof.blockHash),
@@ -523,12 +714,37 @@ describe("Cross-Chain Lock Receipt E2E", () => {
         stripHexPrefix(ethSigner.address),
         stripHexPrefix(fakeEthAddress),
         stripHexPrefix(storageKey),
-        proof.storageValue,
+        proof.storageValue.toString(),
         proof.accountProof.map(stripHexPrefix),
         proof.storageProof.map(stripHexPrefix),
       ],
     };
 
+    console.log(`  Transaction payload:`);
+    console.log(`    Function: ${payload.function}`);
+    console.log(`    Type args: ${payload.typeArguments}`);
+    console.log(`    Block number: ${payload.functionArguments[0]}`);
+    console.log(
+      `    Block hash: 0x${payload.functionArguments[1].slice(0, 8)}...`,
+    );
+    console.log(
+      `    State root: 0x${payload.functionArguments[2].slice(0, 8)}...`,
+    );
+    console.log(`    LockBox: 0x${payload.functionArguments[3]}`);
+    console.log(`    User: 0x${payload.functionArguments[4]}`);
+    console.log(`    Token: 0x${payload.functionArguments[5]}`);
+    console.log(
+      `    Storage key: 0x${payload.functionArguments[6].slice(0, 8)}...`,
+    );
+    console.log(`    Storage value: ${payload.functionArguments[7]}`);
+    console.log(
+      `    Account proof nodes: ${payload.functionArguments[8].length}`,
+    );
+    console.log(
+      `    Storage proof nodes: ${payload.functionArguments[9].length}`,
+    );
+
+    console.log("\n  Submitting transaction...");
     const txn = await aptosClient.transaction.build.simple({
       sender: aptosAccount.accountAddress,
       data: payload,
@@ -539,17 +755,19 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       transaction: txn,
     });
 
+    console.log(`  ✓ Transaction submitted: ${committedTxn.hash}`);
+
     const result = await aptosClient.waitForTransaction({
       transactionHash: committedTxn.hash,
       options: { checkSuccess: true },
     });
-    console.log(`  ✓ Tx hash: ${committedTxn.hash}`);
     console.log(`  ✓ Transaction confirmed in block ${result.version}`);
 
     // Verify receipt was created
-    console.log("  Verifying receipt...");
+    console.log("\n  Verifying receipt on Aptos...");
 
     // Calculate lock_id (same logic as in lock_receipt.move)
+    console.log("  Calculating lock ID...");
     const lockIdData = Buffer.concat([
       Buffer.from(proof.blockHash.slice(2), "hex"),
       Buffer.from(lockBoxAddress.slice(2), "hex"),
@@ -558,9 +776,16 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       Buffer.from(storageKey.slice(2), "hex"),
     ]);
     const lockId = ethers.keccak256(lockIdData);
-    console.log(`  Lock ID: ${lockId}`);
+    console.log(`    Lock ID: ${lockId}`);
+    console.log(`    Components:`);
+    console.log(`      - Block hash: ${proof.blockHash.slice(0, 10)}...`);
+    console.log(`      - LockBox: ${lockBoxAddress}`);
+    console.log(`      - User: ${ethSigner.address}`);
+    console.log(`      - Token: ${fakeEthAddress}`);
+    console.log(`      - Storage key: ${storageKey.slice(0, 10)}...`);
 
     // Check if lock is claimed
+    console.log("\n  Checking if lock is claimed...");
     const isClaimed = await viewFunction(
       aptosClient,
       `${aptosModuleAddress}::lock_receipt::is_lock_claimed` as any,
@@ -574,6 +799,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     console.log("  ✓ Lock marked as claimed");
 
     // Get receipt details
+    console.log("\n  Fetching receipt details...");
     const receipt = await viewFunction(
       aptosClient,
       `${aptosModuleAddress}::lock_receipt::get_receipt` as any,
@@ -586,16 +812,35 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     expect(receipt.length).toBeGreaterThan(0);
 
     const [receiptUser, receiptAmount, receiptBlock, receiptStatus] = receipt;
-    console.log(`  Receipt user: ${receiptUser}`);
-    console.log(`  Receipt amount: ${receiptAmount}`);
-    console.log(`  Receipt block: ${receiptBlock}`);
-    console.log(`  Receipt status: ${receiptStatus} (0=ACTIVE)`);
+    console.log(`    Receipt user: ${receiptUser}`);
+    console.log(`    Receipt amount: ${receiptAmount}`);
+    console.log(`    Receipt block: ${receiptBlock}`);
+    console.log(`    Receipt status: ${receiptStatus} (0=ACTIVE)`);
 
-    expect(receiptAmount).toBe(proof.storageValue);
+    // Detailed validation
+    console.log("\n  Validating receipt data...");
+
+    if (receiptAmount.toString() !== proof.storageValue.toString()) {
+      console.error(`  ✗ Amount mismatch!`);
+      console.error(`    Expected: ${proof.storageValue}`);
+      console.error(`    Got: ${receiptAmount}`);
+    }
+    expect(receiptAmount.toString()).toBe(proof.storageValue.toString());
+    console.log(`    ✓ Amount matches proof`);
+
+    if (receiptBlock !== proof.blockNumber) {
+      console.error(`  ✗ Block number mismatch!`);
+      console.error(`    Expected: ${proof.blockNumber}`);
+      console.error(`    Got: ${receiptBlock}`);
+    }
     expect(receiptBlock).toBe(proof.blockNumber);
+    console.log(`    ✓ Block number matches proof`);
+
     expect(receiptStatus).toBe(0); // ACTIVE
+    console.log(`    ✓ Status is ACTIVE`);
 
     // Check registry metrics
+    console.log("\n  Checking registry metrics...");
     const receiptCount = await viewFunction(
       aptosClient,
       `${aptosModuleAddress}::lock_receipt::get_receipt_count` as any,
@@ -606,7 +851,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       [],
     );
     expect(receiptCount[0]).toBe(1);
-    console.log(`  ✓ Receipt count: ${receiptCount[0]}`);
+    console.log(`    ✓ Receipt count: ${receiptCount[0]}`);
 
     const totalLocked = await viewFunction(
       aptosClient,
@@ -617,8 +862,8 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       ],
       [],
     );
-    expect(totalLocked[0]).toBe(proof.storageValue);
-    console.log(`  ✓ Total locked: ${totalLocked[0]}`);
+    expect(totalLocked[0].toString()).toBe(proof.storageValue.toString());
+    console.log(`    ✓ Total locked: ${totalLocked[0]}`);
 
     (global as any).fakeEthLockId = lockId;
   }, 120000);
@@ -715,6 +960,44 @@ describe("Cross-Chain Lock Receipt E2E", () => {
 // ============================================================
 // Helper Functions
 // ============================================================
+
+/**
+ * Wait for a module to be indexed and available
+ * Polls the account modules until the target module appears
+ */
+async function waitForModuleIndexed(
+  client: Aptos,
+  accountAddress: string,
+  moduleName: string,
+  maxWaitMs: number = 30000,
+): Promise<boolean> {
+  const startTime = Date.now();
+  let attempts = 0;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    attempts++;
+    try {
+      const modules = await client.getAccountModules({
+        accountAddress: accountAddress as any,
+      });
+
+      const found = modules.find((m) => m.abi?.name === moduleName);
+      if (found) {
+        console.log(
+          `  ✓ Module '${moduleName}' found after ${attempts} attempts (${Date.now() - startTime}ms)`,
+        );
+        return true;
+      }
+    } catch (error: any) {
+      // Ignore errors during polling
+    }
+
+    await new Promise((r) => setTimeout(r, 2000)); // Poll every 2 seconds
+  }
+
+  console.error(`  ✗ Module '${moduleName}' not found after ${maxWaitMs}ms`);
+  return false;
+}
 
 async function initializeRegistry(
   client: Aptos,
