@@ -274,11 +274,12 @@ contract LockBoxTest is Test {
         bytes32 keyUSD = lockBox.calculateStorageKey(alice, address(fakeUSD));
         assertTrue(key1 != keyUSD);
 
-        // Verify calculation matches Solidity's nested mapping layout
-        // For mapping(address => mapping(address => uint256)) at slot 0:
-        // key = keccak256(abi.encode(outerKey, keccak256(abi.encode(innerKey, slot))))
-        bytes32 innerKey = keccak256(abi.encode(address(fakeETH), uint256(0)));
-        bytes32 expectedKey = keccak256(abi.encode(alice, innerKey));
+        // Verify calculation matches Solidity's single-level mapping layout
+        // For mapping(bytes32 => uint256) at slot 0 with composite key:
+        // compositeKey = keccak256(abi.encodePacked(user, token))
+        // storageKey = keccak256(abi.encode(compositeKey, slot))
+        bytes32 compositeKey = lockBox.getLockKey(alice, address(fakeETH));
+        bytes32 expectedKey = keccak256(abi.encode(compositeKey, uint256(0)));
 
         assertEq(key1, expectedKey);
     }
