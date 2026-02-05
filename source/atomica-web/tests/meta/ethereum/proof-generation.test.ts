@@ -157,6 +157,9 @@ describe("Ethereum State Proof Generation", () => {
     );
     console.log(`✓ State indexed`);
 
+    // Additional wait for state trie to sync (eth_getProof uses different code path)
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
     // Generate proof
     const proof = await generateLockedBalanceProof(
       provider,
@@ -236,6 +239,9 @@ describe("Ethereum State Proof Generation", () => {
       lockAmount,
       { description: "locked FakeUSD balance" },
     );
+
+    // Additional wait for state trie to sync (eth_getProof uses different code path)
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Generate proof
     const proof = await generateLockedBalanceProof(
