@@ -41,6 +41,12 @@ jobs:
           cd source/atomica-web
           bun install
 
+      - name: Build state-proof-verifier
+        run: |
+          cd source/state-proofs/typescript
+          bun install
+          bun run build
+
       - name: Install Playwright browsers
         run: |
           cd source/atomica-web
