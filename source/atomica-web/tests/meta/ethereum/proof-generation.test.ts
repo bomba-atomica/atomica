@@ -148,7 +148,7 @@ describe("Ethereum State Proof Generation", () => {
     console.log(`✓ Locked FakeETH: ${lockReceipt.hash}`);
 
     // Wait for state to be indexed (PoS testnet needs time)
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 6000));
 
     // Generate proof
     const proof = await generateLockedBalanceProof(
