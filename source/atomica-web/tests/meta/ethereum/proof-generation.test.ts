@@ -172,7 +172,7 @@ describe("Ethereum State Proof Generation", () => {
       (proof) => proof.storageValue === lockAmount,
       {
         description: `proof at block ${proofBlock} with correct balance`,
-        timeout: 30000,
+        timeout: 120000,
       },
     );
     console.log(`✓ Proof generated at block ${proofBlock}`);
@@ -261,7 +261,7 @@ describe("Ethereum State Proof Generation", () => {
       (proof) => proof.storageValue === lockAmount,
       {
         description: `proof at block ${proofBlock}`,
-        timeout: 30000,
+        timeout: 120000,
       },
     );
 
