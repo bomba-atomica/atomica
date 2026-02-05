@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
+import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { EthereumDockerTestnet } from "../src/index";
 import { ethers } from "ethers";
 import {
   compileContracts,
   getMinimalTestArtifact,
   deployWithRetry,
-} from "../ethereum/solidity-compiler";
+} from "./helpers/solidity-compiler";
 
 /**
  * Minimal Deployment Test

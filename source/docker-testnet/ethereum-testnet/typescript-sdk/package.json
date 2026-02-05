@@ -19,7 +19,8 @@
         "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.ts'"
     },
     "dependencies": {
-        "dotenv": "^16.3.1"
+        "dotenv": "^16.3.1",
+        "ethers": "^6.16.0"
     },
     "devDependencies": {
         "prettier": "^3.0.0",
