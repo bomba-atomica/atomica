@@ -126,8 +126,11 @@ export async function pollUntil<T>(
     description?: string;
   } = {},
 ): Promise<T> {
-  const { interval = 500, timeout = 30000, description = "condition" } =
-    options;
+  const {
+    interval = 500,
+    timeout = 30000,
+    description = "condition",
+  } = options;
   const startTime = Date.now();
   let lastError: Error | undefined;
 

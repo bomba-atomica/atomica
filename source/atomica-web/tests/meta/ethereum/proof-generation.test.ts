@@ -16,10 +16,7 @@ import {
   getLockBoxArtifact,
   deployWithRetry,
 } from "./solidity-compiler.js";
-import {
-  sendAndWaitForTx,
-  pollUntil,
-} from "../helpers/transaction-utils.js";
+import { sendAndWaitForTx, pollUntil } from "../helpers/transaction-utils.js";
 
 /**
  * Integration tests for state proof generation
@@ -160,7 +157,9 @@ describe("Ethereum State Proof Generation", () => {
         // Wait for the target block to exist
         const currentBlock = await provider.getBlockNumber();
         if (currentBlock < proofBlock) {
-          throw new Error(`Block ${proofBlock} not yet mined (current: ${currentBlock})`);
+          throw new Error(
+            `Block ${proofBlock} not yet mined (current: ${currentBlock})`,
+          );
         }
         return generateLockedBalanceProof(
           provider,
