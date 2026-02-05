@@ -150,27 +150,33 @@ describe("Ethereum State Proof Generation", () => {
     );
     console.log(`✓ Locked FakeETH: ${lockReceipt.hash}`);
 
-    // Poll proof generation until state trie is indexed and proof is available
+    // Query proof at the block AFTER the lock transaction for state consistency
+    const proofBlock = lockReceipt.blockNumber + 1;
+    console.log(`  Waiting for block ${proofBlock} to be mined...`);
+
+    // Poll for proof at specific block until state is available
     const proof = await pollUntil(
-      () =>
-        generateLockedBalanceProof(
+      async () => {
+        // Wait for the target block to exist
+        const currentBlock = await provider.getBlockNumber();
+        if (currentBlock < proofBlock) {
+          throw new Error(`Block ${proofBlock} not yet mined (current: ${currentBlock})`);
+        }
+        return generateLockedBalanceProof(
           provider,
           lockBoxAddress,
           deployer.address,
           fakeETHAddress,
-        ),
-      (proof) => {
-        console.log(
-          `  Polling proof... storage value: ${proof.storageValue} (expected: ${lockAmount})`,
+          proofBlock, // Query at specific block, not "latest"
         );
-        return proof.storageValue === lockAmount;
       },
+      (proof) => proof.storageValue === lockAmount,
       {
-        description: "proof with correct locked balance",
-        timeout: 60000, // Increase to 60s
+        description: `proof at block ${proofBlock} with correct balance`,
+        timeout: 30000,
       },
     );
-    console.log(`✓ Proof generated with correct storage value`);
+    console.log(`✓ Proof generated at block ${proofBlock}`);
 
     // Verify proof structure
     expect(proof.blockNumber).toBeGreaterThan(0);
@@ -230,23 +236,32 @@ describe("Ethereum State Proof Generation", () => {
       fakeUSD.approve(lockBoxAddress, lockAmount, { nonce: nonce++ }),
       1,
     );
-    await sendAndWaitForTx(
+    const lockReceipt = await sendAndWaitForTx(
       lockBox.lock(fakeUSDAddress, lockAmount, { nonce: nonce++ }),
       1,
     );
 
-    // Poll proof generation until state trie is indexed and proof is available
+    // Query proof at the block AFTER the lock transaction
+    const proofBlock = lockReceipt.blockNumber + 1;
+
+    // Poll for proof at specific block
     const proof = await pollUntil(
-      () =>
-        generateLockedBalanceProof(
+      async () => {
+        const currentBlock = await provider.getBlockNumber();
+        if (currentBlock < proofBlock) {
+          throw new Error(`Block ${proofBlock} not yet mined`);
+        }
+        return generateLockedBalanceProof(
           provider,
           lockBoxAddress,
           deployer.address,
           fakeUSDAddress,
-        ),
+          proofBlock,
+        );
+      },
       (proof) => proof.storageValue === lockAmount,
       {
-        description: "proof with correct locked balance",
+        description: `proof at block ${proofBlock}`,
         timeout: 30000,
       },
     );
