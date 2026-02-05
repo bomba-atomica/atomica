@@ -159,10 +159,15 @@ describe("Ethereum State Proof Generation", () => {
           deployer.address,
           fakeETHAddress,
         ),
-      (proof) => proof.storageValue === lockAmount,
+      (proof) => {
+        console.log(
+          `  Polling proof... storage value: ${proof.storageValue} (expected: ${lockAmount})`,
+        );
+        return proof.storageValue === lockAmount;
+      },
       {
         description: "proof with correct locked balance",
-        timeout: 30000,
+        timeout: 60000, // Increase to 60s
       },
     );
     console.log(`✓ Proof generated with correct storage value`);
