@@ -101,11 +101,12 @@ module atomica::eth_proof {
         assert!(vector::length(&storage_root) == 32, E_INVALID_ACCOUNT);
 
         // 3. Verify storage proof against storage root
-        // The storage key is already provided (calculated off-chain)
+        // The storage key is hashed to get the trie path
+        let storage_path = keccak256(proof.storage_key);
         let storage_value_rlp = mpt::verify_proof(
             proof.storage_proof,
             storage_root,
-            proof.storage_key
+            storage_path
         );
 
         // 4. Decode the storage value

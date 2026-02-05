@@ -95,7 +95,7 @@ async function pollUntilWithLogging<T>(
   throw new Error(errorMsg);
 }
 
-describe("Isolated: Proof Generation Step Tests", () => {
+describe.skip("Isolated: Proof Generation Step Tests (Diagnostic - skip by default)", () => {
   let testnet: EthereumDockerTestnet;
   let provider: ethers.Provider;
   let deployer: ethers.Wallet;

@@ -4,6 +4,7 @@ import type {
   Signer,
   Contract,
 } from "ethers";
+import { errorAggregator } from "./error-aggregator";
 
 /**
  * Sends a transaction and waits for confirmation with explicit timeout and status checks.
@@ -19,20 +20,46 @@ export async function sendAndWaitForTx(
   confirmations = 1,
   timeout = 30000,
 ): Promise<TransactionReceipt> {
-  const tx = await txPromise;
-  const receipt = await tx.wait(confirmations, timeout);
+  try {
+    const tx = await txPromise;
+    const receipt = await tx.wait(confirmations, timeout);
 
-  if (!receipt) {
-    throw new Error(
-      `Transaction ${tx.hash} confirmation timeout after ${timeout}ms`,
-    );
+    if (!receipt) {
+      const error = new Error(
+        `Transaction ${tx.hash} confirmation timeout after ${timeout}ms`,
+      );
+      errorAggregator.recordError("sendAndWaitForTx", error, {
+        txHash: tx.hash,
+        confirmations,
+        timeout,
+      });
+      throw error;
+    }
+
+    if (receipt.status === 0) {
+      const error = new Error(`Transaction ${tx.hash} reverted`);
+      errorAggregator.recordError("sendAndWaitForTx", error, {
+        txHash: tx.hash,
+        blockNumber: receipt.blockNumber,
+        status: receipt.status,
+      });
+      throw error;
+    }
+
+    return receipt;
+  } catch (error: any) {
+    // Record all errors, including those from tx submission
+    if (
+      !error.message.includes("confirmation timeout") &&
+      !error.message.includes("reverted")
+    ) {
+      errorAggregator.recordError("sendAndWaitForTx", error, {
+        confirmations,
+        timeout,
+      });
+    }
+    throw error;
   }
-
-  if (receipt.status === 0) {
-    throw new Error(`Transaction ${tx.hash} reverted`);
-  }
-
-  return receipt;
 }
 
 /**

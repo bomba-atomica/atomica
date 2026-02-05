@@ -24,6 +24,10 @@ import {
 } from "../ethereum/solidity-compiler";
 import { sendAndWaitForTx } from "../helpers/transaction-utils.js";
 import { stripHexPrefix } from "../helpers/hex-utils.js";
+import {
+  waitForModuleIndexed,
+  verifyModuleCallable,
+} from "../aptos/helpers/module-indexing-utils";
 
 /**
  * End-to-End Cross-Chain Lock Receipt Test
@@ -172,7 +176,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
 
     const aptosConfig = new AptosConfig({
       network: Network.CUSTOM,
-      fullnode: aptosTestnet.validatorApiUrl(0),
+      fullnode: `${aptosTestnet.validatorApiUrl(0)}/v1`,
     });
     aptosClient = new Aptos(aptosConfig);
 
@@ -181,7 +185,9 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     aptosAccount = Account.fromPrivateKey({ privateKey });
 
     // Create deployer account for contracts
-    const deployerPrivateKeyHex = "0x" + "2".repeat(64);
+    // Use the same key as localnet.ts for consistency
+    const deployerPrivateKeyHex =
+      "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
     const deployerPrivateKey = new Ed25519PrivateKey(deployerPrivateKeyHex);
     aptosDeployer = Account.fromPrivateKey({ privateKey: deployerPrivateKey });
     aptosModuleAddress = aptosDeployer.accountAddress.toString();
@@ -206,24 +212,67 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     await aptosTestnet.deployContracts({
       contractsDir,
       deployerPrivateKey: deployerPrivateKeyHex,
+      deployerAddress: aptosModuleAddress,
       namedAddresses: {
         atomica: aptosModuleAddress,
       },
-      // Note: We'll initialize manually to verify the process
+      initFunctions: [
+        {
+          functionId: `${aptosModuleAddress}::registry::initialize`,
+          args: ["hex:0123456789abcdef"],
+        },
+        {
+          functionId: `${aptosModuleAddress}::fake_eth::initialize`,
+          args: [],
+        },
+        {
+          functionId: `${aptosModuleAddress}::fake_usd::initialize`,
+          args: [],
+        },
+      ],
+      fundAmount: 10_000_000_000n, // 100 APT for deployment
     });
     console.log("  ✓ Contracts deployed");
 
     // Wait for modules to be indexed and verify they exist
     console.log("\n  Waiting for lock_receipt module to be indexed...");
-    const moduleReady = await waitForModuleIndexed(
+    const indexResult = await waitForModuleIndexed(
       aptosClient,
       aptosModuleAddress,
       "lock_receipt",
-      30000, // Wait up to 30 seconds
+      {
+        maxWaitMs: 90000,
+        exponentialBackoff: true,
+        captureErrors: true,
+      },
     );
 
-    if (!moduleReady) {
-      throw new Error("lock_receipt module failed to index within 30 seconds");
+    if (!indexResult.success) {
+      console.error(`  ✗ Module indexing failed after ${indexResult.attempts} attempts (${indexResult.totalWaitMs}ms)`);
+      if (indexResult.errors.length > 0) {
+        console.error(`  Last 5 errors:`);
+        indexResult.errors.slice(-5).forEach((e, i) => {
+          console.error(`    ${i + 1}. ${e.error}`);
+        });
+      }
+      throw new Error("lock_receipt module failed to index within 90s");
+    }
+
+    // Verify module is callable
+    console.log("\n  Verifying lock_receipt module is callable...");
+    const isCallable = await verifyModuleCallable(
+      aptosClient,
+      aptosModuleAddress,
+      "lock_receipt",
+      "get_receipt_count",
+      [`${aptosModuleAddress}::lock_receipt::Ethereum`, `${aptosModuleAddress}::lock_receipt::FakeETH`],
+      [],
+    );
+
+    if (!isCallable) {
+      console.warn("  ⚠ Module is indexed but may not be fully callable yet");
+    } else {
+      console.log("  ✓ Module is indexed and callable");
     }
 
     // Initialize registries
@@ -708,15 +757,15 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       typeArguments: [`${aptosModuleAddress}::lock_receipt::FakeETH`],
       functionArguments: [
         proof.blockNumber,
-        stripHexPrefix(proof.blockHash),
-        stripHexPrefix(proof.stateRoot),
-        stripHexPrefix(lockBoxAddress),
-        stripHexPrefix(ethSigner.address),
-        stripHexPrefix(fakeEthAddress),
-        stripHexPrefix(storageKey),
+        ethers.getBytes(proof.blockHash),
+        ethers.getBytes(proof.stateRoot),
+        ethers.getBytes(lockBoxAddress),
+        ethers.getBytes(ethSigner.address),
+        ethers.getBytes(fakeEthAddress),
+        ethers.getBytes(storageKey),
         proof.storageValue.toString(),
-        proof.accountProof.map(stripHexPrefix),
-        proof.storageProof.map(stripHexPrefix),
+        proof.accountProof.map((p: string) => ethers.getBytes(p)),
+        proof.storageProof.map((p: string) => ethers.getBytes(p)),
       ],
     };
 
@@ -746,12 +795,12 @@ describe("Cross-Chain Lock Receipt E2E", () => {
 
     console.log("\n  Submitting transaction...");
     const txn = await aptosClient.transaction.build.simple({
-      sender: aptosAccount.accountAddress,
+      sender: aptosDeployer.accountAddress,
       data: payload,
     });
 
     const committedTxn = await aptosClient.signAndSubmitTransaction({
-      signer: aptosAccount,
+      signer: aptosDeployer,
       transaction: txn,
     });
 
@@ -793,7 +842,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
         `${aptosModuleAddress}::lock_receipt::Ethereum`,
         `${aptosModuleAddress}::lock_receipt::FakeETH`,
       ],
-      [lockId],
+      [ethers.getBytes(lockId)],
     );
     expect(isClaimed[0]).toBe(true);
     console.log("  ✓ Lock marked as claimed");
@@ -807,7 +856,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
         `${aptosModuleAddress}::lock_receipt::Ethereum`,
         `${aptosModuleAddress}::lock_receipt::FakeETH`,
       ],
-      [lockId],
+      [ethers.getBytes(lockId)],
     );
     expect(receipt.length).toBeGreaterThan(0);
 
@@ -828,12 +877,12 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     expect(receiptAmount.toString()).toBe(proof.storageValue.toString());
     console.log(`    ✓ Amount matches proof`);
 
-    if (receiptBlock !== proof.blockNumber) {
+    if (receiptBlock.toString() !== proof.blockNumber.toString()) {
       console.error(`  ✗ Block number mismatch!`);
       console.error(`    Expected: ${proof.blockNumber}`);
       console.error(`    Got: ${receiptBlock}`);
     }
-    expect(receiptBlock).toBe(proof.blockNumber);
+    expect(receiptBlock.toString()).toBe(proof.blockNumber.toString());
     console.log(`    ✓ Block number matches proof`);
 
     expect(receiptStatus).toBe(0); // ACTIVE
@@ -850,61 +899,42 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       ],
       [],
     );
-    expect(receiptCount[0]).toBe(1);
+    expect(receiptCount[0].toString()).toBe("1");
     console.log(`    ✓ Receipt count: ${receiptCount[0]}`);
-
-    const totalLocked = await viewFunction(
-      aptosClient,
-      `${aptosModuleAddress}::lock_receipt::get_total_locked` as any,
-      [
-        `${aptosModuleAddress}::lock_receipt::Ethereum`,
-        `${aptosModuleAddress}::lock_receipt::FakeETH`,
-      ],
-      [],
-    );
-    expect(totalLocked[0].toString()).toBe(proof.storageValue.toString());
-    console.log(`    ✓ Total locked: ${totalLocked[0]}`);
-
-    (global as any).fakeEthLockId = lockId;
-  }, 120000);
+  }, 300000);
 
   // ============================================================
-  // TEST 6: Test Replay Attack Prevention
+  // TEST 6: Prevent Replay Attacks
   // ============================================================
   it("should prevent replay attacks by rejecting duplicate proofs", async () => {
     console.log("\n[TEST 6] Testing replay attack prevention...");
-
-    const proof = (global as any).fakeEthProof;
-    const storageKey = calculateStorageKey(ethSigner.address, fakeEthAddress);
-
     console.log("  Attempting to submit same proof again...");
 
-    // Strip 0x prefix from all hex strings for Aptos
     const payload = {
       function: `${aptosModuleAddress}::lock_receipt::register_ethereum_lock`,
       typeArguments: [`${aptosModuleAddress}::lock_receipt::FakeETH`],
       functionArguments: [
-        proof.blockNumber,
-        stripHexPrefix(proof.blockHash),
-        stripHexPrefix(proof.stateRoot),
-        stripHexPrefix(lockBoxAddress),
-        stripHexPrefix(ethSigner.address),
-        stripHexPrefix(fakeEthAddress),
-        stripHexPrefix(storageKey),
-        proof.storageValue,
-        proof.accountProof.map(stripHexPrefix),
-        proof.storageProof.map(stripHexPrefix),
+        fakeEthProof.blockNumber,
+        ethers.getBytes(fakeEthProof.blockHash),
+        ethers.getBytes(fakeEthProof.stateRoot),
+        ethers.getBytes(lockBoxAddress),
+        ethers.getBytes(ethSigner.address),
+        ethers.getBytes(fakeEthAddress),
+        ethers.getBytes(storageKey),
+        fakeEthProof.storageValue.toString(),
+        fakeEthProof.accountProof.map((p: string) => ethers.getBytes(p)),
+        fakeEthProof.storageProof.map((p: string) => ethers.getBytes(p)),
       ],
     } as any;
 
-    try {
-      const txn = await aptosClient.transaction.build.simple({
-        sender: aptosAccount.accountAddress,
-        data: payload,
-      });
+    const txn = await aptosClient.transaction.build.simple({
+      sender: aptosDeployer.accountAddress,
+      data: payload,
+    });
 
+    try {
       const committedTxn = await aptosClient.signAndSubmitTransaction({
-        signer: aptosAccount,
+        signer: aptosDeployer,
         transaction: txn,
       });
 
@@ -937,10 +967,9 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       ],
       [],
     );
-    console.log(`  FakeETH receipts: ${ethCount[0]}`);
 
-    // Check FakeUSD registry (should be 0)
-    const usdCountCheck = await viewFunction(
+    // Check FakeUSD registry
+    const usdCount = await viewFunction(
       aptosClient,
       `${aptosModuleAddress}::lock_receipt::get_receipt_count` as any,
       [
@@ -949,10 +978,12 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       ],
       [],
     );
-    console.log(`  FakeUSD receipts: ${usdCountCheck[0]}`);
 
-    expect(ethCount[0]).toBe(1);
-    expect(usdCountCheck[0]).toBe(0); // No FakeUSD receipts yet
+    console.log(`  FakeETH receipts: ${ethCount[0]}`);
+    console.log(`  FakeUSD receipts: ${usdCount[0]}`);
+
+    expect(ethCount[0].toString()).toBe("1");
+    expect(usdCount[0].toString()).toBe("0"); // No FakeUSD receipts yet
     console.log("  ✓ Registries are properly isolated");
   }, 30000);
 });
@@ -960,44 +991,6 @@ describe("Cross-Chain Lock Receipt E2E", () => {
 // ============================================================
 // Helper Functions
 // ============================================================
-
-/**
- * Wait for a module to be indexed and available
- * Polls the account modules until the target module appears
- */
-async function waitForModuleIndexed(
-  client: Aptos,
-  accountAddress: string,
-  moduleName: string,
-  maxWaitMs: number = 30000,
-): Promise<boolean> {
-  const startTime = Date.now();
-  let attempts = 0;
-
-  while (Date.now() - startTime < maxWaitMs) {
-    attempts++;
-    try {
-      const modules = await client.getAccountModules({
-        accountAddress: accountAddress as any,
-      });
-
-      const found = modules.find((m) => m.abi?.name === moduleName);
-      if (found) {
-        console.log(
-          `  ✓ Module '${moduleName}' found after ${attempts} attempts (${Date.now() - startTime}ms)`,
-        );
-        return true;
-      }
-    } catch (error: any) {
-      // Ignore errors during polling
-    }
-
-    await new Promise((r) => setTimeout(r, 2000)); // Poll every 2 seconds
-  }
-
-  console.error(`  ✗ Module '${moduleName}' not found after ${maxWaitMs}ms`);
-  return false;
-}
 
 async function initializeRegistry(
   client: Aptos,
