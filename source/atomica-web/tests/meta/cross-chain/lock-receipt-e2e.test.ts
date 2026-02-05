@@ -239,7 +239,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     console.log(`  Minting ${ethers.formatEther(MINT_AMOUNT_ETH)} FakeETH...`);
     const mintEthReceipt = await sendAndWaitForTx(
       fakeEthContract.mint(MINT_AMOUNT_ETH),
-      1
+      1,
     );
     console.log(
       `  ✓ Tx hash: ${mintEthReceipt.hash} (status: ${mintEthReceipt.status})`,
@@ -279,7 +279,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     );
     const mintUsdReceipt = await sendAndWaitForTx(
       fakeUsdContract.mint(MINT_AMOUNT_USD),
-      1
+      1,
     );
     console.log(
       `  ✓ Tx hash: ${mintUsdReceipt.hash} (status: ${mintUsdReceipt.status})`,
@@ -318,8 +318,10 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       `  Approving LockBox to spend ${ethers.formatEther(LOCK_AMOUNT_ETH)} FakeETH...`,
     );
     const approveReceipt = await sendAndWaitForTx(
-      fakeEthContract.approve(lockBoxAddress, LOCK_AMOUNT_ETH, { nonce: nonce++ }),
-      1
+      fakeEthContract.approve(lockBoxAddress, LOCK_AMOUNT_ETH, {
+        nonce: nonce++,
+      }),
+      1,
     );
     console.log(`  ✓ Approved (status: ${approveReceipt.status})`);
 
@@ -327,9 +329,11 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     console.log(`  Locking ${ethers.formatEther(LOCK_AMOUNT_ETH)} FakeETH...`);
     const lockReceipt = await sendAndWaitForTx(
       lockBoxContract.lock(fakeEthAddress, LOCK_AMOUNT_ETH, { nonce: nonce++ }),
-      1
+      1,
     );
-    console.log(`  ✓ Tx hash: ${lockReceipt.hash} (status: ${lockReceipt.status})`);
+    console.log(
+      `  ✓ Tx hash: ${lockReceipt.hash} (status: ${lockReceipt.status})`,
+    );
     console.log(`  ✓ Block: ${lockReceipt.blockNumber}`);
 
     // Verify locked balance
@@ -374,8 +378,10 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       `  Approving LockBox to spend ${ethers.formatUnits(LOCK_AMOUNT_USD, 6)} FakeUSD...`,
     );
     const approveReceipt = await sendAndWaitForTx(
-      fakeUsdContract.approve(lockBoxAddress, LOCK_AMOUNT_USD, { nonce: nonce++ }),
-      1
+      fakeUsdContract.approve(lockBoxAddress, LOCK_AMOUNT_USD, {
+        nonce: nonce++,
+      }),
+      1,
     );
     console.log(`  ✓ Approved (status: ${approveReceipt.status})`);
 
@@ -385,9 +391,11 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     );
     const lockReceipt = await sendAndWaitForTx(
       lockBoxContract.lock(fakeUsdAddress, LOCK_AMOUNT_USD, { nonce: nonce++ }),
-      1
+      1,
     );
-    console.log(`  ✓ Tx hash: ${lockReceipt.hash} (status: ${lockReceipt.status})`);
+    console.log(
+      `  ✓ Tx hash: ${lockReceipt.hash} (status: ${lockReceipt.status})`,
+    );
     console.log(`  ✓ Block: ${lockReceipt.blockNumber}`);
 
     // Verify locked balance

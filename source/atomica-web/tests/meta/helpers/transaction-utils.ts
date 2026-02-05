@@ -12,13 +12,15 @@ import type { TransactionResponse, TransactionReceipt, Signer } from "ethers";
 export async function sendAndWaitForTx(
   txPromise: Promise<TransactionResponse>,
   confirmations = 1,
-  timeout = 30000
+  timeout = 30000,
 ): Promise<TransactionReceipt> {
   const tx = await txPromise;
   const receipt = await tx.wait(confirmations, timeout);
 
   if (!receipt) {
-    throw new Error(`Transaction ${tx.hash} confirmation timeout after ${timeout}ms`);
+    throw new Error(
+      `Transaction ${tx.hash} confirmation timeout after ${timeout}ms`,
+    );
   }
 
   if (receipt.status === 0) {
@@ -38,7 +40,7 @@ export async function sendAndWaitForTx(
  */
 export async function sendSequentialTxs(
   signer: Signer,
-  txFactories: Array<(nonce: number) => Promise<TransactionResponse>>
+  txFactories: Array<(nonce: number) => Promise<TransactionResponse>>,
 ): Promise<TransactionReceipt[]> {
   let nonce = await signer.getNonce();
   const receipts: TransactionReceipt[] = [];
