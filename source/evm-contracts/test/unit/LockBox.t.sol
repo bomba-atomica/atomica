@@ -146,7 +146,7 @@ contract LockBoxTest is Test {
         lockBox.lock(address(fakeETH), 10 ether);
 
         // Unlock time should be 1 hour from now
-        (uint256 unlockTime) = lockBox.unlockTimes(alice, address(fakeETH));
+        uint256 unlockTime = lockBox.getUnlockTime(alice, address(fakeETH));
         assertEq(unlockTime, lockTime + 1 hours);
 
         // Should not be unlocked yet

@@ -16,7 +16,7 @@ import {
   getLockBoxArtifact,
   deployWithRetry,
 } from "./solidity-compiler.js";
-import { sendAndWaitForTx, pollUntil } from "../helpers/transaction-utils.js";
+import { sendAndWaitForTx } from "../helpers/transaction-utils.js";
 
 /**
  * Integration tests for state proof generation
@@ -147,38 +147,15 @@ describe("Ethereum State Proof Generation", () => {
     );
     console.log(`✓ Locked FakeETH: ${lockReceipt.hash}`);
 
-    // Query proof at the block AFTER the lock transaction for state consistency
-    const proofBlock = lockReceipt.blockNumber + 1;
-    console.log(`  Waiting for block ${proofBlock} to be mined...`);
-
-    // Poll for proof at specific block until state is available
-    const proof = await pollUntil(
-      async () => {
-        // Wait for the target block to exist
-        const currentBlock = await provider.getBlockNumber();
-        console.log(
-          `    Current block: ${currentBlock} (target: ${proofBlock})`,
-        );
-        if (currentBlock < proofBlock) {
-          throw new Error(
-            `Block ${proofBlock} not yet mined (current: ${currentBlock})`,
-          );
-        }
-        return generateLockedBalanceProof(
-          provider,
-          lockBoxAddress,
-          deployer.address,
-          fakeETHAddress,
-          proofBlock, // Query at specific block, not "latest"
-        );
-      },
-      (proof) => proof.storageValue === lockAmount,
-      {
-        description: `proof at block ${proofBlock} with correct balance`,
-        timeout: 300000,
-      },
+    // Generate proof at the lock block (not +1, that was the bug!)
+    const proof = await generateLockedBalanceProof(
+      provider,
+      lockBoxAddress,
+      deployer.address,
+      fakeETHAddress,
+      lockReceipt.blockNumber, // Query at the actual lock block
     );
-    console.log(`✓ Proof generated at block ${proofBlock}`);
+    console.log(`✓ Proof generated at block ${proof.blockNumber}`);
 
     // Verify proof structure
     expect(proof.blockNumber).toBeGreaterThan(0);
@@ -243,29 +220,13 @@ describe("Ethereum State Proof Generation", () => {
       1,
     );
 
-    // Query proof at the block AFTER the lock transaction
-    const proofBlock = lockReceipt.blockNumber + 1;
-
-    // Poll for proof at specific block
-    const proof = await pollUntil(
-      async () => {
-        const currentBlock = await provider.getBlockNumber();
-        if (currentBlock < proofBlock) {
-          throw new Error(`Block ${proofBlock} not yet mined`);
-        }
-        return generateLockedBalanceProof(
-          provider,
-          lockBoxAddress,
-          deployer.address,
-          fakeUSDAddress,
-          proofBlock,
-        );
-      },
-      (proof) => proof.storageValue === lockAmount,
-      {
-        description: `proof at block ${proofBlock}`,
-        timeout: 300000,
-      },
+    // Generate proof at the lock block (not +1, that was the bug!)
+    const proof = await generateLockedBalanceProof(
+      provider,
+      lockBoxAddress,
+      deployer.address,
+      fakeUSDAddress,
+      lockReceipt.blockNumber, // Query at the actual lock block
     );
 
     expect(proof.storageValue).toBe(lockAmount);

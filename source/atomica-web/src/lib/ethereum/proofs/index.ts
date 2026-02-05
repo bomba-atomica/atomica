@@ -6,6 +6,7 @@
  */
 
 export {
+  getLockKey,
   calculateLockedBalanceStorageKey,
   calculateUnlockTimeStorageKey,
   verifyStorageKeyCalculation,

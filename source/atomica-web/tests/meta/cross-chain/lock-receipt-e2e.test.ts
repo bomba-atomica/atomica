@@ -464,15 +464,14 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     await ethTestnet.waitForBlocks(12, 180);
     console.log("  ✓ Block finalized");
 
-    // Generate proof
-    // Note: Query state at lockBlock + 1 to ensure transaction state is included
-    console.log(`  Generating state proof for block ${lockBlockNumber + 1}...`);
+    // Generate proof at the lock block (not +1, that was the bug!)
+    console.log(`  Generating state proof at lock block ${lockBlockNumber}...`);
     const proof = await generateLockProof(
       ethProvider,
       lockBoxAddress,
       ethSigner.address,
       fakeEthAddress,
-      lockBlockNumber + 1,
+      lockBlockNumber, // Query at the actual lock block
     );
 
     console.log(`  ✓ Proof generated for block ${proof.blockNumber}`);
