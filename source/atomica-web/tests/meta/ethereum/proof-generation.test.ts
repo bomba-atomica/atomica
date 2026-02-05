@@ -16,7 +16,7 @@ import {
   getLockBoxArtifact,
   deployWithRetry,
 } from "./solidity-compiler.js";
-import { sendAndWaitForTx } from "../helpers/transaction-utils.js";
+import { sendAndWaitForTx, pollForValue } from "../helpers/transaction-utils.js";
 
 /**
  * Integration tests for state proof generation
@@ -147,8 +147,15 @@ describe("Ethereum State Proof Generation", () => {
     );
     console.log(`✓ Locked FakeETH: ${lockReceipt.hash}`);
 
-    // Wait for state to be indexed (PoS testnet needs time)
-    await new Promise((resolve) => setTimeout(resolve, 6000));
+    // Wait for state to be indexed by polling the locked balance
+    await pollForValue(
+      lockBox,
+      "getLockedBalance",
+      [deployer.address, fakeETHAddress],
+      lockAmount,
+      { description: "locked FakeETH balance" },
+    );
+    console.log(`✓ State indexed`);
 
     // Generate proof
     const proof = await generateLockedBalanceProof(
@@ -221,8 +228,14 @@ describe("Ethereum State Proof Generation", () => {
       1,
     );
 
-    // Wait for state to be indexed
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    // Wait for state to be indexed by polling the locked balance
+    await pollForValue(
+      lockBox,
+      "getLockedBalance",
+      [deployer.address, fakeUSDAddress],
+      lockAmount,
+      { description: "locked FakeUSD balance" },
+    );
 
     // Generate proof
     const proof = await generateLockedBalanceProof(

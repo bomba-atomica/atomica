@@ -1,4 +1,4 @@
-import type { TransactionResponse, TransactionReceipt, Signer } from "ethers";
+import type { TransactionResponse, TransactionReceipt, Signer, Contract } from "ethers";
 
 /**
  * Sends a transaction and waits for confirmation with explicit timeout and status checks.
@@ -28,6 +28,50 @@ export async function sendAndWaitForTx(
   }
 
   return receipt;
+}
+
+/**
+ * Polls a contract function until it returns the expected value or times out.
+ * Useful for waiting until state is indexed on PoS testnets.
+ *
+ * @param contract - The contract to query
+ * @param method - The method name to call
+ * @param args - Arguments to pass to the method
+ * @param expectedValue - The value to wait for
+ * @param options - Polling options
+ * @returns The actual value once it matches expected
+ * @throws Error if timeout is reached
+ */
+export async function pollForValue<T>(
+  contract: Contract,
+  method: string,
+  args: any[],
+  expectedValue: T,
+  options: {
+    interval?: number;
+    timeout?: number;
+    description?: string;
+  } = {},
+): Promise<T> {
+  const { interval = 500, timeout = 30000, description = "value" } = options;
+  const startTime = Date.now();
+
+  while (true) {
+    const value = await contract[method](...args);
+
+    if (value === expectedValue || (typeof value === 'bigint' && typeof expectedValue === 'bigint' && value === expectedValue)) {
+      return value;
+    }
+
+    const elapsed = Date.now() - startTime;
+    if (elapsed >= timeout) {
+      throw new Error(
+        `Timeout waiting for ${description} after ${elapsed}ms. Expected ${expectedValue}, got ${value}`,
+      );
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
 }
 
 /**
