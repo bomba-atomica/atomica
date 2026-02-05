@@ -9,6 +9,7 @@ import {
   Account,
   Ed25519PrivateKey,
 } from "@aptos-labs/ts-sdk";
+import { join } from "path";
 import {
   generateLockProof,
   calculateStorageKey,
@@ -41,6 +42,8 @@ describe("Cross-Chain Lock Receipt E2E", () => {
   let ethSigner: ethers.Wallet;
   let aptosClient: Aptos;
   let aptosAccount: Account;
+  let aptosDeployer: Account;
+  let aptosModuleAddress: string;
 
   // Contract addresses (will be populated after deployment)
   let fakeEthAddress: string;
@@ -177,29 +180,64 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     const privateKey = new Ed25519PrivateKey("0x" + "1".repeat(64));
     aptosAccount = Account.fromPrivateKey({ privateKey });
 
+    // Create deployer account for contracts
+    const deployerPrivateKeyHex = "0x" + "2".repeat(64);
+    const deployerPrivateKey = new Ed25519PrivateKey(deployerPrivateKeyHex);
+    aptosDeployer = Account.fromPrivateKey({ privateKey: deployerPrivateKey });
+    aptosModuleAddress = aptosDeployer.accountAddress.toString();
+
     console.log(`✓ Aptos account: ${aptosAccount.accountAddress.toString()}`);
+    console.log(`✓ Aptos deployer: ${aptosModuleAddress}`);
 
-    // Fund account
-    await aptosTestnet.faucet(
-      aptosAccount.accountAddress.toString(),
-      100_000_000n,
-    );
-    console.log("✓ Account funded with 1 APT");
+    // Fund accounts
+    await Promise.all([
+      aptosTestnet.faucet(aptosAccount.accountAddress.toString(), 100_000_000n),
+      aptosTestnet.faucet(
+        aptosModuleAddress,
+        100_000_000_000n, // 1000 APT for deployment
+      ),
+    ]);
+    console.log("✓ Accounts funded");
 
-    // Deploy and initialize Aptos modules
-    // Note: Modules should already be deployed in docker testnet
+    // Deploy Aptos contracts
+    console.log("\n  Deploying Aptos contracts...");
+    const contractsDir = join(process.cwd(), "../atomica-move-contracts");
+
+    await aptosTestnet.deployContracts({
+      contractsDir,
+      deployerPrivateKey: deployerPrivateKeyHex,
+      namedAddresses: {
+        atomica: aptosModuleAddress,
+      },
+      // Note: We'll initialize manually to verify the process
+    });
+    console.log("  ✓ Contracts deployed");
+
+    // Wait extra time for Aptos indexing
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
     // Initialize registries
     console.log("\n  Initializing Aptos registries...");
 
     try {
-      await initializeRegistry(aptosClient, aptosAccount, "FakeETH");
+      await initializeRegistry(
+        aptosClient,
+        aptosDeployer,
+        "FakeETH",
+        aptosModuleAddress,
+      );
       console.log("  ✓ FakeETH registry initialized");
     } catch (e: any) {
       console.log(`  ⚠ FakeETH registry: ${e.message}`);
     }
 
     try {
-      await initializeRegistry(aptosClient, aptosAccount, "FakeUSD");
+      await initializeRegistry(
+        aptosClient,
+        aptosDeployer,
+        "FakeUSD",
+        aptosModuleAddress,
+      );
       console.log("  ✓ FakeUSD registry initialized");
     } catch (e: any) {
       console.log(`  ⚠ FakeUSD registry: ${e.message}`);
@@ -238,7 +276,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
 
     console.log(`  Minting ${ethers.formatEther(MINT_AMOUNT_ETH)} FakeETH...`);
     const mintEthReceipt = await sendAndWaitForTx(
-      fakeEthContract.mint(MINT_AMOUNT_ETH),
+      fakeEthContract.mint(ethSigner.address, MINT_AMOUNT_ETH),
       1,
     );
     console.log(
@@ -278,7 +316,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
       `  Minting ${ethers.formatUnits(MINT_AMOUNT_USD, 6)} FakeUSD...`,
     );
     const mintUsdReceipt = await sendAndWaitForTx(
-      fakeUsdContract.mint(MINT_AMOUNT_USD),
+      fakeUsdContract.mint(ethSigner.address, MINT_AMOUNT_USD),
       1,
     );
     console.log(
@@ -526,8 +564,11 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     // Check if lock is claimed
     const isClaimed = await viewFunction(
       aptosClient,
-      "atomica::lock_receipt::is_lock_claimed",
-      ["atomica::lock_receipt::Ethereum", "atomica::lock_receipt::FakeETH"],
+      `${aptosModuleAddress}::lock_receipt::is_lock_claimed` as any,
+      [
+        `${aptosModuleAddress}::lock_receipt::Ethereum`,
+        `${aptosModuleAddress}::lock_receipt::FakeETH`,
+      ],
       [lockId],
     );
     expect(isClaimed[0]).toBe(true);
@@ -536,10 +577,14 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     // Get receipt details
     const receipt = await viewFunction(
       aptosClient,
-      "atomica::lock_receipt::get_receipt",
-      ["atomica::lock_receipt::Ethereum", "atomica::lock_receipt::FakeETH"],
+      `${aptosModuleAddress}::lock_receipt::get_receipt` as any,
+      [
+        `${aptosModuleAddress}::lock_receipt::Ethereum`,
+        `${aptosModuleAddress}::lock_receipt::FakeETH`,
+      ],
       [lockId],
     );
+    expect(receipt.length).toBeGreaterThan(0);
 
     const [receiptUser, receiptAmount, receiptBlock, receiptStatus] = receipt;
     console.log(`  Receipt user: ${receiptUser}`);
@@ -554,8 +599,11 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     // Check registry metrics
     const receiptCount = await viewFunction(
       aptosClient,
-      "atomica::lock_receipt::get_receipt_count",
-      ["atomica::lock_receipt::Ethereum", "atomica::lock_receipt::FakeETH"],
+      `${aptosModuleAddress}::lock_receipt::get_receipt_count` as any,
+      [
+        `${aptosModuleAddress}::lock_receipt::Ethereum`,
+        `${aptosModuleAddress}::lock_receipt::FakeETH`,
+      ],
       [],
     );
     expect(receiptCount[0]).toBe(1);
@@ -563,8 +611,11 @@ describe("Cross-Chain Lock Receipt E2E", () => {
 
     const totalLocked = await viewFunction(
       aptosClient,
-      "atomica::lock_receipt::get_total_locked",
-      ["atomica::lock_receipt::Ethereum", "atomica::lock_receipt::FakeETH"],
+      `${aptosModuleAddress}::lock_receipt::get_total_locked` as any,
+      [
+        `${aptosModuleAddress}::lock_receipt::Ethereum`,
+        `${aptosModuleAddress}::lock_receipt::FakeETH`,
+      ],
       [],
     );
     expect(totalLocked[0]).toBe(proof.storageValue);
@@ -586,8 +637,8 @@ describe("Cross-Chain Lock Receipt E2E", () => {
 
     // Strip 0x prefix from all hex strings for Aptos
     const payload = {
-      function: "atomica::lock_receipt::register_ethereum_lock",
-      typeArguments: ["atomica::lock_receipt::FakeETH"],
+      function: `${aptosModuleAddress}::lock_receipt::register_ethereum_lock`,
+      typeArguments: [`${aptosModuleAddress}::lock_receipt::FakeETH`],
       functionArguments: [
         proof.blockNumber,
         stripHexPrefix(proof.blockHash),
@@ -600,7 +651,7 @@ describe("Cross-Chain Lock Receipt E2E", () => {
         proof.accountProof.map(stripHexPrefix),
         proof.storageProof.map(stripHexPrefix),
       ],
-    };
+    } as any;
 
     try {
       const txn = await aptosClient.transaction.build.simple({
@@ -635,23 +686,29 @@ describe("Cross-Chain Lock Receipt E2E", () => {
     // Check FakeETH registry
     const ethCount = await viewFunction(
       aptosClient,
-      "atomica::lock_receipt::get_receipt_count",
-      ["atomica::lock_receipt::Ethereum", "atomica::lock_receipt::FakeETH"],
+      `${aptosModuleAddress}::lock_receipt::get_receipt_count` as any,
+      [
+        `${aptosModuleAddress}::lock_receipt::Ethereum`,
+        `${aptosModuleAddress}::lock_receipt::FakeETH`,
+      ],
       [],
     );
     console.log(`  FakeETH receipts: ${ethCount[0]}`);
 
     // Check FakeUSD registry (should be 0)
-    const usdCount = await viewFunction(
+    const usdCountCheck = await viewFunction(
       aptosClient,
-      "atomica::lock_receipt::get_receipt_count",
-      ["atomica::lock_receipt::Ethereum", "atomica::lock_receipt::FakeUSD"],
+      `${aptosModuleAddress}::lock_receipt::get_receipt_count` as any,
+      [
+        `${aptosModuleAddress}::lock_receipt::Ethereum`,
+        `${aptosModuleAddress}::lock_receipt::FakeUSD`,
+      ],
       [],
     );
-    console.log(`  FakeUSD receipts: ${usdCount[0]}`);
+    console.log(`  FakeUSD receipts: ${usdCountCheck[0]}`);
 
     expect(ethCount[0]).toBe(1);
-    expect(usdCount[0]).toBe(0); // No FakeUSD receipts yet
+    expect(usdCountCheck[0]).toBe(0); // No FakeUSD receipts yet
     console.log("  ✓ Registries are properly isolated");
   }, 30000);
 });
@@ -664,15 +721,16 @@ async function initializeRegistry(
   client: Aptos,
   account: Account,
   assetType: "FakeETH" | "FakeUSD",
+  moduleAddress: string,
 ): Promise<void> {
   const payload = {
-    function: "atomica::lock_receipt::initialize",
+    function: `${moduleAddress}::lock_receipt::initialize`,
     typeArguments: [
-      "atomica::lock_receipt::Ethereum",
-      `atomica::lock_receipt::${assetType}`,
+      `${moduleAddress}::lock_receipt::Ethereum`,
+      `${moduleAddress}::lock_receipt::${assetType}`,
     ],
     functionArguments: [],
-  };
+  } as any;
 
   const txn = await client.transaction.build.simple({
     sender: account.accountAddress,
