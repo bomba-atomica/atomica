@@ -52,21 +52,19 @@ describe("Storage Key Calculation", () => {
       expect(key1).toBe(key2);
     });
 
-    it("should match Solidity's nested mapping calculation", () => {
-      // For mapping(address => mapping(address => uint256)) at slot 0
-      // Solidity calculates: keccak256(abi.encode(user, keccak256(abi.encode(token, 0))))
+    it("should match Solidity's single-level mapping calculation", () => {
+      // For mapping(bytes32 => uint256) at slot 0 with composite key:
+      // 1. compositeKey = keccak256(abi.encodePacked(user, token))
+      // 2. storageKey = keccak256(abi.encode(compositeKey, slot))
 
-      const innerKey = ethers.keccak256(
-        ethers.AbiCoder.defaultAbiCoder().encode(
-          ["address", "uint256"],
-          [FAKE_ETH, 0],
-        ),
+      const compositeKey = ethers.keccak256(
+        ethers.solidityPacked(["address", "address"], [ALICE, FAKE_ETH]),
       );
 
       const expectedKey = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
-          ["address", "bytes32"],
-          [ALICE, innerKey],
+          ["bytes32", "uint256"],
+          [compositeKey, 0],
         ),
       );
 
@@ -183,17 +181,14 @@ describe("Storage Key Calculation", () => {
       const token = "0x0000000000000000000000000000000000000010";
       const key = calculateLockedBalanceStorageKey(user, token);
 
-      // Calculate manually
-      const inner = ethers.keccak256(
-        ethers.AbiCoder.defaultAbiCoder().encode(
-          ["address", "uint256"],
-          [token, 0],
-        ),
+      // Calculate manually using new single-level mapping approach
+      const compositeKey = ethers.keccak256(
+        ethers.solidityPacked(["address", "address"], [user, token]),
       );
       const expected = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
-          ["address", "bytes32"],
-          [user, inner],
+          ["bytes32", "uint256"],
+          [compositeKey, 0],
         ),
       );
 
