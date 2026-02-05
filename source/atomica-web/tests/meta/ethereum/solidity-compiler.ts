@@ -39,10 +39,6 @@ export function getLockBoxArtifact(): Artifact {
   return getArtifact("LockBox");
 }
 
-export function getMinimalTestArtifact(): Artifact {
-  return getArtifact("MinimalTest");
-}
-
 export async function compileContracts(): Promise<void> {
   console.log("Ensuring contracts are compiled...");
   if (!existsSync(join(EVM_CONTRACTS_DIR, "out"))) {
