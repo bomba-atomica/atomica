@@ -156,6 +156,9 @@ describe("Ethereum State Proof Generation", () => {
       async () => {
         // Wait for the target block to exist
         const currentBlock = await provider.getBlockNumber();
+        console.log(
+          `    Current block: ${currentBlock} (target: ${proofBlock})`,
+        );
         if (currentBlock < proofBlock) {
           throw new Error(
             `Block ${proofBlock} not yet mined (current: ${currentBlock})`,
@@ -172,7 +175,7 @@ describe("Ethereum State Proof Generation", () => {
       (proof) => proof.storageValue === lockAmount,
       {
         description: `proof at block ${proofBlock} with correct balance`,
-        timeout: 120000,
+        timeout: 300000,
       },
     );
     console.log(`✓ Proof generated at block ${proofBlock}`);
@@ -261,7 +264,7 @@ describe("Ethereum State Proof Generation", () => {
       (proof) => proof.storageValue === lockAmount,
       {
         description: `proof at block ${proofBlock}`,
-        timeout: 120000,
+        timeout: 300000,
       },
     );
 
