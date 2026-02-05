@@ -106,3 +106,51 @@ export async function sendSequentialTxs(
 
   return receipts;
 }
+
+/**
+ * Polls an async function until it returns a value that passes a condition.
+ * Useful for waiting until state trie is indexed and proofs are available.
+ *
+ * @param fn - Async function to poll
+ * @param condition - Function that returns true when result is acceptable
+ * @param options - Polling options
+ * @returns The result once condition passes
+ * @throws Error if timeout is reached or last error if all attempts fail
+ */
+export async function pollUntil<T>(
+  fn: () => Promise<T>,
+  condition: (result: T) => boolean,
+  options: {
+    interval?: number;
+    timeout?: number;
+    description?: string;
+  } = {},
+): Promise<T> {
+  const { interval = 500, timeout = 30000, description = "condition" } =
+    options;
+  const startTime = Date.now();
+  let lastError: Error | undefined;
+
+  while (true) {
+    try {
+      const result = await fn();
+
+      if (condition(result)) {
+        return result;
+      }
+    } catch (error) {
+      // Store error but keep polling - state might not be ready yet
+      lastError = error as Error;
+    }
+
+    const elapsed = Date.now() - startTime;
+    if (elapsed >= timeout) {
+      const errorMsg = lastError
+        ? `Timeout waiting for ${description} after ${elapsed}ms. Last error: ${lastError.message}`
+        : `Timeout waiting for ${description} after ${elapsed}ms`;
+      throw new Error(errorMsg);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+}

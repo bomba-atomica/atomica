@@ -18,7 +18,7 @@ import {
 } from "./solidity-compiler.js";
 import {
   sendAndWaitForTx,
-  pollForValue,
+  pollUntil,
 } from "../helpers/transaction-utils.js";
 
 /**
@@ -150,26 +150,22 @@ describe("Ethereum State Proof Generation", () => {
     );
     console.log(`✓ Locked FakeETH: ${lockReceipt.hash}`);
 
-    // Wait for state to be indexed by polling the locked balance
-    await pollForValue(
-      lockBox,
-      "getLockedBalance",
-      [deployer.address, fakeETHAddress],
-      lockAmount,
-      { description: "locked FakeETH balance" },
+    // Poll proof generation until state trie is indexed and proof is available
+    const proof = await pollUntil(
+      () =>
+        generateLockedBalanceProof(
+          provider,
+          lockBoxAddress,
+          deployer.address,
+          fakeETHAddress,
+        ),
+      (proof) => proof.storageValue === lockAmount,
+      {
+        description: "proof with correct locked balance",
+        timeout: 30000,
+      },
     );
-    console.log(`✓ State indexed`);
-
-    // Additional wait for state trie to sync (eth_getProof uses different code path)
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Generate proof
-    const proof = await generateLockedBalanceProof(
-      provider,
-      lockBoxAddress,
-      deployer.address,
-      fakeETHAddress,
-    );
+    console.log(`✓ Proof generated with correct storage value`);
 
     // Verify proof structure
     expect(proof.blockNumber).toBeGreaterThan(0);
@@ -234,24 +230,20 @@ describe("Ethereum State Proof Generation", () => {
       1,
     );
 
-    // Wait for state to be indexed by polling the locked balance
-    await pollForValue(
-      lockBox,
-      "getLockedBalance",
-      [deployer.address, fakeUSDAddress],
-      lockAmount,
-      { description: "locked FakeUSD balance" },
-    );
-
-    // Additional wait for state trie to sync (eth_getProof uses different code path)
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Generate proof
-    const proof = await generateLockedBalanceProof(
-      provider,
-      lockBoxAddress,
-      deployer.address,
-      fakeUSDAddress,
+    // Poll proof generation until state trie is indexed and proof is available
+    const proof = await pollUntil(
+      () =>
+        generateLockedBalanceProof(
+          provider,
+          lockBoxAddress,
+          deployer.address,
+          fakeUSDAddress,
+        ),
+      (proof) => proof.storageValue === lockAmount,
+      {
+        description: "proof with correct locked balance",
+        timeout: 30000,
+      },
     );
 
     expect(proof.storageValue).toBe(lockAmount);
