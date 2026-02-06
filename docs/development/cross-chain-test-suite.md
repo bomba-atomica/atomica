@@ -1,6 +1,6 @@
 # Cross-Chain Test Suite Documentation
 
-**Last Updated**: 2026-02-05
+**Last Updated**: 2026-02-06
 **Test Framework**: Vitest
 **Test Location**: `atomica-web/tests/meta/cross-chain/`
 
@@ -206,12 +206,12 @@ expect(receiptCount[0].toString()).toBe("1");
 
 ---
 
-### e2e-05: Replay Attack Prevention ⏳
+### e2e-05: Replay Attack Prevention ✅
 
 **Purpose**: Test security against duplicate submissions
 
-**Status**: ⏳ NOT YET TESTED
-**Expected Runtime**: ~272s (~4.5 minutes)
+**Status**: ✅ PASSING
+**Runtime**: ~272s (~4.5 minutes)
 
 **What it tests**:
 - Duplicate proof submission is rejected
@@ -220,25 +220,20 @@ expect(receiptCount[0].toString()).toBe("1");
 
 **Dependencies**: Full flow + proof submission in `beforeAll`
 
-**Expected behavior**:
-```typescript
-try {
-  // Submit same proof again
-  await submitProof(proof);
-  expect(true).toBe(false); // Should not reach here
-} catch (error) {
-  expect(error.message).toContain("E_ALREADY_CLAIMED");
-}
-```
+**Actual behavior**:
+- ✅ Duplicate proof submission correctly rejected
+- ✅ Error contains `E_ALREADY_CLAIMED`
+- ✅ Lock cannot be claimed twice
+- ✅ Registry replay protection working as designed
 
 ---
 
-### e2e-06: Type Isolation ⏳
+### e2e-06: Type Isolation ✅
 
 **Purpose**: Test multi-asset registry isolation
 
-**Status**: ⏳ NOT YET TESTED
-**Expected Runtime**: ~272s (~4.5 minutes)
+**Status**: ✅ PASSING
+**Runtime**: ~272s (~4.5 minutes)
 
 **What it tests**:
 - FakeETH and FakeUSD have separate registries
@@ -247,11 +242,11 @@ try {
 
 **Dependencies**: Submits FakeETH proof only in `beforeAll`
 
-**Expected validations**:
-```typescript
-expect(ethCount[0].toString()).toBe("1");  // FakeETH has 1 receipt
-expect(usdCount[0].toString()).toBe("0");  // FakeUSD has 0 receipts
-```
+**Actual results**:
+- ✅ FakeETH registry: 1 receipt
+- ✅ FakeUSD registry: 0 receipts
+- ✅ Phantom types correctly isolate registries
+- ✅ No cross-contamination between asset types
 
 ---
 
@@ -432,16 +427,16 @@ describe("E2E XX: Test Name", () => {
 
 ## Performance Metrics
 
-| Test | Setup | Test | Total | Key Operation |
-|------|-------|------|-------|---------------|
-| e2e-01 | 90s | 25s | 115s | Token minting |
-| e2e-02 | 90s | 40s | 130s | Token locking |
-| e2e-04 | 90s | 182s | 272s | Proof generation (12 block wait) |
-| e2e-05 | 90s | 182s | 272s | Proof submission |
-| e2e-06 | 90s | 182s | 272s | Replay attempt |
-| e2e-07 | 90s | 182s | 272s | Registry check |
+| Test | Setup | Test | Total | Status | Key Operation |
+|------|-------|------|-------|--------|---------------|
+| e2e-01 | 90s | 25s | 115s | ✅ | Token minting |
+| e2e-02 | 90s | 40s | 130s | ✅ | Token locking |
+| e2e-03 | 90s | 182s | 272s | ✅ | Proof generation (12 block wait) |
+| e2e-04 | 90s | 182s | 272s | ✅ | Proof submission |
+| e2e-05 | 90s | 182s | 272s | ✅ | Replay protection |
+| e2e-06 | 90s | 182s | 272s | ✅ | Type isolation |
 
-**Total sequential runtime**: ~1,460s (~24 minutes for all 6 tests)
+**Total sequential runtime**: ~1,331s (~22 minutes for all 6 tests)
 
 **Bottlenecks**:
 - Dual-chain setup: 90s (required for each test)
