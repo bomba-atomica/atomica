@@ -4,7 +4,7 @@ export class MockWallet {
   chainId: string;
   wallet: ethers.Wallet;
 
-  constructor(privateKey: string, chainId: number | string = 31337) {
+  constructor(privateKey: string, chainId: number | string = 32382) {
     this.wallet = new ethers.Wallet(privateKey);
     // Ensure hex string format
     this.chainId =

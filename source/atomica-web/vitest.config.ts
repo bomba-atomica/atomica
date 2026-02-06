@@ -224,6 +224,8 @@ export default defineConfig({
         fundAccount: fundAccountCommand,
       },
     },
+    testTimeout: 300000,
+    hookTimeout: 120000,
 
     /**
      * INCLUDED TESTS: All tests except meta tests

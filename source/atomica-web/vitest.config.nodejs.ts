@@ -104,6 +104,8 @@ export default defineConfig({
      * See: tests/meta/README.md#why-nodejs-tests
      */
     environment: "node",
+    testTimeout: 300000,
+    hookTimeout: 120000,
 
     /**
      * INCLUDED TESTS: Only meta tests (infrastructure validation)

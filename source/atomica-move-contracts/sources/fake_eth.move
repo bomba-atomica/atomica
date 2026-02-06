@@ -5,6 +5,7 @@ module atomica::fake_eth {
     use std::string::utf8;
     use std::option;
     use std::signer;
+    use atomica::lock_receipt::{Self, Ethereum, FakeETH};
 
     const ASSET_SYMBOL: vector<u8> = b"FAKEETH";
 
@@ -13,6 +14,9 @@ module atomica::fake_eth {
 
     /// Error code when trying to mint more than the maximum allowed
     const E_EXCEEDS_MAX_MINT: u64 = 1;
+    
+    /// Error code when u256 to u64 conversion would overflow
+    const E_AMOUNT_OVERFLOW: u64 = 2;
 
     /// Holds the refs for minting, transferring, and burning
     struct ManagingRefs has key {
@@ -53,6 +57,9 @@ module atomica::fake_eth {
     /// Mint FAKEETH to yourself
     /// Anyone can call this (it's a faucet for testing)
     /// Maximum 10,000 FAKEETH per mint transaction
+    /// 
+    /// DEPRECATED: Use mint_from_lock() for production cross-chain minting
+    /// This function is for testing only
     public entry fun mint(account: &signer, amount: u64) acquires ManagingRefs {
         // Enforce maximum mint amount per transaction
         assert!(amount <= MAX_MINT_AMOUNT, E_EXCEEDS_MAX_MINT);
@@ -66,6 +73,48 @@ module atomica::fake_eth {
         // Deposit to the signer's primary store
         let recipient = signer::address_of(account);
         primary_fungible_store::deposit(recipient, fa);
+    }
+
+    /// Mint FAKEETH from a verified Ethereum lock receipt
+    /// This is the production minting path for cross-chain bridge operations
+    /// 
+    /// Process:
+    /// 1. User locks ETH on Ethereum via LockBox contract
+    /// 2. User generates Ethereum state proof off-chain
+    /// 3. User registers lock on Aptos via lock_receipt::register_ethereum_lock<FakeETH>()
+    /// 4. User calls this function to claim and mint tokens
+    /// 
+    /// Decimal conversion:
+    /// - Ethereum ETH uses 18 decimals (wei)
+    /// - FakeETH uses 8 decimals
+    /// - We divide by 10^10 to convert
+    /// 
+    /// Example:
+    /// - Lock 1 ETH = 1_000_000_000_000_000_000 wei (u256)
+    /// - Mint 100_000_000 FakeETH (u64, 8 decimals = 1.00000000 FakeETH)
+    public entry fun mint_from_lock(
+        account: &signer,
+        lock_id: vector<u8>,
+    ) acquires ManagingRefs {
+        let user = signer::address_of(account);
+        
+        // Claim the receipt (verifies ownership and marks as claimed)
+        let amount_u256 = lock_receipt::claim<Ethereum, FakeETH>(user, lock_id);
+        
+        // Convert u256 to u64 with overflow check
+        // Ethereum amounts are in wei (18 decimals), FakeETH uses 8 decimals
+        // Divide by 10^10 to convert
+        let divisor: u256 = 10000000000; // 10^10
+        let amount_converted = amount_u256 / divisor;
+        
+        // Ensure the converted amount fits in u64
+        assert!(amount_converted <= (18446744073709551615 as u256), E_AMOUNT_OVERFLOW);
+        let amount = (amount_converted as u64);
+        
+        // Mint the tokens
+        let refs = borrow_global<ManagingRefs>(@atomica);
+        let fa = fungible_asset::mint(&refs.mint_ref, amount);
+        primary_fungible_store::deposit(user, fa);
     }
 
     #[view]

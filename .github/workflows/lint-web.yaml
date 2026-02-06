@@ -21,20 +21,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
         run: |
           cd source/atomica-web
-          npm install
+          bun install
 
       - name: Run ESLint
         run: |
           cd source/atomica-web
-          npm run lint
+          bun run lint
 
   prettier:
     name: Prettier Format Check
@@ -43,20 +41,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
         run: |
           cd source/atomica-web
-          npm install
+          bun install
 
       - name: Check Prettier formatting
         run: |
           cd source/atomica-web
-          npm run format:check
+          bun run format:check
 
   typescript:
     name: TypeScript Compilation Check
@@ -65,17 +61,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
         run: |
           cd source/atomica-web
-          npm install
+          bun install
 
       - name: Check TypeScript compilation
         run: |
           cd source/atomica-web
-          npx tsc --noEmit
+          bun x tsc --noEmit

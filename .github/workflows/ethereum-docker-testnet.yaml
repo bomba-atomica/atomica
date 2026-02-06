@@ -1,0 +1,79 @@
+name: Ethereum Docker Testnet Tests
+
+on:
+  push:
+    branches:
+      - main
+      - ethereum-docker
+    paths:
+      - "source/docker-testnet/ethereum-testnet/**"
+      - ".github/workflows/ethereum-docker-testnet.yaml"
+  pull_request:
+    paths:
+      - "source/docker-testnet/ethereum-testnet/**"
+      - ".github/workflows/ethereum-docker-testnet.yaml"
+
+jobs:
+  test:
+    name: Ethereum PoS Testnet Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      packages: read
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install SDK dependencies
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: bun install
+
+      - name: Build SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: bun run build
+
+      - name: Run all tests
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: |
+          # Run tests sequentially to avoid port conflicts with Docker containers
+          for file in test/*.test.ts; do
+            echo "----------------------------------------------------------------"
+            echo "Running test: $file"
+            echo "----------------------------------------------------------------"
+            bun test "$file" || exit 1
+          done
+        timeout-minutes: 30
+
+      - name: Cleanup Docker on failure
+        if: failure()
+        working-directory: source/docker-testnet/ethereum-testnet/config
+        run: docker compose down -v --remove-orphans || true
+
+      - name: Show Docker logs on failure
+        if: failure()
+        working-directory: source/docker-testnet/ethereum-testnet/config
+        run: |
+          echo "=== Geth logs ==="
+          docker compose logs geth --tail=50 || true
+          echo "=== Beacon logs ==="
+          docker compose logs beacon --tail=50 || true
+          echo "=== Validator logs ==="
+          docker compose logs validator --tail=50 || true

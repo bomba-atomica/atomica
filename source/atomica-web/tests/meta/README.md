@@ -390,6 +390,45 @@ npm run test:meta tests/meta/deploy-atomica-contracts.test.ts
 npm run test:meta tests/meta/secp256k1-account.test.ts
 ```
 
+### 9. `cross-chain/lock-receipt-e2e.test.ts`
+
+**Purpose**: End-to-end cross-chain lock receipt verification
+**What it tests**: Full protocol flow between Ethereum and Aptos:
+
+1. Ethereum user locks assets in LockBox
+2. User generates MPT state proof
+3. User submits proof to Aptos
+4. Aptos verifies proof and issues lock receipt
+
+**Key assertions**:
+
+- Ethereum contracts (LockBox, Tokens) deploy correctly
+- Assets are locked on Ethereum and events emitted
+- MPT proof is generated with correct storage keys
+- Aptos `lock_receipt` module verifies proof successfully
+- Receipt is issued to the correct user for the correct amount
+
+**Requirements**:
+
+- Both Ethereum and Aptos testnets running (started by test)
+- Forge (Foundry) installed on host for contract compilation
+
+---
+
+### 10. `dual-testnet/dual-testnet-startup.test.ts`
+
+**Purpose**: Dual-network infrastructure validation
+**What it tests**: Verifies that both Ethereum (Geth/Lighthouse) and Aptos testnets can run simultaneously on the same host without port conflicts.
+
+**Key assertions**:
+
+- Ethereum testnet starts on 8545 (RPC) / 5052 (Beacon)
+- Aptos testnet starts on 8080 (API) / 8081 (Faucet)
+- Both networks produce blocks simultaneously
+- Pre-funded accounts are available on both chains
+
+---
+
 ### Debug a specific test
 
 ```bash
