@@ -38,7 +38,7 @@ Atomica is a **cross-chain sealed-bid auction protocol** that prioritizes:
 │  • Validators implement BLS threshold timelock (tlock)            │
 │  • Sealed reserve prices + bids (tlock encrypted)                │
 │  • Automatic decryption at auction deadline (2/3 threshold)       │
-│  • Ausubel auction clearing in Move                               │
+│  • Uniform price auction clearing in Move                          │
 │  • Merkle root generated + BLS threshold signed                   │
 └────────────────────────┬─────────────────────────────────────────┘
                          │
@@ -450,8 +450,7 @@ struct Auction {
 ```
 
 **Auction Mechanism**: See [game-theory/](../game-theory/) for:
-- [Ausubel auction mechanics](../game-theory/ausubel-clinching-clock.md)
-- [MEV resistance strategies](../game-theory/ausubel-mev-mitigation.md)
+- [Uniform price auctions](../game-theory/uniform-price-auctions.md)
 - [Sealed bid alternatives analysis](../game-theory/sealed-bid-alternatives.md)
 
 #### 1.3 State Proof Generation API
@@ -1514,13 +1513,13 @@ struct SponsoredUserOp {
 
 ### Auction Type
 
-Atomica implements **Ausubel auctions** (ascending clinching auction):
-- Incentive compatible (truthful bidding is optimal)
-- MEV resistant through cryptographic commitment
-- Efficient price discovery
-- Sealed-bid format with timelock encryption
+Atomica implements **uniform price auctions** (sealed-bid, single clearing price):
+- Revenue equivalent to Vickrey auctions (Nobel Prize-winning research)
+- MEV resistant through cryptographic commitment and sealed bids
+- Efficient price discovery via batch clearing
+- All winners pay the same uniform price (lowest qualifying bid)
 
-**Full Analysis**: See [game-theory/ausubel-summary.md](../game-theory/ausubel-summary.md) and [MEV mitigation strategies](../game-theory/ausubel-mev-mitigation.md).
+**Full Analysis**: See [game-theory/uniform-price-auctions.md](../game-theory/uniform-price-auctions.md).
 
 ### Sealed Bid Implementation
 
@@ -1616,7 +1615,7 @@ submit_sealed_bid(auction_id, encrypted_bid);
 - Bids are encrypted until auction end
 - Front-running requires breaking timelock encryption (computationally infeasible)
 
-**Additional Analysis**: See [MEV Resistance](../game-theory/ausubel-mev-resistance.md).
+**Additional Analysis**: See [Uniform Price Auctions](../game-theory/uniform-price-auctions.md).
 
 #### 4. Validator Set Takeover
 
@@ -1713,11 +1712,11 @@ See [Plan Evolution](../PLAN-EVOLUTION.md) for the multi-phase trust reduction r
 - [ ] On-chain bid storage and decryption
 
 **Auction Logic**:
-- [ ] Ausubel auction implementation in Move
+- [ ] Uniform price auction implementation in Move
 - [ ] Bid validation and settlement computation
 - [ ] Merkle tree generation for final balances
 
-**Documentation**: [Timelock Bids](./timelock-bids.md), [Ausubel Summary](../game-theory/ausubel-summary.md)
+**Documentation**: [Timelock Bids](./timelock-bids.md), [Uniform Price Auctions](../game-theory/uniform-price-auctions.md)
 
 ### Phase 4: Settlement & ZK Proofs (Months 4-6)
 
@@ -1777,8 +1776,7 @@ See [Plan Evolution](../PLAN-EVOLUTION.md) for the multi-phase trust reduction r
 
 ### Game Theory & Economics
 
-- [Ausubel Auction Summary](../game-theory/ausubel-summary.md) - Auction mechanism overview
-- [Ausubel MEV Mitigation](../game-theory/ausubel-mev-mitigation.md) - MEV resistance strategies
+- [Uniform Price Auctions](../game-theory/uniform-price-auctions.md) - Auction mechanism details
 - [Sealed Bid Alternatives](../game-theory/sealed-bid-alternatives.md) - Comparison of bid privacy mechanisms
 - [Fee Philosophy](../game-theory/fee-philosophy.md) - Economic incentive design
 

@@ -159,7 +159,7 @@ circuit AuctionZKProof {
     let sorted_usdc = sort(all_bids.filter(is_usdc), by_price_asc);
     
     let (clearing_price, eth_filled, usdc_filled) = 
-        compute_ausubel_clearing(sorted_eth, sorted_usdc);
+        compute_uniform_price_clearing(sorted_eth, sorted_usdc);
     
     constraint clearing_price == final_clearing_price;
     constraint eth_filled == total_eth_collected;
