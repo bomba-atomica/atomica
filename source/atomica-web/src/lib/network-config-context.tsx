@@ -1,35 +1,8 @@
-/**
- * Network Config Context
- *
- * Provides a runtime-configurable testnet host. Persists to localStorage so
- * the setting survives page refreshes.
- *
- * When the host changes, the Aptos singleton is updated immediately. Ethereum
- * providers call `getStoredHost()` at use-time, so they pick up changes on the
- * next invocation without needing a full page reload.
- */
-
-import { createContext, useContext, useState } from "react";
+import { useState } from "react";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "./aptos/config";
-
-const STORAGE_KEY = "atomica-testnet-host";
-
-function getBrowserHost(): string {
-  if (typeof window === "undefined") {
-    return "localhost";
-  }
-  const host = window.location.hostname?.trim();
-  return host || "localhost";
-}
-
-export function getStoredHost(): string {
-  try {
-    return localStorage.getItem(STORAGE_KEY) || getBrowserHost();
-  } catch {
-    return getBrowserHost();
-  }
-}
+import { NetworkConfigContext } from "./network-config-state";
+import { getStoredHost, setStoredHost } from "./network-host";
 
 function applyHost(host: string): void {
   const aptosConfig = new AptosConfig({
@@ -38,11 +11,6 @@ function applyHost(host: string): void {
   });
   setAptosInstance(new Aptos(aptosConfig));
 }
-
-const NetworkConfigContext = createContext<{
-  host: string;
-  setHost: (host: string) => void;
-}>({ host: "localhost", setHost: () => {} });
 
 export function NetworkConfigProvider({
   children,
@@ -58,7 +26,7 @@ export function NetworkConfigProvider({
   });
 
   const setHost = (h: string) => {
-    localStorage.setItem(STORAGE_KEY, h);
+    setStoredHost(h);
     setHostState(h);
     applyHost(h);
   };
@@ -68,8 +36,4 @@ export function NetworkConfigProvider({
       {children}
     </NetworkConfigContext.Provider>
   );
-}
-
-export function useNetworkConfig() {
-  return useContext(NetworkConfigContext);
 }

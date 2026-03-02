@@ -5,7 +5,7 @@
  */
 
 import { ethers } from "ethers";
-import { getStoredHost } from "../network-config-context";
+import { getStoredHost } from "../network-host";
 
 // Build-time env vars are used as overrides; at runtime the testnet host stored
 // in localStorage takes precedence so the user can point the app at a remote

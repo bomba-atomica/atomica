@@ -7,7 +7,7 @@
  */
 
 import { useState, useRef, useEffect } from "react";
-import { useNetworkConfig } from "../lib/network-config-context";
+import { useNetworkConfig } from "../lib/network-config-state";
 
 export function TestnetSelector() {
   const { host, setHost } = useNetworkConfig();
