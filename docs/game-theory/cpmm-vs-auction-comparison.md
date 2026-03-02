@@ -525,12 +525,12 @@ The key realization is that cross-chain atomic swaps inherently require coordina
 
 1. **Commodity delivered in X hours after auction close** - Assets settle after a predetermined delay (1-3 hours)
 2. **Price smoothing** - auction pricing naturally smooths volatility and reduces sensitivity to momentary price spikes
-3. **Reduced auction frequency** - A single daily batch auction suffices, dramatically simplifying coordination
+3. **Reduced auction frequency** - Two fixed daily batch auctions suffice, dramatically simplifying coordination
 
-### Daily Batch Auction Architecture
+### Twice-Daily Batch Auction Architecture
 
-**twice-daily batch auction Design:**
-- One unified batch auction per day per trading pair
+**Twice-daily batch auction design:**
+- Two unified batch auctions per day per trading pair (one per fixed UTC window)
 - All users with USDC (or other quote asset) auction together in a single large batch
 - All holders of the base asset (e.g., ATOMICA) can submit bids
 - **No reserve prices** - Eliminates reserve price complexity and associated penalties
@@ -547,18 +547,18 @@ The key realization is that cross-chain atomic swaps inherently require coordina
 **Bidder Advantages**
 - Known settlement time allows proper hedging strategies
 - auction pricing reduces price risk (Bidders can take offsetting positions)
-- Single large auction more attractive than many small ones
-- Predictable daily rhythm enables automated participation
+- Two large auction windows are more attractive than many small ones
+- Predictable twice-daily rhythm enables automated participation
 
 **User Experience Benefits**
 - Clear delivery expectations (not spot market confusion)
 - auction pricing may provide better rates due to reduced bidder risk
-- twice-daily batch auction easier to understand than continuous trading
-- Predictable schedule (auction at same time daily)
+- Twice-daily batch auctions are easier to understand than continuous trading
+- Predictable schedule (same fixed windows every day)
 
 ### Timelocked Sealed Bids: Essential for Fair Price Discovery
 
-**Critical Requirement:** The daily batch auction **must** use timelocked sealed bids to prevent manipulation and ensure fair price discovery.
+**Critical Requirement:** The twice-daily batch auction model **must** use timelocked sealed bids to prevent manipulation and ensure fair price discovery.
 
 **Why Sealed Bids Are Essential:**
 - **Prevents shill bidding** - Without reserve prices, preventing last-minute bid manipulation becomes critical
@@ -584,18 +584,18 @@ This approach is **practical and implementable** with current cryptographic tool
 
 ### Comparison to Spot Auction Model
 
-| Dimension | Spot Auctions (Multiple Daily) | batch auction model (Single Daily) |
+| Dimension | Spot Auctions (Multiple Daily) | batch auction model (Twice Daily) |
 |-----------|-------------------------------|------------------------------|
 | **Frequency** | Many auctions per day | two auctions per day |
 | **Settlement** | Immediate | X hours after close |
 | **Pricing Expectation** | Spot market rates | batch auction/forward rates |
-| **Liquidity per Auction** | Fragmented across many | Concentrated in one |
+| **Liquidity per Auction** | Fragmented across many | Concentrated in two global windows |
 | **Bidder Appeal** | Lower volume, higher risk | Higher volume, hedgeable |
 | **Price Volatility Risk** | High (immediate settlement) | Lower (time to hedge) |
 | **Reserve Price Needed** | Yes (protect users) | No (large liquid auction) |
 | **Complexity** | Reserve price mechanism | Simpler (no reserve) |
 | **Bid Privacy** | Helpful | Essential (sealed bids required) |
-| **Bootstrapping** | Hard (need bidders for many auctions) | Easier (single large auction) |
+| **Bootstrapping** | Hard (need bidders for many auctions) | Easier (larger scheduled windows) |
 
 ### Game-Theoretic Improvements
 
@@ -620,7 +620,7 @@ This approach is **practical and implementable** with current cryptographic tool
 ### Economic Viability Analysis
 
 **Bidder Perspective:**
-- Single large daily auction worth the infrastructure investment
+- Two large daily auction windows justify bidder infrastructure investment
 - Known settlement time enables proper risk management
 - auction pricing allows hedging on other markets
 - Sufficient volume to justify competitive bidding
@@ -633,17 +633,17 @@ This approach is **practical and implementable** with current cryptographic tool
 
 **Protocol Perspective:**
 - Self-sustaining without subsidies (like all auction models)
-- Lower coordination overhead (one auction vs. many)
+- Lower coordination overhead (two fixed windows vs. many)
 - Easier to bootstrap critical mass
 - Simpler mechanism without reserve price complexity
 
 ### Implementation Considerations
 
 **Auction Schedule:**
-- Daily auction at fixed time (e.g., 12:00 UTC)
-- Bid submission window: e.g., 08:00-12:00 UTC
-- Automatic decryption at 12:00 UTC via Atomica validator threshold signatures
-- Settlement: 1-3 hours after close (e.g., 13:00 UTC same day, 1 hour)
+- Fixed auctions at 07:45 UTC and 16:15 UTC
+- Bid submission windows open before each fixed close (e.g., 3-4 hours)
+- Automatic decryption at each close time via Atomica validator threshold signatures
+- Settlement: 1-3 hours after each close
 
 **Settlement Delay Rationale:**
 - **Chosen: 1-3 hours** - Prevents arbitrage/information withholding + provides verification period
@@ -666,13 +666,13 @@ Three distinct mechanisms can enable trustless cross-chain atomic swaps, each wi
 
 **Spot Auctions** prioritize economic sustainability through active liquidity provision and self-compensating bidders. However, they introduce execution latency, complexity (reserve prices, penalties), and potential timing game vulnerabilities. Multiple auctions per day fragment liquidity and create bootstrapping challenges.
 
-**batch auction model (Daily Batch Auctions with Sealed Bids)** represents a novel synthesis that addresses many challenges of both prior approaches:
+**batch auction model (Twice-Daily Batch Auctions with Sealed Bids)** represents a novel synthesis that addresses many challenges of both prior approaches:
 - Self-sustaining economics (like spot auctions)
-- Concentrated liquidity through single daily batch
+- Concentrated liquidity through twice-daily batch windows
 - Simpler mechanism (no reserve prices needed)
 - Fair price discovery via mandatory sealed bids (timelock + ZK)
 - Better pricing for users (reduced bidder risk premium through hedging)
-- Easier bootstrapping (critical mass in single auction)
+- Easier bootstrapping (critical mass in scheduled windows)
 - Clear user expectations (batch settlement, not spot)
 
 **The core question shifts from "sustainable economics vs. superior UX" to "spot immediacy vs. batch auction predictability."**
@@ -685,8 +685,8 @@ For cross-chain atomic swaps specifically, the batch auction model may be optima
 - Simpler mechanism (no reserve prices) reduces attack surface
 
 **Recommended Approach:**
-Start with a **single daily batch auction using timelocked sealed bids** for the bootstrapping phase. This maximizes liquidity concentration, simplifies the mechanism, and creates predictable schedule for bidder participation. As volume grows, consider adding:
-- Multiple daily auctions at different times for different geographies
+Start with **twice-daily fixed-window batch auctions using timelocked sealed bids**. This balances liquidity concentration with global coverage, simplifies the mechanism, and creates a predictable schedule for bidder participation. As volume grows, consider adding:
+- Additional auction windows for specific geographies/asset groups
 - Spot auction options for users willing to pay premium for immediate settlement
 - Hybrid approaches where large trades use batch auction and small trades use spot
 

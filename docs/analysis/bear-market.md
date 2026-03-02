@@ -1,5 +1,9 @@
 # Batch Auction Performance During Crypto Market Recessions: An Economic Analysis
 
+> [!IMPORTANT]
+> This document is economic analysis, not the canonical timing spec.
+> Current Atomica schedule is twice daily at **07:45 UTC** and **16:15 UTC**.
+
 ## Document Status
 - **Status**: Academic Research
 - **Last Updated**: 2025-11-14

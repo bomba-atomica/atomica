@@ -1079,11 +1079,11 @@ Difference: Negligible (~$36/year)
 
 #### **Phase 3: Mainnet Launch & Monitoring (Months 6-9)**
 
-**Goal:** Launch daily batch auctions on mainnet
+**Goal:** Launch twice-daily batch auctions on mainnet
 
 **Tasks:**
 1. **Gradual Rollout**
-   - Start with small daily auctions (1-10 ETH)
+   - Start with small auction windows (1-10 ETH)
    - Invite selected bidders (closed alpha)
    - Monitor every auction for issues
    - Gradually increase auction sizes

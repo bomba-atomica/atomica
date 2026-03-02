@@ -54,22 +54,22 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 
 **Structure:**
 - **Two auctions per day** to capture global liquidity:
-  - **Western Auction:** 12:00 PM New York (17:00 UTC)
-  - **Eastern Auction:** 12:00 PM Tokyo (03:00 UTC)
+  - **Western Auction:** 16:15 UTC
+  - **Eastern Auction:** 07:45 UTC
 - All trading pairs clear **simultaneously** within each auction
 - **Sellers (Sellers):** Users with quote assets wanting base assets
 - **Bidders:** Base asset holders submit sealed bids
 - No reserve prices at launch (relies on competitive bidding in large batch)
 - Settlement: 1-3 hours post-auction
 
-**Example Timeline (Western Auction):**
+**Example Timeline (16:15 UTC Auction):**
 ```
-08:00 NYC  Bid window opens (users lock assets on away chains)
-08:00-12:00 NYC  Bid submission window (sealed bids)
-12:00 NYC  Auction close & automatic decryption (all assets simultaneously)
-12:00 NYC  Clearing price determined for each pair (uniform price auction)
-12:00-13:00 NYC  Settlement window (verification & hedging)
-13:00 NYC  Settlement (native assets delivered atomically)
+12:15 UTC  Bid window opens (users lock assets on away chains)
+12:15-16:15 UTC  Bid submission window (sealed bids)
+16:15 UTC  Auction close & automatic decryption (all assets simultaneously)
+16:15 UTC  Clearing price determined for each pair (uniform price auction)
+16:15-17:15 UTC  Settlement window (verification & hedging)
+17:15 UTC  Settlement (native assets delivered atomically)
 ```
 
 **Why 1-3 Hour Settlement (Not 24 Hours):**
@@ -80,11 +80,11 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 
 **Why Two Auctions Per Day:**
 - **Global coverage:** Captures liquidity from both Western and Eastern market participants
-- **Optimal timing:** 12:00 PM local time aligns with peak trading activity in each region
+- **Optimal timing:** Fixed UTC windows align with global desk-overlap participation windows
 - **Aggregates volume:** Each auction concentrates regional liquidity into critical mass
 - **Manageable frequency:** Twice-daily is sufficient for most use cases while maintaining batch size
 
-**→ See:** [Secondary Auctions Analysis](docs/analysis/secondary-auctions-plus-continuous.md) and [Optimal Time of Day Analysis](docs/analysis/optimal-time-of-day.md)
+**→ See:** [Secondary Auctions Analysis](../analysis/secondary-auctions-plus-continuous.md) and [Auction Timing Specification (Canonical)](./auction-timing.md)
 
 ### Multi-Asset Auctions
 
@@ -95,7 +95,7 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 
 **Strategic Focus:** While all markets clear simultaneously, Atomica's competitive advantage is providing fair execution for **long-tail assets** where CEX/DEX liquidity is thin. Major pairs (ETH/BTC) already have deep liquidity elsewhere.
 
-**→ See:** [Product Design v0 (Archived)](docs/archive/product-design-v0-ARCHIVED.md) for complete multi-asset mechanism
+**→ See:** [Product Design v0 (Archived)](docs/archived/product-design-v0-ARCHIVED.md) for complete multi-asset mechanism
 
 ## Technical Architecture
 
@@ -301,7 +301,7 @@ Atomica prioritizes:
 - [CoW Swap Analysis](docs/background/cow-swap-analysis.md) - Batch auction case study
 
 **Design & Strategy:**
-- [Product Design v0 (Archived)](docs/archive/product-design-v0-ARCHIVED.md) - Historical auction mechanism
+- [Product Design v0 (Archived)](docs/archived/product-design-v0-ARCHIVED.md) - Historical auction mechanism
 - [N-Layer Onion Timelock](docs/design/timelock-seller-stake-dkg.md) - Sealed bid architecture
 
 **Technical Specifications:**

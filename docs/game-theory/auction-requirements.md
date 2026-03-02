@@ -659,10 +659,10 @@ t=close-1s: Attacker lowers bid to 50 units @ $1,900
 
 **Frequency Tradeoff**:
 - **Many small auctions** (e.g., every 15 minutes): More frequent trading opportunities, but thin participation per auction
-- **Few large auctions** (e.g., once daily): Less frequent, but critical mass of participants
+- **Few large auctions** (e.g., two fixed UTC windows): Less frequent, but critical mass of participants
 
-**Atomica's Approach**: Single daily batch auction
-- Concentrates all liquidity at one time
+**Atomica's Approach**: Twice-daily batch auctions
+- Concentrates liquidity into two global windows
 - Creates critical mass for price discovery
 - Predictable schedule enables bidder preparation
 - batch settlement model (settlement delay) justifies wait time
@@ -724,7 +724,7 @@ t=close-1s: Attacker lowers bid to 50 units @ $1,900
 - Open entry increases Sybil risk
 
 **References**:
-- [Design Principles](../../PRD.md#design-principles--system-properties), "Unified User Experience" section
+- [Design Principles](../specifications/prd.md#design-principles--system-properties), "Unified User Experience" section
 - Budish et al (2015) - Fairness in continuous vs batch auctions
 
 ---
@@ -784,10 +784,10 @@ t=close-1s: Attacker lowers bid to 50 units @ $1,900
 - Commit-reveal prevents strategic reserve setting
 - Penalty fee (5% of reserve × volume) if Seller rejects
 
-**Status**: Not currently implemented. Single daily batch auction provides sufficient liquidity concentration. Reserve prices are potential future feature for guaranteed execution on large individual orders.
+**Status**: Not currently implemented. Twice-daily batch auctions provide sufficient liquidity concentration. Reserve prices are potential future feature for guaranteed execution on large individual orders.
 
 **2. Liquidity Concentration**:
-- Single daily batch aggregates all users
+- Twice-daily batch windows aggregate users into large clearing events
 - Creates critical mass even in thin markets
 - Predictable schedule attracts professional bidders
 
@@ -808,7 +808,7 @@ t=close-1s: Attacker lowers bid to 50 units @ $1,900
 
 **References**:
 - docs/game-theory/uniform-price-auctions.md, "Reserve Price with Commit-Reveal" section
-- [Design Principles](../../PRD.md#design-principles--system-properties), "Protection Against Illiquidity" section
+- [Design Principles](../specifications/prd.md#design-principles--system-properties), "Protection Against Illiquidity" section
 
 ---
 
@@ -1195,11 +1195,11 @@ Excluded seller gets deposit back, can try next auction
 - Auctions: High capital efficiency but batch windows only
 
 **Resolution**:
-- Accept batch windows (daily auctions) for high capital efficiency
+- Accept batch windows (twice-daily auctions) for high capital efficiency
 - batch settlement model sets user expectations correctly
 
 **Tradeoffs Accepted**:
-- Users must wait for daily auction (not instant swaps)
+- Users must wait for the next auction window (not instant swaps)
 - Time-sensitive use cases may not be well-served
 
 ---
@@ -1489,7 +1489,7 @@ See references throughout document to:
 - docs/game-theory/multi-seller-batch-auction.md
 - docs/technical/timelock-bids.md
 - docs/game-theory/cpmm-vs-auction-comparison.md
-- [Design Principles](../../PRD.md#design-principles--system-properties)
+- [Design Principles](../specifications/prd.md#design-principles--system-properties)
 
 ---
 

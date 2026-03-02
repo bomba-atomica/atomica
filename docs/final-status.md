@@ -1,7 +1,7 @@
 # Cross-Chain Test Suite - Final Status
 
 **Date**: 2026-02-05
-**Status**: ✅ **COMPLETE AND WORKING**
+**Status**: ⚠️ **REFACTOR COMPLETE; TEST VERIFICATION IN PROGRESS (4/6 RUN)**
 
 ---
 
@@ -372,8 +372,8 @@ rm tests/meta/cross-chain/lock-receipt-e2e.test.ts.old
 ### Documentation
 - [Cross-Chain Test Suite Guide](/docs/development/cross-chain-test-suite.md)
 - [Ethereum Storage Proof Quirks](/docs/development/ethereum-storage-proof-quirks.md)
-- [Implementation Status](/IMPLEMENTATION_STATUS.md)
-- [Test Results](/TEST_RESULTS.md)
+- [Implementation Status](/docs/implementation-status.md)
+- [Test Results](/docs/test-results.md)
 
 ### Code
 - [Dual-Chain Fixture](tests/meta/cross-chain/helpers/dual-chain-fixture.ts)

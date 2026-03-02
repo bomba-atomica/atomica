@@ -416,7 +416,7 @@ Based on research topics, recommended investigation order:
 - Quorum threshold: 2f+1 voting power
 - Epoch-based validator set changes
 
-**Implementation Details**: See [Aptos State Proof](./aptps_state_proof.md) for full specification of:
+**Implementation Details**: See [Aptos State Proof](./aptos-state-proof.md) for full specification of:
 - `StateProof` structure and verification
 - `TrustedState` management
 - Waypoint bootstrap mechanism
@@ -472,7 +472,7 @@ GET /v1/merkle_proof?auction_id={id}&account={address}
 GET /v1/validator_set?epoch={epoch}
 ```
 
-**Technical Reference**: See [Aptos State Proof](./aptps_state_proof.md) for proof generation details.
+**Technical Reference**: See [Aptos State Proof](./aptos-state-proof.md) for proof generation details.
 
 #### 1.4 Aptos Full Node Proof APIs
 
@@ -761,7 +761,7 @@ ethereum_timelock.submitAuctionResult(
 - Concurrent requests: Supported
 - Rate limiting: Configurable per full node
 
-**Reference Implementation**: See [Aptos State Proof](./aptps_state_proof.md) for complete verification logic and examples.
+**Reference Implementation**: See [Aptos State Proof](./aptos-state-proof.md) for complete verification logic and examples.
 
 ### 2. Away Chain Components (Ethereum/Solana)
 
@@ -837,7 +837,7 @@ contract AtomicaTimeLock {
    - Gas cost: ~250,000 gas per update
    - 5-30 minute latency for proof generation
    - Enables batching of multiple signature verifications
-   - **See**: [ZK Light Client](./aptos_zk_light_client.md) for implementation
+   - **See**: [ZK Light Client](./aptos-zk-light-client.md) for implementation
 
 3. **Optimistic Verification** (Fallback)
    - Gas cost: ~50,000 gas
@@ -1247,7 +1247,7 @@ struct ValidatorSetUpdate {
 
 **Security**: Only valid if signed by 2f+1 voting power of **old** validator set, preventing unauthorized updates.
 
-**Implementation**: See [Cross-Chain Verification](./cross-chain-verification.md) and [Aptos-Ethereum Bridge Implementation](./aptos_ethereum_bridge_implementation.md).
+**Implementation**: See [Cross-Chain Verification](./cross-chain-verification.md) and [Aptos-Ethereum Bridge Implementation](./aptos-ethereum-bridge-implementation.md).
 
 ### Merkle Root Submission
 
@@ -1463,7 +1463,7 @@ public fun submit_bid(
 }
 ```
 
-**Light Client**: Atomica maintains ZK light client tracking Ethereum state (see [ZK Light Client](./aptos_zk_light_client.md)).
+**Light Client**: Atomica maintains ZK light client tracking Ethereum state (see [ZK Light Client](./aptos-zk-light-client.md)).
 
 #### 4. Gas Sponsorship (AIP-39)
 
@@ -1688,7 +1688,7 @@ See [Plan Evolution](../PLAN-EVOLUTION.md) for the multi-phase trust reduction r
 - [ ] Validator set synchronization logic
 - [ ] Merkle root submission and verification
 
-**Documentation**: [Aptos-Ethereum Bridge Implementation](./aptos_ethereum_bridge_implementation.md)
+**Documentation**: [Aptos-Ethereum Bridge Implementation](./aptos-ethereum-bridge-implementation.md)
 
 ### Phase 2: Account Abstraction (Months 2-4)
 
@@ -1769,10 +1769,10 @@ See [Plan Evolution](../PLAN-EVOLUTION.md) for the multi-phase trust reduction r
 - [Account Abstraction Overview](./account-abstraction.md) - ERC-4337 and Aptos AA comparison
 - [Cross-Chain Verification](./cross-chain-verification.md) - Atomic guarantees and ZK light clients
 - [Timelock Bids](./timelock-bids.md) - Sealed bid encryption with drand
-- [Aptos State Proof](./aptps_state_proof.md) - BLS signatures and light client verification
+- [Aptos State Proof](./aptos-state-proof.md) - BLS signatures and light client verification
 - [Cryptographic Stack Analysis](./cryptographic-stack-analysis.md) - ZK system selection (SP1)
-- [ZK Light Client](./aptos_zk_light_client.md) - ZK-SNARK wrapped BLS verification
-- [Aptos-Ethereum Bridge Implementation](./aptos_ethereum_bridge_implementation.md) - Smart contract specifications
+- [ZK Light Client](./aptos-zk-light-client.md) - ZK-SNARK wrapped BLS verification
+- [Aptos-Ethereum Bridge Implementation](./aptos-ethereum-bridge-implementation.md) - Smart contract specifications
 
 ### Game Theory & Economics
 

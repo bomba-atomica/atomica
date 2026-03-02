@@ -689,7 +689,7 @@ class AutomatedBidder {
 - No griefing incidents
 
 **Phase 2 (Months 3-6): Optimization**
-- Increase to daily auctions
+- Increase to twice-daily auctions
 - Optimize round duration (test 5 min vs 10 min rounds)
 - A/B test price increments ($25 vs $50 vs $100)
 - Add advanced agent features (custom demand curves)
@@ -704,7 +704,7 @@ class AutomatedBidder {
 **Risk 1: No Blockchain Precedent**
 - Mitigation: Extensive testnet deployment (3 months)
 - Mitigation: Bug bounty program ($500K+)
-- Mitigation: Gradual rollout (weekly → daily auctions)
+- Mitigation: Gradual rollout (weekly → twice-daily auctions)
 - Mitigation: Circuit breakers (pause if anomalous behavior)
 
 **Risk 2: Complexity Barrier**
@@ -724,7 +724,7 @@ class AutomatedBidder {
 - Mitigation: Set maximum rounds (e.g., 10 rounds max)
 - Mitigation: Automated agents (users don't wait)
 - Mitigation: Push notifications when auction ends
-- Acceptance: 60-90 min acceptable for daily auction
+- Acceptance: 60-90 min acceptable for fixed auction windows
 
 ---
 

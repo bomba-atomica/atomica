@@ -2364,7 +2364,7 @@ After analyzing undersubscription risks, **public bids create severe seller prot
 2. ✓ Meets critical requirements (R7, R8, R12, R5, R10)
 3. ✓ Simple bid mechanism
 4. ✓ Gas efficient (but reserves add complexity)
-5. ✓ Fits Atomica's daily batch auction model
+5. ✓ Fits Atomica's twice-daily batch auction model
 6. ✗ **SEVERE seller risk** requires mandatory reserves
 
 **Mandatory Requirements for Public Bids**:

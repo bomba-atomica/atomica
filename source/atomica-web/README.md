@@ -43,13 +43,13 @@ The web application will be available at `http://localhost:4173/`.
 
 ### Naming Convention
 
-All Atomica-specific environment variables **must** be prefixed with `ATOMICA_`:
+Atomica-specific environment variables should prefer the `ATOMICA_` prefix where supported:
 
 - ✅ `ATOMICA_DEBUG=1`
 - ✅ `ATOMICA_LOG_LEVEL=verbose`
-- ✅ `ATOMICA_NUM_VALIDATORS=4`
+- ✅ `NUM_VALIDATORS=4` (currently used by local testnet scripts)
 - ❌ `DEBUG=1` (too generic)
-- ❌ `NUM_VALIDATORS=4` (missing prefix)
+- ⚠️ `ATOMICA_NUM_VALIDATORS=4` (not wired in current scripts yet)
 
 **Rationale**: This prevents naming conflicts with third-party libraries and system variables, making it clear which variables belong to Atomica.
 
@@ -58,11 +58,11 @@ All Atomica-specific environment variables **must** be prefixed with `ATOMICA_`:
 Currently used environment variables:
 
 - `NUM_VALIDATORS` - Number of validators for Docker testnet (default: 2)
-  - **Note**: This should be renamed to `ATOMICA_NUM_VALIDATORS` in a future update
-
-Testnet debugging:
-
 - `ATOMICA_DEBUG_TESTNET` - Enable verbose logging in docker-testnet SDK (values: `1`, `true`)
+
+Planned cleanup:
+
+- Migrate `NUM_VALIDATORS` to `ATOMICA_NUM_VALIDATORS` with backward compatibility
 
 ## Troubleshooting
 

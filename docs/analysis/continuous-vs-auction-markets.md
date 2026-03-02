@@ -1587,9 +1587,9 @@ History provides the answer: We didn't think—we assumed. Atomica corrects that
 **Document Status:** Complete - Comprehensive Analysis
 **Last Updated:** 2025-01-10
 **Related Documents:**
-- `PRD.md` - Atomica product requirements
+- `docs/specifications/prd.md` - Atomica product requirements
 - `docs/game-theory/uniform-price-auctions.md` - Auction mechanism details
-- `docs/design/batch-auction-economics.md` - Why batch auction for cross-chain
+- `docs/game-theory/batch-auction-economics.md` - Why batch auction for cross-chain
 - `docs/game-theory/cpmm-vs-auction-comparison.md` - Economic comparison
 
 ---
