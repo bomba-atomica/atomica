@@ -2,12 +2,12 @@ import { useState } from "react";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "./aptos/config";
 import { NetworkConfigContext } from "./network-config-state";
-import { getStoredHost, setStoredHost } from "./network-host";
+import { buildAptosFullnodeUrl, getStoredHost, setStoredHost } from "./network-host";
 
 function applyHost(host: string): void {
   const aptosConfig = new AptosConfig({
     network: Network.LOCAL,
-    fullnode: `http://${host}:8080/v1`,
+    fullnode: buildAptosFullnodeUrl(host),
   });
   setAptosInstance(new Aptos(aptosConfig));
 }

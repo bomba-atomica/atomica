@@ -5,11 +5,10 @@
  */
 
 import { ethers } from "ethers";
-import { getStoredHost } from "../network-host";
+import { buildEthRpcUrl, getStoredHost } from "../network-host";
 
-// Build-time env vars are used as overrides; at runtime the testnet host stored
-// in localStorage takes precedence so the user can point the app at a remote
-// machine without rebuilding.
+// Build-time env vars are kept for backwards compatibility constants below.
+// Runtime RPC host is always derived from the selector state (localStorage/page host).
 const ENV_ETH_RPC_URL = import.meta.env.VITE_ETH_RPC_URL as string | undefined;
 const ENV_ETH_WS_URL = import.meta.env.VITE_ETH_WS_URL as string | undefined;
 const ENV_ETH_BEACON_URL = import.meta.env.VITE_ETH_BEACON_URL as
@@ -17,7 +16,7 @@ const ENV_ETH_BEACON_URL = import.meta.env.VITE_ETH_BEACON_URL as
   | undefined;
 
 export function getEthRpcUrl(): string {
-  return ENV_ETH_RPC_URL || `http://${getStoredHost()}:8545`;
+  return buildEthRpcUrl(getStoredHost());
 }
 
 // Keep these for backwards compatibility / direct use in tests

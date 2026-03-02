@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { aptos, CONTRACT_ADDR, getDerivedAddress } from "../lib/aptos";
 
 import { areContractsDeployed } from "../lib/aptos";
+import { useNetworkConfig } from "../lib/network-config-state";
 
 interface TokenBalances {
   apt: number;
@@ -20,6 +21,7 @@ interface TokenBalances {
  * Returns balances for APT, FAKEETH, and FAKEUSD
  */
 export function useTokenBalances(ethAddress: string | null): TokenBalances {
+  const { host } = useNetworkConfig();
   const [balances, setBalances] = useState<Omit<TokenBalances, "refetch">>({
     apt: 0,
     fakeEth: 0,
@@ -31,7 +33,7 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
     contractsDeployed: false,
   });
 
-  const checkBalances = useCallback(async () => {
+  const checkBalances = useCallback(async (): Promise<boolean> => {
     if (!ethAddress) {
       setBalances((prev) => ({
         ...prev,
@@ -41,7 +43,7 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
         loading: false,
         exists: false,
       }));
-      return;
+      return false;
     }
 
     try {
@@ -63,7 +65,7 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
           loading: false,
           exists: false,
         }));
-        return;
+        return false;
       }
 
       // If balance is 0, consider account as not funded/not existing
@@ -76,7 +78,7 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
           loading: false,
           exists: false,
         }));
-        return;
+        return false;
       }
 
       // Check contracts deployment status
@@ -93,7 +95,7 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
           fakeUsdInitialized: false,
           contractsDeployed: false,
         });
-        return;
+        return false;
       }
 
       // Contracts deployed, fetch balances directly using view functions
@@ -136,28 +138,50 @@ export function useTokenBalances(ethAddress: string | null): TokenBalances {
         fakeUsdInitialized,
         contractsDeployed: true,
       });
+      return false;
     } catch {
       // Fallback for unexpected errors
       setBalances((prev) => ({ ...prev, loading: false, exists: false }));
+      return true;
     }
   }, [ethAddress]);
 
   useEffect(() => {
-    // Initial check and polling - wrapped to avoid synchronous setState
+    const baseDelayMs = 5000;
+    const maxDelayMs = 60000;
     let cancelled = false;
+    let retryCount = 0;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = (delayMs: number) => {
+      timeout = setTimeout(() => void runCheck(), delayMs);
+    };
+
     const runCheck = async () => {
+      if (cancelled) return;
+      const failed = await checkBalances();
+      retryCount = failed ? retryCount + 1 : 0;
+      const nextDelay = failed
+        ? Math.min(baseDelayMs * 2 ** retryCount, maxDelayMs)
+        : baseDelayMs;
       if (!cancelled) {
-        await checkBalances();
+        schedule(nextDelay);
       }
     };
+
     void runCheck();
-    // Poll every 5 seconds
-    const interval = setInterval(() => void runCheck(), 5000);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (timeout) {
+        clearTimeout(timeout);
+      }
     };
-  }, [checkBalances]);
+  }, [checkBalances, host]);
 
-  return { ...balances, refetch: checkBalances };
+  return {
+    ...balances,
+    refetch: async () => {
+      await checkBalances();
+    },
+  };
 }

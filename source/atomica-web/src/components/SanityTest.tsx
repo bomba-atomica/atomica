@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { testSimpleAPTTransfer, getDerivedAddress, aptos } from "../lib/aptos";
+import { useNetworkConfig } from "../lib/network-config-state";
 
 export function SanityTest({ account }: { account: string }) {
+  const { host } = useNetworkConfig();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
     success: boolean;
@@ -22,25 +24,43 @@ export function SanityTest({ account }: { account: string }) {
 
   // Check if the derived account exists on chain
   useEffect(() => {
-    // ... existing check logic ...
+    const baseDelayMs = 3000;
+    const maxDelayMs = 30000;
+    let cancelled = false;
+    let retryCount = 0;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
     const checkAccount = async () => {
       if (!account) return;
       setCheckingAccount(true);
+      let failed = false;
       try {
         const derived = await getDerivedAddress(account.toLowerCase());
         await aptos.getAccountInfo({ accountAddress: derived });
         setAccountExists(true);
       } catch {
         setAccountExists(false);
+        failed = true;
       } finally {
         setCheckingAccount(false);
+        retryCount = failed ? retryCount + 1 : 0;
+        const nextDelay = failed
+          ? Math.min(baseDelayMs * 2 ** retryCount, maxDelayMs)
+          : baseDelayMs;
+        if (!cancelled) {
+          timeout = setTimeout(() => void checkAccount(), nextDelay);
+        }
       }
     };
 
-    checkAccount();
-    const interval = setInterval(checkAccount, 3000);
-    return () => clearInterval(interval);
-  }, [account]);
+    void checkAccount();
+    return () => {
+      cancelled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [account, host]);
 
   const runTest = async () => {
     if (!account) return;

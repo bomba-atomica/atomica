@@ -7,6 +7,7 @@ import {
   areContractsDeployed,
 } from "../lib/aptos";
 import { getAllBalances } from "../lib/ethereum/balances";
+import { useNetworkConfig } from "../lib/network-config-state";
 
 export interface DualChainBalances {
   // Ethereum balances (in wei / smallest units)
@@ -40,6 +41,7 @@ export interface DualChainBalances {
 export function useDualChainBalances(
   ethAddress: string | null,
 ): DualChainBalances {
+  const { host } = useNetworkConfig();
   const [balances, setBalances] = useState<Omit<DualChainBalances, "refetch">>({
     ethBalance: 0n,
     ethFakeETH: 0n,
@@ -54,7 +56,7 @@ export function useDualChainBalances(
     loading: true,
   });
 
-  const checkBalances = useCallback(async () => {
+  const checkBalances = useCallback(async (): Promise<boolean> => {
     if (!ethAddress) {
       setBalances((prev) => ({
         ...prev,
@@ -67,7 +69,7 @@ export function useDualChainBalances(
         aptosExists: false,
         loading: false,
       }));
-      return;
+      return false;
     }
 
     // Fetch Ethereum and Aptos balances concurrently
@@ -95,31 +97,54 @@ export function useDualChainBalances(
           };
 
     setBalances({ ...eth, ...aptosData, loading: false });
+    return (
+      ethResult.status === "rejected" || aptosResult.status === "rejected"
+    );
   }, [ethAddress]);
 
   useEffect(() => {
+    const baseDelayMs = 5000;
+    const maxDelayMs = 60000;
     let cancelled = false;
-    const run = async () => {
-      if (!cancelled) await checkBalances();
+    let retryCount = 0;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = (delayMs: number) => {
+      timeout = setTimeout(() => void run(), delayMs);
     };
+
+    const run = async () => {
+      if (cancelled) return;
+      const failed = await checkBalances();
+      retryCount = failed ? retryCount + 1 : 0;
+      const nextDelay = failed
+        ? Math.min(baseDelayMs * 2 ** retryCount, maxDelayMs)
+        : baseDelayMs;
+      if (!cancelled) {
+        schedule(nextDelay);
+      }
+    };
+
     void run();
-    const interval = setInterval(() => void run(), 5000);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (timeout) {
+        clearTimeout(timeout);
+      }
     };
-  }, [checkBalances]);
+  }, [checkBalances, host]);
 
-  return { ...balances, refetch: checkBalances };
+  return {
+    ...balances,
+    refetch: async () => {
+      await checkBalances();
+    },
+  };
 }
 
 async function fetchEthereumBalances(address: string) {
-  try {
-    const { eth, fakeETH, fakeUSD } = await getAllBalances(address);
-    return { ethBalance: eth, ethFakeETH: fakeETH, ethFakeUSD: fakeUSD };
-  } catch {
-    return { ethBalance: 0n, ethFakeETH: 0n, ethFakeUSD: 0n };
-  }
+  const { eth, fakeETH, fakeUSD } = await getAllBalances(address);
+  return { ethBalance: eth, ethFakeETH: fakeETH, ethFakeUSD: fakeUSD };
 }
 
 async function fetchAptosBalances(ethAddress: string) {
@@ -188,8 +213,10 @@ async function fetchAptosBalances(ethAddress: string) {
       aptosFakeUsdInitialized,
       aptosContractsDeployed: true,
     };
-  } catch {
-    return zero;
+  } catch (error) {
+    throw error instanceof Error
+      ? error
+      : new Error("Failed to fetch Aptos balances");
   }
 }
 
