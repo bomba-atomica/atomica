@@ -14,6 +14,13 @@ interface AccountStatusProps {
 
 export function AccountStatus({ ethAddress, balances }: AccountStatusProps) {
   const [aptosAddress, setAptosAddress] = useState<string | null>(null);
+  const contractsMissing: string[] = [];
+  if (!balances.ethContractsDeployed) {
+    contractsMissing.push("Ethereum");
+  }
+  if (!balances.aptosContractsDeployed) {
+    contractsMissing.push("Aptos");
+  }
 
   useEffect(() => {
     const derive = async () => {
@@ -108,9 +115,11 @@ export function AccountStatus({ ethAddress, balances }: AccountStatusProps) {
                     </span>
                   </div>
 
-                  {!balances.aptosContractsDeployed ? (
+                  {contractsMissing.length > 0 ? (
                     <div className="text-zinc-500 text-xs animate-pulse">
-                      Contracts Loading...
+                      {contractsMissing.length === 1
+                        ? `${contractsMissing[0]} contracts loading...`
+                        : `${contractsMissing.join(" & ")} contracts loading...`}
                     </div>
                   ) : (
                     <>

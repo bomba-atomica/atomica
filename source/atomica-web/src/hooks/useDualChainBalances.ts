@@ -4,9 +4,10 @@ import {
   aptos,
   CONTRACT_ADDR,
   getDerivedAddress,
-  areContractsDeployed,
+  areContractsDeployed as areAptosContractsDeployed,
 } from "../lib/aptos";
 import { getAllBalances } from "../lib/ethereum/balances";
+import { areContractsDeployed as areEthereumContractsDeployed } from "../lib/ethereum/contracts";
 import { useNetworkConfig } from "../lib/network-config-state";
 
 export interface DualChainBalances {
@@ -23,6 +24,7 @@ export interface DualChainBalances {
   aptosFakeEthInitialized: boolean;
   aptosFakeUsdInitialized: boolean;
   aptosContractsDeployed: boolean;
+  ethContractsDeployed: boolean;
 
   loading: boolean;
   refetch: () => Promise<void>;
@@ -53,6 +55,7 @@ export function useDualChainBalances(
     aptosFakeEthInitialized: false,
     aptosFakeUsdInitialized: false,
     aptosContractsDeployed: false,
+    ethContractsDeployed: false,
     loading: true,
   });
 
@@ -81,7 +84,12 @@ export function useDualChainBalances(
     const eth =
       ethResult.status === "fulfilled"
         ? ethResult.value
-        : { ethBalance: 0n, ethFakeETH: 0n, ethFakeUSD: 0n };
+        : {
+            ethBalance: 0n,
+            ethFakeETH: 0n,
+            ethFakeUSD: 0n,
+            ethContractsDeployed: false,
+          };
 
     const aptosData =
       aptosResult.status === "fulfilled"
@@ -142,7 +150,13 @@ export function useDualChainBalances(
 
 async function fetchEthereumBalances(address: string) {
   const { eth, fakeETH, fakeUSD } = await getAllBalances(address);
-  return { ethBalance: eth, ethFakeETH: fakeETH, ethFakeUSD: fakeUSD };
+  const contractsDeployed = await areEthereumContractsDeployed();
+  return {
+    ethBalance: eth,
+    ethFakeETH: fakeETH,
+    ethFakeUSD: fakeUSD,
+    ethContractsDeployed: contractsDeployed,
+  };
 }
 
 async function fetchAptosBalances(ethAddress: string) {
@@ -170,7 +184,7 @@ async function fetchAptosBalances(ethAddress: string) {
 
     if (aptBalance === 0) return zero;
 
-    const contractsDeployed = await areContractsDeployed();
+    const contractsDeployed = await areAptosContractsDeployed();
     if (!contractsDeployed) {
       return { ...zero, apt: aptBalance, aptosExists: true };
     }
