@@ -124,18 +124,11 @@ async function main() {
   }
 
   // 5. Start Docker Testnet
-  console.log(
-    "chains⛓️ Starting Docker Testnet (expecting 4 validators + faucet)...",
-  );
+  console.log("chains⛓️ Starting Docker Testnet (expecting 4 validators)...");
 
   // Create and wait for testnet readiness
   const testnet = await DockerTestnet.new(4);
   console.log("✅ Docker Testnet is Ready!");
-
-  // Wait for Faucet Service (now provided by Docker on port 8081)
-  console.log("⏳ Waiting for Faucet Service (http://127.0.0.1:8081)...");
-  await waitForUrl("http://127.0.0.1:8081");
-  console.log("✅ Faucet Service is Ready!");
 
   // 6. Deploy Contracts using SDK
   console.log("📜 Deploying Contracts...");

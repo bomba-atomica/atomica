@@ -116,7 +116,7 @@ export function TestnetSelector() {
           </div>
 
           <p className="text-xs text-zinc-600 mt-1">
-            Ports used: ETH :8545, Aptos :8080, Faucet :8081
+            Ports used: ETH :8545, Aptos :8080
           </p>
         </div>
       )}

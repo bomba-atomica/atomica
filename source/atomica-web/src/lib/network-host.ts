@@ -65,11 +65,3 @@ export function buildAptosFullnodeUrl(host: string): string {
   url.pathname = "/v1";
   return url.toString();
 }
-
-export function buildAptosFaucetUrl(host: string): string {
-  const url = ensurePort(parseTargetHost(host), "8081");
-  if (url.pathname === "/") {
-    url.pathname = "";
-  }
-  return url.toString();
-}

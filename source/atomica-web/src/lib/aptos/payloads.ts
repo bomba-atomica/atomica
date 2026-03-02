@@ -2,7 +2,7 @@ import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
 import { CONTRACT_ADDR, aptos } from "./config";
 import { getDerivedAddress } from "./siwe";
 import { submitNativeTransaction } from "./transaction";
-import { buildAptosFaucetUrl, getStoredHost } from "../network-host";
+import { getStoredHost } from "../network-host";
 
 /**
  * Sanity Test: Simple APT transfer using MetaMask signature
@@ -66,35 +66,46 @@ export async function testSimpleAPTTransfer(
 }
 
 /**
- * Step 1: Request APT tokens from faucet for gas
+ * Step 1: Request APT tokens for gas via web funding API
  */
 export async function requestAPT(ethAddress: string) {
   // Always use lowercase for consistency with submitNativeTransaction
   const derived = await getDerivedAddress(ethAddress.toLowerCase());
-  const faucetUrl = buildAptosFaucetUrl(getStoredHost());
+  const host = getStoredHost();
 
-  console.log("=== Requesting APT from Faucet ===");
+  console.log("=== Requesting APT from Funding API ===");
   console.log("  Ethereum Address:", ethAddress);
   console.log("  Aptos Derived Address:", derived.toString());
   console.log("  Funding address:", derived.toString());
-  console.log("  Faucet URL:", faucetUrl);
+  console.log("  Funding host:", host);
 
-  const res = await fetch(
-    `${faucetUrl}/mint?amount=100000000&address=${derived.toString()}`,
-    { method: "POST" },
-  );
+  const res = await fetch("/api/aptos/fund", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      address: derived.toString(),
+      amount: 100000000,
+      host,
+    }),
+  });
+
+  const body = (await res.json().catch(() => ({}))) as {
+    txHash?: string;
+    error?: string;
+  };
+
   if (!res.ok) {
-    const text = await res.text().catch(() => "No response text");
+    const text = body.error || "No response text";
     console.error(
-      `Faucet API Failed: ${res.status} ${res.statusText} - ${text}`,
+      `Funding API Failed: ${res.status} ${res.statusText} - ${text}`,
     );
-    throw new Error(`Faucet API Failed: ${text}`);
+    throw new Error(`Funding API Failed: ${text}`);
   }
 
   // Wait slightly for balance to reflect (local node is fast but async)
   await new Promise((r) => setTimeout(r, 1000));
 
-  return { hash: "apt-funded" };
+  return { hash: body.txHash || "apt-funded" };
 }
 
 /**

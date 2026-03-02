@@ -1,5 +1,83 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import type { Connect, Logger } from "vite";
+import { fundAptosAccount } from "./scripts/aptos-funding";
+
+type JsonObject = Record<string, unknown>;
+
+function sendJson(
+  res: {
+    statusCode: number;
+    setHeader(name: string, value: string): void;
+    end(chunk?: string): void;
+  },
+  statusCode: number,
+  payload: JsonObject,
+): void {
+  res.statusCode = statusCode;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify(payload));
+}
+
+async function readJsonBody(req: {
+  on(event: "data", listener: (chunk: string) => void): void;
+  on(event: "end", listener: () => void): void;
+}): Promise<JsonObject> {
+  return await new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", () => {
+      if (!body.trim()) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(body) as JsonObject);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+function registerAptosFundingApi(
+  middlewares: Connect.Server,
+  logger: Logger,
+): void {
+  middlewares.use("/api/aptos/fund", async (req, res) => {
+    if (req.method !== "POST") {
+      if (req.method === "OPTIONS") {
+        res.statusCode = 204;
+        res.end();
+        return;
+      }
+      sendJson(res, 405, { error: "Method not allowed. Use POST." });
+      return;
+    }
+
+    try {
+      const body = await readJsonBody(req);
+      const address =
+        typeof body.address === "string" ? body.address : undefined;
+      const amount = typeof body.amount === "number" ? body.amount : undefined;
+      const host = typeof body.host === "string" ? body.host : undefined;
+
+      if (!address) {
+        sendJson(res, 400, { error: "`address` is required." });
+        return;
+      }
+
+      const result = await fundAptosAccount({ address, amount, host });
+      sendJson(res, 200, { success: true, ...result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`[aptos-fund-api] ${message}`, { timestamp: true });
+      sendJson(res, 500, { success: false, error: message });
+    }
+  });
+}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -50,6 +128,15 @@ export default defineConfig({
             next();
           }
         });
+      },
+    },
+    {
+      name: "aptos-funding-api",
+      configureServer(server) {
+        registerAptosFundingApi(server.middlewares, server.config.logger);
+      },
+      configurePreviewServer(server) {
+        registerAptosFundingApi(server.middlewares, server.config.logger);
       },
     },
   ],

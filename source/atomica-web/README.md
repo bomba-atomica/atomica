@@ -67,4 +67,4 @@ Planned cleanup:
 ## Troubleshooting
 
 - **Compilation Issues**: Ensure you have the latest Rust toolchain installed.
-- **Port Conflicts**: The local testnet uses ports 8080, 8081, and 6180. Ensure these are free.
+- **Port Conflicts**: The local testnet uses ports 8080 and 6180 (plus 8545 for Ethereum in dual-testnet mode). Ensure these are free.

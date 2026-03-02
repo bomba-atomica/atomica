@@ -82,7 +82,7 @@ export function Faucet({
         Get tokens to interact with the auction demo.
       </p>
 
-      {/* APT gas tokens (Aptos faucet) */}
+      {/* APT gas tokens (server-side funder) */}
       <div className="mb-4 p-4 bg-zinc-950/50 border border-zinc-900 rounded">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold text-zinc-400">
@@ -93,7 +93,7 @@ export function Faucet({
           )}
         </div>
         <p className="text-xs text-zinc-600 mb-3">
-          APT tokens pay for transaction fees on Aptos.
+          APT tokens pay for transaction fees on Aptos (funded by the demo API).
         </p>
         <button
           onClick={handleRequestAPT}
