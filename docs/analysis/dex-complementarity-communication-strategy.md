@@ -182,4 +182,4 @@ That narrative transformation—from potential competitor to ecosystem infrastru
 - [Market Volume by Participant Category](./market-volume-by-participant-category.md)
 - [GTM Pull Strategy](./gtm-considerations.md)
 - [CoW Swap vs OTC Analysis](../background/cowswap-otc-analysis.md)
-- [Product Design v0](../design/product-design-v0-ARCHIVED.md)
+- [Product Design v0](../archived/product-design-v0-archived.md)

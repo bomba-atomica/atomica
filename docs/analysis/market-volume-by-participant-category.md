@@ -1870,6 +1870,6 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 - [Auction Timing Specification](../specifications/auction-timing.md) - Canonical auction timing
 
 **Product Design:**
-- [Product Design v0](../archived/product-design-v0-ARCHIVED.md) - Atomica auction mechanism design
+- [Product Design v0](../archived/product-design-v0-archived.md) - Atomica auction mechanism design
 - [batch auction model](../game-theory/batch-auction-economics.md) - Why Atomica uses batch settlement
 - [Design Principles](../specifications/prd.md#design-principles--system-properties) - Target solution properties

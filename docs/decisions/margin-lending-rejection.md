@@ -27,7 +27,7 @@ A "flash loan-style P2P lending" system where:
 - Loans repaid "atomically" with claimed "zero default risk"
 - LPs earn 50-400% APY from high-velocity capital deployment
 
-**Archived document:** `/docs/archived/liquidity-provision-DEPRECATED.md`
+**Archived document:** `/docs/archived/liquidity-provision-deprecated.md`
 
 ### Why It Seemed Appealing
 
@@ -309,7 +309,7 @@ Settlement transaction:
 - `/docs/analysis/margin-lending-critique.md` - Why this is out-of-band lending, not auction-native
 
 **Deprecated proposal:**
-- `/docs/archived/liquidity-provision-DEPRECATED.md` - Original proposal (marked as deprecated)
+- `/docs/archived/liquidity-provision-deprecated.md` - Original proposal (marked as deprecated)
 
 **Alternative approaches:**
 - Document Aave/Morpho integration patterns (TODO)

@@ -25,7 +25,7 @@ This directory contains detailed technical and economic analyses of proposed fea
 ### Related Documents
 
 - **Decision Record:** `/docs/decisions/margin-lending-rejection.md` - Formal decision and rationale
-- **Deprecated Proposal:** `/docs/archived/liquidity-provision-DEPRECATED.md` - Original proposal with deprecation notice
+- **Deprecated Proposal:** `/docs/archived/liquidity-provision-deprecated.md` - Original proposal with deprecation notice
 
 ### Key Findings
 
