@@ -41,7 +41,7 @@ All winning bidders pay the same clearing price (lowest qualifying bid), regardl
 All externalities internalized. Fees proportional to distance from clearing price—accurate bidders get rebates, noisy bidders pay. **Zero operator fees for Bitcoin and Ethereum markets.**
 
 ### Unified Cross-Chain Architecture
-All away chains (Ethereum, Solana, Base, Arbitrum, etc.) use identical verification mechanisms. Dual-layer security: BLS threshold signatures + ZK proofs.
+All away chains (Ethereum, Solana, Base, Arbitrum, etc.) use identical verification mechanisms. BLS threshold signatures (v0.1 Beta), with ZK proof verification (v1.0+).
 
 ### Account Abstraction
 Users deposit on preferred chains using familiar wallets (MetaMask, Phantom). Sign bids with Ethereum wallet—no Atomica-native wallet or gas tokens needed.
