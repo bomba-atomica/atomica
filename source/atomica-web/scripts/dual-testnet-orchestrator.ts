@@ -11,8 +11,6 @@
  */
 
 import { spawn, ChildProcess } from "child_process";
-import { writeFileSync } from "fs";
-import { join } from "path";
 import { ethers } from "ethers";
 import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
 import { DockerTestnet } from "@atomica/docker-testnet";
@@ -24,6 +22,7 @@ import {
   deployWithRetry,
 } from "../tests/meta/ethereum/solidity-compiler.js";
 import { DEPLOYER_ADDR, DEPLOYER_PK } from "../test-utils/localnet";
+import { writeChainConfig } from "./chain-config";
 
 const NUM_ETH_VALIDATORS = 4;
 const NUM_APTOS_VALIDATORS = 4;
@@ -64,7 +63,18 @@ async function main() {
     const ethAddresses = await deployEthereumContracts(ethTestnet);
     await deployAptosContracts(aptosTestnet);
 
-    writeEnvLocal(ethAddresses);
+    const chainConfigPath = writeChainConfig({
+      ethereum: {
+        rpcUrl: ethAddresses.rpcUrl,
+        fakeETH: ethAddresses.fakeETH,
+        fakeUSD: ethAddresses.fakeUSD,
+        lockBox: ethAddresses.lockBox,
+      },
+      aptos: {
+        contractAddress: DEPLOYER_ADDR,
+      },
+    });
+    console.log(`  ✓ Chain config written to ${chainConfigPath}`);
 
     console.log("\n🌐 Starting webapp...");
     await launchWebapp();
@@ -158,23 +168,6 @@ async function deployAptosContracts(testnet: DockerTestnet) {
   });
 
   console.log(`  ✓ Aptos contracts deployed`);
-}
-
-function writeEnvLocal(addresses: {
-  rpcUrl: string;
-  fakeETH: string;
-  fakeUSD: string;
-  lockBox: string;
-}) {
-  const envLocal = [
-    `VITE_ETH_RPC_URL=${addresses.rpcUrl}`,
-    `VITE_FAKE_ETH_ADDRESS=${addresses.fakeETH}`,
-    `VITE_FAKE_USD_ADDRESS=${addresses.fakeUSD}`,
-    `VITE_CONTRACT_ADDRESS=${DEPLOYER_ADDR}`,
-    `VITE_LOCK_BOX_ADDRESS=${addresses.lockBox}`,
-  ].join("\n");
-  writeFileSync(join(process.cwd(), ".env.local"), envLocal);
-  console.log("  ✓ Written to .env.local");
 }
 
 async function launchWebapp(): Promise<void> {

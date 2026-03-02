@@ -6,10 +6,10 @@
 
 import { ethers } from "ethers";
 import { buildEthRpcUrl, getStoredHost } from "../network-host";
+import { getChainConfig } from "./chain-config.ts";
 
 // Build-time env vars are kept for backwards compatibility constants below.
 // Runtime RPC host is always derived from the selector state (localStorage/page host).
-const ENV_ETH_RPC_URL = import.meta.env.VITE_ETH_RPC_URL as string | undefined;
 const ENV_ETH_WS_URL = import.meta.env.VITE_ETH_WS_URL as string | undefined;
 const ENV_ETH_BEACON_URL = import.meta.env.VITE_ETH_BEACON_URL as
   | string
@@ -19,18 +19,16 @@ export function getEthRpcUrl(): string {
   return buildEthRpcUrl(getStoredHost());
 }
 
+const { ethereum } = getChainConfig();
+
 // Keep these for backwards compatibility / direct use in tests
-export const ETH_RPC_URL = ENV_ETH_RPC_URL || "http://localhost:8545";
+export const ETH_RPC_URL = ethereum.rpcUrl;
 export const ETH_WS_URL = ENV_ETH_WS_URL || "ws://localhost:8546";
 export const ETH_BEACON_URL = ENV_ETH_BEACON_URL || "http://localhost:5052";
 
 // Contract addresses (set after deployment)
-export const FAKE_ETH_ADDRESS =
-  import.meta.env.VITE_FAKE_ETH_ADDRESS ||
-  "0x0000000000000000000000000000000000000000";
-export const FAKE_USD_ADDRESS =
-  import.meta.env.VITE_FAKE_USD_ADDRESS ||
-  "0x0000000000000000000000000000000000000000";
+export const FAKE_ETH_ADDRESS = ethereum.fakeETH;
+export const FAKE_USD_ADDRESS = ethereum.fakeUSD;
 
 // Chain ID for local testnet
 export const ETH_CHAIN_ID = 32382;

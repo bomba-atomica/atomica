@@ -40,6 +40,10 @@ function findConfigDir(): string {
 
 const CONFIG_DIR = findConfigDir();
 
+export function getDockerTestnetConfigDir(): string {
+  return CONFIG_DIR;
+}
+
 function parseHexField(content: string, field: string): string | null {
   const regex = new RegExp(`${field}:\\s*"?0x?([a-fA-F0-9]+)"?`, "i");
   const match = content.match(regex);

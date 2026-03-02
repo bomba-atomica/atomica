@@ -1,12 +1,9 @@
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { buildAptosFullnodeUrl, getStoredHost } from "../network-host";
-import { APTOS_DEFAULT_DEPLOYER_ADDRESS } from "./constants";
+import { getChainConfig } from "./chain-config.ts";
 
-// Use safer env access that works in Node (test/ts-node) and Vite
-const env =
-  (import.meta as { env?: Record<string, string> }).env || process.env || {};
-export const CONTRACT_ADDR =
-  env.VITE_CONTRACT_ADDRESS || APTOS_DEFAULT_DEPLOYER_ADDRESS;
+const { aptos: chainConfig } = getChainConfig();
+export const CONTRACT_ADDR = chainConfig.contractAddress;
 
 const config = new AptosConfig({
   network: Network.LOCAL,

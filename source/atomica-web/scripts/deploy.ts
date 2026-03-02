@@ -13,8 +13,6 @@
  *   ETH_RPC_URL - Ethereum JSON-RPC endpoint (optional, defaults to localhost:8545)
  */
 
-import { writeFileSync } from "fs";
-import { join } from "path";
 import { spawn } from "child_process";
 import { ethers } from "ethers";
 import { TEST_ACCOUNTS } from "@atomica/ethereum-docker-testnet";
@@ -29,6 +27,7 @@ import {
   DEPLOYER_ADDR as APTOS_DEPLOYER_ADDR,
   DEPLOYER_PK as APTOS_DEPLOYER_PK,
 } from "../test-utils/localnet";
+import { writeChainConfig } from "./chain-config";
 
 const ETH_RPC_URL = process.env.ETH_RPC_URL || "http://localhost:8545";
 const APTOS_URL = process.env.APTOS_URL || "http://localhost:8080";
@@ -217,14 +216,18 @@ async function main() {
 
   await deployAptosContracts();
 
-  const envLocal = [
-    `VITE_ETH_RPC_URL=${ETH_RPC_URL}`,
-    `VITE_FAKE_ETH_ADDRESS=${ethAddresses.fakeETH}`,
-    `VITE_FAKE_USD_ADDRESS=${ethAddresses.fakeUSD}`,
-    `VITE_LOCK_BOX_ADDRESS=${ethAddresses.lockBox}`,
-  ].join("\n");
-  writeFileSync(join(process.cwd(), ".env.local"), envLocal);
-  console.log("\n✓ Contract addresses written to .env.local");
+  const configPath = writeChainConfig({
+    ethereum: {
+      rpcUrl: ETH_RPC_URL,
+      fakeETH: ethAddresses.fakeETH,
+      fakeUSD: ethAddresses.fakeUSD,
+      lockBox: ethAddresses.lockBox,
+    },
+    aptos: {
+      contractAddress: APTOS_DEPLOYER_ADDR,
+    },
+  });
+  console.log(`\n✓ Chain config written to ${configPath}`);
 
   console.log("\n" + "═".repeat(60));
   console.log("  ✅ Deployment Complete!");
