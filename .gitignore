@@ -36,3 +36,7 @@ tests/Cargo.lock
 bun.lockb
 bun.lock
 **/dist/
+
+# Local Codex configuration
+.codex/config.toml
+.codex/rules/

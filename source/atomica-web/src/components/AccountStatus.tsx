@@ -57,7 +57,7 @@ export function AccountStatus({ ethAddress, balances }: AccountStatusProps) {
             </div>
             {!balances.aptosExists && !balances.loading && ethAddress && (
               <div className="text-xs text-zinc-500 ml-[100px] mt-1 border-l-2 border-zinc-700 pl-2">
-                Aptos account not found (request APT from Faucet)
+                Atomica account not found (request APT from Faucet)
               </div>
             )}
           </>

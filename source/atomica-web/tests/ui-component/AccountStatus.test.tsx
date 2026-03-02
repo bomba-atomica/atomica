@@ -49,7 +49,7 @@ describe.sequential("AccountStatus Integration", () => {
       // Wait for the component to finish loading and show the "account not found" warning
       await waitFor(
         () => {
-          screen.getByText(/Account not found on chain/);
+          screen.getByText(/Atomica account not found/);
         },
         { timeout: 10000 },
       );
@@ -73,7 +73,7 @@ describe.sequential("AccountStatus Integration", () => {
       // Step 1: Initially, account should show "not found" warning
       await waitFor(
         () => {
-          screen.getByText(/Account not found on chain/);
+          screen.getByText(/Atomica account not found/);
         },
         { timeout: 10000 },
       );
@@ -108,7 +108,7 @@ describe.sequential("AccountStatus Integration", () => {
       console.log("✓ Balance displayed after funding");
 
       // Step 4: Verify the warning is gone
-      expect(screen.queryByText(/Account not found on chain/)).toBeNull();
+      expect(screen.queryByText(/Atomica account not found/)).toBeNull();
 
       console.log("✓ Test passed: Warning removed after funding");
     }, 60000);
