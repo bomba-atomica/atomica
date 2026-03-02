@@ -20,6 +20,9 @@ const ROOT_KEY_FILE_CANDIDATES = [
   "../../docker-testnet/config/genesis-artifacts/root-account-private-keys.yaml",
 ];
 
+const BALANCE_CONFIRM_RETRIES = 40;
+const BALANCE_CONFIRM_DELAY_MS = 1_000;
+
 type FundingRequest = {
   address: string;
   amount?: number;
@@ -88,11 +91,6 @@ function parseYamlPrivateKey(yaml: string): string | null {
 }
 
 function findRootPrivateKey(): string {
-  const envPk = process.env.ATOMICA_APTOS_FUNDER_PRIVATE_KEY?.trim();
-  if (envPk) {
-    return envPk;
-  }
-
   const candidates = ROOT_KEY_FILE_CANDIDATES.map((p) =>
     pathResolve(process.cwd(), p),
   );
@@ -109,7 +107,7 @@ function findRootPrivateKey(): string {
   }
 
   throw new Error(
-    "No Aptos funder private key found. Set ATOMICA_APTOS_FUNDER_PRIVATE_KEY or ensure docker-testnet genesis artifacts are installed.",
+    "No Aptos funder private key found in docker-testnet genesis artifacts.",
   );
 }
 
@@ -163,6 +161,7 @@ export async function fundAptosAccount(
   const signedTxn = await client.signTransaction(funder, rawTxn);
   const submitted = await client.submitTransaction(signedTxn);
   await client.waitForTransaction(submitted.hash, { timeoutSecs: 60 });
+  await waitForBalance(client, fundedAddress, amount);
 
   return {
     txHash: submitted.hash,
@@ -170,4 +169,33 @@ export async function fundAptosAccount(
     amount,
     fullnodeUrl,
   };
+}
+
+async function waitForBalance(
+  client: AptosClient,
+  address: string,
+  expected: number,
+) {
+  const target = BigInt(expected);
+  for (let attempt = 0; attempt < BALANCE_CONFIRM_RETRIES; attempt++) {
+    try {
+      const balanceView = await client.view({
+        function: "0x1::coin::balance",
+        type_arguments: ["0x1::aptos_coin::AptosCoin"],
+        arguments: [address],
+      });
+      if (balanceView && balanceView.length > 0) {
+        const value = BigInt(balanceView[0] as string);
+        if (value >= target) {
+          return;
+        }
+      }
+    } catch (error) {
+      console.warn("Balance confirmation failed, retrying", error);
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, BALANCE_CONFIRM_DELAY_MS),
+    );
+  }
+  console.warn("Failed to confirm Apt balance after funding", address);
 }

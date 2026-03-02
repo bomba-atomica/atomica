@@ -3,7 +3,9 @@ import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import { AccountStatus } from "../../src/components/AccountStatus";
 import { commands } from "vitest/browser";
 import { MockWallet } from "../../test-utils/browser-utils/MockWallet";
-import { useDualChainBalances } from "../../src/hooks/useDualChainBalances";
+import { useEthereumBalances } from "../../src/hooks/useEthereumBalances";
+import { useAptosBalances } from "../../src/hooks/useAptosBalances";
+import { NetworkConfigProvider } from "../../src/lib/network-config-context";
 
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "../../src/lib/aptos";
@@ -12,6 +14,26 @@ describe.sequential("AccountStatus Integration", () => {
   const TEST_PK =
     "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
   const mockWallet = new MockWallet(TEST_PK);
+
+  function AccountStatusWithBalances() {
+    const ethBalances = useEthereumBalances(mockWallet.address);
+    const aptosBalances = useAptosBalances(mockWallet.address);
+    return (
+      <AccountStatus
+        ethAddress={mockWallet.address}
+        ethBalances={ethBalances}
+        aptosBalances={aptosBalances}
+      />
+    );
+  }
+
+  function WrappedAccountStatus() {
+    return (
+      <NetworkConfigProvider>
+        <AccountStatusWithBalances />
+      </NetworkConfigProvider>
+    );
+  }
 
   beforeAll(async () => {
     console.log("Starting Localnet...");
@@ -37,14 +59,7 @@ describe.sequential("AccountStatus Integration", () => {
   describe.sequential("Without funded account", () => {
     it("should show 'account not found' warning when account doesn't exist", async () => {
       // Wrapper component that uses the hook
-      function TestWrapper() {
-        const balances = useDualChainBalances(mockWallet.address);
-        return (
-          <AccountStatus ethAddress={mockWallet.address} balances={balances} />
-        );
-      }
-
-      render(<TestWrapper />);
+      render(<WrappedAccountStatus />);
 
       // Wait for the component to finish loading and show the "account not found" warning
       await waitFor(
@@ -61,14 +76,7 @@ describe.sequential("AccountStatus Integration", () => {
   describe.sequential("With funded account", () => {
     it("should show warning initially, then display balance after funding", async () => {
       // Wrapper component that uses the hook
-      function TestWrapper() {
-        const balances = useDualChainBalances(mockWallet.address);
-        return (
-          <AccountStatus ethAddress={mockWallet.address} balances={balances} />
-        );
-      }
-
-      render(<TestWrapper />);
+      render(<WrappedAccountStatus />);
 
       // Step 1: Initially, account should show "not found" warning
       await waitFor(

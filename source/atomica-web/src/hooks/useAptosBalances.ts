@@ -28,9 +28,13 @@ const EMPTY_STATE: Omit<AptosBalanceSnapshot, "loading"> = {
   aptosContractsDeployed: false,
 };
 
+export type AptosBalancesSnapshot = AptosBalanceSnapshot & {
+  refetch: () => Promise<void>;
+};
+
 export function useAptosBalances(
   ethAddress: string | null,
-): AptosBalanceSnapshot & { refetch: () => Promise<void> } {
+): AptosBalancesSnapshot {
   const { host } = useNetworkConfig();
   const [state, setState] = useState<AptosBalanceSnapshot>({
     ...EMPTY_STATE,
@@ -44,20 +48,15 @@ export function useAptosBalances(
 
     try {
       const derived = await getDerivedAddress(ethAddress.toLowerCase());
+      const contractsDeployed = await areContractsDeployed();
       const aptValue = await aptos.getAccountAPTAmount({
         accountAddress: derived,
       });
 
       if (aptValue === 0) {
-        return { ...EMPTY_STATE, loading: false };
-      }
-
-      const contractsDeployed = await areContractsDeployed();
-      if (!contractsDeployed) {
         return {
           ...EMPTY_STATE,
-          apt: aptValue,
-          aptosExists: true,
+          aptosContractsDeployed: contractsDeployed,
           loading: false,
         };
       }
@@ -96,7 +95,7 @@ export function useAptosBalances(
         aptosExists: true,
         aptosFakeEthInitialized: fakeEthInitialized,
         aptosFakeUsdInitialized: fakeUsdInitialized,
-        aptosContractsDeployed: true,
+        aptosContractsDeployed: contractsDeployed,
         loading: false,
       };
     } catch (error) {

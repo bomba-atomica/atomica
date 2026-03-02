@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 import { Faucet } from "./components/Faucet";
 import { SanityTest } from "./components/SanityTest";
@@ -6,12 +6,19 @@ import { AuctionCreator } from "./components/AuctionCreator";
 import { AuctionBidder } from "./components/AuctionBidder";
 import { AccountStatus } from "./components/AccountStatus";
 import { NetworkStatus } from "./components/NetworkStatus";
-import { useDualChainBalances } from "./hooks/useDualChainBalances";
+import { useEthereumBalances } from "./hooks/useEthereumBalances";
+import { useAptosBalances } from "./hooks/useAptosBalances";
 import { TestnetSelector } from "./components/TestnetSelector";
 
 function App() {
   const [account, setAccount] = useState<string | null>(null);
-  const balances = useDualChainBalances(account);
+  const ethBalances = useEthereumBalances(account);
+  const aptosBalances = useAptosBalances(account);
+  const { refetch: refetchEth } = ethBalances;
+  const { refetch: refetchAptos } = aptosBalances;
+  const refreshBalances = useCallback(async () => {
+    await Promise.all([refetchEth(), refetchAptos()]);
+  }, [refetchEth, refetchAptos]);
 
   const connectWallet = async () => {
     if (window.ethereum) {
@@ -52,10 +59,18 @@ function App() {
           <TestnetSelector />
           <NetworkStatus />
           {account ? (
-            <AccountStatus ethAddress={account} balances={balances} />
+            <AccountStatus
+              ethAddress={account}
+              ethBalances={ethBalances}
+              aptosBalances={aptosBalances}
+            />
           ) : (
             <div className="flex items-center gap-4">
-              <AccountStatus ethAddress={null} balances={balances} />
+              <AccountStatus
+                ethAddress={null}
+                ethBalances={ethBalances}
+                aptosBalances={aptosBalances}
+              />
               <button
                 onClick={connectWallet}
                 className="bg-zinc-100 hover:bg-white text-zinc-900 px-4 py-2 rounded transition font-medium text-sm"
@@ -76,13 +91,13 @@ function App() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-8">
-            <Faucet account={account} onMintSuccess={balances.refetch} />
+            <Faucet account={account} onMintSuccess={refreshBalances} />
 
             {/* Sanity Test - Discreet debug utility */}
             <SanityTest account={account} />
 
             {/* Show disabled state if user hasn't minted Ethereum test tokens yet */}
-            {balances.ethFakeETH === 0n || balances.ethFakeUSD === 0n ? (
+            {ethBalances.ethFakeETH === 0n || ethBalances.ethFakeUSD === 0n ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 opacity-40 grayscale">
                 <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-800">
                   <div className="flex items-center justify-between mb-4">

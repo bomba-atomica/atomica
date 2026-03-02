@@ -10,9 +10,13 @@ export interface EthereumBalances {
   loading: boolean;
 }
 
+export type EthereumBalancesSnapshot = EthereumBalances & {
+  refetch: () => Promise<void>;
+};
+
 export function useEthereumBalances(
   ethAddress: string | null,
-): EthereumBalances & { refetch: () => Promise<void> } {
+): EthereumBalancesSnapshot {
   const [state, setState] = useState<EthereumBalances>({
     ethBalance: 0n,
     ethFakeETH: 0n,
