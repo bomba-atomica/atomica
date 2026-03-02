@@ -1,5 +1,5 @@
 import { areContractsDeployed as areEVMContractsDeployed } from "./ethereum/contracts";
-import { areContractsDeployed as areAptosContractsDeployed } from "./aptos/payloads";
+import { areCoreContractsDeployed as areAptosCoreContractsDeployed } from "./aptos/payloads";
 
 export async function checkEVMContracts(): Promise<boolean> {
   try {
@@ -12,7 +12,7 @@ export async function checkEVMContracts(): Promise<boolean> {
 
 export async function checkAptosContracts(): Promise<boolean> {
   try {
-    return await areAptosContractsDeployed();
+    return await areAptosCoreContractsDeployed();
   } catch (error) {
     console.warn("checkAptosContracts failed", error);
     return false;

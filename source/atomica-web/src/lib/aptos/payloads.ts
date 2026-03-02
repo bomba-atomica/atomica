@@ -214,6 +214,22 @@ export async function areContractsDeployed(): Promise<boolean> {
   }
 }
 
+export async function areCoreContractsDeployed(): Promise<boolean> {
+  const requiredModules = ["registry", "auction", "lock_receipt"];
+  try {
+    const modules = await aptos.getAccountModules({
+      accountAddress: CONTRACT_ADDR,
+    });
+    const deployed = new Set(
+      modules.map((module) => module.abi?.name).filter(Boolean),
+    );
+    return requiredModules.every((name) => deployed.has(name));
+  } catch (e) {
+    console.log("Core Aptos contracts not yet deployed:", e);
+    return false;
+  }
+}
+
 /**
  * Legacy function for backward compatibility
  * @deprecated Use requestAPT() only for canonical flows. This helper also calls
