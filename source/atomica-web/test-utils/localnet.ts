@@ -59,14 +59,14 @@ const WEB_DIR = pathResolve(TEST_SETUP_DIR, "..");
  * Fixed deployer private key for deployContracts() function.
  * This is a TEST KEY - never use in production!
  */
-const DEPLOYER_PK =
+export const DEPLOYER_PK =
   "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
 
 /**
  * Address derived from DEPLOYER_PK.
  * Used as the deployment address for Atomica contracts.
  */
-const DEPLOYER_ADDR =
+export const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 
 /** Path to atomica-move-contracts directory (relative to WEB_DIR) */

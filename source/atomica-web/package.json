@@ -18,6 +18,7 @@
     "test:dual": "bun run prepare:all && vitest run --config vitest.config.nodejs.ts tests/meta/dual-testnet",
     "test:proofs": "vitest run tests/unit/ethereum/storage-key.test.ts",
     "testnet": "bun run prepare:all && bun scripts/testnet-only.ts",
+    "deploy": "bun scripts/deploy.ts",
     "demo": "bun run prepare:all && bun scripts/dual-testnet-orchestrator.ts",
     "demo:aptos-only": "bun run prepare:aptos && bun scripts/orchestrator.ts",
     "demo:ethereum-only": "bun run prepare:ethereum && bun scripts/ethereum-testnet-only.ts",
