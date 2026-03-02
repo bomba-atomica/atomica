@@ -47,7 +47,9 @@ export async function testSimpleAPTTransfer(
     console.log("\n✅ SANITY TEST PASSED!");
     console.log("Transaction hash:", result.hash);
     console.log("\nConclusion: Signature verification is working correctly!");
-    console.log("The issue with the custom contract call is likely contract-specific\n");
+    console.log(
+      "The issue with the custom contract call is likely contract-specific\n",
+    );
 
     return { success: true, hash: result.hash };
   } catch (e: unknown) {
