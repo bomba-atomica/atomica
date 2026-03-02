@@ -30,11 +30,6 @@ export function TestnetSelector() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  // Keep form input in sync if host changes from another UI path.
-  useEffect(() => {
-    setCustomInput(host === "localhost" ? "" : host);
-  }, [host]);
-
   const applyCustom = () => {
     const h = customInput.trim();
     if (h) {
@@ -47,7 +42,14 @@ export function TestnetSelector() {
     <div className="relative" ref={panelRef}>
       {/* Trigger button */}
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          if (open) {
+            setOpen(false);
+            return;
+          }
+          setCustomInput(host === "localhost" ? "" : host);
+          setOpen(true);
+        }}
         className="flex items-center gap-2 text-xs font-mono border border-zinc-800 rounded px-2 py-1.5 bg-zinc-900/60 hover:border-zinc-700 transition-colors"
         title="Testnet host"
       >
