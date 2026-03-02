@@ -97,9 +97,7 @@ export function useDualChainBalances(
           };
 
     setBalances({ ...eth, ...aptosData, loading: false });
-    return (
-      ethResult.status === "rejected" || aptosResult.status === "rejected"
-    );
+    return ethResult.status === "rejected" || aptosResult.status === "rejected";
   }, [ethAddress]);
 
   useEffect(() => {

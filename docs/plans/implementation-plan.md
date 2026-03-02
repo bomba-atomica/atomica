@@ -50,6 +50,25 @@ Addresses leftover gaps from the completed infrastructure work.
 
 ---
 
+## Phase 1.5: Frontend State + Config Foundation (2-3 days)
+
+Establish a proper React state model for shared app/runtime state instead of ad-hoc module globals.
+
+- [ ] Add a centralized app state layer (React context + reducer/store) for wallet state, network config, chain health, polling status, and transaction status
+- [ ] Define a typed app configuration model with persistence (localStorage/session storage) and hydration/versioning safeguards
+- [ ] Migrate network endpoint resolution to read from shared runtime state first, with persistence as fallback
+- [ ] Add a Settings/Configuration UI surface in the app header where persistent app config can be edited (network selector will live here)
+- [ ] Refactor components/hooks to consume shared state selectors/actions instead of scattered local component state for cross-cutting concerns
+
+**Files (planned):**
+- `src/state/app-state.tsx` (or equivalent) — global state provider
+- `src/state/app-config.ts` — config schema + persistence/hydration
+- `src/components/AppSettings.tsx` — settings UI entry point
+- `src/components/TestnetSelector.tsx` — move/integrate into settings UI
+- `src/App.tsx` + affected hooks/components — wire provider + shared selectors
+
+---
+
 ## Phase 2: Auction Move Contract (5-7 days)
 
 Replace `auction.move.broken` with a working sealed-bid auction using Fungible Asset API and `ibe_config` integration.
