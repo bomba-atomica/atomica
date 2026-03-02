@@ -170,6 +170,7 @@ function writeEnvLocal(addresses: {
     `VITE_ETH_RPC_URL=${addresses.rpcUrl}`,
     `VITE_FAKE_ETH_ADDRESS=${addresses.fakeETH}`,
     `VITE_FAKE_USD_ADDRESS=${addresses.fakeUSD}`,
+    `VITE_CONTRACT_ADDRESS=${DEPLOYER_ADDR}`,
     `VITE_LOCK_BOX_ADDRESS=${addresses.lockBox}`,
   ].join("\n");
   writeFileSync(join(process.cwd(), ".env.local"), envLocal);

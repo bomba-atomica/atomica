@@ -1,5 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve as pathResolve } from "node:path";
 import {
   AptosAccount,
   AptosClient,
@@ -7,18 +5,12 @@ import {
   HexString,
   TxnBuilderTypes,
 } from "aptos";
+import { getFunderCredentials } from "../test-utils/aptos-keys";
 
 const DEFAULT_FUNDING_AMOUNT = 100_000_000;
 const MAX_FUNDING_AMOUNT = 10_000_000_000;
 const DEFAULT_FAUCET_ADDRESS =
   "0x00000000000000000000000000000000000000000000000000000000a550c18";
-
-const ROOT_KEY_FILE_CANDIDATES = [
-  "../docker-testnet/config/genesis-artifacts/root-account-private-keys.yaml",
-  "docker-testnet/config/genesis-artifacts/root-account-private-keys.yaml",
-  "source/docker-testnet/config/genesis-artifacts/root-account-private-keys.yaml",
-  "../../docker-testnet/config/genesis-artifacts/root-account-private-keys.yaml",
-];
 
 const BALANCE_CONFIRM_RETRIES = 40;
 const BALANCE_CONFIRM_DELAY_MS = 1_000;
@@ -85,38 +77,12 @@ function buildAptosRestUrl(host: string): string {
   return url.toString();
 }
 
-function parseYamlPrivateKey(yaml: string): string | null {
-  const match = yaml.match(/account_private_key:\s*"?(0x[a-fA-F0-9]+)"?/);
-  return match?.[1] ?? null;
-}
-
-function findRootPrivateKey(): string {
-  const candidates = ROOT_KEY_FILE_CANDIDATES.map((p) =>
-    pathResolve(process.cwd(), p),
-  );
-
-  for (const filePath of candidates) {
-    if (!existsSync(filePath)) {
-      continue;
-    }
-    const content = readFileSync(filePath, "utf-8");
-    const parsed = parseYamlPrivateKey(content);
-    if (parsed) {
-      return parsed;
-    }
-  }
-
-  throw new Error(
-    "No Aptos funder private key found in docker-testnet genesis artifacts.",
-  );
-}
-
 function getFunderAccount(): AptosAccount {
-  const privateKeyHex = findRootPrivateKey().replace(/^0x/, "");
+  const credentials = getFunderCredentials();
   const faucetAddress =
     process.env.ATOMICA_APTOS_FUNDER_ADDRESS?.trim() || DEFAULT_FAUCET_ADDRESS;
   return new AptosAccount(
-    HexString.ensure(privateKeyHex).toUint8Array(),
+    HexString.ensure(credentials.privateKey).toUint8Array(),
     normalizeAddress(faucetAddress),
   );
 }
