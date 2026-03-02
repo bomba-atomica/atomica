@@ -5,14 +5,25 @@
  */
 
 import { ethers } from "ethers";
+import { getStoredHost } from "../network-config-context";
 
-// Environment variables with fallback defaults
-export const ETH_RPC_URL =
-  import.meta.env.VITE_ETH_RPC_URL || "http://localhost:8545";
-export const ETH_WS_URL =
-  import.meta.env.VITE_ETH_WS_URL || "ws://localhost:8546";
-export const ETH_BEACON_URL =
-  import.meta.env.VITE_ETH_BEACON_URL || "http://localhost:5052";
+// Build-time env vars are used as overrides; at runtime the testnet host stored
+// in localStorage takes precedence so the user can point the app at a remote
+// machine without rebuilding.
+const ENV_ETH_RPC_URL = import.meta.env.VITE_ETH_RPC_URL as string | undefined;
+const ENV_ETH_WS_URL = import.meta.env.VITE_ETH_WS_URL as string | undefined;
+const ENV_ETH_BEACON_URL = import.meta.env.VITE_ETH_BEACON_URL as
+  | string
+  | undefined;
+
+export function getEthRpcUrl(): string {
+  return ENV_ETH_RPC_URL || `http://${getStoredHost()}:8545`;
+}
+
+// Keep these for backwards compatibility / direct use in tests
+export const ETH_RPC_URL = ENV_ETH_RPC_URL || "http://localhost:8545";
+export const ETH_WS_URL = ENV_ETH_WS_URL || "ws://localhost:8546";
+export const ETH_BEACON_URL = ENV_ETH_BEACON_URL || "http://localhost:5052";
 
 // Contract addresses (set after deployment)
 export const FAKE_ETH_ADDRESS =
@@ -26,10 +37,12 @@ export const FAKE_USD_ADDRESS =
 export const ETH_CHAIN_ID = 32382;
 
 /**
- * Get a JSON-RPC provider for the Ethereum testnet
+ * Get a JSON-RPC provider for the Ethereum testnet.
+ * Reads the testnet host from localStorage at call-time so it reflects any
+ * runtime host change without requiring a page reload.
  */
 export function getEthereumProvider(): ethers.JsonRpcProvider {
-  return new ethers.JsonRpcProvider(ETH_RPC_URL);
+  return new ethers.JsonRpcProvider(getEthRpcUrl());
 }
 
 /**
@@ -103,7 +116,7 @@ export async function switchToTestnet(): Promise<void> {
           {
             chainId: `0x${ETH_CHAIN_ID.toString(16)}`,
             chainName: "Atomica Ethereum Testnet",
-            rpcUrls: [ETH_RPC_URL],
+            rpcUrls: [getEthRpcUrl()],
             nativeCurrency: {
               name: "Ether",
               symbol: "ETH",

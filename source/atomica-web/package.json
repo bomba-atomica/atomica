@@ -17,6 +17,7 @@
     "test:docker": "bun run prepare:aptos && vitest run --config vitest.config.nodejs.ts tests/meta/docker-testnet.test.ts",
     "test:dual": "bun run prepare:all && vitest run --config vitest.config.nodejs.ts tests/meta/dual-testnet",
     "test:proofs": "vitest run tests/unit/ethereum/storage-key.test.ts",
+    "testnet": "bun run prepare:all && npx tsx scripts/testnet-only.ts",
     "demo": "bun run prepare:all && npx tsx scripts/dual-testnet-orchestrator.ts",
     "demo:aptos-only": "bun run prepare:aptos && npx tsx scripts/orchestrator.ts",
     "demo:ethereum-only": "bun run prepare:ethereum && npx tsx scripts/ethereum-testnet-only.ts",
