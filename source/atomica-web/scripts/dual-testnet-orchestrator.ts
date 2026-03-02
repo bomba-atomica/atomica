@@ -180,7 +180,7 @@ async function launchWebapp(): Promise<void> {
   return new Promise((resolve, reject) => {
     webappProcess = spawn(
       "bun",
-      ["run", "dev", "--port", String(WEBAPP_PORT)],
+      ["run", "dev", "--host", "--port", String(WEBAPP_PORT)],
       { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe"] },
     );
 
