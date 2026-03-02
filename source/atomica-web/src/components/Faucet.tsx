@@ -1,3 +1,9 @@
+// TODO: This component currently mints FakeETH/FakeUSD via Aptos-side direct
+// minting (getMintFakeEthPayload / getMintFakeUsdPayload). This is INCORRECT
+// for the v0 architecture. Fake tokens should be minted on the Ethereum testnet
+// via MetaMask using mintFakeETH() / mintFakeUSD() from lib/ethereum/transaction.ts.
+// The APT faucet button is correct (APT is still needed for gas on Aptos).
+// See: docs/plans/implementation-plan.md Phase 1 for the planned fix.
 import { useState, useEffect } from "react";
 import {
   requestAPT,

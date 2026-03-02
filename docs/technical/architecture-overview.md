@@ -73,14 +73,19 @@ Atomica is a cross-chain sealed-bid auction system enabling trustless, gas-effic
 - Maintains current validator public keys on-chain
 - Updates happen on validator set rotation
 
-**Settlement Mechanism (ZK-Verified Merkle Proofs)**:
+**Settlement Mechanism**:
+
+**v0.1 Beta (BLS-Only Settlement)**:
 1. Accepts merkle root submissions with BLS-signed state proofs from Atomica
 2. Verifies BLS threshold signatures against current validator public keys
-3. Off-chain client replays all auction transactions through ZK circuit
-4. ZK proof submitted to away chain, proves computation correctness
-5. If ZK proof merkle root matches BLS-signed merkle root → settlement enabled
-6. Users withdraw via merkle proofs (single state update per user)
-7. Gas-optimized: avoids per-transaction settlement costs
+3. If BLS threshold met → settlement enabled
+4. Users withdraw via merkle proofs (single state update per user)
+5. Gas-optimized: avoids per-transaction settlement costs
+
+**v1.0 Enhancement (BLS + ZK Dual Verification)**:
+6. Off-chain client replays all auction transactions through ZK circuit
+7. ZK proof submitted to away chain, proves computation correctness
+8. Settlement requires BOTH BLS signatures AND ZK proof to agree on merkle root
 
 ### 3. Complete Auction Flow
 
@@ -101,38 +106,42 @@ Atomica is a cross-chain sealed-bid auction system enabling trustless, gas-effic
 - Sequential decryption (outer → inner): Each layer reveals ciphertext for next layer
 - Example (2-layer): Validators decrypt outer → Sellers decrypt inner → Plaintext
 - Example (3-layer): Validators → Drand → Sellers → Plaintext
-- Ausubel auction clearing algorithm executes in Move
+- Uniform price auction clearing executes in Move
 - Final allocations and prices computed
 - Merkle tree of balances generated → merkle root stored on-chain
 
 **Step 4: Cross-Chain Settlement Verification**
+
+*v0.1 Beta:*
 1. BLS-signed state proof generated (contains merkle root)
 2. Anyone submits state proof to away chain Time Lock contract
-3. Contract verifies BLS threshold signatures → merkle root accepted
+3. Contract verifies BLS threshold signatures → settlement enabled
+
+*v1.0 Enhancement:*
 4. Off-chain client replays auction transactions through ZK circuit
 5. ZK proof submitted to away chain
-6. If ZK merkle root matches BLS-signed merkle root → settlement enabled
+6. Settlement requires BOTH BLS signatures AND ZK proof to agree on merkle root
 
 **Step 5: User Withdrawals**
 - Users provide merkle proofs to claim their balances
 - Single state update per user (gas-efficient)
 - Automatic unlocking of unclaimed deposits after timeout
 
-### 4. Dual-Layer Verification
+### 4. Verification Layers
 
-**Layer 1: BLS Threshold Signatures (Consensus Layer)**
+**Layer 1: BLS Threshold Signatures (Consensus Layer) — v0.1 Beta+**
 - Validators sign merkle root with BLS threshold scheme
 - Requires 2/3+ validator agreement
 - Proves consensus was reached on Atomica
 - Prevents single validator manipulation
 
-**Layer 2: ZK Proof (Computation Layer)**
+**Layer 2: ZK Proof (Computation Layer) — v1.0+**
 - Anyone can verify auction computation was correct
 - Replays all transactions through ZK circuit
 - Proves merkle root was computed correctly from inputs
 - Independent of validator honesty
 
-**Security Property**: Settlement requires BOTH layers to agree on merkle root
+**Security Property**: v0.1 Beta uses BLS-only settlement (trust validators). v1.0 adds ZK verification — settlement requires BOTH layers to agree on merkle root.
 
 ### 5. User Experience & Account Abstraction
 
@@ -171,7 +180,7 @@ Atomica is a cross-chain sealed-bid auction system enabling trustless, gas-effic
 - Prevents bid manipulation and front-running
 
 **Cross-Chain Security**:
-- Dual-layer verification (BLS consensus + ZK computation)
+- BLS consensus verification (v0.1 Beta), dual-layer BLS + ZK verification (v1.0+)
 - Trustless validator set synchronization
 - No central authority or oracle dependency
 - Permissionless proof submission

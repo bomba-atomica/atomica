@@ -129,7 +129,7 @@ Layer 3 (Inner): Auction Sellers (ElGamal, >33% stake threshold)
 - Invalid bid slashing logic
 - Scuttle Reward mechanism
 
-**atomica-web (TypeScript + WASM)**:
+**Client Encryption (Rust)**:
 - Client-side encryption library
 - Transaction payload construction
 - MetaMask integration
@@ -225,8 +225,8 @@ Layer 3 (Inner): Auction Sellers (ElGamal, >33% stake threshold)
 #### Required Features (Not Yet Implemented)
 
 **Encryption Library**:
-- ❌ WASM wrapper for `aptos-dkg` Rust code
-- ❌ TypeScript client library for encryption
+- ❌ Rust encryption library with FFI/bindings for frontend integration
+- ❌ TypeScript client library wrapping Rust encryption
 - ❌ Key derivation from MetaMask signatures
 
 **UI Components**:
@@ -1063,21 +1063,20 @@ Build client-side encryption library and UI for bid submission.
 
 ### Task Breakdown
 
-#### 3.1 Encryption Library (WASM Wrapper) (Week 1)
+#### 3.1 Encryption Library (Rust) (Week 1)
 
-**Goal**: Expose Rust encryption functions to TypeScript
+**Goal**: Build Rust encryption library with bindings for frontend integration
 
 **Tasks**:
-- [ ] Create WASM build configuration
-  - Location: `/source/atomica-aptos/crates/aptos-dkg-wasm/`
-  - Setup: `wasm-pack` build pipeline
-  - Target: Web browsers (not Node.js)
+- [ ] Create Rust encryption library
+  - Location: `/source/atomica-aptos/crates/aptos-dkg-client/`
+  - Setup: Rust library with FFI bindings
+  - Target: Client-side encryption for bid submission
 
-- [ ] Create WASM bindings
-  - File: `/source/atomica-aptos/crates/aptos-dkg-wasm/src/lib.rs`
-  - Expose functions:
+- [ ] Expose encryption functions
+  - File: `/source/atomica-aptos/crates/aptos-dkg-client/src/lib.rs`
+  - Public API:
     ```rust
-    #[wasm_bindgen]
     pub fn encrypt_bid(
         plaintext_json: &str,  // {"price": 1500, "quantity": 10}
         seller_group_pk_hex: &str,
@@ -1085,7 +1084,6 @@ Build client-side encryption library and UI for bid submission.
         auction_end_time: u64,
     ) -> String; // Returns hex-encoded ciphertext
 
-    #[wasm_bindgen]
     pub fn encrypt_reserve_price(
         plaintext_price: u64,
         seller_group_pk_hex: &str,
@@ -1107,7 +1105,7 @@ Build client-side encryption library and UI for bid submission.
     import { AtomicaEncryption } from '@atomica/encryption';
 
     const encryption = new AtomicaEncryption();
-    await encryption.initialize(); // Load WASM
+    await encryption.initialize(); // Load Rust library
 
     const ciphertext = await encryption.encryptBid({
       price: 1500,
@@ -1127,7 +1125,7 @@ Build client-side encryption library and UI for bid submission.
     - Handle large numbers (JavaScript precision issues)
 
 **Success Criteria**:
-- ✅ WASM module builds successfully
+- ✅ Rust encryption library builds successfully
 - ✅ NPM package published
 - ✅ TypeScript types generated
 - ✅ Unit tests pass in browser environment
@@ -1326,7 +1324,7 @@ Build client-side encryption library and UI for bid submission.
 **Cross-layer testing**:
 - Rust ↔ Move: Test serialization compatibility
 - Move ↔ TypeScript: Test transaction construction
-- TypeScript ↔ Rust: Test WASM interface
+- TypeScript ↔ Rust: Test FFI/binding interface
 
 **Multi-component testing**:
 - DKG + Encryption + Decryption
@@ -1373,7 +1371,7 @@ Build client-side encryption library and UI for bid submission.
 - [ ] Slashing and scuttle reward mechanisms implemented
 
 ✅ **Phase 3 (Web frontend)**:
-- [ ] WASM encryption library published
+- [ ] Rust encryption library published
 - [ ] MetaMask transaction signing works
 - [ ] Bid submission UI functional
 - [ ] E2E tests pass
@@ -1412,7 +1410,7 @@ Build client-side encryption library and UI for bid submission.
 **Mitigation**: Optimize share verification, batch operations
 **Fallback**: Move decryption off-chain, verify via ZK proof
 
-**Risk**: WASM encryption too slow in browser (>500ms)
+**Risk**: Rust encryption too slow on client (>500ms)
 **Mitigation**: Use Web Workers for parallel computation
 **Fallback**: Provide native app for high-frequency traders
 
@@ -1459,7 +1457,7 @@ source/atomica-aptos/
 │   │   └── adversarial.rs          # NEW: Security tests
 │   └── examples/
 │       └── auction_encryption.rs   # NEW: Example usage
-└── crates/aptos-dkg-wasm/          # NEW: WASM bindings
+└── crates/aptos-dkg-client/         # NEW: Rust encryption client library
     ├── src/lib.rs
     └── Cargo.toml
 ```
@@ -1493,7 +1491,7 @@ source/atomica-web/
 │   ├── encryption/                 # NEW: Encryption library
 │   │   ├── src/
 │   │   │   ├── index.ts
-│   │   │   └── wasm-loader.ts
+│   │   │   └── rust-loader.ts
 │   │   ├── test/
 │   │   │   └── encryption.test.ts
 │   │   └── package.json

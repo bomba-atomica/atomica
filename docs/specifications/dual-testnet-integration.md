@@ -11,18 +11,20 @@
 
 Migrate FAKETH and FAKEUSD token minting from Aptos to Ethereum testnet while maintaining Aptos testnet for auction functionality. This creates a dual-testnet architecture where:
 
-- **Ethereum Testnet:** Hosts ERC20 tokens (FAKETH, FAKEUSD) and handles token minting
-- **Aptos Testnet:** Hosts auction contracts and manages auction lifecycle
+- **Ethereum Testnet:** Hosts ERC20 tokens (FakeETH, FakeUSD) and the LockBox escrow contract. Users mint and lock tokens here.
+- **Aptos Testnet:** Hosts auction contracts, IBE/DKG infrastructure, and cross-chain verification modules. Tokens arrive on Aptos via state proof bridge (`lock_receipt` + `mint_from_lock()`), NOT via direct Aptos-side minting.
 
-This architecture better simulates the production cross-chain environment where real assets (ETH, USDC) exist on Ethereum while auction logic runs on Aptos.
+This architecture simulates the production cross-chain environment where real assets (ETH, USDC) exist on Ethereum while auction logic runs on Aptos.
+
+> **Note (2026-03-02):** The Aptos-side `fake_eth::mint()` and `fake_usd::mint()` functions still exist for test compatibility, but the intended user flow is: mint on Ethereum → lock in LockBox → generate state proof → submit to Aptos → `mint_from_lock()`. The Aptos faucet is only used for APT gas tokens.
 
 ---
 
-## Current Architecture
+## Previous Architecture (Superseded)
 
-### Token Flow (Current)
+### Token Flow (Old — no longer used)
 ```
-User → Aptos Testnet → Mint FAKETH/FAKEUSD
+User → Aptos Testnet → Mint FAKETH/FAKEUSD directly
      ↓
      Aptos Auction Contracts
 ```
@@ -50,13 +52,17 @@ User → Aptos Testnet → Mint FAKETH/FAKEUSD
 
 ## Target Architecture
 
-### Token Flow (Target)
+### Token Flow (Current — implemented)
 ```
-User → MetaMask → Ethereum Testnet → Mint FAKETH/FAKEUSD
+User → MetaMask → Ethereum Testnet → Mint FakeETH/FakeUSD (ERC20)
                         ↓
-                   ERC20 Contracts
+                   Lock in LockBox.sol
                         ↓
-                   Bridge/Lock (future)
+                   Generate state proof (eth_getProof)
+                        ↓
+                   Submit proof to Aptos (lock_receipt::register_ethereum_lock)
+                        ↓
+                   mint_from_lock() → Aptos Fungible Asset
                         ↓
                    Aptos Auction Contracts
 ```

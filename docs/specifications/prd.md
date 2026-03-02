@@ -15,7 +15,7 @@
 - **Timelock IBE cryptography**: Identity-Based Encryption enables sealed bids that automatically decrypt at auction deadline—no interactive reveal phase
 - **Encrypted mempools**: Bid contents hidden from validators until decryption, eliminating front-running and MEV extraction
 - **High-throughput blockchain**: Built on Aptos-core infrastructure (Move VM, BLS signatures, parallel execution) for scalable auction processing
-- **Double verification pathways**: Dual-layer security combining BLS threshold signatures (consensus) + ZK proofs (computation)—both must agree for settlement
+- **Double verification pathways**: BLS threshold signatures for consensus (v0.1 Beta), with ZK proofs for independent computation verification (v1.0+)—both must agree for settlement in v1.0
 - **Zero operator fees on major pairs**: Bitcoin and Ethereum markets have no network fees; deal breakers pay deal makers
 
 ## Problem Statement
@@ -103,11 +103,11 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 
 **Unified Architecture:** All away chains (Ethereum, Solana, Base, Arbitrum, etc.) use identical verification mechanisms.
 
-**Dual-Layer Verification:**
-1. **BLS Consensus Layer:** Atomica validators sign merkle roots with BLS threshold signatures (requires 2/3+ validator agreement)
-2. **ZK Computation Layer:** Anyone can verify auction execution correctness via ZK proofs (independent of validator honesty)
+**Verification:**
+1. **BLS Consensus Layer (v0.1 Beta+):** Atomica validators sign merkle roots with BLS threshold signatures (requires 2/3+ validator agreement). v0.1 Beta uses BLS-only settlement.
+2. **ZK Computation Layer (v1.0+):** Anyone can verify auction execution correctness via ZK proofs (independent of validator honesty). In v1.0, settlement requires BOTH layers to agree on the merkle root.
 
-Settlement requires BOTH layers to agree on the merkle root. No trusted oracles or bridges.
+No trusted oracles or bridges.
 
 **→ See:** [Architecture Overview](docs/technical/architecture-overview.md) and [Unified Away Chain Architecture](docs/decisions/unified-away-chain-architecture.md)
 
@@ -221,7 +221,7 @@ Bidders (arbitrageurs) earn through bid-ask spreads (buy at auction price, sell/
 **Current Progress:**
 - ✅ **Risk #1 (Ethereum Signing):** Complete - users can sign Atomica transactions with MetaMask
 - 🟡 **Risk #2 (Timelock Encryption):** In progress - N-layer onion encryption implementation
-- ⏳ **Risk #3 (Cross-Chain Verification):** Pending - ZK light client for Ethereum state verification
+- ⏳ **Risk #3 (Cross-Chain Verification):** Pending - Trusted validators + BLS for Ethereum state verification (v0.1 Beta); ZK light client (v1.0)
 
 **Timeline Estimate:**
 - Risk #2: 7-10 weeks (current sprint)
@@ -246,7 +246,7 @@ Atomica prioritizes:
 |----------------|-------------|--------------------|
 | **Private Strategies** | Full privacy of strategies & prices | **Timelock Sealed Bids:** Temporary privacy during auction window; public post-decryption. |
 | **MEV Resistance** | No front-running or censorship | **Batch Auctions:** Uniform clearing price makes ordering irrelevant; sealed bids prevent pre-auction front-running. |
-| **Cross-Chain** | Native asset trading without bridges | **ZK Verification:** Cryptographic proof of away-chain state; atomic settlement without wrapped tokens. |
+| **Cross-Chain** | Native asset trading without bridges | **Cross-Chain Verification:** BLS-signed state proofs (v0.1 Beta); ZK verification for independent computation proof (v1.0+); atomic settlement without wrapped tokens. |
 | **Liquidity** | Passive, non-adversarial | **Active Bidding:** Bidders compete on price; eliminates LP adverse selection (LVR). |
 | **Adverse Selection** | No winner's curse | **Self-Selection:** Bidders choose participation; sealed bids equalize information access. |
 | **User Experience** | Unified, single-wallet | **Account Abstraction:** Sign with existing wallets (MetaMask); single interface for cross-chain actions. |
