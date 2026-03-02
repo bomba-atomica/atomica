@@ -9,7 +9,7 @@ Demonstrate an end-to-end auction flow where users (Sellers and Buyers) interact
 *   **Authentication**: `secp256k1` signature verification within Move contracts to authenticate actions from Ethereum addresses.
 
 ## User Stories
-1.  **Faucet**: User connects MetaMask and requests `FAKEETH` and `FAKEUSD`. (Relayer submits `mint` tx verifyng sig).
+1.  **Faucet**: User connects MetaMask and mints `FAKEETH` and `FAKEUSD` on the Ethereum testnet, then bridges to Aptos via LockBox + state proofs.
 2.  **Seller**: User creates an auction for `FAKEETH`.
 3.  **Buyer**: User submits an encrypted bid in `FAKEUSD` (timelocked).
 4.  **Observation**: Users see a live dashboard of auction states and deadlines.
@@ -29,7 +29,7 @@ This document outlines the test environment for the "Atomica Web PoC" demo.
 
 ## Flow
 
-1.  **Faucet**: User connects MetaMask and requests funds. The frontend calls the local faucet service to fund the user's **Derived Aptos Address**.
+1.  **Faucet**: User connects MetaMask and requests APT gas tokens via the Aptos faucet. FakeETH/FakeUSD are minted on the **Ethereum testnet** via MetaMask, then bridged to Aptos via LockBox + state proofs (not minted directly on Aptos).
 2.  **Create Auction**: User inputs parameters.
     *   Frontend generates a **SIWE Message** with `Nonce = Transaction Hash`.
     *   User signs via MetaMask.

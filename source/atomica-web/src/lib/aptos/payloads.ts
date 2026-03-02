@@ -95,6 +95,12 @@ export async function requestAPT(ethAddress: string) {
 
 /**
  * Mint FAKEETH Payload Builder
+ *
+ * @deprecated Fake tokens should be minted on the Ethereum testnet via MetaMask
+ * (see `lib/ethereum/transaction.ts` — `mintFakeETH()`), not directly on Aptos.
+ * The correct user flow is: mint on Ethereum → lock in LockBox → bridge via
+ * state proof → `fake_eth::mint_from_lock()` on Aptos.
+ * This Aptos-side direct mint exists only for legacy test compatibility.
  */
 export async function getMintFakeEthPayload(): Promise<InputGenerateTransactionPayloadData> {
   // Verify contracts are deployed before building payload
@@ -125,6 +131,12 @@ export async function mintFakeEth(ethAddress: string) {
 
 /**
  * Mint FAKEUSD Payload Builder
+ *
+ * @deprecated Fake tokens should be minted on the Ethereum testnet via MetaMask
+ * (see `lib/ethereum/transaction.ts` — `mintFakeUSD()`), not directly on Aptos.
+ * The correct user flow is: mint on Ethereum → lock in LockBox → bridge via
+ * state proof → `fake_usd::mint_from_lock()` on Aptos.
+ * This Aptos-side direct mint exists only for legacy test compatibility.
  */
 export async function getMintFakeUsdPayload(): Promise<InputGenerateTransactionPayloadData> {
   // Verify contracts are deployed before building payload
@@ -156,7 +168,8 @@ export async function mintFakeUsd(ethAddress: string) {
 /**
  * Step 2: Mint test tokens (FAKEETH and FAKEUSD)
  * Requires contracts to be deployed
- * @deprecated Use mintFakeEth and mintFakeUsd separately
+ * @deprecated Aptos-side direct minting is vestigial. Fake tokens should be
+ * minted on Ethereum and bridged to Aptos. See `lib/ethereum/transaction.ts`.
  */
 export async function requestTestTokens(ethAddress: string) {
   await mintFakeEth(ethAddress);

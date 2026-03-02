@@ -110,10 +110,16 @@ async function deployEthereumContracts(
 
   console.log(`  Deployer: ${deployer.address}`);
 
-  // TODO: Use Foundry to deploy FakeETH and FakeUSD
-  // For now, just log placeholder
-  console.log("  ⚠️  TODO: Deploy FakeETH and FakeUSD via Foundry");
-  console.log("  📝 Contracts will be deployed in next phase");
+  // TODO: Port the deployment logic from tests/meta/cross-chain/helpers/dual-chain-fixture.ts
+  // That file already has working deployment: compile via Foundry, deploy FakeETH + FakeUSD +
+  // LockBox via ethers ContractFactory, verify deployment. This orchestrator just needs to
+  // call the same pattern. The Ethereum testnet is already running at this point.
+  //
+  // NOTE: FakeETH/FakeUSD are the PRIMARY issuance point. Users mint on Ethereum via MetaMask,
+  // then bridge to Aptos via LockBox + state proofs. Do NOT use Aptos-side direct minting
+  // (getMintFakeEthPayload etc.) for the user-facing flow.
+  console.log("  ⚠️  TODO: Deploy FakeETH, FakeUSD, and LockBox via Foundry/ethers");
+  console.log("  📝 See tests/meta/cross-chain/helpers/dual-chain-fixture.ts for working example");
 
   // Simulate deployment delay
   await new Promise((resolve) => setTimeout(resolve, 2000));
