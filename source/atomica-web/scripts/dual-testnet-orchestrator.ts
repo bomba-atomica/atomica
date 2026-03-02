@@ -5,8 +5,18 @@
  */
 
 import { spawn, ChildProcess } from "child_process";
+import { writeFileSync } from "fs";
+import { join } from "path";
+import { ethers } from "ethers";
 import type { EthereumDockerTestnet } from "../../docker-testnet/ethereum-testnet/typescript-sdk/dist/index.js";
 import type { DockerTestnet } from "../../docker-testnet/typescript-sdk/dist/index.js";
+import {
+  compileContracts,
+  getFakeETHArtifact,
+  getFakeUSDArtifact,
+  getLockBoxArtifact,
+  deployWithRetry,
+} from "../tests/meta/ethereum/solidity-compiler.js";
 
 // Dynamic imports to avoid module resolution issues
 const { EthereumDockerTestnet: EthTestnet } =
@@ -99,26 +109,78 @@ async function main() {
 }
 
 /**
- * Deploy ERC20 contracts to Ethereum testnet
+ * Deploy ERC20 contracts to Ethereum testnet.
+ *
+ * FakeETH and FakeUSD are ERC20s on Ethereum — the primary issuance point.
+ * Users mint here via MetaMask, then bridge to Aptos via LockBox + state proofs.
+ * After deployment, writes VITE_* env vars to .env.local so the webapp picks
+ * them up on startup.
  */
 async function deployEthereumContracts(
   testnet: EthereumDockerTestnet,
 ): Promise<void> {
-  // Get test account for deployment
+  const rpcUrl = testnet.getExecutionRpcUrl();
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
   const testAccounts = testnet.getTestAccounts();
-  const deployer = testAccounts[0];
+  const signer = new ethers.Wallet(testAccounts[0].privateKey, provider);
 
-  console.log(`  Deployer: ${deployer.address}`);
+  console.log(`  Deployer: ${signer.address}`);
+  console.log(`  RPC: ${rpcUrl}`);
 
-  // TODO: Use Foundry to deploy FakeETH and FakeUSD
-  // For now, just log placeholder
-  console.log("  ⚠️  TODO: Deploy FakeETH and FakeUSD via Foundry");
-  console.log("  📝 Contracts will be deployed in next phase");
+  // Compile contracts (no-op if already compiled)
+  await compileContracts();
 
-  // Simulate deployment delay
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+  // Deploy FakeETH
+  console.log("  Deploying FakeETH...");
+  const fakeETHContract = await deployWithRetry(
+    new ethers.ContractFactory(
+      getFakeETHArtifact().abi,
+      getFakeETHArtifact().bytecode.object,
+      signer,
+    ),
+    signer,
+  );
+  const fakeETHAddress = await fakeETHContract.getAddress();
+  console.log(`  ✓ FakeETH deployed at: ${fakeETHAddress}`);
 
-  console.log("  ✅ Ethereum contracts deployment complete (placeholder)");
+  // Deploy FakeUSD
+  console.log("  Deploying FakeUSD...");
+  const fakeUSDContract = await deployWithRetry(
+    new ethers.ContractFactory(
+      getFakeUSDArtifact().abi,
+      getFakeUSDArtifact().bytecode.object,
+      signer,
+    ),
+    signer,
+  );
+  const fakeUSDAddress = await fakeUSDContract.getAddress();
+  console.log(`  ✓ FakeUSD deployed at: ${fakeUSDAddress}`);
+
+  // Deploy LockBox (constructor takes FakeETH and FakeUSD addresses)
+  console.log("  Deploying LockBox...");
+  const lockBoxContract = await deployWithRetry(
+    new ethers.ContractFactory(
+      getLockBoxArtifact().abi,
+      getLockBoxArtifact().bytecode.object,
+      signer,
+    ),
+    signer,
+    [fakeETHAddress, fakeUSDAddress],
+  );
+  const lockBoxAddress = await lockBoxContract.getAddress();
+  console.log(`  ✓ LockBox deployed at: ${lockBoxAddress}`);
+
+  // Write .env.local so the Vite dev server picks up the addresses on startup
+  const envLocal = [
+    `VITE_ETH_RPC_URL=${rpcUrl}`,
+    `VITE_FAKE_ETH_ADDRESS=${fakeETHAddress}`,
+    `VITE_FAKE_USD_ADDRESS=${fakeUSDAddress}`,
+    `VITE_LOCK_BOX_ADDRESS=${lockBoxAddress}`,
+  ].join("\n");
+  writeFileSync(join(process.cwd(), ".env.local"), envLocal);
+  console.log("  ✓ Contract addresses written to .env.local");
+
+  console.log("  ✅ Ethereum contracts deployed");
 }
 
 /**

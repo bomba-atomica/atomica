@@ -6,11 +6,11 @@ import { AuctionCreator } from "./components/AuctionCreator";
 import { AuctionBidder } from "./components/AuctionBidder";
 import { AccountStatus } from "./components/AccountStatus";
 import { NetworkStatus } from "./components/NetworkStatus";
-import { useTokenBalances } from "./hooks/useTokenBalances";
+import { useDualChainBalances } from "./hooks/useDualChainBalances";
 
 function App() {
   const [account, setAccount] = useState<string | null>(null);
-  const balances = useTokenBalances(account);
+  const balances = useDualChainBalances(account);
 
   const connectWallet = async () => {
     if (window.ethereum) {
@@ -79,8 +79,8 @@ function App() {
             {/* Sanity Test - Discreet debug utility */}
             <SanityTest account={account} />
 
-            {/* Show disabled state if user doesn't have test tokens */}
-            {balances.fakeEth === 0 || balances.fakeUsd === 0 ? (
+            {/* Show disabled state if user hasn't minted Ethereum test tokens yet */}
+            {balances.ethFakeETH === 0n || balances.ethFakeUSD === 0n ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 opacity-40 grayscale">
                 <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-800">
                   <div className="flex items-center justify-between mb-4">
