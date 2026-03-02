@@ -3,7 +3,7 @@ import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import { AccountStatus } from "../../src/components/AccountStatus";
 import { commands } from "vitest/browser";
 import { MockWallet } from "../../test-utils/browser-utils/MockWallet";
-import { useTokenBalances } from "../../src/hooks/useTokenBalances";
+import { useDualChainBalances } from "../../src/hooks/useDualChainBalances";
 
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "../../src/lib/aptos";
@@ -38,7 +38,7 @@ describe.sequential("AccountStatus Integration", () => {
     it("should show 'account not found' warning when account doesn't exist", async () => {
       // Wrapper component that uses the hook
       function TestWrapper() {
-        const balances = useTokenBalances(mockWallet.address);
+        const balances = useDualChainBalances(mockWallet.address);
         return (
           <AccountStatus ethAddress={mockWallet.address} balances={balances} />
         );
@@ -62,7 +62,7 @@ describe.sequential("AccountStatus Integration", () => {
     it("should show warning initially, then display balance after funding", async () => {
       // Wrapper component that uses the hook
       function TestWrapper() {
-        const balances = useTokenBalances(mockWallet.address);
+        const balances = useDualChainBalances(mockWallet.address);
         return (
           <AccountStatus ethAddress={mockWallet.address} balances={balances} />
         );
