@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
-import { aptos, CONTRACT_ADDR, getDerivedAddress, areContractsDeployed } from "../lib/aptos";
+import {
+  aptos,
+  CONTRACT_ADDR,
+  getDerivedAddress,
+  areContractsDeployed,
+} from "../lib/aptos";
 import { getAllBalances } from "../lib/ethereum/balances";
 
 export interface DualChainBalances {
@@ -35,21 +40,19 @@ export interface DualChainBalances {
 export function useDualChainBalances(
   ethAddress: string | null,
 ): DualChainBalances {
-  const [balances, setBalances] = useState<Omit<DualChainBalances, "refetch">>(
-    {
-      ethBalance: 0n,
-      ethFakeETH: 0n,
-      ethFakeUSD: 0n,
-      apt: 0,
-      aptosFakeEth: 0,
-      aptosFakeUsd: 0,
-      aptosExists: false,
-      aptosFakeEthInitialized: false,
-      aptosFakeUsdInitialized: false,
-      aptosContractsDeployed: false,
-      loading: true,
-    },
-  );
+  const [balances, setBalances] = useState<Omit<DualChainBalances, "refetch">>({
+    ethBalance: 0n,
+    ethFakeETH: 0n,
+    ethFakeUSD: 0n,
+    apt: 0,
+    aptosFakeEth: 0,
+    aptosFakeUsd: 0,
+    aptosExists: false,
+    aptosFakeEthInitialized: false,
+    aptosFakeUsdInitialized: false,
+    aptosContractsDeployed: false,
+    loading: true,
+  });
 
   const checkBalances = useCallback(async () => {
     if (!ethAddress) {

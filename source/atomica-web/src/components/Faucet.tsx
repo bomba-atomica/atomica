@@ -165,11 +165,7 @@ export function Faucet({
                   : "bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
               }`}
             >
-              {loadingUSD
-                ? "Minting..."
-                : usdTxHash
-                  ? "✓ 10k USD"
-                  : "10k USD"}
+              {loadingUSD ? "Minting..." : usdTxHash ? "✓ 10k USD" : "10k USD"}
             </button>
             {usdTxHash && (
               <div className="mt-1 text-[10px] text-zinc-500 break-all font-mono">
