@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { getDerivedAddress } from "../lib/aptos";
 import {
-  useDualChainBalances,
-  formatETH,
-  formatEthFakeETH,
-  formatEthFakeUSD,
-} from "../hooks/useDualChainBalances";
+  formatETHBalance,
+  formatFakeETHBalance,
+  formatUSDBalance,
+} from "../lib/ethereum/balances";
+import { useDualChainBalances } from "../hooks/useDualChainBalances";
 
 interface AccountStatusProps {
   ethAddress: string | null;
@@ -83,19 +83,19 @@ export function AccountStatus({ ethAddress, balances }: AccountStatusProps) {
               <div title="Native ETH">
                 <span className="text-zinc-500 mr-1">ETH:</span>
                 <span className="text-zinc-200">
-                  {formatETH(balances.ethBalance)}
+                  {formatETHBalance(balances.ethBalance)}
                 </span>
               </div>
               <div title="FakeETH ERC20 (18 decimals)">
                 <span className="text-zinc-500 mr-1">FETH:</span>
                 <span className="text-zinc-200">
-                  {formatEthFakeETH(balances.ethFakeETH)}
+                  {formatFakeETHBalance(balances.ethFakeETH)}
                 </span>
               </div>
               <div title="FakeUSD ERC20 (6 decimals)">
                 <span className="text-zinc-500 mr-1">FUSD:</span>
                 <span className="text-zinc-200">
-                  {formatEthFakeUSD(balances.ethFakeUSD)}
+                  {formatUSDBalance(balances.ethFakeUSD)}
                 </span>
               </div>
             </div>
