@@ -1,4 +1,12 @@
-# Cross-Chain Proof Testing Refactor - Implementation Status
+# Cross-Chain Proof Testing Refactor - Implementation Snapshot
+
+> [!IMPORTANT]
+> This file is a historical refactor snapshot from early February 2026.
+> It is **not** the canonical live status source for current implementation progress.
+>
+> Use:
+> - `docs/plans/implementation-plan.md` for roadmap/progress tracking
+> - `docs/development/cross-chain-test-suite.md` for suite structure and usage
 
 ## ✅ COMPLETE
 

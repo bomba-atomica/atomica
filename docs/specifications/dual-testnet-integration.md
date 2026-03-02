@@ -2,8 +2,13 @@
 ## Project Specification v1.0
 
 **Date:** 2026-02-02
-**Status:** Planning
+**Status:** Reference Planning Spec (baseline implementation now exists)
 **Approach:** Test-Driven Development (TDD)
+
+> [!NOTE]
+> This document captures the original planning specification and architecture intent.
+> For current roadmap/progress, use `docs/plans/implementation-plan.md`.
+> For current cross-chain suite structure/usage, use `docs/development/cross-chain-test-suite.md`.
 
 ---
 
@@ -12,27 +17,28 @@
 Migrate FAKETH and FAKEUSD token minting from Aptos to Ethereum testnet while maintaining Aptos testnet for auction functionality. This creates a dual-testnet architecture where:
 
 - **Ethereum Testnet:** Hosts ERC20 tokens (FakeETH, FakeUSD) and the LockBox escrow contract. Users mint and lock tokens here.
-- **Aptos Testnet:** Hosts auction contracts, IBE/DKG infrastructure, and cross-chain verification modules. Tokens arrive on Aptos via state proof bridge (`lock_receipt` + `mint_from_lock()`), NOT via direct Aptos-side minting.
+- **Aptos Testnet:** Hosts auction contracts, IBE/DKG infrastructure, and cross-chain verification modules. Lock receipts are verified and consumed on Aptos for auction/settlement logic. FakeETH/FakeUSD are **not minted on Aptos** in the canonical test architecture.
 
 This architecture simulates the production cross-chain environment where real assets (ETH, USDC) exist on Ethereum while auction logic runs on Aptos.
 
-> **Note (2026-03-02):** The Aptos-side `fake_eth::mint()` and `fake_usd::mint()` functions still exist for test compatibility, but the intended user flow is: mint on Ethereum → lock in LockBox → generate state proof → submit to Aptos → `mint_from_lock()`. The Aptos faucet is only used for APT gas tokens.
+> **Canonical token policy (2026-03-02):** FakeETH and FakeUSD are minted **only on the EVM testnet**.  
+> Any Aptos-side fake coin minting path (direct `fake_eth::mint()` / `fake_usd::mint()` or bridged fake-coin minting) is legacy prototype behavior and is **deprecated in specifications**.  
+> The Aptos faucet is APT-gas-only.
 
 ---
 
 ## Previous Architecture (Superseded)
 
-### Token Flow (Old — no longer used)
+### Token Flow (Old — deprecated prototype, no longer used)
 ```
-User → Aptos Testnet → Mint FAKETH/FAKEUSD directly
+User → Aptos Testnet → Direct fake-token minting (deprecated)
      ↓
      Aptos Auction Contracts
 ```
 
 ### Components
-1. **Aptos Move Contracts**
-   - `fake_eth.move` - Fungible Asset with 8 decimals
-   - `fake_usd.move` - Fungible Asset with 6 decimals
+1. **Aptos contracts (legacy prototype)**
+   - Included direct fake-token minting paths on Aptos (deprecated and removed from canonical test flow)
    - `registry.move` - Auction registry
    - Location: `source/atomica-move-contracts/sources/`
 
@@ -62,7 +68,7 @@ User → MetaMask → Ethereum Testnet → Mint FakeETH/FakeUSD (ERC20)
                         ↓
                    Submit proof to Aptos (lock_receipt::register_ethereum_lock)
                         ↓
-                   mint_from_lock() → Aptos Fungible Asset
+                   Register/consume lock receipt on Aptos
                         ↓
                    Aptos Auction Contracts
 ```
@@ -440,10 +446,10 @@ contract FakeUSD is ERC20 {
 
 ## Future Enhancements (Out of Scope)
 
-1. **Cross-Chain Bridge**
-   - Lock FAKETH on Ethereum → Mint on Aptos
-   - Lock FAKEUSD on Ethereum → Mint on Aptos
-   - Requires state proofs and relayers
+1. **Cross-Chain Receipt Settlement**
+   - Lock FAKETH/FAKEUSD on Ethereum
+   - Register and consume lock receipts on Aptos
+   - No Aptos fake-coin minting in canonical flow
 
 2. **Real Asset Support**
    - Replace FAKETH with real Ethereum Sepolia

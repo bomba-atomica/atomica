@@ -1,4 +1,5 @@
-// Low-level integration test for FakeEth using Ed25519 signing
+// Legacy-compatibility integration test for Aptos-side FakeEth minting via Ed25519 signing.
+// Canonical fake-token issuance is EVM-only; this suite validates deprecated paths still work.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 import { commands } from "vitest/browser";

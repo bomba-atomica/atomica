@@ -11,23 +11,22 @@ Atomica is a sealed-bid auction protocol with IBE-based bid encryption, cross-ch
 
 The dual testnet integration (Ethereum + Aptos) is largely complete. Summary of what's working:
 
-- **EVM contracts** — FakeETH, FakeUSD, LockBox (36 Solidity unit tests passing). Deployment script (`DeployLockBox.s.sol`) deploys all three.
+- **EVM contracts** — FakeETH, FakeUSD, LockBox with Solidity unit/integration coverage. Deployment script (`DeployLockBox.s.sol`) deploys all three.
 - **Ethereum integration layer** — `config.ts`, `transaction.ts`, `balances.ts`, `contracts.ts`, `abis.ts`. MetaMask connection, network switching, minting, balance queries all working.
-- **Dual testnet orchestrator** — 331 lines (`scripts/dual-testnet-orchestrator.ts`). Parallel startup, health checks, Aptos contract deployment, webapp launcher, cleanup handlers. Ethereum contract deployment is proven in test fixtures (`dual-chain-fixture.ts`) but not yet wired into the orchestrator (still a TODO placeholder).
-- **Cross-chain proof pipeline** — 6 E2E tests passing: mint → lock → proof generation → proof submission → replay protection → type isolation (`tests/meta/cross-chain/`). Storage key calculation for `eth_getProof` with single-level mappings.
+- **Dual testnet orchestrator** — `scripts/dual-testnet-orchestrator.ts` starts both chains, deploys FakeETH/FakeUSD/LockBox on Ethereum, deploys Aptos contracts, writes `.env.local`, launches webapp, and performs cleanup.
+- **Cross-chain proof pipeline** — 6 focused E2E scenarios implemented under `tests/meta/cross-chain/`: mint → lock → proof generation → proof submission → replay protection → type isolation. Storage key calculation for `eth_getProof` uses single-level mappings.
 - **SIWE auth + MetaMask** — secp256k1 → Aptos derived accounts, `ethers.BrowserProvider`.
 - **Aptos payloads** — faucet (APT gas), auction create/bid. Note: `getMintFakeEthPayload()` and `getMintFakeUsdPayload()` exist but are vestigial — fake tokens should be minted on Ethereum and bridged, not minted directly on Aptos.
-- **Validator node** — DKG on epoch transitions, IBE native (`reconstruct_ibe_dk_internal<G1>`), auto-subscribe to `TimelockExpiredEvent`, `finalize_timelock_reveal()`. Docker testnet runs 4 validators.
-- **Framework modules** — `ibe_config.move`, `ibe.move`, `dkg.move`, `reconfiguration_with_dkg.move`.
+- **Network/runtime state** — host/network selection is centralized through `NetworkConfigProvider` + `useNetworkConfig`, with runtime/localStorage persistence.
 - **Cross-chain verification modules** — `eth_proof.move`, `lock_receipt.move`, `mpt.move`, `rlp.move`, `fake_eth.move` (includes `mint_from_lock()`).
+- **Bridged asset minting modules** — `fake_eth.move` and `fake_usd.move` both include `mint_from_lock()`.
 
 **Known gaps carried forward:**
-- Orchestrator `deployEthereumContracts()` is a TODO placeholder (deployment logic exists in test fixtures, just needs wiring)
-- Component tests not yet created
-- `useDualChainBalances` hook not created (existing `useTokenBalances` is Aptos-only)
-- NetworkStatus only shows Aptos chain
-- Faucet uses Aptos-based minting for fake tokens instead of Ethereum minting
-- Some integration tests have `it.todo()` blocks
+- `auction.move` remains unimplemented (`auction.move.broken` still in tree)
+- Frontend auction flows are still coupled to placeholder auction/IBE assumptions (local MPK generation, XOR mask placeholder in `lib/ibe.ts`)
+- Cross-chain deposit and settlement UI flows are not yet wired end-to-end in the app
+- Phase 1.5 shared app state/config foundation is only partially implemented (network host is centralized; broader app state and settings surface still pending)
+- Some TypeScript integration tests still contain `it.todo()` blocks (`tests/meta/ethereum/erc20-deployment.test.ts`)
 
 ---
 
@@ -35,18 +34,18 @@ The dual testnet integration (Ethereum + Aptos) is largely complete. Summary of 
 
 Addresses leftover gaps from the completed infrastructure work.
 
-- [ ] Wire `deployEthereumContracts()` in orchestrator — port the proven deployment logic from `tests/meta/cross-chain/helpers/dual-chain-fixture.ts` (compile via Foundry, deploy FakeETH + FakeUSD + LockBox via ethers `ContractFactory`)
-- [ ] Create `useDualChainBalances` hook — query Ethereum balances (ETH, FakeETH, FakeUSD) alongside Aptos balances (APT)
-- [ ] Update NetworkStatus to show both chains side-by-side (block heights, health indicators)
-- [ ] Update Faucet to mint FakeETH/FakeUSD directly on Ethereum via MetaMask (replace Aptos-based `getMintFakeEthPayload()` / `getMintFakeUsdPayload()` calls with `mintFakeETH()` / `mintFakeUSD()` from `lib/ethereum/transaction.ts`). Keep the APT gas faucet button (that still goes through Aptos).
-- [ ] Remove or deprecate vestigial Aptos-side fake token minting payloads
+- [x] Wire `deployEthereumContracts()` in orchestrator — deployment logic is now in `scripts/dual-testnet-orchestrator.ts`
+- [x] Create `useDualChainBalances` hook — queries Ethereum balances (ETH, FakeETH, FakeUSD) and Aptos balances
+- [x] Update NetworkStatus to show both chains side-by-side (ETH + APT block heights)
+- [x] Update Faucet to mint FakeETH/FakeUSD directly on Ethereum via MetaMask while keeping APT faucet
+- [x] Deprecate vestigial Aptos-side fake token minting payloads (kept for compatibility, marked deprecated in `src/lib/aptos/payloads.ts`)
 
 **Files:**
-- `scripts/dual-testnet-orchestrator.ts` — wire `deployEthereumContracts()`
-- `src/hooks/useDualChainBalances.ts` — new
-- `src/components/NetworkStatus.tsx` — update
-- `src/components/Faucet.tsx` — update to use Ethereum minting
-- `src/lib/aptos/payloads.ts` — deprecate/remove `getMintFakeEthPayload`, `getMintFakeUsdPayload`
+- `scripts/dual-testnet-orchestrator.ts` — implemented Ethereum deployment wiring
+- `src/hooks/useDualChainBalances.ts` — implemented
+- `src/components/NetworkStatus.tsx` — updated for dual-chain status
+- `src/components/Faucet.tsx` — updated to use Ethereum minting
+- `src/lib/aptos/payloads.ts` — Aptos direct mint payloads retained but marked deprecated
 
 ---
 
@@ -143,7 +142,7 @@ Wire up ETH deposits → Atomica minting → auction → settlement back to ETH.
 **4a. Cross-Chain Deposit (3-4 days):**
 
 - [ ] CrossChainDeposit component — full flow: mint FakeETH on Ethereum → approve + lock in LockBox → generate state proof → call `lock_receipt::register_ethereum_lock<FakeETH>()` on Aptos → call `fake_eth::mint_from_lock(lock_id)` on Aptos
-- [ ] `fake_usd.move` — add `mint_from_lock()` matching `fake_eth.move` pattern
+- [x] `fake_usd.move` — `mint_from_lock()` implemented to match `fake_eth.move` bridging pattern
 - [ ] Add `lock_receipt` + `mint_from_lock` payloads to `lib/aptos/payloads.ts`
 
 **4b. Cross-Chain Settlement (3-4 days):**
@@ -170,7 +169,7 @@ Wire everything together and run the complete demo.
 - [ ] Update orchestrator to deploy auction module, configure settlement contracts, wait for DKG completion
 - [ ] Wire all components into App.tsx: CrossChainDeposit → AuctionCreator → AuctionBidder → AuctionRevealer → SettlementStatus → WithdrawWinnings
 - [ ] E2E test: deposit → bid → decrypt → clear → settle → withdraw
-- [ ] Component tests for key components (deferred from earlier work)
+- [ ] Expand component tests for newly added cross-chain and auction components
 - [ ] Manual smoke test of `bun run demo`
 
 **Files:**
@@ -200,6 +199,7 @@ Wire everything together and run the complete demo.
 **Known issues:**
 - Some TypeScript integration tests have `it.todo()` blocks
 - `auction.move.broken` uses deprecated `Coin<T>` API — needs full rewrite
+- `src/lib/ibe.ts` still uses a placeholder XOR mask and is not aligned with intended production IBE flow
 
 ---
 

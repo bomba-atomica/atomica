@@ -1,4 +1,12 @@
-# Test Results - Cross-Chain Refactor Verification
+# Test Results - Cross-Chain Refactor Verification Snapshot
+
+> [!IMPORTANT]
+> This file records a historical verification run from February 2026.
+> It is **not** a canonical live status tracker.
+>
+> Use:
+> - `docs/plans/implementation-plan.md` for roadmap/progress tracking
+> - `docs/development/cross-chain-test-suite.md` for suite structure and usage
 
 **Date**: 2026-02-05
 **Status**: ✅ **SUCCESS**

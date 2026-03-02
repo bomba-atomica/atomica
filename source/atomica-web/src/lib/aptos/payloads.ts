@@ -2,6 +2,7 @@ import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
 import { CONTRACT_ADDR, aptos } from "./config";
 import { getDerivedAddress } from "./siwe";
 import { submitNativeTransaction } from "./transaction";
+import { buildAptosFaucetUrl, getStoredHost } from "../network-host";
 
 /**
  * Sanity Test: Simple APT transfer using MetaMask signature
@@ -46,7 +47,7 @@ export async function testSimpleAPTTransfer(
     console.log("\n✅ SANITY TEST PASSED!");
     console.log("Transaction hash:", result.hash);
     console.log("\nConclusion: Signature verification is working correctly!");
-    console.log("The issue with FAKEETH::mint is likely contract-specific\n");
+    console.log("The issue with the custom contract call is likely contract-specific\n");
 
     return { success: true, hash: result.hash };
   } catch (e: unknown) {
@@ -68,15 +69,16 @@ export async function testSimpleAPTTransfer(
 export async function requestAPT(ethAddress: string) {
   // Always use lowercase for consistency with submitNativeTransaction
   const derived = await getDerivedAddress(ethAddress.toLowerCase());
-  const FAUCET_URL = "http://127.0.0.1:8081";
+  const faucetUrl = buildAptosFaucetUrl(getStoredHost());
 
   console.log("=== Requesting APT from Faucet ===");
   console.log("  Ethereum Address:", ethAddress);
   console.log("  Aptos Derived Address:", derived.toString());
   console.log("  Funding address:", derived.toString());
+  console.log("  Faucet URL:", faucetUrl);
 
   const res = await fetch(
-    `${FAUCET_URL}/mint?amount=100000000&address=${derived.toString()}`,
+    `${faucetUrl}/mint?amount=100000000&address=${derived.toString()}`,
     { method: "POST" },
   );
   if (!res.ok) {
@@ -98,8 +100,8 @@ export async function requestAPT(ethAddress: string) {
  *
  * @deprecated Fake tokens should be minted on the Ethereum testnet via MetaMask
  * (see `lib/ethereum/transaction.ts` — `mintFakeETH()`), not directly on Aptos.
- * The correct user flow is: mint on Ethereum → lock in LockBox → bridge via
- * state proof → `fake_eth::mint_from_lock()` on Aptos.
+ * The canonical flow is: mint on Ethereum → lock in LockBox → submit proof to
+ * Aptos `lock_receipt` → consume receipt in auction/settlement logic.
  * This Aptos-side direct mint exists only for legacy test compatibility.
  */
 export async function getMintFakeEthPayload(): Promise<InputGenerateTransactionPayloadData> {
@@ -134,8 +136,8 @@ export async function mintFakeEth(ethAddress: string) {
  *
  * @deprecated Fake tokens should be minted on the Ethereum testnet via MetaMask
  * (see `lib/ethereum/transaction.ts` — `mintFakeUSD()`), not directly on Aptos.
- * The correct user flow is: mint on Ethereum → lock in LockBox → bridge via
- * state proof → `fake_usd::mint_from_lock()` on Aptos.
+ * The canonical flow is: mint on Ethereum → lock in LockBox → submit proof to
+ * Aptos `lock_receipt` → consume receipt in auction/settlement logic.
  * This Aptos-side direct mint exists only for legacy test compatibility.
  */
 export async function getMintFakeUsdPayload(): Promise<InputGenerateTransactionPayloadData> {
@@ -168,8 +170,9 @@ export async function mintFakeUsd(ethAddress: string) {
 /**
  * Step 2: Mint test tokens (FAKEETH and FAKEUSD)
  * Requires contracts to be deployed
- * @deprecated Aptos-side direct minting is vestigial. Fake tokens should be
- * minted on Ethereum and bridged to Aptos. See `lib/ethereum/transaction.ts`.
+ * @deprecated Aptos-side direct minting is legacy-only compatibility coverage.
+ * Canonical fake-token minting happens on Ethereum testnet; Aptos consumes lock
+ * receipts for auction/settlement.
  */
 export async function requestTestTokens(ethAddress: string) {
   await mintFakeEth(ethAddress);
@@ -200,7 +203,8 @@ export async function areContractsDeployed(): Promise<boolean> {
 
 /**
  * Legacy function for backward compatibility
- * @deprecated Use requestAPT() and requestTestTokens() separately
+ * @deprecated Use requestAPT() only for canonical flows. This helper also calls
+ * deprecated Aptos-side fake-token mint paths.
  */
 export async function submitFaucet(ethAddress: string) {
   await requestAPT(ethAddress);

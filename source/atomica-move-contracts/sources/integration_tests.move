@@ -67,7 +67,8 @@ module atomica::integration_tests {
     }
 
     /*
-    /// Test full E2E flow: Register lock → Verify receipt → Claim → Mint FakeETH
+    /// Test full E2E flow: Register lock → Verify receipt → Claim receipt amount
+    /// for Aptos-side accounting (no canonical fake-token minting on Aptos).
     /// DISABLED: The golden proof data is stale (from Ethereum block 16).
     /// Re-enable when fresh proof data is available.
     #[test(framework = @0x1, atomica = @atomica)]

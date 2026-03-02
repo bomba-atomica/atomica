@@ -133,7 +133,7 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     expect(txHash).toBeTruthy();
     console.log("Transaction submitted directly:", txHash);
 
-    // Verify balance on-chain using view function (same as production)
+    // Verify balance on-chain using the same view helper used by legacy Aptos mint tests.
     const balanceResult = await aptos.view({
       payload: {
         function: `${DEPLOYER_ADDR}::fake_eth::balance`,

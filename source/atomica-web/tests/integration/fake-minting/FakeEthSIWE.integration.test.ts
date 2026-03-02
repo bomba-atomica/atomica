@@ -5,6 +5,8 @@ import { getDerivedAddress } from "../../../src/lib/aptos/siwe";
 import { submitNativeTransaction } from "../../../src/lib/aptos/transaction";
 import { setupBrowserWalletMock } from "../../../test-utils/browser-utils/wallet-mock";
 
+// Legacy-compatibility integration test for Aptos-side FakeEth minting via SIWE.
+// Canonical fake-token issuance is EVM-only; this suite validates deprecated paths still work.
 const DEPLOYER_ADDR =
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 const TEST_ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"; // Hardhat Account 0

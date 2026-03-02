@@ -1,5 +1,10 @@
 # Lock Receipt Implementation Summary
 
+> [!IMPORTANT]
+> **Canonical token policy:** FakeETH and FakeUSD are minted only on the EVM testnet.
+> Aptos-side fake coin minting paths are legacy prototype behavior and are **deprecated in specifications**.
+> This document should be read as a lock-receipt verification/registration design, not an Aptos token issuance design.
+
 ## What Was Built
 
 A **generic, type-safe cross-chain lock receipt system** for Atomica that enables verifying and registering asset locks from any blockchain.
@@ -81,8 +86,8 @@ struct ReceiptRegistry<phantom Chain, phantom Asset> has key {
    - Marks lock_id as claimed
    - Emits LockRegistered event
    ↓
-6. User can claim receipt to mint tokens
-   fake_eth::mint_from_ethereum_lock()
+6. Receipt is consumed by Aptos auction/settlement logic
+   (no canonical FakeETH/FakeUSD minting on Aptos)
 ```
 
 ### Entry Function
@@ -127,7 +132,7 @@ public entry fun initialize<Chain, Asset>(account: &signer)
 /// Register a lock from Ethereum
 public entry fun register_ethereum_lock<Asset>(...)
 
-/// Claim a receipt (called by asset modules to mint tokens)
+/// Claim a receipt (called by auction/settlement logic to consume verified lock state)
 public fun claim<Chain, Asset>(claimer: address, lock_id: vector<u8>): u256
 ```
 
@@ -171,26 +176,32 @@ struct LockClaimed<phantom Chain, phantom Asset> {
 }
 ```
 
-## Integration with Asset Modules
+## Integration with Auction/Settlement Modules
 
-### Example: fake_eth.move
+### Example: Receipt Consumption in Auction Flow
 
 ```move
-module atomica::fake_eth {
+module atomica::auction_receipts {
     use atomica::lock_receipt::{Self, Ethereum, FakeETH};
+    use std::signer;
 
-    /// Mint FakeETH from a verified Ethereum lock receipt
-    public entry fun mint_from_ethereum_lock(
+    /// Consume a verified Ethereum lock receipt for auction collateral/accounting.
+    /// No Aptos-side FakeETH/FakeUSD minting is performed in canonical flow.
+    public entry fun consume_lock_receipt_for_auction(
         account: &signer,
         lock_id: vector<u8>,
-    ) acquires FakeEthStore {
+    ) {
         let user = signer::address_of(account);
 
-        // 1. Claim receipt (verifies ownership and status)
+        // Claim validates ownership and replay protection.
         let amount = lock_receipt::claim<Ethereum, FakeETH>(user, lock_id);
 
-        // 2. Mint tokens
-        mint_internal(user, amount);
+        // Use `amount` for auction eligibility/collateral accounting.
+        record_collateral(user, amount);
+    }
+
+    fun record_collateral(_user: address, _amount: u256) {
+        // Placeholder for auction-specific accounting logic.
     }
 }
 ```
@@ -212,12 +223,12 @@ let amount = claim<Ethereum, FakeETH>(user, lock_id);
 
 ```move
 // ERROR: Type mismatch
-let receipt: LockReceipt<Ethereum, FakeETH> = ...;
-fake_usd::mint_from_receipt(receipt); // Compile error!
+let eth_receipt: LockReceipt<Ethereum, FakeETH> = ...;
+let usd_receipt: LockReceipt<Ethereum, FakeUSD> = eth_receipt; // Compile error!
 
 // ERROR: Wrong chain type
-let eth_receipt: LockReceipt<Ethereum, FakeETH> = ...;
-bitcoin::process_receipt(eth_receipt); // Compile error!
+let receipt: LockReceipt<Ethereum, FakeETH> = ...;
+bitcoin::process_receipt(receipt); // Compile error!
 ```
 
 ## Test Results
@@ -282,9 +293,9 @@ struct USDC has copy, drop, store {}
 // 2. Use existing functions with new type
 register_ethereum_lock<USDC>(account, proof, 1000_USDC);
 
-// 3. Integrate with asset module
-module atomica::usdc {
-    public entry fun mint_from_ethereum_lock(
+// 3. Integrate with receipt-aware module (auction/settlement accounting)
+module atomica::usdc_receipts {
+    public entry fun consume_usdc_lock_receipt(
         account: &signer,
         lock_id: vector<u8>,
     ) {
@@ -292,19 +303,19 @@ module atomica::usdc {
             signer::address_of(account),
             lock_id
         );
-        mint_internal(signer::address_of(account), amount);
+        apply_receipt_to_settlement(signer::address_of(account), amount);
     }
 }
 ```
 
 ## Next Steps
 
-### 1. Integration with fake_eth/fake_usd
+### 1. Integration with Auction/Settlement Modules
 
-Add mint functions to asset modules:
+Add receipt-consumption entry points in auction/settlement modules:
 
 ```move
-public entry fun mint_from_ethereum_lock(
+public entry fun consume_lock_receipt_for_auction(
     account: &signer,
     lock_id: vector<u8>,
 )
@@ -316,7 +327,7 @@ Create complete cross-chain test:
 - Lock FakeETH on Ethereum
 - Generate proof
 - Register receipt on Aptos
-- Claim and mint tokens
+- Consume receipt in auction/settlement flow (no Aptos fake-coin minting)
 
 ### 3. TypeScript Integration
 
