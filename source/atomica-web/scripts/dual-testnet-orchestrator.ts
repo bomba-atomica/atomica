@@ -64,7 +64,7 @@ async function main() {
     const ethAddresses = await deployEthereumContracts(ethTestnet);
     await deployAptosContracts(aptosTestnet);
 
-    writeEnvLocal(ethAddresses, DEPLOYER_ADDR);
+    writeEnvLocal(ethAddresses);
 
     console.log("\n🌐 Starting webapp...");
     await launchWebapp();
@@ -160,21 +160,17 @@ async function deployAptosContracts(testnet: DockerTestnet) {
   console.log(`  ✓ Aptos contracts deployed`);
 }
 
-function writeEnvLocal(
-  addresses: {
-    rpcUrl: string;
-    fakeETH: string;
-    fakeUSD: string;
-    lockBox: string;
-  },
-  aptosContractAddress: string,
-) {
+function writeEnvLocal(addresses: {
+  rpcUrl: string;
+  fakeETH: string;
+  fakeUSD: string;
+  lockBox: string;
+}) {
   const envLocal = [
     `VITE_ETH_RPC_URL=${addresses.rpcUrl}`,
     `VITE_FAKE_ETH_ADDRESS=${addresses.fakeETH}`,
     `VITE_FAKE_USD_ADDRESS=${addresses.fakeUSD}`,
     `VITE_LOCK_BOX_ADDRESS=${addresses.lockBox}`,
-    `VITE_CONTRACT_ADDRESS=${aptosContractAddress}`,
   ].join("\n");
   writeFileSync(join(process.cwd(), ".env.local"), envLocal);
   console.log("  ✓ Written to .env.local");
