@@ -87,24 +87,15 @@ function parseYamlPrivateKey(yaml: string): string | null {
   return match?.[1] ?? null;
 }
 
-function getRootKeyCandidatesFromEnv(): string[] {
-  const configured = process.env.ATOMICA_APTOS_FUNDER_KEYS_FILE?.trim();
-  if (!configured) {
-    return [];
-  }
-  return [configured];
-}
-
 function findRootPrivateKey(): string {
   const envPk = process.env.ATOMICA_APTOS_FUNDER_PRIVATE_KEY?.trim();
   if (envPk) {
     return envPk;
   }
 
-  const candidates = [
-    ...getRootKeyCandidatesFromEnv(),
-    ...ROOT_KEY_FILE_CANDIDATES.map((p) => pathResolve(process.cwd(), p)),
-  ];
+  const candidates = ROOT_KEY_FILE_CANDIDATES.map((p) =>
+    pathResolve(process.cwd(), p),
+  );
 
   for (const filePath of candidates) {
     if (!existsSync(filePath)) {
@@ -118,7 +109,7 @@ function findRootPrivateKey(): string {
   }
 
   throw new Error(
-    "No Aptos funder private key found. Set ATOMICA_APTOS_FUNDER_PRIVATE_KEY or ATOMICA_APTOS_FUNDER_KEYS_FILE.",
+    "No Aptos funder private key found. Set ATOMICA_APTOS_FUNDER_PRIVATE_KEY or ensure docker-testnet genesis artifacts are installed.",
   );
 }
 
