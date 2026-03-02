@@ -7,6 +7,7 @@ import { AuctionBidder } from "./components/AuctionBidder";
 import { AccountStatus } from "./components/AccountStatus";
 import { NetworkStatus } from "./components/NetworkStatus";
 import { useDualChainBalances } from "./hooks/useDualChainBalances";
+import { TestnetSelector } from "./components/TestnetSelector";
 
 function App() {
   const [account, setAccount] = useState<string | null>(null);
@@ -48,6 +49,7 @@ function App() {
           Atomica Auction
         </h1>
         <div className="flex items-center gap-4">
+          <TestnetSelector />
           <NetworkStatus />
           {account ? (
             <AccountStatus ethAddress={account} balances={balances} />
