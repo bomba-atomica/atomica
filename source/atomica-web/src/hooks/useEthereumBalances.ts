@@ -30,7 +30,7 @@ export function useEthereumBalances(
         ethContractsDeployed: false,
         loading: false,
       });
-      return;
+      return true;
     }
 
     try {
@@ -46,9 +46,11 @@ export function useEthereumBalances(
         ethContractsDeployed: contractsDeployed,
         loading: false,
       });
+      return true;
     } catch (error) {
       console.warn("Failed to refresh Ethereum balances:", error);
       setState((prev) => ({ ...prev, loading: false }));
+      return false;
     }
   }, [ethAddress]);
 
@@ -65,13 +67,11 @@ export function useEthereumBalances(
 
     const execute = async () => {
       if (cancelled) return;
-      const prev = state.loading;
-      await load();
-      const failed = prev && state.loading;
-      const nextDelay = failed
-        ? Math.min(baseDelay * 2 ** retries, maxDelay)
-        : baseDelay;
-      retries = failed ? retries + 1 : 0;
+      const success = await load();
+      const nextDelay = success
+        ? baseDelay
+        : Math.min(baseDelay * 2 ** retries, maxDelay);
+      retries = success ? 0 : retries + 1;
       if (!cancelled) {
         schedule(nextDelay);
       }
@@ -84,8 +84,12 @@ export function useEthereumBalances(
     };
   }, [load]);
 
+  const refetch = useCallback(async () => {
+    await load();
+  }, [load]);
+
   return {
     ...state,
-    refetch: load,
+    refetch,
   };
 }
