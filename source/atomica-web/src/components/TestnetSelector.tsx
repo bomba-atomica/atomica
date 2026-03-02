@@ -30,6 +30,11 @@ export function TestnetSelector() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  // Keep form input in sync if host changes from another UI path.
+  useEffect(() => {
+    setCustomInput(host === "localhost" ? "" : host);
+  }, [host]);
+
   const applyCustom = () => {
     const h = customInput.trim();
     if (h) {

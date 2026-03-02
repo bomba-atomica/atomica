@@ -15,11 +15,19 @@ import { setAptosInstance } from "./aptos/config";
 
 const STORAGE_KEY = "atomica-testnet-host";
 
+function getBrowserHost(): string {
+  if (typeof window === "undefined") {
+    return "localhost";
+  }
+  const host = window.location.hostname?.trim();
+  return host || "localhost";
+}
+
 export function getStoredHost(): string {
   try {
-    return localStorage.getItem(STORAGE_KEY) || "localhost";
+    return localStorage.getItem(STORAGE_KEY) || getBrowserHost();
   } catch {
-    return "localhost";
+    return getBrowserHost();
   }
 }
 
