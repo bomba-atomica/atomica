@@ -118,8 +118,12 @@ async function deployEthereumContracts(
   // NOTE: FakeETH/FakeUSD are the PRIMARY issuance point. Users mint on Ethereum via MetaMask,
   // then bridge to Aptos via LockBox + state proofs. Do NOT use Aptos-side direct minting
   // (getMintFakeEthPayload etc.) for the user-facing flow.
-  console.log("  ⚠️  TODO: Deploy FakeETH, FakeUSD, and LockBox via Foundry/ethers");
-  console.log("  📝 See tests/meta/cross-chain/helpers/dual-chain-fixture.ts for working example");
+  console.log(
+    "  ⚠️  TODO: Deploy FakeETH, FakeUSD, and LockBox via Foundry/ethers",
+  );
+  console.log(
+    "  📝 See tests/meta/cross-chain/helpers/dual-chain-fixture.ts for working example",
+  );
 
   // Simulate deployment delay
   await new Promise((resolve) => setTimeout(resolve, 2000));
