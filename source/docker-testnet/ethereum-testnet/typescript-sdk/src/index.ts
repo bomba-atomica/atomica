@@ -640,4 +640,3 @@ export interface TestAccount {
   address: string;
   privateKey: string;
 }
-
