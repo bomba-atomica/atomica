@@ -16,7 +16,13 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  cleanup,
+} from "@testing-library/react";
 import { useState } from "react";
 import { commands } from "vitest/browser";
 import { setupEthereumMintMock } from "../../test-utils/browser-utils/EthereumMintMock";
@@ -34,7 +40,9 @@ interface MintButtonProps {
 }
 
 function MintFakeEthButton({ contractAddress, rpcUrl }: MintButtonProps) {
-  const [status, setStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
+  const [status, setStatus] = useState<
+    "idle" | "pending" | "success" | "error"
+  >("idle");
   const [txHash, setTxHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +56,11 @@ function MintFakeEthButton({ contractAddress, rpcUrl }: MintButtonProps) {
       // the production Faucet component (MetaMask → eth_sendTransaction).
       const browserProvider = new ethers.BrowserProvider(window.ethereum);
       const signer = await browserProvider.getSigner();
-      const contract = new ethers.Contract(contractAddress, FAKE_ETH_ABI, signer);
+      const contract = new ethers.Contract(
+        contractAddress,
+        FAKE_ETH_ABI,
+        signer,
+      );
       const address = await signer.getAddress();
       const amount = 10n * 10n ** 18n; // 10 ETH
       const tx = await contract.mint(address, amount);
@@ -72,7 +84,11 @@ function MintFakeEthButton({ contractAddress, rpcUrl }: MintButtonProps) {
         onClick={handleMint}
         disabled={status === "pending"}
       >
-        {status === "pending" ? "Minting..." : status === "success" ? "Minted!" : "Mint 10 ETH"}
+        {status === "pending"
+          ? "Minting..."
+          : status === "success"
+            ? "Minted!"
+            : "Mint 10 ETH"}
       </button>
       {txHash && <div data-testid="tx-hash">{txHash}</div>}
       {error && <div data-testid="error">{error}</div>}
@@ -118,7 +134,9 @@ describe.sequential("FakeEthMint UI", () => {
     // Read balance before mint
     const contract = new ethers.Contract(info.fakeETH, FAKE_ETH_ABI, provider);
     const balanceBefore: bigint = await contract.balanceOf(signerAddress);
-    console.log(`[FakeEthMint] Balance before: ${ethers.formatEther(balanceBefore)} ETH`);
+    console.log(
+      `[FakeEthMint] Balance before: ${ethers.formatEther(balanceBefore)} ETH`,
+    );
 
     render(
       <MintFakeEthButton contractAddress={info.fakeETH} rpcUrl={info.rpcUrl} />,
@@ -130,13 +148,17 @@ describe.sequential("FakeEthMint UI", () => {
 
     // Button should show "Minting..." immediately
     await waitFor(() => {
-      expect(screen.getByTestId("mint-eth-button")).toHaveTextContent("Minting...");
+      expect(screen.getByTestId("mint-eth-button")).toHaveTextContent(
+        "Minting...",
+      );
     });
 
     // Wait for success state
     await waitFor(
       () => {
-        expect(screen.getByTestId("mint-eth-button")).toHaveTextContent("Minted!");
+        expect(screen.getByTestId("mint-eth-button")).toHaveTextContent(
+          "Minted!",
+        );
       },
       { timeout: 60000 },
     );
@@ -148,7 +170,9 @@ describe.sequential("FakeEthMint UI", () => {
 
     // Verify on-chain balance increased by 10 ETH
     const balanceAfter: bigint = await contract.balanceOf(signerAddress);
-    console.log(`[FakeEthMint] Balance after: ${ethers.formatEther(balanceAfter)} ETH`);
+    console.log(
+      `[FakeEthMint] Balance after: ${ethers.formatEther(balanceAfter)} ETH`,
+    );
 
     const minted = balanceAfter - balanceBefore;
     expect(minted).toBe(10n * 10n ** 18n);
