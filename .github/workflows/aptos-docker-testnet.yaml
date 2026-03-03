@@ -71,22 +71,22 @@ jobs:
 
       - name: Run validator connectivity tests
         working-directory: source/docker-testnet/typescript-sdk
-        run: bun test test/validator-connectivity.test.ts
+        run: bun --env-file=../../.env.test test test/validator-connectivity.test.ts
         timeout-minutes: 10
 
       - name: Run faucet tests
         working-directory: source/docker-testnet/typescript-sdk
-        run: bun test test/faucet.test.ts
+        run: bun --env-file=../../.env.test test test/faucet.test.ts
         timeout-minutes: 10
 
       - name: Run block production tests
         working-directory: source/docker-testnet/typescript-sdk
-        run: bun test test/block-production.test.ts
+        run: bun --env-file=../../.env.test test test/block-production.test.ts
         timeout-minutes: 10
 
       - name: Run validator sync tests
         working-directory: source/docker-testnet/typescript-sdk
-        run: bun test test/validator-sync.test.ts
+        run: bun --env-file=../../.env.test test test/validator-sync.test.ts
         timeout-minutes: 10
 
       - name: Cleanup Docker on failure

@@ -89,7 +89,7 @@ export async function deployWithRetry(
           }
 
           // Debug: Check if bytecode exists
-          const code = await deployer.provider.getCode(deployedAddress);
+          const code = await deployer.provider!.getCode(deployedAddress);
           console.log(`   Bytecode check:`);
           console.log(`     - Length: ${code.length} characters`);
           if (code === "0x" || code === "0x0") {
@@ -100,7 +100,7 @@ export async function deployWithRetry(
         }
       }
 
-      return deployedContract;
+      return deployedContract as ethers.Contract;
     } catch (error: any) {
       lastError = error;
       console.log(`   Attempt ${attempt} failed: ${error.message}`);

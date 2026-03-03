@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { verifyMerkleProof, hashNode, decodeNode } from "../src/mpt";
 import { RLP } from "@ethereumjs/rlp";
+import { ETHEREUM_DEPLOYER_ADDRESS } from "../../../shared/test-constants";
 
 describe("Merkle-Patricia Trie Core", () => {
     describe("verifyMerkleProof", () => {
@@ -157,7 +158,7 @@ describe("Merkle-Patricia Trie Core", () => {
 
     describe("Account Key Hashing", () => {
         test("should hash Ethereum address to get trie key", () => {
-            const address = "0x8943545177806ED17B9F23F0a21ee5948eCaa776";
+            const address = ETHEREUM_DEPLOYER_ADDRESS;
 
             // Address should be hashed with Keccak-256 to get the trie key
             // This will be implemented in the verifier
@@ -167,7 +168,7 @@ describe("Merkle-Patricia Trie Core", () => {
         });
 
         test("should produce consistent key for same address", () => {
-            const address = "0x8943545177806ED17B9F23F0a21ee5948eCaa776";
+            const address = ETHEREUM_DEPLOYER_ADDRESS;
 
             // Hashing should be deterministic
             const key1 = hashNode(Buffer.from(address.slice(2), "hex"));

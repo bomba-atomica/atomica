@@ -119,7 +119,7 @@ This addresses Requirement 3: "Validator set change (new public keys)".
 *   **Solution**: Light Client Sync Protocol.
 *   **Tech**: SSZ decoding, BLS verification.
 
-*   [x] **Plan Document**: Created `docs/plan/light_client_plan.md`
+*   [x] **Plan Document**: Created `docs/plans/light_client_plan.md`
 *   [x] **Stub Libraries**: `src/beacon/types.ts`, `fetch.ts`, `sync.ts`, `state.ts`
 *   [x] **Stub Tests**: `test/beacon/*.test.ts`
 *   [x] **Light Client Logic**:

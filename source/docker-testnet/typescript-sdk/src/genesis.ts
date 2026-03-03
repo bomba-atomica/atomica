@@ -181,6 +181,21 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
             dockerArgs.push("-e", `ATOMICA_DEBUG_TESTNET=${process.env.ATOMICA_DEBUG_TESTNET}`);
         }
 
+        // Pass deterministic credentials so the genesis script produces reproducible keys
+        const credentialEnvVars = [
+            "APTOS_ROOT_ACCOUNT_PUBLIC_KEY",
+            ...Array.from({ length: config.numValidators }, (_, i) => `APTOS_VALIDATOR_${i}_SEED`),
+        ];
+        for (const varName of credentialEnvVars) {
+            const value = process.env[varName];
+            if (!value) {
+                throw new Error(
+                    `Missing required credential env var: ${varName}. Load source/.env.test before running genesis.`,
+                );
+            }
+            dockerArgs.push("-e", `${varName}=${value}`);
+        }
+
         dockerArgs.push(
             genesisImage,
             "/genesis-script.sh",

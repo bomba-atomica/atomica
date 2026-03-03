@@ -14,7 +14,7 @@ The strongest argument for complementarity lies in a fundamental dimension that 
 
 AMMs excel at serving immediate liquidity needs. When a trader needs tokens *now*—whether for arbitrage, immediate consumption, or time-sensitive strategies—AMMs provide instant, continuous execution. This instant-gratification model has proven enormously successful, capturing billions in daily volume and becoming the default mental model for "DeFi trading."
 
-Atomica, by contrast, is architected around delayed execution. The daily batch auction with 12-24 hour batch settlement isn't a limitation to be apologized for—it's the core feature that enables the protocol's economics. Bidders need that settlement delay to hedge positions, manage inventory risk, and capture sustainable spreads. The batch auction model isn't something Atomica might "fix" later by adding instant swaps; it's economically fundamental to how the protocol works.
+Atomica, by contrast, is architected around delayed execution. The twice-daily batch auction model with 1-3 hour batch settlement isn't a limitation to be apologized for; it's the core feature that enables the protocol's economics. Bidders need that settlement delay to hedge positions, manage inventory risk, and capture sustainable spreads. The batch auction model isn't something Atomica might "fix" later by adding instant swaps; it's economically fundamental to how the protocol works.
 
 This creates a natural market segmentation analogous to traditional finance, where spot and batch auction markets coexist symbiotically. Spot markets serve immediate price discovery and instant settlement needs. batch auction markets serve scheduled execution, risk management, and strategic positioning. No serious market participant would argue that CME futures "compete" with NYSE spot markets—they're recognized as complementary infrastructure serving different purposes.
 
@@ -34,9 +34,9 @@ This narrative is particularly powerful when addressing DEX aggregators like 1in
 
 ## The Bidder-DEX Symbiosis: Volume Generation, Not Cannibalization
 
-Perhaps the most counterintuitive argument for complementarity involves Atomica's bidders—the Bidders who provide liquidity in daily auctions. On the surface, one might assume these bidders compete with DEX liquidity providers. But the economics reveal a symbiotic relationship that actually drives *additional* DEX volume.
+Perhaps the most counterintuitive argument for complementarity involves Atomica's bidders, the Bidders who provide liquidity in twice-daily auction windows. On the surface, one might assume these bidders compete with DEX liquidity providers. But the economics reveal a symbiotic relationship that actually drives *additional* DEX volume.
 
-Consider how a professional bidder operates on Atomica: They win an auction, acquiring ETH at $2,995 in the clearing price. But this creates immediate inventory risk—if ETH price moves against them during the 12-24 hour settlement window, they could lose money. The solution? Immediately hedge on a DEX or CEX by selling ETH at the current market price of $3,000. This locks in their spread profit while eliminating directional price risk.
+Consider how a professional bidder operates on Atomica: they win an auction, acquiring ETH at $2,995 in the clearing price. But this creates immediate inventory risk; if ETH price moves against them during the 1-3 hour settlement window, they could lose money. The solution is to hedge on a DEX or CEX by selling ETH at the current market price of $3,000. This locks in their spread profit while eliminating directional price risk.
 
 The critical insight: *every dollar of Atomica volume generates approximately one dollar of hedging volume on DEXes*. Atomica bidders are DEX power users who will trade *more*, not less. Rather than cannibalizing DEX volume, Atomica creates a new class of sophisticated traders who require DEX liquidity for their hedging strategies.
 
@@ -182,4 +182,4 @@ That narrative transformation—from potential competitor to ecosystem infrastru
 - [Market Volume by Participant Category](./market-volume-by-participant-category.md)
 - [GTM Pull Strategy](./gtm-considerations.md)
 - [CoW Swap vs OTC Analysis](../background/cowswap-otc-analysis.md)
-- [Product Design v0](../design/product-design-v0-ARCHIVED.md)
+- [Product Design v0](../archived/product-design-v0-archived.md)

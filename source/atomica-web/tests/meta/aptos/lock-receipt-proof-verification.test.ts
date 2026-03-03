@@ -13,6 +13,11 @@ import {
   getTestnet,
   teardownLocalnet,
 } from "../../../test-utils/localnet";
+import {
+  APTOS_DEPLOYER_PRIVATE_KEY,
+  APTOS_ATOMICA_CONTRACT_ADDRESS,
+  ETHEREUM_DEPLOYER_ADDRESS,
+} from "../../../../shared/test-constants";
 
 /**
  * Aptos Lock Receipt Proof Verification Test
@@ -26,10 +31,8 @@ import {
 describe.sequential("Aptos Lock Receipt Proof Verification", () => {
   let aptos: Aptos;
   let deployer: Account;
-  const deployerPrivateKeyHex =
-    "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
-  const aptosModuleAddress =
-    "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
+  const deployerPrivateKeyHex = APTOS_DEPLOYER_PRIVATE_KEY;
+  const aptosModuleAddress = APTOS_ATOMICA_CONTRACT_ADDRESS;
 
   beforeAll(async () => {
     // 1. Setup localnet
@@ -85,7 +88,7 @@ describe.sequential("Aptos Lock Receipt Proof Verification", () => {
     // but we expect it to fail verification because the state root won't match
     // our current environment (which is fine, we want to see the error type)
 
-    const ethUserAddress = "0x8943545177806ED17B9F23F0a21ee5948eCaa776";
+    const ethUserAddress = ETHEREUM_DEPLOYER_ADDRESS;
 
     // Create a random account to try and sign (should fail E_UNAUTHORIZED_SIGNER)
     const attacker = Account.generate();
@@ -163,7 +166,7 @@ describe.sequential("Aptos Lock Receipt Proof Verification", () => {
   it("should identify correct signer mapping", async () => {
     // Ethereum address: 0x8943545177806ED17B9F23F0a21ee5948eCaa776
     // Move address_from_bytes pads with 12 bytes of zeros
-    const ethUserAddress = "0x8943545177806ED17B9F23F0a21ee5948eCaa776";
+    const ethUserAddress = ETHEREUM_DEPLOYER_ADDRESS;
     const expectedAptosAddress =
       "0x0000000000000000000000008943545177806ED17B9F23F0a21ee5948eCaa776";
 

@@ -1,12 +1,14 @@
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+import { buildAptosFullnodeUrl, getStoredHost } from "../network-host";
+import { getChainConfig } from "../chain-config.ts";
 
-const NODE_URL = "http://127.0.0.1:8080/v1";
-// Use safer env access that works in Node (test/ts-node) and Vite
-const env =
-  (import.meta as { env?: Record<string, string> }).env || process.env || {};
-export const CONTRACT_ADDR = env.VITE_CONTRACT_ADDRESS || "0x1";
+const { aptos: chainConfig } = getChainConfig();
+export const CONTRACT_ADDR = chainConfig.contractAddress;
 
-const config = new AptosConfig({ network: Network.LOCAL, fullnode: NODE_URL });
+const config = new AptosConfig({
+  network: Network.LOCAL,
+  fullnode: buildAptosFullnodeUrl(getStoredHost()),
+});
 export let aptos = new Aptos(config);
 
 export function setAptosInstance(instance: Aptos) {

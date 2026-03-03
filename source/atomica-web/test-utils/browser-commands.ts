@@ -107,11 +107,23 @@ import {
   fundAccount,
   // killZombies, // Unused - setupLocalnet handles cleanup internally
 } from "./localnet";
+import {
+  setupEthereumTestnet,
+  teardownEthereumTestnet,
+} from "./ethereum-testnet";
 
 /**
  * Module augmentation to add our custom commands to Vitest's browser commands types.
  * This provides TypeScript autocomplete and type checking in browser tests.
  */
+export interface EthereumTestnetInfo {
+  rpcUrl: string;
+  fakeETH: string;
+  fakeUSD: string;
+  signerPrivateKey: string;
+  chainId: number;
+}
+
 declare module "vitest/browser" {
   interface BrowserCommands {
     setupLocalnet(): Promise<{ success: boolean }>;
@@ -121,6 +133,8 @@ declare module "vitest/browser" {
       address: string,
       amount?: number,
     ): Promise<{ success: boolean; txHash: string }>;
+    setupEthereumTestnet(): Promise<EthereumTestnetInfo>;
+    teardownEthereumTestnet(): Promise<{ success: boolean }>;
   }
 }
 
@@ -231,4 +245,26 @@ export const fundAccountCommand: BrowserCommand<
 > = async (_context, address: string, amount: number = 100_000_000) => {
   const result = await fundAccount(address, amount);
   return { success: true, txHash: result };
+};
+
+/**
+ * Start an Ethereum Docker testnet and deploy FakeETH + FakeUSD contracts.
+ *
+ * Returns JSON-serializable connection info so the browser test can set up
+ * its wallet mock and verify on-chain balances.
+ *
+ * EXECUTION: Node.js (browser can't start Docker containers)
+ */
+export const setupEthereumTestnetCommand: BrowserCommand<[]> = async () => {
+  return await setupEthereumTestnet();
+};
+
+/**
+ * Tear down the Ethereum Docker testnet started by setupEthereumTestnetCommand.
+ *
+ * EXECUTION: Node.js
+ */
+export const teardownEthereumTestnetCommand: BrowserCommand<[]> = async () => {
+  await teardownEthereumTestnet();
+  return { success: true };
 };

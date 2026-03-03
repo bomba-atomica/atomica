@@ -54,12 +54,12 @@ module atomica::fake_usd {
         });
     }
 
-    /// Mint FAKEUSD to yourself
-    /// Anyone can call this (it's a faucet for testing)
-    /// Maximum 10,000 FAKEUSD per mint transaction
-    /// 
-    /// DEPRECATED: Use mint_from_lock() for production cross-chain minting
-    /// This function is for testing only
+    /// Mint FAKEUSD to yourself (legacy Aptos test helper).
+    /// Anyone can call this (it's a faucet for testing).
+    /// Maximum 10,000 FAKEUSD per mint transaction.
+    ///
+    /// DEPRECATED: Canonical fake-token issuance is EVM-only.
+    /// Aptos-side fake token minting is legacy prototype behavior.
     public entry fun mint(account: &signer, amount: u64) acquires ManagingRefs {
         // Enforce maximum mint amount per transaction
         assert!(amount <= MAX_MINT_AMOUNT, E_EXCEEDS_MAX_MINT);
@@ -75,14 +75,15 @@ module atomica::fake_usd {
         primary_fungible_store::deposit(recipient, fa);
     }
 
-    /// Mint FAKEUSD from a verified Ethereum lock receipt
-    /// This is the production minting path for cross-chain bridge operations
-    /// 
+    /// Mint FAKEUSD from a verified Ethereum lock receipt (legacy bridge prototype helper).
+    /// DEPRECATED: In canonical flow, receipts are consumed for Aptos auction/settlement
+    /// accounting and FakeETH/FakeUSD are not minted on Aptos.
+    ///
     /// Process:
     /// 1. User locks USDC on Ethereum via LockBox contract
     /// 2. User generates Ethereum state proof off-chain
     /// 3. User registers lock on Aptos via lock_receipt::register_ethereum_lock<FakeUSD>()
-    /// 4. User calls this function to claim and mint tokens
+    /// 4. (Legacy only) user calls this function to claim and mint Aptos FA
     /// 
     /// Decimal conversion:
     /// - Ethereum USDC uses 6 decimals
@@ -106,7 +107,7 @@ module atomica::fake_usd {
         assert!(amount_u256 <= (18446744073709551615 as u256), E_AMOUNT_OVERFLOW);
         let amount = (amount_u256 as u64);
         
-        // Mint the tokens
+        // Legacy prototype behavior: mint Aptos FA from claimed receipt amount.
         let refs = borrow_global<ManagingRefs>(@atomica);
         let fa = fungible_asset::mint(&refs.mint_ref, amount);
         primary_fungible_store::deposit(user, fa);

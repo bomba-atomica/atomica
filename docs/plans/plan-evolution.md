@@ -257,9 +257,9 @@ Future: Additional chains, improved proof systems, etc.
 
 This evolution roadmap is referenced from:
 
-- **PRD.md**: Product requirements and high-level goals
-- **docs/plan/evm-contracts-implementation-plan.md**: EVM contract implementation
-- **docs/plan/ethereum-state-verification-plan.md**: State proof verification strategy
+- **docs/specifications/prd.md**: Product requirements and high-level goals
+- **docs/plans/evm-contracts-implementation.md**: EVM contract implementation
+- **docs/plans/ethereum-state-verification.md**: State proof verification strategy
 - **docs/technical/aptos-proof-systems-summary.md**: Proof system architecture
 - **docs/technical/cryptographic-stack-analysis.md**: Cryptographic components
 

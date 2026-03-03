@@ -475,7 +475,7 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
    - Eliminate slippage from depegging
 
 4. **"Predictable settlement = better hedging = higher profits"**
-   - Fixed 17:00 UTC auction time
+   - Fixed auction windows at 07:45 UTC and 16:15 UTC
    - Plan offsetting positions in advance
 
 5. **"The professional's choice for cross-chain arbitrage"**
@@ -693,10 +693,10 @@ Unlike traditional two-sided markets, cross-chain arbitrageurs naturally partici
 ---
 
 **Related Documents:**
-- [Dual Auction Timing Specification](./dual-auction-timing.md) - Current canonical timing strategy
+- [Auction Timing Specification](../specifications/auction-timing.md) - Current canonical timing strategy
 - [Optimal Time of Day Analysis](./optimal-time-of-day.md) - Historical research on timezone strategy
-- [Product Design v0](../design/product-design-v0-ARCHIVED.md) - Atomica auction mechanism
-- [batch auction model](../design/batch-auction-economics.md) - Why batch settlement works
+- [Product Design v0](../archived/product-design-v0-archived.md) - Atomica auction mechanism
+- [batch auction model](../game-theory/batch-auction-economics.md) - Why batch settlement works
 
 **Version:** 1.0
 **Date:** 2025-11-15

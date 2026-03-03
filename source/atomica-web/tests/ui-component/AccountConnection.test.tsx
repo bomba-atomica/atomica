@@ -8,10 +8,10 @@ import {
 } from "@testing-library/react";
 import App from "../../src/App";
 import { MockWallet } from "../../test-utils/browser-utils/MockWallet";
+import { APTOS_DEPLOYER_PRIVATE_KEY } from "../../../shared/test-constants";
 
 // Random secp256k1 private key for testing
-const TEST_PK =
-  "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
+const TEST_PK = APTOS_DEPLOYER_PRIVATE_KEY;
 const mockWallet = new MockWallet(TEST_PK);
 
 describe("Account Connection Flow", () => {

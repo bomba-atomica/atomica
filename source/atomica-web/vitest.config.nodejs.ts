@@ -67,10 +67,17 @@
  * - test-utils/localnet.ts - Localnet management utilities
  */
 
-import { defineConfig } from "vitest/config";
+import { defineConfig, loadEnv } from "vite";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+// Load all vars from source/.env.test (empty prefix = no filter)
+const testEnv = loadEnv("test", resolve(__dirname, ".."), "");
 
 export default defineConfig({
   test: {
+    env: testEnv,
     /**
      * SEQUENTIAL EXECUTION: Tests run one at a time
      *

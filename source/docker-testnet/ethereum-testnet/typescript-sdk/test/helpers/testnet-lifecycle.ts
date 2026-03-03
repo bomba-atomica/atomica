@@ -1,6 +1,12 @@
 import { spawn } from "child_process";
-import { existsSync } from "fs";
-import { resolve as pathResolve } from "path";
+import { dirname, resolve } from "path";
+import { fileURLToPath } from "url";
+
+/** Config directory containing docker-compose.yaml and setup scripts */
+const CONFIG_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../config",
+);
 import { EthereumDockerTestnet } from "../../src/index";
 
 let globalTestnet: EthereumDockerTestnet | undefined;
@@ -33,7 +39,7 @@ export async function performCleanup(reason: string): Promise<void> {
       "⚠ Testnet was never initialized, attempting cleanup anyway...",
     );
     try {
-      const configDir = findConfigDir();
+      const configDir = CONFIG_DIR;
 
       await new Promise<void>((resolve) => {
         const proc = spawn(
@@ -114,25 +120,6 @@ export function setGlobalTestnet(
  */
 export function getGlobalTestnet(): EthereumDockerTestnet | undefined {
   return globalTestnet;
-}
-
-/**
- * Helper to find config directory
- */
-function findConfigDir(): string {
-  const candidates = [
-    pathResolve(__dirname, "../../../config"),
-    pathResolve(process.cwd(), "source/docker-testnet/ethereum-testnet/config"),
-    pathResolve(process.cwd(), "config"),
-  ];
-
-  for (const path of candidates) {
-    if (existsSync(pathResolve(path, "docker-compose.yaml"))) {
-      return path;
-    }
-  }
-
-  throw new Error("Could not find ethereum-testnet/config directory");
 }
 
 /**

@@ -4094,11 +4094,11 @@ See [Cannon/AMM fraud proof research](https://github.com/ethereum-optimism/canno
 
 ### Created Files
 
-- `/home/lucas/atomica/docs/plan/evm-contracts-implementation-plan.md` - Complete implementation plan (updated with SDK integration)
-- `/home/lucas/atomica/docs/development/docker-testnet-sdk-integration.md` - Comprehensive Docker and SDK integration guide
-- `/home/lucas/atomica/docs/development/quick-reference.md` - Quick reference guide
-- `/home/lucas/atomica/docs/development/contract-interfaces.sol` - Solidity interfaces for all contracts
-- `/home/lucas/atomica/docs/PLAN-EVOLUTION.md` - Protocol evolution roadmap (v0 → v1 → v2)
+- `/Users/lucas/code/rust/atomica/docs/plans/evm-contracts-implementation.md` - Complete implementation plan (updated with SDK integration)
+- `/Users/lucas/code/rust/atomica/docs/development/docker-testnet-sdk-integration.md` - Comprehensive Docker and SDK integration guide
+- `/Users/lucas/code/rust/atomica/docs/development/quick-reference.md` - Quick reference guide
+- `/Users/lucas/code/rust/atomica/docs/development/contract-interfaces.sol` - Solidity interfaces for all contracts
+- `/Users/lucas/code/rust/atomica/docs/plans/plan-evolution.md` - Protocol evolution roadmap (v0 → v1 → v2)
 
 ### Next Steps
 

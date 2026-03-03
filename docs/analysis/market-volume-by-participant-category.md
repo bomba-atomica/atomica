@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document analyzes global crypto trading volume by participant category and estimates Atomica's addressable market. For go-to-market strategy, see [GTM Pull Strategy](./gtm-considerations.md). For auction timing analysis, see [Optimal Time of Day](./optimal-time-of-day.md).
+This document analyzes global crypto trading volume by participant category and estimates Atomica's addressable market. For go-to-market strategy, see [GTM Pull Strategy](./gtm-considerations.md). For auction timing, see [Auction Timing Specification](../specifications/auction-timing.md).
 
 **Key Findings:**
 - Total daily spot crypto trading volume: **$133-198B**
@@ -67,7 +67,7 @@ This document analyzes global crypto trading volume by participant category and 
 - Fairly distributed across all global sessions (30% Asian, 35% European, 35% US)
 - Slight US/Asia bias in volume concentration
 
-*For detailed time-of-day distribution, see [Optimal Time of Day Analysis](./optimal-time-of-day.md)*
+*For canonical timing decisions, see [Auction Timing Specification](../specifications/auction-timing.md).*
 
 #### Atomica Addressability: **LOW (2-5%)**
 
@@ -296,7 +296,7 @@ This document analyzes global crypto trading volume by participant category and 
 #### Atomica Addressability: **VERY LOW as customers (0-1%)**
 
 **Why OTC desks won't use Atomica:**
-- OTC desks offer instant execution; won't route through daily auctions
+- OTC desks offer instant execution; unlikely to route through scheduled auction windows
 - Their business model is service + spread markup
 - Clients pay for speed and certainty
 
@@ -428,7 +428,7 @@ This 8-hour window captures:
 
 Following a strategic shift, Atomica has moved from a single daily auction to a dual-auction model to maximize global institutional coverage. 
 
-**See: [Dual Auction Timing Specification](./dual-auction-timing.md)** for the current canonical specification.
+**See: [Auction Timing Specification](../specifications/auction-timing.md)** for the current canonical specification.
 
 ### Why the Dual-Auction Model is Optimal for Atomica
 
@@ -638,7 +638,7 @@ Following a strategic shift, Atomica has moved from a single daily auction to a 
 - Optimal for Tier 1 target segments (DAOs, DeFi institutions) globally.
 - Maximizes bidder participation across all major financial hubs.
 - Aligns with traditional market hours (price discovery reference) in both hemispheres.
-- **See: [Dual Auction Timing Specification](./dual-auction-timing.md)**
+- **See: [Auction Timing Specification](../specifications/auction-timing.md)**
 
 ---
 
@@ -649,7 +649,7 @@ Following a strategic shift, Atomica has moved from a single daily auction to a 
 | Dimension | CoW Swap | Atomica |
 |-----------|----------|---------|
 | **Cross-chain** | ❌ Single-chain only | ✅ Native cross-chain settlement |
-| **Auction frequency** | Every few minutes | Once daily (17:00 UTC) |
+| **Auction frequency** | Every few minutes | Twice daily (07:45 UTC, 16:15 UTC) |
 | **Bridge risk** | Requires bridges for cross-chain | ✅ No bridges, native settlement |
 | **DAO adoption** | ✅ 1/3 of DAO volume | 🎯 Target: 40-60% of cross-chain DAO volume |
 | **Market share** | 42% peak (Ethereum DEX aggregators) | 🎯 Target: Market leader for cross-chain |
@@ -668,7 +668,7 @@ Following a strategic shift, Atomica has moved from a single daily auction to a 
 | **Custody** | ❌ Requires prefunding | ✅ Non-custodial |
 | **Governance-friendly** | ❌ Hard to audit | ✅ On-chain settlement |
 | **DeFi token support** | ❌ CEX-listed only | ✅ Any token with liquidity |
-| **Execution speed** | ✅ Instant | ⚠️ Once daily |
+| **Execution speed** | ✅ Instant | ⚠️ Scheduled windows (twice daily) |
 | **White-glove service** | ✅ Human relationship managers | ❌ Automated |
 
 **Key insight:** Atomica won't replace OTC desks for BTC/ETH, but will capture DAO treasuries and DeFi-native token trading (which OTC desks can't serve).
@@ -694,13 +694,13 @@ Following a strategic shift, Atomica has moved from a single daily auction to a 
    - Build solver network similar to CoW Swap model
    - Provide analytics and tools for professional bidders
 
-4. **17:00 UTC timing is optimal**: Already correct in current design
-   - Captures peak addressable volume window
-   - Aligns with DAO coordination needs
-   - Maximizes professional bidder participation
+4. **Dual-window timing is optimal**: Already correct in current design
+   - Uses fixed auctions at 07:45 UTC and 16:15 UTC
+   - Aligns with global desk-overlap coordination needs
+   - Maximizes professional bidder participation across regions
 
 5. **Specify in UTC, not "ET"**: Avoid DST confusion
-   - Update product design doc to specify **17:00 UTC**
+   - Update product design docs to specify **07:45 UTC and 16:15 UTC**
    - Frontend displays local time, backend uses UTC
    - Smart contracts use block timestamps (UTC-based)
 
@@ -950,7 +950,7 @@ Unlike market risk (which can be hedged), bridge risk is binary and catastrophic
 | **Counterparty risk** | Bridge smart contracts + validators | Atomic settlement (zero counterparty risk) |
 | **Depegging risk** | High (wrapped tokens) | Zero (native assets) |
 | **Hack risk** | $2B+ annual losses | Zero (no bridge) |
-| **Predictability** | Variable (bridge congestion) | Fixed schedule (17:00 UTC daily) |
+| **Predictability** | Variable (bridge congestion) | Fixed schedule (07:45/16:15 UTC windows) |
 
 **Key insight: Bridge arbitrageurs are ALREADY doing batch auction trading, they just don't realize it.**
 
@@ -962,7 +962,7 @@ When an arbitrageur bridges ETH from Ethereum to Arbitrum:
 **Atomica is just a better batch settlement mechanism:**
 - Same settlement delay (12-24h is acceptable to arbitrageurs already using bridges)
 - Superior safety (atomic settlement vs. bridge risk)
-- Better predictability (fixed 17:00 UTC vs. variable bridge times)
+- Better predictability (fixed UTC windows vs. variable bridge times)
 - Native asset delivery (no wrapped token depegging)
 
 ---
@@ -994,7 +994,7 @@ When an arbitrageur bridges ETH from Ethereum to Arbitrum:
 - Uncertainty complicates hedging strategies
 
 **With Atomica:**
-- Fixed settlement: 17:00 UTC daily auction, 12-24h delivery
+- Fixed settlement windows: 07:45/16:15 UTC auctions, 1-3h delivery
 - Known schedule enables precise hedging
 - Can plan offsetting positions in advance
 
@@ -1149,12 +1149,12 @@ Atomica_profit = Spread - Auction_spread - (Settlement_delay_premium)
    └─ Risk premium: $0 (no bridge)
    └─ Net profit: $5.50 → PROFITABLE ✅
 
-3. Submit sealed bid to Atomica auction at 17:00 UTC
+3. Submit sealed bid to Atomica auction window (07:45 UTC or 16:15 UTC)
    └─ Bid to buy ETH on Ethereum, deliver on Arbitrum
    └─ Max bid: $3,005.50 (leaves $4.50 profit margin)
    └─ Simultaneously: Short ETH on Arbitrum at $3,010 (hedge)
 
-4. Wait for auction settlement (24h)
+4. Wait for auction settlement (1-3h)
    └─ Auction clears at $3,004 (uniform price)
    └─ Receive ETH on Ethereum
    └─ Deliver to Arbitrum (native asset)
@@ -1747,8 +1747,8 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
   - Profit: $10 - bridge fees - depegging risk
 
 - **With Atomica**: Same price difference detected
-  - Submits sealed bid in daily auction to buy ATOMICA on Ethereum, deliver on Arbitrum
-  - Settlement in 24h via native atomic swap (no bridge)
+  - Submits sealed bid in a fixed-window auction to buy ATOMICA on Ethereum, deliver on Arbitrum
+  - Settlement in 1-3h via native atomic swap (no bridge)
   - Profit: $10 - auction spread - **zero bridge risk**
 
 ---
@@ -1867,9 +1867,9 @@ Even in early days with limited bidders, arbitrageurs accept some spread risk be
 
 **Strategy & Execution:**
 - [GTM Pull Strategy](./gtm-considerations.md) - Go-to-market strategy focused on individual arbitrageurs
-- [Optimal Time of Day](./optimal-time-of-day.md) - Auction timing analysis and timezone considerations
+- [Auction Timing Specification](../specifications/auction-timing.md) - Canonical auction timing
 
 **Product Design:**
-- [Product Design v0](../design/product-design-v0-ARCHIVED.md) - Atomica auction mechanism design
-- [batch auction model](../design/batch-auction-economics.md) - Why Atomica uses batch settlement
-- [Design Principles](../../PRD.md#design-principles--system-properties) - Target solution properties
+- [Product Design v0](../archived/product-design-v0-archived.md) - Atomica auction mechanism design
+- [batch auction model](../game-theory/batch-auction-economics.md) - Why Atomica uses batch settlement
+- [Design Principles](../specifications/prd.md#design-principles--system-properties) - Target solution properties

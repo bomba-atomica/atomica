@@ -29,12 +29,17 @@ import {
   InputEntryFunctionData,
 } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "../../src/lib/aptos";
+import {
+  ETHEREUM_DEPLOYER_ADDRESS,
+  ETHEREUM_DEPLOYER_PRIVATE_KEY,
+} from "../../../shared/test-constants";
 
-const DEPLOYER_ADDR =
-  "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
-const TEST_ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"; // Hardhat Account 0
-const TEST_PK =
-  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+const TEST_ACCOUNT = ETHEREUM_DEPLOYER_ADDRESS;
+const TEST_PK = ETHEREUM_DEPLOYER_PRIVATE_KEY;
+
+// Recipient for the APT transfer used as the test transaction
+const TRANSFER_RECIPIENT =
+  "0x0000000000000000000000000000000000000000000000000000000000000001";
 
 describe.sequential("TxButton Skip & Submit Mode", () => {
   let derivedAddr: string;
@@ -43,9 +48,8 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
   beforeAll(async () => {
     console.log("Setting up browser test environment...");
 
-    // 1. Setup Localnet & Contracts (via browser commands)
+    // 1. Setup Localnet (no contract deployment needed — we use native APT transfer)
     await commands.setupLocalnet();
-    await commands.deployContracts();
 
     // 2. Inject fetch-compatible Aptos instance
     const config = new AptosConfig({
@@ -69,13 +73,6 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     // Wait for funding to be indexed
     await new Promise<void>((resolve) => setTimeout(resolve, 2000));
 
-    // Note: window.location is already available in real browser tests
-    // No need to mock it - Vitest browser mode provides a real browser context
-    console.log(
-      "[TxButton Test] Using browser window.location:",
-      window.location.origin,
-    );
-
     console.log("Browser test environment ready");
   }, 120000);
 
@@ -88,17 +85,19 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     cleanup();
   });
 
-  it("should skip simulation and submit FakeEth mint directly", async () => {
+  it("should skip simulation and submit APT transfer directly", async () => {
     let txHash: string | null = null;
 
+    // Use a native APT transfer as the test transaction.
+    // FakeETH/FakeUSD minting is EVM-only; TxButton tests Aptos tx lifecycle.
     const prepareTransaction = (): InputEntryFunctionData => ({
-      function: `${DEPLOYER_ADDR}::fake_eth::mint`,
-      functionArguments: [1000000000], // 10 FAKEETH
+      function: "0x1::aptos_account::transfer",
+      functionArguments: [TRANSFER_RECIPIENT, 1000], // 1000 octas
     });
 
     render(
       <TxButton
-        label="10 ETH"
+        label="Transfer APT"
         accountAddress={TEST_ACCOUNT}
         prepareTransaction={prepareTransaction}
         onSuccess={(hash) => {
@@ -133,16 +132,11 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
     expect(txHash).toBeTruthy();
     console.log("Transaction submitted directly:", txHash);
 
-    // Verify balance on-chain using view function (same as production)
-    const balanceResult = await aptos.view({
-      payload: {
-        function: `${DEPLOYER_ADDR}::fake_eth::balance`,
-        functionArguments: [derivedAddr],
-      },
+    // Verify the transaction executed on-chain
+    const txInfo = await aptos.waitForTransaction({
+      transactionHash: txHash!,
     });
-    const balance = Number(balanceResult[0]);
-
-    expect(Number(balance)).toBeGreaterThan(0);
-    console.log("Balance verified:", balance);
+    expect(txInfo.success).toBe(true);
+    console.log("Transaction confirmed on-chain:", txHash);
   }, 90000);
 });

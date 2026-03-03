@@ -20,6 +20,10 @@ import {
   waitForModuleIndexed,
   verifyModuleCallable,
 } from "../../aptos/helpers/module-indexing-utils";
+import {
+  APTOS_DEPLOYER_PRIVATE_KEY,
+  APTOS_ATOMICA_CONTRACT_ADDRESS,
+} from "../../../../../shared/test-constants";
 
 export interface DualChainFixture {
   eth: {
@@ -201,13 +205,12 @@ export async function setupDualChainFixture(
 
   // Create deployer account for contracts
   // Use the same key as localnet.ts for consistency
-  const deployerPrivateKeyHex =
-    "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
+  const deployerPrivateKeyHex = APTOS_DEPLOYER_PRIVATE_KEY;
   const deployerPrivateKey = new Ed25519PrivateKey(deployerPrivateKeyHex);
   const aptosDeployer = Account.fromPrivateKey({
     privateKey: deployerPrivateKey,
   });
-  const aptosModuleAddress = aptosDeployer.accountAddress.toString();
+  const aptosModuleAddress = APTOS_ATOMICA_CONTRACT_ADDRESS;
 
   console.log(`✓ Aptos account: ${aptosAccount.accountAddress.toString()}`);
   console.log(`✓ Aptos deployer: ${aptosModuleAddress}`);

@@ -137,19 +137,28 @@ export function pollBalances(
   intervalMs: number = 5000,
 ): () => void {
   let stopped = false;
+  let retryCount = 0;
+  const maxIntervalMs = 60000;
 
   async function poll() {
     if (stopped) return;
 
+    let failed = false;
     try {
       const balances = await getAllBalances(address);
       callback(balances);
     } catch (error) {
+      failed = true;
       console.error("Error polling balances:", error);
     }
 
+    retryCount = failed ? retryCount + 1 : 0;
+    const nextDelay = failed
+      ? Math.min(intervalMs * 2 ** retryCount, maxIntervalMs)
+      : intervalMs;
+
     if (!stopped) {
-      setTimeout(poll, intervalMs);
+      setTimeout(poll, nextDelay);
     }
   }
 

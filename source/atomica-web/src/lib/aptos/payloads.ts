@@ -2,6 +2,7 @@ import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
 import { CONTRACT_ADDR, aptos } from "./config";
 import { getDerivedAddress } from "./siwe";
 import { submitNativeTransaction } from "./transaction";
+import { getStoredHost } from "../network-host";
 
 /**
  * Sanity Test: Simple APT transfer using MetaMask signature
@@ -46,7 +47,9 @@ export async function testSimpleAPTTransfer(
     console.log("\n✅ SANITY TEST PASSED!");
     console.log("Transaction hash:", result.hash);
     console.log("\nConclusion: Signature verification is working correctly!");
-    console.log("The issue with FAKEETH::mint is likely contract-specific\n");
+    console.log(
+      "The issue with the custom contract call is likely contract-specific\n",
+    );
 
     return { success: true, hash: result.hash };
   } catch (e: unknown) {
@@ -63,118 +66,46 @@ export async function testSimpleAPTTransfer(
 }
 
 /**
- * Step 1: Request APT tokens from faucet for gas
+ * Step 1: Request APT tokens for gas via web funding API
  */
 export async function requestAPT(ethAddress: string) {
   // Always use lowercase for consistency with submitNativeTransaction
   const derived = await getDerivedAddress(ethAddress.toLowerCase());
-  const FAUCET_URL = "http://127.0.0.1:8081";
+  const host = getStoredHost();
 
-  console.log("=== Requesting APT from Faucet ===");
+  console.log("=== Requesting APT from Funding API ===");
   console.log("  Ethereum Address:", ethAddress);
   console.log("  Aptos Derived Address:", derived.toString());
   console.log("  Funding address:", derived.toString());
+  console.log("  Funding host:", host);
 
-  const res = await fetch(
-    `${FAUCET_URL}/mint?amount=100000000&address=${derived.toString()}`,
-    { method: "POST" },
-  );
+  const res = await fetch("/api/aptos/fund", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      address: derived.toString(),
+      amount: 100000000,
+      host,
+    }),
+  });
+
+  const body = (await res.json().catch(() => ({}))) as {
+    txHash?: string;
+    error?: string;
+  };
+
   if (!res.ok) {
-    const text = await res.text().catch(() => "No response text");
+    const text = body.error || "No response text";
     console.error(
-      `Faucet API Failed: ${res.status} ${res.statusText} - ${text}`,
+      `Funding API Failed: ${res.status} ${res.statusText} - ${text}`,
     );
-    throw new Error(`Faucet API Failed: ${text}`);
+    throw new Error(`Funding API Failed: ${text}`);
   }
 
   // Wait slightly for balance to reflect (local node is fast but async)
   await new Promise((r) => setTimeout(r, 1000));
 
-  return { hash: "apt-funded" };
-}
-
-/**
- * Mint FAKEETH Payload Builder
- *
- * @deprecated Fake tokens should be minted on the Ethereum testnet via MetaMask
- * (see `lib/ethereum/transaction.ts` — `mintFakeETH()`), not directly on Aptos.
- * The correct user flow is: mint on Ethereum → lock in LockBox → bridge via
- * state proof → `fake_eth::mint_from_lock()` on Aptos.
- * This Aptos-side direct mint exists only for legacy test compatibility.
- */
-export async function getMintFakeEthPayload(): Promise<InputGenerateTransactionPayloadData> {
-  // Verify contracts are deployed before building payload
-  const deployed = await areContractsDeployed();
-  if (!deployed) {
-    throw new Error(
-      "fake_eth contract not deployed yet. Please wait for contract deployment to complete.",
-    );
-  }
-
-  const amountEth = BigInt(10) * BigInt(100_000_000); // 10 FAKEETH with 8 decimals
-  return {
-    function: `${CONTRACT_ADDR}::fake_eth::mint`,
-    functionArguments: [amountEth],
-  };
-}
-
-/**
- * Mint FAKEETH (10 ETH)
- */
-export async function mintFakeEth(ethAddress: string) {
-  console.log("\n=== Minting FAKEETH ===");
-  return await submitNativeTransaction(
-    ethAddress,
-    await getMintFakeEthPayload(),
-  );
-}
-
-/**
- * Mint FAKEUSD Payload Builder
- *
- * @deprecated Fake tokens should be minted on the Ethereum testnet via MetaMask
- * (see `lib/ethereum/transaction.ts` — `mintFakeUSD()`), not directly on Aptos.
- * The correct user flow is: mint on Ethereum → lock in LockBox → bridge via
- * state proof → `fake_usd::mint_from_lock()` on Aptos.
- * This Aptos-side direct mint exists only for legacy test compatibility.
- */
-export async function getMintFakeUsdPayload(): Promise<InputGenerateTransactionPayloadData> {
-  // Verify contracts are deployed before building payload
-  const deployed = await areContractsDeployed();
-  if (!deployed) {
-    throw new Error(
-      "fake_usd contract not deployed yet. Please wait for contract deployment to complete.",
-    );
-  }
-
-  const amountUsd = BigInt(10000) * BigInt(1_000_000); // 10,000 USD with 6 decimals
-  return {
-    function: `${CONTRACT_ADDR}::fake_usd::mint`,
-    functionArguments: [amountUsd],
-  };
-}
-
-/**
- * Mint FAKEUSD (10,000 USD)
- */
-export async function mintFakeUsd(ethAddress: string) {
-  console.log("\n=== Minting FAKEUSD ===");
-  return await submitNativeTransaction(
-    ethAddress,
-    await getMintFakeUsdPayload(),
-  );
-}
-
-/**
- * Step 2: Mint test tokens (FAKEETH and FAKEUSD)
- * Requires contracts to be deployed
- * @deprecated Aptos-side direct minting is vestigial. Fake tokens should be
- * minted on Ethereum and bridged to Aptos. See `lib/ethereum/transaction.ts`.
- */
-export async function requestTestTokens(ethAddress: string) {
-  await mintFakeEth(ethAddress);
-  await mintFakeUsd(ethAddress);
-  return { hash: "test-tokens-minted" };
+  return { hash: body.txHash || "apt-funded" };
 }
 
 /**
@@ -198,14 +129,20 @@ export async function areContractsDeployed(): Promise<boolean> {
   }
 }
 
-/**
- * Legacy function for backward compatibility
- * @deprecated Use requestAPT() and requestTestTokens() separately
- */
-export async function submitFaucet(ethAddress: string) {
-  await requestAPT(ethAddress);
-  await requestTestTokens(ethAddress);
-  return { hash: "gas-fakeeth-fakeusd-minted" };
+export async function areCoreContractsDeployed(): Promise<boolean> {
+  const requiredModules = ["registry", "auction", "lock_receipt"];
+  try {
+    const modules = await aptos.getAccountModules({
+      accountAddress: CONTRACT_ADDR,
+    });
+    const deployed = new Set(
+      modules.map((module) => module.abi?.name).filter(Boolean),
+    );
+    return requiredModules.every((name) => deployed.has(name));
+  } catch (e) {
+    console.log("Core Aptos contracts not yet deployed:", e);
+    return false;
+  }
 }
 
 export function getCreateAuctionPayload(

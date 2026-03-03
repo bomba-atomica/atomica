@@ -56,18 +56,20 @@ import {
   submitNativeTransaction,
 } from "../../../src/lib/aptos";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+import {
+  ETHEREUM_ACCOUNT_0_ADDRESS,
+  ETHEREUM_ACCOUNT_0_PRIVATE_KEY,
+} from "../../../../shared/test-constants";
 
-const TEST_ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"; // Hardhat Account 0
-const TEST_PK =
-  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+const TEST_ACCOUNT = ETHEREUM_ACCOUNT_0_ADDRESS; // Hardhat Account 0
+const TEST_PK = ETHEREUM_ACCOUNT_0_PRIVATE_KEY;
 
 describe.sequential(
   "MetaMask Mock Fidelity - Simple Transfer (Browser)",
   () => {
     beforeAll(async () => {
-      // 1. Ensure localnet is running and contracts deployed
+      // 1. Ensure localnet is running (no contract deployment needed — test uses native APT transfer)
       await commands.setupLocalnet();
-      await commands.deployContracts();
 
       console.log("[Browser Test] Initializing test environment...");
 

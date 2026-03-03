@@ -128,6 +128,6 @@ This pragmatic approach delivers trustless cross-chain atomic swaps today, rathe
 
 ## Related Documents
 
-- [Timelock Encryption for Sealed Bids](../../timelock-bids.md) - Technical implementation
+- [Timelock Encryption for Sealed Bids](./timelock-bids.md) - Technical implementation
 - [Uniform Price Auctions](../game-theory/uniform-price-auctions.md) - Game-theoretic mechanism
-- [Atomica PRD](../../Prd.md) - Overall product design
+- [Atomica PRD](../specifications/prd.md) - Overall product design

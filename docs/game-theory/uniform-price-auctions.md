@@ -88,7 +88,7 @@ Atomica employs four complementary mitigations:
 
 ### 2. Bid Automators (Always-Online Agents)
 
-**Note:** This mitigation is less critical for the current daily batch auction with sealed bids.
+**Note:** This mitigation is less critical for the current twice-daily batch auction model with sealed bids.
 
 - Market participants can submit bids through always-online bid automators
 - These are effectively online wallets running on desktops or commodity servers
@@ -170,10 +170,10 @@ The uniform price auction mechanism enables Atomic Auctions to function effectiv
 
 ## Related Documents
 
-- [Shill Bidding: Formal Analysis](../../shill-bidding-analysis.md) - Detailed game-theoretic analysis
-- [Timelock Encryption for Sealed Bids](../../timelock-bids.md) - Technical implementation of bid privacy
-- [CPMM vs Auction Analysis](../../cpmm-vs-auction.md) - Comparative analysis of exchange mechanisms
-- [Atomica PRD](../../Prd.md) - Overall product design
+- [Shill Bidding: Formal Analysis](./shill-bidding-analysis.md) - Detailed game-theoretic analysis
+- [Timelock Encryption for Sealed Bids](../technical/timelock-bids.md) - Technical implementation of bid privacy
+- [CPMM vs Auction Analysis](./cpmm-vs-auction-comparison.md) - Comparative analysis of exchange mechanisms
+- [Atomica PRD](../specifications/prd.md) - Overall product design
 
 ## Academic References
 

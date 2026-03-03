@@ -68,7 +68,7 @@ UI component tests run in a real browser environment to ensure accurate renderin
 
 **What it tests**:
 
-- **Unfunded account warning** - Shows "Account not found on chain" message
+- **Unfunded account warning** - Shows "Atomica account not found (request APT from Faucet)" message
 - **Balance display after funding** - Tests complete flow from unfunded → funded
 - Account balance updates via polling (5 second intervals)
 - Loading states

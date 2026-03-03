@@ -362,25 +362,14 @@ export class DockerTestnet {
      * - Can delegate minting capability to other accounts
      */
     getFaucetAccount(): AptosAccount {
-        // Read root account private key from genesis artifacts
-        const rootKeysPath = pathResolve(
-            this.composeDir,
-            "genesis-artifacts",
-            "root-account-private-keys.yaml",
-        );
-
-        if (!existsSync(rootKeysPath)) {
-            throw new Error(`Root account keys file not found: ${rootKeysPath}`);
+        const rawKey = process.env.APTOS_ROOT_ACCOUNT_PRIVATE_KEY;
+        if (!rawKey) {
+            throw new Error(
+                "APTOS_ROOT_ACCOUNT_PRIVATE_KEY is not set. Load source/.env.test before running tests.",
+            );
         }
 
-        const content = readFileSync(rootKeysPath, "utf-8");
-        const keyMatch = content.match(/account_private_key:\s*"0x([a-fA-F0-9]+)"/);
-
-        if (!keyMatch) {
-            throw new Error(`Failed to parse root account private key from ${rootKeysPath}`);
-        }
-
-        const privateKey = HexString.ensure(keyMatch[1]).toUint8Array();
+        const privateKey = HexString.ensure(rawKey).toUint8Array();
 
         // IMPORTANT: The Core Resources account is ALWAYS at address 0xA550C18 (hardcoded in Move.toml)
         // At genesis, its auth key is rotated to match the root_key from layout.yaml

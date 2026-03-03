@@ -51,17 +51,46 @@
  */
 
 import { defineConfig } from "vitest/config";
+import { loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { playwright } from "@vitest/browser-playwright";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 import {
   setupLocalnetCommand,
   teardownLocalnetCommand,
   deployContractsCommand,
   fundAccountCommand,
+  setupEthereumTestnetCommand,
+  teardownEthereumTestnetCommand,
 } from "./test-utils/browser-commands";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+// Load all vars from source/.env.test into the Vite server process (browser commands run here)
+const testEnv = loadEnv("test", resolve(__dirname, ".."), "");
+// Assign to process.env so browser commands (which run server-side) see these vars
+Object.assign(process.env, testEnv);
 
 export default defineConfig({
   plugins: [react()],
+  /**
+   * SERVER-SIDE EXTERNALS: Node.js-only packages used by browser commands
+   *
+   * Browser commands run in Node.js (Vite server side), but Vite's module
+   * resolver still traces static imports and may bundle them into the browser
+   * virtual module. Packages listed here are treated as Node.js externals and
+   * never bundled for the browser.
+   *
+   * Add any package here that:
+   *   - Is imported (directly or transitively) by test-utils/browser-commands.ts
+   *   - Uses Node.js-only APIs (child_process, __dirname, fs, etc.)
+   *   - Would break if evaluated in a browser context
+   */
+  server: {
+    deps: {
+      external: [/@atomica\/ethereum-docker-testnet/, /ethereum-testnet/],
+    },
+  },
   test: {
     /**
      * GLOBAL TEARDOWN: Ensure all resources are cleaned up
@@ -222,8 +251,11 @@ export default defineConfig({
         teardownLocalnet: teardownLocalnetCommand,
         deployContracts: deployContractsCommand,
         fundAccount: fundAccountCommand,
+        setupEthereumTestnet: setupEthereumTestnetCommand,
+        teardownEthereumTestnet: teardownEthereumTestnetCommand,
       },
     },
+    env: testEnv,
     testTimeout: 300000,
     hookTimeout: 120000,
 

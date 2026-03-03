@@ -1,5 +1,10 @@
 # Daily Atomic Auctions for Prediction Markets: An Economic Analysis
 
+> [!IMPORTANT]
+> This research draft evaluates a legacy single-daily auction assumption.
+> Current canonical Atomica schedule is twice daily at **07:45 UTC** and **16:15 UTC**.
+> Use this document for mechanism research, not as the current timing specification.
+
 ## Document Status
 - **Status**: Research in Progress
 - **Created**: 2025-11-18

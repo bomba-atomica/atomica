@@ -91,10 +91,10 @@ module atomica::lock_receipt_tests {
         assert!(!lock_receipt::is_lock_claimed<Ethereum, FakeETH>(lock_id), 1);
         assert!(!lock_receipt::is_lock_claimed<Ethereum, FakeUSD>(lock_id), 2);
 
-        // This demonstrates type isolation at compile time
+        // This demonstrates type isolation at compile time.
         // The following would NOT compile:
-        // let eth_receipt: LockReceipt<Ethereum, FakeETH> = ...;
-        // fake_usd::mint_from_receipt(eth_receipt); // ERROR: type mismatch!
+        // let eth_receipt: lock_receipt::LockReceipt<Ethereum, FakeETH> = ...;
+        // let usd_receipt: lock_receipt::LockReceipt<Ethereum, FakeUSD> = eth_receipt; // ERROR: type mismatch!
     }
 
     #[test(framework = @0x1, atomica = @atomica)]
@@ -182,4 +182,3 @@ module atomica::lock_receipt_tests {
         assert!(id1 == id3, 2);
     }
 }
-

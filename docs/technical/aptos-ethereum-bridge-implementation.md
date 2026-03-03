@@ -768,7 +768,7 @@ contract AptosOracle {
 
 ## References
 
-- **Aptos Proof Systems**: `docs/technical/aptos_proof_systems_summary.md`
+- **Aptos Proof Systems**: `docs/technical/aptos-proof-systems-summary.md`
 - **EIP-2537**: BLS12-381 precompiles for Ethereum
 - **BLS Signatures**: https://crypto.stanford.edu/~dabo/pubs/papers/BLSmultisig.html
 - **Sparse Merkle Trees**: https://eprint.iacr.org/2016/683.pdf
