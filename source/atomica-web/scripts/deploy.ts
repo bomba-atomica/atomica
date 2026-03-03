@@ -9,13 +9,18 @@
  *   bun run deploy                    # Uses localhost:8545 / localhost:8080
  *   ETH_RPC_URL=<url> bun run deploy  # Custom Ethereum URL
  *
- * Environment variables:
- *   ETH_RPC_URL - Ethereum JSON-RPC endpoint (optional, defaults to localhost:8545)
+ * Environment variables (required):
+ *   ETH_DEPLOYER_PRIVATE_KEY  - Ethereum deployer private key
+ *   APTOS_DEPLOYER_ADDRESS    - Aptos deployer account address
+ *   APTOS_DEPLOYER_PRIVATE_KEY - Aptos deployer private key
+ *
+ * Environment variables (optional):
+ *   ETH_RPC_URL  - Ethereum JSON-RPC endpoint (default: localhost:8545)
+ *   APTOS_URL    - Aptos API endpoint (default: localhost:8080)
  */
 
 import { spawn } from "child_process";
 import { ethers } from "ethers";
-import { TEST_ACCOUNTS } from "@atomica/ethereum-docker-testnet";
 import {
   compileContracts,
   getFakeETHArtifact,
@@ -23,14 +28,22 @@ import {
   getLockBoxArtifact,
   deployWithRetry,
 } from "../tests/meta/ethereum/solidity-compiler.js";
-import {
-  DEPLOYER_ADDR as APTOS_DEPLOYER_ADDR,
-  DEPLOYER_PK as APTOS_DEPLOYER_PK,
-} from "../test-utils/localnet";
 import { writeChainConfig } from "./chain-config";
 
 const ETH_RPC_URL = process.env.ETH_RPC_URL || "http://localhost:8545";
 const APTOS_URL = process.env.APTOS_URL || "http://localhost:8080";
+
+const ETH_DEPLOYER_PRIVATE_KEY = process.env.ETH_DEPLOYER_PRIVATE_KEY;
+if (!ETH_DEPLOYER_PRIVATE_KEY)
+  throw new Error("ETH_DEPLOYER_PRIVATE_KEY is not set");
+
+const APTOS_DEPLOYER_ADDRESS = process.env.APTOS_DEPLOYER_ADDRESS;
+if (!APTOS_DEPLOYER_ADDRESS)
+  throw new Error("APTOS_DEPLOYER_ADDRESS is not set");
+
+const APTOS_DEPLOYER_PRIVATE_KEY = process.env.APTOS_DEPLOYER_PRIVATE_KEY;
+if (!APTOS_DEPLOYER_PRIVATE_KEY)
+  throw new Error("APTOS_DEPLOYER_PRIVATE_KEY is not set");
 
 function execCommand(
   bin: string,
@@ -74,8 +87,7 @@ async function deployEthereumContracts() {
 
   const provider = new ethers.JsonRpcProvider(ETH_RPC_URL);
 
-  // Use the first test account from the Ethereum testnet
-  const ethSigner = new ethers.Wallet(TEST_ACCOUNTS[0].privateKey, provider);
+  const ethSigner = new ethers.Wallet(ETH_DEPLOYER_PRIVATE_KEY, provider);
 
   const deployerAddress = await ethSigner.getAddress();
   console.log(`  Deployer: ${deployerAddress}`);
@@ -151,9 +163,9 @@ async function deployAptosContracts() {
     "--package-dir",
     contractsDir,
     "--named-addresses",
-    `atomica=${APTOS_DEPLOYER_ADDR}`,
+    `atomica=${APTOS_DEPLOYER_ADDRESS}`,
     "--private-key",
-    APTOS_DEPLOYER_PK,
+    APTOS_DEPLOYER_PRIVATE_KEY,
     "--url",
     APTOS_URL,
     "--skip-fetch-latest-git-deps",
@@ -166,13 +178,13 @@ async function deployAptosContracts() {
   // Run initialization functions
   const initFunctions = [
     {
-      functionId: `${APTOS_DEPLOYER_ADDR}::registry::initialize`,
+      functionId: `${APTOS_DEPLOYER_ADDRESS}::registry::initialize`,
       args: [
         "hex:0000000000000000000000000000000000000000000000000000000000000000",
       ],
     },
-    { functionId: `${APTOS_DEPLOYER_ADDR}::fake_eth::initialize`, args: [] },
-    { functionId: `${APTOS_DEPLOYER_ADDR}::fake_usd::initialize`, args: [] },
+    { functionId: `${APTOS_DEPLOYER_ADDRESS}::fake_eth::initialize`, args: [] },
+    { functionId: `${APTOS_DEPLOYER_ADDRESS}::fake_usd::initialize`, args: [] },
   ];
 
   for (const initFunc of initFunctions) {
@@ -183,7 +195,7 @@ async function deployAptosContracts() {
       "--function-id",
       initFunc.functionId,
       "--private-key",
-      APTOS_DEPLOYER_PK,
+      APTOS_DEPLOYER_PRIVATE_KEY,
       "--url",
       APTOS_URL,
       "--assume-yes",
@@ -224,7 +236,7 @@ async function main() {
       lockBox: ethAddresses.lockBox,
     },
     aptos: {
-      contractAddress: APTOS_DEPLOYER_ADDR,
+      contractAddress: APTOS_DEPLOYER_ADDRESS,
     },
   });
   console.log(`\n✓ Chain config written to ${configPath}`);

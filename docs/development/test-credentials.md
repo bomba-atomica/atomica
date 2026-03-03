@@ -41,18 +41,6 @@ The hardcoded defaults for all of the above live **only** in `source/shared/test
 
 ---
 
-## Known violations to fix
-
-The following files currently duplicate credentials and need to be cleaned up:
-
-- `source/docker-testnet/ethereum-testnet/typescript-sdk/src/index.ts` — hardcodes ETH deployer address, private key, and mnemonic in `getTestAccounts()` / `TEST_ACCOUNTS`.
-- `source/evm-contracts/src/script/Deploy.s.sol` — hardcodes `DEFAULT_PRIVATE_KEY` and four test account addresses.
-- `source/atomica-web/scripts/deploy.ts` — imports `TEST_ACCOUNTS` from the SDK instead of requiring `ETH_DEPLOYER_PRIVATE_KEY` from env.
-
-Until those are fixed, treat `test-constants.ts` as the authoritative source and the SDK / Solidity values as copies that must stay in sync.
-
----
-
 ## Regenerating key material
 
 1. Run the generator script from the workspace root:
