@@ -1,6 +1,13 @@
 import { spawn } from "child_process";
-import { resolve as pathResolve } from "path";
+import { dirname, resolve } from "path";
 import { existsSync, readFileSync } from "fs";
+import { fileURLToPath } from "url";
+
+/** Config directory containing docker-compose.yaml and setup scripts */
+const CONFIG_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../config",
+);
 
 /**
  * Ethereum Docker Testnet - Multi-validator PoS setup
@@ -26,7 +33,7 @@ export class EthereumDockerTestnet {
   static async start(
     numValidators: number = 4,
   ): Promise<EthereumDockerTestnet> {
-    const configDir = this.findConfigDir();
+    const configDir = CONFIG_DIR;
 
     console.log(
       `Setting up Ethereum PoS testnet with ${numValidators} validators...`,
@@ -400,10 +407,7 @@ export class EthereumDockerTestnet {
    * Get validator public keys from the generated keystore
    */
   getValidatorPublicKeys(): string[] {
-    const pubkeysPath = pathResolve(
-      this.configDir,
-      "validator_keys/pubkeys.json",
-    );
+    const pubkeysPath = resolve(this.configDir, "validator_keys/pubkeys.json");
     if (existsSync(pubkeysPath)) {
       try {
         return JSON.parse(readFileSync(pubkeysPath, "utf-8"));
@@ -490,25 +494,6 @@ export class EthereumDockerTestnet {
 
   private async sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  private static findConfigDir(): string {
-    const candidates = [
-      pathResolve(__dirname, "../../config"),
-      pathResolve(
-        process.cwd(),
-        "source/docker-testnet/ethereum-testnet/config",
-      ),
-      pathResolve(process.cwd(), "config"),
-    ];
-
-    for (const path of candidates) {
-      if (existsSync(pathResolve(path, "docker-compose.yaml"))) {
-        return path;
-      }
-    }
-
-    throw new Error("Could not find ethereum-testnet/config directory");
   }
 
   private static async runCommand(

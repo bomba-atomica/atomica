@@ -1,6 +1,7 @@
 {
     "name": "@atomica/ethereum-docker-testnet",
     "version": "0.1.0",
+    "type": "module",
     "description": "Local Ethereum multi-validator testnet for Atomica",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",

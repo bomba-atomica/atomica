@@ -1,9 +1,10 @@
 import { execSync } from "child_process";
 import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 import { ethers } from "ethers";
 
-const __dirname = dirname(import.meta.url.replace("file://", ""));
+const __dirname = dirname(fileURLToPath(import.meta.url));
 // source/docker-testnet/ethereum-testnet/typescript-sdk/test/helpers -> source/evm-contracts
 const EVM_CONTRACTS_DIR = join(__dirname, "../../../../../evm-contracts");
 
