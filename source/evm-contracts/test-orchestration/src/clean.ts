@@ -8,7 +8,10 @@ import { spawn } from "child_process";
 import { resolve as pathResolve } from "path";
 
 const CONTRACTS_DIR = pathResolve(import.meta.dir, "../src");
-const ETHEREUM_TESTNET_CONFIG_DIR = pathResolve(import.meta.dir, "../../../docker-testnet/ethereum-testnet/config");
+const ETHEREUM_TESTNET_CONFIG_DIR = pathResolve(
+    import.meta.dir,
+    "../../../docker-testnet/ethereum-testnet/config",
+);
 
 async function clean(keepTestnet: boolean = false): Promise<void> {
     console.log("Cleaning up...");

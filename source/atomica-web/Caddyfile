@@ -1,0 +1,40 @@
+# Atomica Web - Local HTTPS Reverse Proxy
+#
+# Usage (no root/daemon needed):
+#   caddy run --config Caddyfile
+#
+# Accessible from any machine on the network. Browser will show a self-signed
+# cert warning on remote clients — click through it for testing.
+#
+# Services proxied:
+#   https://<server-ip>:5443  → Vite webapp        (http://localhost:5173)
+#   https://<server-ip>:18545 → Ethereum RPC        (http://localhost:8545)
+#   https://<server-ip>:18080 → Aptos REST API      (http://localhost:8080)
+
+{
+	auto_https off
+}
+
+(proxy_https) {
+	tls internal {
+		on_demand
+	}
+}
+
+# Vite webapp
+:5443 {
+	import proxy_https
+	reverse_proxy localhost:5173
+}
+
+# Ethereum JSON-RPC
+:18545 {
+	import proxy_https
+	reverse_proxy localhost:8545
+}
+
+# Aptos REST API
+:18080 {
+	import proxy_https
+	reverse_proxy localhost:8080
+}

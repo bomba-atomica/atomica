@@ -14,7 +14,10 @@ import { fileURLToPath } from "url";
 import { ETHEREUM_DEPLOYER_PRIVATE_KEY } from "../../../../shared/test-constants";
 
 const REPO_ROOT = pathResolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
-const ETHEREUM_TESTNET_CONFIG_DIR = pathResolve(REPO_ROOT, "source/docker-testnet/ethereum-testnet/config");
+const ETHEREUM_TESTNET_CONFIG_DIR = pathResolve(
+    REPO_ROOT,
+    "source/docker-testnet/ethereum-testnet/config",
+);
 
 const CONTRACTS_DIR = pathResolve(import.meta.dir, "../src");
 

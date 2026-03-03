@@ -5,9 +5,13 @@ import { getChainConfig } from "../chain-config.ts";
 const { aptos: chainConfig } = getChainConfig();
 export const CONTRACT_ADDR = chainConfig.contractAddress;
 
+const fullnodeUrl = chainConfig.aptosUrl.endsWith("/v1")
+  ? chainConfig.aptosUrl
+  : chainConfig.aptosUrl.replace(/\/?$/, "/v1");
+
 const config = new AptosConfig({
   network: Network.LOCAL,
-  fullnode: buildAptosFullnodeUrl(getStoredHost()),
+  fullnode: fullnodeUrl || buildAptosFullnodeUrl(getStoredHost()),
 });
 export let aptos = new Aptos(config);
 

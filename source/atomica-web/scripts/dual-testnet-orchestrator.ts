@@ -22,11 +22,13 @@ import {
   deployWithRetry,
 } from "../tests/meta/ethereum/solidity-compiler.js";
 import { DEPLOYER_ADDR, DEPLOYER_PK } from "../test-utils/localnet";
-import { writeChainConfig } from "./chain-config";
 
 const NUM_ETH_VALIDATORS = 4;
 const NUM_APTOS_VALIDATORS = 4;
-const WEBAPP_PORT = 4173;
+const WEBAPP_PORT = 5173;
+const HTTPS_WEBAPP_PORT = 5443;
+const HTTPS_ETH_PORT = 18545;
+const HTTPS_APTOS_PORT = 18080;
 const ETHEREUM_TESTNET_CONFIG_DIR = new URL(
   "../../docker-testnet/ethereum-testnet/config",
   import.meta.url,
@@ -35,6 +37,7 @@ const ETHEREUM_TESTNET_CONFIG_DIR = new URL(
 let ethTestnet: EthereumDockerTestnet | null = null;
 let aptosTestnet: DockerTestnet | null = null;
 let webappProcess: ChildProcess | null = null;
+let caddyProcess: ChildProcess | null = null;
 
 async function main() {
   console.log("═".repeat(60));
@@ -70,26 +73,24 @@ async function main() {
     const ethAddresses = await deployEthereumContracts(ethTestnet);
     await deployAptosContracts(aptosTestnet);
 
-    const chainConfigPath = writeChainConfig({
-      ethereum: {
-        rpcUrl: ethAddresses.rpcUrl,
-        fakeETH: ethAddresses.fakeETH,
-        fakeUSD: ethAddresses.fakeUSD,
-        lockBox: ethAddresses.lockBox,
-      },
-      aptos: {
-        contractAddress: DEPLOYER_ADDR,
-      },
-    });
-    console.log(`  ✓ Chain config written to ${chainConfigPath}`);
+    const viteEnv = {
+      ...process.env,
+      VITE_ETH_RPC_URL: `https://localhost:${HTTPS_ETH_PORT}`,
+      VITE_FAKE_ETH_ADDRESS: ethAddresses.fakeETH,
+      VITE_FAKE_USD_ADDRESS: ethAddresses.fakeUSD,
+      VITE_LOCK_BOX_ADDRESS: ethAddresses.lockBox,
+      VITE_CONTRACT_ADDRESS: DEPLOYER_ADDR,
+      VITE_APTOS_URL: `https://localhost:${HTTPS_APTOS_PORT}`,
+    };
 
-    console.log("\n🌐 Starting webapp...");
-    await launchWebapp();
+    console.log("\n🌐 Starting webapp and HTTPS proxy...");
+    await launchWebapp(viteEnv);
+    await launchCaddy();
 
     console.log("\n" + "═".repeat(60));
     console.log("  ✅ Demo Ready!");
     console.log("═".repeat(60));
-    console.log(`\n📍 Open http://localhost:${WEBAPP_PORT}\n`);
+    console.log(`\n📍 Open https://localhost:${HTTPS_WEBAPP_PORT}\n`);
     console.log("🛑 Press Ctrl+C to stop all services\n");
 
     await new Promise(() => {});
@@ -177,12 +178,12 @@ async function deployAptosContracts(testnet: DockerTestnet) {
   console.log(`  ✓ Aptos contracts deployed`);
 }
 
-async function launchWebapp(): Promise<void> {
+async function launchWebapp(env: NodeJS.ProcessEnv): Promise<void> {
   return new Promise((resolve, reject) => {
     webappProcess = spawn(
       "bun",
-      ["run", "dev", "--host", "--port", String(WEBAPP_PORT)],
-      { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe"] },
+      ["run", "dev", "--host", "127.0.0.1", "--port", String(WEBAPP_PORT)],
+      { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe"], env },
     );
 
     const timeout = setTimeout(
@@ -213,11 +214,42 @@ async function launchWebapp(): Promise<void> {
   });
 }
 
+async function launchCaddy(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    caddyProcess = spawn("caddy", ["run", "--config", "Caddyfile"], {
+      cwd: process.cwd(),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    const timeout = setTimeout(
+      () => reject(new Error("Caddy startup timeout")),
+      15000,
+    );
+
+    caddyProcess.stderr?.on("data", (data: Buffer) => {
+      const output = data.toString();
+      process.stderr.write(`  [caddy] ${output}`);
+      if (output.includes("serving initial configuration")) {
+        clearTimeout(timeout);
+        resolve();
+      }
+    });
+
+    caddyProcess.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(new Error(`Failed to start Caddy: ${error.message}`));
+    });
+  });
+}
+
 async function cleanup(): Promise<void> {
   console.log("\n🧹 Cleaning up...");
 
   if (webappProcess && !webappProcess.killed) {
     webappProcess.kill("SIGTERM");
+  }
+  if (caddyProcess && !caddyProcess.killed) {
+    caddyProcess.kill("SIGTERM");
   }
 
   const promises: Promise<void>[] = [];

@@ -33,7 +33,10 @@ describe("Minimal Contract Deployment Test", () => {
 
     // Start Ethereum testnet
     console.log("\n[PHASE 1] Starting Ethereum testnet...");
-    ethTestnet = await EthereumDockerTestnet.start(4, ETHEREUM_TESTNET_CONFIG_DIR);
+    ethTestnet = await EthereumDockerTestnet.start(
+      4,
+      ETHEREUM_TESTNET_CONFIG_DIR,
+    );
     await ethTestnet.waitForHealthy(180);
     console.log("✓ Ethereum testnet is healthy");
 

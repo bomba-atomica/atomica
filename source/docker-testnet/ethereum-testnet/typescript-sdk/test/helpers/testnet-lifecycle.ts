@@ -146,7 +146,10 @@ export async function initializeTestnet(
     `Initializing Ethereum PoS testnet with ${numValidators} validators...`,
   );
 
-  const testnet = await EthereumDockerTestnet.start(numValidators, findConfigDir());
+  const testnet = await EthereumDockerTestnet.start(
+    numValidators,
+    findConfigDir(),
+  );
   setGlobalTestnet(testnet);
   console.log("✓ Testnet containers started");
 

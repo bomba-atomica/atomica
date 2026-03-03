@@ -1,12 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import type { Connect, Logger } from "vite";
-import { existsSync, readFileSync } from "node:fs";
-import { resolve as pathResolve } from "node:path";
 import { fundAptosAccount } from "./scripts/aptos-funding";
-import { getDockerTestnetConfigDir } from "./test-utils/aptos-keys";
-import { DEFAULT_CHAIN_CONFIG } from "./src/lib/chain-config";
-import type { ChainConfig } from "./src/lib/chain-config";
 
 type JsonObject = Record<string, unknown>;
 
@@ -84,85 +79,8 @@ function registerAptosFundingApi(
   });
 }
 
-// https://vite.dev/config/
-const CONFIG_FILE = pathResolve(
-  getDockerTestnetConfigDir(),
-  "atomica-web.yaml",
-);
-
-type ParsedChainConfig = {
-  ethereum?: Partial<ChainConfig["ethereum"]>;
-  aptos?: Partial<ChainConfig["aptos"]>;
-};
-
-function parseChainConfigYaml(content: string): ParsedChainConfig {
-  const parsed: ParsedChainConfig = {};
-  let currentSection: keyof ParsedChainConfig | null = null;
-
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const indent = line.search(/\S|$/);
-
-    if (indent === 0 && trimmed.endsWith(":")) {
-      const sectionName = trimmed.slice(0, -1);
-      if (sectionName === "ethereum") {
-        currentSection = "ethereum";
-        parsed.ethereum ??= {};
-      } else if (sectionName === "aptos") {
-        currentSection = "aptos";
-        parsed.aptos ??= {};
-      } else {
-        currentSection = null;
-      }
-      continue;
-    }
-
-    if (currentSection && trimmed.includes(":")) {
-      const [key, ...rest] = trimmed.split(":");
-      const value = rest.join(":").trim();
-      if (!value) continue;
-      if (currentSection === "ethereum") {
-        (parsed.ethereum as Record<string, string>)[key.trim()] = value;
-      } else if (currentSection === "aptos") {
-        (parsed.aptos as Record<string, string>)[key.trim()] = value;
-      }
-    }
-  }
-
-  return parsed;
-}
-
-function loadChainConfig(): ChainConfig {
-  if (!existsSync(CONFIG_FILE)) {
-    return DEFAULT_CHAIN_CONFIG;
-  }
-  try {
-    const raw = readFileSync(CONFIG_FILE, "utf-8");
-    const parsed = parseChainConfigYaml(raw);
-    return {
-      ethereum: {
-        ...DEFAULT_CHAIN_CONFIG.ethereum,
-        ...parsed.ethereum,
-      },
-      aptos: {
-        ...DEFAULT_CHAIN_CONFIG.aptos,
-        ...parsed.aptos,
-      },
-    };
-  } catch (error) {
-    console.warn("Failed to load chain config YAML:", error);
-    return DEFAULT_CHAIN_CONFIG;
-  }
-}
-
-const CHAIN_CONFIG = loadChainConfig();
-
 export default defineConfig({
   envDir: "../", // load source/.env.test (and source/.env) for all packages
-  define: {
-    __ATOMICA_CHAIN_CONFIG__: JSON.stringify(CHAIN_CONFIG),
-  },
   plugins: [
     react(),
     {

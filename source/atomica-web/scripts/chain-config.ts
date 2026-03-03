@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
-import { getDockerTestnetConfigDir } from "../test-utils/aptos-keys";
+import { fileURLToPath } from "url";
 
 export type ChainConfigPayload = {
   ethereum: {
@@ -11,23 +11,26 @@ export type ChainConfigPayload = {
   };
   aptos: {
     contractAddress: string;
+    aptosUrl?: string;
   };
 };
 
-const FILE_NAME = "atomica-web.yaml";
+// envDir in vite.config.ts is "../" (source/), so .env.local goes there
+const SOURCE_DIR = pathResolve(fileURLToPath(import.meta.url), "../../..");
+const FILE_NAME = ".env.local";
 
 export function writeChainConfig(payload: ChainConfigPayload): string {
-  const configDir = getDockerTestnetConfigDir();
-  const filePath = pathResolve(configDir, FILE_NAME);
-  const yaml = [
-    "ethereum:",
-    `  rpcUrl: ${payload.ethereum.rpcUrl}`,
-    `  fakeETH: ${payload.ethereum.fakeETH}`,
-    `  fakeUSD: ${payload.ethereum.fakeUSD}`,
-    `  lockBox: ${payload.ethereum.lockBox}`,
-    "aptos:",
-    `  contractAddress: ${payload.aptos.contractAddress}`,
-  ].join("\n");
-  writeFileSync(filePath, yaml, { encoding: "utf-8" });
+  const filePath = pathResolve(SOURCE_DIR, FILE_NAME);
+  const lines = [
+    `VITE_ETH_RPC_URL=${payload.ethereum.rpcUrl}`,
+    `VITE_FAKE_ETH_ADDRESS=${payload.ethereum.fakeETH}`,
+    `VITE_FAKE_USD_ADDRESS=${payload.ethereum.fakeUSD}`,
+    `VITE_LOCK_BOX_ADDRESS=${payload.ethereum.lockBox}`,
+    `VITE_CONTRACT_ADDRESS=${payload.aptos.contractAddress}`,
+    ...(payload.aptos.aptosUrl
+      ? [`VITE_APTOS_URL=${payload.aptos.aptosUrl}`]
+      : []),
+  ];
+  writeFileSync(filePath, lines.join("\n") + "\n", { encoding: "utf-8" });
   return filePath;
 }

@@ -53,7 +53,10 @@ interface Config {
 // Constants
 const CONTRACTS_DIR = pathResolve(import.meta.dir, "../..");
 const OUTPUT_DIR = pathResolve(import.meta.dir, "../test-results");
-const ETHEREUM_TESTNET_CONFIG_DIR = pathResolve(import.meta.dir, "../../../docker-testnet/ethereum-testnet/config");
+const ETHEREUM_TESTNET_CONFIG_DIR = pathResolve(
+    import.meta.dir,
+    "../../../docker-testnet/ethereum-testnet/config",
+);
 const FOUNDRY_PROFILE = "test";
 
 /**

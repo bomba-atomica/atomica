@@ -9,6 +9,7 @@ export type ChainConfig = {
   };
   aptos: {
     contractAddress: string;
+    aptosUrl: string;
   };
 };
 
@@ -29,21 +30,10 @@ export const DEFAULT_CHAIN_CONFIG: ChainConfig = {
     contractAddress:
       import.meta.env.VITE_CONTRACT_ADDRESS ||
       "0x0000000000000000000000000000000000000000000000000000000000000000",
+    aptosUrl: import.meta.env.VITE_APTOS_URL || "http://localhost:8080",
   },
 };
 
-declare global {
-  interface GlobalThis {
-    __ATOMICA_CHAIN_CONFIG__?: ChainConfig;
-  }
-}
-
-type GlobalWithChainConfig = typeof globalThis & {
-  __ATOMICA_CHAIN_CONFIG__?: ChainConfig;
-};
-
-const globalWithChainConfig = globalThis as GlobalWithChainConfig;
-
 export function getChainConfig(): ChainConfig {
-  return globalWithChainConfig.__ATOMICA_CHAIN_CONFIG__ ?? DEFAULT_CHAIN_CONFIG;
+  return DEFAULT_CHAIN_CONFIG;
 }
