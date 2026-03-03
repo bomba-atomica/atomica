@@ -1,37 +1,66 @@
 # Test Credentials
 
-This document records the deterministic key material that Atomica test suites and the webapp share via the root `.env` files.
+## Rules — read this first
+
+There are exactly two ways to consume credentials, depending on context:
+
+| Context | Source | Behaviour if missing |
+|---------|--------|----------------------|
+| **Tests** (`bun test`, Vitest, Forge tests, …) | `source/shared/test-constants.ts` | Falls back to hardcoded testnet defaults — tests always work without `.env` |
+| **Operational scripts** (`bun run deploy`, `bun run demo`, …) | `.env` / `.env.local` environment variables | **Must abort** with a clear error — never fall back to defaults |
+
+### Do not duplicate credentials
+
+- **Never** hardcode private keys, addresses, or mnemonics in any file other than `source/shared/test-constants.ts`.
+- **Never** import `TEST_ACCOUNTS` or raw key literals from the Ethereum testnet SDK inside a deploy or demo script.
+- **Never** copy the default values from `test-constants.ts` into a deploy/demo script as a fallback. If the env var is absent, throw:
+  ```ts
+  const key = process.env.ETH_DEPLOYER_PRIVATE_KEY;
+  if (!key) throw new Error("ETH_DEPLOYER_PRIVATE_KEY is not set");
+  ```
+
+---
 
 ## Canonical values
 
-The tracked `/.env.example` defines the following environment variables with the values currently used for the local Docker testnets:
+`/.env.example` is the reference list of variables. `/.env.local` (gitignored) should mirror those values locally.
 
-| Variable | Purpose | Source |
-| --- | --- | --- |
-| `CORE_RESOURCES_ADDRESS` | Aptos faucet/Core Resources address (0x...A550C18) | `source/shared/test-constants.ts` (mirrors `root-account-private-keys.yaml`) |
-| `CORE_RESOURCES_PRIVATE_KEY` | Private key that controls minting/faucet behavior | same module (fallback to `root-account-private-keys.yaml`) |
-| `APTOS_DEPLOYER_ADDRESS` | Atomica module (deployer) account | `source/shared/test-constants.ts` (default: 0x44eb...) |
-| `APTOS_DEPLOYER_PRIVATE_KEY` | Private key for the Atomica deployer | same module (default: 0x52a...) |
-| `ETH_DEPLOYER_ADDRESS` | First Ethereum testnet account (pre-funded) | `source/shared/test-constants.ts` (syncs with `ethereum-testnet` SDK) |
-| `ETH_DEPLOYER_PRIVATE_KEY` | Private key for that Ethereum account | same module |
-| `ETH_DEPLOYER_MNEMONIC` | Mnemonic that derives the above ETH accounts | same module |
-| `HARDHAT_ACCOUNT_0_ADDRESS` | First Hardhat account (used by wallet/integration tests) | same module (matches Hardhat defaults in `/source/evm-contracts/test-orchestration`) |
-| `HARDHAT_ACCOUNT_0_PRIVATE_KEY` | Private key for Hardhat account 0 | same module |
+| Variable | Purpose |
+|----------|---------|
+| `CORE_RESOURCES_ADDRESS` | Aptos faucet/Core Resources address (0x…A550C18) |
+| `CORE_RESOURCES_PRIVATE_KEY` | Private key that controls minting/faucet behaviour |
+| `APTOS_DEPLOYER_ADDRESS` | Atomica module (deployer) account (default: 0x44eb…) |
+| `APTOS_DEPLOYER_PRIVATE_KEY` | Private key for the Atomica deployer |
+| `ETH_DEPLOYER_ADDRESS` | First Ethereum testnet account (pre-funded) |
+| `ETH_DEPLOYER_PRIVATE_KEY` | Private key for that Ethereum account |
+| `ETH_DEPLOYER_MNEMONIC` | Mnemonic that derives the ETH accounts |
+| `HARDHAT_ACCOUNT_0_ADDRESS` | First Hardhat account (wallet/integration tests) |
+| `HARDHAT_ACCOUNT_0_PRIVATE_KEY` | Private key for Hardhat account 0 |
 
-`/.env.example` is the reference list; `/.env.local` (gitignored) should mirror those values when you want to run locally. If you ever need a different set of keys, update `.env.local` and, optionally, `.env.example` so teammates can see the new defaults.
+The hardcoded defaults for all of the above live **only** in `source/shared/test-constants.ts`. That file is the single source of truth for test key material.
+
+---
+
+## Known violations to fix
+
+The following files currently duplicate credentials and need to be cleaned up:
+
+- `source/docker-testnet/ethereum-testnet/typescript-sdk/src/index.ts` — hardcodes ETH deployer address, private key, and mnemonic in `getTestAccounts()` / `TEST_ACCOUNTS`.
+- `source/evm-contracts/src/script/Deploy.s.sol` — hardcodes `DEFAULT_PRIVATE_KEY` and four test account addresses.
+- `source/atomica-web/scripts/deploy.ts` — imports `TEST_ACCOUNTS` from the SDK instead of requiring `ETH_DEPLOYER_PRIVATE_KEY` from env.
+
+Until those are fixed, treat `test-constants.ts` as the authoritative source and the SDK / Solidity values as copies that must stay in sync.
+
+---
 
 ## Regenerating key material
 
-If you want to rotate these credentials, regenerate the Aptos key files and copy the resulting hex values into `.env.local`:
-
-1. Run the generator script from the workspace root so it overwrites `source/docker-testnet/config/genesis-artifacts` and the validator directories with freshly generated keys:
+1. Run the generator script from the workspace root:
    ```bash
    cd source/docker-testnet/config
    ./generate-genesis.sh 4
    ```
-   or use the higher-level Docker/testnet helpers that call the same script if you prefer custom validator counts or chain IDs.
-2. After the script finishes, copy the new `account_private_key` entries out of `genesis-artifacts/root-account-private-keys.yaml` (for the Core Resources key) and whichever Aptos module address you want to reuse (currently `0x44eb...`) for the deployer.
-3. Update `.env.local` (and `.env.example` if you want to share the new defaults) so `CORE_RESOURCES_PRIVATE_KEY` and `APTOS_DEPLOYER_PRIVATE_KEY` point at the new hex values.
-4. The Ethereum deployer values live in `source/docker-testnet/ethereum-testnet/typescript-sdk/src/index.ts`. To rotate them, edit that file to hard-code new addresses/keys or generate replacement accounts from the same mnemonic and copy the values into `.env.local`.
-
-When rotating keys, make sure Docker or any running testnet process is restarted so it picks up the new `.env.local` values.
+2. Copy the new `account_private_key` entries from `genesis-artifacts/root-account-private-keys.yaml` into `.env.local` (`CORE_RESOURCES_PRIVATE_KEY`, `APTOS_DEPLOYER_PRIVATE_KEY`).
+3. Update `.env.example` if you want teammates to see the new defaults.
+4. Update the defaults in `source/shared/test-constants.ts` to match (tests must still pass without `.env`).
+5. Restart Docker / testnet processes so they pick up the new values.
