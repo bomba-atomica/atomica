@@ -23,8 +23,11 @@ const { ethereum } = getChainConfig();
 
 // Keep these for backwards compatibility / direct use in tests
 export const ETH_RPC_URL = ethereum.rpcUrl;
-export const ETH_WS_URL = ENV_ETH_WS_URL || "ws://localhost:8546";
-export const ETH_BEACON_URL = ENV_ETH_BEACON_URL || "http://localhost:5052";
+
+// Ensure we at least resolve the host based on Vite env variables if not explicitly provided
+const fallbackHost = import.meta.env.VITE_HOST_IP || "localhost";
+export const ETH_WS_URL = ENV_ETH_WS_URL || `ws://${fallbackHost}:8546`;
+export const ETH_BEACON_URL = ENV_ETH_BEACON_URL || `http://${fallbackHost}:5052`;
 
 // Contract addresses (set after deployment)
 export const FAKE_ETH_ADDRESS = ethereum.fakeETH;

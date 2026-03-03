@@ -86,11 +86,10 @@ export function TestnetSelector() {
               setCustomInput("");
               setOpen(false);
             }}
-            className={`flex items-center gap-2 text-sm px-3 py-2 rounded transition-colors w-full text-left ${
-              isLocal
+            className={`flex items-center gap-2 text-sm px-3 py-2 rounded transition-colors w-full text-left ${isLocal
                 ? "bg-zinc-800 text-zinc-100"
                 : "text-zinc-400 hover:bg-zinc-800/60"
-            }`}
+              }`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
             Local (localhost)
@@ -116,7 +115,7 @@ export function TestnetSelector() {
           </div>
 
           <p className="text-xs text-zinc-600 mt-1">
-            Ports used: ETH :8545, Aptos :8080
+            Ports used: ETH :{import.meta.env.VITE_ETHEREUM_HTTP_PORT || "8545"}, Aptos :{import.meta.env.VITE_APTOS_HTTP_PORT || "8080"}
           </p>
         </div>
       )}

@@ -3,10 +3,10 @@ let runtimeHost: string | null = null;
 
 function getBrowserHost(): string {
   if (typeof window === "undefined") {
-    return "localhost";
+    return import.meta.env.VITE_HOST_IP || "localhost";
   }
   const host = window.location.hostname?.trim();
-  return host || "localhost";
+  return host || import.meta.env.VITE_HOST_IP || "localhost";
 }
 
 export function getStoredHost(): string {
@@ -53,7 +53,16 @@ function ensurePort(url: URL, port: string): URL {
 }
 
 export function buildEthRpcUrl(host: string): string {
-  const url = ensurePort(parseTargetHost(host), "8545");
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+  const defaultPort = isHttps
+    ? (import.meta.env.VITE_ETHEREUM_SSL_PORT || "8546")
+    : (import.meta.env.VITE_ETHEREUM_HTTP_PORT || "8545");
+
+  const url = ensurePort(parseTargetHost(host), defaultPort);
+  if (isHttps) {
+    url.protocol = "https:";
+  }
+
   if (url.pathname === "/") {
     url.pathname = "";
   }
@@ -61,7 +70,16 @@ export function buildEthRpcUrl(host: string): string {
 }
 
 export function buildAptosFullnodeUrl(host: string): string {
-  const url = ensurePort(parseTargetHost(host), "8080");
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+  const defaultPort = isHttps
+    ? (import.meta.env.VITE_APTOS_SSL_PORT || "8443")
+    : (import.meta.env.VITE_APTOS_HTTP_PORT || "8080");
+
+  const url = ensurePort(parseTargetHost(host), defaultPort);
+  if (isHttps) {
+    url.protocol = "https:";
+  }
+
   url.pathname = "/v1";
   return url.toString();
 }
