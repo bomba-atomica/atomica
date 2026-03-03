@@ -6,7 +6,10 @@
  */
 
 import type { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
-const ETHEREUM_TESTNET_CONFIG_DIR = new URL("../../../../../docker-testnet/ethereum-testnet/config", import.meta.url).pathname;
+const ETHEREUM_TESTNET_CONFIG_DIR = new URL(
+    "../../../../../docker-testnet/ethereum-testnet/config",
+    import.meta.url,
+).pathname;
 import {
     ETHEREUM_DEPLOYER_ADDRESS,
     ETHEREUM_DEPLOYER_PRIVATE_KEY,
