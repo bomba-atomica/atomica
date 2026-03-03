@@ -181,21 +181,10 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
             dockerArgs.push("-e", `ATOMICA_DEBUG_TESTNET=${process.env.ATOMICA_DEBUG_TESTNET}`);
         }
 
-        // Pass all deterministic credentials so the genesis script never generates random keys
+        // Pass deterministic credentials so the genesis script produces reproducible keys
         const credentialEnvVars = [
             "APTOS_ROOT_ACCOUNT_PUBLIC_KEY",
-            ...Array.from({ length: config.numValidators }, (_, i) => [
-                `APTOS_VALIDATOR_${i}_ACCOUNT_ADDRESS`,
-                `APTOS_VALIDATOR_${i}_ACCOUNT_PUBLIC_KEY`,
-                `APTOS_VALIDATOR_${i}_ACCOUNT_PRIVATE_KEY`,
-                `APTOS_VALIDATOR_${i}_CONSENSUS_PUBLIC_KEY`,
-                `APTOS_VALIDATOR_${i}_CONSENSUS_PROOF_OF_POSSESSION`,
-                `APTOS_VALIDATOR_${i}_CONSENSUS_PRIVATE_KEY`,
-                `APTOS_VALIDATOR_${i}_FULL_NODE_NETWORK_PUBLIC_KEY`,
-                `APTOS_VALIDATOR_${i}_FULL_NODE_NETWORK_PRIVATE_KEY`,
-                `APTOS_VALIDATOR_${i}_VALIDATOR_NETWORK_PUBLIC_KEY`,
-                `APTOS_VALIDATOR_${i}_VALIDATOR_NETWORK_PRIVATE_KEY`,
-            ]).flat(),
+            ...Array.from({ length: config.numValidators }, (_, i) => `APTOS_VALIDATOR_${i}_SEED`),
         ];
         for (const varName of credentialEnvVars) {
             const value = process.env[varName];

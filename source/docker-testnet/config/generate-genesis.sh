@@ -36,15 +36,10 @@ for var in APTOS_ROOT_ACCOUNT_PUBLIC_KEY; do
     fi
 done
 for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
-    for suffix in ACCOUNT_ADDRESS ACCOUNT_PUBLIC_KEY ACCOUNT_PRIVATE_KEY \
-                  CONSENSUS_PUBLIC_KEY CONSENSUS_PROOF_OF_POSSESSION \
-                  FULL_NODE_NETWORK_PUBLIC_KEY FULL_NODE_NETWORK_PRIVATE_KEY \
-                  VALIDATOR_NETWORK_PUBLIC_KEY VALIDATOR_NETWORK_PRIVATE_KEY; do
-        var="APTOS_VALIDATOR_${i}_${suffix}"
-        if [ -z "${!var}" ]; then
-            echo "ERROR: ${var} is required"; exit 1
-        fi
-    done
+    var="APTOS_VALIDATOR_${i}_SEED"
+    if [ -z "${!var}" ]; then
+        echo "ERROR: ${var} is required"; exit 1
+    fi
 done
 
 IFS='.' read -r ip1 ip2 ip3 ip4 <<< "$BASE_IP"
@@ -56,42 +51,21 @@ for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
     USERNAMES="${USERNAMES}\"validator-${i}\""
 done
 
-# Step 1: Write validator key files directly from env vars
+# Step 1: Generate validator key files from deterministic seeds
 echo "Step 1/6: Writing validator key files..."
 for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
     username="validator-${i}"
     mkdir -p "$username"
 
-    acct_addr="APTOS_VALIDATOR_${i}_ACCOUNT_ADDRESS"
-    acct_pub="APTOS_VALIDATOR_${i}_ACCOUNT_PUBLIC_KEY"
-    acct_pk="APTOS_VALIDATOR_${i}_ACCOUNT_PRIVATE_KEY"
-    cons_pub="APTOS_VALIDATOR_${i}_CONSENSUS_PUBLIC_KEY"
-    cons_pop="APTOS_VALIDATOR_${i}_CONSENSUS_PROOF_OF_POSSESSION"
-    fn_pub="APTOS_VALIDATOR_${i}_FULL_NODE_NETWORK_PUBLIC_KEY"
-    fn_pk="APTOS_VALIDATOR_${i}_FULL_NODE_NETWORK_PRIVATE_KEY"
-    val_pub="APTOS_VALIDATOR_${i}_VALIDATOR_NETWORK_PUBLIC_KEY"
-    val_pk="APTOS_VALIDATOR_${i}_VALIDATOR_NETWORK_PRIVATE_KEY"
+    seed_var="APTOS_VALIDATOR_${i}_SEED"
+    seed="${!seed_var}"
 
-    cat > "${username}/private-keys.yaml" <<EOF
----
-account_address: ${!acct_addr#0x}
-account_private_key: "${!acct_pk}"
-consensus_private_key: "${!cons_pub}"
-full_node_network_private_key: "${!fn_pk}"
-validator_network_private_key: "${!val_pk}"
-EOF
+    aptos genesis generate-keys \
+        --output-dir "$username" \
+        --random-seed "$seed" \
+        --assume-yes > "$APTOS_OUTPUT"
 
-    cat > "${username}/public-keys.yaml" <<EOF
----
-account_address: ${!acct_addr#0x}
-account_public_key: "${!acct_pub}"
-consensus_public_key: "${!cons_pub}"
-consensus_proof_of_possession: "${!cons_pop}"
-full_node_network_public_key: "${!fn_pub}"
-validator_network_public_key: "${!val_pub}"
-EOF
-
-    debug "Wrote key files for $username"
+    debug "Generated key files for $username from seed $seed"
 done
 
 # Step 2: Create layout.yaml

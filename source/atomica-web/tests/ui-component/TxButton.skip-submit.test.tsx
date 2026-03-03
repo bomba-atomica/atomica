@@ -30,12 +30,12 @@ import {
 } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "../../src/lib/aptos";
 import {
-  HARDHAT_ACCOUNT_0_ADDRESS,
-  HARDHAT_ACCOUNT_0_PRIVATE_KEY,
+  ETHEREUM_DEPLOYER_ADDRESS,
+  ETHEREUM_DEPLOYER_PRIVATE_KEY,
 } from "../../../shared/test-constants";
 
-const TEST_ACCOUNT = HARDHAT_ACCOUNT_0_ADDRESS;
-const TEST_PK = HARDHAT_ACCOUNT_0_PRIVATE_KEY;
+const TEST_ACCOUNT = ETHEREUM_DEPLOYER_ADDRESS;
+const TEST_PK = ETHEREUM_DEPLOYER_PRIVATE_KEY;
 
 // Recipient for the APT transfer used as the test transaction
 const TRANSFER_RECIPIENT =
