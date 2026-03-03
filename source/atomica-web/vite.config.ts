@@ -1,11 +1,10 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import type { Connect, Logger } from "vite";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 import { fundAptosAccount } from "./scripts/aptos-funding";
 import { getDockerTestnetConfigDir } from "./test-utils/aptos-keys";
-import { DEFAULT_CHAIN_CONFIG } from "./src/lib/chain-config";
 import type { ChainConfig } from "./src/lib/chain-config";
 
 type JsonObject = Record<string, unknown>;
@@ -133,105 +132,138 @@ function parseChainConfigYaml(content: string): ParsedChainConfig {
   return parsed;
 }
 
-function loadChainConfig(): ChainConfig {
+function loadChainConfig(defaultConfig: ChainConfig): ChainConfig {
   if (!existsSync(CONFIG_FILE)) {
-    return DEFAULT_CHAIN_CONFIG;
+    return defaultConfig;
   }
   try {
     const raw = readFileSync(CONFIG_FILE, "utf-8");
     const parsed = parseChainConfigYaml(raw);
     return {
       ethereum: {
-        ...DEFAULT_CHAIN_CONFIG.ethereum,
+        ...defaultConfig.ethereum,
         ...parsed.ethereum,
       },
       aptos: {
-        ...DEFAULT_CHAIN_CONFIG.aptos,
+        ...defaultConfig.aptos,
         ...parsed.aptos,
       },
     };
   } catch (error) {
     console.warn("Failed to load chain config YAML:", error);
-    return DEFAULT_CHAIN_CONFIG;
+    return defaultConfig;
   }
 }
 
-const CHAIN_CONFIG = loadChainConfig();
+export default defineConfig(({ mode }) => {
+  // Load env variables from source/.env.test (envDir is "../")
+  const env = loadEnv(mode, pathResolve(__dirname, ".."), "");
 
-export default defineConfig({
-  envDir: "../", // load source/.env.test (and source/.env) for all packages
-  define: {
-    __ATOMICA_CHAIN_CONFIG__: JSON.stringify(CHAIN_CONFIG),
-  },
-  plugins: [
-    react(),
-    {
-      name: "remote-console-logs",
-      configureServer(server) {
-        server.middlewares.use("/__log", (req, res, next) => {
-          if (req.method === "POST") {
-            let body = "";
-            req.on("data", (chunk) => (body += chunk));
-            req.on("end", () => {
-              try {
-                const entry = JSON.parse(body);
+  const hostIp = env.VITE_HOST_IP || "127.0.0.1";
+  const webappHttpPort = parseInt(env.VITE_WEBAPP_HTTP_PORT || "5173", 10);
+  const aptosHttpPort = env.VITE_APTOS_HTTP_PORT || "8080";
+  const ethHttpPort = env.VITE_ETHEREUM_HTTP_PORT || "8545";
 
-                let source = "";
-                if (entry.source?.file) {
-                  const fname = entry.source.file.split("/").pop();
-                  source = `\x1b[90m${fname}:${entry.source.line}\x1b[0m`;
+  // Build DEFAULT_CHAIN_CONFIG from env vars (import.meta.env not available in Node context)
+  const defaultChainConfig: ChainConfig = {
+    ethereum: {
+      rpcUrl: env.VITE_ETH_RPC_URL || `http://${env.VITE_HOST_IP || "localhost"}:${env.VITE_ETHEREUM_HTTP_PORT || "8545"}`,
+      fakeETH: env.VITE_FAKE_ETH_ADDRESS || "0x0000000000000000000000000000000000000000",
+      fakeUSD: env.VITE_FAKE_USD_ADDRESS || "0x0000000000000000000000000000000000000000",
+      lockBox: env.VITE_LOCK_BOX_ADDRESS || "0x0000000000000000000000000000000000000000",
+    },
+    aptos: {
+      contractAddress: env.VITE_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000000000000000000000000000000",
+    },
+  };
+  const CHAIN_CONFIG = loadChainConfig(defaultChainConfig);
+
+  return {
+    envDir: "../", // load source/.env.test (and source/.env) for all packages
+    define: {
+      __ATOMICA_CHAIN_CONFIG__: JSON.stringify(CHAIN_CONFIG),
+    },
+    plugins: [
+      react(),
+      {
+        name: "remote-console-logs",
+        configureServer(server) {
+          server.middlewares.use("/__log", (req, res, next) => {
+            if (req.method === "POST") {
+              let body = "";
+              req.on("data", (chunk) => (body += chunk));
+              req.on("end", () => {
+                try {
+                  const entry = JSON.parse(body);
+
+                  let source = "";
+                  if (entry.source?.file) {
+                    const fname = entry.source.file.split("/").pop();
+                    source = `\x1b[90m${fname}:${entry.source.line}\x1b[0m`;
+                  }
+
+                  // Join message parts
+                  const msg = Array.isArray(entry.message)
+                    ? entry.message.join(" ")
+                    : String(entry.message);
+
+                  // Construct log message
+                  const logMessage = `\x1b[90m(client)\x1b[0m ${source} ${msg}`;
+
+                  // Use Vite's built-in logger
+                  if (entry.level === "error") {
+                    server.config.logger.error(logMessage, { timestamp: true });
+                  } else if (entry.level === "warn") {
+                    server.config.logger.warn(logMessage, { timestamp: true });
+                  } else {
+                    server.config.logger.info(logMessage, { timestamp: true });
+                  }
+                } catch (e) {
+                  server.config.logger.error(
+                    `Failed to parse remote log: ${e}`,
+                    { timestamp: true },
+                  );
                 }
-
-                // Join message parts
-                const msg = Array.isArray(entry.message)
-                  ? entry.message.join(" ")
-                  : String(entry.message);
-
-                // Construct log message
-                const logMessage = `\x1b[90m(client)\x1b[0m ${source} ${msg}`;
-
-                // Use Vite's built-in logger
-                if (entry.level === "error") {
-                  server.config.logger.error(logMessage, { timestamp: true });
-                } else if (entry.level === "warn") {
-                  server.config.logger.warn(logMessage, { timestamp: true });
-                } else {
-                  server.config.logger.info(logMessage, { timestamp: true });
-                }
-              } catch (e) {
-                server.config.logger.error(`Failed to parse remote log: ${e}`, {
-                  timestamp: true,
-                });
-              }
-              res.statusCode = 200;
-              res.end();
-            });
-          } else {
-            next();
-          }
-        });
+                res.statusCode = 200;
+                res.end();
+              });
+            } else {
+              next();
+            }
+          });
+        },
+      },
+      {
+        name: "aptos-funding-api",
+        configureServer(server) {
+          registerAptosFundingApi(server.middlewares, server.config.logger);
+        },
+      },
+    ],
+    server: {
+      port: webappHttpPort,
+      strictPort: false,
+      hmr: {
+        overlay: true,
+      },
+      proxy: {
+        // Proxy /aptos-api/* → http://<host>:<VITE_APTOS_HTTP_PORT>
+        "/aptos-api": {
+          target: `http://${hostIp}:${aptosHttpPort}`,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/aptos-api/, ""),
+        },
+        // Proxy /eth-api/* → http://<host>:<VITE_ETHEREUM_HTTP_PORT>
+        "/eth-api": {
+          target: `http://${hostIp}:${ethHttpPort}`,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/eth-api/, ""),
+        },
       },
     },
-    {
-      name: "aptos-funding-api",
-      configureServer(server) {
-        registerAptosFundingApi(server.middlewares, server.config.logger);
-      },
-      configurePreviewServer(server) {
-        registerAptosFundingApi(server.middlewares, server.config.logger);
-      },
+    // Enable source maps for better error messages
+    build: {
+      sourcemap: true,
     },
-  ],
-  server: {
-    // Enable verbose logging to help debug browser errors
-    strictPort: false,
-    // Log browser console errors to terminal
-    hmr: {
-      overlay: true, // Show errors in browser overlay
-    },
-  },
-  // Enable source maps for better error messages
-  build: {
-    sourcemap: true,
-  },
+  };
 });
