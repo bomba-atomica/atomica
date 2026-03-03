@@ -12,7 +12,7 @@ There are exactly two ways to consume credentials, depending on context:
 ### Do not duplicate credentials
 
 - **Never** hardcode private keys, addresses, or mnemonics in any file other than `source/shared/test-constants.ts`.
-- **Never** import `TEST_ACCOUNTS` or raw key literals from the Ethereum testnet SDK inside a deploy or demo script.
+- **Never** use raw key literals from the Ethereum testnet SDK (`getTestAccounts()`) inside a deploy or demo script.
 - **Never** copy the default values from `test-constants.ts` into a deploy/demo script as a fallback. If the env var is absent, throw:
   ```ts
   const key = process.env.ETH_DEPLOYER_PRIVATE_KEY;
