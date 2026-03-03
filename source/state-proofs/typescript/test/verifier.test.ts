@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { verifyAccountProof, verifyStorageProof } from "../src/verifier";
-import { ETH_DEPLOYER_ADDRESS } from "../../../../shared/test-constants";
+import { ETH_DEPLOYER_ADDRESS } from "../../../shared/test-constants";
 
 describe("Account Proof Verification", () => {
     test("should verify valid account proof against state root", async () => {

@@ -3,7 +3,7 @@ import { verifyTransactionProof, encodeTransaction } from "../src/transaction";
 import type { Block, Transaction } from "../src/types";
 import { RLP } from "@ethereumjs/rlp";
 import { Trie } from "@ethereumjs/trie";
-import { ETH_DEPLOYER_ADDRESS } from "../../../../shared/test-constants";
+import { ETH_DEPLOYER_ADDRESS } from "../../../shared/test-constants";
 
 // Mock data helpers
 const mockAddress = ETH_DEPLOYER_ADDRESS;

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { verifyMerkleProof, hashNode, decodeNode } from "../src/mpt";
 import { RLP } from "@ethereumjs/rlp";
-import { ETH_DEPLOYER_ADDRESS } from "../../../../shared/test-constants";
+import { ETH_DEPLOYER_ADDRESS } from "../../../shared/test-constants";
 
 describe("Merkle-Patricia Trie Core", () => {
     describe("verifyMerkleProof", () => {
