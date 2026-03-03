@@ -200,7 +200,9 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         for (const varName of credentialEnvVars) {
             const value = process.env[varName];
             if (!value) {
-                throw new Error(`Missing required credential env var: ${varName}. Load source/.env.test before running genesis.`);
+                throw new Error(
+                    `Missing required credential env var: ${varName}. Load source/.env.test before running genesis.`,
+                );
             }
             dockerArgs.push("-e", `${varName}=${value}`);
         }
