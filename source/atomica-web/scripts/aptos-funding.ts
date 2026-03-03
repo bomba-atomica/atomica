@@ -77,9 +77,14 @@ function buildAptosRestUrl(host: string): string {
 
 function getFunderAccount(): AptosAccount {
   const credentials = getFunderCredentials();
+  // The Core Resources account is ALWAYS at 0xA550C18 in Aptos (hardcoded in Move).
+  // At genesis (is_test: true) its auth key is rotated to match root_key from layout.yaml,
+  // so we sign with APTOS_ROOT_ACCOUNT_PRIVATE_KEY but send from 0xA550C18.
+  const coreResourcesAddress =
+    "0x00000000000000000000000000000000000000000000000000000000a550c18";
   return new AptosAccount(
     HexString.ensure(credentials.privateKey).toUint8Array(),
-    normalizeAddress(credentials.address),
+    coreResourcesAddress,
   );
 }
 
