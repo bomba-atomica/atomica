@@ -41,6 +41,27 @@ function readArtifact(contractName: string): {
   return JSON.parse(readFileSync(artifactPath, "utf-8"));
 }
 
+/**
+ * Wait until geth's transaction indexer is ready by polling eth_blockNumber.
+ * Geth returns -32000 "transaction indexing is in progress" on eth_getTransactionReceipt
+ * for a short window after startup even though the health check has passed.
+ * Waiting for block 1 ensures the indexer is fully caught up.
+ */
+async function waitForFirstBlock(
+  provider: ethers.JsonRpcProvider,
+): Promise<void> {
+  console.log("[Ethereum Testnet] Waiting for first block...");
+  for (let i = 0; i < 60; i++) {
+    const block = await provider.getBlockNumber();
+    if (block >= 1) {
+      console.log(`[Ethereum Testnet] ✓ Block ${block} reached`);
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error("Timed out waiting for first block");
+}
+
 async function deployContract(
   signer: ethers.Wallet,
   artifact: { abi: object[]; bytecode: { object: string } },
@@ -73,6 +94,7 @@ export async function setupEthereumTestnet(): Promise<EthereumTestnetInfo> {
   console.log(`[Ethereum Testnet] ✓ RPC: ${rpcUrl}, chainId: ${chainId}`);
   console.log(`[Ethereum Testnet] Deployer: ${signer.address}`);
 
+  await waitForFirstBlock(provider);
   ensureCompiled();
 
   const fakeETHArtifact = readArtifact("FakeETH");
