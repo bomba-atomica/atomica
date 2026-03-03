@@ -6,13 +6,13 @@ import { MockWallet } from "../../test-utils/browser-utils/MockWallet";
 import { useEthereumBalances } from "../../src/hooks/useEthereumBalances";
 import { useAptosBalances } from "../../src/hooks/useAptosBalances";
 import { NetworkConfigProvider } from "../../src/lib/network-config-context";
+import { APTOS_DEPLOYER_PRIVATE_KEY } from "../../../shared/test-constants";
 
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "../../src/lib/aptos";
 
 describe.sequential("AccountStatus Integration", () => {
-  const TEST_PK =
-    "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
+  const TEST_PK = APTOS_DEPLOYER_PRIVATE_KEY;
   const mockWallet = new MockWallet(TEST_PK);
 
   function AccountStatusWithBalances() {

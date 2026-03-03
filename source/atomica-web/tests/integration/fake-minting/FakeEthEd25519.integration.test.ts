@@ -3,9 +3,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 import { commands } from "vitest/browser";
+import { ATOMICA_CONTRACT_ADDRESS } from "../../../shared/test-constants";
 
-const DEPLOYER_ADDR =
-  "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
+const DEPLOYER_ADDR = ATOMICA_CONTRACT_ADDRESS;
 
 describe.sequential("FakeEth Integration Test (Ed25519)", () => {
   let aptos: Aptos;

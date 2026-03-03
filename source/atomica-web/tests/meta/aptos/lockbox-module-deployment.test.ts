@@ -8,6 +8,7 @@ import {
   Ed25519PrivateKey,
 } from "@aptos-labs/ts-sdk";
 import { resolve as pathResolve } from "path";
+import { APTOS_DEPLOYER_PRIVATE_KEY } from "../../../shared/test-constants";
 
 /**
  * Test: Aptos LockBox Module Deployment Verification
@@ -47,7 +48,7 @@ describe.sequential("Aptos LockBox Module Deployment", () => {
     aptosClient = new Aptos(config);
 
     const deployerPrivateKey = new Ed25519PrivateKey(
-      "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717",
+      APTOS_DEPLOYER_PRIVATE_KEY,
     );
     deployerAccount = Account.fromPrivateKey({
       privateKey: deployerPrivateKey,

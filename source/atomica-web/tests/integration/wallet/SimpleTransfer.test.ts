@@ -56,10 +56,13 @@ import {
   submitNativeTransaction,
 } from "../../../src/lib/aptos";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+import {
+  HARDHAT_ACCOUNT_0_ADDRESS,
+  HARDHAT_ACCOUNT_0_PRIVATE_KEY,
+} from "../../../../shared/test-constants";
 
-const TEST_ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"; // Hardhat Account 0
-const TEST_PK =
-  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+const TEST_ACCOUNT = HARDHAT_ACCOUNT_0_ADDRESS; // Hardhat Account 0
+const TEST_PK = HARDHAT_ACCOUNT_0_PRIVATE_KEY;
 
 describe.sequential(
   "MetaMask Mock Fidelity - Simple Transfer (Browser)",

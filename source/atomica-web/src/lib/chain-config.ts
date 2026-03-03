@@ -1,4 +1,4 @@
-import { APTOS_DEFAULT_DEPLOYER_ADDRESS } from "./aptos/constants";
+import { ATOMICA_CONTRACT_ADDRESS } from "../../shared/test-constants";
 
 export type ChainConfig = {
   ethereum: {
@@ -32,7 +32,7 @@ export const DEFAULT_CHAIN_CONFIG: ChainConfig = {
   },
   aptos: {
     contractAddress:
-      (env.VITE_CONTRACT_ADDRESS as string) || APTOS_DEFAULT_DEPLOYER_ADDRESS,
+      (env.VITE_CONTRACT_ADDRESS as string) || ATOMICA_CONTRACT_ADDRESS,
   },
 };
 

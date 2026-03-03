@@ -3,9 +3,10 @@ import { verifyReceiptProof, encodeReceipt } from "../src/receipt";
 import type { Block, Receipt } from "../src/types";
 import { RLP } from "@ethereumjs/rlp";
 import { Trie } from "@ethereumjs/trie";
+import { ETH_DEPLOYER_ADDRESS } from "../../../../shared/test-constants";
 
 const mockHash = "0x" + "b".repeat(64);
-const mockAddress = "0x8943545177806ED17B9F23F0a21ee5948eCaa776";
+const mockAddress = ETH_DEPLOYER_ADDRESS;
 
 // Sample Receipt (Legacy / Post-Byzantium)
 // RLP([status, cumulativeGasUsed, logsBloom, logs])

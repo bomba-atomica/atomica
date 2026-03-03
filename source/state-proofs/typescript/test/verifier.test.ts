@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { verifyAccountProof, verifyStorageProof } from "../src/verifier";
+import { ETH_DEPLOYER_ADDRESS } from "../../../../shared/test-constants";
 
 describe("Account Proof Verification", () => {
     test("should verify valid account proof against state root", async () => {
@@ -9,7 +10,7 @@ describe("Account Proof Verification", () => {
             // RLP-encoded trie nodes (will be filled by integration test)
         ];
         const stateRoot = "0x" + "0".repeat(64); // Placeholder
-        const address = "0x8943545177806ED17B9F23F0a21ee5948eCaa776";
+        const address = ETH_DEPLOYER_ADDRESS;
 
         const result = await verifyAccountProof(accountProof, stateRoot, address);
 
@@ -31,7 +32,7 @@ describe("Account Proof Verification", () => {
             "0xdeadbeef",
         ];
         const stateRoot = "0x" + "a".repeat(64);
-        const address = "0x8943545177806ED17B9F23F0a21ee5948eCaa776";
+        const address = ETH_DEPLOYER_ADDRESS;
 
         const result = await verifyAccountProof(accountProof, stateRoot, address);
 
@@ -42,7 +43,7 @@ describe("Account Proof Verification", () => {
     test("should reject proof with wrong state root", async () => {
         const accountProof: string[] = []; // Will be filled with valid proof
         const wrongStateRoot = "0x" + "b".repeat(64); // Wrong root
-        const address = "0x8943545177806ED17B9F23F0a21ee5948eCaa776";
+        const address = ETH_DEPLOYER_ADDRESS;
 
         const result = await verifyAccountProof(accountProof, wrongStateRoot, address);
 

@@ -4,6 +4,11 @@ import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  APTOS_DEPLOYER_PRIVATE_KEY,
+  ATOMICA_CONTRACT_ADDRESS,
+} from "../../shared/test-constants";
+
 // Helper to get __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -15,10 +20,8 @@ const CONTRACTS_DIR = join(WORKSPACE_ROOT, "source/atomica-move-contracts");
 const WEB_DIR = join(WORKSPACE_ROOT, "source/atomica-web");
 
 // Test Keys (NOT FOR MAINNET)
-const DEPLOYER_PK =
-  "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
-const DEPLOYER_ADDR =
-  "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
+const DEPLOYER_PK = APTOS_DEPLOYER_PRIVATE_KEY;
+const DEPLOYER_ADDR = ATOMICA_CONTRACT_ADDRESS;
 
 async function main() {
   console.log("🚀 Starting Atomica Demo Orchestrator (Node.js)...");

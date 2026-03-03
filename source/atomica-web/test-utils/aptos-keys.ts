@@ -2,6 +2,8 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { getEnvOverride, DEFAULT_CREDENTIALS } from "../../shared/test-constants";
+
 export type AptosKeyPair = {
   address: string;
   privateKey: string;
@@ -72,7 +74,12 @@ const GENESIS_KEYS_PATH = pathResolve(
 let cachedFunder: AptosKeyPair | null = null;
 export function getFunderCredentials(): AptosKeyPair {
   if (!cachedFunder) {
-    cachedFunder = readYamlKey(GENESIS_KEYS_PATH);
+    cachedFunder =
+      readEnvKeyPair(
+        "CORE_RESOURCES_ADDRESS",
+        "CORE_RESOURCES_PRIVATE_KEY",
+        "env",
+      ) ?? readYamlKey(GENESIS_KEYS_PATH);
   }
   return cachedFunder;
 }
@@ -107,7 +114,25 @@ function findValidatorKeyPath(): string {
 let cachedDeployer: AptosKeyPair | null = null;
 export function getDeployerCredentials(): AptosKeyPair {
   if (!cachedDeployer) {
-    cachedDeployer = readYamlKey(findValidatorKeyPath());
+    cachedDeployer =
+      readEnvKeyPair(
+        "APTOS_DEPLOYER_ADDRESS",
+        "APTOS_DEPLOYER_PRIVATE_KEY",
+        "env",
+      ) ?? readYamlKey(findValidatorKeyPath());
   }
   return cachedDeployer;
+}
+
+function readEnvKeyPair(
+  addressKey: keyof typeof DEFAULT_CREDENTIALS,
+  privateKeyKey: keyof typeof DEFAULT_CREDENTIALS,
+  source: string,
+): AptosKeyPair | null {
+  const address = getEnvOverride(addressKey);
+  const privateKey = getEnvOverride(privateKeyKey);
+  if (address && privateKey) {
+    return { address, privateKey, source };
+  }
+  return null;
 }

@@ -29,12 +29,15 @@ import {
   InputEntryFunctionData,
 } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "../../src/lib/aptos";
+import {
+  ATOMICA_CONTRACT_ADDRESS,
+  HARDHAT_ACCOUNT_0_ADDRESS,
+  HARDHAT_ACCOUNT_0_PRIVATE_KEY,
+} from "../../shared/test-constants";
 
-const DEPLOYER_ADDR =
-  "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
-const TEST_ACCOUNT = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"; // Hardhat Account 0
-const TEST_PK =
-  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+const DEPLOYER_ADDR = ATOMICA_CONTRACT_ADDRESS;
+const TEST_ACCOUNT = HARDHAT_ACCOUNT_0_ADDRESS;
+const TEST_PK = HARDHAT_ACCOUNT_0_PRIVATE_KEY;
 
 describe.sequential("TxButton Skip & Submit Mode", () => {
   let derivedAddr: string;
