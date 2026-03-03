@@ -8,12 +8,12 @@ import { getDerivedAddress } from "../../../src/lib/aptos/siwe";
 import { submitNativeTransaction } from "../../../src/lib/aptos/transaction";
 import { setupBrowserWalletMock } from "../../../test-utils/browser-utils/wallet-mock";
 import {
-  HARDHAT_ACCOUNT_0_ADDRESS,
-  HARDHAT_ACCOUNT_0_PRIVATE_KEY,
+  ETHEREUM_ACCOUNT_0_ADDRESS,
+  ETHEREUM_ACCOUNT_0_PRIVATE_KEY,
 } from "../../../../shared/test-constants";
 
-const TEST_ACCOUNT = HARDHAT_ACCOUNT_0_ADDRESS; // Hardhat Account 0
-const TEST_PK = HARDHAT_ACCOUNT_0_PRIVATE_KEY;
+const TEST_ACCOUNT = ETHEREUM_ACCOUNT_0_ADDRESS; // Hardhat Account 0
+const TEST_PK = ETHEREUM_ACCOUNT_0_PRIVATE_KEY;
 
 // Recipient for the APT transfer used as the test transaction
 const TRANSFER_RECIPIENT =

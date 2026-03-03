@@ -10,7 +10,7 @@
  *   ETH_RPC_URL=<url> bun run deploy  # Custom Ethereum URL
  *
  * Environment variables (required):
- *   ETH_DEPLOYER_PRIVATE_KEY  - Ethereum deployer private key
+ *   ETHEREUM_DEPLOYER_PRIVATE_KEY  - Ethereum deployer private key
  *   APTOS_DEPLOYER_ADDRESS    - Aptos deployer account address
  *   APTOS_DEPLOYER_PRIVATE_KEY - Aptos deployer private key
  *
@@ -39,7 +39,9 @@ function requireEnv(key: string): string {
   return value;
 }
 
-const ETH_DEPLOYER_PRIVATE_KEY = requireEnv("ETH_DEPLOYER_PRIVATE_KEY");
+const ETHEREUM_DEPLOYER_PRIVATE_KEY = requireEnv(
+  "ETHEREUM_DEPLOYER_PRIVATE_KEY",
+);
 const APTOS_DEPLOYER_ADDRESS = requireEnv("APTOS_DEPLOYER_ADDRESS");
 const APTOS_DEPLOYER_PRIVATE_KEY = requireEnv("APTOS_DEPLOYER_PRIVATE_KEY");
 
@@ -85,7 +87,7 @@ async function deployEthereumContracts() {
 
   const provider = new ethers.JsonRpcProvider(ETH_RPC_URL);
 
-  const ethSigner = new ethers.Wallet(ETH_DEPLOYER_PRIVATE_KEY, provider);
+  const ethSigner = new ethers.Wallet(ETHEREUM_DEPLOYER_PRIVATE_KEY, provider);
 
   const deployerAddress = await ethSigner.getAddress();
   console.log(`  Deployer: ${deployerAddress}`);

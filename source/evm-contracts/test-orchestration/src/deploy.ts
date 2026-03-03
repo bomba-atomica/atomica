@@ -11,7 +11,7 @@ import { spawn } from "child_process";
 import { resolve as pathResolve, dirname } from "path";
 import { parseArgs } from "util";
 import { fileURLToPath } from "url";
-import { ETH_DEPLOYER_PRIVATE_KEY } from "../../../../shared/test-constants";
+import { ETHEREUM_DEPLOYER_PRIVATE_KEY } from "../../../../shared/test-constants";
 
 const REPO_ROOT = pathResolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 
@@ -259,7 +259,7 @@ if (import.meta.main) {
     });
 
     // Default private key for testing (Anvil default)
-    const privateKey = values.key || ETH_DEPLOYER_PRIVATE_KEY;
+    const privateKey = values.key || ETHEREUM_DEPLOYER_PRIVATE_KEY;
 
     await deploy({
         rpcUrl: values.network,

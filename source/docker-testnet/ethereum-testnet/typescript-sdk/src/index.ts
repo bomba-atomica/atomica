@@ -419,16 +419,16 @@ export class EthereumDockerTestnet {
   /**
    * Get pre-funded test accounts (1000 ETH each at genesis).
    *
-   * Account 0 is read from ETH_DEPLOYER_ADDRESS / ETH_DEPLOYER_PRIVATE_KEY
+   * Account 0 is read from ETHEREUM_DEPLOYER_ADDRESS / ETHEREUM_DEPLOYER_PRIVATE_KEY
    * env vars so it stays in sync with source/shared/test-constants.ts.
    * Accounts 1-3 are fixed by the docker-compose genesis configuration.
    */
   getTestAccounts(): TestAccount[] {
     const account0Address =
-      process.env.ETH_DEPLOYER_ADDRESS?.trim() ||
+      process.env.ETHEREUM_DEPLOYER_ADDRESS?.trim() ||
       "0x8943545177806ED17B9F23F0a21ee5948eCaa776";
     const account0PrivateKey =
-      process.env.ETH_DEPLOYER_PRIVATE_KEY?.trim() ||
+      process.env.ETHEREUM_DEPLOYER_PRIVATE_KEY?.trim() ||
       "0xbcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31";
     return [
       { address: account0Address, privateKey: account0PrivateKey },
@@ -452,12 +452,12 @@ export class EthereumDockerTestnet {
 
   /**
    * Get the testnet mnemonic.
-   * Read from ETH_DEPLOYER_MNEMONIC env var so it stays in sync with
+   * Read from ETHEREUM_DEPLOYER_MNEMONIC env var so it stays in sync with
    * source/shared/test-constants.ts.
    */
   getMnemonic(): string {
     return (
-      process.env.ETH_DEPLOYER_MNEMONIC?.trim() ||
+      process.env.ETHEREUM_DEPLOYER_MNEMONIC?.trim() ||
       "giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete"
     );
   }

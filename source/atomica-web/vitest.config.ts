@@ -51,8 +51,11 @@
  */
 
 import { defineConfig } from "vitest/config";
+import { loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { playwright } from "@vitest/browser-playwright";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 import {
   setupLocalnetCommand,
   teardownLocalnetCommand,
@@ -61,6 +64,12 @@ import {
   setupEthereumTestnetCommand,
   teardownEthereumTestnetCommand,
 } from "./test-utils/browser-commands";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+// Load all vars from source/.env.test into the Vite server process (browser commands run here)
+const testEnv = loadEnv("test", resolve(__dirname, ".."), "");
+// Assign to process.env so browser commands (which run server-side) see these vars
+Object.assign(process.env, testEnv);
 
 export default defineConfig({
   plugins: [react()],
@@ -246,6 +255,7 @@ export default defineConfig({
         teardownEthereumTestnet: teardownEthereumTestnetCommand,
       },
     },
+    env: testEnv,
     testTimeout: 300000,
     hookTimeout: 120000,
 

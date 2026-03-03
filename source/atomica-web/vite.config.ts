@@ -159,6 +159,7 @@ function loadChainConfig(): ChainConfig {
 const CHAIN_CONFIG = loadChainConfig();
 
 export default defineConfig({
+  envDir: "../", // load source/.env.test (and source/.env) for all packages
   define: {
     __ATOMICA_CHAIN_CONFIG__: JSON.stringify(CHAIN_CONFIG),
   },

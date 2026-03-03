@@ -3,8 +3,8 @@ import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  CORE_RESOURCES_ADDRESS,
-  CORE_RESOURCES_PRIVATE_KEY,
+  APTOS_ROOT_ACCOUNT_ADDRESS,
+  APTOS_ROOT_ACCOUNT_PRIVATE_KEY,
   APTOS_DEPLOYER_ADDRESS,
   APTOS_DEPLOYER_PRIVATE_KEY,
 } from "../../shared/test-constants";
@@ -51,8 +51,8 @@ export type AptosKeyPair = {
 
 export function getFunderCredentials(): AptosKeyPair {
   return {
-    address: CORE_RESOURCES_ADDRESS,
-    privateKey: CORE_RESOURCES_PRIVATE_KEY,
+    address: APTOS_ROOT_ACCOUNT_ADDRESS,
+    privateKey: APTOS_ROOT_ACCOUNT_PRIVATE_KEY,
     source: "test-constants",
   };
 }

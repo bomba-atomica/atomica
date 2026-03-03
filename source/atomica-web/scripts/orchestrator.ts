@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   APTOS_DEPLOYER_PRIVATE_KEY,
-  ATOMICA_CONTRACT_ADDRESS,
+  APTOS_ATOMICA_CONTRACT_ADDRESS,
 } from "../../shared/test-constants";
 
 // Helper to get __dirname in ESM
@@ -21,7 +21,7 @@ const WEB_DIR = join(WORKSPACE_ROOT, "source/atomica-web");
 
 // Test Keys (NOT FOR MAINNET)
 const DEPLOYER_PK = APTOS_DEPLOYER_PRIVATE_KEY;
-const DEPLOYER_ADDR = ATOMICA_CONTRACT_ADDRESS;
+const DEPLOYER_ADDR = APTOS_ATOMICA_CONTRACT_ADDRESS;
 
 async function main() {
   console.log("🚀 Starting Atomica Demo Orchestrator (Node.js)...");

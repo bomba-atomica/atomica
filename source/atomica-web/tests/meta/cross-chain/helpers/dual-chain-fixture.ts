@@ -22,7 +22,7 @@ import {
 } from "../../aptos/helpers/module-indexing-utils";
 import {
   APTOS_DEPLOYER_PRIVATE_KEY,
-  ATOMICA_CONTRACT_ADDRESS,
+  APTOS_ATOMICA_CONTRACT_ADDRESS,
 } from "../../../../../shared/test-constants";
 
 export interface DualChainFixture {
@@ -210,7 +210,7 @@ export async function setupDualChainFixture(
   const aptosDeployer = Account.fromPrivateKey({
     privateKey: deployerPrivateKey,
   });
-  const aptosModuleAddress = ATOMICA_CONTRACT_ADDRESS;
+  const aptosModuleAddress = APTOS_ATOMICA_CONTRACT_ADDRESS;
 
   console.log(`✓ Aptos account: ${aptosAccount.accountAddress.toString()}`);
   console.log(`✓ Aptos deployer: ${aptosModuleAddress}`);
