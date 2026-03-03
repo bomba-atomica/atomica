@@ -107,11 +107,23 @@ import {
   fundAccount,
   // killZombies, // Unused - setupLocalnet handles cleanup internally
 } from "./localnet";
+import {
+  setupEthereumTestnet,
+  teardownEthereumTestnet,
+} from "./ethereum-testnet";
 
 /**
  * Module augmentation to add our custom commands to Vitest's browser commands types.
  * This provides TypeScript autocomplete and type checking in browser tests.
  */
+export interface EthereumTestnetInfo {
+  rpcUrl: string;
+  fakeETH: string;
+  fakeUSD: string;
+  signerPrivateKey: string;
+  chainId: number;
+}
+
 declare module "vitest/browser" {
   interface BrowserCommands {
     setupLocalnet(): Promise<{ success: boolean }>;
@@ -121,6 +133,8 @@ declare module "vitest/browser" {
       address: string,
       amount?: number,
     ): Promise<{ success: boolean; txHash: string }>;
+    setupEthereumTestnet(): Promise<EthereumTestnetInfo>;
+    teardownEthereumTestnet(): Promise<{ success: boolean }>;
   }
 }
 
