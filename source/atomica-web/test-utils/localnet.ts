@@ -57,7 +57,6 @@ const TEST_SETUP_DIR = dirname(fileURLToPath(import.meta.url));
 const WEB_DIR = pathResolve(TEST_SETUP_DIR, "..");
 
 const DEPLOYER_CREDS = getDeployerCredentials();
-
 export const DEPLOYER_PK = DEPLOYER_CREDS.privateKey;
 export const DEPLOYER_ADDR = DEPLOYER_CREDS.address;
 
