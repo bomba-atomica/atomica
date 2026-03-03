@@ -49,7 +49,5 @@ type GlobalWithChainConfig = typeof globalThis & {
 const globalWithChainConfig = globalThis as GlobalWithChainConfig;
 
 export function getChainConfig(): ChainConfig {
-  return (
-    globalWithChainConfig.__ATOMICA_CHAIN_CONFIG__ ?? DEFAULT_CHAIN_CONFIG
-  );
+  return globalWithChainConfig.__ATOMICA_CHAIN_CONFIG__ ?? DEFAULT_CHAIN_CONFIG;
 }

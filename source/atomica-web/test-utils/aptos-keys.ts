@@ -2,7 +2,10 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { getEnvOverride, DEFAULT_CREDENTIALS } from "../../shared/test-constants";
+import {
+  getEnvOverride,
+  DEFAULT_CREDENTIALS,
+} from "../../shared/test-constants";
 
 export type AptosKeyPair = {
   address: string;
