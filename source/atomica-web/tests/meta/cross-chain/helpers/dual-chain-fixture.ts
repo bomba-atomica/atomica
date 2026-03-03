@@ -1,4 +1,5 @@
 import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
+const ETHEREUM_TESTNET_CONFIG_DIR = new URL("../../../../../docker-testnet/ethereum-testnet/config", import.meta.url).pathname;
 import { DockerTestnet } from "@atomica/docker-testnet";
 import { ethers } from "ethers";
 import {
@@ -90,7 +91,7 @@ export async function setupDualChainFixture(
   console.log("\n[PHASE 1] Starting testnets in parallel...");
 
   const [ethTestnet, aptosTestnet] = await Promise.all([
-    EthereumDockerTestnet.start(ethereumSlots),
+    EthereumDockerTestnet.start(ethereumSlots, ETHEREUM_TESTNET_CONFIG_DIR),
     DockerTestnet.new(aptosSlots),
   ]);
 

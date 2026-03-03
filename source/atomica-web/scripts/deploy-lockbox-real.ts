@@ -13,6 +13,7 @@
  */
 
 import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
+const ETHEREUM_TESTNET_CONFIG_DIR = new URL("../../docker-testnet/ethereum-testnet/config", import.meta.url).pathname;
 import { ethers } from "ethers";
 import { writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
@@ -52,7 +53,7 @@ async function main() {
     console.log("\n📦 Step 1/6: Starting Ethereum Docker testnet...");
     console.log("   (This may take 2-3 minutes for first-time setup)");
 
-    testnet = await EthereumDockerTestnet.start(8);
+    testnet = await EthereumDockerTestnet.start(8, ETHEREUM_TESTNET_CONFIG_DIR);
     console.log("   ✅ Testnet started");
 
     console.log("\n⏳ Waiting for network to be healthy...");

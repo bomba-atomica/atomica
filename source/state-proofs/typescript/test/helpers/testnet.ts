@@ -6,6 +6,7 @@
  */
 
 import type { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
+const ETHEREUM_TESTNET_CONFIG_DIR = new URL("../../../../../docker-testnet/ethereum-testnet/config", import.meta.url).pathname;
 import {
     ETHEREUM_DEPLOYER_ADDRESS,
     ETHEREUM_DEPLOYER_PRIVATE_KEY,
@@ -21,7 +22,7 @@ export async function startTestnet(): Promise<void> {
     const { EthereumDockerTestnet } = await import("@atomica/ethereum-docker-testnet");
 
     console.log("Starting Ethereum testnet...");
-    testnet = await EthereumDockerTestnet.start(4); // 4 validators
+    testnet = await EthereumDockerTestnet.start(4, ETHEREUM_TESTNET_CONFIG_DIR); // 4 validators
 
     console.log("Waiting for testnet to become healthy...");
     await testnet.waitForHealthy(120); // 2 minute timeout

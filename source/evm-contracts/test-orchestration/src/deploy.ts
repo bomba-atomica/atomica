@@ -14,6 +14,7 @@ import { fileURLToPath } from "url";
 import { ETHEREUM_DEPLOYER_PRIVATE_KEY } from "../../../../shared/test-constants";
 
 const REPO_ROOT = pathResolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+const ETHEREUM_TESTNET_CONFIG_DIR = pathResolve(REPO_ROOT, "source/docker-testnet/ethereum-testnet/config");
 
 const CONTRACTS_DIR = pathResolve(import.meta.dir, "../src");
 
@@ -51,7 +52,7 @@ async function deploy(config: DeployConfig): Promise<void> {
             process.chdir(REPO_ROOT);
             console.log(`New cwd: ${process.cwd()}`);
             try {
-                testnet = await EthereumDockerTestnet.start(4);
+                testnet = await EthereumDockerTestnet.start(4, ETHEREUM_TESTNET_CONFIG_DIR);
                 await testnet.waitForHealthy(180);
                 rpcUrl = testnet.getExecutionRpcUrl();
                 console.log(`✓ Testnet started at ${rpcUrl}`);

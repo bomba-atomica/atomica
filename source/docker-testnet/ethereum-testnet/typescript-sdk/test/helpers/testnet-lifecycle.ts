@@ -121,7 +121,7 @@ export function getGlobalTestnet(): EthereumDockerTestnet | undefined {
  */
 function findConfigDir(): string {
   const candidates = [
-    pathResolve(__dirname, "../../../config"),
+    pathResolve(import.meta.dir, "../../../config"),
     pathResolve(process.cwd(), "source/docker-testnet/ethereum-testnet/config"),
     pathResolve(process.cwd(), "config"),
   ];
@@ -146,7 +146,7 @@ export async function initializeTestnet(
     `Initializing Ethereum PoS testnet with ${numValidators} validators...`,
   );
 
-  const testnet = await EthereumDockerTestnet.start(numValidators);
+  const testnet = await EthereumDockerTestnet.start(numValidators, findConfigDir());
   setGlobalTestnet(testnet);
   console.log("✓ Testnet containers started");
 
