@@ -145,7 +145,6 @@ export async function areCoreContractsDeployed(): Promise<boolean> {
   }
 }
 
-
 export function getCreateAuctionPayload(
   amountEth: bigint,
   minPrice: bigint,

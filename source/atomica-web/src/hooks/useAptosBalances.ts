@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  aptos,
-  getDerivedAddress,
-  areContractsDeployed,
-} from "../lib/aptos";
+import { aptos, getDerivedAddress, areContractsDeployed } from "../lib/aptos";
 import { useNetworkConfig } from "../lib/network-config-state";
 
 export interface AptosBalanceSnapshot {
