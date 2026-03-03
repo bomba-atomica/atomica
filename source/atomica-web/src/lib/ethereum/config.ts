@@ -98,22 +98,25 @@ export async function switchToTestnet(): Promise<void> {
     throw new Error("MetaMask is not installed");
   }
 
+  const chainIdHex = `0x${ETH_CHAIN_ID.toString(16)}`;
+
   try {
     await window.ethereum!.request({
       method: "wallet_switchEthereumChain",
-      params: [{ chainId: `0x${ETH_CHAIN_ID.toString(16)}` }],
+      params: [{ chainId: chainIdHex }],
     });
   } catch (error: unknown) {
-    const err = error as { code?: number };
-    // Chain not added yet, add it
+    const err = error as { code?: number; message?: string };
+    // Chain not added yet (4902) — add it
     if (err.code === 4902) {
+      const rpcUrl = getEthRpcUrl();
       await window.ethereum!.request({
         method: "wallet_addEthereumChain",
         params: [
           {
-            chainId: `0x${ETH_CHAIN_ID.toString(16)}`,
+            chainId: chainIdHex,
             chainName: "Atomica Ethereum Testnet",
-            rpcUrls: [getEthRpcUrl()],
+            rpcUrls: [rpcUrl],
             nativeCurrency: {
               name: "Ether",
               symbol: "ETH",
@@ -123,7 +126,10 @@ export async function switchToTestnet(): Promise<void> {
         ],
       });
     } else {
-      throw error;
+      // Re-throw as a proper Error so callers can display a useful message
+      const msg =
+        err.message ?? (error instanceof Error ? error.message : String(error));
+      throw new Error(msg);
     }
   }
 }

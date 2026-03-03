@@ -36,6 +36,17 @@ export function Faucet({
     }
   };
 
+  function extractErrorMessage(e: unknown): string {
+    if (e instanceof Error) return e.message;
+    if (e !== null && typeof e === "object") {
+      const obj = e as Record<string, unknown>;
+      if (typeof obj.message === "string") return obj.message;
+      if (typeof obj.reason === "string") return obj.reason;
+      return JSON.stringify(obj);
+    }
+    return String(e);
+  }
+
   const handleMintETH = async () => {
     setLoadingETH(true);
     setEthTxHash(null);
@@ -47,8 +58,7 @@ export function Faucet({
       await result.wait();
       onMintSuccess?.();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setEthError(msg);
+      setEthError(extractErrorMessage(e));
       console.error("FakeETH mint failed:", e);
     } finally {
       setLoadingETH(false);
@@ -65,8 +75,7 @@ export function Faucet({
       await result.wait();
       onMintSuccess?.();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setUsdError(msg);
+      setUsdError(extractErrorMessage(e));
       console.error("FakeUSD mint failed:", e);
     } finally {
       setLoadingUSD(false);
