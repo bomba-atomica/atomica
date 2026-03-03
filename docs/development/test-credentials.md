@@ -15,6 +15,8 @@ The tracked `/.env.example` defines the following environment variables with the
 | `ETH_DEPLOYER_ADDRESS` | First Ethereum testnet account (pre-funded) | `source/shared/test-constants.ts` (syncs with `ethereum-testnet` SDK) |
 | `ETH_DEPLOYER_PRIVATE_KEY` | Private key for that Ethereum account | same module |
 | `ETH_DEPLOYER_MNEMONIC` | Mnemonic that derives the above ETH accounts | same module |
+| `HARDHAT_ACCOUNT_0_ADDRESS` | First Hardhat account (used by wallet/integration tests) | same module (matches Hardhat defaults in `/source/evm-contracts/test-orchestration`) |
+| `HARDHAT_ACCOUNT_0_PRIVATE_KEY` | Private key for Hardhat account 0 | same module |
 
 `/.env.example` is the reference list; `/.env.local` (gitignored) should mirror those values when you want to run locally. If you ever need a different set of keys, update `.env.local` and, optionally, `.env.example` so teammates can see the new defaults.
 
