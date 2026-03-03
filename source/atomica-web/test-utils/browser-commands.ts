@@ -107,9 +107,10 @@ import {
   fundAccount,
   // killZombies, // Unused - setupLocalnet handles cleanup internally
 } from "./localnet";
-// ethereum-testnet is imported dynamically inside each command handler to
-// prevent Vite from statically bundling Node.js-only deps into the browser
-// virtual module (which would cause "ReferenceError: __dirname is not defined").
+import {
+  setupEthereumTestnet,
+  teardownEthereumTestnet,
+} from "./ethereum-testnet";
 
 /**
  * Module augmentation to add our custom commands to Vitest's browser commands types.
@@ -255,7 +256,6 @@ export const fundAccountCommand: BrowserCommand<
  * EXECUTION: Node.js (browser can't start Docker containers)
  */
 export const setupEthereumTestnetCommand: BrowserCommand<[]> = async () => {
-  const { setupEthereumTestnet } = await import("./ethereum-testnet");
   return await setupEthereumTestnet();
 };
 
@@ -265,7 +265,6 @@ export const setupEthereumTestnetCommand: BrowserCommand<[]> = async () => {
  * EXECUTION: Node.js
  */
 export const teardownEthereumTestnetCommand: BrowserCommand<[]> = async () => {
-  const { teardownEthereumTestnet } = await import("./ethereum-testnet");
   await teardownEthereumTestnet();
   return { success: true };
 };

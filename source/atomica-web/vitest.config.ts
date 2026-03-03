@@ -64,6 +64,24 @@ import {
 
 export default defineConfig({
   plugins: [react()],
+  /**
+   * SERVER-SIDE EXTERNALS: Node.js-only packages used by browser commands
+   *
+   * Browser commands run in Node.js (Vite server side), but Vite's module
+   * resolver still traces static imports and may bundle them into the browser
+   * virtual module. Packages listed here are treated as Node.js externals and
+   * never bundled for the browser.
+   *
+   * Add any package here that:
+   *   - Is imported (directly or transitively) by test-utils/browser-commands.ts
+   *   - Uses Node.js-only APIs (child_process, __dirname, fs, etc.)
+   *   - Would break if evaluated in a browser context
+   */
+  server: {
+    deps: {
+      external: [/@atomica\/ethereum-docker-testnet/, /ethereum-testnet/],
+    },
+  },
   test: {
     /**
      * GLOBAL TEARDOWN: Ensure all resources are cleaned up
