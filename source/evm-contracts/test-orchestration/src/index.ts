@@ -29,7 +29,7 @@
  *   bun run src/index.ts --keep-alive       # Don't tear down testnet
  */
 import { EthereumDockerTestnet } from "../../../docker-testnet/ethereum-testnet/typescript-sdk/dist/index.js";
-import { ETH_DEPLOYER_PRIVATE_KEY } from "../../../../shared/test-constants";
+import { ETH_DEPLOYER_PRIVATE_KEY } from "../../../shared/test-constants";
 import { spawn } from "child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { resolve as pathResolve } from "path";
