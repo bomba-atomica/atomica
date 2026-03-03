@@ -16,6 +16,10 @@ import type { EthereumTestnetInfo } from "./browser-commands";
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
 const EVM_CONTRACTS_DIR = pathResolve(THIS_DIR, "../../evm-contracts");
+const ETHEREUM_TESTNET_CONFIG_DIR = pathResolve(
+  THIS_DIR,
+  "../../docker-testnet/ethereum-testnet/config",
+);
 
 let testnet: EthereumDockerTestnet | null = null;
 
@@ -80,7 +84,7 @@ async function deployContract(
 export async function setupEthereumTestnet(): Promise<EthereumTestnetInfo> {
   console.log("[Ethereum Testnet] Starting...");
 
-  testnet = await EthereumDockerTestnet.start(4);
+  testnet = await EthereumDockerTestnet.start(4, ETHEREUM_TESTNET_CONFIG_DIR);
   await testnet.waitForHealthy(180);
 
   const rpcUrl = testnet.getExecutionRpcUrl();

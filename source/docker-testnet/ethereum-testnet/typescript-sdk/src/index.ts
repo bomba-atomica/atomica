@@ -25,8 +25,9 @@ export class EthereumDockerTestnet {
    */
   static async start(
     numValidators: number = 4,
+    configDir?: string,
   ): Promise<EthereumDockerTestnet> {
-    const configDir = this.findConfigDir();
+    const resolvedConfigDir = configDir ?? this.findConfigDir();
 
     console.log(
       `Setting up Ethereum PoS testnet with ${numValidators} validators...`,
@@ -36,7 +37,7 @@ export class EthereumDockerTestnet {
     await this.runCommand(
       "docker",
       ["compose", "down", "-v", "--remove-orphans"],
-      configDir,
+      resolvedConfigDir,
     );
 
     // 2. Run setup service (foreground, wait for completion)
@@ -44,7 +45,7 @@ export class EthereumDockerTestnet {
     await this.runCommand(
       "docker",
       ["compose", "run", "--rm", "setup"],
-      configDir,
+      resolvedConfigDir,
     );
 
     // 3. Start remaining services (setup has completed, data is in volume)
@@ -62,10 +63,10 @@ export class EthereumDockerTestnet {
         "validator-3",
         "validator-4",
       ],
-      configDir,
+      resolvedConfigDir,
     );
 
-    return new EthereumDockerTestnet(configDir, numValidators);
+    return new EthereumDockerTestnet(resolvedConfigDir, numValidators);
   }
 
   /**
@@ -494,7 +495,6 @@ export class EthereumDockerTestnet {
 
   private static findConfigDir(): string {
     const candidates = [
-      pathResolve(__dirname, "../../config"),
       pathResolve(
         process.cwd(),
         "source/docker-testnet/ethereum-testnet/config",
