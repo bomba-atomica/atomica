@@ -27,7 +27,10 @@ import { writeChainConfig } from "./chain-config";
 const NUM_ETH_VALIDATORS = 4;
 const NUM_APTOS_VALIDATORS = 4;
 const WEBAPP_PORT = 4173;
-const ETHEREUM_TESTNET_CONFIG_DIR = new URL("../../docker-testnet/ethereum-testnet/config", import.meta.url).pathname;
+const ETHEREUM_TESTNET_CONFIG_DIR = new URL(
+  "../../docker-testnet/ethereum-testnet/config",
+  import.meta.url,
+).pathname;
 
 let ethTestnet: EthereumDockerTestnet | null = null;
 let aptosTestnet: DockerTestnet | null = null;
@@ -45,7 +48,10 @@ async function main() {
     console.log(`  - Aptos: ${NUM_APTOS_VALIDATORS} validators`);
 
     [ethTestnet, aptosTestnet] = await Promise.all([
-      EthereumDockerTestnet.start(NUM_ETH_VALIDATORS, ETHEREUM_TESTNET_CONFIG_DIR),
+      EthereumDockerTestnet.start(
+        NUM_ETH_VALIDATORS,
+        ETHEREUM_TESTNET_CONFIG_DIR,
+      ),
       DockerTestnet.new(NUM_APTOS_VALIDATORS),
     ]);
 

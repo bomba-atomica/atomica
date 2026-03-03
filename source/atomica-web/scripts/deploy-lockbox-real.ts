@@ -13,7 +13,10 @@
  */
 
 import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
-const ETHEREUM_TESTNET_CONFIG_DIR = new URL("../../docker-testnet/ethereum-testnet/config", import.meta.url).pathname;
+const ETHEREUM_TESTNET_CONFIG_DIR = new URL(
+  "../../docker-testnet/ethereum-testnet/config",
+  import.meta.url,
+).pathname;
 import { ethers } from "ethers";
 import { writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
