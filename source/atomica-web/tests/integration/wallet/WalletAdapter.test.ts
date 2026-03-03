@@ -4,7 +4,7 @@ import { ethers } from "ethers";
 import {
   HARDHAT_ACCOUNT_0_ADDRESS,
   HARDHAT_ACCOUNT_0_PRIVATE_KEY,
-} from "../../../shared/test-constants";
+} from "../../../../shared/test-constants";
 
 const TEST_ACCOUNT = HARDHAT_ACCOUNT_0_ADDRESS; // Hardhat Account 0
 const TEST_PK = HARDHAT_ACCOUNT_0_PRIVATE_KEY;

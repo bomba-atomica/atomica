@@ -3,7 +3,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 import { commands } from "vitest/browser";
-import { ATOMICA_CONTRACT_ADDRESS } from "../../../shared/test-constants";
+import { ATOMICA_CONTRACT_ADDRESS } from "../../../../shared/test-constants";
 
 const DEPLOYER_ADDR = ATOMICA_CONTRACT_ADDRESS;
 

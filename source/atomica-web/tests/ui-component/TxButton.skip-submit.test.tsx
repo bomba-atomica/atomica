@@ -33,7 +33,7 @@ import {
   ATOMICA_CONTRACT_ADDRESS,
   HARDHAT_ACCOUNT_0_ADDRESS,
   HARDHAT_ACCOUNT_0_PRIVATE_KEY,
-} from "../../shared/test-constants";
+} from "../../../shared/test-constants";
 
 const DEPLOYER_ADDR = ATOMICA_CONTRACT_ADDRESS;
 const TEST_ACCOUNT = HARDHAT_ACCOUNT_0_ADDRESS;

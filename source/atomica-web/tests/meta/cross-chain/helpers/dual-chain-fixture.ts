@@ -23,7 +23,7 @@ import {
 import {
   APTOS_DEPLOYER_PRIVATE_KEY,
   ATOMICA_CONTRACT_ADDRESS,
-} from "../../../../shared/test-constants";
+} from "../../../../../shared/test-constants";
 
 export interface DualChainFixture {
   eth: {

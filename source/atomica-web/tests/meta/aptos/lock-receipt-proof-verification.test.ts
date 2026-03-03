@@ -17,7 +17,7 @@ import {
   APTOS_DEPLOYER_PRIVATE_KEY,
   ATOMICA_CONTRACT_ADDRESS,
   ETH_DEPLOYER_ADDRESS,
-} from "../../../shared/test-constants";
+} from "../../../../shared/test-constants";
 
 /**
  * Aptos Lock Receipt Proof Verification Test

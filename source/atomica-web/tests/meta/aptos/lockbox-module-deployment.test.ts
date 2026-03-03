@@ -8,7 +8,7 @@ import {
   Ed25519PrivateKey,
 } from "@aptos-labs/ts-sdk";
 import { resolve as pathResolve } from "path";
-import { APTOS_DEPLOYER_PRIVATE_KEY } from "../../../shared/test-constants";
+import { APTOS_DEPLOYER_PRIVATE_KEY } from "../../../../shared/test-constants";
 
 /**
  * Test: Aptos LockBox Module Deployment Verification

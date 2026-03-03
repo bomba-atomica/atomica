@@ -8,7 +8,7 @@ import {
   ATOMICA_CONTRACT_ADDRESS,
   HARDHAT_ACCOUNT_0_ADDRESS,
   HARDHAT_ACCOUNT_0_PRIVATE_KEY,
-} from "../../../shared/test-constants";
+} from "../../../../shared/test-constants";
 
 // Legacy-compatibility integration test for Aptos-side FakeEth minting via SIWE.
 // Canonical fake-token issuance is EVM-only; this suite validates deprecated paths still work.
