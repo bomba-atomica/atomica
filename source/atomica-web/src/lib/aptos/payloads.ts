@@ -145,16 +145,6 @@ export async function areCoreContractsDeployed(): Promise<boolean> {
   }
 }
 
-/**
- * Legacy function for backward compatibility
- * @deprecated Use requestAPT() only for canonical flows. This helper also calls
- * deprecated Aptos-side fake-token mint paths.
- */
-export async function submitFaucet(ethAddress: string) {
-  await requestAPT(ethAddress);
-  await requestTestTokens(ethAddress);
-  return { hash: "gas-fakeeth-fakeusd-minted" };
-}
 
 export function getCreateAuctionPayload(
   amountEth: bigint,
