@@ -58,6 +58,8 @@ import {
   teardownLocalnetCommand,
   deployContractsCommand,
   fundAccountCommand,
+  setupEthereumTestnetCommand,
+  teardownEthereumTestnetCommand,
 } from "./test-utils/browser-commands";
 
 export default defineConfig({
@@ -222,6 +224,8 @@ export default defineConfig({
         teardownLocalnet: teardownLocalnetCommand,
         deployContracts: deployContractsCommand,
         fundAccount: fundAccountCommand,
+        setupEthereumTestnet: setupEthereumTestnetCommand,
+        teardownEthereumTestnet: teardownEthereumTestnetCommand,
       },
     },
     testTimeout: 300000,

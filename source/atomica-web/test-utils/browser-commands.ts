@@ -246,3 +246,25 @@ export const fundAccountCommand: BrowserCommand<
   const result = await fundAccount(address, amount);
   return { success: true, txHash: result };
 };
+
+/**
+ * Start an Ethereum Docker testnet and deploy FakeETH + FakeUSD contracts.
+ *
+ * Returns JSON-serializable connection info so the browser test can set up
+ * its wallet mock and verify on-chain balances.
+ *
+ * EXECUTION: Node.js (browser can't start Docker containers)
+ */
+export const setupEthereumTestnetCommand: BrowserCommand<[]> = async () => {
+  return await setupEthereumTestnet();
+};
+
+/**
+ * Tear down the Ethereum Docker testnet started by setupEthereumTestnetCommand.
+ *
+ * EXECUTION: Node.js
+ */
+export const teardownEthereumTestnetCommand: BrowserCommand<[]> = async () => {
+  await teardownEthereumTestnet();
+  return { success: true };
+};
