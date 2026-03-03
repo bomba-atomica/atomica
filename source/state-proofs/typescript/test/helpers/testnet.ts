@@ -6,7 +6,10 @@
  */
 
 import type { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
-import { ETHEREUM_DEPLOYER_ADDRESS, ETHEREUM_DEPLOYER_PRIVATE_KEY } from "../../../../shared/test-constants";
+import {
+    ETHEREUM_DEPLOYER_ADDRESS,
+    ETHEREUM_DEPLOYER_PRIVATE_KEY,
+} from "../../../../shared/test-constants";
 
 let testnet: EthereumDockerTestnet | undefined;
 
