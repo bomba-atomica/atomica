@@ -1,6 +1,6 @@
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { buildAptosFullnodeUrl, getStoredHost } from "../network-host";
-import { getChainConfig } from "./chain-config.ts";
+import { getChainConfig } from "../chain-config.ts";
 
 const { aptos: chainConfig } = getChainConfig();
 export const CONTRACT_ADDR = chainConfig.contractAddress;

@@ -6,7 +6,7 @@
 
 import { ethers } from "ethers";
 import { buildEthRpcUrl, getStoredHost } from "../network-host";
-import { getChainConfig } from "./chain-config.ts";
+import { getChainConfig } from "../chain-config.ts";
 
 // Build-time env vars are kept for backwards compatibility constants below.
 // Runtime RPC host is always derived from the selector state (localStorage/page host).

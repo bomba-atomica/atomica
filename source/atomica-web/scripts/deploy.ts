@@ -33,17 +33,15 @@ import { writeChainConfig } from "./chain-config";
 const ETH_RPC_URL = process.env.ETH_RPC_URL || "http://localhost:8545";
 const APTOS_URL = process.env.APTOS_URL || "http://localhost:8080";
 
-const ETH_DEPLOYER_PRIVATE_KEY = process.env.ETH_DEPLOYER_PRIVATE_KEY;
-if (!ETH_DEPLOYER_PRIVATE_KEY)
-  throw new Error("ETH_DEPLOYER_PRIVATE_KEY is not set");
+function requireEnv(key: string): string {
+  const value = process.env[key];
+  if (!value) throw new Error(`${key} is not set`);
+  return value;
+}
 
-const APTOS_DEPLOYER_ADDRESS = process.env.APTOS_DEPLOYER_ADDRESS;
-if (!APTOS_DEPLOYER_ADDRESS)
-  throw new Error("APTOS_DEPLOYER_ADDRESS is not set");
-
-const APTOS_DEPLOYER_PRIVATE_KEY = process.env.APTOS_DEPLOYER_PRIVATE_KEY;
-if (!APTOS_DEPLOYER_PRIVATE_KEY)
-  throw new Error("APTOS_DEPLOYER_PRIVATE_KEY is not set");
+const ETH_DEPLOYER_PRIVATE_KEY = requireEnv("ETH_DEPLOYER_PRIVATE_KEY");
+const APTOS_DEPLOYER_ADDRESS = requireEnv("APTOS_DEPLOYER_ADDRESS");
+const APTOS_DEPLOYER_PRIVATE_KEY = requireEnv("APTOS_DEPLOYER_PRIVATE_KEY");
 
 function execCommand(
   bin: string,

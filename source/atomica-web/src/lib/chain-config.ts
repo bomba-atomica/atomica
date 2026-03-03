@@ -1,4 +1,4 @@
-import { ATOMICA_CONTRACT_ADDRESS } from "../../shared/test-constants";
+import { ATOMICA_CONTRACT_ADDRESS } from "../../../shared/test-constants";
 
 export type ChainConfig = {
   ethereum: {
