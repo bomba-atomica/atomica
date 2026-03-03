@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   aptos,
-  CONTRACT_ADDR,
   getDerivedAddress,
   areContractsDeployed,
 } from "../lib/aptos";
@@ -9,22 +8,14 @@ import { useNetworkConfig } from "../lib/network-config-state";
 
 export interface AptosBalanceSnapshot {
   apt: number;
-  aptosFakeEth: number;
-  aptosFakeUsd: number;
   aptosExists: boolean;
-  aptosFakeEthInitialized: boolean;
-  aptosFakeUsdInitialized: boolean;
   aptosContractsDeployed: boolean;
   loading: boolean;
 }
 
 const EMPTY_STATE: Omit<AptosBalanceSnapshot, "loading"> = {
   apt: 0,
-  aptosFakeEth: 0,
-  aptosFakeUsd: 0,
   aptosExists: false,
-  aptosFakeEthInitialized: false,
-  aptosFakeUsdInitialized: false,
   aptosContractsDeployed: false,
 };
 
@@ -53,48 +44,9 @@ export function useAptosBalances(
         accountAddress: derived,
       });
 
-      if (aptValue === 0) {
-        return {
-          ...EMPTY_STATE,
-          aptosContractsDeployed: contractsDeployed,
-          loading: false,
-        };
-      }
-
-      let fakeEth = 0;
-      let fakeUsd = 0;
-      let fakeEthInitialized = false;
-      let fakeUsdInitialized = false;
-
-      try {
-        const fakeEthRes = await aptos.view({
-          payload: {
-            function: `${CONTRACT_ADDR}::fake_eth::balance`,
-            functionArguments: [derived.toString()],
-          },
-        });
-        fakeEth = Number(fakeEthRes[0]);
-        fakeEthInitialized = true;
-
-        const fakeUsdRes = await aptos.view({
-          payload: {
-            function: `${CONTRACT_ADDR}::fake_usd::balance`,
-            functionArguments: [derived.toString()],
-          },
-        });
-        fakeUsd = Number(fakeUsdRes[0]);
-        fakeUsdInitialized = true;
-      } catch (error) {
-        console.warn("Error fetching Aptos token balances:", error);
-      }
-
       return {
         apt: aptValue,
-        aptosFakeEth: fakeEth,
-        aptosFakeUsd: fakeUsd,
-        aptosExists: true,
-        aptosFakeEthInitialized: fakeEthInitialized,
-        aptosFakeUsdInitialized: fakeUsdInitialized,
+        aptosExists: aptValue > 0,
         aptosContractsDeployed: contractsDeployed,
         loading: false,
       };

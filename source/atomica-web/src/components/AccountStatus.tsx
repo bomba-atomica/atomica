@@ -146,35 +146,6 @@ export function AccountStatus({
                     {fmtApt(aptosBalances.apt)}
                   </span>
                 </div>
-
-                <div title="Bridged FakeETH on Aptos (8 decimals)">
-                  <span className="text-zinc-500 mr-1">FETH:</span>
-                  <span
-                    className={
-                      aptosBalances.aptosFakeEthInitialized
-                        ? "text-zinc-400"
-                        : "text-zinc-600"
-                    }
-                  >
-                    {aptosBalances.aptosFakeEthInitialized
-                      ? (aptosBalances.aptosFakeEth / 100_000_000).toFixed(4)
-                      : "Not Init"}
-                  </span>
-                </div>
-                <div title="Bridged FakeUSD on Aptos (6 decimals)">
-                  <span className="text-zinc-500 mr-1">FUSD:</span>
-                  <span
-                    className={
-                      aptosBalances.aptosFakeUsdInitialized
-                        ? "text-zinc-400"
-                        : "text-zinc-600"
-                    }
-                  >
-                    {aptosBalances.aptosFakeUsdInitialized
-                      ? (aptosBalances.aptosFakeUsd / 1_000_000).toFixed(2)
-                      : "Not Init"}
-                  </span>
-                </div>
               </div>
             ) : (
               !aptosBalances.loading &&

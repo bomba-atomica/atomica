@@ -68,9 +68,8 @@ describe.sequential(
   "MetaMask Mock Fidelity - Simple Transfer (Browser)",
   () => {
     beforeAll(async () => {
-      // 1. Ensure localnet is running and contracts deployed
+      // 1. Ensure localnet is running (no contract deployment needed — test uses native APT transfer)
       await commands.setupLocalnet();
-      await commands.deployContracts();
 
       console.log("[Browser Test] Initializing test environment...");
 

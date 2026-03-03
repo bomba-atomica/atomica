@@ -9,8 +9,6 @@ import { getFunderCredentials } from "../test-utils/aptos-keys";
 
 const DEFAULT_FUNDING_AMOUNT = 100_000_000;
 const MAX_FUNDING_AMOUNT = 10_000_000_000;
-const DEFAULT_FAUCET_ADDRESS =
-  "0x00000000000000000000000000000000000000000000000000000000a550c18";
 
 const BALANCE_CONFIRM_RETRIES = 40;
 const BALANCE_CONFIRM_DELAY_MS = 1_000;
@@ -79,11 +77,9 @@ function buildAptosRestUrl(host: string): string {
 
 function getFunderAccount(): AptosAccount {
   const credentials = getFunderCredentials();
-  const faucetAddress =
-    process.env.ATOMICA_APTOS_FUNDER_ADDRESS?.trim() || DEFAULT_FAUCET_ADDRESS;
   return new AptosAccount(
     HexString.ensure(credentials.privateKey).toUint8Array(),
-    normalizeAddress(faucetAddress),
+    normalizeAddress(credentials.address),
   );
 }
 
