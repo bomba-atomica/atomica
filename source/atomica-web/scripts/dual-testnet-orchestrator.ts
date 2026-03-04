@@ -27,7 +27,6 @@ import { writeChainConfig } from "./chain-config";
 const NUM_ETH_VALIDATORS = 4;
 const NUM_APTOS_VALIDATORS = 4;
 
-
 let ethTestnet: EthereumDockerTestnet | null = null;
 let aptosTestnet: DockerTestnet | null = null;
 let webappProcess: ChildProcess | null = null;
@@ -173,11 +172,10 @@ async function deployAptosContracts(testnet: DockerTestnet) {
 
 async function launchWebapp(): Promise<void> {
   return new Promise((resolve, reject) => {
-    webappProcess = spawn(
-      "bun",
-      ["run", "dev"],
-      { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe"] },
-    );
+    webappProcess = spawn("bun", ["run", "dev"], {
+      cwd: process.cwd(),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
 
     const timeout = setTimeout(
       () => reject(new Error("Webapp startup timeout")),
@@ -187,10 +185,7 @@ async function launchWebapp(): Promise<void> {
     webappProcess.stdout?.on("data", (data: Buffer) => {
       const output = data.toString();
       process.stdout.write(`  [webapp] ${output}`);
-      if (
-        output.includes("Local:") ||
-        output.includes("localhost:")
-      ) {
+      if (output.includes("Local:") || output.includes("localhost:")) {
         clearTimeout(timeout);
         resolve();
       }

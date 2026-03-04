@@ -255,7 +255,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: webappHttpPort,
       strictPort: false,
-      https: true,
+      https: {},
       host: true,
       hmr: {
         overlay: true,
