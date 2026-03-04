@@ -125,7 +125,9 @@ export function Faucet() {
         </p>
         <button
           onClick={handleMintEthTokens}
-          disabled={!evmReady || loadingEthTokens || (!!ethTxHash && !!usdTxHash)}
+          disabled={
+            !evmReady || loadingEthTokens || (!!ethTxHash && !!usdTxHash)
+          }
           className={`w-full py-2 px-4 rounded font-medium text-sm transition-colors ${
             !evmReady || loadingEthTokens || (!!ethTxHash && !!usdTxHash)
               ? "bg-zinc-800 cursor-not-allowed text-zinc-600"
