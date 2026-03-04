@@ -64,17 +64,15 @@ function ensurePort(url: URL, port: string): URL {
  * using the stored host and the configured HTTP port.
  */
 export function buildEthRpcUrl(host: string): string {
-  // Explicit URL override takes precedence (used in test environments where
-  // the Vite proxy is not available and services must be reached directly).
-  const override = import.meta.env.VITE_ETH_RPC_URL;
-  if (override) {
-    return override;
-  }
   if (typeof window !== "undefined") {
     // Route through Vite's /eth-api proxy; path will be rewritten to "/"
     return `${window.location.origin}/eth-api`;
   }
-  // Node / test context — connect directly
+  // Node / test context — explicit override takes precedence, then derive from host
+  const override = import.meta.env.VITE_ETH_RPC_URL;
+  if (override) {
+    return override;
+  }
   const port = import.meta.env.VITE_ETHEREUM_HTTP_PORT || "8545";
   const url = ensurePort(parseTargetHost(host), port);
   if (url.pathname === "/") {
@@ -93,18 +91,16 @@ export function buildEthRpcUrl(host: string): string {
  * the configured HTTP port.
  */
 export function buildAptosFullnodeUrl(host: string): string {
-  // Explicit URL override takes precedence (used in test environments where
-  // the Vite proxy is not available and services must be reached directly).
-  const override = import.meta.env.VITE_APTOS_FULLNODE_URL;
-  if (override) {
-    return override;
-  }
   if (typeof window !== "undefined") {
     // Route through Vite's /aptos-api proxy; the rewrite strips /aptos-api
     // so /aptos-api/v1 reaches the node at /v1
     return `${window.location.origin}/aptos-api/v1`;
   }
-  // Node / test context — connect directly
+  // Node / test context — explicit override takes precedence, then derive from host
+  const override = import.meta.env.VITE_APTOS_FULLNODE_URL;
+  if (override) {
+    return override;
+  }
   const port = import.meta.env.VITE_APTOS_HTTP_PORT || "8080";
   const url = ensurePort(parseTargetHost(host), port);
   url.pathname = "/v1";

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { requestAPT } from "../lib/aptos";
-import { mint10FakeETH, mint10kFakeUSD } from "../lib/ethereum/transaction";
+import { requestEthTokens } from "../lib/ethereum/transaction";
 
 export function Faucet({
   account,
@@ -10,15 +10,13 @@ export function Faucet({
   onMintSuccess?: () => void;
 }) {
   const [loadingAPT, setLoadingAPT] = useState(false);
-  const [loadingETH, setLoadingETH] = useState(false);
-  const [loadingUSD, setLoadingUSD] = useState(false);
+  const [loadingEthTokens, setLoadingEthTokens] = useState(false);
 
   const [aptTxHash, setAptTxHash] = useState<string | null>(null);
   const [ethTxHash, setEthTxHash] = useState<string | null>(null);
   const [usdTxHash, setUsdTxHash] = useState<string | null>(null);
 
-  const [ethError, setEthError] = useState<string | null>(null);
-  const [usdError, setUsdError] = useState<string | null>(null);
+  const [ethTokensError, setEthTokensError] = useState<string | null>(null);
 
   const handleRequestAPT = async () => {
     if (!account) return;
@@ -47,38 +45,22 @@ export function Faucet({
     return String(e);
   }
 
-  const handleMintETH = async () => {
-    setLoadingETH(true);
+  const handleMintEthTokens = async () => {
+    if (!account) return;
+    setLoadingEthTokens(true);
     setEthTxHash(null);
-    setEthError(null);
-    try {
-      const result = await mint10FakeETH();
-      setEthTxHash(result.hash);
-      // Wait for confirmation then refresh balances
-      await result.wait();
-      onMintSuccess?.();
-    } catch (e: unknown) {
-      setEthError(extractErrorMessage(e));
-      console.error("FakeETH mint failed:", e);
-    } finally {
-      setLoadingETH(false);
-    }
-  };
-
-  const handleMintUSD = async () => {
-    setLoadingUSD(true);
     setUsdTxHash(null);
-    setUsdError(null);
+    setEthTokensError(null);
     try {
-      const result = await mint10kFakeUSD();
-      setUsdTxHash(result.hash);
-      await result.wait();
+      const result = await requestEthTokens(account);
+      setEthTxHash(result.ethTxHash);
+      setUsdTxHash(result.usdTxHash);
       onMintSuccess?.();
     } catch (e: unknown) {
-      setUsdError(extractErrorMessage(e));
-      console.error("FakeUSD mint failed:", e);
+      setEthTokensError(extractErrorMessage(e));
+      console.error("Ethereum token faucet failed:", e);
     } finally {
-      setLoadingUSD(false);
+      setLoadingEthTokens(false);
     }
   };
 
@@ -126,68 +108,45 @@ export function Faucet({
         )}
       </div>
 
-      {/* FakeETH and FakeUSD (minted on Ethereum via MetaMask) */}
+      {/* FakeETH and FakeUSD (minted server-side by funder account) */}
       <div className="mb-4 p-4 bg-zinc-950/50 border border-zinc-900 rounded">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold text-zinc-400">
-            Step 1b: Mint Test Tokens (Ethereum)
+            Step 1b: Get Test Tokens (Ethereum)
           </h3>
+          {ethTxHash && usdTxHash && (
+            <span className="text-xs text-zinc-500">✓ Completed</span>
+          )}
         </div>
         <p className="text-xs text-zinc-600 mb-3">
-          Mint FakeETH and FakeUSD on the Ethereum testnet via MetaMask.
+          10 FakeETH and 10,000 FakeUSD sent to your address (funded by the demo
+          API).
         </p>
-
-        <div className="grid grid-cols-2 gap-4">
-          {/* FakeETH */}
-          <div>
-            <button
-              onClick={handleMintETH}
-              disabled={loadingETH || !!ethTxHash}
-              className={`w-full py-2 px-4 rounded font-medium text-sm transition-colors ${
-                loadingETH || !!ethTxHash
-                  ? "bg-zinc-800 cursor-not-allowed text-zinc-600"
-                  : "bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
-              }`}
-            >
-              {loadingETH ? "Minting..." : ethTxHash ? "✓ 10 ETH" : "10 ETH"}
-            </button>
-            {ethTxHash && (
-              <div className="mt-1 text-[10px] text-zinc-500 break-all font-mono">
-                Tx: {ethTxHash.slice(0, 10)}...
-              </div>
-            )}
-            {ethError && (
-              <div className="mt-1 text-[10px] text-zinc-500 break-words font-mono">
-                {ethError}
-              </div>
-            )}
+        <button
+          onClick={handleMintEthTokens}
+          disabled={loadingEthTokens || (!!ethTxHash && !!usdTxHash)}
+          className={`w-full py-2 px-4 rounded font-medium text-sm transition-colors ${
+            loadingEthTokens || (!!ethTxHash && !!usdTxHash)
+              ? "bg-zinc-800 cursor-not-allowed text-zinc-600"
+              : "bg-zinc-100 hover:bg-white text-zinc-900"
+          }`}
+        >
+          {loadingEthTokens
+            ? "Requesting tokens..."
+            : ethTxHash && usdTxHash
+              ? "Tokens Received"
+              : "Request ETH Tokens"}
+        </button>
+        {ethTxHash && usdTxHash && (
+          <div className="mt-2 p-2 bg-zinc-900 text-zinc-400 rounded text-xs break-all font-mono border border-zinc-800">
+            Success! 10 FakeETH and 10,000 FakeUSD added to your account
           </div>
-
-          {/* FakeUSD */}
-          <div>
-            <button
-              onClick={handleMintUSD}
-              disabled={loadingUSD || !!usdTxHash}
-              className={`w-full py-2 px-4 rounded font-medium text-sm transition-colors ${
-                loadingUSD || !!usdTxHash
-                  ? "bg-zinc-800 cursor-not-allowed text-zinc-600"
-                  : "bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
-              }`}
-            >
-              {loadingUSD ? "Minting..." : usdTxHash ? "✓ 10k USD" : "10k USD"}
-            </button>
-            {usdTxHash && (
-              <div className="mt-1 text-[10px] text-zinc-500 break-all font-mono">
-                Tx: {usdTxHash.slice(0, 10)}...
-              </div>
-            )}
-            {usdError && (
-              <div className="mt-1 text-[10px] text-zinc-500 break-words font-mono">
-                {usdError}
-              </div>
-            )}
+        )}
+        {ethTokensError && (
+          <div className="mt-2 text-[10px] text-zinc-500 break-words font-mono">
+            {ethTokensError}
           </div>
-        </div>
+        )}
       </div>
 
       {/* Status indicator */}
