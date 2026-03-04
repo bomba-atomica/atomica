@@ -13,7 +13,6 @@ typechain-types/
 coverage/
 coverage.json
 .env
-.env.local
 
 # Circom
 circuits/build/

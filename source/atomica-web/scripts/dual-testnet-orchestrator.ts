@@ -22,7 +22,6 @@ import {
   deployWithRetry,
 } from "../tests/meta/ethereum/solidity-compiler.js";
 import { DEPLOYER_ADDR, DEPLOYER_PK } from "../test-utils/localnet";
-import { writeChainConfig } from "./chain-config";
 
 const NUM_ETH_VALIDATORS = 4;
 const NUM_APTOS_VALIDATORS = 4;
@@ -62,18 +61,12 @@ async function main() {
     const ethAddresses = await deployEthereumContracts(ethTestnet);
     await deployAptosContracts(aptosTestnet);
 
-    const chainConfigPath = writeChainConfig({
-      ethereum: {
-        rpcUrl: ethAddresses.rpcUrl,
-        fakeETH: ethAddresses.fakeETH,
-        fakeUSD: ethAddresses.fakeUSD,
-        lockBox: ethAddresses.lockBox,
-      },
-      aptos: {
-        contractAddress: DEPLOYER_ADDR,
-      },
-    });
-    console.log(`  ✓ Chain config written to ${chainConfigPath}`);
+    process.env.VITE_ETH_RPC_URL = ethAddresses.rpcUrl;
+    process.env.VITE_FAKE_ETH_ADDRESS = ethAddresses.fakeETH;
+    process.env.VITE_FAKE_USD_ADDRESS = ethAddresses.fakeUSD;
+    process.env.VITE_LOCK_BOX_ADDRESS = ethAddresses.lockBox;
+    process.env.VITE_CONTRACT_ADDRESS = DEPLOYER_ADDR;
+    console.log("  ✓ Chain config set in environment");
 
     console.log("\n🌐 Starting webapp...");
     await launchWebapp();

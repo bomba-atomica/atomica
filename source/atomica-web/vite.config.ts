@@ -147,20 +147,25 @@ export default defineConfig(({ mode }) => {
     ethereum: {
       rpcUrl:
         env.VITE_ETH_RPC_URL ||
+        process.env.VITE_ETH_RPC_URL ||
         `http://${env.VITE_HOST_IP || "localhost"}:${env.VITE_ETHEREUM_HTTP_PORT || "8545"}`,
       fakeETH:
         env.VITE_FAKE_ETH_ADDRESS ||
+        process.env.VITE_FAKE_ETH_ADDRESS ||
         "0x0000000000000000000000000000000000000000",
       fakeUSD:
         env.VITE_FAKE_USD_ADDRESS ||
+        process.env.VITE_FAKE_USD_ADDRESS ||
         "0x0000000000000000000000000000000000000000",
       lockBox:
         env.VITE_LOCK_BOX_ADDRESS ||
+        process.env.VITE_LOCK_BOX_ADDRESS ||
         "0x0000000000000000000000000000000000000000",
     },
     aptos: {
       contractAddress:
         env.VITE_CONTRACT_ADDRESS ||
+        process.env.VITE_CONTRACT_ADDRESS ||
         "0x0000000000000000000000000000000000000000000000000000000000000000",
     },
   };
