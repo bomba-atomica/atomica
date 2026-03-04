@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import basicSsl from "@vitejs/plugin-basic-ssl";
 import type { Connect, Logger } from "vite";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
@@ -194,6 +195,7 @@ export default defineConfig(({ mode }) => {
       __ATOMICA_CHAIN_CONFIG__: JSON.stringify(CHAIN_CONFIG),
     },
     plugins: [
+      basicSsl(),
       react(),
       {
         name: "remote-console-logs",
@@ -253,6 +255,8 @@ export default defineConfig(({ mode }) => {
     server: {
       port: webappHttpPort,
       strictPort: false,
+      https: true,
+      host: true,
       hmr: {
         overlay: true,
       },
