@@ -12,6 +12,7 @@ export function AuctionBidder() {
   const [status, setStatus] = useState<string | null>(null);
 
   const handleBid = async () => {
+    if (!account) return;
     setLoading(true);
     setStatus("Encrypting Bid...");
     try {

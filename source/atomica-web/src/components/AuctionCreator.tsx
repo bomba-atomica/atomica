@@ -13,6 +13,7 @@ export function AuctionCreator() {
   const [status, setStatus] = useState<string | null>(null);
 
   const handleCreateAuction = async () => {
+    if (!account) return;
     setLoading(true);
     setStatus("Generating IBE keys...");
     try {
