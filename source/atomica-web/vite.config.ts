@@ -2,11 +2,9 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import type { Connect, Logger } from "vite";
-import { existsSync, readFileSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 import { fundAptosAccount } from "./scripts/aptos-funding";
 import { fundEthereumAccount } from "./scripts/ethereum-funding";
-import { getDockerTestnetConfigDir } from "./test-utils/aptos-keys";
 import type { ChainConfig } from "./src/lib/chain-config";
 
 type JsonObject = Record<string, unknown>;
@@ -131,77 +129,6 @@ function registerEthereumFundingApi(
 }
 
 // https://vite.dev/config/
-const CONFIG_FILE = pathResolve(
-  getDockerTestnetConfigDir(),
-  "atomica-web.yaml",
-);
-
-type ParsedChainConfig = {
-  ethereum?: Partial<ChainConfig["ethereum"]>;
-  aptos?: Partial<ChainConfig["aptos"]>;
-};
-
-function parseChainConfigYaml(content: string): ParsedChainConfig {
-  const parsed: ParsedChainConfig = {};
-  let currentSection: keyof ParsedChainConfig | null = null;
-
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const indent = line.search(/\S|$/);
-
-    if (indent === 0 && trimmed.endsWith(":")) {
-      const sectionName = trimmed.slice(0, -1);
-      if (sectionName === "ethereum") {
-        currentSection = "ethereum";
-        parsed.ethereum ??= {};
-      } else if (sectionName === "aptos") {
-        currentSection = "aptos";
-        parsed.aptos ??= {};
-      } else {
-        currentSection = null;
-      }
-      continue;
-    }
-
-    if (currentSection && trimmed.includes(":")) {
-      const [key, ...rest] = trimmed.split(":");
-      const value = rest.join(":").trim();
-      if (!value) continue;
-      if (currentSection === "ethereum") {
-        (parsed.ethereum as Record<string, string>)[key.trim()] = value;
-      } else if (currentSection === "aptos") {
-        (parsed.aptos as Record<string, string>)[key.trim()] = value;
-      }
-    }
-  }
-
-  return parsed;
-}
-
-function loadChainConfig(defaultConfig: ChainConfig): ChainConfig {
-  if (!existsSync(CONFIG_FILE)) {
-    return defaultConfig;
-  }
-  try {
-    const raw = readFileSync(CONFIG_FILE, "utf-8");
-    const parsed = parseChainConfigYaml(raw);
-    return {
-      ethereum: {
-        ...defaultConfig.ethereum,
-        ...parsed.ethereum,
-      },
-      aptos: {
-        ...defaultConfig.aptos,
-        ...parsed.aptos,
-      },
-    };
-  } catch (error) {
-    console.warn("Failed to load chain config YAML:", error);
-    return defaultConfig;
-  }
-}
-
 export default defineConfig(({ mode }) => {
   // Load env variables from source/.env.test (envDir is "../")
   const env = loadEnv(mode, pathResolve(__dirname, ".."), "");
@@ -237,7 +164,7 @@ export default defineConfig(({ mode }) => {
         "0x0000000000000000000000000000000000000000000000000000000000000000",
     },
   };
-  const CHAIN_CONFIG = loadChainConfig(defaultChainConfig);
+  const CHAIN_CONFIG = defaultChainConfig;
 
   return {
     envDir: "../", // load source/.env.test (and source/.env) for all packages

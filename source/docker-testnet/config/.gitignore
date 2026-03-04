@@ -8,3 +8,4 @@ logs/
 
 # Environment overrides
 .env.local
+atomica-web.yaml
