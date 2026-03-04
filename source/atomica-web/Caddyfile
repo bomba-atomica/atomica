@@ -17,7 +17,9 @@
 	auto_https disable_redirects
 }
 
-https://localhost:5174 {
+:5174 {
+	tls internal
+
 	reverse_proxy localhost:5173 {
 		# Forward Upgrade header so Vite's HMR websocket works over HTTPS.
 		header_up Connection {http.request.header.Connection}
