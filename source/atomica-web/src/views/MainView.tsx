@@ -11,10 +11,9 @@ interface MainViewProps {
 export function MainView({ onNavigateToSettings }: MainViewProps) {
   const { account } = useWallet();
   const { ethBalances } = useBalances();
-  const { evmStatus, aptosStatus } = useContractStatus();
+  const { evmAlive, aptosAlive } = useContractStatus();
 
-  const networksUnavailable =
-    evmStatus === "missing" || aptosStatus === "missing";
+  const networksUnavailable = evmAlive === false || aptosAlive === false;
 
   return (
     <main className="container mx-auto p-8 max-w-5xl">
