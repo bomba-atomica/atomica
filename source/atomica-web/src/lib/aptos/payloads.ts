@@ -116,7 +116,7 @@ export async function areContractsDeployed(): Promise<boolean> {
 }
 
 export async function areCoreContractsDeployed(): Promise<boolean> {
-  const requiredModules = ["registry", "auction", "lock_receipt"];
+  const requiredModules = ["registry", "lock_receipt", "eth_proof"];
   try {
     const modules = await aptos.getAccountModules({
       accountAddress: CONTRACT_ADDR,

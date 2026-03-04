@@ -7,47 +7,10 @@ import {
 } from "../lib/ethereum/balances";
 import { useWallet } from "../context/WalletContext";
 import { useBalances } from "../context/BalancesContext";
-import { useContractStatus } from "../context/ContractStatusContext";
-import type { ContractDeploymentStatus } from "../hooks/useContractStatuses";
-
-const STATUS_COLORS: Record<ContractDeploymentStatus, string> = {
-  loading: "text-amber-400",
-  ready: "text-emerald-400",
-  missing: "text-rose-400",
-};
-
-function getStatusText(
-  chain: string,
-  status: ContractDeploymentStatus,
-): string {
-  switch (status) {
-    case "ready":
-      return `${chain} contracts deployed`;
-    case "loading":
-      return `${chain} contracts checking...`;
-    case "missing":
-      return `${chain} contracts unavailable`;
-  }
-}
-
-function StatusBadge({
-  chain,
-  status,
-}: {
-  chain: string;
-  status: ContractDeploymentStatus;
-}) {
-  return (
-    <span className={`text-xs font-mono ${STATUS_COLORS[status]}`}>
-      {getStatusText(chain, status)}
-    </span>
-  );
-}
 
 export function AccountStatus() {
   const { account: ethAddress } = useWallet();
   const { ethBalances, aptosBalances } = useBalances();
-  const { evmStatus, aptosStatus } = useContractStatus();
   const [aptosAddress, setAptosAddress] = useState<string | null>(null);
 
   useEffect(() => {
@@ -96,10 +59,7 @@ export function AccountStatus() {
           <div className="h-px bg-zinc-800"></div>
 
           <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <span className="text-zinc-600 text-xs">Ethereum</span>
-              <StatusBadge chain="Ethereum" status={evmStatus} />
-            </div>
+            <span className="text-zinc-600 text-xs">Ethereum</span>
             <div className="flex items-center gap-4">
               <div title="Native ETH">
                 <span className="text-zinc-500 mr-1">ETH:</span>
@@ -124,10 +84,7 @@ export function AccountStatus() {
 
           <div className="h-px bg-zinc-800"></div>
           <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <span className="text-zinc-600 text-xs">Aptos</span>
-              <StatusBadge chain="Aptos" status={aptosStatus} />
-            </div>
+            <span className="text-zinc-600 text-xs">Aptos</span>
             {aptosBalances.aptosExists ? (
               <div className="flex items-center gap-4">
                 <div title="Gas (APT)">

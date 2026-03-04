@@ -3,6 +3,7 @@ import { SanityTest } from "../components/SanityTest";
 import { AccountStatus } from "../components/AccountStatus";
 import { TestnetSelector } from "../components/TestnetSelector";
 import { NetworkStatus } from "../components/NetworkStatus";
+import { ContractStatus } from "../components/ContractStatus";
 import { useWallet } from "../context/WalletContext";
 
 function SectionHeader({ title }: { title: string }) {
@@ -45,6 +46,18 @@ export function SettingsView() {
                 </span>
               </div>
               <NetworkStatus />
+            </div>
+            <div className="h-px bg-zinc-800" />
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-sm text-zinc-300 font-medium">
+                  Contracts
+                </span>
+                <span className="text-xs text-zinc-500">
+                  Whether testnet contracts are deployed and reachable.
+                </span>
+              </div>
+              <ContractStatus />
             </div>
           </div>
         </section>
