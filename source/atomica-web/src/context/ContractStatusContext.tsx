@@ -3,11 +3,15 @@ import { useContractStatuses } from "../hooks/useContractStatuses";
 import type { ContractDeploymentStatus } from "../hooks/useContractStatuses";
 
 interface ContractStatusContextValue {
+  evmAlive: boolean | null;
+  aptosAlive: boolean | null;
   evmStatus: ContractDeploymentStatus;
   aptosStatus: ContractDeploymentStatus;
 }
 
 const ContractStatusContext = createContext<ContractStatusContextValue>({
+  evmAlive: null,
+  aptosAlive: null,
   evmStatus: "loading",
   aptosStatus: "loading",
 });

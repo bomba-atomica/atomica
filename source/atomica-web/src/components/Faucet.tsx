@@ -3,10 +3,15 @@ import { requestAPT } from "../lib/aptos";
 import { requestEthTokens } from "../lib/ethereum/transaction";
 import { useWallet } from "../context/WalletContext";
 import { useBalances } from "../context/BalancesContext";
+import { useContractStatus } from "../context/ContractStatusContext";
 
 export function Faucet() {
   const { account } = useWallet();
   const { refresh } = useBalances();
+  const { aptosAlive, evmAlive, evmStatus } = useContractStatus();
+
+  const aptosReady = aptosAlive === true;
+  const evmReady = evmAlive === true && evmStatus === "ready";
   const [loadingAPT, setLoadingAPT] = useState(false);
   const [loadingEthTokens, setLoadingEthTokens] = useState(false);
   const [aptTxHash, setAptTxHash] = useState<string | null>(null);
@@ -84,9 +89,9 @@ export function Faucet() {
         </p>
         <button
           onClick={handleRequestAPT}
-          disabled={loadingAPT || !!aptTxHash}
+          disabled={!aptosReady || loadingAPT || !!aptTxHash}
           className={`w-full py-2 px-4 rounded font-medium text-sm transition-colors ${
-            loadingAPT || !!aptTxHash
+            !aptosReady || loadingAPT || !!aptTxHash
               ? "bg-zinc-800 cursor-not-allowed text-zinc-600"
               : "bg-zinc-100 hover:bg-white text-zinc-900"
           }`}
@@ -120,9 +125,9 @@ export function Faucet() {
         </p>
         <button
           onClick={handleMintEthTokens}
-          disabled={loadingEthTokens || (!!ethTxHash && !!usdTxHash)}
+          disabled={!evmReady || loadingEthTokens || (!!ethTxHash && !!usdTxHash)}
           className={`w-full py-2 px-4 rounded font-medium text-sm transition-colors ${
-            loadingEthTokens || (!!ethTxHash && !!usdTxHash)
+            !evmReady || loadingEthTokens || (!!ethTxHash && !!usdTxHash)
               ? "bg-zinc-800 cursor-not-allowed text-zinc-600"
               : "bg-zinc-100 hover:bg-white text-zinc-900"
           }`}
