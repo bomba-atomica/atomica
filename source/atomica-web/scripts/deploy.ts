@@ -227,7 +227,6 @@ async function main() {
 
   await deployAptosContracts();
 
-
   console.log("\n" + "═".repeat(60));
   console.log("  ✅ Deployment Complete!");
   console.log("═".repeat(60));
