@@ -119,8 +119,8 @@ export function Faucet({
           )}
         </div>
         <p className="text-xs text-zinc-600 mb-3">
-          10 FakeETH and 10,000 FakeUSD sent to your address (funded by the
-          demo API).
+          10 FakeETH and 10,000 FakeUSD sent to your address (funded by the demo
+          API).
         </p>
         <button
           onClick={handleMintEthTokens}

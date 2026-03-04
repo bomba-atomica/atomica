@@ -22,8 +22,16 @@ function ensureCompiled(): void {
   }
 }
 
-function readArtifact(name: string): { abi: object[]; bytecode: { object: string } } {
-  const p = pathResolve(EVM_CONTRACTS_DIR, "out", `${name}.sol`, `${name}.json`);
+function readArtifact(name: string): {
+  abi: object[];
+  bytecode: { object: string };
+} {
+  const p = pathResolve(
+    EVM_CONTRACTS_DIR,
+    "out",
+    `${name}.sol`,
+    `${name}.json`,
+  );
   return JSON.parse(readFileSync(p, "utf-8"));
 }
 
@@ -31,13 +39,19 @@ async function deployContract(
   signer: ethers.Wallet,
   artifact: { abi: object[]; bytecode: { object: string } },
 ): Promise<string> {
-  const factory = new ethers.ContractFactory(artifact.abi, artifact.bytecode.object, signer);
+  const factory = new ethers.ContractFactory(
+    artifact.abi,
+    artifact.bytecode.object,
+    signer,
+  );
   const contract = await factory.deploy();
   await contract.waitForDeployment();
   return await contract.getAddress();
 }
 
-async function waitForFirstBlock(provider: ethers.JsonRpcProvider): Promise<void> {
+async function waitForFirstBlock(
+  provider: ethers.JsonRpcProvider,
+): Promise<void> {
   for (let i = 0; i < 60; i++) {
     const block = await provider.getBlockNumber();
     if (block >= 1) return;
@@ -96,7 +110,9 @@ describe.sequential("EVM server-side faucet (fundEthereumAccount)", () => {
       rpcUrl,
     });
 
-    expect(result.recipientAddress.toLowerCase()).toBe(recipient.address.toLowerCase());
+    expect(result.recipientAddress.toLowerCase()).toBe(
+      recipient.address.toLowerCase(),
+    );
     expect(result.ethTxHash).toMatch(/^0x[0-9a-f]{64}$/i);
     expect(result.usdTxHash).toMatch(/^0x[0-9a-f]{64}$/i);
 

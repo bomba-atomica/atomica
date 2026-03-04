@@ -87,13 +87,19 @@ export async function fundEthereumAccount(
   const fakeUSD = new ethers.Contract(fakeUSDAddress, FAKE_USD_ABI, funder);
 
   const ethTx = await (
-    fakeETH.mint as (to: string, amount: bigint) => Promise<ethers.TransactionResponse>
+    fakeETH.mint as (
+      to: string,
+      amount: bigint,
+    ) => Promise<ethers.TransactionResponse>
   )(recipientAddress, DEFAULT_FAKE_ETH_AMOUNT);
   await ethTx.wait();
   console.log(`[eth-fund] FakeETH minted, tx: ${ethTx.hash}`);
 
   const usdTx = await (
-    fakeUSD.mint as (to: string, amount: bigint) => Promise<ethers.TransactionResponse>
+    fakeUSD.mint as (
+      to: string,
+      amount: bigint,
+    ) => Promise<ethers.TransactionResponse>
   )(recipientAddress, DEFAULT_FAKE_USD_AMOUNT);
   await usdTx.wait();
   console.log(`[eth-fund] FakeUSD minted, tx: ${usdTx.hash}`);
