@@ -1,21 +1,17 @@
 import { useState } from "react";
 import { requestAPT } from "../lib/aptos";
 import { requestEthTokens } from "../lib/ethereum/transaction";
+import { useWallet } from "../context/WalletContext";
+import { useBalances } from "../context/BalancesContext";
 
-export function Faucet({
-  account,
-  onMintSuccess,
-}: {
-  account: string;
-  onMintSuccess?: () => void;
-}) {
+export function Faucet() {
+  const { account } = useWallet();
+  const { refresh } = useBalances();
   const [loadingAPT, setLoadingAPT] = useState(false);
   const [loadingEthTokens, setLoadingEthTokens] = useState(false);
-
   const [aptTxHash, setAptTxHash] = useState<string | null>(null);
   const [ethTxHash, setEthTxHash] = useState<string | null>(null);
   const [usdTxHash, setUsdTxHash] = useState<string | null>(null);
-
   const [ethTokensError, setEthTokensError] = useState<string | null>(null);
 
   const handleRequestAPT = async () => {
@@ -25,7 +21,7 @@ export function Faucet({
     try {
       const result = await requestAPT(account);
       setAptTxHash(result.hash);
-      onMintSuccess?.();
+      await refresh();
     } catch (e) {
       console.error("APT request failed:", e);
       alert("Failed to request APT: " + e);
@@ -55,7 +51,7 @@ export function Faucet({
       const result = await requestEthTokens(account);
       setEthTxHash(result.ethTxHash);
       setUsdTxHash(result.usdTxHash);
-      onMintSuccess?.();
+      await refresh();
     } catch (e: unknown) {
       setEthTokensError(extractErrorMessage(e));
       console.error("Ethereum token faucet failed:", e);
@@ -119,8 +115,8 @@ export function Faucet({
           )}
         </div>
         <p className="text-xs text-zinc-600 mb-3">
-          10 FakeETH and 10,000 FakeUSD sent to your address (funded by the demo
-          API).
+          10 FakeETH and 10,000 FakeUSD sent to your address (funded by the
+          demo API).
         </p>
         <button
           onClick={handleMintEthTokens}

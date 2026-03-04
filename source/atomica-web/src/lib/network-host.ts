@@ -2,11 +2,7 @@ const STORAGE_KEY = "atomica-testnet-host";
 let runtimeHost: string | null = null;
 
 function getBrowserHost(): string {
-  if (typeof window === "undefined") {
-    return import.meta.env.VITE_HOST_IP || "localhost";
-  }
-  const host = window.location.hostname?.trim();
-  return host || import.meta.env.VITE_HOST_IP || "localhost";
+  return import.meta.env.VITE_HOST_IP || "localhost";
 }
 
 export function getStoredHost(): string {

@@ -208,6 +208,10 @@ export default defineConfig(({ mode }) => {
 
   const hostIp = env.VITE_HOST_IP || "127.0.0.1";
   const webappHttpPort = parseInt(env.VITE_WEBAPP_HTTP_PORT || "5173", 10);
+  const sslDomains = (env.VITE_SSL_DOMAINS || "localhost")
+    .split(",")
+    .map((d) => d.trim())
+    .filter(Boolean);
   const aptosHttpPort = env.VITE_APTOS_HTTP_PORT || "8080";
   const ethHttpPort = env.VITE_ETHEREUM_HTTP_PORT || "8545";
 
@@ -241,7 +245,7 @@ export default defineConfig(({ mode }) => {
       __ATOMICA_CHAIN_CONFIG__: JSON.stringify(CHAIN_CONFIG),
     },
     plugins: [
-      basicSsl(),
+      basicSsl({ domains: sslDomains }),
       react(),
       {
         name: "remote-console-logs",
@@ -314,6 +318,7 @@ export default defineConfig(({ mode }) => {
       https: {},
       host: true,
       hmr: {
+        host: "localhost",
         overlay: true,
       },
       proxy: {

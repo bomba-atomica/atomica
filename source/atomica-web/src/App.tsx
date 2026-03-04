@@ -1,53 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
-import { ethers } from "ethers";
-import { Faucet } from "./components/Faucet";
-import { SanityTest } from "./components/SanityTest";
-import { AuctionCreator } from "./components/AuctionCreator";
-import { AuctionBidder } from "./components/AuctionBidder";
-import { AccountStatus } from "./components/AccountStatus";
-import { NetworkStatus } from "./components/NetworkStatus";
-import { useEthereumBalances } from "./hooks/useEthereumBalances";
-import { useAptosBalances } from "./hooks/useAptosBalances";
-import { TestnetSelector } from "./components/TestnetSelector";
+import { useState } from "react";
+import { WalletProvider, useWallet } from "./context/WalletContext";
+import { BalancesProvider } from "./context/BalancesContext";
+import { ContractStatusProvider } from "./context/ContractStatusContext";
+import { MainView } from "./views/MainView";
+import { SettingsView } from "./views/SettingsView";
 
-function App() {
-  const [account, setAccount] = useState<string | null>(null);
-  const ethBalances = useEthereumBalances(account);
-  const aptosBalances = useAptosBalances(account);
-  const { refetch: refetchEth } = ethBalances;
-  const { refetch: refetchAptos } = aptosBalances;
-  const refreshBalances = useCallback(async () => {
-    await Promise.all([refetchEth(), refetchAptos()]);
-  }, [refetchEth, refetchAptos]);
+type View = "main" | "settings";
 
-  const connectWallet = async () => {
-    if (window.ethereum) {
-      try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
-        const address = await signer.getAddress();
-        setAccount(address);
-      } catch (error) {
-        console.error("Error connecting wallet:", error);
-      }
-    } else {
-      alert("Please install MetaMask!");
-    }
-  };
-
-  useEffect(() => {
-    // Check if already connected
-    const checkConnection = async () => {
-      if (window.ethereum) {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const accounts = await provider.listAccounts();
-        if (accounts.length > 0) {
-          setAccount(accounts[0].address);
-        }
-      }
-    };
-    checkConnection();
-  }, []);
+function AppShell() {
+  const [view, setView] = useState<View>("main");
+  const { account, connect } = useWallet();
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-400 font-sans selection:bg-zinc-800 selection:text-white">
@@ -55,99 +17,63 @@ function App() {
         <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">
           Atomica Auction
         </h1>
-        <div className="flex items-center gap-4">
-          <TestnetSelector />
-          <NetworkStatus />
+
+        <nav className="flex items-center gap-1">
+          <button
+            onClick={() => setView("main")}
+            className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+              view === "main"
+                ? "text-zinc-100 bg-zinc-800"
+                : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900"
+            }`}
+          >
+            Auctions
+          </button>
+          <button
+            onClick={() => setView("settings")}
+            className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+              view === "settings"
+                ? "text-zinc-100 bg-zinc-800"
+                : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900"
+            }`}
+          >
+            Settings
+          </button>
+        </nav>
+
+        <div className="flex items-center">
           {account ? (
-            <AccountStatus
-              ethAddress={account}
-              ethBalances={ethBalances}
-              aptosBalances={aptosBalances}
-            />
+            <span className="text-xs font-mono text-zinc-500 border border-zinc-800 rounded px-3 py-2 bg-zinc-900/50">
+              {account.substring(0, 6)}...{account.substring(38)}
+            </span>
           ) : (
-            <div className="flex items-center gap-4">
-              <AccountStatus
-                ethAddress={null}
-                ethBalances={ethBalances}
-                aptosBalances={aptosBalances}
-              />
-              <button
-                onClick={connectWallet}
-                className="bg-zinc-100 hover:bg-white text-zinc-900 px-4 py-2 rounded transition font-medium text-sm"
-              >
-                Connect MetaMask
-              </button>
-            </div>
+            <button
+              onClick={connect}
+              className="bg-zinc-100 hover:bg-white text-zinc-900 px-4 py-2 rounded transition font-medium text-sm"
+            >
+              Connect MetaMask
+            </button>
           )}
         </div>
       </header>
 
-      <main className="container mx-auto p-8 max-w-5xl">
-        {!account ? (
-          <div className="text-center mt-20">
-            <h2 className="text-xl text-zinc-600 font-medium">
-              Connect your wallet to participate
-            </h2>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-8">
-            <Faucet account={account} onMintSuccess={refreshBalances} />
-
-            {/* Sanity Test - Discreet debug utility */}
-            <SanityTest account={account} />
-
-            {/* Show disabled state if user hasn't minted Ethereum test tokens yet */}
-            {ethBalances.ethFakeETH === 0n || ethBalances.ethFakeUSD === 0n ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 opacity-40 grayscale">
-                <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-800">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-zinc-500">
-                      2. Create Auction
-                    </h2>
-                    <span className="text-xs bg-zinc-800 text-zinc-500 px-2 py-1 rounded border border-zinc-700">
-                      Disabled
-                    </span>
-                  </div>
-                  <p className="text-zinc-600 text-sm">
-                    Complete step 1 to unlock auction creation. You need FAKEETH
-                    and FAKEUSD tokens.
-                  </p>
-                </div>
-                <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-800">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-zinc-500">
-                      3. Bid on Auction
-                    </h2>
-                    <span className="text-xs bg-zinc-800 text-zinc-500 px-2 py-1 rounded border border-zinc-700">
-                      Disabled
-                    </span>
-                  </div>
-                  <p className="text-zinc-600 text-sm">
-                    Complete step 1 to unlock bidding. You need FAKEUSD tokens
-                    to bid.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <AuctionCreator account={account} />
-                <AuctionBidder account={account} />
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="mt-12">
-          <h2 className="text-2xl font-bold mb-4 text-zinc-200">
-            Active Auctions
-          </h2>
-          <div className="bg-zinc-900/50 border border-zinc-900 p-8 rounded text-center text-zinc-600">
-            No active auctions found.
-          </div>
-        </div>
-      </main>
+      {view === "main" ? (
+        <MainView onNavigateToSettings={() => setView("settings")} />
+      ) : (
+        <SettingsView />
+      )}
     </div>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <WalletProvider>
+      <ContractStatusProvider>
+        <BalancesProvider>
+          <AppShell />
+        </BalancesProvider>
+      </ContractStatusProvider>
+    </WalletProvider>
+  );
+}

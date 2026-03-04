@@ -2,12 +2,10 @@ import { useState } from "react";
 import { ethers } from "ethers";
 import { submitCreateAuction } from "../lib/aptos";
 import * as ibe from "../lib/ibe";
+import { useWallet } from "../context/WalletContext";
 
-interface AuctionCreatorProps {
-  account: string;
-}
-
-export function AuctionCreator({ account }: AuctionCreatorProps) {
+export function AuctionCreator() {
+  const { account } = useWallet();
   const [amount, setAmount] = useState("0.1");
   const [minPrice, setMinPrice] = useState("100");
   const [duration, setDuration] = useState("3600"); // 1 hour

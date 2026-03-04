@@ -3,9 +3,10 @@ import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import { AccountStatus } from "../../src/components/AccountStatus";
 import { commands } from "vitest/browser";
 import { MockWallet } from "../../test-utils/browser-utils/MockWallet";
-import { useEthereumBalances } from "../../src/hooks/useEthereumBalances";
-import { useAptosBalances } from "../../src/hooks/useAptosBalances";
 import { NetworkConfigProvider } from "../../src/lib/network-config-context";
+import { WalletContext } from "../../src/context/WalletContext";
+import { BalancesProvider } from "../../src/context/BalancesContext";
+import { ContractStatusProvider } from "../../src/context/ContractStatusContext";
 import { APTOS_DEPLOYER_PRIVATE_KEY } from "../../../shared/test-constants";
 
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
@@ -15,29 +16,26 @@ describe.sequential("AccountStatus Integration", () => {
   const TEST_PK = APTOS_DEPLOYER_PRIVATE_KEY;
   const mockWallet = new MockWallet(TEST_PK);
 
-  function AccountStatusWithBalances() {
-    const ethBalances = useEthereumBalances(mockWallet.address);
-    const aptosBalances = useAptosBalances(mockWallet.address);
-    return (
-      <AccountStatus
-        ethAddress={mockWallet.address}
-        ethBalances={ethBalances}
-        aptosBalances={aptosBalances}
-      />
-    );
-  }
-
+  // Wrap AccountStatus with all required providers, injecting a fixed account
+  // via WalletContext.Provider so BalancesProvider polls the right address.
   function WrappedAccountStatus() {
     return (
       <NetworkConfigProvider>
-        <AccountStatusWithBalances />
+        <WalletContext.Provider
+          value={{ account: mockWallet.address, connect: async () => {} }}
+        >
+          <ContractStatusProvider>
+            <BalancesProvider>
+              <AccountStatus />
+            </BalancesProvider>
+          </ContractStatusProvider>
+        </WalletContext.Provider>
       </NetworkConfigProvider>
     );
   }
 
   beforeAll(async () => {
     console.log("Starting Localnet...");
-    // Use browser command shortcuts
     await commands.setupLocalnet();
     await commands.deployContracts();
 
@@ -49,19 +47,14 @@ describe.sequential("AccountStatus Integration", () => {
     setAptosInstance(new Aptos(config));
   }, 120000);
 
-  // Clean up after each test to prevent component interference
   afterEach(() => {
     cleanup();
   });
 
-  // Note: No afterAll teardown - globalSetup handles lifecycle
-
   describe.sequential("Without funded account", () => {
     it("should show 'account not found' warning when account doesn't exist", async () => {
-      // Wrapper component that uses the hook
       render(<WrappedAccountStatus />);
 
-      // Wait for the component to finish loading and show the "account not found" warning
       await waitFor(
         () => {
           screen.getByText(/Atomica account not found/);
@@ -75,7 +68,6 @@ describe.sequential("AccountStatus Integration", () => {
 
   describe.sequential("With funded account", () => {
     it("should show warning initially, then display balance after funding", async () => {
-      // Wrapper component that uses the hook
       render(<WrappedAccountStatus />);
 
       // Step 1: Initially, account should show "not found" warning
@@ -102,9 +94,6 @@ describe.sequential("AccountStatus Integration", () => {
       console.log("✓ Account funded via faucet");
 
       // Step 3: Wait for the hook to poll and update the balance
-      // The hook polls every 5 seconds, so we need to wait for it to detect the change
-      // APT is divided by 100_000_000 and fixed to 4 decimals.
-      // 1000000000 / 100000000 = 10.0000
       await waitFor(
         () => {
           screen.getByText("APT:");

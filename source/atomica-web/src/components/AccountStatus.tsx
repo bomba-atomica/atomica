@@ -5,16 +5,10 @@ import {
   formatFakeETHBalance,
   formatUSDBalance,
 } from "../lib/ethereum/balances";
-import { useContractStatuses } from "../hooks/useContractStatuses";
+import { useWallet } from "../context/WalletContext";
+import { useBalances } from "../context/BalancesContext";
+import { useContractStatus } from "../context/ContractStatusContext";
 import type { ContractDeploymentStatus } from "../hooks/useContractStatuses";
-import type { EthereumBalancesSnapshot } from "../hooks/useEthereumBalances";
-import type { AptosBalancesSnapshot } from "../hooks/useAptosBalances";
-
-interface AccountStatusProps {
-  ethAddress: string | null;
-  ethBalances: EthereumBalancesSnapshot;
-  aptosBalances: AptosBalancesSnapshot;
-}
 
 const STATUS_COLORS: Record<ContractDeploymentStatus, string> = {
   loading: "text-amber-400",
@@ -50,13 +44,11 @@ function StatusBadge({
   );
 }
 
-export function AccountStatus({
-  ethAddress,
-  ethBalances,
-  aptosBalances,
-}: AccountStatusProps) {
+export function AccountStatus() {
+  const { account: ethAddress } = useWallet();
+  const { ethBalances, aptosBalances } = useBalances();
+  const { evmStatus, aptosStatus } = useContractStatus();
   const [aptosAddress, setAptosAddress] = useState<string | null>(null);
-  const { evmStatus, aptosStatus } = useContractStatuses();
 
   useEffect(() => {
     const derive = async () => {
@@ -88,16 +80,14 @@ export function AccountStatus({
         </div>
 
         {aptosAddress && (
-          <>
-            <div className="flex items-center">
-              <span className="text-zinc-500 mr-2 min-w-[100px]">
-                Aptos Address:
-              </span>
-              <span className="text-zinc-400 text-xs" title={aptosAddress}>
-                {aptosAddress.substring(0, 8)}...{aptosAddress.substring(58)}
-              </span>
-            </div>
-          </>
+          <div className="flex items-center">
+            <span className="text-zinc-500 mr-2 min-w-[100px]">
+              Aptos Address:
+            </span>
+            <span className="text-zinc-400 text-xs" title={aptosAddress}>
+              {aptosAddress.substring(0, 8)}...{aptosAddress.substring(58)}
+            </span>
+          </div>
         )}
       </div>
 
