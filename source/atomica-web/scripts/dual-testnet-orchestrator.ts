@@ -26,7 +26,6 @@ import { writeChainConfig } from "./chain-config";
 
 const NUM_ETH_VALIDATORS = 4;
 const NUM_APTOS_VALIDATORS = 4;
-const WEBAPP_PORT = 4173;
 
 let ethTestnet: EthereumDockerTestnet | null = null;
 let aptosTestnet: DockerTestnet | null = null;
@@ -82,7 +81,8 @@ async function main() {
     console.log("\n" + "═".repeat(60));
     console.log("  ✅ Demo Ready!");
     console.log("═".repeat(60));
-    console.log(`\n📍 Open http://localhost:${WEBAPP_PORT}\n`);
+    const webappPort = process.env.VITE_WEBAPP_HTTP_PORT ?? "5173";
+    console.log(`\n📍 Open https://localhost:${webappPort}\n`);
     console.log("🛑 Press Ctrl+C to stop all services\n");
 
     await new Promise(() => {});
@@ -172,11 +172,10 @@ async function deployAptosContracts(testnet: DockerTestnet) {
 
 async function launchWebapp(): Promise<void> {
   return new Promise((resolve, reject) => {
-    webappProcess = spawn(
-      "bun",
-      ["run", "dev", "--host", "--port", String(WEBAPP_PORT)],
-      { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe"] },
-    );
+    webappProcess = spawn("bun", ["run", "dev"], {
+      cwd: process.cwd(),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
 
     const timeout = setTimeout(
       () => reject(new Error("Webapp startup timeout")),
@@ -186,10 +185,7 @@ async function launchWebapp(): Promise<void> {
     webappProcess.stdout?.on("data", (data: Buffer) => {
       const output = data.toString();
       process.stdout.write(`  [webapp] ${output}`);
-      if (
-        output.includes("Local:") ||
-        output.includes(`localhost:${WEBAPP_PORT}`)
-      ) {
+      if (output.includes("Local:") || output.includes("localhost:")) {
         clearTimeout(timeout);
         resolve();
       }

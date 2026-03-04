@@ -116,7 +116,8 @@ export function TestnetSelector() {
           </div>
 
           <p className="text-xs text-zinc-600 mt-1">
-            Ports used: ETH :8545, Aptos :8080
+            Ports used: ETH :{import.meta.env.VITE_ETHEREUM_HTTP_PORT || "8545"}
+            , Aptos :{import.meta.env.VITE_APTOS_HTTP_PORT || "8080"}
           </p>
         </div>
       )}
