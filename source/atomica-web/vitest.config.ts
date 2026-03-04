@@ -90,6 +90,18 @@ export default defineConfig({
     deps: {
       external: [/@atomica\/ethereum-docker-testnet/, /ethereum-testnet/],
     },
+    proxy: {
+      "/aptos-api": {
+        target: `http://${testEnv.VITE_HOST_IP || "127.0.0.1"}:${testEnv.VITE_APTOS_HTTP_PORT || "8080"}`,
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/aptos-api/, ""),
+      },
+      "/eth-api": {
+        target: `http://${testEnv.VITE_HOST_IP || "127.0.0.1"}:${testEnv.VITE_ETHEREUM_HTTP_PORT || "8545"}`,
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/eth-api/, ""),
+      },
+    },
   },
   test: {
     /**
