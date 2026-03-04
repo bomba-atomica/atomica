@@ -98,6 +98,37 @@ export async function mint10kFakeUSD(): Promise<TransactionResult> {
 }
 
 /**
+ * Request FakeETH and FakeUSD from the server-side faucet.
+ * Uses the deployer account to mint tokens on behalf of the user
+ * so the user doesn't need any ETH to pay gas.
+ */
+export async function requestEthTokens(recipientAddress: string): Promise<{
+  ethTxHash: string;
+  usdTxHash: string;
+}> {
+  const res = await fetch("/api/ethereum/fund", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ recipientAddress }),
+  });
+
+  const body = (await res.json().catch(() => ({}))) as {
+    ethTxHash?: string;
+    usdTxHash?: string;
+    error?: string;
+  };
+
+  if (!res.ok) {
+    throw new Error(body.error || `Ethereum faucet failed: ${res.status}`);
+  }
+
+  return {
+    ethTxHash: body.ethTxHash || "",
+    usdTxHash: body.usdTxHash || "",
+  };
+}
+
+/**
  * Wait for a transaction to be mined
  * @param txHash Transaction hash
  * @param confirmations Number of confirmations to wait for (default: 1)

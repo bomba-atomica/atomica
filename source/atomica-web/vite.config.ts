@@ -5,6 +5,7 @@ import type { Connect, Logger } from "vite";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 import { fundAptosAccount } from "./scripts/aptos-funding";
+import { fundEthereumAccount } from "./scripts/ethereum-funding";
 import { getDockerTestnetConfigDir } from "./test-utils/aptos-keys";
 import type { ChainConfig } from "./src/lib/chain-config";
 
@@ -79,6 +80,51 @@ function registerAptosFundingApi(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`[aptos-fund-api] ${message}`, { timestamp: true });
+      sendJson(res, 500, { success: false, error: message });
+    }
+  });
+}
+
+function registerEthereumFundingApi(
+  middlewares: Connect.Server,
+  logger: Logger,
+  chainConfig: ChainConfig,
+): void {
+  middlewares.use("/api/ethereum/fund", async (req, res) => {
+    if (req.method !== "POST") {
+      if (req.method === "OPTIONS") {
+        res.statusCode = 204;
+        res.end();
+        return;
+      }
+      sendJson(res, 405, { error: "Method not allowed. Use POST." });
+      return;
+    }
+
+    try {
+      const body = await readJsonBody(req);
+      const recipientAddress =
+        typeof body.recipientAddress === "string"
+          ? body.recipientAddress
+          : undefined;
+      const host = typeof body.host === "string" ? body.host : undefined;
+
+      if (!recipientAddress) {
+        sendJson(res, 400, { error: "`recipientAddress` is required." });
+        return;
+      }
+
+      const result = await fundEthereumAccount({
+        recipientAddress,
+        fakeETHAddress: chainConfig.ethereum.fakeETH,
+        fakeUSDAddress: chainConfig.ethereum.fakeUSD,
+        rpcUrl: chainConfig.ethereum.rpcUrl,
+        host,
+      });
+      sendJson(res, 200, { success: true, ...result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`[ethereum-fund-api] ${message}`, { timestamp: true });
       sendJson(res, 500, { success: false, error: message });
     }
   });
@@ -249,6 +295,16 @@ export default defineConfig(({ mode }) => {
         name: "aptos-funding-api",
         configureServer(server) {
           registerAptosFundingApi(server.middlewares, server.config.logger);
+        },
+      },
+      {
+        name: "ethereum-funding-api",
+        configureServer(server) {
+          registerEthereumFundingApi(
+            server.middlewares,
+            server.config.logger,
+            CHAIN_CONFIG,
+          );
         },
       },
     ],
