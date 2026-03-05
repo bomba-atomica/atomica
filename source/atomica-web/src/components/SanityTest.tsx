@@ -92,7 +92,7 @@ export function SanityTest() {
             ▸
           </span>
           <h2 className="text-sm font-semibold text-gray-400 group-hover:text-yellow-400 transition-colors">
-            Diagnostic: Sanity Test{" "}
+            Check Wallet SIWE Compatibility{" "}
             {checkingAccount && (
               <span className="animate-pulse ml-2 text-xs font-normal opacity-50">
                 Checking chain...
@@ -137,11 +137,10 @@ export function SanityTest() {
         <button
           onClick={runTest}
           disabled={loading || !accountExists}
-          className={`w-full py-2 px-4 rounded text-sm font-medium transition-all ${
-            loading || !accountExists
+          className={`w-full py-2 px-4 rounded text-sm font-medium transition-all ${loading || !accountExists
               ? "bg-gray-800 text-gray-600 cursor-not-allowed"
               : "bg-yellow-900/20 text-yellow-500 hover:bg-yellow-900/40 border border-yellow-900/50"
-          }`}
+            }`}
         >
           {loading
             ? "Verifying Signature..."
@@ -152,11 +151,10 @@ export function SanityTest() {
 
         {result && (
           <div
-            className={`mt-3 p-3 rounded text-xs border ${
-              result.success
+            className={`mt-3 p-3 rounded text-xs border ${result.success
                 ? "bg-green-900/10 border-green-900/30 text-green-400"
                 : "bg-red-900/10 border-red-900/30 text-red-400"
-            }`}
+              }`}
           >
             <div className="flex items-start gap-2">
               <span className="text-lg">{result.success ? "✓" : "✕"}</span>
