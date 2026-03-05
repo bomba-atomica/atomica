@@ -104,9 +104,13 @@ export function useAptosBalances(
       if (cancelled) return;
       setState(snapshot);
 
-      // Back off when the fetch returned an empty/error state (no address
-      // resolved and account not found), so we don't hammer an unreachable node.
-      const failed = !ethAddress || (!snapshot.aptAccountExists && snapshot.apt === 0 && !snapshot.aptosContractsDeployed);
+      // Back off when the fetch returned a fully-empty state — no account,
+      // no contracts — which indicates an unreachable node rather than a valid
+      // "not yet funded" state.
+      const failed =
+        !snapshot.aptAccountExists &&
+        snapshot.apt === 0 &&
+        !snapshot.aptosContractsDeployed;
       const delay = failed ? maxDelay : baseDelay;
       timer = setTimeout(() => void tick(), delay);
     };

@@ -172,7 +172,7 @@ export function AccountStatus() {
           //   !aptAccountExists || apt === 0 → not funded yet (show hint)
           //   apt > 0                        → show APT balance
           (aptosBalances.loading ? null : aptosBalances.aptAccountExists &&
-          aptosBalances.apt > 0 ? (
+            aptosBalances.apt > 0 ? (
             <BalanceItem
               label="APT"
               value={fmtApt(aptosBalances.apt)}
