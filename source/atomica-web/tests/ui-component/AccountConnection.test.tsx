@@ -39,7 +39,7 @@ describe("Account Connection Flow", () => {
     const settingsBtn = screen.getByTitle("Settings");
     fireEvent.click(settingsBtn);
 
-    screen.getByText("Not Connected");
+    screen.getByText("Not connected");
   });
 
   it("displays address after connecting wallet", async () => {

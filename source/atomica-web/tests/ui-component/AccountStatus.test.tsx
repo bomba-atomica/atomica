@@ -96,7 +96,7 @@ describe.sequential("AccountStatus Integration", () => {
       // Step 3: Wait for the hook to poll and update the balance
       await waitFor(
         () => {
-          screen.getByText("APT:");
+          screen.getByText("APT");
           screen.getByText("10.0000");
         },
         { timeout: 15000, interval: 500 },
