@@ -18,7 +18,7 @@ function AppShell() {
           Atomica Auction
         </h1>
 
-        <nav className="flex items-center gap-1">
+        <nav>
           <button
             onClick={() => setView("main")}
             className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
@@ -29,30 +29,45 @@ function AppShell() {
           >
             Auctions
           </button>
-          <button
-            onClick={() => setView("settings")}
-            className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-              view === "settings"
-                ? "text-zinc-100 bg-zinc-800"
-                : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900"
-            }`}
-          >
-            Settings
-          </button>
         </nav>
 
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
           {account ? (
-            <span className="text-xs font-mono text-zinc-500 border border-zinc-800 rounded px-3 py-2 bg-zinc-900/50">
-              {account.substring(0, 6)}...{account.substring(38)}
-            </span>
-          ) : (
+            // Connected: truncated address + gear icon — both navigate to Settings
             <button
-              onClick={connect}
-              className="bg-zinc-100 hover:bg-white text-zinc-900 px-4 py-2 rounded transition font-medium text-sm"
+              onClick={() => setView("settings")}
+              className={`flex items-center gap-2 text-xs font-mono border rounded px-3 py-2 transition-colors ${
+                view === "settings"
+                  ? "text-zinc-200 border-zinc-600 bg-zinc-800"
+                  : "text-zinc-500 border-zinc-800 bg-zinc-900/50 hover:text-zinc-300 hover:border-zinc-600"
+              }`}
             >
-              Connect MetaMask
+              <span>
+                {account.substring(0, 6)}…{account.substring(38)}
+              </span>
+              <span className="text-zinc-500">⚙</span>
             </button>
+          ) : (
+            // Not connected: connect wallet button + gear icon to settings
+            <>
+              <button
+                onClick={connect}
+                className="bg-zinc-100 hover:bg-white text-zinc-900 px-4 py-2 rounded transition font-medium text-sm"
+              >
+                Connect MetaMask
+              </button>
+              <button
+                onClick={() => setView("settings")}
+                className={`p-2 rounded transition-colors ${
+                  view === "settings"
+                    ? "text-zinc-200 bg-zinc-800"
+                    : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900"
+                }`}
+                title="Settings"
+              >
+                ⚙
+              </button>
+            </>
           )}
         </div>
       </header>
