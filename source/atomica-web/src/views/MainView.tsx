@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { SellFlow } from "../components/SellFlow";
 import { AuctionBidder } from "../components/AuctionBidder";
 import { AuctionCountdown } from "../components/AuctionCountdown";
+import { PoolStatus } from "../components/PoolStatus";
 import { getUpcomingAuctions } from "../components/auctionUtils";
 import { useWallet } from "../context/WalletContext";
 import { useBalances } from "../context/BalancesContext";
@@ -135,6 +136,8 @@ export function MainView({ onNavigateToSettings }: MainViewProps) {
               Sealed bids accepted until close. Settlement 1–3 hours after.
             </p>
           </div>
+
+          <PoolStatus />
         </div>
       </div>
     </main>
