@@ -1,9 +1,6 @@
 import { useState } from "react";
 import { requestAPT } from "../lib/aptos";
-import {
-  requestEthTokens,
-  waitForTransaction,
-} from "../lib/ethereum/transaction";
+import { requestEthTokens } from "../lib/ethereum/transaction";
 import { useWallet } from "../context/WalletContext";
 import { useBalances } from "../context/BalancesContext";
 import { useContractStatus } from "../context/ContractStatusContext";
@@ -15,6 +12,14 @@ export function Faucet() {
 
   const aptosReady = aptosAlive === true;
   const evmReady = evmAlive === true && evmStatus === "ready";
+
+  // Schedule a burst of balance refreshes after a faucet call so the UI
+  // reflects the confirmed state without depending on chain-specific tx watchers.
+  const scheduleRefreshBurst = () => {
+    for (const delay of [500, 1500, 4000]) {
+      setTimeout(() => void refresh(), delay);
+    }
+  };
   const [loadingAPT, setLoadingAPT] = useState(false);
   const [loadingEthTokens, setLoadingEthTokens] = useState(false);
   const [aptTxHash, setAptTxHash] = useState<string | null>(null);
@@ -29,7 +34,7 @@ export function Faucet() {
     try {
       const result = await requestAPT(account);
       setAptTxHash(result.hash);
-      await refresh();
+      scheduleRefreshBurst();
     } catch (e) {
       console.error("APT request failed:", e);
       alert("Failed to request APT: " + e);
@@ -59,11 +64,7 @@ export function Faucet() {
       const result = await requestEthTokens(account);
       setEthTxHash(result.ethTxHash);
       setUsdTxHash(result.usdTxHash);
-      await Promise.all([
-        waitForTransaction(result.ethTxHash),
-        waitForTransaction(result.usdTxHash),
-      ]);
-      await refresh();
+      scheduleRefreshBurst();
     } catch (e: unknown) {
       setEthTokensError(extractErrorMessage(e));
       console.error("Ethereum token faucet failed:", e);
