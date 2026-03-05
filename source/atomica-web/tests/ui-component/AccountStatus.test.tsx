@@ -57,7 +57,7 @@ describe.sequential("AccountStatus Integration", () => {
 
       await waitFor(
         () => {
-          screen.getByText(/Atomica account not found/);
+          screen.getByText(/Account not yet on chain/);
         },
         { timeout: 10000 },
       );
@@ -73,7 +73,7 @@ describe.sequential("AccountStatus Integration", () => {
       // Step 1: Initially, account should show "not found" warning
       await waitFor(
         () => {
-          screen.getByText(/Atomica account not found/);
+          screen.getByText(/Account not yet on chain/);
         },
         { timeout: 10000 },
       );
@@ -96,7 +96,7 @@ describe.sequential("AccountStatus Integration", () => {
       // Step 3: Wait for the hook to poll and update the balance
       await waitFor(
         () => {
-          screen.getByText("APT:");
+          screen.getByText("APT");
           screen.getByText("10.0000");
         },
         { timeout: 15000, interval: 500 },

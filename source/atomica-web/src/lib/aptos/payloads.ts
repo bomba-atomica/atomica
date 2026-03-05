@@ -1,8 +1,9 @@
 import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
+import { ethers } from "ethers";
 import { CONTRACT_ADDR, aptos } from "./config";
 import { getDerivedAddress } from "./siwe";
 import { submitNativeTransaction } from "./transaction";
-import { getStoredHost } from "../network-host";
+import type { LockedBalanceProof } from "../ethereum/proofs/generator";
 
 /**
  * Sanity Test: Simple APT transfer using MetaMask signature
@@ -71,21 +72,16 @@ export async function testSimpleAPTTransfer(
 export async function requestAPT(ethAddress: string) {
   // Always use lowercase for consistency with submitNativeTransaction
   const derived = await getDerivedAddress(ethAddress.toLowerCase());
-  const host = getStoredHost();
 
-  console.log("=== Requesting APT from Funding API ===");
-  console.log("  Ethereum Address:", ethAddress);
-  console.log("  Aptos Derived Address:", derived.toString());
-  console.log("  Funding address:", derived.toString());
-  console.log("  Funding host:", host);
-
+  // Do not pass host from the client — the server determines the Aptos node
+  // URL from its own environment (ATOMICA_APTOS_HOST). Passing a client-side
+  // host value caused TLS errors when localStorage held a stale https:// URL.
   const res = await fetch("/api/aptos/fund", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       address: derived.toString(),
       amount: 100000000,
-      host,
     }),
   });
 
@@ -101,9 +97,6 @@ export async function requestAPT(ethAddress: string) {
     );
     throw new Error(`Funding API Failed: ${text}`);
   }
-
-  // Wait slightly for balance to reflect (local node is fast but async)
-  await new Promise((r) => setTimeout(r, 1000));
 
   return { hash: body.txHash || "apt-funded" };
 }
@@ -154,6 +147,53 @@ export async function submitCreateAuction(
     ethAddress,
     getCreateAuctionPayload(amountEth, minPrice, duration, mpk),
   );
+}
+
+/**
+ * Build payload for lock_receipt::register_ethereum_lock<FakeETH>.
+ *
+ * Serialises directly from LockedBalanceProof, matching the Move entry function:
+ *   register_ethereum_lock<Asset>(account, block_number, block_hash, state_root,
+ *     contract_address, user_address, token_address, storage_key, storage_value,
+ *     account_proof, storage_proof)
+ *
+ * Do NOT use serializeProofForAptos() — it is missing block_number, user_address,
+ * token_address and returns wrong types.
+ */
+export function getRegisterLockPayload(
+  proof: LockedBalanceProof,
+): InputGenerateTransactionPayloadData {
+  return {
+    function: `${CONTRACT_ADDR}::lock_receipt::register_ethereum_lock`,
+    typeArguments: [`${CONTRACT_ADDR}::lock_receipt::FakeETH`],
+    functionArguments: [
+      proof.blockNumber,
+      ethers.getBytes(proof.blockHash),
+      ethers.getBytes(proof.stateRoot),
+      ethers.getBytes(proof.contractAddress),
+      ethers.getBytes(proof.userAddress),
+      ethers.getBytes(proof.tokenAddress),
+      ethers.getBytes(proof.storageKey),
+      proof.storageValue.toString(), // u256 as decimal string
+      proof.accountProof.map((node) => ethers.getBytes(node)),
+      proof.storageProof.map((node) => ethers.getBytes(node)),
+    ],
+  };
+}
+
+/**
+ * Build payload for fake_eth::mint_from_lock.
+ *
+ * Entry function: mint_from_lock(account: &signer, lock_id: vector<u8>)
+ * Used in Demo/MVP phases. Production may replace with receipt-direct-escrow.
+ */
+export function getMintFakeEthPayload(
+  lockId: Uint8Array,
+): InputGenerateTransactionPayloadData {
+  return {
+    function: `${CONTRACT_ADDR}::fake_eth::mint_from_lock`,
+    functionArguments: [lockId],
+  };
 }
 
 export function getBidPayload(
