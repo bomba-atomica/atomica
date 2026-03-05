@@ -59,18 +59,21 @@ describe("E2E 09: Bid and Settle Auction", () => {
 
     // Mint FakeUSD to bidder: fake_usd::mint takes (account: &signer, amount: u64)
     // and mints to the caller. Bidder calls it directly.
-    const bidderMintUsdTxn = await fixture.aptos.client.transaction.build.simple({
-      sender: bidderAccount.accountAddress,
-      data: {
-        function: `${fixture.aptos.moduleAddress}::fake_usd::mint`,
-        typeArguments: [],
-        functionArguments: [BIDDER_FAKEUSD.toString()],
+    const bidderMintUsdTxn =
+      await fixture.aptos.client.transaction.build.simple({
+        sender: bidderAccount.accountAddress,
+        data: {
+          function: `${fixture.aptos.moduleAddress}::fake_usd::mint`,
+          typeArguments: [],
+          functionArguments: [BIDDER_FAKEUSD.toString()],
+        },
+      });
+    const bidderMintedTxn = await fixture.aptos.client.signAndSubmitTransaction(
+      {
+        signer: bidderAccount,
+        transaction: bidderMintUsdTxn,
       },
-    });
-    const bidderMintedTxn = await fixture.aptos.client.signAndSubmitTransaction({
-      signer: bidderAccount,
-      transaction: bidderMintUsdTxn,
-    });
+    );
     await fixture.aptos.client.waitForTransaction({
       transactionHash: bidderMintedTxn.hash,
       options: { checkSuccess: true },
@@ -193,10 +196,12 @@ describe("E2E 09: Bid and Settle Auction", () => {
         ],
       },
     });
-    const createSubmitted = await fixture.aptos.client.signAndSubmitTransaction({
-      signer: fixture.aptos.deployer,
-      transaction: createTxn,
-    });
+    const createSubmitted = await fixture.aptos.client.signAndSubmitTransaction(
+      {
+        signer: fixture.aptos.deployer,
+        transaction: createTxn,
+      },
+    );
     await fixture.aptos.client.waitForTransaction({
       transactionHash: createSubmitted.hash,
       options: { checkSuccess: true },
@@ -217,19 +222,51 @@ describe("E2E 09: Bid and Settle Auction", () => {
 
     // Record balances before bid
     const sellerEthBefore = BigInt(
-      (await viewFunction(fixture.aptos.client, `${fixture.aptos.moduleAddress}::fake_eth::balance`, [], [sellerAddress]))[0],
+      (
+        await viewFunction(
+          fixture.aptos.client,
+          `${fixture.aptos.moduleAddress}::fake_eth::balance`,
+          [],
+          [sellerAddress],
+        )
+      )[0],
     );
     const sellerUsdBefore = BigInt(
-      (await viewFunction(fixture.aptos.client, `${fixture.aptos.moduleAddress}::fake_usd::balance`, [], [sellerAddress]))[0],
+      (
+        await viewFunction(
+          fixture.aptos.client,
+          `${fixture.aptos.moduleAddress}::fake_usd::balance`,
+          [],
+          [sellerAddress],
+        )
+      )[0],
     );
     const bidderEthBefore = BigInt(
-      (await viewFunction(fixture.aptos.client, `${fixture.aptos.moduleAddress}::fake_eth::balance`, [], [bidderAddress]))[0],
+      (
+        await viewFunction(
+          fixture.aptos.client,
+          `${fixture.aptos.moduleAddress}::fake_eth::balance`,
+          [],
+          [bidderAddress],
+        )
+      )[0],
     );
     const bidderUsdBefore = BigInt(
-      (await viewFunction(fixture.aptos.client, `${fixture.aptos.moduleAddress}::fake_usd::balance`, [], [bidderAddress]))[0],
+      (
+        await viewFunction(
+          fixture.aptos.client,
+          `${fixture.aptos.moduleAddress}::fake_usd::balance`,
+          [],
+          [bidderAddress],
+        )
+      )[0],
     );
-    console.log(`  Seller ETH before: ${sellerEthBefore}, USD before: ${sellerUsdBefore}`);
-    console.log(`  Bidder ETH before: ${bidderEthBefore}, USD before: ${bidderUsdBefore}`);
+    console.log(
+      `  Seller ETH before: ${sellerEthBefore}, USD before: ${sellerUsdBefore}`,
+    );
+    console.log(
+      `  Bidder ETH before: ${bidderEthBefore}, USD before: ${bidderUsdBefore}`,
+    );
 
     // Submit bid (auction has 2s duration, so likely already expired — submit before that)
     const bidTxn = await fixture.aptos.client.transaction.build.simple({
@@ -266,10 +303,12 @@ describe("E2E 09: Bid and Settle Auction", () => {
         functionArguments: [sellerAddress],
       },
     });
-    const settleSubmitted = await fixture.aptos.client.signAndSubmitTransaction({
-      signer: fixture.aptos.deployer,
-      transaction: settleTxn,
-    });
+    const settleSubmitted = await fixture.aptos.client.signAndSubmitTransaction(
+      {
+        signer: fixture.aptos.deployer,
+        transaction: settleTxn,
+      },
+    );
     await fixture.aptos.client.waitForTransaction({
       transactionHash: settleSubmitted.hash,
       options: { checkSuccess: true },
@@ -288,18 +327,45 @@ describe("E2E 09: Bid and Settle Auction", () => {
 
     // Verify balances after settlement
     const bidderEthAfter = BigInt(
-      (await viewFunction(fixture.aptos.client, `${fixture.aptos.moduleAddress}::fake_eth::balance`, [], [bidderAddress]))[0],
+      (
+        await viewFunction(
+          fixture.aptos.client,
+          `${fixture.aptos.moduleAddress}::fake_eth::balance`,
+          [],
+          [bidderAddress],
+        )
+      )[0],
     );
     const sellerUsdAfter = BigInt(
-      (await viewFunction(fixture.aptos.client, `${fixture.aptos.moduleAddress}::fake_usd::balance`, [], [sellerAddress]))[0],
+      (
+        await viewFunction(
+          fixture.aptos.client,
+          `${fixture.aptos.moduleAddress}::fake_usd::balance`,
+          [],
+          [sellerAddress],
+        )
+      )[0],
     );
     const bidderUsdAfter = BigInt(
-      (await viewFunction(fixture.aptos.client, `${fixture.aptos.moduleAddress}::fake_usd::balance`, [], [bidderAddress]))[0],
+      (
+        await viewFunction(
+          fixture.aptos.client,
+          `${fixture.aptos.moduleAddress}::fake_usd::balance`,
+          [],
+          [bidderAddress],
+        )
+      )[0],
     );
 
-    console.log(`  Bidder ETH after: ${bidderEthAfter} (gained ${bidderEthAfter - bidderEthBefore})`);
-    console.log(`  Seller USD after: ${sellerUsdAfter} (gained ${sellerUsdAfter - sellerUsdBefore})`);
-    console.log(`  Bidder USD after: ${bidderUsdAfter} (refunded ${bidderUsdAfter - bidderUsdBefore + COLLATERAL})`);
+    console.log(
+      `  Bidder ETH after: ${bidderEthAfter} (gained ${bidderEthAfter - bidderEthBefore})`,
+    );
+    console.log(
+      `  Seller USD after: ${sellerUsdAfter} (gained ${sellerUsdAfter - sellerUsdBefore})`,
+    );
+    console.log(
+      `  Bidder USD after: ${bidderUsdAfter} (refunded ${bidderUsdAfter - bidderUsdBefore + COLLATERAL})`,
+    );
 
     // Winner received all auctioned FakeETH
     expect(bidderEthAfter - bidderEthBefore).toBe(AUCTION_AMOUNT);
