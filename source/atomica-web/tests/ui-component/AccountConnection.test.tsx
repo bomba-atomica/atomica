@@ -12,7 +12,6 @@ import { APTOS_DEPLOYER_PRIVATE_KEY } from "../../../shared/test-constants";
 const TEST_PK = APTOS_DEPLOYER_PRIVATE_KEY;
 
 describe("Account Connection Flow", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getWindow = () => globalThis.window as any;
 
   afterEach(() => {
@@ -71,7 +70,7 @@ describe("Account Connection Flow", () => {
     // After successful connection, the header should show the address not the connect button
     // Wait a bit more for the UI to update
     await waitFor(() => {
-      const buttons = screen.queryAllByText("Connect MetaMask");
+      screen.queryAllByText("Connect MetaMask");
       // Either 0 buttons (if fully connected) or still have them (if showing in other places)
       // The key is the address is shown
     });
