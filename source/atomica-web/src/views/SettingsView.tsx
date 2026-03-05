@@ -65,22 +65,20 @@ export function SettingsView() {
         {/* Account */}
         <section>
           <SectionHeader title="Account" />
-          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5 flex flex-col gap-4">
-            {!account && (
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm text-zinc-400">
-                  Connect MetaMask to see balances and interact with auctions.
-                </span>
-                <button
-                  onClick={connect}
-                  className="flex-shrink-0 bg-zinc-100 hover:bg-white text-zinc-900 px-4 py-2 rounded transition font-medium text-sm"
-                >
-                  Connect MetaMask
-                </button>
-              </div>
-            )}
-            <AccountStatus />
-          </div>
+          {!account && (
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <span className="text-sm text-zinc-400">
+                Connect MetaMask to see balances and interact with auctions.
+              </span>
+              <button
+                onClick={connect}
+                className="flex-shrink-0 bg-zinc-100 hover:bg-white text-zinc-900 px-4 py-2 rounded transition font-medium text-sm"
+              >
+                Connect MetaMask
+              </button>
+            </div>
+          )}
+          <AccountStatus />
         </section>
 
         {/* Tokens */}

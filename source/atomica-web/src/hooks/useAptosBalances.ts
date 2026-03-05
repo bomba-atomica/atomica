@@ -4,14 +4,14 @@ import { useNetworkConfig } from "../lib/network-config-state";
 
 export interface AptosBalanceSnapshot {
   apt: number;
-  aptosExists: boolean;
+  aptAccountExists: boolean;
   aptosContractsDeployed: boolean;
   loading: boolean;
 }
 
 const EMPTY_STATE: Omit<AptosBalanceSnapshot, "loading"> = {
   apt: 0,
-  aptosExists: false,
+  aptAccountExists: false,
   aptosContractsDeployed: false,
 };
 
@@ -36,13 +36,23 @@ export function useAptosBalances(
     try {
       const derived = await getDerivedAddress(ethAddress.toLowerCase());
       const contractsDeployed = await areContractsDeployed();
-      const aptValue = await aptos.getAccountAPTAmount({
-        accountAddress: derived,
-      });
+
+      let aptValue: number;
+      let aptAccountExists: boolean;
+      try {
+        aptValue = await aptos.getAccountAPTAmount({
+          accountAddress: derived,
+        });
+        aptAccountExists = true; // account found on-chain (even if balance is 0)
+      } catch {
+        // Account does not exist on chain yet
+        aptValue = 0;
+        aptAccountExists = false;
+      }
 
       return {
         apt: aptValue,
-        aptosExists: aptValue > 0,
+        aptAccountExists,
         aptosContractsDeployed: contractsDeployed,
         loading: false,
       };
@@ -72,7 +82,7 @@ export function useAptosBalances(
       const failed =
         snapshot.loading &&
         snapshot.apt === 0 &&
-        snapshot.aptosExists === false;
+        snapshot.aptAccountExists === false;
       const delay = failed ? maxDelay : baseDelay;
       timer = setTimeout(() => void tick(), delay);
     };

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { getAllBalances } from "../lib/ethereum/balances";
 import { areContractsDeployed } from "../lib/ethereum/contracts";
+import { getEthereumProvider } from "../lib/ethereum/config";
 
 export interface EthereumBalances {
+  ethAccountExists: boolean; // nonce > 0 OR balance > 0
   ethBalance: bigint;
   ethFakeETH: bigint;
   ethFakeUSD: bigint;
@@ -18,6 +20,7 @@ export function useEthereumBalances(
   ethAddress: string | null,
 ): EthereumBalancesSnapshot {
   const [state, setState] = useState<EthereumBalances>({
+    ethAccountExists: false,
     ethBalance: 0n,
     ethFakeETH: 0n,
     ethFakeUSD: 0n,
@@ -28,6 +31,7 @@ export function useEthereumBalances(
   const load = useCallback(async () => {
     if (!ethAddress) {
       setState({
+        ethAccountExists: false,
         ethBalance: 0n,
         ethFakeETH: 0n,
         ethFakeUSD: 0n,
@@ -38,11 +42,19 @@ export function useEthereumBalances(
     }
 
     try {
+      const provider = getEthereumProvider();
+      const [nonce, ethBalance] = await Promise.all([
+        provider.getTransactionCount(ethAddress),
+        provider.getBalance(ethAddress),
+      ]);
+      const ethAccountExists = nonce > 0 || ethBalance > 0n;
+
       const contractsDeployed = await areContractsDeployed();
 
       if (!contractsDeployed) {
         setState({
-          ethBalance: 0n,
+          ethAccountExists,
+          ethBalance,
           ethFakeETH: 0n,
           ethFakeUSD: 0n,
           ethContractsDeployed: false,
@@ -53,6 +65,7 @@ export function useEthereumBalances(
 
       const balances = await getAllBalances(ethAddress);
       setState({
+        ethAccountExists,
         ethBalance: balances.eth,
         ethFakeETH: balances.fakeETH,
         ethFakeUSD: balances.fakeUSD,
