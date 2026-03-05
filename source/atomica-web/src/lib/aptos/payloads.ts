@@ -102,8 +102,9 @@ export async function requestAPT(ethAddress: string) {
     throw new Error(`Funding API Failed: ${text}`);
   }
 
-  // Wait slightly for balance to reflect (local node is fast but async)
-  await new Promise((r) => setTimeout(r, 1000));
+  if (body.txHash) {
+    await aptos.waitForTransaction({ transactionHash: body.txHash });
+  }
 
   return { hash: body.txHash || "apt-funded" };
 }

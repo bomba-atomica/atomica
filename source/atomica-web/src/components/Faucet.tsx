@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { requestAPT } from "../lib/aptos";
-import { requestEthTokens } from "../lib/ethereum/transaction";
+import {
+  requestEthTokens,
+  waitForTransaction,
+} from "../lib/ethereum/transaction";
 import { useWallet } from "../context/WalletContext";
 import { useBalances } from "../context/BalancesContext";
 import { useContractStatus } from "../context/ContractStatusContext";
@@ -56,6 +59,10 @@ export function Faucet() {
       const result = await requestEthTokens(account);
       setEthTxHash(result.ethTxHash);
       setUsdTxHash(result.usdTxHash);
+      await Promise.all([
+        waitForTransaction(result.ethTxHash),
+        waitForTransaction(result.usdTxHash),
+      ]);
       await refresh();
     } catch (e: unknown) {
       setEthTokensError(extractErrorMessage(e));
