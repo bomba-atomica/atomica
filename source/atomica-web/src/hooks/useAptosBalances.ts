@@ -54,15 +54,16 @@ export function useAptosBalances(
       let aptValue: number;
       let aptAccountExists: boolean;
       try {
-        // getAccountAPTAmount throws when the account resource doesn't exist on-chain.
-        // We catch that separately so a real zero-balance account is treated as existing,
-        // rather than being collapsed into the same "not found" state.
-        aptValue = await aptos.getAccountAPTAmount({
-          accountAddress: derived,
-        });
-        aptAccountExists = true; // call succeeded → account is initialized on-chain
+        // getAccountInfo throws for addresses that have never been initialised
+        // on-chain. We use this (not getAccountAPTAmount) for the existence check
+        // because getAccountAPTAmount silently returns 0 for missing accounts,
+        // making it impossible to distinguish "not on chain" from "zero balance".
+        await aptos.getAccountInfo({ accountAddress: derived });
+        aptAccountExists = true;
+        // Account exists — now fetch the actual APT balance.
+        aptValue = await aptos.getAccountAPTAmount({ accountAddress: derived });
       } catch {
-        // Account has never been funded / initialized — not an error, just not there yet.
+        // Account has never been funded / initialised — not an error, just not there yet.
         aptValue = 0;
         aptAccountExists = false;
       }
