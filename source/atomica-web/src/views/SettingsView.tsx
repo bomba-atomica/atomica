@@ -57,7 +57,8 @@ export function SettingsView() {
                   Testnet Host
                 </span>
                 <span className="text-xs text-zinc-500">
-                  Switch between local and remote testnet nodes.
+                  Proxy target set at server start via{" "}
+                  <code className="font-mono">VITE_HOST_IP</code>.
                 </span>
               </div>
               <TestnetSelector />
