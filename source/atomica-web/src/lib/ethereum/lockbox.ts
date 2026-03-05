@@ -161,3 +161,26 @@ export async function getLockBoxAllowance(
   const contract = new ethers.Contract(fakeEthAddress, FAKE_ETH_ABI, provider);
   return contract.allowance(userAddress, lockBoxAddress) as Promise<bigint>;
 }
+
+/**
+ * Get total FakeETH locked by all users in LockBox.
+ * Queries all TokensLocked events and sums the amounts.
+ */
+export async function getTotalLockedEth(
+  provider: ethers.Provider,
+): Promise<bigint> {
+  const lockBoxAddress = getLockBoxAddress();
+  const tokenAddress = getFakeEthAddress();
+  const contract = new ethers.Contract(lockBoxAddress, LOCKBOX_ABI, provider);
+
+  const filter = contract.filters.TokensLocked(null, tokenAddress, null, null);
+  const events = await contract.queryFilter(filter);
+
+  let total = 0n;
+  for (const event of events) {
+    const amount = (event as unknown as { args: { amount: bigint } }).args
+      .amount;
+    total += amount;
+  }
+  return total;
+}
