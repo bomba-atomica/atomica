@@ -57,8 +57,7 @@ export function SettingsView() {
                   Testnet Host
                 </span>
                 <span className="text-xs text-zinc-500">
-                  Proxy target set at server start via{" "}
-                  <code className="font-mono">VITE_HOST_IP</code>.
+                  The origin all API calls are routed through.
                 </span>
               </div>
               <TestnetSelector />
