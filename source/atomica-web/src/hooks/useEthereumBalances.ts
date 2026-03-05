@@ -87,8 +87,13 @@ export function useEthereumBalances(
 
       // Contracts are up — fetch all token balances.
       const balances = await getAllBalances(ethAddress);
+      // Also count ERC-20 holdings as "account exists": the ETH faucet mints
+      // FakeETH/FakeUSD without touching native ETH or nonce, so nonce+ethBalance
+      // alone would incorrectly show "Account not yet on chain" after minting.
+      const ethAccountExistsFinal =
+        ethAccountExists || balances.fakeETH > 0n || balances.fakeUSD > 0n;
       setState({
-        ethAccountExists,
+        ethAccountExists: ethAccountExistsFinal,
         ethBalance: balances.eth,
         ethFakeETH: balances.fakeETH,
         ethFakeUSD: balances.fakeUSD,

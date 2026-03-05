@@ -168,10 +168,11 @@ export function AccountStatus() {
       >
         {ethAddress &&
           // Balance display flow for Atomica:
-          //   loading            → render nothing
-          //   !aptAccountExists  → account not initialised on-chain yet (needs APT from faucet)
-          //   aptAccountExists   → show APT balance (may legitimately be 0)
-          (aptosBalances.loading ? null : aptosBalances.aptAccountExists ? (
+          //   loading                       → render nothing
+          //   !aptAccountExists || apt === 0 → not funded yet (show hint)
+          //   apt > 0                        → show APT balance
+          (aptosBalances.loading ? null : aptosBalances.aptAccountExists &&
+          aptosBalances.apt > 0 ? (
             <BalanceItem
               label="APT"
               value={fmtApt(aptosBalances.apt)}

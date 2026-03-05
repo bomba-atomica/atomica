@@ -51,26 +51,32 @@ export function useAptosBalances(
       const derived = await getDerivedAddress(ethAddress.toLowerCase());
       const contractsDeployed = await areContractsDeployed();
 
-      let aptValue: number;
-      let aptAccountExists: boolean;
+      // Existence check: getAccountInfo throws for uninitialised addresses.
+      // Kept separate from the balance fetch so a balance failure doesn't
+      // incorrectly flip aptAccountExists to false.
       try {
-        // getAccountInfo throws for addresses that have never been initialised
-        // on-chain. We use this (not getAccountAPTAmount) for the existence check
-        // because getAccountAPTAmount silently returns 0 for missing accounts,
-        // making it impossible to distinguish "not on chain" from "zero balance".
         await aptos.getAccountInfo({ accountAddress: derived });
-        aptAccountExists = true;
-        // Account exists — now fetch the actual APT balance.
+      } catch {
+        // Account not yet on-chain — not an error, just not funded yet.
+        return {
+          apt: 0,
+          aptAccountExists: false,
+          aptosContractsDeployed: contractsDeployed,
+          loading: false,
+        };
+      }
+
+      // Account exists — fetch APT balance separately.
+      let aptValue: number;
+      try {
         aptValue = await aptos.getAccountAPTAmount({ accountAddress: derived });
       } catch {
-        // Account has never been funded / initialised — not an error, just not there yet.
         aptValue = 0;
-        aptAccountExists = false;
       }
 
       return {
         apt: aptValue,
-        aptAccountExists,
+        aptAccountExists: true,
         aptosContractsDeployed: contractsDeployed,
         loading: false,
       };
@@ -98,12 +104,9 @@ export function useAptosBalances(
       if (cancelled) return;
       setState(snapshot);
 
-      // Back off to a longer interval when the fetch clearly failed
-      // (still in loading state with no data), so we don't hammer the node.
-      const failed =
-        snapshot.loading &&
-        snapshot.apt === 0 &&
-        snapshot.aptAccountExists === false;
+      // Back off when the fetch returned an empty/error state (no address
+      // resolved and account not found), so we don't hammer an unreachable node.
+      const failed = !ethAddress || (!snapshot.aptAccountExists && snapshot.apt === 0 && !snapshot.aptosContractsDeployed);
       const delay = failed ? maxDelay : baseDelay;
       timer = setTimeout(() => void tick(), delay);
     };
