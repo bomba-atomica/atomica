@@ -1,10 +1,8 @@
 import { useState, useEffect } from "react";
 import { AuctionCreator } from "../components/AuctionCreator";
 import { AuctionBidder } from "../components/AuctionBidder";
-import {
-  AuctionCountdown,
-  getUpcomingAuctions,
-} from "../components/AuctionCountdown";
+import { AuctionCountdown } from "../components/AuctionCountdown";
+import { getUpcomingAuctions } from "../components/auctionUtils";
 import { useWallet } from "../context/WalletContext";
 import { useBalances } from "../context/BalancesContext";
 import { useContractStatus } from "../context/ContractStatusContext";
