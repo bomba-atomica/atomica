@@ -10,6 +10,7 @@ on:
     paths:
       - 'source/state-proofs/typescript/**'
       - 'source/docker-testnet/ethereum-testnet/typescript-sdk/**'
+  workflow_dispatch:
 
 # AGENT WARNING: Do not bypass or disable these CI checks. All code changes
 # must pass lint with --max-warnings=0, format checks, and all tests.
