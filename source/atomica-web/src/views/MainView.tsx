@@ -20,11 +20,12 @@ export function MainView({ onNavigateToSettings }: MainViewProps) {
 
   const networksUnavailable = evmAlive === false || aptosAlive === false;
   const needsTokens =
-    account &&
-    (ethBalances.ethFakeETH === 0n || ethBalances.ethFakeUSD === 0n);
+    account && (ethBalances.ethFakeETH === 0n || ethBalances.ethFakeUSD === 0n);
 
   // Keep auction list live — recompute when minute ticks over
-  const [auctions, setAuctions] = useState(() => getUpcomingAuctions(new Date()));
+  const [auctions, setAuctions] = useState(() =>
+    getUpcomingAuctions(new Date()),
+  );
   useEffect(() => {
     const id = setInterval(
       () => setAuctions(getUpcomingAuctions(new Date())),
@@ -40,7 +41,9 @@ export function MainView({ onNavigateToSettings }: MainViewProps) {
       {/* Warning banners */}
       {!account && (
         <div className="mb-6 flex items-center justify-between gap-4 rounded-lg border border-amber-900/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-400">
-          <span>Wallet not connected — connect to participate in auctions.</span>
+          <span>
+            Wallet not connected — connect to participate in auctions.
+          </span>
           <button
             onClick={onNavigateToSettings}
             className="flex-shrink-0 rounded border border-amber-800 px-3 py-1 text-xs text-amber-300 hover:bg-amber-900/40 transition-colors"
@@ -52,7 +55,9 @@ export function MainView({ onNavigateToSettings }: MainViewProps) {
 
       {networksUnavailable && (
         <div className="mb-6 flex items-center justify-between gap-4 rounded-lg border border-amber-900/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-400">
-          <span>Testnet networks unreachable — check network configuration.</span>
+          <span>
+            Testnet networks unreachable — check network configuration.
+          </span>
           <button
             onClick={onNavigateToSettings}
             className="flex-shrink-0 rounded border border-amber-800 px-3 py-1 text-xs text-amber-300 hover:bg-amber-900/40 transition-colors"
@@ -116,7 +121,9 @@ export function MainView({ onNavigateToSettings }: MainViewProps) {
             <div className="h-px bg-zinc-800" />
             <div className="flex flex-col gap-1">
               <span className="text-xs text-zinc-500">Opens at</span>
-              <span className="text-sm text-zinc-400">{subsequent.utcLabel}</span>
+              <span className="text-sm text-zinc-400">
+                {subsequent.utcLabel}
+              </span>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xs text-zinc-500">Opens in</span>

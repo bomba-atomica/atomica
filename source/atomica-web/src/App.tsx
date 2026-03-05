@@ -26,10 +26,11 @@ function AppShell() {
             // Connected: truncated address + gear icon — both navigate to Settings
             <button
               onClick={() => setView("settings")}
-              className={`flex items-center gap-2 text-xs font-mono border rounded px-3 py-2 transition-colors ${view === "settings"
+              className={`flex items-center gap-2 text-xs font-mono border rounded px-3 py-2 transition-colors ${
+                view === "settings"
                   ? "text-zinc-200 border-zinc-600 bg-zinc-800"
                   : "text-zinc-500 border-zinc-800 bg-zinc-900/50 hover:text-zinc-300 hover:border-zinc-600"
-                }`}
+              }`}
             >
               <span>
                 {account.substring(0, 6)}…{account.substring(38)}
@@ -47,10 +48,11 @@ function AppShell() {
               </button>
               <button
                 onClick={() => setView("settings")}
-                className={`p-2 rounded transition-colors ${view === "settings"
+                className={`p-2 rounded transition-colors ${
+                  view === "settings"
                     ? "text-zinc-200 bg-zinc-800"
                     : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900"
-                  }`}
+                }`}
                 title="Settings"
               >
                 ⚙

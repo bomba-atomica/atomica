@@ -22,7 +22,7 @@ describe.sequential("AccountStatus Integration", () => {
     return (
       <NetworkConfigProvider>
         <WalletContext.Provider
-          value={{ account: mockWallet.address, connect: async () => { } }}
+          value={{ account: mockWallet.address, connect: async () => {} }}
         >
           <ContractStatusProvider>
             <BalancesProvider>
