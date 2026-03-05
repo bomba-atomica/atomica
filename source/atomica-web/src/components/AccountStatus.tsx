@@ -15,7 +15,6 @@ import { useBalances } from "../context/BalancesContext";
  */
 function NetworkCard({
   label,
-  icon,
   address,
   addressTitle,
   addressTruncate,
@@ -23,7 +22,6 @@ function NetworkCard({
   children,
 }: {
   label: string;
-  icon: string;
   address: string | null;
   addressTitle?: string;
   addressTruncate: (addr: string) => string;
@@ -34,7 +32,6 @@ function NetworkCard({
     <div className="flex flex-col gap-3 bg-zinc-800/50 border border-zinc-700/60 rounded-lg px-4 py-3">
       {/* Network header */}
       <div className="flex items-center gap-2">
-        <span className="text-base">{icon}</span>
         <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
           {label}
         </span>
@@ -117,7 +114,6 @@ export function AccountStatus() {
       {/* ── Ethereum ── */}
       <NetworkCard
         label="Ethereum"
-        icon="⬡"
         address={ethAddress}
         addressTruncate={(a) => `${a.substring(0, 10)}...${a.substring(38)}`}
         notConnectedLabel="Not connected"
@@ -164,7 +160,6 @@ export function AccountStatus() {
       {/* ── Atomica (Aptos) ── */}
       <NetworkCard
         label="Atomica"
-        icon="⬢"
         address={aptosAddress}
         addressTruncate={(a) => `${a.substring(0, 10)}...${a.substring(58)}`}
         // While the address is being derived (ethAddress known but aptosAddress not yet set)
