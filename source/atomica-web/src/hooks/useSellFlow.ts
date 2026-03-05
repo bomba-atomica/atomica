@@ -143,7 +143,7 @@ export function useSellFlow(
 
     const persisted = loadState(account);
     if (!persisted)
-      return { step: "connect", blockConfirmed: false, loading: false };
+      return { step: "lock", blockConfirmed: false, loading: false };
 
     return {
       step: persisted.step,

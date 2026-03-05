@@ -74,7 +74,7 @@ describe("SellFlow step rendering", () => {
   it("shows Step1Connect when no account is connected", () => {
     vi.mocked(useSellFlow).mockReturnValue({ ...BASE_FLOW, step: "connect" });
     renderSellFlow(null);
-    expect(screen.getByText(/Connect/i)).toBeTruthy();
+    expect(screen.getAllByText(/Connect/i).length).toBeGreaterThan(0);
   });
 
   it("shows Step2Lock at lock step", () => {
@@ -101,7 +101,7 @@ describe("SellFlow step rendering", () => {
       step: "generating-proof",
     });
     renderSellFlow();
-    expect(screen.getByText(/proof/i)).toBeTruthy();
+    expect(screen.getAllByText(/proof/i).length).toBeGreaterThan(0);
   });
 
   it("shows Step5Submit at submitting-proof step", () => {
@@ -110,7 +110,7 @@ describe("SellFlow step rendering", () => {
       step: "submitting-proof",
     });
     renderSellFlow();
-    expect(screen.getByText(/proof/i)).toBeTruthy();
+    expect(screen.getAllByText(/proof/i).length).toBeGreaterThan(0);
   });
 
   it("shows Step6Mint at minting step", () => {
@@ -120,7 +120,7 @@ describe("SellFlow step rendering", () => {
       amount: 1_000_000_000_000_000_000n,
     });
     renderSellFlow();
-    expect(screen.getByText(/mint/i)).toBeTruthy();
+    expect(screen.getAllByText(/mint/i).length).toBeGreaterThan(0);
   });
 
   it("shows Step7Auction at creating-auction step", () => {
@@ -131,7 +131,7 @@ describe("SellFlow step rendering", () => {
       minPrice: 2_000_000_000n,
     });
     renderSellFlow();
-    expect(screen.getByText(/auction/i)).toBeTruthy();
+    expect(screen.getByText(/Creating auction for/i)).toBeTruthy();
   });
 
   it("shows Step8Monitor at monitoring step", () => {

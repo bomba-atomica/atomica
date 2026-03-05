@@ -162,7 +162,7 @@ describe("SellFlow localStorage resume", () => {
     });
     // After reset, should be back at lock step
     expect(screen.getByText(/Approve & Lock/i)).toBeTruthy();
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toContain('"step":"lock"');
   });
 
   // ── Pending: requires live blockchain infrastructure ──────────────────────
