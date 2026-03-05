@@ -2,12 +2,12 @@ name: Lint Web
 
 on:
   pull_request:
-    branches: [main]
+    
     paths:
       - 'source/atomica-web/**'
       - '.github/workflows/lint-web.yaml'
   push:
-    branches: [main]
+    
     paths:
       - 'source/atomica-web/**'
       - '.github/workflows/lint-web.yaml'
