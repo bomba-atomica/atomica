@@ -39,7 +39,8 @@ describe("Account Connection Flow", () => {
     const settingsBtn = screen.getByTitle("Settings");
     fireEvent.click(settingsBtn);
 
-    screen.getByText("Not connected");
+    // Both Ethereum and Atomica cards show "Not connected" when no wallet is present
+    expect(screen.getAllByText("Not connected").length).toBeGreaterThan(0);
   });
 
   it("displays address after connecting wallet", async () => {
