@@ -1,11 +1,18 @@
 import { useEffect, useState } from "react";
 import { useNetworkConfig } from "../lib/network-config-state";
-import { checkAptosContracts, checkEVMContracts } from "../lib/contract-check";
+import {
+  checkAptosAlive,
+  checkAptosContracts,
+  checkEthereumAlive,
+  checkEVMContracts,
+} from "../lib/contract-check";
 
 export type ContractDeploymentStatus = "loading" | "ready" | "missing";
 
 export function useContractStatuses() {
   const { host } = useNetworkConfig();
+  const [evmAlive, setEvmAlive] = useState<boolean | null>(null);
+  const [aptosAlive, setAptosAlive] = useState<boolean | null>(null);
   const [evmStatus, setEvmStatus] =
     useState<ContractDeploymentStatus>("loading");
   const [aptosStatus, setAptosStatus] =
@@ -19,37 +26,39 @@ export function useContractStatuses() {
     const pollEvm = async (initial = false) => {
       if (cancelled) return;
       if (initial) setEvmStatus("loading");
-      try {
+
+      const alive = await checkEthereumAlive();
+      if (cancelled) return;
+      setEvmAlive(alive);
+
+      if (alive) {
         const ready = await checkEVMContracts();
         if (cancelled) return;
         setEvmStatus(ready ? "ready" : "missing");
-        if (!ready) {
-          evmTimer = setTimeout(() => void pollEvm(), 5000);
-        }
-      } catch (error) {
-        if (cancelled) return;
-        console.warn("Ethereum contract check failed", error);
+      } else {
         setEvmStatus("missing");
-        evmTimer = setTimeout(() => void pollEvm(), 5000);
       }
+
+      evmTimer = setTimeout(() => void pollEvm(), 5000);
     };
 
     const pollAptos = async (initial = false) => {
       if (cancelled) return;
       if (initial) setAptosStatus("loading");
-      try {
+
+      const alive = await checkAptosAlive();
+      if (cancelled) return;
+      setAptosAlive(alive);
+
+      if (alive) {
         const ready = await checkAptosContracts();
         if (cancelled) return;
         setAptosStatus(ready ? "ready" : "missing");
-        if (!ready) {
-          aptosTimer = setTimeout(() => void pollAptos(), 5000);
-        }
-      } catch (error) {
-        if (cancelled) return;
-        console.warn("Aptos contract check failed", error);
+      } else {
         setAptosStatus("missing");
-        aptosTimer = setTimeout(() => void pollAptos(), 5000);
       }
+
+      aptosTimer = setTimeout(() => void pollAptos(), 5000);
     };
 
     void pollEvm(true);
@@ -62,8 +71,5 @@ export function useContractStatuses() {
     };
   }, [host]);
 
-  return {
-    evmStatus,
-    aptosStatus,
-  };
+  return { evmAlive, aptosAlive, evmStatus, aptosStatus };
 }

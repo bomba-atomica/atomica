@@ -2,11 +2,9 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import type { Connect, Logger } from "vite";
-import { existsSync, readFileSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 import { fundAptosAccount } from "./scripts/aptos-funding";
 import { fundEthereumAccount } from "./scripts/ethereum-funding";
-import { getDockerTestnetConfigDir } from "./test-utils/aptos-keys";
 import type { ChainConfig } from "./src/lib/chain-config";
 
 type JsonObject = Record<string, unknown>;
@@ -131,83 +129,16 @@ function registerEthereumFundingApi(
 }
 
 // https://vite.dev/config/
-const CONFIG_FILE = pathResolve(
-  getDockerTestnetConfigDir(),
-  "atomica-web.yaml",
-);
-
-type ParsedChainConfig = {
-  ethereum?: Partial<ChainConfig["ethereum"]>;
-  aptos?: Partial<ChainConfig["aptos"]>;
-};
-
-function parseChainConfigYaml(content: string): ParsedChainConfig {
-  const parsed: ParsedChainConfig = {};
-  let currentSection: keyof ParsedChainConfig | null = null;
-
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const indent = line.search(/\S|$/);
-
-    if (indent === 0 && trimmed.endsWith(":")) {
-      const sectionName = trimmed.slice(0, -1);
-      if (sectionName === "ethereum") {
-        currentSection = "ethereum";
-        parsed.ethereum ??= {};
-      } else if (sectionName === "aptos") {
-        currentSection = "aptos";
-        parsed.aptos ??= {};
-      } else {
-        currentSection = null;
-      }
-      continue;
-    }
-
-    if (currentSection && trimmed.includes(":")) {
-      const [key, ...rest] = trimmed.split(":");
-      const value = rest.join(":").trim();
-      if (!value) continue;
-      if (currentSection === "ethereum") {
-        (parsed.ethereum as Record<string, string>)[key.trim()] = value;
-      } else if (currentSection === "aptos") {
-        (parsed.aptos as Record<string, string>)[key.trim()] = value;
-      }
-    }
-  }
-
-  return parsed;
-}
-
-function loadChainConfig(defaultConfig: ChainConfig): ChainConfig {
-  if (!existsSync(CONFIG_FILE)) {
-    return defaultConfig;
-  }
-  try {
-    const raw = readFileSync(CONFIG_FILE, "utf-8");
-    const parsed = parseChainConfigYaml(raw);
-    return {
-      ethereum: {
-        ...defaultConfig.ethereum,
-        ...parsed.ethereum,
-      },
-      aptos: {
-        ...defaultConfig.aptos,
-        ...parsed.aptos,
-      },
-    };
-  } catch (error) {
-    console.warn("Failed to load chain config YAML:", error);
-    return defaultConfig;
-  }
-}
-
 export default defineConfig(({ mode }) => {
   // Load env variables from source/.env.test (envDir is "../")
   const env = loadEnv(mode, pathResolve(__dirname, ".."), "");
 
   const hostIp = env.VITE_HOST_IP || "127.0.0.1";
   const webappHttpPort = parseInt(env.VITE_WEBAPP_HTTP_PORT || "5173", 10);
+  const sslDomains = (env.VITE_SSL_DOMAINS || "localhost")
+    .split(",")
+    .map((d) => d.trim())
+    .filter(Boolean);
   const aptosHttpPort = env.VITE_APTOS_HTTP_PORT || "8080";
   const ethHttpPort = env.VITE_ETHEREUM_HTTP_PORT || "8545";
 
@@ -216,24 +147,29 @@ export default defineConfig(({ mode }) => {
     ethereum: {
       rpcUrl:
         env.VITE_ETH_RPC_URL ||
+        process.env.VITE_ETH_RPC_URL ||
         `http://${env.VITE_HOST_IP || "localhost"}:${env.VITE_ETHEREUM_HTTP_PORT || "8545"}`,
       fakeETH:
         env.VITE_FAKE_ETH_ADDRESS ||
+        process.env.VITE_FAKE_ETH_ADDRESS ||
         "0x0000000000000000000000000000000000000000",
       fakeUSD:
         env.VITE_FAKE_USD_ADDRESS ||
+        process.env.VITE_FAKE_USD_ADDRESS ||
         "0x0000000000000000000000000000000000000000",
       lockBox:
         env.VITE_LOCK_BOX_ADDRESS ||
+        process.env.VITE_LOCK_BOX_ADDRESS ||
         "0x0000000000000000000000000000000000000000",
     },
     aptos: {
       contractAddress:
         env.VITE_CONTRACT_ADDRESS ||
+        process.env.VITE_CONTRACT_ADDRESS ||
         "0x0000000000000000000000000000000000000000000000000000000000000000",
     },
   };
-  const CHAIN_CONFIG = loadChainConfig(defaultChainConfig);
+  const CHAIN_CONFIG = defaultChainConfig;
 
   return {
     envDir: "../", // load source/.env.test (and source/.env) for all packages
@@ -241,7 +177,7 @@ export default defineConfig(({ mode }) => {
       __ATOMICA_CHAIN_CONFIG__: JSON.stringify(CHAIN_CONFIG),
     },
     plugins: [
-      basicSsl(),
+      basicSsl({ domains: sslDomains }),
       react(),
       {
         name: "remote-console-logs",
@@ -314,6 +250,7 @@ export default defineConfig(({ mode }) => {
       https: {},
       host: true,
       hmr: {
+        host: "localhost",
         overlay: true,
       },
       proxy: {

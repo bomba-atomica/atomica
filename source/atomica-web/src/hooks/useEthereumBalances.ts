@@ -38,16 +38,25 @@ export function useEthereumBalances(
     }
 
     try {
-      const [balances, contractsDeployed] = await Promise.all([
-        getAllBalances(ethAddress),
-        areContractsDeployed(),
-      ]);
+      const contractsDeployed = await areContractsDeployed();
 
+      if (!contractsDeployed) {
+        setState({
+          ethBalance: 0n,
+          ethFakeETH: 0n,
+          ethFakeUSD: 0n,
+          ethContractsDeployed: false,
+          loading: false,
+        });
+        return true;
+      }
+
+      const balances = await getAllBalances(ethAddress);
       setState({
         ethBalance: balances.eth,
         ethFakeETH: balances.fakeETH,
         ethFakeUSD: balances.fakeUSD,
-        ethContractsDeployed: contractsDeployed,
+        ethContractsDeployed: true,
         loading: false,
       });
       return true;

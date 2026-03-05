@@ -2,18 +2,17 @@ import { useState } from "react";
 import { ethers } from "ethers";
 import { submitBid } from "../lib/aptos";
 import * as ibe from "../lib/ibe";
+import { useWallet } from "../context/WalletContext";
 
-interface AuctionBidderProps {
-  account: string;
-}
-
-export function AuctionBidder({ account }: AuctionBidderProps) {
+export function AuctionBidder() {
+  const { account } = useWallet();
   const [sellerAddr, setSellerAddr] = useState("");
   const [bidAmount, setBidAmount] = useState("110");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   const handleBid = async () => {
+    if (!account) return;
     setLoading(true);
     setStatus("Encrypting Bid...");
     try {

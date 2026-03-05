@@ -109,28 +109,14 @@ export async function requestAPT(ethAddress: string) {
 }
 
 /**
- * Check if test token contracts are deployed
+ * Check if auction contracts are deployed
  */
 export async function areContractsDeployed(): Promise<boolean> {
-  try {
-    // Try to get account modules at the contract address
-    const modules = await aptos.getAccountModules({
-      accountAddress: CONTRACT_ADDR,
-    });
-
-    // Check if fake_eth and fake_usd modules exist
-    const hasFakeEth = modules.some((m) => m.abi?.name === "fake_eth");
-    const hasFakeUsd = modules.some((m) => m.abi?.name === "fake_usd");
-
-    return hasFakeEth && hasFakeUsd;
-  } catch (e) {
-    console.log("Contracts not yet deployed:", e);
-    return false;
-  }
+  return areCoreContractsDeployed();
 }
 
 export async function areCoreContractsDeployed(): Promise<boolean> {
-  const requiredModules = ["registry", "auction", "lock_receipt"];
+  const requiredModules = ["registry", "lock_receipt", "eth_proof"];
   try {
     const modules = await aptos.getAccountModules({
       accountAddress: CONTRACT_ADDR,

@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { testSimpleAPTTransfer, getDerivedAddress, aptos } from "../lib/aptos";
 import { useNetworkConfig } from "../lib/network-config-state";
+import { useWallet } from "../context/WalletContext";
 
-export function SanityTest({ account }: { account: string }) {
+export function SanityTest() {
+  const { account } = useWallet();
   const { host } = useNetworkConfig();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{

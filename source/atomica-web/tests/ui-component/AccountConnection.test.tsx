@@ -30,11 +30,15 @@ describe("Account Connection Flow", () => {
 
     render(<App />);
 
-    // We look for "Not Connected" in the AccountStatus component
-    // getByText throws if element is not found, so this is an assertion
-    screen.getByText("Not Connected");
-    // And the Connect button
+    // The Connect button is always visible in the header
     screen.getByText("Connect MetaMask");
+
+    // "Not Connected" is shown inside AccountStatus, which lives in the Settings view.
+    // Navigate there to verify.
+    const settingsTab = screen.getByText("Settings");
+    fireEvent.click(settingsTab);
+
+    screen.getByText("Not Connected");
   });
 
   it("displays address after connecting wallet", async () => {
@@ -47,27 +51,19 @@ describe("Account Connection Flow", () => {
 
     render(<App />);
 
-    // Initially not connected
-    screen.getByText("Not Connected");
-
-    // Click Connect
+    // Header Connect button is visible on any view
     const connectBtn = screen.getByText("Connect MetaMask");
     fireEvent.click(connectBtn);
 
-    // Wait for address to appear
-    // The address display logic: {ethAddress.substring(0, 6)}...{ethAddress.substring(38)}
-    // E.g. 0x44eb...8aa
-    // Let's just Regex match the start of the address
+    // Wait for the compact address to appear in the header.
+    // Format: {address.substring(0, 6)}...{address.substring(38)}  e.g. "0x44eb...8aa"
     const expectedAddressPrefix = mockWallet.address.substring(0, 6);
 
     await waitFor(() => {
       screen.getByText(new RegExp(expectedAddressPrefix));
     });
 
-    // "Not Connected" should now be gone from the status area,
-    // though "Not Connected" string might appear elsewhere?
-    // In AccountStatus logic: "Not Connected" is replaced by the address.
-    // So checking the button is gone is good too.
+    // Connect button should be gone once connected
     expect(screen.queryByText("Connect MetaMask")).toBeNull();
   });
 });

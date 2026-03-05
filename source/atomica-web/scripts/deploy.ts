@@ -28,7 +28,6 @@ import {
   getLockBoxArtifact,
   deployWithRetry,
 } from "../tests/meta/ethereum/solidity-compiler.js";
-import { writeChainConfig } from "./chain-config";
 
 const ETH_RPC_URL = process.env.ETH_RPC_URL || "http://localhost:8545";
 const APTOS_URL = process.env.APTOS_URL || "http://localhost:8080";
@@ -227,19 +226,6 @@ async function main() {
   const ethAddresses = await deployEthereumContracts();
 
   await deployAptosContracts();
-
-  const configPath = writeChainConfig({
-    ethereum: {
-      rpcUrl: ETH_RPC_URL,
-      fakeETH: ethAddresses.fakeETH,
-      fakeUSD: ethAddresses.fakeUSD,
-      lockBox: ethAddresses.lockBox,
-    },
-    aptos: {
-      contractAddress: APTOS_DEPLOYER_ADDRESS,
-    },
-  });
-  console.log(`\n✓ Chain config written to ${configPath}`);
 
   console.log("\n" + "═".repeat(60));
   console.log("  ✅ Deployment Complete!");

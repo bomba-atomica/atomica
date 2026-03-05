@@ -1,11 +1,37 @@
 import { areContractsDeployed as areEVMContractsDeployed } from "./ethereum/contracts";
 import { areCoreContractsDeployed as areAptosCoreContractsDeployed } from "./aptos/payloads";
 
+export async function checkAptosAlive(): Promise<boolean> {
+  try {
+    const res = await fetch("/aptos-api/v1");
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function checkEthereumAlive(): Promise<boolean> {
+  try {
+    const res = await fetch("/eth-api", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "eth_blockNumber",
+        params: [],
+        id: 1,
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function checkEVMContracts(): Promise<boolean> {
   try {
     return await areEVMContractsDeployed();
-  } catch (error) {
-    console.warn("checkEVMContracts failed", error);
+  } catch {
     return false;
   }
 }
@@ -13,8 +39,7 @@ export async function checkEVMContracts(): Promise<boolean> {
 export async function checkAptosContracts(): Promise<boolean> {
   try {
     return await areAptosCoreContractsDeployed();
-  } catch (error) {
-    console.warn("checkAptosContracts failed", error);
+  } catch {
     return false;
   }
 }
