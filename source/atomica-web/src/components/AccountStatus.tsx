@@ -8,6 +8,11 @@ import {
 import { useWallet } from "../context/WalletContext";
 import { useBalances } from "../context/BalancesContext";
 
+/**
+ * Renders a single network's account card: header, address row, and balance row.
+ * The balance row is only rendered when `children` is non-null; callers control
+ * exactly what gets shown (balances, "not on chain" message, etc.).
+ */
 function NetworkCard({
   label,
   icon,
@@ -37,7 +42,7 @@ function NetworkCard({
 
       <div className="h-px bg-zinc-700/50" />
 
-      {/* Address row */}
+      {/* Address row — always shown; falls back to notConnectedLabel when null */}
       <div className="flex items-center gap-2 text-sm font-mono">
         <span className="text-zinc-500 min-w-[64px]">Address</span>
         {address ? (
@@ -52,7 +57,7 @@ function NetworkCard({
         )}
       </div>
 
-      {/* Balances */}
+      {/* Balance row — only rendered when the caller passes balance content */}
       {children && (
         <>
           <div className="h-px bg-zinc-700/50" />
@@ -65,6 +70,7 @@ function NetworkCard({
   );
 }
 
+/** Single labelled balance value, e.g. "ETH 0.5000". */
 function BalanceItem({
   label,
   value,
@@ -89,6 +95,8 @@ export function AccountStatus() {
   const { ethBalances, aptosBalances } = useBalances();
   const [aptosAddress, setAptosAddress] = useState<string | null>(null);
 
+  // Derive the Atomica address from the connected Ethereum address.
+  // This is recomputed whenever the wallet changes.
   useEffect(() => {
     const derive = async () => {
       if (!ethAddress) {
@@ -101,11 +109,12 @@ export function AccountStatus() {
     derive();
   }, [ethAddress]);
 
+  // APT is stored in octas (1 APT = 1e8 octas); display with 4 decimal places.
   const fmtApt = (val: number) => (val / 100_000_000).toFixed(4);
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Ethereum */}
+      {/* ── Ethereum ── */}
       <NetworkCard
         label="Ethereum"
         icon="⬡"
@@ -114,6 +123,11 @@ export function AccountStatus() {
         notConnectedLabel="Not connected"
       >
         {ethAddress && (
+          // Balance display flow for Ethereum:
+          //   loading         → render nothing (card still shows address)
+          //   !ethAccountExists → account hasn't been funded/used yet on this chain
+          //   ethAccountExists, no contracts → ETH balance only (token contracts not deployed)
+          //   ethAccountExists, contracts up  → ETH + FETH + FUSD
           ethBalances.loading ? null : !ethBalances.ethAccountExists ? (
             <span className="text-xs text-zinc-500">
               Account not yet on chain
@@ -125,7 +139,6 @@ export function AccountStatus() {
                 value={formatETHBalance(ethBalances.ethBalance)}
                 title="Native ETH"
               />
-              {/* ERC-20 balances only meaningful when contracts are deployed */}
               {ethBalances.ethContractsDeployed ? (
                 <>
                   <BalanceItem
@@ -149,15 +162,21 @@ export function AccountStatus() {
         )}
       </NetworkCard>
 
-      {/* Atomica (Aptos) */}
+      {/* ── Atomica (Aptos) ── */}
       <NetworkCard
         label="Atomica"
         icon="⬢"
         address={aptosAddress}
         addressTruncate={(a) => `${a.substring(0, 10)}...${a.substring(58)}`}
+        // While the address is being derived (ethAddress known but aptosAddress not yet set)
+        // show a transient label rather than "Not connected".
         notConnectedLabel={ethAddress ? "Deriving…" : "Not connected"}
       >
         {ethAddress &&
+          // Balance display flow for Atomica:
+          //   loading            → render nothing
+          //   !aptAccountExists  → account not initialised on-chain yet (needs APT from faucet)
+          //   aptAccountExists   → show APT balance (may legitimately be 0)
           (aptosBalances.loading ? null : aptosBalances.aptAccountExists ? (
             <BalanceItem
               label="APT"

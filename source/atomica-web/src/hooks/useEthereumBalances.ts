@@ -4,10 +4,23 @@ import { areContractsDeployed } from "../lib/ethereum/contracts";
 import { getEthereumProvider } from "../lib/ethereum/config";
 
 export interface EthereumBalances {
-  ethAccountExists: boolean; // nonce > 0 OR balance > 0
+  /**
+   * Whether this address has been active on the Ethereum chain.
+   * True when nonce > 0 (has sent txs) OR native ETH balance > 0 (has been funded).
+   * This is checked independently of token balances so the UI can show
+   * "Account not yet on chain" rather than misleading zero balances.
+   */
+  ethAccountExists: boolean;
+  /** Native ETH balance in wei. Only meaningful when ethAccountExists is true. */
   ethBalance: bigint;
+  /** FakeETH ERC-20 balance (18 decimals). Only present when ethContractsDeployed. */
   ethFakeETH: bigint;
+  /** FakeUSD ERC-20 balance (6 decimals). Only present when ethContractsDeployed. */
   ethFakeUSD: bigint;
+  /**
+   * Whether the FakeETH / FakeUSD contracts are deployed on the current testnet.
+   * Token balances are zero-valued (not meaningful) when this is false.
+   */
   ethContractsDeployed: boolean;
   loading: boolean;
 }
@@ -29,6 +42,7 @@ export function useEthereumBalances(
   });
 
   const load = useCallback(async () => {
+    // No wallet connected — reset everything, stop loading.
     if (!ethAddress) {
       setState({
         ethAccountExists: false,
@@ -43,15 +57,23 @@ export function useEthereumBalances(
 
     try {
       const provider = getEthereumProvider();
+
+      // Fetch nonce and native balance in parallel to determine account existence.
+      // We check both because a freshly-funded account may have balance but no nonce yet,
+      // and a contract deployer may have a nonce but zero remaining balance.
       const [nonce, ethBalance] = await Promise.all([
         provider.getTransactionCount(ethAddress),
         provider.getBalance(ethAddress),
       ]);
       const ethAccountExists = nonce > 0 || ethBalance > 0n;
 
+      // Check whether testnet contracts are deployed before querying token balances.
+      // If contracts aren't up yet, token balance calls would fail or return stale zeros.
       const contractsDeployed = await areContractsDeployed();
 
       if (!contractsDeployed) {
+        // Still surface the native ETH balance and existence flag
+        // so the UI can show something useful even without token contract data.
         setState({
           ethAccountExists,
           ethBalance,
@@ -63,6 +85,7 @@ export function useEthereumBalances(
         return true;
       }
 
+      // Contracts are up — fetch all token balances.
       const balances = await getAllBalances(ethAddress);
       setState({
         ethAccountExists,
@@ -94,6 +117,7 @@ export function useEthereumBalances(
     const execute = async () => {
       if (cancelled) return;
       const success = await load();
+      // Back off exponentially on failure, reset on success.
       const nextDelay = success
         ? baseDelay
         : Math.min(baseDelay * 2 ** retries, maxDelay);

@@ -20,6 +20,33 @@ export function SettingsView() {
   return (
     <main className="container mx-auto p-8 max-w-3xl">
       <div className="flex flex-col gap-8">
+        {/* Account */}
+        <section>
+          <SectionHeader title="Account" />
+          {!account && (
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <span className="text-sm text-zinc-400">
+                Connect MetaMask to see balances and interact with auctions.
+              </span>
+              <button
+                onClick={connect}
+                className="flex-shrink-0 bg-zinc-100 hover:bg-white text-zinc-900 px-4 py-2 rounded transition font-medium text-sm"
+              >
+                Connect MetaMask
+              </button>
+            </div>
+          )}
+          <AccountStatus />
+        </section>
+
+        {/* Tokens */}
+        {account && (
+          <section>
+            <SectionHeader title="Tokens" />
+            <Faucet />
+          </section>
+        )}
+
         {/* Network */}
         <section>
           <SectionHeader title="Network" />
@@ -61,33 +88,6 @@ export function SettingsView() {
             </div>
           </div>
         </section>
-
-        {/* Account */}
-        <section>
-          <SectionHeader title="Account" />
-          {!account && (
-            <div className="flex items-center justify-between gap-4 mb-3">
-              <span className="text-sm text-zinc-400">
-                Connect MetaMask to see balances and interact with auctions.
-              </span>
-              <button
-                onClick={connect}
-                className="flex-shrink-0 bg-zinc-100 hover:bg-white text-zinc-900 px-4 py-2 rounded transition font-medium text-sm"
-              >
-                Connect MetaMask
-              </button>
-            </div>
-          )}
-          <AccountStatus />
-        </section>
-
-        {/* Tokens */}
-        {account && (
-          <section>
-            <SectionHeader title="Tokens" />
-            <Faucet />
-          </section>
-        )}
 
         {/* Diagnostics */}
         {account && (
