@@ -40,7 +40,9 @@ export function PoolStatus() {
             <span className="text-zinc-500">Receipts on Aptos</span>
             <span className="text-zinc-400 font-mono">
               {totalReceipts}
-              <span className="ml-1 text-xs text-zinc-600">(pending infra)</span>
+              <span className="ml-1 text-xs text-zinc-600">
+                (pending infra)
+              </span>
             </span>
           </div>
 

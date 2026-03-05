@@ -141,10 +141,7 @@ describe("SellFlow localStorage resume", () => {
   });
 
   it("resumes StepIndicator to the correct position", async () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ step: "minting" }),
-    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ step: "minting" }));
     await act(async () => {
       renderSellFlow();
     });
@@ -154,10 +151,7 @@ describe("SellFlow localStorage resume", () => {
   });
 
   it("clears resume state when reset is triggered", async () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ step: "monitoring" }),
-    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ step: "monitoring" }));
     await act(async () => {
       renderSellFlow();
     });
@@ -176,10 +170,6 @@ describe("SellFlow localStorage resume", () => {
   it.todo(
     "auto-progresses from confirming to generating-proof after 1 block confirmation",
   );
-  it.todo(
-    "auto-progresses steps 5→6→7 on successful Aptos transactions",
-  );
-  it.todo(
-    "shows correct resume state after browser tab closes mid-lock",
-  );
+  it.todo("auto-progresses steps 5→6→7 on successful Aptos transactions");
+  it.todo("shows correct resume state after browser tab closes mid-lock");
 });

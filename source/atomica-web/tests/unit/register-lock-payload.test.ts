@@ -54,7 +54,9 @@ function makeMockProof(): LockedBalanceProof {
 describe("getRegisterLockPayload", () => {
   it("targets lock_receipt::register_ethereum_lock", () => {
     const payload = getRegisterLockPayload(makeMockProof());
-    expect(payload.function).toContain("::lock_receipt::register_ethereum_lock");
+    expect(payload.function).toContain(
+      "::lock_receipt::register_ethereum_lock",
+    );
   });
 
   it("includes FakeETH as the type argument", () => {
@@ -152,7 +154,7 @@ describe("getRegisterLockPayload", () => {
     const p1 = getRegisterLockPayload(proof);
     const p2 = getRegisterLockPayload(proof);
     expect(p1.function).toBe(p2.function);
-    expect((p1.functionArguments![0])).toBe(p2.functionArguments![0]);
+    expect(p1.functionArguments![0]).toBe(p2.functionArguments![0]);
   });
 });
 

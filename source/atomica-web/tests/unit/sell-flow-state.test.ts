@@ -150,10 +150,7 @@ describe("useSellFlow state machine", () => {
   // ── reset() ─────────────────────────────────────────────────────────────
 
   it("reset clears localStorage and returns to lock step", async () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ step: "monitoring" }),
-    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ step: "monitoring" }));
     const { result } = renderHook(() => useSellFlow(ACCOUNT));
     await act(async () => {});
     expect(result.current.step).toBe("monitoring");
@@ -174,21 +171,13 @@ describe("useSellFlow state machine", () => {
   it.todo(
     "generateProof: transitions confirming → generating-proof → submitting-proof",
   );
-  it.todo(
-    "submitProof: transitions submitting-proof → minting after Aptos tx",
-  );
-  it.todo(
-    "mintFakeEth: transitions minting → creating-auction after Aptos tx",
-  );
+  it.todo("submitProof: transitions submitting-proof → minting after Aptos tx");
+  it.todo("mintFakeEth: transitions minting → creating-auction after Aptos tx");
   it.todo(
     "createAuction: transitions creating-auction → monitoring after Aptos tx",
   );
-  it.todo(
-    "cancelAndUnlock: calls withdrawFakeEth and resets flow",
-  );
-  it.todo(
-    "lockEth error: sets error message and stays at current step",
-  );
+  it.todo("cancelAndUnlock: calls withdrawFakeEth and resets flow");
+  it.todo("lockEth error: sets error message and stays at current step");
   it.todo(
     "submitProof error: sets error message and stays at submitting-proof",
   );

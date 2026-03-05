@@ -16,14 +16,12 @@
  * event so callers can re-fetch totals immediately.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function usePoolEvents(_onEvent: () => void): void {
   // TODO (Ethereum): subscribe to TokensLocked events via ethers.js provider
   //   const provider = new ethers.JsonRpcProvider(config.ethereum.rpcUrl);
   //   const contract = new ethers.Contract(lockBoxAddress, LOCKBOX_ABI, provider);
   //   contract.on("TokensLocked", onEvent);
   //   return () => { contract.off("TokensLocked", onEvent); };
-
   // TODO (Aptos, I-D4): poll or subscribe to LockReceiptCreated events
   //   aptos.getEventsByEventHandle({ ... }) periodically and call onEvent on new events
 }
