@@ -122,13 +122,13 @@ export function AccountStatus() {
         addressTruncate={(a) => `${a.substring(0, 10)}...${a.substring(38)}`}
         notConnectedLabel="Not connected"
       >
-        {ethAddress && (
+        {ethAddress &&
           // Balance display flow for Ethereum:
           //   loading         → render nothing (card still shows address)
           //   !ethAccountExists → account hasn't been funded/used yet on this chain
           //   ethAccountExists, no contracts → ETH balance only (token contracts not deployed)
           //   ethAccountExists, contracts up  → ETH + FETH + FUSD
-          ethBalances.loading ? null : !ethBalances.ethAccountExists ? (
+          (ethBalances.loading ? null : !ethBalances.ethAccountExists ? (
             <span className="text-xs text-zinc-500">
               Account not yet on chain
             </span>
@@ -158,8 +158,7 @@ export function AccountStatus() {
                 </span>
               )}
             </>
-          )
-        )}
+          ))}
       </NetworkCard>
 
       {/* ── Atomica (Aptos) ── */}
