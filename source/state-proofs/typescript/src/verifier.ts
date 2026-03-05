@@ -6,9 +6,13 @@
 
 import { RLP } from "@ethereumjs/rlp";
 import { keccak256 } from "ethereum-cryptography/keccak";
-import { bytesToBigInt, bytesToHex, hexToBytes } from "@ethereumjs/util";
+import { bytesToHex, hexToBytes } from "viem";
 import { verifyMerkleProof, decodeNode } from "./mpt";
 import type { VerificationResult, AccountState } from "./types";
+
+function bytesToBigInt(bytes: Uint8Array): bigint {
+    return BigInt(bytesToHex(bytes) || "0x0");
+}
 
 function ensureHex(value: string): `0x${string}` {
     return value.startsWith("0x") ? (value as `0x${string}`) : (`0x${value}` as `0x${string}`);

@@ -23,9 +23,10 @@
     "demo:aptos-only": "bun run prepare:aptos && bun --env-file=../.env.test scripts/orchestrator.ts",
     "demo:ethereum-only": "bun run prepare:ethereum && bun --env-file=../.env.test scripts/ethereum-testnet-only.ts",
     "proof:generate": "bun --env-file=../.env.test run scripts/generate-proof.ts",
-    "prepare:all": "bun run prepare:ethereum && bun run prepare:aptos",
+    "prepare:all": "bun run prepare:ethereum && bun run prepare:aptos && bun run prepare:state-proofs",
     "prepare:ethereum": "cd ../docker-testnet/ethereum-testnet/typescript-sdk && bun install && bun run build",
     "prepare:aptos": "cd ../docker-testnet/typescript-sdk && bun install && bun run build",
+    "prepare:state-proofs": "cd ../state-proofs/typescript && bun install && bun run build",
     "prepare:testnet": "bun run prepare:aptos",
     "postinstall": "bun run prepare:all"
   },

@@ -36,8 +36,6 @@ export {
 
 // Re-export verification functions (browser-compatible)
 export { verifyAccountProof, verifyStorageProof, decodeAccountState } from "./verifier";
-export { verifyTransactionProof } from "./transaction";
-export { verifyReceiptProof } from "./receipt";
 
 // Re-export MPT core functions (browser-compatible)
 export {
