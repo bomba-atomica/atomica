@@ -35,8 +35,9 @@ describe("Account Connection Flow", () => {
 
     // "Not Connected" is shown inside AccountStatus, which lives in the Settings view.
     // Navigate there to verify.
-    const settingsTab = screen.getByText("Settings");
-    fireEvent.click(settingsTab);
+    // Navigate to Settings via the gear icon button (⚙ in the header)
+    const settingsBtn = screen.getByTitle("Settings");
+    fireEvent.click(settingsBtn);
 
     screen.getByText("Not Connected");
   });

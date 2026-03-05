@@ -22,7 +22,7 @@ describe.sequential("AccountStatus Integration", () => {
     return (
       <NetworkConfigProvider>
         <WalletContext.Provider
-          value={{ account: mockWallet.address, connect: async () => {} }}
+          value={{ account: mockWallet.address, connect: async () => { } }}
         >
           <ContractStatusProvider>
             <BalancesProvider>
@@ -57,7 +57,7 @@ describe.sequential("AccountStatus Integration", () => {
 
       await waitFor(
         () => {
-          screen.getByText(/Atomica account not found/);
+          screen.getByText(/Account not yet on chain/);
         },
         { timeout: 10000 },
       );
@@ -73,7 +73,7 @@ describe.sequential("AccountStatus Integration", () => {
       // Step 1: Initially, account should show "not found" warning
       await waitFor(
         () => {
-          screen.getByText(/Atomica account not found/);
+          screen.getByText(/Account not yet on chain/);
         },
         { timeout: 10000 },
       );

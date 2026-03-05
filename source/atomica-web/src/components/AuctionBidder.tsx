@@ -46,8 +46,8 @@ export function AuctionBidder() {
 
   return (
     <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-800">
-      <h2 className="text-xl font-bold mb-4 text-zinc-500">
-        3. Bid on Auction
+      <h2 className="text-xl font-bold mb-4 text-zinc-300">
+        Buy
       </h2>
       <div className="space-y-4">
         <div>
@@ -77,11 +77,10 @@ export function AuctionBidder() {
         <button
           onClick={handleBid}
           disabled={loading}
-          className={`w-full py-2 rounded font-bold transition-colors ${
-            loading
+          className={`w-full py-2 rounded font-bold transition-colors ${loading
               ? "bg-zinc-800 cursor-not-allowed text-zinc-600 border border-zinc-700"
               : "bg-zinc-100 hover:bg-white text-zinc-900"
-          }`}
+            }`}
         >
           {loading ? "Processing..." : "Submit Encrypted Bid"}
         </button>
