@@ -1,19 +1,19 @@
-import { useState, useEffect } from "react";
-import { testSimpleAPTTransfer, getDerivedAddress, aptos } from "../lib/aptos";
-import { useNetworkConfig } from "../lib/network-config-state";
+import { useState } from "react";
+import { testSimpleAPTTransfer } from "../lib/aptos";
 import { useWallet } from "../context/WalletContext";
+import { useBalances } from "../context/BalancesContext";
 
 export function SanityTest() {
   const { account } = useWallet();
-  const { host } = useNetworkConfig();
+  const { aptosBalances } = useBalances();
+  const ready =
+    !!account && aptosBalances.aptAccountExists && aptosBalances.apt > 0;
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
     success: boolean;
     hash?: string;
     error?: string;
   } | null>(null);
-  const [accountExists, setAccountExists] = useState(false);
-  const [checkingAccount, setCheckingAccount] = useState(false);
 
   // Default to a random address
   const [recipient, setRecipient] = useState(
@@ -24,52 +24,10 @@ export function SanityTest() {
       ).join(""),
   );
 
-  // Check if the derived account exists on chain
-  useEffect(() => {
-    const baseDelayMs = 3000;
-    const maxDelayMs = 30000;
-    let cancelled = false;
-    let retryCount = 0;
-    let timeout: ReturnType<typeof setTimeout> | null = null;
-
-    const checkAccount = async () => {
-      if (!account) return;
-      setCheckingAccount(true);
-      let failed = false;
-      try {
-        const derived = await getDerivedAddress(account.toLowerCase());
-        await aptos.getAccountInfo({ accountAddress: derived });
-        setAccountExists(true);
-      } catch {
-        setAccountExists(false);
-        failed = true;
-      } finally {
-        setCheckingAccount(false);
-        retryCount = failed ? retryCount + 1 : 0;
-        const nextDelay = failed
-          ? Math.min(baseDelayMs * 2 ** retryCount, maxDelayMs)
-          : baseDelayMs;
-        if (!cancelled) {
-          timeout = setTimeout(() => void checkAccount(), nextDelay);
-        }
-      }
-    };
-
-    void checkAccount();
-    return () => {
-      cancelled = true;
-      if (timeout) {
-        clearTimeout(timeout);
-      }
-    };
-  }, [account, host]);
-
   const runTest = async () => {
-    if (!account) return;
-
+    if (!ready) return;
     setLoading(true);
     setResult(null);
-
     try {
       const testResult = await testSimpleAPTTransfer(account, recipient);
       setResult(testResult);
@@ -85,105 +43,95 @@ export function SanityTest() {
   };
 
   return (
-    <details className="group bg-gray-900/50 p-4 rounded-lg border border-gray-800 open:border-yellow-900/50 transition-all">
-      <summary className="flex items-center justify-between cursor-pointer list-none select-none">
-        <div className="flex items-center gap-2">
-          <span className="text-xl group-open:rotate-90 transition-transform">
-            ▸
-          </span>
-          <h2 className="text-sm font-semibold text-gray-400 group-hover:text-yellow-400 transition-colors">
-            Diagnostic: Sanity Test{" "}
-            {checkingAccount && (
-              <span className="animate-pulse ml-2 text-xs font-normal opacity-50">
-                Checking chain...
-              </span>
-            )}
-          </h2>
-        </div>
-        {!accountExists && !checkingAccount && (
-          <span className="text-xs text-red-500 bg-red-900/20 px-2 py-1 rounded">
-            Account Not Found
-          </span>
-        )}
-      </summary>
+    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5 flex flex-col gap-4">
+      {/* Description */}
+      <div className="flex flex-col gap-1">
+        <span className="text-sm text-zinc-300 font-medium">
+          Check Wallet SIWE Compatibility
+        </span>
+        <span className="text-xs text-zinc-500">
+          Verifies that your MetaMask signature can be verified by the Aptos
+          Move VM via a{" "}
+          <code className="font-mono">0x1::aptos_account::transfer</code>.
+        </span>
+      </div>
 
-      <div className="mt-4 pl-2">
-        <div className="mb-4 text-xs text-gray-500">
-          <p className="mb-2">
-            Verifies that your MetaMask signature can be verified by the Aptos
-            Move VM. Runs a standard <code>0x1::aptos_account::transfer</code>.
-          </p>
-        </div>
+      <div className="h-px bg-zinc-800" />
 
-        <div className="mb-4">
-          <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-            Target Address
-          </label>
-          <input
-            type="text"
-            value={recipient}
-            onChange={(e) => setRecipient(e.target.value)}
-            className="w-full bg-black/30 border border-gray-700 rounded px-3 py-2 text-xs text-gray-300 font-mono focus:outline-none focus:border-yellow-600/50 transition-colors"
-            placeholder="0x..."
-          />
-        </div>
+      {/* Target address input */}
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-zinc-500 uppercase tracking-wider">
+          Target Address
+        </label>
+        <input
+          type="text"
+          value={recipient}
+          onChange={(e) => setRecipient(e.target.value)}
+          className="w-full bg-zinc-800/60 border border-zinc-700 rounded px-3 py-2 text-xs text-zinc-300 font-mono focus:outline-none focus:border-zinc-500 transition-colors"
+          placeholder="0x..."
+        />
+      </div>
 
-        {!accountExists && (
-          <div className="mb-3 p-2 bg-red-900/10 border border-red-900/30 rounded text-xs text-red-400">
-            ⚠ Aptos account not found. Please use the Faucet above first.
-          </div>
-        )}
+      {/* Prerequisite hint */}
+      {!account && (
+        <p className="text-xs text-zinc-500 border-l-2 border-zinc-700 pl-2">
+          Connect your wallet to run this check.
+        </p>
+      )}
+      {account && !aptosBalances.aptAccountExists && (
+        <p className="text-xs text-zinc-500 border-l-2 border-zinc-700 pl-2">
+          ⚠ Atomica account not found. Use the Faucet to fund it first.
+        </p>
+      )}
+      {account && aptosBalances.aptAccountExists && aptosBalances.apt === 0 && (
+        <p className="text-xs text-zinc-500 border-l-2 border-zinc-700 pl-2">
+          ⚠ Atomica account has no APT balance. Use the Faucet to fund it first.
+        </p>
+      )}
 
-        <button
-          onClick={runTest}
-          disabled={loading || !accountExists}
-          className={`w-full py-2 px-4 rounded text-sm font-medium transition-all ${
-            loading || !accountExists
-              ? "bg-gray-800 text-gray-600 cursor-not-allowed"
-              : "bg-yellow-900/20 text-yellow-500 hover:bg-yellow-900/40 border border-yellow-900/50"
+      {/* Run button */}
+      <button
+        onClick={runTest}
+        disabled={!ready || loading}
+        className={`w-full py-2 px-4 rounded text-sm font-medium transition-all ${
+          !ready || loading
+            ? "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+            : "bg-zinc-700 text-zinc-200 hover:bg-zinc-600"
+        }`}
+      >
+        {loading ? "Verifying…" : "Run Check"}
+      </button>
+
+      {/* Result */}
+      {result && (
+        <div
+          className={`p-3 rounded text-xs border ${
+            result.success
+              ? "bg-zinc-800/60 border-zinc-700 text-zinc-300"
+              : "bg-zinc-800/60 border-zinc-700 text-red-400"
           }`}
         >
-          {loading
-            ? "Verifying Signature..."
-            : !accountExists
-              ? "Fund Account First"
-              : "Run Diagnostic Test"}
-        </button>
-
-        {result && (
-          <div
-            className={`mt-3 p-3 rounded text-xs border ${
-              result.success
-                ? "bg-green-900/10 border-green-900/30 text-green-400"
-                : "bg-red-900/10 border-red-900/30 text-red-400"
-            }`}
-          >
-            <div className="flex items-start gap-2">
-              <span className="text-lg">{result.success ? "✓" : "✕"}</span>
-              <div>
-                <p className="font-semibold mb-1">
-                  {result.success
-                    ? "Verification Passed"
-                    : "Verification Failed"}
+          <div className="flex items-start gap-2">
+            <span>{result.success ? "✓" : "✕"}</span>
+            <div>
+              <p className="font-semibold mb-1">
+                {result.success ? "Verification Passed" : "Verification Failed"}
+              </p>
+              {result.hash && (
+                <p className="font-mono opacity-80 break-all select-all">
+                  {result.hash}
                 </p>
-                {result.hash && (
-                  <p className="font-mono opacity-80 break-all select-all">
-                    {result.hash}
-                  </p>
-                )}
-                {result.error && (
-                  <p className="font-mono opacity-80 break-all">
-                    {result.error}
-                  </p>
-                )}
-                {result.success && (
-                  <p className="mt-1 opacity-60">Signature logic is correct.</p>
-                )}
-              </div>
+              )}
+              {result.error && (
+                <p className="font-mono opacity-80 break-all">{result.error}</p>
+              )}
+              {result.success && (
+                <p className="mt-1 opacity-60">Signature logic is correct.</p>
+              )}
             </div>
           </div>
-        )}
-      </div>
-    </details>
+        </div>
+      )}
+    </div>
   );
 }

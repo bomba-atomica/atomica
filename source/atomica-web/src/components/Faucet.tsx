@@ -12,6 +12,14 @@ export function Faucet() {
 
   const aptosReady = aptosAlive === true;
   const evmReady = evmAlive === true && evmStatus === "ready";
+
+  // Schedule a burst of balance refreshes after a faucet call so the UI
+  // reflects the confirmed state without depending on chain-specific tx watchers.
+  const scheduleRefreshBurst = () => {
+    for (const delay of [500, 1500, 4000]) {
+      setTimeout(() => void refresh(), delay);
+    }
+  };
   const [loadingAPT, setLoadingAPT] = useState(false);
   const [loadingEthTokens, setLoadingEthTokens] = useState(false);
   const [aptTxHash, setAptTxHash] = useState<string | null>(null);
@@ -26,7 +34,7 @@ export function Faucet() {
     try {
       const result = await requestAPT(account);
       setAptTxHash(result.hash);
-      await refresh();
+      scheduleRefreshBurst();
     } catch (e) {
       console.error("APT request failed:", e);
       alert("Failed to request APT: " + e);
@@ -56,7 +64,7 @@ export function Faucet() {
       const result = await requestEthTokens(account);
       setEthTxHash(result.ethTxHash);
       setUsdTxHash(result.usdTxHash);
-      await refresh();
+      scheduleRefreshBurst();
     } catch (e: unknown) {
       setEthTokensError(extractErrorMessage(e));
       console.error("Ethereum token faucet failed:", e);
@@ -67,9 +75,6 @@ export function Faucet() {
 
   return (
     <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-800">
-      <h2 className="text-xl font-bold mb-4 text-zinc-300">
-        1. Get Testnet Funds
-      </h2>
       <p className="text-zinc-500 mb-6 text-sm">
         Get tokens to interact with the auction demo.
       </p>
@@ -78,7 +83,7 @@ export function Faucet() {
       <div className="mb-4 p-4 bg-zinc-950/50 border border-zinc-900 rounded">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold text-zinc-400">
-            Step 1a: Request APT (Gas Tokens)
+            APT (Gas Tokens)
           </h3>
           {aptTxHash && (
             <span className="text-xs text-zinc-500">✓ Completed</span>
@@ -113,7 +118,7 @@ export function Faucet() {
       <div className="mb-4 p-4 bg-zinc-950/50 border border-zinc-900 rounded">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold text-zinc-400">
-            Step 1b: Get Test Tokens (Ethereum)
+            Test Tokens (Ethereum)
           </h3>
           {ethTxHash && usdTxHash && (
             <span className="text-xs text-zinc-500">✓ Completed</span>
@@ -155,9 +160,6 @@ export function Faucet() {
       {/* Status indicator */}
       <div className="mt-4 pt-4 border-t border-zinc-800">
         <div className="text-xs text-zinc-500">
-          {!aptTxHash && !ethTxHash && !usdTxHash && (
-            <p>Start by requesting APT tokens above</p>
-          )}
           {aptTxHash && !ethTxHash && !usdTxHash && (
             <p>APT received. Now mint test tokens on Ethereum.</p>
           )}

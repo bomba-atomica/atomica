@@ -2,7 +2,6 @@ import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
 import { CONTRACT_ADDR, aptos } from "./config";
 import { getDerivedAddress } from "./siwe";
 import { submitNativeTransaction } from "./transaction";
-import { getStoredHost } from "../network-host";
 
 /**
  * Sanity Test: Simple APT transfer using MetaMask signature
@@ -71,21 +70,16 @@ export async function testSimpleAPTTransfer(
 export async function requestAPT(ethAddress: string) {
   // Always use lowercase for consistency with submitNativeTransaction
   const derived = await getDerivedAddress(ethAddress.toLowerCase());
-  const host = getStoredHost();
 
-  console.log("=== Requesting APT from Funding API ===");
-  console.log("  Ethereum Address:", ethAddress);
-  console.log("  Aptos Derived Address:", derived.toString());
-  console.log("  Funding address:", derived.toString());
-  console.log("  Funding host:", host);
-
+  // Do not pass host from the client — the server determines the Aptos node
+  // URL from its own environment (ATOMICA_APTOS_HOST). Passing a client-side
+  // host value caused TLS errors when localStorage held a stale https:// URL.
   const res = await fetch("/api/aptos/fund", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       address: derived.toString(),
       amount: 100000000,
-      host,
     }),
   });
 
@@ -101,9 +95,6 @@ export async function requestAPT(ethAddress: string) {
     );
     throw new Error(`Funding API Failed: ${text}`);
   }
-
-  // Wait slightly for balance to reflect (local node is fast but async)
-  await new Promise((r) => setTimeout(r, 1000));
 
   return { hash: body.txHash || "apt-funded" };
 }

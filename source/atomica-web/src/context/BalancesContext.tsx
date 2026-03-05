@@ -12,6 +12,7 @@ interface BalancesContextValue {
 }
 
 const defaultEthBalances: EthereumBalancesSnapshot = {
+  ethAccountExists: false,
   ethBalance: 0n,
   ethFakeETH: 0n,
   ethFakeUSD: 0n,
@@ -22,7 +23,7 @@ const defaultEthBalances: EthereumBalancesSnapshot = {
 
 const defaultAptosBalances: AptosBalancesSnapshot = {
   apt: 0,
-  aptosExists: false,
+  aptAccountExists: false,
   aptosContractsDeployed: false,
   loading: true,
   refetch: async () => {},
