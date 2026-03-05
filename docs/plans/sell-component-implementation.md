@@ -93,13 +93,23 @@ The broken `auction.move` uses legacy `aptos_framework::coin` (`Coin<FAKEETH>`) 
   - `e2e-08-create-auction.test.ts` — create auction with minted FakeETH → verify on-chain state
   - `e2e-09-bid-and-settle.test.ts` — submit plaintext bid → settle → verify transfers
 
-#### I-D5: Decide mint_from_lock role
+#### I-D5: auction.move must consume LockReceipts, not FA
 
-`fake_eth::mint_from_lock()` is marked DEPRECATED in its own docstring ("In canonical flow, receipts are consumed for Aptos auction/settlement accounting and FakeETH/FakeUSD are not minted on Aptos").
+**Correction (original plan was wrong):** FakeETH and FakeUSD exist only as ERC20 tokens on Ethereum. There are no FakeETH/FakeUSD Fungible Assets on Aptos. The Aptos-side representation of a lock is a `LockReceipt<Ethereum, FakeETH>` stored in the `ReceiptRegistry`. The `fake_eth::mint` and `fake_eth::mint_from_lock` functions are explicitly deprecated (canonical token issuance is EVM-only).
 
-**Decision for Demo:** Keep `mint_from_lock` as the Demo/MVP path. The canonical receipt-as-asset design requires the auction module to escrow receipts directly, which is a larger redesign. For Demo and MVP, the flow is: lock → prove → register receipt → mint FA → create auction with FA. Production may change this.
+**Correct Demo flow:**
+1. Seller locks FakeETH on Ethereum → `register_ethereum_lock<FakeETH>()` → `LockReceipt<Ethereum, FakeETH>` in registry
+2. `auction::create_auction(seller, lock_id, min_price, duration, mpk)` → calls `lock_receipt::claim<Ethereum, FakeETH>(seller, lock_id)` to consume the receipt and record the auctioned amount
+3. Bidders submit bids with a price (Demo: no Aptos-side collateral; bidder collateral is enforced at Ethereum settlement)
+4. `auction::settle(seller_addr)` → records winner + clearing price on-chain; emits `SettlementResult` event
+5. Ethereum settlement contract reads the clearing result and transfers FakeETH to winner, FakeUSD to seller
 
-**Document this in code:** Update the `mint_from_lock` docstring to say "Used in Demo/MVP phases. Production may replace with receipt-direct-escrow."
+**What NOT to do:**
+- Do NOT call `fake_eth::mint_from_lock` in the auction flow (deprecated)
+- Do NOT call `primary_fungible_store::withdraw` for FakeETH or FakeUSD in auction.move
+- Do NOT try to hold FakeETH FA in escrow on Aptos (it doesn't exist there)
+
+**Auction.move is a receipt-based module**: seller proves their Ethereum lock via `lock_receipt::claim`, auction records the clearing result, Ethereum side handles actual asset delivery.
 
 ### UX — Demo
 
@@ -211,9 +221,12 @@ The UX agent consumes these from the Infra agent:
 | What UX needs | What Infra delivers | Interface |
 |---------------|---------------------|-----------|
 | Working `register_ethereum_lock<FakeETH>` callable by fee payer | I-D3: signer auth fix | `@atomica` admin signs on behalf of user |
-| Working `fake_eth::mint_from_lock` | Already exists | `mint_from_lock(account, lock_id)` |
-| Working `auction::create_auction` using FA | I-D1: rewritten auction.move | `create_auction(seller, amount, min_price, duration, mpk_bytes)` |
+| Working `auction::create_auction` consuming a LockReceipt | I-D1/I-D5: rewritten auction.move | `create_auction(seller, lock_id, min_price, duration, mpk_bytes)` |
+| Working `auction::submit_bid` | I-D1: auction.move | `submit_bid(bidder, seller_addr, bid_price)` |
+| Working `auction::settle` emitting clearing result | I-D1: auction.move | `settle(caller, seller_addr)` |
 | Deployed contracts on local testnet | I-D4 | Docker compose up → all contracts deployed |
+
+**Note:** There is NO `mint_from_lock` step in the correct flow. FakeETH/FakeUSD do not exist as Fungible Assets on Aptos. The UX step 6 ("Mint") in U-D3 should be removed or replaced with "Claim Receipt" which is implicit in `create_auction`.
 
 ### Demo Definition of Done
 

@@ -17,24 +17,31 @@ import {
 import { viewFunction } from "./helpers/aptos-view-utils";
 
 /**
- * E2E Test 8: Create auction with minted FakeETH on Atomica
+ * E2E Test 7: Create auction directly from a LockReceipt (canonical flow)
  *
- * Extends e2e-07 by calling auction::create_auction after minting FakeETH.
- * Verifies:
- * - Auction is created with correct parameters
- * - Seller's FakeETH balance decreased by auction amount
- * - auction::get_auction returns correct data
+ * FakeETH and FakeUSD exist only on Ethereum. On Aptos, a lock is represented
+ * by a LockReceipt<Ethereum, FakeETH>. auction::create_auction consumes that
+ * receipt (proving the seller locked assets on Ethereum) and opens the auction.
+ * No Aptos-side FA minting is involved.
+ *
+ * Flow:
+ *   1. Mint FakeETH on Ethereum
+ *   2. Lock FakeETH in LockBox
+ *   3. Generate storage proof
+ *   4. register_ethereum_lock<FakeETH> → LockReceipt created in registry
+ *   5. create_auction(lock_id, ...) → receipt claimed, Auction stored at seller address
+ *   6. Assert: auction exists with correct amount (in wei from receipt)
+ *   7. Assert: receipt is now STATUS_CLAIMED
  */
-describe("E2E 08: Create Auction with Minted FakeETH", () => {
+describe("E2E 07: Create Auction from Ethereum Lock Receipt", () => {
   let fixture: DualChainFixture;
+  let lockId: string;
+  let storageValue: bigint;
 
   const MINT_AMOUNT_ETH = ethers.parseEther("1000");
   const LOCK_AMOUNT_ETH = ethers.parseEther("10");
-  // 1_000_000_000 FakeETH units minted from 10 ETH lock
-  const AUCTION_AMOUNT = 500_000_000n; // Sell half
-  const MIN_PRICE = 100n; // 100 FakeUSD per unit
-  const AUCTION_DURATION = 300n; // 5 minutes in seconds
-  const MPK_BYTES = new Uint8Array(0); // Empty for Demo
+  const MIN_PRICE = 100; // 100 FakeUSD per unit
+  const AUCTION_DURATION = 300; // 5 minutes
 
   beforeAll(async () => {
     fixture = await setupDualChainFixture();
@@ -57,6 +64,7 @@ describe("E2E 08: Create Auction with Minted FakeETH", () => {
       fakeEthContract.mint(fixture.eth.signer.address, MINT_AMOUNT_ETH),
       1,
     );
+
     let nonce = await fixture.eth.signer.getNonce();
     await sendAndWaitForTx(
       fakeEthContract.approve(fixture.eth.contracts.lockBox, LOCK_AMOUNT_ETH, {
@@ -73,7 +81,7 @@ describe("E2E 08: Create Auction with Minted FakeETH", () => {
 
     await fixture.eth.testnet.waitForBlocks(12, 180);
 
-    // Generate and register proof
+    // Generate storage proof
     const proof = await generateLockProof(
       fixture.eth.provider,
       fixture.eth.contracts.lockBox,
@@ -81,11 +89,14 @@ describe("E2E 08: Create Auction with Minted FakeETH", () => {
       fixture.eth.contracts.fakeETH,
       lockReceipt.blockNumber!,
     );
+    storageValue = proof.storageValue;
+
     const storageKey = calculateStorageKey(
       fixture.eth.signer.address,
       fixture.eth.contracts.fakeETH,
     );
 
+    // Register lock on Aptos (admin/fee-payer signs — Demo I-D3)
     const registerTxn = await fixture.aptos.client.transaction.build.simple({
       sender: fixture.aptos.deployer.accountAddress,
       data: {
@@ -107,16 +118,16 @@ describe("E2E 08: Create Auction with Minted FakeETH", () => {
         ],
       },
     });
-    const registeredTxn = await fixture.aptos.client.signAndSubmitTransaction({
+    const regSubmitted = await fixture.aptos.client.signAndSubmitTransaction({
       signer: fixture.aptos.deployer,
       transaction: registerTxn,
     });
     await fixture.aptos.client.waitForTransaction({
-      transactionHash: registeredTxn.hash,
+      transactionHash: regSubmitted.hash,
       options: { checkSuccess: true },
     });
 
-    // Calculate lock_id and mint FakeETH on Atomica
+    // Compute lock_id
     const lockIdData = Buffer.concat([
       Buffer.from(proof.blockHash.slice(2), "hex"),
       Buffer.from(fixture.eth.contracts.lockBox.slice(2), "hex"),
@@ -124,24 +135,7 @@ describe("E2E 08: Create Auction with Minted FakeETH", () => {
       Buffer.from(fixture.eth.contracts.fakeETH.slice(2), "hex"),
       Buffer.from(storageKey.slice(2), "hex"),
     ]);
-    const lockId = ethers.keccak256(lockIdData);
-
-    const mintTxn = await fixture.aptos.client.transaction.build.simple({
-      sender: fixture.aptos.deployer.accountAddress,
-      data: {
-        function: `${fixture.aptos.moduleAddress}::fake_eth::mint_from_lock`,
-        typeArguments: [],
-        functionArguments: [ethers.getBytes(lockId)],
-      },
-    });
-    const mintedTxn = await fixture.aptos.client.signAndSubmitTransaction({
-      signer: fixture.aptos.deployer,
-      transaction: mintTxn,
-    });
-    await fixture.aptos.client.waitForTransaction({
-      transactionHash: mintedTxn.hash,
-      options: { checkSuccess: true },
-    });
+    lockId = ethers.keccak256(lockIdData);
   }, 600000);
 
   afterAll(async () => {
@@ -150,90 +144,95 @@ describe("E2E 08: Create Auction with Minted FakeETH", () => {
     }
   });
 
-  it("should create auction with minted FakeETH and verify on-chain state", async () => {
-    console.log("\n[TEST 8] Creating auction with FakeETH on Atomica...");
-
-    const deployerAddress = fixture.aptos.deployer.accountAddress.toString();
-
-    // Record seller's FakeETH balance before creating auction
-    const balanceBefore = await viewFunction(
-      fixture.aptos.client,
-      `${fixture.aptos.moduleAddress}::fake_eth::balance`,
-      [],
-      [deployerAddress],
+  it("should create auction by consuming the LockReceipt", async () => {
+    console.log(
+      "\n[TEST 7] Creating auction from LockReceipt (canonical flow)...",
     );
-    const balanceBeforeBn = BigInt(balanceBefore[0]);
-    console.log(`  FakeETH balance before: ${balanceBeforeBn}`);
-    expect(balanceBeforeBn).toBeGreaterThanOrEqual(AUCTION_AMOUNT);
 
-    // Create auction
-    const createPayload = {
-      function: `${fixture.aptos.moduleAddress}::auction::create_auction`,
-      typeArguments: [],
-      functionArguments: [
-        AUCTION_AMOUNT.toString(),
-        MIN_PRICE.toString(),
-        AUCTION_DURATION.toString(),
-        MPK_BYTES,
+    const sellerAddress = fixture.aptos.deployer.accountAddress.toString();
+
+    // Verify receipt is ACTIVE before creating auction
+    const receiptBefore = await viewFunction(
+      fixture.aptos.client,
+      `${fixture.aptos.moduleAddress}::lock_receipt::get_receipt`,
+      [
+        `${fixture.aptos.moduleAddress}::lock_receipt::Ethereum`,
+        `${fixture.aptos.moduleAddress}::lock_receipt::FakeETH`,
       ],
-    };
+      [ethers.getBytes(lockId)],
+    );
+    const [, , , statusBefore] = receiptBefore;
+    expect(statusBefore).toBe(0); // STATUS_ACTIVE
+    console.log(`  ✓ Receipt is ACTIVE before auction creation`);
 
+    // Create auction — this claims the receipt
     const createTxn = await fixture.aptos.client.transaction.build.simple({
       sender: fixture.aptos.deployer.accountAddress,
-      data: createPayload,
+      data: {
+        function: `${fixture.aptos.moduleAddress}::auction::create_auction`,
+        typeArguments: [],
+        functionArguments: [
+          ethers.getBytes(lockId),
+          MIN_PRICE,
+          AUCTION_DURATION,
+          new Uint8Array(0), // mpk_bytes: empty for Demo
+        ],
+      },
     });
-    const createdTxn = await fixture.aptos.client.signAndSubmitTransaction({
-      signer: fixture.aptos.deployer,
-      transaction: createTxn,
-    });
+    const createSubmitted = await fixture.aptos.client.signAndSubmitTransaction(
+      {
+        signer: fixture.aptos.deployer,
+        transaction: createTxn,
+      },
+    );
     await fixture.aptos.client.waitForTransaction({
-      transactionHash: createdTxn.hash,
+      transactionHash: createSubmitted.hash,
       options: { checkSuccess: true },
     });
-    console.log(`  ✓ create_auction confirmed: ${createdTxn.hash}`);
+    console.log(`  ✓ create_auction confirmed: ${createSubmitted.hash}`);
 
     // Verify auction exists
-    const auctionExists = await viewFunction(
+    const exists = await viewFunction(
       fixture.aptos.client,
       `${fixture.aptos.moduleAddress}::auction::auction_exists`,
       [],
-      [deployerAddress],
+      [sellerAddress],
     );
-    expect(auctionExists[0]).toBe(true);
+    expect(exists[0]).toBe(true);
     console.log(`  ✓ Auction exists at seller address`);
 
-    // Verify auction data: (seller, asset_amount, min_price, end_time, bid_count, settled)
+    // Verify auction data
     const auctionData = await viewFunction(
       fixture.aptos.client,
       `${fixture.aptos.moduleAddress}::auction::get_auction`,
       [],
-      [deployerAddress],
+      [sellerAddress],
     );
-    const [seller, assetAmount, minPrice, , bidCount, settled] = auctionData;
-    console.log(`  Auction data:`);
-    console.log(`    seller: ${seller}`);
-    console.log(`    asset_amount: ${assetAmount}`);
-    console.log(`    min_price: ${minPrice}`);
-    console.log(`    bid_count: ${bidCount}`);
-    console.log(`    settled: ${settled}`);
+    const [seller, amount, , minPrice, , bidCount, settled] = auctionData;
+    console.log(
+      `  Auction: seller=${seller}, amount=${amount}, min_price=${minPrice}`,
+    );
 
-    expect(seller).toBe(deployerAddress);
-    expect(BigInt(assetAmount)).toBe(AUCTION_AMOUNT);
-    expect(BigInt(minPrice)).toBe(MIN_PRICE);
+    expect(seller).toBe(sellerAddress);
+    // amount is the wei value from the receipt (same as storageValue)
+    expect(BigInt(amount)).toBe(storageValue);
+    expect(BigInt(minPrice)).toBe(BigInt(MIN_PRICE));
     expect(BigInt(bidCount)).toBe(0n);
     expect(settled).toBe(false);
-    console.log(`  ✓ Auction parameters match`);
+    console.log(`  ✓ Auction amount matches locked wei: ${storageValue}`);
 
-    // Verify seller's FakeETH balance decreased by auction amount
-    const balanceAfter = await viewFunction(
+    // Verify receipt is now STATUS_CLAIMED (consumed by create_auction)
+    const receiptAfter = await viewFunction(
       fixture.aptos.client,
-      `${fixture.aptos.moduleAddress}::fake_eth::balance`,
-      [],
-      [deployerAddress],
+      `${fixture.aptos.moduleAddress}::lock_receipt::get_receipt`,
+      [
+        `${fixture.aptos.moduleAddress}::lock_receipt::Ethereum`,
+        `${fixture.aptos.moduleAddress}::lock_receipt::FakeETH`,
+      ],
+      [ethers.getBytes(lockId)],
     );
-    const balanceAfterBn = BigInt(balanceAfter[0]);
-    console.log(`  FakeETH balance after: ${balanceAfterBn}`);
-    expect(balanceBeforeBn - balanceAfterBn).toBe(AUCTION_AMOUNT);
-    console.log(`  ✓ Seller balance decreased by auction amount`);
+    const [, , , statusAfter] = receiptAfter;
+    expect(statusAfter).toBe(1); // STATUS_CLAIMED
+    console.log(`  ✓ Receipt is CLAIMED — consumed by create_auction`);
   }, 120000);
 });
