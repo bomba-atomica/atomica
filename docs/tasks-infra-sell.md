@@ -2,7 +2,7 @@
 
 **Worktree:** `infra/sell`
 **Plan ref:** `docs/plans/sell-component-implementation.md`
-**Last updated:** 2026-03-05
+**Last updated:** 2026-03-05 (I-D7 complete)
 
 ---
 
@@ -135,7 +135,7 @@ Old incorrect tests deleted: `e2e-07-mint-on-atomica.test.ts`, `e2e-08-create-au
 ## Demo Definition of Done
 
 - [x] `aptos move compile` — clean
-- [x] `aptos move test` — 41/41 existing tests pass
+- [x] `aptos move test` — 54/54 pass
 - [x] `auction.move` uses LockReceipts (not FA, not legacy Coin)
 - [x] `lock_receipt` auth allows `@atomica` admin signer (with MVP note)
 - [x] Plan corrected: no mint_from_lock step in canonical flow
