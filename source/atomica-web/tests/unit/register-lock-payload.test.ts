@@ -13,24 +13,24 @@
 import { describe, it, expect, vi } from "vitest";
 
 // Mock the Aptos config to avoid SDK initialization side effects.
-vi.mock("../../../src/lib/aptos/config", () => ({
+vi.mock("../../src/lib/aptos/config", () => ({
   CONTRACT_ADDR: "0xtest",
   aptos: { getAccountModules: vi.fn() },
 }));
 
 // Mock siwe and transaction so payloads.ts can be imported cleanly.
-vi.mock("../../../src/lib/aptos/siwe", () => ({
+vi.mock("../../src/lib/aptos/siwe", () => ({
   getDerivedAddress: vi.fn(),
 }));
-vi.mock("../../../src/lib/aptos/transaction", () => ({
+vi.mock("../../src/lib/aptos/transaction", () => ({
   submitNativeTransaction: vi.fn(),
 }));
 
 import {
   getRegisterLockPayload,
   getMintFakeEthPayload,
-} from "../../../src/lib/aptos/payloads";
-import type { LockedBalanceProof } from "../../../src/lib/ethereum/proofs/generator";
+} from "../../src/lib/aptos/payloads";
+import type { LockedBalanceProof } from "../../src/lib/ethereum/proofs/generator";
 
 // ── Fixture ──────────────────────────────────────────────────────────────────
 
@@ -46,6 +46,8 @@ function makeMockProof(): LockedBalanceProof {
     storageValue: 1_000_000_000_000_000_000n, // 1 FETH in wei
     accountProof: ["0x" + "55".repeat(20)],
     storageProof: ["0x" + "66".repeat(20)],
+    timestamp: 1700000000,
+    generatedAt: Date.now(),
   };
 }
 
@@ -53,14 +55,16 @@ function makeMockProof(): LockedBalanceProof {
 
 describe("getRegisterLockPayload", () => {
   it("targets lock_receipt::register_ethereum_lock", () => {
-    const payload = getRegisterLockPayload(makeMockProof());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const payload = getRegisterLockPayload(makeMockProof()) as any;
     expect(payload.function).toContain(
       "::lock_receipt::register_ethereum_lock",
     );
   });
 
   it("includes FakeETH as the type argument", () => {
-    const payload = getRegisterLockPayload(makeMockProof());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const payload = getRegisterLockPayload(makeMockProof()) as any;
     expect(payload.typeArguments).toBeDefined();
     expect(payload.typeArguments![0]).toContain("::lock_receipt::FakeETH");
   });
@@ -151,8 +155,10 @@ describe("getRegisterLockPayload", () => {
 
   it("is deterministic for the same proof", () => {
     const proof = makeMockProof();
-    const p1 = getRegisterLockPayload(proof);
-    const p2 = getRegisterLockPayload(proof);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p1 = getRegisterLockPayload(proof) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p2 = getRegisterLockPayload(proof) as any;
     expect(p1.function).toBe(p2.function);
     expect(p1.functionArguments![0]).toBe(p2.functionArguments![0]);
   });
@@ -163,7 +169,8 @@ describe("getRegisterLockPayload", () => {
 describe("getMintFakeEthPayload", () => {
   it("targets fake_eth::mint_from_lock", () => {
     const lockId = new Uint8Array(32).fill(0xab);
-    const payload = getMintFakeEthPayload(lockId);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const payload = getMintFakeEthPayload(lockId) as any;
     expect(payload.function).toContain("::fake_eth::mint_from_lock");
   });
 

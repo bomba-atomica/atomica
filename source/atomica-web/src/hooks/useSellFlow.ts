@@ -162,9 +162,43 @@ export function useSellFlow(
   // Ref to latest proof (not stored in state to avoid re-renders from large objects)
   const proofRef = useRef<LockedBalanceProof | undefined>(undefined);
 
-  // Persist whenever persisted fields change
+  // Track the previous account so we can skip persisting during account transitions
+  const prevAccountRef = useRef<string | null>(account);
+
+  // When account changes, reload persisted state (must run BEFORE persist effect)
+  useEffect(() => {
+    if (!account) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setState({ step: "connect", blockConfirmed: false, loading: false });
+      prevAccountRef.current = account;
+      return;
+    }
+    const persisted = loadState(account);
+    if (!persisted) {
+      setState({ step: "lock", blockConfirmed: false, loading: false });
+    } else {
+      setState({
+        step: persisted.step,
+        txHash: persisted.txHash,
+        lockBlock: persisted.lockBlock,
+        blockConfirmed: false,
+        lockId: persisted.lockId,
+        auctionEndTime: persisted.auctionEndTime,
+        minPrice: persisted.minPrice ? BigInt(persisted.minPrice) : undefined,
+        amount: persisted.amount ? BigInt(persisted.amount) : undefined,
+        unlockTime: persisted.unlockTime,
+        loading: false,
+      });
+    }
+    prevAccountRef.current = account;
+  }, [account]);
+
+  // Persist whenever persisted fields change (skip when account just changed)
   useEffect(() => {
     if (!account) return;
+    // Skip persisting right after an account change — the reload effect handles
+    // loading the correct state, and persisting here would overwrite it.
+    if (prevAccountRef.current !== account) return;
     const persisted: PersistedState = {
       step: state.step,
       txHash: state.txHash,
@@ -187,32 +221,6 @@ export function useSellFlow(
     state.amount,
     state.unlockTime,
   ]);
-
-  // When account changes, reload persisted state
-  useEffect(() => {
-    if (!account) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setState({ step: "connect", blockConfirmed: false, loading: false });
-      return;
-    }
-    const persisted = loadState(account);
-    if (!persisted) {
-      setState({ step: "lock", blockConfirmed: false, loading: false });
-      return;
-    }
-    setState({
-      step: persisted.step,
-      txHash: persisted.txHash,
-      lockBlock: persisted.lockBlock,
-      blockConfirmed: false,
-      lockId: persisted.lockId,
-      auctionEndTime: persisted.auctionEndTime,
-      minPrice: persisted.minPrice ? BigInt(persisted.minPrice) : undefined,
-      amount: persisted.amount ? BigInt(persisted.amount) : undefined,
-      unlockTime: persisted.unlockTime,
-      loading: false,
-    });
-  }, [account]);
 
   // Poll for block confirmations when in 'confirming' step
   useEffect(() => {
