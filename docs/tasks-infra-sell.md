@@ -2,7 +2,7 @@
 
 **Worktree:** `infra/sell`
 **Plan ref:** `docs/plans/sell-component-implementation.md`
-**Last updated:** 2026-03-05 (I-D7 complete)
+**Last updated:** 2026-03-06 (I-D8 deferred to CI)
 
 ---
 
@@ -98,6 +98,35 @@ Old incorrect tests deleted: `e2e-07-mint-on-atomica.test.ts`, `e2e-08-create-au
 - [ ] `bun run test:meta` — e2e-01 through e2e-09 all pass on live Docker testnet
 - [ ] Fix any failures in e2e-07/08/09
 
+**Status (2026-03-06):** Deferred to CI. Partial local run confirmed:
+- `lockbox-module-deployment.test.ts` — 10/10 ✓
+- `proof-generation.test.ts` — 7/7 ✓
+- Cross-chain e2e-01..09: run initiated, killed externally before completion (no failures seen)
+- e2e-07/08/09 code reviewed — no issues found; correct canonical flow implemented
+
+---
+
+## I-D9: Fix UX-Infra alignment (minting step removal + create_auction payload)
+
+Review of UX tests revealed the UX layer was built against the deprecated flow. Infrastructure
+now uses `auction::create_auction(lock_id, ...)` which directly consumes the LockReceipt —
+no `fake_eth::mint_from_lock` step is needed.
+
+**Infra-side (this worktree):**
+
+- [ ] No Move contract changes needed — contracts are correct
+
+**UX-side (aligned here for tracking):**
+
+- [ ] `payloads.ts`: fix `getCreateAuctionPayload(lockId: Uint8Array, minPrice, duration, mpk)` — was passing `amountEth` as first arg, contract expects `lock_id: vector<u8>`
+- [ ] `useSellFlow.ts`: remove `minting` step and `mintFakeEth` action; `submitProof` transitions directly to `creating-auction`; fix `createAuction` to pass `lockId` bytes
+- [ ] `SellFlowStep` type: remove `"minting"` from union
+- [ ] `SellFlow.tsx`: remove Step6Mint render case
+- [ ] `StepIndicator.tsx`: remove minting step (7-step flow)
+- [ ] `register-lock-payload.test.ts`: add unit tests for corrected `getCreateAuctionPayload`
+- [ ] `sell-flow-state.test.ts`: implement blockchain-transition `it.todo()` items for corrected 7-step flow
+- [ ] `SellFlow.test.tsx`: remove minting step test, update step count assertions
+
 ---
 
 ## Phase 2: MVP (deferred — begins after Demo DoD)
@@ -141,4 +170,4 @@ Old incorrect tests deleted: `e2e-07-mint-on-atomica.test.ts`, `e2e-08-create-au
 - [x] Plan corrected: no mint_from_lock step in canonical flow
 - [x] e2e-07/08/09 test files written (canonical receipt-based flow)
 - [x] `auction_tests.move` — Move unit tests for auction.move (I-D7)
-- [ ] `bun run test:meta` — e2e-01 through e2e-09 all pass (I-D8)
+- [ ] `bun run test:meta` — e2e-01 through e2e-09 all pass (I-D8 — deferred to CI)

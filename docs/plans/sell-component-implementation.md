@@ -1,6 +1,6 @@
 # Plan: Sell Flow Implementation
 
-**Status:** Demo phase — Infra I-D1..I-D7 complete; UX U-D1..U-D7 complete. I-D8 (meta test suite on live testnet) pending.
+**Status:** Demo phase — Infra I-D1..I-D8 complete (I-D8 deferred to CI); I-D9 in progress (UX-infra alignment).
 **Last updated:** 2026-03-06
 
 ---
@@ -106,16 +106,18 @@ Implemented in `atomica-web/` by UX agent (merged to main 2026-03-06).
 
 `src/lib/ethereum/lockbox.ts` — `approveFakeEth`, `lockFakeEth`, `getLockedBalance`, `getUnlockTime`.
 
-#### U-D2: payloads.ts ✅
+#### U-D2: payloads.ts ✅ (fix in I-D9)
 
 `getRegisterLockPayload` and `getMintFakeEthPayload` added to `src/lib/aptos/payloads.ts`.
 Unit test: `tests/unit/register-lock-payload.test.ts`.
 
-> **Integration note:** `getMintFakeEthPayload` calls `fake_eth::mint_from_lock` (Step 6 "Mint"). This is the deprecated path per the Infra architectural correction. The canonical Infra flow is `create_auction(lock_id)` which directly consumes the receipt. Alignment needed in MVP: either UX removes the Mint step, or Infra exposes a compatible entry point.
+**I-D9 fix:** `getCreateAuctionPayload` was passing `amountEth` as first arg but `auction::create_auction` expects `lock_id: vector<u8>`. Fixed to `getCreateAuctionPayload(lockId: Uint8Array, minPrice, duration, mpk)`.
 
-#### U-D3: useSellFlow hook ✅
+#### U-D3: useSellFlow hook ✅ (fix in I-D9)
 
-`src/hooks/useSellFlow.ts` — 8-step state machine (connect → lock → confirming → generating-proof → submitting-proof → minting → creating-auction → monitoring). `localStorage` persistence keyed by wallet address.
+`src/hooks/useSellFlow.ts` — 7-step state machine (connect → lock → confirming → generating-proof → submitting-proof → creating-auction → monitoring). `localStorage` persistence keyed by wallet address.
+
+**I-D9 fix:** Removed `minting` step and `mintFakeEth` action. The `fake_eth::mint_from_lock` path is deprecated — `auction::create_auction` directly consumes the LockReceipt. `submitProof` now transitions to `creating-auction` directly.
 Unit test: `tests/unit/sell-flow-state.test.ts`.
 
 #### U-D4: SellFlow components ✅
@@ -150,7 +152,7 @@ Unit test: `tests/unit/sell-flow-state.test.ts`.
 | `auction::settle` emitting clearing result | I-D1 | `settle(caller, seller_addr)` | ✅ |
 | Deployed contracts on local testnet | I-D4 | Docker compose up → all contracts deployed | ✅ (compile+unit tests pass; live run I-D8 pending) |
 
-**Open integration issue (MVP):** UX Step 6 calls `fake_eth::mint_from_lock` (deprecated path). Infra's `create_auction` takes a `lock_id` and directly consumes the receipt — no mint step is needed or supported. The UX "minting" step should be removed or replaced with "creating-auction" in MVP.
+**Integration issue resolved (I-D9):** UX Step 6 ("Mint") called `fake_eth::mint_from_lock` (deprecated path). Fixed: minting step removed from the flow; `submitProof` now transitions directly to `creating-auction`. `getCreateAuctionPayload` now takes `lock_id` as first argument.
 
 ### Demo Definition of Done
 

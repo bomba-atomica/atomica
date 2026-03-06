@@ -22,7 +22,6 @@ import {
 import { getChainConfig } from "../lib/chain-config";
 import {
   getRegisterLockPayload,
-  getMintFakeEthPayload,
   getCreateAuctionPayload,
 } from "../lib/aptos/payloads";
 import { submitNativeTransaction } from "../lib/aptos/transaction";
@@ -34,7 +33,6 @@ export type SellFlowStep =
   | "confirming"
   | "generating-proof"
   | "submitting-proof"
-  | "minting"
   | "creating-auction"
   | "monitoring";
 
@@ -72,9 +70,7 @@ export interface SellFlowActions {
   generateProof: () => Promise<void>;
   /** Step 5: submit proof to Aptos → creates LockReceipt */
   submitProof: () => Promise<void>;
-  /** Step 6: mint FakeETH on Aptos from the LockReceipt */
-  mintFakeEth: () => Promise<void>;
-  /** Step 7: create auction on Aptos with minted FakeETH */
+  /** Step 6: create auction on Aptos — consumes the LockReceipt */
   createAuction: () => Promise<void>;
   /** Cancel & unlock — only callable when unlockTime has passed */
   cancelAndUnlock: () => Promise<void>;
@@ -355,9 +351,11 @@ export function useSellFlow(
 
       const lockId = computeLockId(proof);
 
+      // Go directly to creating-auction — no mint step needed.
+      // auction::create_auction consumes the LockReceipt directly.
       setState((s) => ({
         ...s,
-        step: "minting",
+        step: "creating-auction",
         lockId,
         loading: false,
       }));
@@ -366,28 +364,8 @@ export function useSellFlow(
     }
   }, [account, setError]);
 
-  const mintFakeEth = useCallback(async () => {
-    if (!account || !state.lockId) return;
-    setState((s) => ({
-      ...s,
-      step: "minting",
-      loading: true,
-      error: undefined,
-    }));
-
-    try {
-      const lockIdBytes = ethers.getBytes(state.lockId);
-      const payload = getMintFakeEthPayload(lockIdBytes);
-      await submitNativeTransaction(account, payload);
-
-      setState((s) => ({ ...s, step: "creating-auction", loading: false }));
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, [account, state.lockId, setError]);
-
   const createAuction = useCallback(async () => {
-    if (!account || !state.amount || !state.minPrice) return;
+    if (!account || !state.minPrice || !state.lockId) return;
     setState((s) => ({
       ...s,
       step: "creating-auction",
@@ -396,17 +374,13 @@ export function useSellFlow(
     }));
 
     try {
+      const lockIdBytes = ethers.getBytes(state.lockId);
       // Duration: 1 hour default for demo
       const duration = BigInt(3600);
       // MPK: empty bytes for demo (timelock encryption deferred to Production)
       const mpk = new Uint8Array(0);
 
-      const payload = getCreateAuctionPayload(
-        state.amount,
-        state.minPrice,
-        duration,
-        mpk,
-      );
+      const payload = getCreateAuctionPayload(lockIdBytes, state.minPrice, duration, mpk);
       await submitNativeTransaction(account, payload);
 
       const auctionEndTime = Math.floor(Date.now() / 1000) + 3600;
@@ -420,7 +394,7 @@ export function useSellFlow(
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [account, state.amount, state.minPrice, setError]);
+  }, [account, state.minPrice, state.lockId, setError]);
 
   const cancelAndUnlock = useCallback(async () => {
     if (!account || !window.ethereum || !state.amount) return;
