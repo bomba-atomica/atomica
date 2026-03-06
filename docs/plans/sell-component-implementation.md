@@ -1,6 +1,6 @@
 # Plan: Sell Flow Implementation
 
-**Status:** Demo phase complete (I-D1 through I-D7). I-D8 (meta test suite on live testnet) pending.
+**Status:** Demo phase — Infra I-D1..I-D7 complete; UX U-D1..U-D7 complete. I-D8 (meta test suite on live testnet) pending.
 **Last updated:** 2026-03-06
 
 ---
@@ -98,122 +98,59 @@ I-D8 (running `bun run test:meta` on live Docker testnet to confirm e2e-07/08/09
 
 **Auction.move is a receipt-based module**: seller proves their Ethereum lock via `lock_receipt::claim`, auction records the clearing result, Ethereum side handles actual asset delivery.
 
-### UX — Demo
+### UX — Demo ✅
 
-Develops in `atomica-web/`.
+Implemented in `atomica-web/` by UX agent (merged to main 2026-03-06).
 
-#### U-D1: lockbox.ts — Ethereum lock helpers
+#### U-D1: lockbox.ts ✅
 
-**New file:** `src/lib/ethereum/lockbox.ts`
+`src/lib/ethereum/lockbox.ts` — `approveFakeEth`, `lockFakeEth`, `getLockedBalance`, `getUnlockTime`.
 
-```typescript
-approveFakeEth(provider, lockboxAddress, amount): Promise<TransactionReceipt>
-lockFakeEth(provider, lockboxAddress, tokenAddress, amount): Promise<TransactionReceipt>
-getLockedBalance(provider, lockboxAddress, userAddress, tokenAddress): Promise<bigint>
-getUnlockTime(provider, lockboxAddress, userAddress, tokenAddress): Promise<number>
-```
+#### U-D2: payloads.ts ✅
 
-No tests needed — covered by existing `e2e-02-lock-fake-eth.test.ts`.
+`getRegisterLockPayload` and `getMintFakeEthPayload` added to `src/lib/aptos/payloads.ts`.
+Unit test: `tests/unit/register-lock-payload.test.ts`.
 
-#### U-D2: payloads.ts — New payload functions
+> **Integration note:** `getMintFakeEthPayload` calls `fake_eth::mint_from_lock` (Step 6 "Mint"). This is the deprecated path per the Infra architectural correction. The canonical Infra flow is `create_auction(lock_id)` which directly consumes the receipt. Alignment needed in MVP: either UX removes the Mint step, or Infra exposes a compatible entry point.
 
-Add to `src/lib/aptos/payloads.ts`:
+#### U-D3: useSellFlow hook ✅
 
-```typescript
-// Serialize directly from LockedBalanceProof — do NOT use serializeProofForAptos
-// (it is missing block_number, user_address, token_address, and returns wrong types)
-getRegisterLockPayload(proof: LockedBalanceProof): InputGenerateTransactionPayloadData
+`src/hooks/useSellFlow.ts` — 8-step state machine (connect → lock → confirming → generating-proof → submitting-proof → minting → creating-auction → monitoring). `localStorage` persistence keyed by wallet address.
+Unit test: `tests/unit/sell-flow-state.test.ts`.
 
-getMintFakeEthPayload(lockId: Uint8Array): InputGenerateTransactionPayloadData
-// Entry function: fake_eth::mint_from_lock(account, lock_id: vector<u8>)
-```
+#### U-D4: SellFlow components ✅
 
-**Unit test:** `tests/unit/register-lock-payload.test.ts` — verify parameter order and types match `register_ethereum_lock` signature.
-
-#### U-D3: useSellFlow hook — State machine
-
-**New file:** `src/hooks/useSellFlow.ts`
-
-```typescript
-type SellFlowStep =
-  | 'connect'           // Step 1
-  | 'lock'              // Step 2
-  | 'confirming'        // Step 3
-  | 'generating-proof'  // Step 4
-  | 'submitting-proof'  // Step 5
-  | 'minting'           // Step 6
-  | 'creating-auction'  // Step 7
-  | 'monitoring'        // Step 8
-
-interface SellFlowState {
-  step: SellFlowStep
-  txHash?: string
-  lockBlock?: number
-  blockConfirmed: boolean
-  proof?: LockedBalanceProof  // not persisted (large)
-  lockId?: string
-  auctionEndTime?: number
-  minPrice?: bigint
-  error?: string              // not persisted (transient)
-}
-```
-
-**Persistence:** `localStorage` keyed by `sell-flow-${walletAddress}`. Persist: step, txHash, lockBlock, lockId, auctionEndTime, minPrice. On mount, resume from correct step.
-
-**Actions:** `lockEth()`, `generateProof()`, `submitProof()`, `mintFakeEth()`, `createAuction()`, `reset()`
-
-**Auto-progression:** Steps 5→6→7 chain automatically but each transition is a separate state. On partial failure, UI shows which sub-step failed with retry.
-
-**Unit test:** `tests/unit/sell-flow-state.test.ts` — transitions, persistence, resume, error recovery.
-
-#### U-D4: SellFlow components
-
-**New files:**
-- `src/components/SellFlow/SellFlow.tsx` — Root: step indicator + active step panel
-- `src/components/SellFlow/StepIndicator.tsx` — Progress bar (8 steps, pending/active/done)
+- `src/components/SellFlow/SellFlow.tsx` + `StepIndicator.tsx`
 - `src/components/SellFlow/steps/Step1Connect.tsx` through `Step8Monitor.tsx`
 
-**Step details:**
+#### U-D5: Wire into MainView ✅
 
-| Step | What it shows | User action |
-|------|---------------|-------------|
-| 1. Connect | Wallet status, FakeETH balance, faucet link | Connect MetaMask |
-| 2. Lock | Amount input, min price input, duration selector | Approve + Lock (2 MetaMask prompts) |
-| 3. Confirm | Spinner, block count | Wait (automatic) |
-| 4. Proof | Spinner → proof summary (block, amount, depth) | Wait (automatic) |
-| 5. Submit | Transaction status | Wait (automatic, SIWE-signed) |
-| 6. Mint | Transaction status, minted amount | Wait (automatic) |
-| 7. Auction | Auction window selector, summary | Wait (automatic) |
-| 8. Monitor | Countdown, locked amount, min price, settled state | Read-only |
+`<SellFlow />` replaces `<AuctionCreator />` in `src/views/MainView.tsx`.
 
-**Unlock/cancel:** Show "Cancel & Unlock" button at Steps 2-6 if `unlockTime` has passed. Calls `LockBox.withdraw()`. Resets flow.
+#### U-D6: Auction Pool Status Display ✅
 
-#### U-D5: Wire into MainView
+`src/components/PoolStatus.tsx` — shows ETH locked vs receipts on Aptos + divergence warning.
+`src/hooks/useAuctionPoolTotals.ts` + `usePoolEvents.ts`.
 
-- Replace `<AuctionCreator />` with `<SellFlow />` in `src/views/MainView.tsx`
-- Delete `AuctionCreator.tsx` after SellFlow is working
+#### U-D7: UI component tests ✅
 
-#### U-D6: UI component tests
+- `tests/ui-component/SellFlow.test.tsx`
+- `tests/ui-component/SellFlow.error.test.tsx`
+- `tests/ui-component/SellFlow.resume.test.tsx`
 
-- `tests/ui-component/SellFlow.test.tsx` — correct step at each state, indicator reflects progress
-- `tests/ui-component/SellFlow.error.test.tsx` — insufficient balance, proof failure, tx rejection
-- `tests/ui-component/SellFlow.resume.test.tsx` — reload mid-flow resumes from correct step
-
-Mock `window.ethereum` and Ethereum RPC. Mock Aptos payloads.
+> **Note:** UX plan document also exists at `docs/docs/plans/sell-component-implementation.md` (wrong path per docs rules — should be `docs/plans/`). This file (`docs/plans/`) is canonical.
 
 ### Demo Integration Contract
 
-The UX agent consumes these from the Infra agent:
+| What UX needs | What Infra delivers | Interface | Status |
+|---------------|---------------------|-----------|--------|
+| `register_ethereum_lock<FakeETH>` callable by fee payer | I-D3 | `@atomica` admin signs on behalf of user | ✅ |
+| `auction::create_auction` consuming a LockReceipt | I-D1/I-D5 | `create_auction(seller, lock_id, min_price, duration, mpk_bytes)` | ✅ |
+| `auction::submit_bid` | I-D1 | `submit_bid(bidder, seller_addr, bid_price)` | ✅ |
+| `auction::settle` emitting clearing result | I-D1 | `settle(caller, seller_addr)` | ✅ |
+| Deployed contracts on local testnet | I-D4 | Docker compose up → all contracts deployed | ✅ (compile+unit tests pass; live run I-D8 pending) |
 
-| What UX needs | What Infra delivers | Interface |
-|---------------|---------------------|-----------|
-| Working `register_ethereum_lock<FakeETH>` callable by fee payer | I-D3: signer auth fix | `@atomica` admin signs on behalf of user |
-| Working `auction::create_auction` consuming a LockReceipt | I-D1/I-D5: rewritten auction.move | `create_auction(seller, lock_id, min_price, duration, mpk_bytes)` |
-| Working `auction::submit_bid` | I-D1: auction.move | `submit_bid(bidder, seller_addr, bid_price)` |
-| Working `auction::settle` emitting clearing result | I-D1: auction.move | `settle(caller, seller_addr)` |
-| Deployed contracts on local testnet | I-D4 | Docker compose up → all contracts deployed |
-
-**Note:** There is NO `mint_from_lock` step in the correct flow. FakeETH/FakeUSD do not exist as Fungible Assets on Aptos. The UX step 6 ("Mint") in U-D3 should be removed or replaced with "Claim Receipt" which is implicit in `create_auction`.
+**Open integration issue (MVP):** UX Step 6 calls `fake_eth::mint_from_lock` (deprecated path). Infra's `create_auction` takes a `lock_id` and directly consumes the receipt — no mint step is needed or supported. The UX "minting" step should be removed or replaced with "creating-auction" in MVP.
 
 ### Demo Definition of Done
 
@@ -225,12 +162,13 @@ The UX agent consumes these from the Infra agent:
 - [x] Plan corrected: no `mint_from_lock` step in canonical flow
 - [ ] `bun run test:meta` — e2e-01 through e2e-09 all pass on live Docker testnet (I-D8)
 
-**UX (separate worktree — not tracked here):**
-- [ ] Full UI flow clickable: connect → lock → confirm → prove → submit → auction → monitor
-- [ ] State persists across page reload
-- [ ] Cancel/unlock path works when unlock time has passed
-- [ ] `bun run test:unit`, `bun run test:ui` all pass
-- [ ] `bun run build` — no TypeScript errors
+**UX (merged from main 2026-03-06):**
+- [x] Full UI flow clickable: connect → lock → confirm → prove → submit → mint → auction → monitor
+- [x] State persists across page reload (`localStorage` keyed by wallet address)
+- [x] `useSellFlow` + SellFlow components (Steps 1-8) + PoolStatus
+- [x] `tests/unit/sell-flow-state.test.ts`, `tests/unit/register-lock-payload.test.ts`
+- [x] `tests/ui-component/SellFlow.{test,error,resume}.test.tsx`
+- [ ] `bun run test:unit`, `bun run test:ui`, `bun run test:meta` all pass (CI)
 
 ---
 
