@@ -1,77 +1,88 @@
 {
-  "name": "@atomica/state-proof-verifier",
-  "version": "0.1.0",
-  "description": "Self-sufficient TypeScript library and CLI for fetching and verifying Ethereum state proofs",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "bin": {
-    "eth-verify": "dist/cli.js"
-  },
-  "scripts": {
-    "prebuild": "cd ../../docker-testnet/ethereum-testnet/typescript-sdk && bun run build && mkdir -p ../../state-proofs/typescript/node_modules/@atomica/ethereum-docker-testnet && rm -rf ../../state-proofs/typescript/node_modules/@atomica/ethereum-docker-testnet && cp -r . ../../state-proofs/typescript/node_modules/@atomica/ethereum-docker-testnet",
-    "build": "tsc && tsc --project tsconfig.check.json",
-    "test": "bun test",
-    "test:watch": "bun test --watch",
-    "test:integration": "bun test test/integration.test.ts",
-    "benchmark": "bun test test/benchmark.test.ts",
-    "demo": "bun run scripts/sepolia-demo.ts",
-    "demo:sepolia": "bun run scripts/sepolia-demo.ts",
-    "demo:docker": "bun run scripts/docker-demo.ts",
-    "clean": "rm -rf dist",
-    "lint": "eslint 'src/**/*.ts' 'test/**/*.ts'",
-    "lint:fix": "eslint 'src/**/*.ts' 'test/**/*.ts' --fix",
-    "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
-"format:check": "prettier --check 'src/**/*.ts' 'test/**/*.ts'",
-    "prepublishOnly": "bun run build"
-  },
-  "keywords": [
-    "ethereum",
-    "state-proof",
-    "merkle-patricia-trie",
-    "eip-1186",
-    "verification",
-    "cryptography",
-    "cross-chain",
-    "light-client"
-  ],
-  "author": "Atomica",
-  "license": "MIT",
-  "dependencies": {
-    "@chainsafe/bls": "^8.2.0",
-    "@chainsafe/ssz": "^1.3.0",
-    "@ethereumjs/common": "^10.1.1",
-    "@ethereumjs/rlp": "^10.1.1",
-    "@ethereumjs/trie": "^6.2.1",
-    "@ethereumjs/util": "^10.1.1",
-    "abitype": "^1.2.3",
-    "viem": "^2.0.0"
-  },
-  "devDependencies": {
-    "@atomica/ethereum-docker-testnet": "file:../../docker-testnet/ethereum-testnet/typescript-sdk",
-    "@ethereumjs/tx": "^10.1.0",
-    "@types/node": "^20.8.2",
-    "@typescript-eslint/eslint-plugin": "^8.53.1",
-    "@typescript-eslint/parser": "^8.53.1",
-    "bun-types": "^1.3.6",
-    "eslint": "^9.39.2",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.5",
-    "prettier": "^3.8.0",
-    "typescript": "^5.2.2",
-    "typescript-eslint": "^8.53.1"
-  },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/atomica/atomica.git",
-    "directory": "source/state-proofs/typescript"
-  },
-  "bugs": {
-    "url": "https://github.com/atomica/atomica/issues"
-  },
-  "homepage": "https://github.com/atomica/atomica/tree/main/source/state-proofs/typescript#readme"
+    "name": "@atomica/state-proof-verifier",
+    "version": "0.1.0",
+    "description": "Self-sufficient TypeScript library and CLI for fetching and verifying Ethereum state proofs",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "browser": "dist/browser.js",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./browser": {
+            "types": "./dist/browser.d.ts",
+            "default": "./dist/browser.js"
+        }
+    },
+    "bin": {
+        "eth-verify": "dist/cli.js"
+    },
+    "scripts": {
+        "prebuild": "cd ../../docker-testnet/ethereum-testnet/typescript-sdk && bun run build && mkdir -p ../../state-proofs/typescript/node_modules/@atomica/ethereum-docker-testnet && rm -rf ../../state-proofs/typescript/node_modules/@atomica/ethereum-docker-testnet && cp -r . ../../state-proofs/typescript/node_modules/@atomica/ethereum-docker-testnet",
+        "build": "tsc && tsc --project tsconfig.check.json",
+        "test": "bun test",
+        "test:watch": "bun test --watch",
+        "test:integration": "bun test test/integration.test.ts",
+        "benchmark": "bun test test/benchmark.test.ts",
+        "demo": "bun run scripts/sepolia-demo.ts",
+        "demo:sepolia": "bun run scripts/sepolia-demo.ts",
+        "demo:docker": "bun run scripts/docker-demo.ts",
+        "clean": "rm -rf dist",
+        "lint": "eslint 'src/**/*.ts' 'test/**/*.ts'",
+        "lint:fix": "eslint 'src/**/*.ts' 'test/**/*.ts' --fix",
+        "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
+        "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.ts'",
+        "prepublishOnly": "bun run build"
+    },
+    "keywords": [
+        "ethereum",
+        "state-proof",
+        "merkle-patricia-trie",
+        "eip-1186",
+        "verification",
+        "cryptography",
+        "cross-chain",
+        "light-client"
+    ],
+    "author": "Atomica",
+    "license": "MIT",
+    "dependencies": {
+        "@chainsafe/bls": "^8.2.0",
+        "@chainsafe/ssz": "^1.3.0",
+        "@ethereumjs/common": "^10.1.1",
+        "@ethereumjs/rlp": "^10.1.1",
+        "@ethereumjs/trie": "^6.2.1",
+        "@ethereumjs/util": "^10.1.1",
+        "abitype": "^1.2.3",
+        "viem": "^2.0.0"
+    },
+    "devDependencies": {
+        "@atomica/ethereum-docker-testnet": "file:../../docker-testnet/ethereum-testnet/typescript-sdk",
+        "@ethereumjs/tx": "^10.1.0",
+        "@types/node": "^20.8.2",
+        "@typescript-eslint/eslint-plugin": "^8.53.1",
+        "@typescript-eslint/parser": "^8.53.1",
+        "bun-types": "^1.3.6",
+        "eslint": "^9.39.2",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-prettier": "^5.5.5",
+        "prettier": "^3.8.0",
+        "typescript": "^5.2.2",
+        "typescript-eslint": "^8.53.1"
+    },
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/atomica/atomica.git",
+        "directory": "source/state-proofs/typescript"
+    },
+    "bugs": {
+        "url": "https://github.com/atomica/atomica/issues"
+    },
+    "homepage": "https://github.com/atomica/atomica/tree/main/source/state-proofs/typescript#readme"
 }

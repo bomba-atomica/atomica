@@ -10,7 +10,7 @@ import {
   fetchProof,
   type EthereumProof,
   type StorageProof,
-} from "@atomica/state-proof-verifier";
+} from "@atomica/state-proof-verifier/browser";
 import { calculateLockedBalanceStorageKey } from "./storage-key.js";
 
 /**
