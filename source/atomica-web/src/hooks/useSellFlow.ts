@@ -1,9 +1,9 @@
 /**
- * useSellFlow — 8-step sell flow state machine
+ * useSellFlow — 7-step sell flow state machine
  *
  * Manages the full seller journey:
  *   connect → lock → confirming → generating-proof → submitting-proof
- *   → minting → creating-auction → monitoring
+ *   → creating-auction → monitoring
  *
  * State is persisted to localStorage keyed by wallet address so the user
  * can resume after a page reload.
@@ -380,7 +380,12 @@ export function useSellFlow(
       // MPK: empty bytes for demo (timelock encryption deferred to Production)
       const mpk = new Uint8Array(0);
 
-      const payload = getCreateAuctionPayload(lockIdBytes, state.minPrice, duration, mpk);
+      const payload = getCreateAuctionPayload(
+        lockIdBytes,
+        state.minPrice,
+        duration,
+        mpk,
+      );
       await submitNativeTransaction(account, payload);
 
       const auctionEndTime = Math.floor(Date.now() / 1000) + 3600;
@@ -423,7 +428,6 @@ export function useSellFlow(
     lockEth,
     generateProof,
     submitProof,
-    mintFakeEth,
     createAuction,
     cancelAndUnlock,
     reset,

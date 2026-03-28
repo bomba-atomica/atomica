@@ -55,7 +55,6 @@ function makeMockProof(): LockedBalanceProof {
 
 describe("getRegisterLockPayload", () => {
   it("targets lock_receipt::register_ethereum_lock", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const payload = getRegisterLockPayload(makeMockProof()) as any;
     expect(payload.function).toContain(
       "::lock_receipt::register_ethereum_lock",
@@ -63,7 +62,6 @@ describe("getRegisterLockPayload", () => {
   });
 
   it("includes FakeETH as the type argument", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const payload = getRegisterLockPayload(makeMockProof()) as any;
     expect(payload.typeArguments).toBeDefined();
     expect(payload.typeArguments![0]).toContain("::lock_receipt::FakeETH");
@@ -155,9 +153,7 @@ describe("getRegisterLockPayload", () => {
 
   it("is deterministic for the same proof", () => {
     const proof = makeMockProof();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const p1 = getRegisterLockPayload(proof) as any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const p2 = getRegisterLockPayload(proof) as any;
     expect(p1.function).toBe(p2.function);
     expect(p1.functionArguments![0]).toBe(p2.functionArguments![0]);
@@ -169,7 +165,6 @@ describe("getRegisterLockPayload", () => {
 describe("getMintFakeEthPayload", () => {
   it("targets fake_eth::mint_from_lock", () => {
     const lockId = new Uint8Array(32).fill(0xab);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const payload = getMintFakeEthPayload(lockId) as any;
     expect(payload.function).toContain("::fake_eth::mint_from_lock");
   });
