@@ -1,9 +1,7 @@
-import { useState, useEffect } from "react";
-import {
-  testSimpleAPTTransfer,
-  getDerivedAddress,
-  aptos,
-} from "@atomica/aptos-docker-testnet/browser";
+import { useState } from "react";
+import { testSimpleAPTTransfer } from "@atomica/aptos-docker-testnet/browser";
+import { useWallet } from "../context/WalletContext";
+import { useBalances } from "../context/BalancesContext";
 
 export function SanityTest() {
   const { account } = useWallet();

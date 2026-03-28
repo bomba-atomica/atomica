@@ -44,6 +44,7 @@
     },
     "dependencies": {
         "@aptos-labs/ts-sdk": "^5.2.0",
+        "@atomica/ethereum-docker-testnet": "../../docker-testnet/ethereum-testnet/typescript-sdk",
         "@atomica/sdk": "../../atomica-sdk",
         "@noble/bls12-381": "^1.4.0",
         "aptos": "^1.22.1",

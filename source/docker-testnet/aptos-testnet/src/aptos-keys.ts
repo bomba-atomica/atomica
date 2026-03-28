@@ -7,7 +7,7 @@ import {
   APTOS_ROOT_ACCOUNT_PRIVATE_KEY,
   APTOS_DEPLOYER_ADDRESS,
   APTOS_DEPLOYER_PRIVATE_KEY,
-} from "../../shared/test-constants";
+} from "../../../shared/test-constants";
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
 const CONFIG_CANDIDATES = [

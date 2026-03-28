@@ -9,11 +9,7 @@
  * (e.g. ERC20 mint calls via MetaMask).
  */
 
-declare global {
-  interface Window {
-    ethereum?: unknown;
-  }
-}
+// Window.ethereum typing is provided by wallet-mock.ts global declaration
 
 export interface EthereumMintMockOptions {
   /** Private key of the test account */

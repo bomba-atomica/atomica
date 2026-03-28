@@ -1,11 +1,9 @@
-import { useState, useEffect } from "react";
-import {
-  requestAPT,
-  getMintFakeEthPayload,
-  getMintFakeUsdPayload,
-  areContractsDeployed,
-} from "@atomica/aptos-docker-testnet/browser";
-import { TxButton } from "./TxButton";
+import { useState } from "react";
+import { requestAPT } from "@atomica/aptos-docker-testnet/browser";
+import { requestEthTokens } from "../lib/ethereum/transaction";
+import { useWallet } from "../context/WalletContext";
+import { useBalances } from "../context/BalancesContext";
+import { useContractStatus } from "../context/ContractStatusContext";
 
 export function Faucet() {
   const { account } = useWallet();

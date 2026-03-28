@@ -150,10 +150,7 @@ async function main() {
         args: [],
       },
     ],
-    {
-      stdio: "inherit",
-    },
-  );
+  });
 
   // Wait for network ready
   console.log(

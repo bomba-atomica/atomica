@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
-import { useTokenBalances } from "../hooks/useTokenBalances";
+import {
+  formatETHBalance,
+  formatFakeETHBalance,
+  formatUSDBalance,
+} from "../lib/ethereum/balances";
+import { useWallet } from "../context/WalletContext";
+import { useBalances } from "../context/BalancesContext";
 
 /**
  * Renders a single network's account card: header, address row, and balance row.

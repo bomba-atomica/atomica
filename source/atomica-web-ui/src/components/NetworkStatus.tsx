@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { aptos } from "@atomica/aptos-docker-testnet/browser";
+import { getEthereumProvider } from "../lib/ethereum/config";
+import { useNetworkConfig } from "../lib/network-config-state";
 
 export function NetworkStatus() {
   const { host } = useNetworkConfig();

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { ethers } from "ethers";
-import { submitCreateAuction } from "@atomica/aptos-docker-testnet/browser";
+import { submitCreateAuction } from "../lib/aptos/payloads";
 import * as ibe from "@atomica/state-proof-verifier/ibe";
+import { useWallet } from "../context/WalletContext";
 
 export function AuctionCreator() {
   const { account } = useWallet();

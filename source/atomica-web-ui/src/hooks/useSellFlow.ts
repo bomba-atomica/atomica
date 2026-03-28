@@ -25,6 +25,7 @@ import {
   getCreateAuctionPayload,
 } from "../lib/aptos/payloads";
 import { submitNativeTransaction } from "../lib/aptos/transaction";
+import { aptos } from "../lib/aptos/config";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type SellFlowStep =
@@ -164,7 +165,6 @@ export function useSellFlow(
   // When account changes, reload persisted state (must run BEFORE persist effect)
   useEffect(() => {
     if (!account) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState({ step: "connect", blockConfirmed: false, loading: false });
       prevAccountRef.current = account;
       return;
@@ -347,7 +347,7 @@ export function useSellFlow(
     try {
       const proof = proofRef.current;
       const payload = getRegisterLockPayload(proof);
-      await submitNativeTransaction(account, payload);
+      await submitNativeTransaction(aptos, account, payload);
 
       const lockId = computeLockId(proof);
 
@@ -386,7 +386,7 @@ export function useSellFlow(
         duration,
         mpk,
       );
-      await submitNativeTransaction(account, payload);
+      await submitNativeTransaction(aptos, account, payload);
 
       const auctionEndTime = Math.floor(Date.now() / 1000) + 3600;
 
