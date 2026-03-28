@@ -48,15 +48,17 @@ describe("E2E 08: Submit Bids on Auction", () => {
     bidder1 = Account.generate();
     bidder2 = Account.generate();
 
-    // Fund bidders with APT for gas
+    // Fund bidders with APT for gas.
+    // DEFAULT_MAX_GAS_AMOUNT=2_000_000 * gas_price=100 = 200_000_000 octas minimum.
+    // Use 500_000_000 (5 APT) to give ample headroom.
     await Promise.all([
       fixture.aptos.testnet.faucet(
         bidder1.accountAddress.toString(),
-        10_000_000n,
+        500_000_000n,
       ),
       fixture.aptos.testnet.faucet(
         bidder2.accountAddress.toString(),
-        10_000_000n,
+        500_000_000n,
       ),
     ]);
 
@@ -234,7 +236,7 @@ describe("E2E 08: Submit Bids on Auction", () => {
     const lowBidder = Account.generate();
     await fixture.aptos.testnet.faucet(
       lowBidder.accountAddress.toString(),
-      10_000_000n,
+      500_000_000n, // 5 APT — covers max gas reservation
     );
 
     const lowBidTxn = await fixture.aptos.client.transaction.build.simple({

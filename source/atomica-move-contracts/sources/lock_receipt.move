@@ -340,8 +340,14 @@ module atomica::lock_receipt {
         // Verify receipt is active
         assert!(receipt.status == STATUS_ACTIVE, E_RECEIPT_ALREADY_CLAIMED);
 
-        // Verify claimer is the receipt owner
-        assert!(receipt.user == claimer, E_NOT_RECEIPT_OWNER);
+        // Verify claimer is the receipt owner or the atomica admin.
+        //
+        // Demo: The @atomica admin (fee-payer) calls create_auction on behalf of
+        // the user. The user's Aptos address (zero-padded Ethereum address) differs
+        // from the admin's native Aptos address, so we allow @atomica as an
+        // authorized claimer in this phase. MVP must implement proper user-signer
+        // auth (I-M4) and remove this bypass.
+        assert!(receipt.user == claimer || claimer == @atomica, E_NOT_RECEIPT_OWNER);
 
         // Mark as claimed
         receipt.status = STATUS_CLAIMED;

@@ -51,7 +51,8 @@ describe("E2E 09: Settle Auction and Verify Clearing Result", () => {
     bidder = Account.generate();
     bidderAddress = bidder.accountAddress.toString();
 
-    await fixture.aptos.testnet.faucet(bidderAddress, 10_000_000n);
+    // 5 APT — covers max gas reservation (2M units * 100 gas price = 200M octas minimum)
+    await fixture.aptos.testnet.faucet(bidderAddress, 500_000_000n);
 
     // --- Seller: full lock → proof → register → create auction flow ---
     const fakeETHArtifact = getFakeETHArtifact();
