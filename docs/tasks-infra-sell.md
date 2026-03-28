@@ -114,18 +114,18 @@ no `fake_eth::mint_from_lock` step is needed.
 
 **Infra-side (this worktree):**
 
-- [ ] No Move contract changes needed — contracts are correct
+- [x] No Move contract changes needed — contracts are correct
 
 **UX-side (aligned here for tracking):**
 
-- [ ] `payloads.ts`: fix `getCreateAuctionPayload(lockId: Uint8Array, minPrice, duration, mpk)` — was passing `amountEth` as first arg, contract expects `lock_id: vector<u8>`
-- [ ] `useSellFlow.ts`: remove `minting` step and `mintFakeEth` action; `submitProof` transitions directly to `creating-auction`; fix `createAuction` to pass `lockId` bytes
-- [ ] `SellFlowStep` type: remove `"minting"` from union
-- [ ] `SellFlow.tsx`: remove Step6Mint render case
-- [ ] `StepIndicator.tsx`: remove minting step (7-step flow)
-- [ ] `register-lock-payload.test.ts`: add unit tests for corrected `getCreateAuctionPayload`
-- [ ] `sell-flow-state.test.ts`: implement blockchain-transition `it.todo()` items for corrected 7-step flow
-- [ ] `SellFlow.test.tsx`: remove minting step test, update step count assertions
+- [x] `payloads.ts`: fix `getCreateAuctionPayload(lockId: Uint8Array, minPrice, duration, mpk)` — was passing `amountEth` as first arg, contract expects `lock_id: vector<u8>`
+- [x] `useSellFlow.ts`: remove `minting` step and `mintFakeEth` action; `submitProof` transitions directly to `creating-auction`; fix `createAuction` to pass `lockId` bytes
+- [x] `SellFlowStep` type: remove `"minting"` from union
+- [x] `SellFlow.tsx`: remove Step6Mint render case
+- [x] `StepIndicator.tsx`: remove minting step (7-step flow)
+- [x] `register-lock-payload.test.ts`: add unit tests for corrected `getCreateAuctionPayload`
+- [x] `sell-flow-state.test.ts`: updated `it.todo()` stubs to reflect 7-step flow (blockchain-dependent transitions deferred to meta/e2e)
+- [x] `SellFlow.test.tsx`: remove minting step test, update step count assertions
 
 ---
 

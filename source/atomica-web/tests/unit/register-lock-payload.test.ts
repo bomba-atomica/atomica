@@ -1,5 +1,6 @@
 /**
- * Unit tests for getRegisterLockPayload and getMintFakeEthPayload.
+ * Unit tests for getRegisterLockPayload, getMintFakeEthPayload, and
+ * getCreateAuctionPayload.
  *
  * Verifies parameter order and types match the Move entry function signatures:
  *   lock_receipt::register_ethereum_lock<FakeETH>(
@@ -8,6 +9,7 @@
  *     storage_value, account_proof, storage_proof
  *   )
  *   fake_eth::mint_from_lock(account, lock_id)
+ *   auction::create_auction(lock_id, min_price, duration, mpk)
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -29,6 +31,7 @@ vi.mock("../../src/lib/aptos/transaction", () => ({
 import {
   getRegisterLockPayload,
   getMintFakeEthPayload,
+  getCreateAuctionPayload,
 } from "../../src/lib/aptos/payloads";
 import type { LockedBalanceProof } from "../../src/lib/ethereum/proofs/generator";
 
@@ -179,6 +182,49 @@ describe("getMintFakeEthPayload", () => {
   it("does not add type arguments", () => {
     const lockId = new Uint8Array(32).fill(0xab);
     const payload = getMintFakeEthPayload(lockId);
+    expect(payload.typeArguments).toBeUndefined();
+  });
+});
+
+// ── getCreateAuctionPayload ───────────────────────────────────────────────────
+
+describe("getCreateAuctionPayload", () => {
+  it("targets auction::create_auction", () => {
+    const lockId = new Uint8Array(32).fill(0xcd);
+    const payload = getCreateAuctionPayload(lockId, 1000n, 3600n, new Uint8Array(0)) as any;
+    expect(payload.function).toContain("::auction::create_auction");
+  });
+
+  it("passes lock_id as the first argument (Uint8Array)", () => {
+    const lockId = new Uint8Array(32).fill(0xcd);
+    const payload = getCreateAuctionPayload(lockId, 1000n, 3600n, new Uint8Array(0));
+    expect(payload.functionArguments![0]).toBe(lockId);
+  });
+
+  it("passes min_price as the second argument", () => {
+    const lockId = new Uint8Array(32).fill(0xcd);
+    const minPrice = 500000n;
+    const payload = getCreateAuctionPayload(lockId, minPrice, 3600n, new Uint8Array(0));
+    expect(payload.functionArguments![1]).toBe(minPrice);
+  });
+
+  it("passes duration as the third argument", () => {
+    const lockId = new Uint8Array(32).fill(0xcd);
+    const duration = 7200n;
+    const payload = getCreateAuctionPayload(lockId, 1000n, duration, new Uint8Array(0));
+    expect(payload.functionArguments![2]).toBe(duration);
+  });
+
+  it("passes mpk as the fourth argument", () => {
+    const lockId = new Uint8Array(32).fill(0xcd);
+    const mpk = new Uint8Array(0);
+    const payload = getCreateAuctionPayload(lockId, 1000n, 3600n, mpk);
+    expect(payload.functionArguments![3]).toBe(mpk);
+  });
+
+  it("does not add type arguments", () => {
+    const lockId = new Uint8Array(32).fill(0xcd);
+    const payload = getCreateAuctionPayload(lockId, 1000n, 3600n, new Uint8Array(0));
     expect(payload.typeArguments).toBeUndefined();
   });
 });
