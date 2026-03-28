@@ -13,6 +13,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
+import type { InputEntryFunctionData } from "@aptos-labs/ts-sdk";
 
 // Mock the Aptos config to avoid SDK initialization side effects.
 vi.mock("../../src/lib/aptos/config", () => ({
@@ -58,14 +59,18 @@ function makeMockProof(): LockedBalanceProof {
 
 describe("getRegisterLockPayload", () => {
   it("targets lock_receipt::register_ethereum_lock", () => {
-    const payload = getRegisterLockPayload(makeMockProof()) as any;
+    const payload = getRegisterLockPayload(
+      makeMockProof(),
+    ) as InputEntryFunctionData;
     expect(payload.function).toContain(
       "::lock_receipt::register_ethereum_lock",
     );
   });
 
   it("includes FakeETH as the type argument", () => {
-    const payload = getRegisterLockPayload(makeMockProof()) as any;
+    const payload = getRegisterLockPayload(
+      makeMockProof(),
+    ) as InputEntryFunctionData;
     expect(payload.typeArguments).toBeDefined();
     expect(payload.typeArguments![0]).toContain("::lock_receipt::FakeETH");
   });
@@ -156,8 +161,8 @@ describe("getRegisterLockPayload", () => {
 
   it("is deterministic for the same proof", () => {
     const proof = makeMockProof();
-    const p1 = getRegisterLockPayload(proof) as any;
-    const p2 = getRegisterLockPayload(proof) as any;
+    const p1 = getRegisterLockPayload(proof) as InputEntryFunctionData;
+    const p2 = getRegisterLockPayload(proof) as InputEntryFunctionData;
     expect(p1.function).toBe(p2.function);
     expect(p1.functionArguments![0]).toBe(p2.functionArguments![0]);
   });
@@ -168,7 +173,7 @@ describe("getRegisterLockPayload", () => {
 describe("getMintFakeEthPayload", () => {
   it("targets fake_eth::mint_from_lock", () => {
     const lockId = new Uint8Array(32).fill(0xab);
-    const payload = getMintFakeEthPayload(lockId) as any;
+    const payload = getMintFakeEthPayload(lockId) as InputEntryFunctionData;
     expect(payload.function).toContain("::fake_eth::mint_from_lock");
   });
 
@@ -196,7 +201,7 @@ describe("getCreateAuctionPayload", () => {
       1000n,
       3600n,
       new Uint8Array(0),
-    ) as any;
+    ) as InputEntryFunctionData;
     expect(payload.function).toContain("::auction::create_auction");
   });
 

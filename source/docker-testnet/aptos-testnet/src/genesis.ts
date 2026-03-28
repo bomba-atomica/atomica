@@ -121,15 +121,6 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
 
         const validatorImage = genesisImage;
 
-        // Find the framework.mrb file - try multiple possible locations relative to workspaceDir
-        const possiblePaths = [
-            pathResolve(workspaceDir, "..", "move-framework-fixtures", "head.mrb"),
-            pathResolve(workspaceDir, "..", "..", "move-framework-fixtures", "head.mrb"),
-            pathResolve(process.cwd(), "..", "move-framework-fixtures", "head.mrb"),
-            pathResolve(process.cwd(), "source", "move-framework-fixtures", "head.mrb"),
-            "/home/lucas/atomica/source/move-framework-fixtures/head.mrb",
-        ];
-
         let frameworkPath = "";
 
         if (process.env.FORCE_LOCAL_FRAMEWORK) {
