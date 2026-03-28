@@ -5,9 +5,16 @@
  */
 
 import { RLP } from "@ethereumjs/rlp";
-import { equalsBytes } from "@ethereumjs/util";
 import { keccak256 } from "ethereum-cryptography/keccak";
 import { type TrieNode } from "./types";
+
+function equalsBytes(a: Uint8Array, b: Uint8Array): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+}
 
 /**
  * Verify a Merkle-Patricia proof

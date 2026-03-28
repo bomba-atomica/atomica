@@ -1,6 +1,13 @@
 import { spawn } from "child_process";
-import { resolve as pathResolve } from "path";
+import { dirname, resolve } from "path";
 import { existsSync, readFileSync } from "fs";
+import { fileURLToPath } from "url";
+
+/** Config directory containing docker-compose.yaml and setup scripts */
+const CONFIG_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../config",
+);
 
 /**
  * Ethereum Docker Testnet - Multi-validator PoS setup
@@ -26,7 +33,7 @@ export class EthereumDockerTestnet {
   static async start(
     numValidators: number = 4,
   ): Promise<EthereumDockerTestnet> {
-    const configDir = this.findConfigDir();
+    const configDir = CONFIG_DIR;
 
     console.log(
       `Setting up Ethereum PoS testnet with ${numValidators} validators...`,
@@ -400,10 +407,7 @@ export class EthereumDockerTestnet {
    * Get validator public keys from the generated keystore
    */
   getValidatorPublicKeys(): string[] {
-    const pubkeysPath = pathResolve(
-      this.configDir,
-      "validator_keys/pubkeys.json",
-    );
+    const pubkeysPath = resolve(this.configDir, "validator_keys/pubkeys.json");
     if (existsSync(pubkeysPath)) {
       try {
         return JSON.parse(readFileSync(pubkeysPath, "utf-8"));
@@ -417,28 +421,49 @@ export class EthereumDockerTestnet {
   // ==================== Test Accounts ====================
 
   /**
-   * Get pre-funded test accounts
-   * These accounts have 1000 ETH each at genesis
+   * Get pre-funded test accounts (1000 ETH each at genesis).
+   *
+   * Account 0 is read from ETHEREUM_DEPLOYER_ADDRESS / ETHEREUM_DEPLOYER_PRIVATE_KEY
+   * env vars so it stays in sync with source/shared/test-constants.ts.
+   * Accounts 1-3 are fixed by the docker-compose genesis configuration.
    */
   getTestAccounts(): TestAccount[] {
+    const account0Address =
+      process.env.ETHEREUM_DEPLOYER_ADDRESS?.trim() ||
+      "0x8943545177806ED17B9F23F0a21ee5948eCaa776";
+    const account0PrivateKey =
+      process.env.ETHEREUM_DEPLOYER_PRIVATE_KEY?.trim() ||
+      "0xbcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31";
     return [
-      {
-        address: "0x8943545177806ED17B9F23F0a21ee5948eCaa776",
-        privateKey: null,
-      },
+      { address: account0Address, privateKey: account0PrivateKey },
       {
         address: "0x71bE63f3384f5fb98995898A86B02Fb2426c5788",
-        privateKey: null,
+        privateKey:
+          "0x53321db7c1e331d93a11a41d16f004d7ff63972ec8ec7c25db329728ceeb1710",
       },
       {
         address: "0xFABB0ac9d68B0B445fB7357272Ff202C5651694a",
-        privateKey: null,
+        privateKey:
+          "0xab63b23eb7941c1251757e24b3d2350d2bc05c3c388d06f8fe6feafefb1e8c70",
       },
       {
         address: "0x1CBd3b2770909D4e10f157cABC84C7264073C9Ec",
-        privateKey: null,
+        privateKey:
+          "0x5d2344259f42259f82d2c140aa66102ba89b57b4883ee441a8b312622bd42491",
       },
     ];
+  }
+
+  /**
+   * Get the testnet mnemonic.
+   * Read from ETHEREUM_DEPLOYER_MNEMONIC env var so it stays in sync with
+   * source/shared/test-constants.ts.
+   */
+  getMnemonic(): string {
+    return (
+      process.env.ETHEREUM_DEPLOYER_MNEMONIC?.trim() ||
+      "giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete"
+    );
   }
 
   // ==================== Internal Helpers ====================
@@ -469,25 +494,6 @@ export class EthereumDockerTestnet {
 
   private async sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  private static findConfigDir(): string {
-    const candidates = [
-      pathResolve(__dirname, "../../config"),
-      pathResolve(
-        process.cwd(),
-        "source/docker-testnet/ethereum-testnet/config",
-      ),
-      pathResolve(process.cwd(), "config"),
-    ];
-
-    for (const path of candidates) {
-      if (existsSync(pathResolve(path, "docker-compose.yaml"))) {
-        return path;
-      }
-    }
-
-    throw new Error("Could not find ethereum-testnet/config directory");
   }
 
   private static async runCommand(
@@ -617,5 +623,5 @@ export interface FinalityCheckpoints {
 
 export interface TestAccount {
   address: string;
-  privateKey: string | null;
+  privateKey: string;
 }

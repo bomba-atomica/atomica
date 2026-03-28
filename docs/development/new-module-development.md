@@ -9,7 +9,7 @@ This guide outlines the mandatory workflow for all agents (AI and human) when st
 Before writing a single line of code, a comprehensive plan must be created.
 
 1.  **Create Plan Document**:
-    *   **Location**: `docs/plan/<module_name>_plan.md`
+    *   **Location**: `docs/plans/<module_name>_plan.md`
     *   **Content**:
         *   **Product Features**: Clear definition of what is being built.
         *   **Technical Implementation**: Specific libraries, patterns, and architectural decisions.
@@ -69,7 +69,7 @@ Fill in the blanks using Test-Driven Development (TDD).
 3.  **Cycle**:
     *   `Red` (Fail test) -> `Green` (Pass test) -> `Refactor`.
 4.  **Continuous Plan Updates**:
-    *   After completing a logical unit, update `docs/plan/<module_name>_plan.md` to reflect progress.
+    *   After completing a logical unit, update `docs/plans/<module_name>_plan.md` to reflect progress.
 
 ## 5. Iteration Loop
 

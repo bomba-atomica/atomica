@@ -2,7 +2,16 @@
 
 ## Overview
 
-Atomica provides test fungible tokens (fake_eth and fake_usd) for development and testing purposes. These tokens simulate ETH and USD assets on the Aptos blockchain and can be freely minted by users within defined limits.
+Atomica uses two parallel sets of test tokens representing ETH and USD:
+
+1. **ERC20 tokens on Ethereum testnet** (`FakeETH.sol`, `FakeUSD.sol`) — these are the primary issuance point. Users mint fake tokens on Ethereum via MetaMask, then bridge them to Aptos via LockBox + state proofs.
+2. **Fungible Assets on Aptos** (`fake_eth.move`, `fake_usd.move`) — these exist on Aptos to represent bridged assets. They have a `mint_from_lock()` function that mints tokens when a valid Ethereum lock proof is submitted. The direct `mint()` function exists for testing but is **not the intended user-facing flow**.
+
+> **Important for future agents:** The Faucet UI should mint FakeETH/FakeUSD on Ethereum (via `lib/ethereum/transaction.ts`), NOT on Aptos (via `lib/aptos/payloads.ts`). The Aptos-side `getMintFakeEthPayload()` and `getMintFakeUsdPayload()` are vestigial from an earlier architecture and should be deprecated. The correct flow is: mint on Ethereum → lock in LockBox → generate state proof → submit proof to Aptos → `mint_from_lock()`.
+
+### Aptos-Side Tokens (Fungible Assets)
+
+The Aptos modules below represent bridged assets. Their direct `mint()` is for testing only.
 
 ## Token Types
 
@@ -78,22 +87,24 @@ The `initialize` function:
 
 ## Usage Examples
 
-### Web App Integration
+### Web App Integration (Ethereum-side minting — preferred)
 ```typescript
-// Mint 10 FAKEETH to yourself (from atomica-web/src/lib/aptos/payloads.ts)
-const amountEth = BigInt(10) * BigInt(100_000_000); // 10 ETH with 8 decimals
+// Mint FakeETH on Ethereum testnet via MetaMask (from lib/ethereum/transaction.ts)
+import { mintFakeETH, mintFakeUSD } from '../lib/ethereum/transaction';
+
+await mintFakeETH(parseEther("10"));   // 10 FakeETH (18 decimals)
+await mintFakeUSD(parseUnits("10000", 6)); // 10,000 FakeUSD (6 decimals)
+```
+
+### Aptos-side direct minting (legacy/testing only)
+```typescript
+// @deprecated — Direct Aptos minting bypasses the cross-chain bridge.
+// Use Ethereum-side minting above for the intended user flow.
+const amountEth = BigInt(10) * BigInt(100_000_000); // 10 FAKEETH with 8 decimals
 
 await submitNativeTransaction(ethAddress, {
     function: `${CONTRACT_ADDR}::fake_eth::mint`,
-    functionArguments: [amountEth], // Only amount, signer receives tokens
-});
-
-// Mint 10,000 FAKEUSD to yourself
-const amountUsd = BigInt(10000) * BigInt(1_000_000); // 10,000 USD with 6 decimals
-
-await submitNativeTransaction(ethAddress, {
-    function: `${CONTRACT_ADDR}::fake_usd::mint`,
-    functionArguments: [amountUsd], // Only amount, signer receives tokens
+    functionArguments: [amountEth],
 });
 ```
 
@@ -164,12 +175,16 @@ Applications building on these test tokens should implement their own rate limit
   - Functions: `initialize()`, `mint(account: &signer, amount: u64)`, `get_metadata()`, `balance(owner: address): u64`
 
 ### TypeScript/Web Integration
-- **`source/atomica-web/src/lib/aptos/payloads.ts`**
-  - `getMintFakeEthPayload()` - Creates mint transaction for 10 FAKEETH
-  - `getMintFakeUsdPayload()` - Creates mint transaction for 10,000 FAKEUSD
-  - `mintFakeEth()` - Wrapper for minting FAKEETH
-  - `mintFakeUsd()` - Wrapper for minting FAKEUSD
-  - `areContractsDeployed()` - Verifies contracts are deployed
+
+**Ethereum-side (preferred — `source/atomica-web/src/lib/ethereum/`):**
+- `transaction.ts` — `mintFakeETH()`, `mintFakeUSD()`, `mint10FakeETH()`, `mint10kFakeUSD()`
+- `balances.ts` — `getFakeETHBalance()`, `getFakeUSDBalance()`, `getAllBalances()`
+- `contracts.ts` — `getFakeETHContract()`, `getFakeUSDContract()`, `areContractsDeployed()`
+
+**Aptos-side (legacy/testing only — `source/atomica-web/src/lib/aptos/payloads.ts`):**
+- `getMintFakeEthPayload()` - @deprecated, use Ethereum-side minting
+- `getMintFakeUsdPayload()` - @deprecated, use Ethereum-side minting
+- `areContractsDeployed()` - Checks Aptos contract deployment
 
 ### Deployment & Initialization
 - **`source/atomica-web/scripts/orchestrator.ts`**

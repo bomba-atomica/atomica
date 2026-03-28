@@ -41,11 +41,10 @@ contract MockUSDC is ERC20 {
  */
 contract Deploy is Script {
     string constant DEFAULT_RPC_URL = "http://localhost:8545";
-    string constant DEFAULT_PRIVATE_KEY = "0xbcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31";
 
     function run() public {
         string memory rpcUrl = vm.envOr("ETH_RPC_URL", DEFAULT_RPC_URL);
-        string memory privateKeyStr = vm.envOr("ETH_PRIVATE_KEY", string(DEFAULT_PRIVATE_KEY));
+        string memory privateKeyStr = vm.envString("ETH_PRIVATE_KEY");
         string memory usdcTokenAddr = vm.envOr("USDC_TOKEN_ADDR", string(""));
 
         console.log("============================================================");

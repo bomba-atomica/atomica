@@ -70,7 +70,7 @@
 
 **Phase 1: Bidding (Simultaneous)**
 ```
-Time: See [Dual Auction Timing Specification](../analysis/dual-auction-timing.md)
+Time: See [Auction Timing Specification](../specifications/auction-timing.md)
 - All bidders submit sealed bids (timelock encrypted)
 - Can bid on any/all assets (ETH, BTC, SOL, DOGE, etc.)
 - Bids remain encrypted until deadline

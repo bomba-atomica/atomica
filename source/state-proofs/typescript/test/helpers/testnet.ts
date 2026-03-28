@@ -6,6 +6,10 @@
  */
 
 import type { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
+import {
+    ETHEREUM_DEPLOYER_ADDRESS,
+    ETHEREUM_DEPLOYER_PRIVATE_KEY,
+} from "../../../../shared/test-constants";
 
 let testnet: EthereumDockerTestnet | undefined;
 
@@ -59,9 +63,8 @@ export function getTestAccounts(): Array<{ address: string; privateKey: string |
     // Mnemonic: giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete
     // Derived using standard path m/44'/60'/0'/0/0
     const accounts = testnet.getTestAccounts();
-    if (accounts[0].address === "0x8943545177806ED17B9F23F0a21ee5948eCaa776") {
-        accounts[0].privateKey =
-            "0xbcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31";
+    if (accounts[0].address === ETHEREUM_DEPLOYER_ADDRESS) {
+        accounts[0].privateKey = ETHEREUM_DEPLOYER_PRIVATE_KEY;
     }
 
     return accounts;

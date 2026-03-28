@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "echo 'No build step required for TypeScript scripts'",
+    "postinstall": "cd ../../docker-testnet/ethereum-testnet/typescript-sdk && bun install && bun run build",
     "start": "bun run src/index.ts",
     "test": "bun run src/index.ts --test all",
     "test:unit": "bun run src/index.ts --test unit",
@@ -19,17 +20,16 @@
     "format:check": "prettier 'src/**/*.ts' --check"
   },
   "dependencies": {
-    "@atomica/ethereum-docker-testnet": "file:../docker-testnet/ethereum-testnet/typescript-sdk/dist/index.js",
+    "@atomica/ethereum-docker-testnet": "file:../../docker-testnet/ethereum-testnet/typescript-sdk",
     "viem": "^2.21.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@types/node": "^20.8.2",
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
     "bun-types": "^1.1.0",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
-    "typescript": "^5.2.2"
+    "typescript": "^5.2.2",
+    "typescript-eslint": "^8.0.0"
   }
 }

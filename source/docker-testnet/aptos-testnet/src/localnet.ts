@@ -38,6 +38,7 @@
 import { DockerTestnet } from "./index";
 import { resolve as pathResolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { getDeployerCredentials } from "./aptos-keys";
 
 /**
  * Global testnet instance (singleton for all tests in a process)

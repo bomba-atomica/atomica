@@ -1,6 +1,6 @@
 # batch auction model for Atomic Auctions
 
-This document explains why Atomica uses a batch auction model rather than spot trading for cross-chain atomic swaps, and details the daily batch auction architecture.
+This document explains why Atomica uses a batch auction model rather than spot trading for cross-chain atomic swaps, and details the twice-daily batch auction architecture.
 
 ## Core Insight: Embrace Latency, Don't Fight It
 
@@ -210,7 +210,7 @@ Atomica launches with **1-3 hour** settlement delay, which can be adjusted based
 
 **Key Metrics:**
 
-1. **Auctions consistently clear** - Every daily auction has sufficient bidder participation
+1. **Auctions consistently clear** - Every auction window has sufficient bidder participation
 2. **Competitive pricing** - Spreads comparable to spot exchanges + reasonable batch auction premium
 3. **User adoption** - Growing volume indicating users accept batch settlement model
 4. **Bidder profitability** - Bidders remain profitable and expand participation
@@ -223,7 +223,7 @@ Atomica launches with **1-3 hour** settlement delay, which can be adjusted based
 
 ## Related Documents
 
-- [Atomica PRD](../../Prd.md) - Product overview
+- [Atomica PRD](../specifications/prd.md) - Product overview
 - [CPMM vs Auction Comparison](../game-theory/cpmm-vs-auction-comparison.md) - Detailed economic analysis of why auctions over AMMs
 - [Uniform Price Auctions](../game-theory/uniform-price-auctions.md) - Auction mechanism details
-- [Seller-Stake DKG Design](timelock-seller-stake-dkg.md) - How sealed bids work (Dual-Layer Timelock)
+- [Seller-Stake DKG Design](../design/timelock-seller-stake-dkg.md) - How sealed bids work (Dual-Layer Timelock)

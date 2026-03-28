@@ -14,7 +14,7 @@ References to "ZK proofs of bid validity" in this document are now **deprecated*
 
 ## 1. Introduction & Context
 
-Atomica implements trustless cross-chain atomic swaps via daily batch auctions with batch settlement. Bidders submit sealed bids to acquire locked user assets, with settlement occurring 12-24 hours post-auction. The auction uses a uniform price mechanism where all winning bidders pay the same clearing price.
+Atomica implements trustless cross-chain atomic swaps via twice-daily batch auctions with batch settlement. Bidders submit sealed bids to acquire locked user assets, with settlement occurring 1-3 hours post-auction. The auction uses a uniform price mechanism where all winning bidders pay the same clearing price.
 
 ### Why Shill Bidding Matters
 
@@ -429,7 +429,7 @@ An alternative approach was analyzed: instead of random exclusion, use bid patte
 #### Multi-Hour Auction Prevents Flash Attacks
 
 **Timing:**
-- Auction duration: 15-minute reveal windows (see [Dual Auction Timing Specification](../analysis/dual-auction-timing.md) for details)
+- Auction duration: fixed-window auctions at canonical times (see [Auction Timing Specification](../specifications/auction-timing.md))
 - Block production: ~12 seconds per block (Ethereum), ~1 second (Aptos)
 - Total blocks: ~1,200+ blocks during auction window
 
@@ -632,7 +632,7 @@ The defense mechanisms rely on several assumptions. If these are violated, addit
 **Sufficient Bidder Competition:**
 - **Assumption**: Multiple independent bidders compete in each auction
 - **Failure Mode**: If only 1-2 bidders participate, collusion easier or monopoly pricing
-- **Mitigation**: Large daily auction aggregates volume to attract bidders, open entry
+- **Mitigation**: Large twice-daily auction windows aggregate volume to attract bidders, open entry
 - **Residual Risk**: High in early launch phase, decreases as volume grows
 
 **External Market Liquidity for Hedging:**

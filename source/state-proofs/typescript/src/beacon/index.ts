@@ -39,14 +39,4 @@ export {
     getTrustedStateRoots,
 } from "./sync";
 
-export {
-    createInitialState,
-    updateState,
-    isUpdateNewer,
-    transitionPeriod,
-    serializeState,
-    deserializeState,
-    saveState,
-    loadState,
-    clearState,
-} from "./state";
+export { isUpdateNewer, saveState, loadState, clearState } from "./state";

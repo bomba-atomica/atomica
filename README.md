@@ -15,7 +15,7 @@
 
 **New readers should start here:**
 
-1. **[PRD.md](PRD.md)** - Product requirements document (~10 min read)
+1. **[PRD](docs/specifications/prd.md)** - Product requirements document (~10 min read)
 2. **[Auction Prior Art](docs/analysis/secondary-auctions-plus-continuous.md)** - Institutional auction precedents (~20 min)
 3. **[CPMM vs Auction Comparison](docs/game-theory/cpmm-vs-auction-comparison.md)** - Economic analysis (~20 min)
 
@@ -41,7 +41,7 @@ All winning bidders pay the same clearing price (lowest qualifying bid), regardl
 All externalities internalized. Fees proportional to distance from clearing price—accurate bidders get rebates, noisy bidders pay. **Zero operator fees for Bitcoin and Ethereum markets.**
 
 ### Unified Cross-Chain Architecture
-All away chains (Ethereum, Solana, Base, Arbitrum, etc.) use identical verification mechanisms. Dual-layer security: BLS threshold signatures + ZK proofs.
+All away chains (Ethereum, Solana, Base, Arbitrum, etc.) use identical verification mechanisms. BLS threshold signatures (v0.1 Beta), with ZK proof verification (v1.0+).
 
 ### Account Abstraction
 Users deposit on preferred chains using familiar wallets (MetaMask, Phantom). Sign bids with Ethereum wallet—no Atomica-native wallet or gas tokens needed.
@@ -63,7 +63,7 @@ Atomica prioritizes:
 
 ```
 atomica/
-├── PRD.md                    ← Start here (executive summary)
+├── docs/specifications/prd.md ← Start here (executive summary)
 ├── README.md                 ← This file (navigation guide)
 └── docs/
     ├── development/          ← Implementation planning & status
@@ -98,7 +98,7 @@ atomica/
     ├── decisions/            ← Architecture decision records
     │   ├── unified-away-chain-architecture.md
     │   └── aptos-validator-timelock.md
-    └── archive/              ← Historical & exploratory docs
+    └── archived/             ← Historical & exploratory docs
 ```
 
 ## Document Guide
@@ -120,13 +120,18 @@ atomica/
 
 ### 📋 Product Specification
 
-**[PRD.md](PRD.md)** - Complete product requirements
+**[PRD](docs/specifications/prd.md)** - Complete product requirements
 - Executive summary: What, why, how
 - Problem statement (bridge risks, DEX risks)
 - Solution: Atomic Auctions
 - Twice-daily auction architecture (07:45 and 16:15 UTC)
 - Fee structure: Deal breakers pay deal makers
 - Technical architecture summaries
+
+**[Auction Timing Specification](docs/specifications/auction-timing.md)** - Canonical timing source
+- Authoritative schedule: 07:45 UTC and 16:15 UTC
+- UTC-only protocol timing guidance
+- Supersession status for legacy timing analyses
 
 ### 🎯 Design & Strategy
 
@@ -145,7 +150,7 @@ atomica/
 **[Batch Auction Economics](docs/game-theory/batch-auction-economics.md)**
 - Core Insight: "Embrace Latency"
 - Why batch settlement is a feature, not a bug
-- Daily auction structure and 1-3 hour settlement justification
+- Twice-daily auction structure and 1-3 hour settlement justification
 
 ### 🔧 Technical Specifications
 

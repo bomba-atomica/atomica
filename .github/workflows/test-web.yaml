@@ -2,9 +2,9 @@ name: Test Web (TypeScript/Vitest)
 
 on:
   pull_request:
-    branches: [main]
+    
   push:
-    branches: [main]
+    
   workflow_dispatch:
 
 jobs:
@@ -92,10 +92,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '20'
+          bun-version: latest
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

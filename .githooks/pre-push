@@ -2,6 +2,21 @@
 # Git pre-push hook for Atomica
 # Blocks pushes that don't pass build, lint, and format checks
 
+# --------------------------------------------------
+# 0. Documentation Rules Check
+# --------------------------------------------------
+echo "📜 Checking documentation rules..."
+if [ -f "scripts/check-docs.js" ]; then
+    # Using bun to run the node script since bun is available
+    bun scripts/check-docs.js
+    if [ $? -ne 0 ]; then
+        echo "❌ Documentation checks failed."
+        exit 1
+    fi
+else
+    echo "⚠️ scripts/check-docs.js not found. Skipping documentation check."
+fi
+
 # AGENT WARNING: You CANNOT push until code quality checks pass.
 # Do not try to override this hook or bypass it.
 
@@ -20,13 +35,13 @@ check_module() {
     echo "--------------------------------------------------"
     echo "🔍 Checking module: $name"
     
-    if [ ! -d "$REPO_ROOT/$path/node_modules" ]; then
-        echo "⚠️  Skipping $name: node_modules not found. Run 'bun install' in $path if this is a mistake."
-        return 0
-    fi
-
     echo "📍 Path: $path"
     cd "$REPO_ROOT/$path"
+
+    if [ ! -d "node_modules" ]; then
+        echo "📦 node_modules not found. Running 'bun install'..."
+        bun install
+    fi
     
     echo "📦 Building..."
     $build_cmd

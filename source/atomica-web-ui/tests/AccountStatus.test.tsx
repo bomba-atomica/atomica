@@ -6,13 +6,29 @@ import { MockWallet } from "@atomica/aptos-docker-testnet/browser-utils/MockWall
 import { setAptosInstance, Aptos, AptosConfig, Network } from "@atomica/aptos-docker-testnet/browser";
 
 describe.sequential("AccountStatus Integration", () => {
-  const TEST_PK =
-    "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
+  const TEST_PK = APTOS_DEPLOYER_PRIVATE_KEY;
   const mockWallet = new MockWallet(TEST_PK);
+
+  // Wrap AccountStatus with all required providers, injecting a fixed account
+  // via WalletContext.Provider so BalancesProvider polls the right address.
+  function WrappedAccountStatus() {
+    return (
+      <NetworkConfigProvider>
+        <WalletContext.Provider
+          value={{ account: mockWallet.address, connect: async () => {} }}
+        >
+          <ContractStatusProvider>
+            <BalancesProvider>
+              <AccountStatus />
+            </BalancesProvider>
+          </ContractStatusProvider>
+        </WalletContext.Provider>
+      </NetworkConfigProvider>
+    );
+  }
 
   beforeAll(async () => {
     console.log("Starting Localnet...");
-    // Use browser command shortcuts
     await commands.setupLocalnet();
     await commands.deployContracts();
 
@@ -24,29 +40,17 @@ describe.sequential("AccountStatus Integration", () => {
     setAptosInstance(new Aptos(config));
   }, 120000);
 
-  // Clean up after each test to prevent component interference
   afterEach(() => {
     cleanup();
   });
 
-  // Note: No afterAll teardown - globalSetup handles lifecycle
-
   describe.sequential("Without funded account", () => {
     it("should show 'account not found' warning when account doesn't exist", async () => {
-      // Wrapper component that uses the hook
-      function TestWrapper() {
-        const balances = useTokenBalances(mockWallet.address);
-        return (
-          <AccountStatus ethAddress={mockWallet.address} balances={balances} />
-        );
-      }
+      render(<WrappedAccountStatus />);
 
-      render(<TestWrapper />);
-
-      // Wait for the component to finish loading and show the "account not found" warning
       await waitFor(
         () => {
-          screen.getByText(/Account not found on chain/);
+          screen.getByText(/Account not yet on chain/);
         },
         { timeout: 10000 },
       );
@@ -57,20 +61,12 @@ describe.sequential("AccountStatus Integration", () => {
 
   describe.sequential("With funded account", () => {
     it("should show warning initially, then display balance after funding", async () => {
-      // Wrapper component that uses the hook
-      function TestWrapper() {
-        const balances = useTokenBalances(mockWallet.address);
-        return (
-          <AccountStatus ethAddress={mockWallet.address} balances={balances} />
-        );
-      }
-
-      render(<TestWrapper />);
+      render(<WrappedAccountStatus />);
 
       // Step 1: Initially, account should show "not found" warning
       await waitFor(
         () => {
-          screen.getByText(/Account not found on chain/);
+          screen.getByText(/Account not yet on chain/);
         },
         { timeout: 10000 },
       );
@@ -91,12 +87,9 @@ describe.sequential("AccountStatus Integration", () => {
       console.log("✓ Account funded via faucet");
 
       // Step 3: Wait for the hook to poll and update the balance
-      // The hook polls every 5 seconds, so we need to wait for it to detect the change
-      // APT is divided by 100_000_000 and fixed to 4 decimals.
-      // 1000000000 / 100000000 = 10.0000
       await waitFor(
         () => {
-          screen.getByText("APT:");
+          screen.getByText("APT");
           screen.getByText("10.0000");
         },
         { timeout: 15000, interval: 500 },
@@ -105,7 +98,7 @@ describe.sequential("AccountStatus Integration", () => {
       console.log("✓ Balance displayed after funding");
 
       // Step 4: Verify the warning is gone
-      expect(screen.queryByText(/Account not found on chain/)).toBeNull();
+      expect(screen.queryByText(/Atomica account not found/)).toBeNull();
 
       console.log("✓ Test passed: Warning removed after funding");
     }, 60000);

@@ -481,7 +481,7 @@ if validate(bid) {
    - Remove ZK proof sections (lines 42-100)
    - Add post-decryption validation flow
    - Specify drand IBE encryption (not Poseidon)
-4. Update `/PRD.md`
+4. Update `/docs/specifications/prd.md`
    - Remove ZK bid validity requirements (line 70)
    - Add griefing deposit mechanism
 5. Update other docs referencing bid validity proofs
@@ -519,8 +519,8 @@ if validate(bid) {
 **This decision affects:**
 - `/docs/technical/cryptographic-stack-analysis.md` - Remove bid validity proving sections
 - `/docs/technical/timelock-bids.md` - Simplify to post-decryption validation
-- `/PRD.md` - Update sealed bid requirements
-- `/docs/design/batch-auction-economics.md` - May reference bid validity
+- `/docs/specifications/prd.md` - Update sealed bid requirements
+- `/docs/game-theory/batch-auction-economics.md` - May reference bid validity
 - `/docs/game-theory/shill-bidding-remediation.md` - May reference bid deposits
 
 **Key technical references:**

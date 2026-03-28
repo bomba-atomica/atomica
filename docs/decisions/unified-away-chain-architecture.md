@@ -284,7 +284,7 @@ By choosing unified architecture from the start:
 
 - ✅ Single Time Lock contract (deploy identically on all chains)
 - ✅ Single settlement mechanism (merkle proofs everywhere)
-- ✅ Single ZK circuit (verify Ausubel execution)
+- ✅ Single ZK circuit (verify auction execution)
 - ✅ Single security model (BLS + ZK)
 - ✅ Single test suite
 - ✅ Single audit scope

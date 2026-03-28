@@ -8,7 +8,7 @@ This document summarizes findings from a comprehensive search of the Atomica cod
 
 ## 1. API ENDPOINT DEFINITIONS
 
-### Conceptual API Endpoints (From aptps_state_proof.md)
+### Conceptual API Endpoints (From aptos-state-proof.md)
 
 The following REST API endpoints are documented as how Aptos full nodes would expose proof functionality:
 
@@ -78,7 +78,7 @@ Parameters:
 ## 2. PROOF STRUCTURES AND REQUEST/RESPONSE FORMATS
 
 ### 2.1 StateProof Structure
-**File:** `docs/technical/aptos_proof_systems_summary.md`
+**File:** `docs/technical/aptos-proof-systems-summary.md`
 
 ```rust
 pub struct StateProof {
@@ -179,7 +179,7 @@ pub struct TransactionInfoWithProof {
 
 ## 3. STORAGE API FOR PROOF GENERATION
 
-**File:** `docs/technical/aptps_state_proof.md`
+**File:** `docs/technical/aptos-state-proof.md`
 
 Key methods available from AptosDB storage layer:
 
@@ -361,7 +361,7 @@ With updated trusted state:
 
 ## 8. PROOF SIZE CONSIDERATIONS
 
-From `aptps_state_proof.md`:
+From `aptos-state-proof.md`:
 
 - **Waypoint**: ~64 bytes (version + hash)
 - **AccumulatorProof**: ~2KB (63 siblings max)
@@ -435,7 +435,7 @@ POST /verify_account_state
 
 ### 10.4 Solidity Contract Interfaces
 
-From `aptos_ethereum_bridge_implementation.md`:
+From `aptos-ethereum-bridge-implementation.md`:
 
 **AptosLightClient Contract Methods:**
 ```solidity
@@ -474,7 +474,7 @@ function verifyTransaction(
 
 ## 11. ZK-SNARK BASED VERIFICATION
 
-### 11.1 From aptos_zk_light_client.md
+### 11.1 From aptos-zk-light-client.md
 
 **Circuit: aptos_bls_verify.circom**
 - Proves BLS signature verification off-chain
@@ -519,10 +519,10 @@ function verifyTransaction(
 ## 13. KEY FILES AND LOCATIONS
 
 ### Documentation Files Found
-- `/Users/lucas/code/rust/atomica/docs/technical/aptps_state_proof.md`
-- `/Users/lucas/code/rust/atomica/docs/technical/aptos_proof_systems_summary.md`
-- `/Users/lucas/code/rust/atomica/docs/technical/aptos_ethereum_bridge_implementation.md`
-- `/Users/lucas/code/rust/atomica/docs/technical/aptos_zk_light_client.md`
+- `/Users/lucas/code/rust/atomica/docs/technical/aptos-state-proof.md`
+- `/Users/lucas/code/rust/atomica/docs/technical/aptos-proof-systems-summary.md`
+- `/Users/lucas/code/rust/atomica/docs/technical/aptos-ethereum-bridge-implementation.md`
+- `/Users/lucas/code/rust/atomica/docs/technical/aptos-zk-light-client.md`
 - `/Users/lucas/code/rust/atomica/docs/technical/ethereum-wallet-atomica-bridge.md`
 - `/Users/lucas/code/rust/atomica/source/PROJECT_OVERVIEW.md`
 - `/Users/lucas/code/rust/atomica/source/IMPLEMENTATION_SUMMARY.md`
@@ -569,4 +569,3 @@ The Aptos REST API endpoints are **conceptually documented** but not fully imple
 ⚠️ **Not implemented:** Actual HTTP REST API handlers (no web framework code found)
 
 The documentation provides production-ready specifications for implementing these endpoints on full nodes, suitable for developers building light clients, bridges, or cross-chain applications.
-

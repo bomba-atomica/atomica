@@ -2,14 +2,14 @@ name: Lint Web Packages
 
 on:
   pull_request:
-    branches: [main]
+    
     paths:
       - 'source/atomica-sdk/**'
       - 'source/atomica-web-ui/**'
       - 'source/atomica-web-demo/**'
       - '.github/workflows/lint-web.yaml'
   push:
-    branches: [main]
+    
     paths:
       - 'source/atomica-sdk/**'
       - 'source/atomica-web-ui/**'

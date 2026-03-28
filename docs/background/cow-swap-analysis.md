@@ -113,4 +113,4 @@ Atomica extends these insights by:
 - Targeting bidders as competitive bidders (similar to solvers)
 - Framing as batch auction market to bootstrap liquidity
 
-See [Atomica PRD](../../Prd.md) for the full product design.
+See [Atomica PRD](../specifications/prd.md) for the full product design.

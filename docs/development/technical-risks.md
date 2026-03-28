@@ -133,8 +133,8 @@ See **Implementation Plan** below for detailed breakdown.
 - Add deposit slashing for invalid bids
 - Implement Scuttle Reward mechanism
 
-**c) Update atomica-web interface** (2-3 weeks)
-- Client-side encryption library (TypeScript/WASM)
+**c) Build Rust client-side encryption** (2-3 weeks)
+- Client-side encryption library (Rust)
 - UI for encrypting reserve prices
 - UI for encrypting bids
 - Transaction payload construction for MetaMask
@@ -171,30 +171,26 @@ Verify that user deposits on Ethereum (and other away chains) have been included
 - Need efficient proof mechanisms (low gas cost)
 - Must work identically across all away chains (Ethereum, Solana, Base, etc.)
 
-**Dual-Layer Verification**:
-1. **BLS Threshold Signatures** - Atomica validators sign Ethereum state roots
-2. **ZK Proofs** - Anyone can verify state transitions are correct
+### v0.1 Beta Solution: Trusted Validators + BLS Signatures
 
-### Proposed Solution
-
-**ZK Light Client on Atomica**:
-- Use Succinct SP1 to generate ZK proofs of Ethereum block headers
-- Atomica maintains Ethereum state root on-chain
-- Users prove deposit inclusion via Merkle proofs against verified state root
-- Settlement requires both BLS consensus + ZK computation agreement
+**Approach**:
+- Trusted Atomica validators observe Ethereum state and BLS-sign Ethereum state roots
+- Atomica maintains Ethereum state root on-chain (signed by 2/3+ validators)
+- Users prove deposit inclusion via Merkle proofs against the validator-signed state root
+- Settlement uses BLS-only verification (same trust model as auction execution)
 
 **Unified Architecture for All Chains**:
 - Same verification mechanism for Ethereum, Solana, Base, Arbitrum, etc.
 - Merkle-proof-based settlement (O(1) cost per auction, not per user)
 - See `/docs/technical/architecture-plan.md` (Unified Away Chain Architecture section)
 
-### Remaining Work
+### Remaining Work (v0.1 Beta)
 
-**Phase 1: Ethereum Light Client** (4-6 weeks)
-- [ ] Deploy Succinct SP1 ZK verifier on Atomica
-- [ ] Implement Ethereum header verification circuit
-- [ ] Sync Ethereum state roots to Atomica
-- [ ] Test reorg handling
+**Phase 1: Validator Ethereum State Sync** (3-4 weeks)
+- [ ] Validators observe and sign Ethereum state roots
+- [ ] BLS threshold signature aggregation for state roots
+- [ ] Sync signed state roots to Atomica on-chain
+- [ ] Test reorg handling (wait for finality)
 
 **Phase 2: Deposit Verification** (2-3 weeks)
 - [ ] Implement Merkle proof verification in Move
@@ -203,21 +199,29 @@ Verify that user deposits on Ethereum (and other away chains) have been included
 - [ ] Add timeout mechanisms for stale proofs
 
 **Phase 3: Multi-Chain Support** (4-6 weeks)
-- [ ] Solana light client (different architecture)
+- [ ] Solana state observation (different architecture)
 - [ ] L2s (Arbitrum, Optimism, Base) - reuse Ethereum logic
 - [ ] Unified interface for all chains
 
+### Future Enhancement: ZK Light Client (v1.0)
+
+**ZK Light Client on Atomica** (reduces trust in validators for cross-chain state):
+- Use Succinct SP1 to generate ZK proofs of Ethereum block headers
+- Removes need to trust validators for Ethereum state observation
+- Settlement requires BOTH BLS consensus AND ZK computation agreement
+- Phases: Deploy SP1 ZK verifier, implement header verification circuit, dual-layer verification
+
 ### Dependencies
 
-- ZK proof system selection - ✅ Completed (Succinct SP1, see `/docs/technical/cryptographic-stack-analysis.md`)
 - BLS signature verification - ✅ Completed in zapatos
 - Risk #2 (Timelock encryption) - 🟡 In Progress
+- ZK proof system selection (for v1.0) - ✅ Completed (Succinct SP1, see `/docs/technical/cryptographic-stack-analysis.md`)
 
 ### Risk Mitigation
 
-**Latency Risk**: ZK proof generation (5-30 min) - acceptable for 1-hour settlement window
-**Gas Cost Risk**: Use ZK-wrapped BLS verification (~250K gas vs 300K gas direct)
+**Trust Risk (v0.1)**: Same validator trust model as auction execution — 2/3 threshold
 **Reorganization Risk**: Wait for finality (12 minutes on Ethereum) before accepting deposits
+**Latency Risk (v1.0)**: ZK proof generation (5-30 min) — acceptable for 1-hour settlement window
 
 ---
 
@@ -267,8 +271,8 @@ Risk #1 (Ethereum Signing) → Risk #2 (Timelock) → Risk #3 (Cross-Chain Verif
 - [Cross-Chain Verification](/docs/technical/cross-chain-verification.md)
 
 ### Design Documents
-- [Product Requirements Document](/Prd.md)
-- [batch auction model](/docs/design/batch-auction-economics.md)
+- [Product Requirements Document](/docs/specifications/prd.md)
+- [batch auction model](/docs/game-theory/batch-auction-economics.md)
 - [Uniform Price Auctions](/docs/game-theory/uniform-price-auctions.md)
 
 ---

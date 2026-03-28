@@ -1,0 +1,72 @@
+name: Test Move Contracts
+
+on:
+  push:
+    branches: [ "main", "atomica-eth-testnet" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Aptos CLI
+        run: |
+          # Download aptos binary from atomica-aptos releases
+          APTOS_VERSION="binary-125d36b957"
+          # Extract hash from version tag (format: binary-HASH)
+          APTOS_HASH="${APTOS_VERSION#binary-}"
+          APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
+          APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
+
+          echo "Downloading aptos binary from ${APTOS_URL}..."
+          curl -L -o /tmp/aptos "${APTOS_URL}"
+
+          echo "Installing aptos binary to /usr/local/bin/aptos..."
+          chmod +x /tmp/aptos
+          sudo mv /tmp/aptos /usr/local/bin/aptos
+
+          echo "Verifying aptos installation..."
+          aptos --version
+          which aptos
+
+      - name: Run Move Tests
+        run: |
+          aptos move test --package-dir source/atomica-move-contracts
+
+  lint:
+    name: Check Lint Warnings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Aptos CLI
+        run: |
+          # Download aptos binary from atomica-aptos releases
+          APTOS_VERSION="binary-125d36b957"
+          # Extract hash from version tag (format: binary-HASH)
+          APTOS_HASH="${APTOS_VERSION#binary-}"
+          APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
+          APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
+
+          echo "Downloading aptos binary from ${APTOS_URL}..."
+          curl -L -o /tmp/aptos "${APTOS_URL}"
+
+          echo "Installing aptos binary to /usr/local/bin/aptos..."
+          chmod +x /tmp/aptos
+          sudo mv /tmp/aptos /usr/local/bin/aptos
+
+          echo "Verifying aptos installation..."
+          aptos --version
+          which aptos
+
+      - name: Check for Lint Warnings
+        run: |
+          aptos move compile --package-dir source/atomica-move-contracts --fail-on-warning --named-addresses atomica=0xcafe

@@ -10,6 +10,7 @@ on:
     paths:
       - 'source/state-proofs/typescript/**'
       - 'source/docker-testnet/ethereum-testnet/typescript-sdk/**'
+  workflow_dispatch:
 
 # AGENT WARNING: Do not bypass or disable these CI checks. All code changes
 # must pass lint with --max-warnings=0, format checks, and all tests.
@@ -41,7 +42,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - name: Install dependencies
+      # We need to build SDK first because `bun install` in verifier might resolve types/dist
+      - name: Install SDK dependencies
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: bun install
+      - name: Build SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: bun run build
+      - name: Install Verifier dependencies
         working-directory: source/state-proofs/typescript
         run: bun install
       - name: Check Formatting

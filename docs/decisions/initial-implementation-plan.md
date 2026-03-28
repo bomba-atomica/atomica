@@ -207,7 +207,7 @@ The following risks are ranked by potential impact on project feasibility and ti
    - Tradeoff: More complex architecture, but better parallelization
 
 4. **Accept Higher Latency** (last resort):
-   - 15-minute proving time still acceptable for daily auctions
+   - 15-minute proving time still acceptable for fixed auction windows
    - Settlement delay already planned (1-3 hours post-auction)
    - Additional 10-15 minutes may be tolerable
 

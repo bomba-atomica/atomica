@@ -2,16 +2,92 @@ import { useState, useEffect } from "react";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { useTokenBalances } from "../hooks/useTokenBalances";
 
-interface AccountStatusProps {
-  ethAddress: string | null;
-  // Inherit state from parent (which uses useTokenBalances)
-  balances: ReturnType<typeof useTokenBalances>;
+/**
+ * Renders a single network's account card: header, address row, and balance row.
+ * The balance row is only rendered when `children` is non-null; callers control
+ * exactly what gets shown (balances, "not on chain" message, etc.).
+ */
+function NetworkCard({
+  label,
+  address,
+  addressTitle,
+  addressTruncate,
+  notConnectedLabel,
+  children,
+}: {
+  label: string;
+  address: string | null;
+  addressTitle?: string;
+  addressTruncate: (addr: string) => string;
+  notConnectedLabel: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3 bg-zinc-800/50 border border-zinc-700/60 rounded-lg px-4 py-3">
+      {/* Network header */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+          {label}
+        </span>
+      </div>
+
+      <div className="h-px bg-zinc-700/50" />
+
+      {/* Address row — always shown; falls back to notConnectedLabel when null */}
+      <div className="flex items-center gap-2 text-sm font-mono">
+        <span className="text-zinc-500 min-w-[64px]">Address</span>
+        {address ? (
+          <span
+            className="text-zinc-300 text-xs truncate"
+            title={addressTitle ?? address}
+          >
+            {addressTruncate(address)}
+          </span>
+        ) : (
+          <span className="text-zinc-600 text-xs">{notConnectedLabel}</span>
+        )}
+      </div>
+
+      {/* Balance row — only rendered when the caller passes balance content */}
+      {children && (
+        <>
+          <div className="h-px bg-zinc-700/50" />
+          <div className="flex items-center gap-4 text-sm font-mono flex-wrap">
+            {children}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
-export function AccountStatus({ ethAddress, balances }: AccountStatusProps) {
+/** Single labelled balance value, e.g. "ETH 0.5000". */
+function BalanceItem({
+  label,
+  value,
+  title,
+  muted,
+}: {
+  label: string;
+  value: string;
+  title?: string;
+  muted?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline gap-1" title={title}>
+      <span className="text-zinc-500 text-xs">{label}</span>
+      <span className={muted ? "text-zinc-500" : "text-zinc-200"}>{value}</span>
+    </div>
+  );
+}
+
+export function AccountStatus() {
+  const { account: ethAddress } = useWallet();
+  const { ethBalances, aptosBalances } = useBalances();
   const [aptosAddress, setAptosAddress] = useState<string | null>(null);
 
-  // Derive Aptos address from ETH address (pure calculation, no network required)
+  // Derive the Atomica address from the connected Ethereum address.
+  // This is recomputed whenever the wallet changes.
   useEffect(() => {
     const derive = async () => {
       if (!ethAddress) {
@@ -24,97 +100,84 @@ export function AccountStatus({ ethAddress, balances }: AccountStatusProps) {
     derive();
   }, [ethAddress]);
 
-  // Format balances with correct decimal places
-  const fmtEth = (val: number) => (val / 100_000_000).toFixed(4); // 8 decimals for ETH
-  const fmtUsd = (val: number) => (val / 1_000_000).toFixed(2); // 6 decimals for USD
-  const fmtApt = (val: number) => (val / 100_000_000).toFixed(4); // 8 decimals for APT
+  // APT is stored in octas (1 APT = 1e8 octas); display with 4 decimal places.
+  const fmtApt = (val: number) => (val / 100_000_000).toFixed(4);
 
   return (
-    <div className="flex flex-col gap-2 text-sm font-mono bg-zinc-900 px-4 py-3 rounded border border-zinc-800">
-      {/* Address Display */}
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center">
-          <span className="text-zinc-500 mr-2 min-w-[100px]">ETH Address:</span>
-          {ethAddress ? (
-            <span className="text-zinc-300 text-xs" title={ethAddress}>
-              {ethAddress.substring(0, 8)}...{ethAddress.substring(38)}
+    <div className="flex flex-col gap-3">
+      {/* ── Ethereum ── */}
+      <NetworkCard
+        label="Ethereum"
+        address={ethAddress}
+        addressTruncate={(a) => `${a.substring(0, 10)}...${a.substring(38)}`}
+        notConnectedLabel="Not connected"
+      >
+        {ethAddress &&
+          // Balance display flow for Ethereum:
+          //   loading         → render nothing (card still shows address)
+          //   !ethAccountExists → account hasn't been funded/used yet on this chain
+          //   ethAccountExists, no contracts → ETH balance only (token contracts not deployed)
+          //   ethAccountExists, contracts up  → ETH + FETH + FUSD
+          (ethBalances.loading ? null : !ethBalances.ethAccountExists ? (
+            <span className="text-xs text-zinc-500">
+              Account not yet on chain
             </span>
           ) : (
-            <span className="text-zinc-600">Not Connected</span>
-          )}
-        </div>
+            <>
+              <BalanceItem
+                label="ETH"
+                value={formatETHBalance(ethBalances.ethBalance)}
+                title="Native ETH"
+              />
+              {ethBalances.ethContractsDeployed ? (
+                <>
+                  <BalanceItem
+                    label="FETH"
+                    value={formatFakeETHBalance(ethBalances.ethFakeETH)}
+                    title="FakeETH ERC20 (18 decimals)"
+                  />
+                  <BalanceItem
+                    label="FUSD"
+                    value={formatUSDBalance(ethBalances.ethFakeUSD)}
+                    title="FakeUSD ERC20 (6 decimals)"
+                  />
+                </>
+              ) : (
+                <span className="text-xs text-zinc-500">
+                  Contracts not deployed
+                </span>
+              )}
+            </>
+          ))}
+      </NetworkCard>
 
-        {aptosAddress && (
-          <>
-            <div className="flex items-center">
-              <span className="text-zinc-500 mr-2 min-w-[100px]">
-                Aptos Address:
-              </span>
-              <span className="text-zinc-400 text-xs" title={aptosAddress}>
-                {aptosAddress.substring(0, 8)}...{aptosAddress.substring(58)}
-              </span>
-            </div>
-            <div className="text-xs text-zinc-600 ml-[100px]">
-              Derived from ETH address (holds APT & tokens)
-            </div>
-            {!balances.exists && !balances.loading && ethAddress && (
-              <div className="text-xs text-zinc-500 ml-[100px] mt-1 border-l-2 border-zinc-700 pl-2">
-                Account not found on chain (please use Faucet)
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Balances */}
-      {ethAddress && balances.exists && (
-        <>
-          <div className="h-px bg-zinc-800"></div>
-          <div className="flex items-center gap-4">
-            <div title="Gas (APT)">
-              <span className="text-zinc-500 mr-1">APT:</span>
-              <span className="text-zinc-200">{fmtApt(balances.apt)}</span>
-            </div>
-
-            {!balances.contractsDeployed ? (
-              <div className="text-zinc-500 text-xs animate-pulse">
-                Contracts Loading...
-              </div>
-            ) : (
-              <>
-                <div title="Fake ETH (8 decimals)">
-                  <span className="text-zinc-500 mr-1">ETH:</span>
-                  <span
-                    className={
-                      balances.fakeEthInitialized
-                        ? "text-zinc-200"
-                        : "text-zinc-600"
-                    }
-                  >
-                    {balances.fakeEthInitialized
-                      ? fmtEth(balances.fakeEth)
-                      : "Not Init"}
-                  </span>
-                </div>
-                <div title="Fake USD (6 decimals)">
-                  <span className="text-zinc-500 mr-1">USD:</span>
-                  <span
-                    className={
-                      balances.fakeUsdInitialized
-                        ? "text-zinc-200"
-                        : "text-zinc-600"
-                    }
-                  >
-                    {balances.fakeUsdInitialized
-                      ? fmtUsd(balances.fakeUsd)
-                      : "Not Init"}
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-        </>
-      )}
+      {/* ── Atomica (Aptos) ── */}
+      <NetworkCard
+        label="Atomica"
+        address={aptosAddress}
+        addressTruncate={(a) => `${a.substring(0, 10)}...${a.substring(58)}`}
+        // While the address is being derived (ethAddress known but aptosAddress not yet set)
+        // show a transient label rather than "Not connected".
+        notConnectedLabel={ethAddress ? "Deriving…" : "Not connected"}
+      >
+        {ethAddress &&
+          // Balance display flow for Atomica:
+          //   loading                       → render nothing
+          //   !aptAccountExists || apt === 0 → not funded yet (show hint)
+          //   apt > 0                        → show APT balance
+          (aptosBalances.loading ? null : aptosBalances.aptAccountExists &&
+            aptosBalances.apt > 0 ? (
+            <BalanceItem
+              label="APT"
+              value={fmtApt(aptosBalances.apt)}
+              title="Gas (APT)"
+            />
+          ) : (
+            <span className="text-xs text-zinc-500">
+              Account not yet on chain
+            </span>
+          ))}
+      </NetworkCard>
     </div>
   );
 }
