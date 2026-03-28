@@ -6,7 +6,7 @@ import { useWallet } from "../context/WalletContext";
 
 export function AuctionCreator() {
   const { account } = useWallet();
-  const [amount, setAmount] = useState("0.1");
+  const [lockIdHex, setLockIdHex] = useState("");
   const [minPrice, setMinPrice] = useState("100");
   const [duration, setDuration] = useState("3600"); // 1 hour
   const [loading, setLoading] = useState(false);
@@ -23,14 +23,14 @@ export function AuctionCreator() {
       // 2. Submit Transaction
       setStatus("Please sign the transaction in MetaMask...");
 
-      // Convert inputs
-      const amountWei = ethers.parseEther(amount);
+      // Convert inputs — lockIdHex is a 0x-prefixed hex string from the proof step
+      const lockId = ethers.getBytes(lockIdHex || "0x" + "00".repeat(32));
       const minPriceWei = BigInt(minPrice);
       const durationSec = BigInt(duration);
 
       const pendingTx = await submitCreateAuction(
         account,
-        amountWei,
+        lockId,
         minPriceWei,
         durationSec,
         mpk,
@@ -53,12 +53,15 @@ export function AuctionCreator() {
       <h2 className="text-xl font-bold mb-4 text-zinc-300">Sell</h2>
       <div className="space-y-4">
         <div>
-          <label className="block text-zinc-500 text-sm mb-1">ETH Amount</label>
+          <label className="block text-zinc-500 text-sm mb-1">
+            Lock ID (0x hex from proof step)
+          </label>
           <input
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
+            type="text"
+            value={lockIdHex}
+            onChange={(e) => setLockIdHex(e.target.value)}
+            placeholder="0x..."
+            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500 font-mono text-xs"
           />
         </div>
         <div>

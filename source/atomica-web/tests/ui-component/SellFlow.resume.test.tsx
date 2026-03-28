@@ -34,7 +34,6 @@ vi.mock("../../src/lib/ethereum/proofs/generator", () => ({
 }));
 vi.mock("../../src/lib/aptos/payloads", () => ({
   getRegisterLockPayload: vi.fn(),
-  getMintFakeEthPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
 }));
 vi.mock("../../src/lib/aptos/transaction", () => ({
@@ -109,19 +108,23 @@ describe("SellFlow localStorage resume", () => {
     expect(screen.getByText(/Waiting for/i)).toBeTruthy();
   });
 
-  it("resumes to Step6Mint when localStorage has minting step", async () => {
+  it("resumes to creating-auction step when localStorage has creating-auction step", async () => {
+    // When the creating-auction step loads, Step7Auction auto-calls onCreateAuction.
+    // With mocked submitNativeTransaction (no-op), it transitions to monitoring immediately.
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        step: "minting",
+        step: "creating-auction",
         lockId: "0x" + "ab".repeat(32),
         amount: "1000000000000000000",
+        minPrice: "100",
       }),
     );
     await act(async () => {
       renderSellFlow();
     });
-    expect(screen.getByText(/mint/i)).toBeTruthy();
+    // After auto-transition completes the component shows Step8Monitor
+    expect(screen.getByText(/Locked amount/i)).toBeTruthy();
   });
 
   it("resumes to Step8Monitor when localStorage has monitoring step", async () => {
@@ -141,12 +144,15 @@ describe("SellFlow localStorage resume", () => {
   });
 
   it("resumes StepIndicator to the correct position", async () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ step: "minting" }));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ step: "creating-auction" }),
+    );
     await act(async () => {
       renderSellFlow();
     });
     // StepIndicator renders all step labels — verify it's rendered
-    expect(screen.getByText("Mint")).toBeTruthy();
+    expect(screen.getByText("Auction")).toBeTruthy();
     expect(screen.getByText("Monitor")).toBeTruthy();
   });
 

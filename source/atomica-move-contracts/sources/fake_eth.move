@@ -75,9 +75,11 @@ module atomica::fake_eth {
         primary_fungible_store::deposit(recipient, fa);
     }
 
-    /// Mint FAKEETH from a verified Ethereum lock receipt (legacy bridge prototype helper).
-    /// DEPRECATED: In canonical flow, receipts are consumed for Aptos auction/settlement
-    /// accounting and FakeETH/FakeUSD are not minted on Aptos.
+    /// Mint FAKEETH from a verified Ethereum lock receipt.
+    /// Used in Demo/MVP phases. Production may replace with receipt-direct-escrow (I-P4),
+    /// where auction.move accepts LockReceipt directly without minting FAs on Aptos.
+    /// DEPRECATED (canonical): In canonical flow, receipts are consumed for Aptos
+    /// auction/settlement accounting and FakeETH is not minted on Aptos.
     ///
     /// Process:
     /// 1. User locks ETH on Ethereum via LockBox contract

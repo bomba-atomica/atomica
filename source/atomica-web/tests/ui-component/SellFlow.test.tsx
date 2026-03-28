@@ -46,7 +46,6 @@ const BASE_FLOW = {
   lockEth: vi.fn(),
   generateProof: vi.fn(),
   submitProof: vi.fn(),
-  mintFakeEth: vi.fn(),
   createAuction: vi.fn(),
   cancelAndUnlock: vi.fn(),
   reset: vi.fn(),
@@ -113,16 +112,6 @@ describe("SellFlow step rendering", () => {
     expect(screen.getAllByText(/proof/i).length).toBeGreaterThan(0);
   });
 
-  it("shows Step6Mint at minting step", () => {
-    vi.mocked(useSellFlow).mockReturnValue({
-      ...BASE_FLOW,
-      step: "minting",
-      amount: 1_000_000_000_000_000_000n,
-    });
-    renderSellFlow();
-    expect(screen.getAllByText(/mint/i).length).toBeGreaterThan(0);
-  });
-
   it("shows Step7Auction at creating-auction step", () => {
     vi.mocked(useSellFlow).mockReturnValue({
       ...BASE_FLOW,
@@ -162,13 +151,13 @@ describe("SellFlow step rendering", () => {
     renderSellFlow();
     // StepIndicator shows step labels
     expect(screen.getByText("Lock")).toBeTruthy();
-    expect(screen.getByText("Mint")).toBeTruthy();
+    expect(screen.getByText("Auction")).toBeTruthy();
   });
 
   it("does not show StepIndicator when no account", () => {
     vi.mocked(useSellFlow).mockReturnValue({ ...BASE_FLOW, step: "connect" });
     renderSellFlow(null);
-    // "Lock" label appears in step indicator — should not be present without account
-    expect(screen.queryByText("Mint")).toBeFalsy();
+    // "Auction" label appears in step indicator — should not be present without account
+    expect(screen.queryByText("Auction")).toBeFalsy();
   });
 });

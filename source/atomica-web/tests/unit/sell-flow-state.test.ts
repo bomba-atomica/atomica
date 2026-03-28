@@ -3,8 +3,8 @@
  *
  * Tests state transitions, localStorage persistence, and resume behavior
  * without triggering any blockchain calls. Blockchain-dependent transitions
- * (lockEth, generateProof, submitProof, mintFakeEth, createAuction) are
- * covered by meta/e2e tests once infrastructure is available.
+ * (lockEth, generateProof, submitProof, createAuction) are covered by
+ * meta/e2e tests once infrastructure is available.
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
@@ -34,7 +34,6 @@ vi.mock("../../src/lib/ethereum/proofs/generator", () => ({
 }));
 vi.mock("../../src/lib/aptos/payloads", () => ({
   getRegisterLockPayload: vi.fn(),
-  getMintFakeEthPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
 }));
 vi.mock("../../src/lib/aptos/transaction", () => ({
@@ -70,11 +69,11 @@ describe("useSellFlow state machine", () => {
   it("resumes step from localStorage on mount", async () => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ step: "minting", lockId: "0xdeadbeef" }),
+      JSON.stringify({ step: "creating-auction", lockId: "0xdeadbeef" }),
     );
     const { result } = renderHook(() => useSellFlow(ACCOUNT));
     await act(async () => {});
-    expect(result.current.step).toBe("minting");
+    expect(result.current.step).toBe("creating-auction");
     expect(result.current.lockId).toBe("0xdeadbeef");
   });
 
@@ -175,8 +174,9 @@ describe("useSellFlow state machine", () => {
   it.todo(
     "generateProof: transitions confirming → generating-proof → submitting-proof",
   );
-  it.todo("submitProof: transitions submitting-proof → minting after Aptos tx");
-  it.todo("mintFakeEth: transitions minting → creating-auction after Aptos tx");
+  it.todo(
+    "submitProof: transitions submitting-proof → creating-auction after Aptos tx",
+  );
   it.todo(
     "createAuction: transitions creating-auction → monitoring after Aptos tx",
   );

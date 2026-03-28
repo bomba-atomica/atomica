@@ -6,7 +6,6 @@ const STEPS: { id: SellFlowStep; label: string }[] = [
   { id: "confirming", label: "Confirm" },
   { id: "generating-proof", label: "Proof" },
   { id: "submitting-proof", label: "Submit" },
-  { id: "minting", label: "Mint" },
   { id: "creating-auction", label: "Auction" },
   { id: "monitoring", label: "Monitor" },
 ];
@@ -17,9 +16,8 @@ const STEP_ORDER: Record<SellFlowStep, number> = {
   confirming: 2,
   "generating-proof": 3,
   "submitting-proof": 4,
-  minting: 5,
-  "creating-auction": 6,
-  monitoring: 7,
+  "creating-auction": 5,
+  monitoring: 6,
 };
 
 interface Props {

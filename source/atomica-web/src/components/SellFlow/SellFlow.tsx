@@ -7,7 +7,6 @@ import { Step2Lock } from "./steps/Step2Lock";
 import { Step3Confirm } from "./steps/Step3Confirm";
 import { Step4Proof } from "./steps/Step4Proof";
 import { Step5Submit } from "./steps/Step5Submit";
-import { Step6Mint } from "./steps/Step6Mint";
 import { Step7Auction } from "./steps/Step7Auction";
 import { Step8Monitor } from "./steps/Step8Monitor";
 
@@ -67,13 +66,6 @@ export function SellFlow() {
           loading={flow.loading}
           error={flow.error}
           onSubmit={flow.submitProof}
-        />
-      ) : flow.step === "minting" ? (
-        <Step6Mint
-          loading={flow.loading}
-          error={flow.error}
-          amount={flow.amount}
-          onMint={flow.mintFakeEth}
         />
       ) : flow.step === "creating-auction" ? (
         <Step7Auction

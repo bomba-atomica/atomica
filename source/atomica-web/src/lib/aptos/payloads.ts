@@ -125,27 +125,27 @@ export async function areCoreContractsDeployed(): Promise<boolean> {
 }
 
 export function getCreateAuctionPayload(
-  amountEth: bigint,
+  lockId: Uint8Array,
   minPrice: bigint,
   duration: bigint,
   mpk: Uint8Array,
 ): InputGenerateTransactionPayloadData {
   return {
     function: `${CONTRACT_ADDR}::auction::create_auction`,
-    functionArguments: [amountEth, minPrice, duration, mpk],
+    functionArguments: [lockId, minPrice, duration, mpk],
   };
 }
 
 export async function submitCreateAuction(
   ethAddress: string,
-  amountEth: bigint,
+  lockId: Uint8Array,
   minPrice: bigint,
   duration: bigint,
   mpk: Uint8Array,
 ) {
   return await submitNativeTransaction(
     ethAddress,
-    getCreateAuctionPayload(amountEth, minPrice, duration, mpk),
+    getCreateAuctionPayload(lockId, minPrice, duration, mpk),
   );
 }
 
