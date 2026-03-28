@@ -65,8 +65,10 @@ describe.sequential("SECP256k1 Account Creation and Usage", () => {
     });
     expect(aliceFundedBalance).toBe(1_000_000_000);
 
-    // Step 4: Alice sends 100,000,000 octas (1 APT) to Bob
-    const transferAmount = 100_000_000;
+    // Step 4: Alice sends 500,000,000 octas (5 APT) to Bob
+    // Bob needs enough balance to cover max gas (2,000,000 units * 100 gas price = 200,000,000 octas)
+    // plus the return transfer amount (50,000,000 octas), so use 500,000,000 for safety.
+    const transferAmount = 500_000_000;
 
     const aliceToBobTxn = await aptos.transaction.build.simple({
       sender: alice.accountAddress,

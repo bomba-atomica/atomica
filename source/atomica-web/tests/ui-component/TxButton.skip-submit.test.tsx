@@ -68,7 +68,9 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
       await getDerivedAddress(TEST_ACCOUNT.toLowerCase())
     ).toString();
 
-    await commands.fundAccount(derivedAddr, 100_000_000);
+    // Fund with 500_000_000 octas (5 APT) to cover max gas reservation
+    // (DEFAULT_MAX_GAS_AMOUNT=2_000_000 * gas_price=100 = 200_000_000 required minimum)
+    await commands.fundAccount(derivedAddr, 500_000_000);
 
     // Wait for funding to be indexed
     await new Promise<void>((resolve) => setTimeout(resolve, 2000));

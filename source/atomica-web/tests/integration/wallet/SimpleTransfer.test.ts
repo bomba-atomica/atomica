@@ -107,10 +107,10 @@ describe.sequential(
       );
 
       // STEP 2: Fund the derived Aptos account
-      // The derived account needs APT (Aptos native coin) to pay for gas fees
-      // 100_000_000 Octas = 1 APT (Aptos uses 8 decimals)
-      // Uses production-like funding via Core Resources account (not HTTP faucet)
-      await commands.fundAccount(derivedAddrStr, 100_000_000); // 1 APT
+      // The derived account needs APT (Aptos native coin) to pay for gas fees.
+      // DEFAULT_MAX_GAS_AMOUNT=2_000_000 * gas_price=100 = 200_000_000 octas minimum.
+      // Use 500_000_000 (5 APT) to give ample headroom for gas.
+      await commands.fundAccount(derivedAddrStr, 500_000_000); // 5 APT
       // Wait for funding transaction to be indexed by the blockchain
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
