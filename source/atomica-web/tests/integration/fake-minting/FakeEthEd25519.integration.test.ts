@@ -31,7 +31,7 @@ describe.sequential("Aptos Ed25519 Transaction Signing", () => {
 
     await commands.fundAccount(
       testAccount.accountAddress.toString(),
-      100_000_000, // 1 APT
+      500_000_000, // 5 APT — covers max gas reservation (2M units * 100 price = 200M octas minimum)
     );
 
     await new Promise((r) => setTimeout(r, 2000));

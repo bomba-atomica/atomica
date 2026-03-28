@@ -189,7 +189,12 @@ module atomica::lock_receipt {
         // This prevents frontrunning attacks where someone could steal the receipt
         let user = address_from_bytes(user_address);
         
-        // 4. Verify the signer is authorized (either the user or the atomica admin)
+        // 4. Verify the signer is authorized.
+        //
+        // Demo: The @atomica admin (fee-payer) signs on behalf of the user.
+        // The user-derived Aptos address (SHA3-256 of SIWE pubkey + domain) does
+        // not match the zero-padded Ethereum address, so user self-signing is not
+        // supported here. MVP must implement proper user-signer auth (I-M4).
         let signer_addr = signer::address_of(account);
         assert!(
             signer_addr == user || signer_addr == @atomica,
@@ -416,6 +421,26 @@ module atomica::lock_receipt {
     }
 
     // ===================== Test-Only Functions =====================
+
+    // Insert a receipt directly into the registry, bypassing proof verification.
+    // Used by auction_tests.move to set up receipts for testing create_auction.
+    #[test_only]
+    public fun insert_test_receipt<Chain, Asset>(
+        lock_id: vector<u8>,
+        user: address,
+        amount: u256,
+        block_number: u64,
+    ) acquires ReceiptRegistry {
+        let receipt = LockReceipt<Chain, Asset> {
+            lock_id,
+            user,
+            amount,
+            block_number,
+            timestamp: 0,
+            status: STATUS_ACTIVE,
+        };
+        store_receipt<Chain, Asset>(receipt, lock_id);
+    }
 
     #[test_only]
     public fun create_test_receipt<Chain, Asset>(
