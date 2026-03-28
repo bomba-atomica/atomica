@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import { AptosAccount, AptosClient } from "aptos";
-import { setupLocalnet, getTestnet } from "../src/localnet";
+import { setupLocalnet, getTestnet, teardownLocalnet } from "../src/localnet";
 
 describe.sequential("Faucet Mechanism", () => {
     let client: AptosClient;
@@ -12,8 +12,7 @@ describe.sequential("Faucet Mechanism", () => {
     }, 300000);
 
     afterAll(async () => {
-        const testnet = getTestnet();
-        await testnet.teardown();
+        await teardownLocalnet();
     });
 
     test("should verify faucet account exists and has balance", async () => {

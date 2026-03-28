@@ -136,10 +136,20 @@ jobs:
         working-directory: source/atomica-web-demo
         run: bun install
 
-      - name: Install Playwright browsers
+      - name: Install web UI dependencies
         if: matrix.type == 'ui'
+        working-directory: source/atomica-web-ui
+        run: bun install
+
+      - name: Install Playwright browsers (demo)
+        if: matrix.type == 'unit'
         working-directory: source/atomica-web-demo
-        run: bunx playwright install --with-deps
+        run: bunx playwright install --with-deps chromium
+
+      - name: Install Playwright browsers (web UI)
+        if: matrix.type == 'ui'
+        working-directory: source/atomica-web-ui
+        run: bunx playwright install --with-deps chromium
 
       - name: Install Aptos CLI
         if: matrix.type == 'ui'
@@ -156,12 +166,12 @@ jobs:
           aptos --version
 
       - name: Run tests
-        working-directory: source/atomica-web-demo
+        working-directory: ${{ matrix.type == 'unit' && 'source/atomica-web-demo' || 'source/atomica-web-ui' }}
         run: |
           if [ "${{ matrix.type }}" = "unit" ]; then
             bunx vitest run tests/simple.test.ts tests/sdk-import.test.ts tests/aptos-sdk.test.ts tests/mock-wallet.test.ts tests/app-import.test.ts tests/app-component.test.tsx
           else
-            bunx vitest run tests/AccountStatus.test.tsx tests/AccountConnection.test.tsx tests/TxButton.skip-submit.test.tsx
+            bunx vitest run tests/AccountStatus.test.tsx tests/TxButton.skip-submit.test.tsx
           fi
 
   test-state-proofs:

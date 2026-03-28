@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { setupLocalnet, getTestnet } from "../src/localnet";
+import { setupLocalnet, getTestnet, teardownLocalnet } from "../src/localnet";
 
 describe.sequential("Validator Connectivity", () => {
     let numValidators: number;
@@ -11,8 +11,7 @@ describe.sequential("Validator Connectivity", () => {
     }, 300000);
 
     afterAll(async () => {
-        const testnet = getTestnet();
-        await testnet.teardown();
+        await teardownLocalnet();
     });
 
     test("should have correct number of validators", async () => {

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { setupLocalnet, getTestnet } from "../src/localnet";
+import { setupLocalnet, getTestnet, teardownLocalnet } from "../src/localnet";
 
 describe.sequential("Block Production", () => {
     beforeAll(async () => {
@@ -7,8 +7,7 @@ describe.sequential("Block Production", () => {
     }, 300000);
 
     afterAll(async () => {
-        const testnet = getTestnet();
-        await testnet.teardown();
+        await teardownLocalnet();
     });
 
     test("should verify block production", async () => {
