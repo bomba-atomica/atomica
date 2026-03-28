@@ -191,27 +191,47 @@ describe("getMintFakeEthPayload", () => {
 describe("getCreateAuctionPayload", () => {
   it("targets auction::create_auction", () => {
     const lockId = new Uint8Array(32).fill(0xcd);
-    const payload = getCreateAuctionPayload(lockId, 1000n, 3600n, new Uint8Array(0)) as any;
+    const payload = getCreateAuctionPayload(
+      lockId,
+      1000n,
+      3600n,
+      new Uint8Array(0),
+    ) as any;
     expect(payload.function).toContain("::auction::create_auction");
   });
 
   it("passes lock_id as the first argument (Uint8Array)", () => {
     const lockId = new Uint8Array(32).fill(0xcd);
-    const payload = getCreateAuctionPayload(lockId, 1000n, 3600n, new Uint8Array(0));
+    const payload = getCreateAuctionPayload(
+      lockId,
+      1000n,
+      3600n,
+      new Uint8Array(0),
+    );
     expect(payload.functionArguments![0]).toBe(lockId);
   });
 
   it("passes min_price as the second argument", () => {
     const lockId = new Uint8Array(32).fill(0xcd);
     const minPrice = 500000n;
-    const payload = getCreateAuctionPayload(lockId, minPrice, 3600n, new Uint8Array(0));
+    const payload = getCreateAuctionPayload(
+      lockId,
+      minPrice,
+      3600n,
+      new Uint8Array(0),
+    );
     expect(payload.functionArguments![1]).toBe(minPrice);
   });
 
   it("passes duration as the third argument", () => {
     const lockId = new Uint8Array(32).fill(0xcd);
     const duration = 7200n;
-    const payload = getCreateAuctionPayload(lockId, 1000n, duration, new Uint8Array(0));
+    const payload = getCreateAuctionPayload(
+      lockId,
+      1000n,
+      duration,
+      new Uint8Array(0),
+    );
     expect(payload.functionArguments![2]).toBe(duration);
   });
 
@@ -224,7 +244,12 @@ describe("getCreateAuctionPayload", () => {
 
   it("does not add type arguments", () => {
     const lockId = new Uint8Array(32).fill(0xcd);
-    const payload = getCreateAuctionPayload(lockId, 1000n, 3600n, new Uint8Array(0));
+    const payload = getCreateAuctionPayload(
+      lockId,
+      1000n,
+      3600n,
+      new Uint8Array(0),
+    );
     expect(payload.typeArguments).toBeUndefined();
   });
 });
