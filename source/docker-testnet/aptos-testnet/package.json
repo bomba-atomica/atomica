@@ -2,6 +2,7 @@
     "name": "@atomica/aptos-docker-testnet",
     "version": "0.1.0",
     "description": "Aptos testnet harness and SDK for Atomica integration tests",
+    "type": "module",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "exports": {

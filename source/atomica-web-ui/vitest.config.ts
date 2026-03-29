@@ -8,6 +8,13 @@
 import { defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import react from "@vitejs/plugin-react";
+import { loadEnv } from "vite";
+import { resolve } from "path";
+
+// Load all vars from source/.env.test into the Vite server process (browser commands run here)
+const testEnv = loadEnv("test", resolve(__dirname, "../.."), "");
+// Assign to process.env so browser commands (which run server-side) see these vars
+Object.assign(process.env, testEnv);
 
 export default defineConfig(async () => {
   // Dynamic import to avoid ESM bundling issues in config
@@ -20,6 +27,11 @@ export default defineConfig(async () => {
 
   return {
     plugins: [react()],
+    // Inject test credentials as compile-time globals so tests can use them
+    // as bare identifiers (e.g. APTOS_DEPLOYER_PRIVATE_KEY).
+    define: Object.fromEntries(
+      Object.entries(testEnv).map(([k, v]) => [k, JSON.stringify(v)]),
+    ),
     test: {
       globals: true,
       setupFiles: ["./tests/setup.ts"],
@@ -50,6 +62,12 @@ export default defineConfig(async () => {
           fundAccount: fundAccountCommand,
         },
       },
+
+      /**
+       * ENVIRONMENT: Expose .env.test variables as globals in browser tests
+       * (e.g. APTOS_DEPLOYER_PRIVATE_KEY, ETHEREUM_DEPLOYER_ADDRESS)
+       */
+      env: testEnv,
 
       /**
        * SEQUENTIAL EXECUTION for tests using localnet
