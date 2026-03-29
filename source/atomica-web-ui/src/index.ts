@@ -5,6 +5,11 @@ export { AuctionBidder } from "./components/AuctionBidder";
 export { AccountStatus } from "./components/AccountStatus";
 export { NetworkStatus } from "./components/NetworkStatus";
 export { TxButton } from "./components/TxButton";
+export { SettleButton } from "./components/SettleButton";
+export { ClaimButton } from "./components/ClaimButton";
+export { FeeRebateDisplay } from "./components/FeeRebateDisplay";
+export { BidHistory } from "./components/BidHistory";
+export type { BidHistoryEntry } from "./components/BidHistory";
 
 export { useTokenBalances } from "./hooks/useTokenBalances";
 

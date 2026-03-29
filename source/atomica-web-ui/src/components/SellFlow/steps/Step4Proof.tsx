@@ -21,7 +21,10 @@ export function Step4Proof({ proof, loading, error, onGenerate }: Props) {
     return (
       <div className="flex flex-col gap-3">
         <p className="text-sm text-zinc-400">Storage proof generated.</p>
-        <div className="rounded border border-zinc-800 bg-zinc-950/60 p-3 text-xs font-mono text-zinc-400 flex flex-col gap-1">
+        <div
+          data-testid="proof-ready"
+          className="rounded border border-zinc-800 bg-zinc-950/60 p-3 text-xs font-mono text-zinc-400 flex flex-col gap-1"
+        >
           <div>
             <span className="text-zinc-600">Block:</span> {proof.blockNumber}
           </div>
@@ -50,7 +53,10 @@ export function Step4Proof({ proof, loading, error, onGenerate }: Props) {
       </p>
 
       {!error && (
-        <div className="flex items-center gap-3 rounded border border-zinc-800 bg-zinc-950/60 p-3">
+        <div
+          data-testid="proof-spinner"
+          className="flex items-center gap-3 rounded border border-zinc-800 bg-zinc-950/60 p-3"
+        >
           <div className="w-4 h-4 border-2 border-zinc-500 border-t-zinc-200 rounded-full animate-spin flex-shrink-0" />
           <span className="text-sm text-zinc-400">Generating proof…</span>
         </div>

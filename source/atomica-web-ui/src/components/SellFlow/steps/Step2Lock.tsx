@@ -38,6 +38,7 @@ export function Step2Lock({ onLock, fakeEthBalance, loading, error }: Props) {
             )}
           </label>
           <input
+            data-testid="lock-amount-input"
             type="number"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
@@ -52,6 +53,7 @@ export function Step2Lock({ onLock, fakeEthBalance, loading, error }: Props) {
             Minimum price (USD)
           </label>
           <input
+            data-testid="min-price-input"
             type="number"
             value={minPrice}
             onChange={(e) => setMinPrice(e.target.value)}
@@ -62,6 +64,7 @@ export function Step2Lock({ onLock, fakeEthBalance, loading, error }: Props) {
       </div>
 
       <button
+        data-testid="approve-lock-button"
         onClick={handleLock}
         disabled={loading}
         className={`w-full py-2 rounded font-semibold transition-colors ${
@@ -74,7 +77,12 @@ export function Step2Lock({ onLock, fakeEthBalance, loading, error }: Props) {
       </button>
 
       {error && (
-        <p className="text-xs text-red-400 font-mono break-all">{error}</p>
+        <p
+          data-testid="lock-error"
+          className="text-xs text-red-400 font-mono break-all"
+        >
+          {error}
+        </p>
       )}
     </div>
   );

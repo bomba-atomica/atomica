@@ -53,6 +53,7 @@ export function AuctionBidder() {
             Auction/Seller Address
           </label>
           <input
+            data-testid="seller-address-input"
             type="text"
             value={sellerAddr}
             onChange={(e) => setSellerAddr(e.target.value)}
@@ -65,6 +66,7 @@ export function AuctionBidder() {
             Bid Amount (USD)
           </label>
           <input
+            data-testid="bid-amount-input"
             type="number"
             value={bidAmount}
             onChange={(e) => setBidAmount(e.target.value)}
@@ -73,6 +75,7 @@ export function AuctionBidder() {
         </div>
 
         <button
+          data-testid="submit-bid-button"
           onClick={handleBid}
           disabled={loading}
           className={`w-full py-2 rounded font-bold transition-colors ${
@@ -84,7 +87,10 @@ export function AuctionBidder() {
           {loading ? "Processing..." : "Submit Encrypted Bid"}
         </button>
         {status && (
-          <div className="mt-4 text-sm font-mono text-zinc-400 break-all p-2 bg-zinc-950 rounded border border-zinc-800">
+          <div
+            data-testid="bid-status"
+            className="mt-4 text-sm font-mono text-zinc-400 break-all p-2 bg-zinc-950 rounded border border-zinc-800"
+          >
             {status}
           </div>
         )}

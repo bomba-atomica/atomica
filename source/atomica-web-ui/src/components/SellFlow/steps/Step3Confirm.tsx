@@ -10,7 +10,10 @@ export function Step3Confirm({ txHash, lockBlock }: Props) {
         Waiting for your lock transaction to be included in a block…
       </p>
 
-      <div className="flex items-center gap-3 rounded border border-zinc-800 bg-zinc-950/60 p-3">
+      <div
+        data-testid="confirm-spinner"
+        className="flex items-center gap-3 rounded border border-zinc-800 bg-zinc-950/60 p-3"
+      >
         <div className="w-4 h-4 border-2 border-zinc-500 border-t-zinc-200 rounded-full animate-spin flex-shrink-0" />
         <div className="text-sm text-zinc-400">
           {lockBlock ? (
@@ -26,7 +29,10 @@ export function Step3Confirm({ txHash, lockBlock }: Props) {
       </div>
 
       {txHash && (
-        <div className="text-xs text-zinc-600 font-mono break-all">
+        <div
+          data-testid="confirm-tx-hash"
+          className="text-xs text-zinc-600 font-mono break-all"
+        >
           Tx: {txHash}
         </div>
       )}

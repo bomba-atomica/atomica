@@ -129,6 +129,7 @@ export function Faucet() {
           API).
         </p>
         <button
+          data-testid="faucet-eth-button"
           onClick={handleMintEthTokens}
           disabled={
             !evmReady || loadingEthTokens || (!!ethTxHash && !!usdTxHash)
@@ -146,12 +147,18 @@ export function Faucet() {
               : "Request ETH Tokens"}
         </button>
         {ethTxHash && usdTxHash && (
-          <div className="mt-2 p-2 bg-zinc-900 text-zinc-400 rounded text-xs break-all font-mono border border-zinc-800">
+          <div
+            data-testid="faucet-status"
+            className="mt-2 p-2 bg-zinc-900 text-zinc-400 rounded text-xs break-all font-mono border border-zinc-800"
+          >
             Success! 10 FakeETH and 10,000 FakeUSD added to your account
           </div>
         )}
         {ethTokensError && (
-          <div className="mt-2 text-[10px] text-zinc-500 break-words font-mono">
+          <div
+            data-testid="faucet-status"
+            className="mt-2 text-[10px] text-zinc-500 break-words font-mono"
+          >
             {ethTokensError}
           </div>
         )}
