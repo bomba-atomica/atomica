@@ -37,8 +37,9 @@
  */
 
 import { existsSync, statSync } from "fs";
-import { join, resolve as pathResolve } from "path";
+import { join, resolve as pathResolve, dirname } from "path";
 import { spawnSync } from "child_process";
+import { fileURLToPath } from "url";
 
 interface BinaryCandidate {
     path: string;
@@ -55,8 +56,8 @@ export function findAptosBinary(): string {
     const candidates: BinaryCandidate[] = [];
 
     // Determine workspace root (atomica/source directory)
-    // Docker SDK is at: source/docker-testnet/typescript-sdk/src
-    const currentDir = __dirname; // typescript-sdk/src
+    // Docker SDK is at: source/docker-testnet/aptos-testnet/src
+    const currentDir = dirname(fileURLToPath(import.meta.url)); // aptos-testnet/dist
     const sdkDir = pathResolve(currentDir, ".."); // typescript-sdk
     const dockerTestnetDir = pathResolve(sdkDir, ".."); // docker-testnet
     const sourceDir = pathResolve(dockerTestnetDir, ".."); // source
