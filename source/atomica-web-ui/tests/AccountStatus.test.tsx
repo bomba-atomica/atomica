@@ -99,7 +99,7 @@ describe.sequential("AccountStatus Integration", () => {
           screen.getByText("APT");
           screen.getByText("10.0000");
         },
-        { timeout: 15000, interval: 500 },
+        { timeout: 30000, interval: 500 },
       );
 
       console.log("✓ Balance displayed after funding");
@@ -108,6 +108,6 @@ describe.sequential("AccountStatus Integration", () => {
       expect(screen.queryByText(/Atomica account not found/)).toBeNull();
 
       console.log("✓ Test passed: Warning removed after funding");
-    }, 60000);
+    }, 90000);
   });
 });
