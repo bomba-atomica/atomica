@@ -236,7 +236,7 @@ export const deployContractsCommand: BrowserCommand<[]> = async () => {
  * See: test-utils/localnet.ts#fundAccount for implementation
  */
 export const fundAccountCommand: BrowserCommand<[address: string, amount?: number]> = async (
-    _context,
+    _context: unknown,
     address: string,
     amount: number = 100_000_000,
 ) => {
