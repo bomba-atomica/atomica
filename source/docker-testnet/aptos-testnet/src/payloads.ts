@@ -1,8 +1,8 @@
-import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
+import type { InputGenerateTransactionPayloadData } from "@atomica/sdk";
 export { CONTRACT_ADDR } from "./config.js";
 import { CONTRACT_ADDR, aptos } from "./config.js";
 import { getDerivedAddress } from "./siwe.js";
-import { submitNativeTransaction } from "./transaction.js";
+import { submitNativeTransaction, type SubmitResult } from "./transaction.js";
 
 /**
  * Sanity Test: Simple APT transfer using MetaMask signature
@@ -102,7 +102,7 @@ export async function getMintFakeEthPayload(): Promise<InputGenerateTransactionP
 /**
  * Mint FAKEETH (10 ETH)
  */
-export async function mintFakeEth(ethAddress: string) {
+export async function mintFakeEth(ethAddress: string): Promise<SubmitResult> {
     console.log("\n=== Minting FAKEETH ===");
     return await submitNativeTransaction(ethAddress, await getMintFakeEthPayload());
 }
@@ -129,7 +129,7 @@ export async function getMintFakeUsdPayload(): Promise<InputGenerateTransactionP
 /**
  * Mint FAKEUSD (10,000 USD)
  */
-export async function mintFakeUsd(ethAddress: string) {
+export async function mintFakeUsd(ethAddress: string): Promise<SubmitResult> {
     console.log("\n=== Minting FAKEUSD ===");
     return await submitNativeTransaction(ethAddress, await getMintFakeUsdPayload());
 }
@@ -156,8 +156,8 @@ export async function areContractsDeployed(): Promise<boolean> {
         });
 
         // Check if fake_eth and fake_usd modules exist
-        const hasFakeEth = modules.some((m) => m.abi?.name === "fake_eth");
-        const hasFakeUsd = modules.some((m) => m.abi?.name === "fake_usd");
+        const hasFakeEth = modules.some((m: { abi?: { name?: string } }) => m.abi?.name === "fake_eth");
+        const hasFakeUsd = modules.some((m: { abi?: { name?: string } }) => m.abi?.name === "fake_usd");
 
         return hasFakeEth && hasFakeUsd;
     } catch (e) {
@@ -194,7 +194,7 @@ export async function submitCreateAuction(
     minPrice: bigint,
     duration: bigint,
     mpk: Uint8Array,
-) {
+): Promise<SubmitResult> {
     return await submitNativeTransaction(
         ethAddress,
         getCreateAuctionPayload(amountEth, minPrice, duration, mpk),
@@ -219,6 +219,6 @@ export async function submitBid(
     amountUsd: bigint,
     u: Uint8Array,
     v: Uint8Array,
-) {
+): Promise<SubmitResult> {
     return await submitNativeTransaction(ethAddress, getBidPayload(sellerAddr, amountUsd, u, v));
 }
