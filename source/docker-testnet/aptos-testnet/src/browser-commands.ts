@@ -136,6 +136,8 @@ declare module "vitest/browser" {
         ): Promise<{ success: boolean; txHash: string }>;
         setupDualChainTestnet(): Promise<DualChainTestnetInfo>;
         teardownDualChainTestnet(): Promise<{ success: boolean }>;
+        setupEthereumTestnet(): Promise<EthereumTestnetInfo>;
+        teardownEthereumTestnet(): Promise<void>;
     }
 }
 

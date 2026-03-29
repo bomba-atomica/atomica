@@ -23,6 +23,8 @@ export default defineConfig(async () => {
     teardownLocalnetCommand,
     deployContractsCommand,
     fundAccountCommand,
+    setupEthereumTestnetCommand,
+    teardownEthereumTestnetCommand,
   } = await import("@atomica/aptos-docker-testnet/browser-commands");
 
   return {
@@ -74,6 +76,8 @@ export default defineConfig(async () => {
           teardownLocalnet: teardownLocalnetCommand,
           deployContracts: deployContractsCommand,
           fundAccount: fundAccountCommand,
+          setupEthereumTestnet: setupEthereumTestnetCommand,
+          teardownEthereumTestnet: teardownEthereumTestnetCommand,
         },
       },
 
@@ -89,7 +93,7 @@ export default defineConfig(async () => {
       fileParallelism: false,
       maxConcurrency: 1,
 
-      include: ["tests/**/*.test.tsx"],
+      include: ["tests/**/*.test.tsx", "tests/**/*.test.ts"],
       exclude: ["**/node_modules/**", "**/dist/**", "**/*.skip"],
     },
   };

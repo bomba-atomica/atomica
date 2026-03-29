@@ -131,6 +131,8 @@ declare module "vitest/browser" {
         teardownDualChainTestnet(): Promise<{
             success: boolean;
         }>;
+        setupEthereumTestnet(): Promise<EthereumTestnetInfo>;
+        teardownEthereumTestnet(): Promise<void>;
     }
 }
 /**
