@@ -108,10 +108,7 @@ import {
     // killZombies, // Unused - setupLocalnet handles cleanup internally
 } from "./localnet.js";
 import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testnet.js";
-import {
-    setupDualChainTestnet,
-    teardownDualChainTestnet,
-} from "./dual-chain-testnet.js";
+import { setupDualChainTestnet, teardownDualChainTestnet } from "./dual-chain-testnet.js";
 import type { DualChainTestnetInfo } from "./dual-chain-testnet.js";
 
 /**

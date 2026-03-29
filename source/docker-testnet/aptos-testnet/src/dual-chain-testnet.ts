@@ -33,26 +33,26 @@ let aptosTestnet: DockerTestnet | null = null;
 // ---------------------------------------------------------------------------
 
 export interface DualChainTestnetInfo {
-  eth: {
-    rpcUrl: string;
-    chainId: number;
-    contracts: {
-      fakeETH: string;
-      fakeUSD: string;
-      lockBox: string;
+    eth: {
+        rpcUrl: string;
+        chainId: number;
+        contracts: {
+            fakeETH: string;
+            fakeUSD: string;
+            lockBox: string;
+        };
+        /** Deployer / seller private key */
+        deployerPrivateKey: string;
+        deployerAddress: string;
+        /** Bidder account (testnet account 1) */
+        bidderPrivateKey: string;
+        bidderAddress: string;
     };
-    /** Deployer / seller private key */
-    deployerPrivateKey: string;
-    deployerAddress: string;
-    /** Bidder account (testnet account 1) */
-    bidderPrivateKey: string;
-    bidderAddress: string;
-  };
-  aptos: {
-    nodeUrl: string;
-    moduleAddress: string;
-    deployerPrivateKey: string;
-  };
+    aptos: {
+        nodeUrl: string;
+        moduleAddress: string;
+        deployerPrivateKey: string;
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -60,68 +60,62 @@ export interface DualChainTestnetInfo {
 // ---------------------------------------------------------------------------
 
 function ensureCompiled(): void {
-  const outDir = pathResolve(EVM_CONTRACTS_DIR, "out");
-  if (!existsSync(outDir)) {
-    console.log("[Dual-Chain] Compiling Solidity contracts...");
-    execSync("forge build", { cwd: EVM_CONTRACTS_DIR, stdio: "inherit" });
-    console.log("[Dual-Chain] ✓ Compiled");
-  }
+    const outDir = pathResolve(EVM_CONTRACTS_DIR, "out");
+    if (!existsSync(outDir)) {
+        console.log("[Dual-Chain] Compiling Solidity contracts...");
+        execSync("forge build", { cwd: EVM_CONTRACTS_DIR, stdio: "inherit" });
+        console.log("[Dual-Chain] ✓ Compiled");
+    }
 }
 
 function readArtifact(contractName: string): {
-  abi: object[];
-  bytecode: { object: string };
+    abi: object[];
+    bytecode: { object: string };
 } {
-  const artifactPath = pathResolve(
-    EVM_CONTRACTS_DIR,
-    "out",
-    `${contractName}.sol`,
-    `${contractName}.json`,
-  );
-  return JSON.parse(readFileSync(artifactPath, "utf-8"));
+    const artifactPath = pathResolve(
+        EVM_CONTRACTS_DIR,
+        "out",
+        `${contractName}.sol`,
+        `${contractName}.json`,
+    );
+    return JSON.parse(readFileSync(artifactPath, "utf-8"));
 }
 
-async function waitForFirstBlock(
-  provider: ethers.JsonRpcProvider,
-): Promise<void> {
-  console.log("[Dual-Chain] Waiting for first Ethereum block...");
-  for (let i = 0; i < 60; i++) {
-    const block = await provider.getBlockNumber();
-    if (block >= 1) {
-      console.log(`[Dual-Chain] ✓ Block ${block} reached`);
-      return;
+async function waitForFirstBlock(provider: ethers.JsonRpcProvider): Promise<void> {
+    console.log("[Dual-Chain] Waiting for first Ethereum block...");
+    for (let i = 0; i < 60; i++) {
+        const block = await provider.getBlockNumber();
+        if (block >= 1) {
+            console.log(`[Dual-Chain] ✓ Block ${block} reached`);
+            return;
+        }
+        await new Promise((r) => setTimeout(r, 1000));
     }
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-  throw new Error("Timed out waiting for first Ethereum block");
+    throw new Error("Timed out waiting for first Ethereum block");
 }
 
 async function deployContract(
-  signer: ethers.Wallet,
-  artifact: { abi: object[]; bytecode: { object: string } },
-  constructorArgs: unknown[] = [],
+    signer: ethers.Wallet,
+    artifact: { abi: object[]; bytecode: { object: string } },
+    constructorArgs: unknown[] = [],
 ): Promise<string> {
-  const factory = new ethers.ContractFactory(
-    artifact.abi,
-    artifact.bytecode.object,
-    signer,
-  );
-  const contract = await factory.deploy(...constructorArgs);
-  await contract.waitForDeployment();
-  return await contract.getAddress();
+    const factory = new ethers.ContractFactory(artifact.abi, artifact.bytecode.object, signer);
+    const contract = await factory.deploy(...constructorArgs);
+    await contract.waitForDeployment();
+    return await contract.getAddress();
 }
 
 async function mintFakeETH(
-  provider: ethers.JsonRpcProvider,
-  tokenAddress: string,
-  abi: object[],
-  fromSigner: ethers.Wallet,
-  toAddress: string,
-  amount: bigint,
+    provider: ethers.JsonRpcProvider,
+    tokenAddress: string,
+    abi: object[],
+    fromSigner: ethers.Wallet,
+    toAddress: string,
+    amount: bigint,
 ): Promise<void> {
-  const contract = new ethers.Contract(tokenAddress, abi, fromSigner);
-  const tx = await contract.mint(toAddress, amount);
-  await provider.waitForTransaction(tx.hash, 1);
+    const contract = new ethers.Contract(tokenAddress, abi, fromSigner);
+    const tx = await contract.mint(toAddress, amount);
+    await provider.waitForTransaction(tx.hash, 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -135,133 +129,130 @@ async function mintFakeETH(
  * reconstructed from the running instances.
  */
 export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
-  console.log("[Dual-Chain] Starting dual-chain testnet...");
+    console.log("[Dual-Chain] Starting dual-chain testnet...");
 
-  // ── Ethereum ──────────────────────────────────────────────────────────────
-  ethTestnet = await EthereumDockerTestnet.start(4);
-  await ethTestnet.waitForHealthy(180);
+    // ── Ethereum ──────────────────────────────────────────────────────────────
+    ethTestnet = await EthereumDockerTestnet.start(4);
+    await ethTestnet.waitForHealthy(180);
 
-  const rpcUrl = ethTestnet.getExecutionRpcUrl();
-  const chainId = await ethTestnet.getChainId();
-  const accounts = ethTestnet.getTestAccounts();
+    const rpcUrl = ethTestnet.getExecutionRpcUrl();
+    const chainId = await ethTestnet.getChainId();
+    const accounts = ethTestnet.getTestAccounts();
 
-  const deployerPrivateKey = accounts[0].privateKey;
-  const deployerAddress = accounts[0].address;
-  const bidderPrivateKey = accounts[1].privateKey;
-  const bidderAddress = accounts[1].address;
+    const deployerPrivateKey = accounts[0].privateKey;
+    const deployerAddress = accounts[0].address;
+    const bidderPrivateKey = accounts[1].privateKey;
+    const bidderAddress = accounts[1].address;
 
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
-  const deployer = new ethers.Wallet(deployerPrivateKey, provider);
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const deployer = new ethers.Wallet(deployerPrivateKey, provider);
 
-  console.log(`[Dual-Chain] ETH RPC: ${rpcUrl}, chainId: ${chainId}`);
-  console.log(`[Dual-Chain] Deployer: ${deployerAddress}`);
-  console.log(`[Dual-Chain] Bidder:   ${bidderAddress}`);
+    console.log(`[Dual-Chain] ETH RPC: ${rpcUrl}, chainId: ${chainId}`);
+    console.log(`[Dual-Chain] Deployer: ${deployerAddress}`);
+    console.log(`[Dual-Chain] Bidder:   ${bidderAddress}`);
 
-  await waitForFirstBlock(provider);
-  ensureCompiled();
+    await waitForFirstBlock(provider);
+    ensureCompiled();
 
-  const fakeETH = await deployContract(deployer, readArtifact("FakeETH"));
-  console.log(`[Dual-Chain] ✓ FakeETH: ${fakeETH}`);
+    const fakeETH = await deployContract(deployer, readArtifact("FakeETH"));
+    console.log(`[Dual-Chain] ✓ FakeETH: ${fakeETH}`);
 
-  const fakeUSD = await deployContract(deployer, readArtifact("FakeUSD"));
-  console.log(`[Dual-Chain] ✓ FakeUSD: ${fakeUSD}`);
+    const fakeUSD = await deployContract(deployer, readArtifact("FakeUSD"));
+    console.log(`[Dual-Chain] ✓ FakeUSD: ${fakeUSD}`);
 
-  const lockBox = await deployContract(
-    deployer,
-    readArtifact("LockBox"),
-    [fakeETH, fakeUSD],
-  );
-  console.log(`[Dual-Chain] ✓ LockBox: ${lockBox}`);
+    const lockBox = await deployContract(deployer, readArtifact("LockBox"), [fakeETH, fakeUSD]);
+    console.log(`[Dual-Chain] ✓ LockBox: ${lockBox}`);
 
-  // Fund seller and bidder with FakeETH so tests can lock tokens immediately.
-  const fakeETHArtifact = readArtifact("FakeETH");
-  const mintAmount = ethers.parseEther("10000");
+    // Fund seller and bidder with FakeETH so tests can lock tokens immediately.
+    const fakeETHArtifact = readArtifact("FakeETH");
+    const mintAmount = ethers.parseEther("10000");
 
-  await mintFakeETH(
-    provider,
-    fakeETH,
-    fakeETHArtifact.abi,
-    deployer,
-    deployerAddress,
-    mintAmount,
-  );
-  console.log(`[Dual-Chain] ✓ Minted FakeETH to seller`);
+    await mintFakeETH(
+        provider,
+        fakeETH,
+        fakeETHArtifact.abi,
+        deployer,
+        deployerAddress,
+        mintAmount,
+    );
+    console.log(`[Dual-Chain] ✓ Minted FakeETH to seller`);
 
-  await mintFakeETH(
-    provider,
-    fakeETH,
-    fakeETHArtifact.abi,
-    deployer,
-    bidderAddress,
-    mintAmount,
-  );
-  console.log(`[Dual-Chain] ✓ Minted FakeETH to bidder`);
+    await mintFakeETH(provider, fakeETH, fakeETHArtifact.abi, deployer, bidderAddress, mintAmount);
+    console.log(`[Dual-Chain] ✓ Minted FakeETH to bidder`);
 
-  // ── Aptos ─────────────────────────────────────────────────────────────────
-  aptosTestnet = await DockerTestnet.new(4);
-  await aptosTestnet.waitForBlocks(1, 120);
+    // ── Aptos ─────────────────────────────────────────────────────────────────
+    aptosTestnet = await DockerTestnet.new(4);
+    await aptosTestnet.waitForBlocks(1, 120);
 
-  const nodeUrl = `${aptosTestnet.validatorApiUrl(0)}/v1`;
+    const nodeUrl = `${aptosTestnet.validatorApiUrl(0)}/v1`;
 
-  const aptosDeployerPrivateKey =
-    process.env.APTOS_DEPLOYER_PRIVATE_KEY ||
-    "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
-  const aptosModuleAddress =
-    process.env.APTOS_ATOMICA_CONTRACT_ADDRESS ||
-    "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
+    const aptosDeployerPrivateKey =
+        process.env.APTOS_DEPLOYER_PRIVATE_KEY ||
+        "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
+    const aptosModuleAddress =
+        process.env.APTOS_ATOMICA_CONTRACT_ADDRESS ||
+        "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 
-  // Fund the deployer so it can deploy contracts.
-  await aptosTestnet.faucet(aptosModuleAddress, 100_000_000_000n);
-  console.log(`[Dual-Chain] ✓ Funded Aptos deployer: ${aptosModuleAddress}`);
+    // Fund the deployer so it can deploy contracts.
+    await aptosTestnet.faucet(aptosModuleAddress, 100_000_000_000n);
+    console.log(`[Dual-Chain] ✓ Funded Aptos deployer: ${aptosModuleAddress}`);
 
-  const contractsDir = join(THIS_DIR, "../../../atomica-move-contracts");
-  await aptosTestnet.deployContracts({
-    contractsDir,
-    deployerPrivateKey: aptosDeployerPrivateKey,
-    deployerAddress: aptosModuleAddress,
-    namedAddresses: { atomica: aptosModuleAddress },
-    initFunctions: [
-      {
-        functionId: `${aptosModuleAddress}::registry::initialize`,
-        args: ["hex:0123456789abcdef"],
-      },
-      { functionId: `${aptosModuleAddress}::fake_eth::initialize`, args: [] },
-      { functionId: `${aptosModuleAddress}::fake_usd::initialize`, args: [] },
-    ],
-    fundAmount: 10_000_000_000n,
-  });
-  console.log(`[Dual-Chain] ✓ Aptos contracts deployed`);
+    const contractsDir = join(THIS_DIR, "../../../atomica-move-contracts");
+    await aptosTestnet.deployContracts({
+        contractsDir,
+        deployerPrivateKey: aptosDeployerPrivateKey,
+        deployerAddress: aptosModuleAddress,
+        namedAddresses: { atomica: aptosModuleAddress },
+        initFunctions: [
+            {
+                functionId: `${aptosModuleAddress}::registry::initialize`,
+                args: ["hex:0123456789abcdef"],
+            },
+            { functionId: `${aptosModuleAddress}::fake_eth::initialize`, args: [] },
+            { functionId: `${aptosModuleAddress}::fake_usd::initialize`, args: [] },
+        ],
+        fundAmount: 10_000_000_000n,
+    });
+    console.log(`[Dual-Chain] ✓ Aptos contracts deployed`);
 
-  console.log("[Dual-Chain] Dual-chain testnet ready.");
+    console.log("[Dual-Chain] Dual-chain testnet ready.");
 
-  return {
-    eth: {
-      rpcUrl,
-      chainId,
-      contracts: { fakeETH, fakeUSD, lockBox },
-      deployerPrivateKey,
-      deployerAddress,
-      bidderPrivateKey,
-      bidderAddress,
-    },
-    aptos: {
-      nodeUrl,
-      moduleAddress: aptosModuleAddress,
-      deployerPrivateKey: aptosDeployerPrivateKey,
-    },
-  };
+    return {
+        eth: {
+            rpcUrl,
+            chainId,
+            contracts: { fakeETH, fakeUSD, lockBox },
+            deployerPrivateKey,
+            deployerAddress,
+            bidderPrivateKey,
+            bidderAddress,
+        },
+        aptos: {
+            nodeUrl,
+            moduleAddress: aptosModuleAddress,
+            deployerPrivateKey: aptosDeployerPrivateKey,
+        },
+    };
 }
 
 /**
  * Tear down both testnets.
  */
 export async function teardownDualChainTestnet(): Promise<void> {
-  console.log("[Dual-Chain] Tearing down dual-chain testnet...");
+    console.log("[Dual-Chain] Tearing down dual-chain testnet...");
 
-  await Promise.all([
-    ethTestnet ? ethTestnet.teardown().finally(() => { ethTestnet = null; }) : Promise.resolve(),
-    aptosTestnet ? aptosTestnet.teardown().finally(() => { aptosTestnet = null; }) : Promise.resolve(),
-  ]);
+    await Promise.all([
+        ethTestnet
+            ? ethTestnet.teardown().finally(() => {
+                  ethTestnet = null;
+              })
+            : Promise.resolve(),
+        aptosTestnet
+            ? aptosTestnet.teardown().finally(() => {
+                  aptosTestnet = null;
+              })
+            : Promise.resolve(),
+    ]);
 
-  console.log("[Dual-Chain] ✓ Both testnets stopped");
+    console.log("[Dual-Chain] ✓ Both testnets stopped");
 }

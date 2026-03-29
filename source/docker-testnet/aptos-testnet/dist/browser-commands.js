@@ -104,7 +104,7 @@ deployContracts, fundAccount,
 // killZombies, // Unused - setupLocalnet handles cleanup internally
  } from "./localnet.js";
 import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testnet.js";
-import { setupDualChainTestnet, teardownDualChainTestnet, } from "./dual-chain-testnet.js";
+import { setupDualChainTestnet, teardownDualChainTestnet } from "./dual-chain-testnet.js";
 /**
  * Start the local Aptos testnet.
  *

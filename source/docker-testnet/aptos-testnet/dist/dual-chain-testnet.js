@@ -154,8 +154,16 @@ export async function setupDualChainTestnet() {
 export async function teardownDualChainTestnet() {
     console.log("[Dual-Chain] Tearing down dual-chain testnet...");
     await Promise.all([
-        ethTestnet ? ethTestnet.teardown().finally(() => { ethTestnet = null; }) : Promise.resolve(),
-        aptosTestnet ? aptosTestnet.teardown().finally(() => { aptosTestnet = null; }) : Promise.resolve(),
+        ethTestnet
+            ? ethTestnet.teardown().finally(() => {
+                ethTestnet = null;
+            })
+            : Promise.resolve(),
+        aptosTestnet
+            ? aptosTestnet.teardown().finally(() => {
+                aptosTestnet = null;
+            })
+            : Promise.resolve(),
     ]);
     console.log("[Dual-Chain] ✓ Both testnets stopped");
 }
