@@ -43,3 +43,7 @@ bun.lock
 
 # Agent assets (local only, not committed)
 .agents/
+
+# MetaMask extension download (run test:metamask:download-ext to populate)
+source/atomica-web-ui/tests/browser-extension/metamask-extension/
+source/atomica-web-ui/tests/browser-extension/.metamask-version
