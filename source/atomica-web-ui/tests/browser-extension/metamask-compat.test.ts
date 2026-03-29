@@ -72,7 +72,7 @@
  *   at most two popup windows (popup #1 for addChain, popup #2 for connect and
  *   tx confirm). The notification queue pattern handles this correctly.
  *
- * See source/docs/browser-extension-compatibility.md for full findings.
+ * See docs/development/browser-extension-compatibility.md for full findings.
  */
 
 import { chromium, BrowserContext, Page } from "playwright";
