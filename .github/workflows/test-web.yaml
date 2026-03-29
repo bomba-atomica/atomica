@@ -73,7 +73,13 @@ jobs:
 
       - name: Run Aptos Testnet SDK tests
         working-directory: source/docker-testnet/aptos-testnet
-        run: bun run test
+        run: |
+          # Load test credentials from source/.env.test so genesis can access
+          # APTOS_ROOT_ACCOUNT_PUBLIC_KEY and APTOS_VALIDATOR_*_SEED variables.
+          set -a
+          source ../../.env.test
+          set +a
+          bun run test
 
   test-web-demo:
     name: Web Demo Tests (${{ matrix.type }})

@@ -1,7 +1,9 @@
 const STORAGE_KEY = "atomica-testnet-host";
 let runtimeHost = null;
+// Safe access to import.meta.env — works in both Vite (browser/SSR) and plain Node.js
+const metaEnv = import.meta.env || {};
 function getBrowserHost() {
-    return import.meta.env.VITE_HOST_IP || "localhost";
+    return metaEnv.VITE_HOST_IP || "localhost";
 }
 export function getStoredHost() {
     if (runtimeHost && runtimeHost.trim()) {
@@ -61,11 +63,11 @@ export function buildEthRpcUrl(host) {
         return `${window.location.origin}/eth-api`;
     }
     // Node / test context — explicit override takes precedence, then derive from host
-    const override = import.meta.env.VITE_ETH_RPC_URL;
+    const override = metaEnv.VITE_ETH_RPC_URL;
     if (override) {
         return override;
     }
-    const port = import.meta.env.VITE_ETHEREUM_HTTP_PORT || "8545";
+    const port = metaEnv.VITE_ETHEREUM_HTTP_PORT || "8545";
     const url = ensurePort(parseTargetHost(host), port);
     if (url.pathname === "/") {
         url.pathname = "";
@@ -88,11 +90,11 @@ export function buildAptosFullnodeUrl(host) {
         return `${window.location.origin}/aptos-api/v1`;
     }
     // Node / test context — explicit override takes precedence, then derive from host
-    const override = import.meta.env.VITE_APTOS_FULLNODE_URL;
+    const override = metaEnv.VITE_APTOS_FULLNODE_URL;
     if (override) {
         return override;
     }
-    const port = import.meta.env.VITE_APTOS_HTTP_PORT || "8080";
+    const port = metaEnv.VITE_APTOS_HTTP_PORT || "8080";
     const url = ensurePort(parseTargetHost(host), port);
     url.pathname = "/v1";
     return url.toString();
