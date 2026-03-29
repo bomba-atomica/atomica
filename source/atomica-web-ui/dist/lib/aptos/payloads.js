@@ -78,7 +78,9 @@ export async function areCoreContractsDeployed() {
         const modules = await aptos.getAccountModules({
             accountAddress: CONTRACT_ADDR,
         });
-        const deployed = new Set(modules.map((module) => module.abi?.name).filter(Boolean));
+        const deployed = new Set(modules
+            .map((module) => module.abi?.name)
+            .filter(Boolean));
         return requiredModules.every((name) => deployed.has(name));
     }
     catch (e) {

@@ -3,10 +3,11 @@ interface Props {
     minPrice?: bigint;
     auctionEndTime?: number;
     unlockTime?: number;
+    sellerAddress?: string | null;
     onCancelAndUnlock: () => Promise<void>;
     loading: boolean;
     error?: string;
 }
-export declare function Step8Monitor({ amount, minPrice, auctionEndTime, unlockTime, onCancelAndUnlock, loading, error, }: Props): import("react/jsx-runtime").JSX.Element;
+export declare function Step8Monitor({ amount, minPrice, auctionEndTime, unlockTime, sellerAddress, onCancelAndUnlock, loading, error, }: Props): import("react/jsx-runtime").JSX.Element;
 export {};
 //# sourceMappingURL=Step8Monitor.d.ts.map
