@@ -15,7 +15,7 @@ import {
   serializeSIWEAbstractSignature,
   serializeSIWEAbstractPublicKey,
   SIWEAccountAuthenticator,
-} from "./siwe";
+} from "./siwe.js";
 
 function sha3(bytes: Uint8Array): Uint8Array {
   return sha3_256(bytes);
