@@ -5,6 +5,7 @@ interface Props {
   minPrice?: bigint;
   auctionEndTime?: number;
   unlockTime?: number;
+  sellerAddress?: string | null;
   onCancelAndUnlock: () => Promise<void>;
   loading: boolean;
   error?: string;
@@ -71,6 +72,7 @@ export function Step8Monitor({
   minPrice,
   auctionEndTime,
   unlockTime,
+  sellerAddress,
   onCancelAndUnlock,
   loading,
   error,
@@ -97,10 +99,23 @@ export function Step8Monitor({
           <span className="text-zinc-500">Min price</span>
           <span className="text-zinc-200 font-mono">{priceFormatted}</span>
         </div>
+        {sellerAddress && (
+          <div className="flex justify-between text-sm">
+            <span className="text-zinc-500">Seller address</span>
+            <span
+              data-testid="auction-seller-address"
+              className="text-zinc-200 font-mono text-xs truncate max-w-[180px]"
+              title={sellerAddress}
+            >
+              {sellerAddress}
+            </span>
+          </div>
+        )}
         <div className="h-px bg-zinc-800" />
         <div className="flex justify-between text-sm">
           <span className="text-zinc-500">Auction closes in</span>
           <span
+            data-testid="auction-countdown"
             className={`font-mono ${ended ? "text-zinc-500" : "text-zinc-200"}`}
           >
             {auctionEndTime ? formatDuration(remaining) : "—"}
@@ -109,6 +124,7 @@ export function Step8Monitor({
         <div className="flex justify-between text-sm">
           <span className="text-zinc-500">Status</span>
           <span
+            data-testid="auction-status-badge"
             className={`text-xs px-2 py-0.5 rounded ${
               ended ? "bg-zinc-700 text-zinc-400" : "bg-zinc-800 text-zinc-300"
             }`}

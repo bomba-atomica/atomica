@@ -6,6 +6,7 @@ interface Props {
   amount?: bigint;
   minPrice?: bigint;
   unlockTime?: number;
+  txHash?: string;
   onCreateAuction: () => Promise<void>;
 }
 
@@ -15,6 +16,7 @@ export function Step7Auction({
   amount,
   minPrice,
   unlockTime: _unlockTime,
+  txHash,
   onCreateAuction,
 }: Props) {
   // Auto-create on mount
@@ -40,11 +42,20 @@ export function Step7Auction({
       </p>
 
       {!error && (
-        <div className="flex items-center gap-3 rounded border border-zinc-800 bg-zinc-950/60 p-3">
+        <div
+          data-testid="auction-spinner"
+          className="flex items-center gap-3 rounded border border-zinc-800 bg-zinc-950/60 p-3"
+        >
           <div className="w-4 h-4 border-2 border-zinc-500 border-t-zinc-200 rounded-full animate-spin flex-shrink-0" />
           <span className="text-sm text-zinc-400">
             {loading ? "Creating auction…" : "Preparing…"}
           </span>
+        </div>
+      )}
+
+      {txHash && (
+        <div data-testid="auction-tx-hash" className="text-xs text-zinc-600 font-mono break-all">
+          Tx: {txHash}
         </div>
       )}
 

@@ -22,7 +22,10 @@ export function Step5Submit({ loading, error, onSubmit }: Props) {
       </p>
 
       {!error && (
-        <div className="flex items-center gap-3 rounded border border-zinc-800 bg-zinc-950/60 p-3">
+        <div
+          data-testid="submit-status"
+          className="flex items-center gap-3 rounded border border-zinc-800 bg-zinc-950/60 p-3"
+        >
           <div className="w-4 h-4 border-2 border-zinc-500 border-t-zinc-200 rounded-full animate-spin flex-shrink-0" />
           <span className="text-sm text-zinc-400">
             {loading ? "Submitting…" : "Preparing…"}
@@ -32,8 +35,11 @@ export function Step5Submit({ loading, error, onSubmit }: Props) {
 
       {error && (
         <div className="flex flex-col gap-2">
-          <p className="text-xs text-red-400 font-mono break-all">{error}</p>
+          <p data-testid="submit-status" className="text-xs text-red-400 font-mono break-all">
+            {error}
+          </p>
           <button
+            data-testid="submit-proof-button"
             onClick={onSubmit}
             disabled={loading}
             className="w-full py-2 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-semibold transition-colors"

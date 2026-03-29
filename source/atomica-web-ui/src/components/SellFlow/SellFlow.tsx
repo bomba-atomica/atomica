@@ -44,6 +44,7 @@ export function SellFlow() {
         <Step1Connect
           onConnect={connect}
           fakeEthBalance={ethBalances?.ethFakeETH}
+          account={account}
         />
       ) : flow.step === "lock" ? (
         <Step2Lock
@@ -82,6 +83,7 @@ export function SellFlow() {
           minPrice={flow.minPrice}
           auctionEndTime={flow.auctionEndTime}
           unlockTime={flow.unlockTime}
+          sellerAddress={account}
           onCancelAndUnlock={flow.cancelAndUnlock}
           loading={flow.loading}
           error={flow.error}
