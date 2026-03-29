@@ -1,14 +1,16 @@
 import { exec as execCb } from "child_process";
 import { promisify } from "util";
 import { existsSync } from "fs";
-import { resolve } from "path";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 import crypto from "crypto";
 import { readdir, readFile } from "fs/promises";
 import { join } from "path";
 
 const exec = promisify(execCb);
 
-const SOURCE_ROOT = resolve(__dirname, "../../..");
+const THIS_DIR = dirname(fileURLToPath(import.meta.url));
+const SOURCE_ROOT = resolve(THIS_DIR, "../../..");
 const ZAPATOS_FRAMEWORK_DIR = resolve(SOURCE_ROOT, "atomica-aptos/aptos-move/framework");
 const FIXTURES_DIR = resolve(SOURCE_ROOT, "move-framework-fixtures");
 const BUILD_SCRIPT = resolve(SOURCE_ROOT, "move-framework-fixtures/build-framework.sh");

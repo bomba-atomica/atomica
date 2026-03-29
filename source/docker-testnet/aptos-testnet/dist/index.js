@@ -2,9 +2,11 @@ import { AptosAccount, AptosClient, HexString, TxnBuilderTypes, BCS } from "apto
 import { spawn } from "child_process";
 import * as dotenv from "dotenv";
 import { cpSync, existsSync, mkdirSync, readFileSync } from "fs";
-import { resolve as pathResolve } from "path";
+import { resolve as pathResolve, dirname } from "path";
+import { fileURLToPath } from "url";
 import { generateGenesis } from "./genesis.js";
 import { findAptosBinary } from "./findAptosBinary.js";
+const __dirname = dirname(fileURLToPath(import.meta.url));
 /** Base API port for validators (incremented for each validator) */
 const BASE_API_PORT = 8080;
 /** Base validator network port for inter-validator communication */
