@@ -24,7 +24,7 @@ export {
     serializeSIWEAbstractSignature,
     serializeSIWEAbstractPublicKey,
     SIWEAccountAuthenticator,
-} from "./siwe";
+} from "./siwe.js";
 
 export {
     CONTRACT_ADDR,
@@ -39,17 +39,17 @@ export {
     submitCreateAuction,
     getBidPayload,
     submitBid,
-} from "./payloads";
+} from "./payloads.js";
 
 export {
     prepareNativeTransaction,
     simulateNativeTransaction,
     submitPreparedTransaction,
     submitNativeTransaction,
-} from "./transaction";
-export type { PreparedTransaction } from "./transaction";
+} from "./transaction.js";
+export type { PreparedTransaction } from "./transaction.js";
 
-export { aptos, setAptosInstance } from "./config";
+export { aptos, setAptosInstance } from "./config.js";
 
-export { MockWallet } from "./browser-utils/MockWallet";
-export { setupBrowserWalletMock } from "./browser-utils/wallet-mock";
+export { MockWallet } from "./browser-utils/MockWallet.js";
+export { setupBrowserWalletMock } from "./browser-utils/wallet-mock.js";

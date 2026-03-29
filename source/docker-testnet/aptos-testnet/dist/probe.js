@@ -5,7 +5,7 @@
  * Usage:
  *   npm run build && node dist/probe.js [num_validators]
  */
-import { probeTestnet } from "./index";
+import { probeTestnet } from "./index.js";
 const numValidators = parseInt(process.argv[2] || "4", 10);
 if (isNaN(numValidators) || numValidators < 1 || numValidators > 7) {
     console.error("Usage: probe.js [num_validators]");

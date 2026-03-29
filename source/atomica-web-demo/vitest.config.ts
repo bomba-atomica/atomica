@@ -27,6 +27,9 @@ export default defineConfig({
       "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
     },
   },
+  optimizeDeps: {
+    include: ["react-dom/client", "@testing-library/react"],
+  },
   test: {
     globals: true,
 

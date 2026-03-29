@@ -1,4 +1,4 @@
-import { aptos } from "./config";
+import { aptos } from "./config.js";
 import { prepareNativeTransaction as sdkPrepare, submitNativeTransaction as sdkSubmit, simulateNativeTransaction as sdkSimulate, submitPreparedTransaction as sdkSubmitPrepared, } from "@atomica/sdk";
 export async function prepareNativeTransaction(ethAddress, payload) {
     return sdkPrepare(aptos, ethAddress, payload);

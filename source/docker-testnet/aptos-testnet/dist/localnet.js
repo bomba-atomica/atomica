@@ -34,7 +34,7 @@
  *
  * See: ../docker-testnet/typescript-sdk/README.md
  */
-import { DockerTestnet } from "./index";
+import { DockerTestnet } from "./index.js";
 import { resolve as pathResolve, dirname } from "path";
 import { fileURLToPath } from "url";
 /**

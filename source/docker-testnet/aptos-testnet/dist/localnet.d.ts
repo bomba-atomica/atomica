@@ -34,7 +34,7 @@
  *
  * See: ../docker-testnet/typescript-sdk/README.md
  */
-import { DockerTestnet } from "./index";
+import { DockerTestnet } from "./index.js";
 /**
  * Start Docker-based local testnet with a single validator.
  *

@@ -102,8 +102,8 @@ import { setupLocalnet,
 // teardownLocalnet, // Unused in persistent mode
 deployContracts, fundAccount,
 // killZombies, // Unused - setupLocalnet handles cleanup internally
- } from "./localnet";
-import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testnet";
+ } from "./localnet.js";
+import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testnet.js";
 /**
  * Start the local Aptos testnet.
  *

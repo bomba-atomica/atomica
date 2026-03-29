@@ -1,7 +1,7 @@
-export { CONTRACT_ADDR } from "./config";
-import { CONTRACT_ADDR, aptos } from "./config";
-import { getDerivedAddress } from "./siwe";
-import { submitNativeTransaction } from "./transaction";
+export { CONTRACT_ADDR } from "./config.js";
+import { CONTRACT_ADDR, aptos } from "./config.js";
+import { getDerivedAddress } from "./siwe.js";
+import { submitNativeTransaction } from "./transaction.js";
 /**
  * Sanity Test: Simple APT transfer using MetaMask signature
  * This tests ONLY the signature verification without any custom contracts

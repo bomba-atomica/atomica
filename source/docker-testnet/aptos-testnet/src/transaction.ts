@@ -1,4 +1,4 @@
-import { aptos } from "./config";
+import { aptos } from "./config.js";
 import {
     prepareNativeTransaction as sdkPrepare,
     submitNativeTransaction as sdkSubmit,

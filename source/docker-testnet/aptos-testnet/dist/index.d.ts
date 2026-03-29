@@ -79,12 +79,12 @@ export interface ProbeResult {
     }[];
 }
 export declare function probeTestnet(numValidators?: number): Promise<ProbeResult[]>;
-export * from "./config";
-export * from "./siwe";
-export * from "./transaction";
-export * from "./payloads";
-export * from "./localnet";
-export * from "./browser-commands";
-export * from "./ensureFramework";
-export * from "./findAptosBinary";
-export * from "./genesis";
+export * from "./config.js";
+export * from "./siwe.js";
+export * from "./transaction.js";
+export * from "./payloads.js";
+export * from "./localnet.js";
+export * from "./browser-commands.js";
+export * from "./ensureFramework.js";
+export * from "./findAptosBinary.js";
+export * from "./genesis.js";

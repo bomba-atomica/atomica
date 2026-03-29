@@ -1,5 +1,5 @@
 import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
-export { CONTRACT_ADDR } from "./config";
+export { CONTRACT_ADDR } from "./config.js";
 /**
  * Sanity Test: Simple APT transfer using MetaMask signature
  * This tests ONLY the signature verification without any custom contracts

@@ -3,8 +3,8 @@ import { spawn } from "child_process";
 import * as dotenv from "dotenv";
 import { cpSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { resolve as pathResolve } from "path";
-import { generateGenesis } from "./genesis";
-import { findAptosBinary } from "./findAptosBinary";
+import { generateGenesis } from "./genesis.js";
+import { findAptosBinary } from "./findAptosBinary.js";
 
 /** Base API port for validators (incremented for each validator) */
 const BASE_API_PORT = 8080;
@@ -1010,12 +1010,12 @@ export async function probeTestnet(numValidators: number = 4): Promise<ProbeResu
 }
 
 // Re-export all other modules
-export * from "./config";
-export * from "./siwe";
-export * from "./transaction";
-export * from "./payloads";
-export * from "./localnet";
-export * from "./browser-commands";
-export * from "./ensureFramework";
-export * from "./findAptosBinary";
-export * from "./genesis";
+export * from "./config.js";
+export * from "./siwe.js";
+export * from "./transaction.js";
+export * from "./payloads.js";
+export * from "./localnet.js";
+export * from "./browser-commands.js";
+export * from "./ensureFramework.js";
+export * from "./findAptosBinary.js";
+export * from "./genesis.js";

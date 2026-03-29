@@ -4,7 +4,7 @@
  * This ensures all async operations, timers, browser contexts,
  * and Docker testnet are properly closed before the process exits.
  */
-import { teardownLocalnet } from "./localnet";
+import { teardownLocalnet } from "./localnet.js";
 
 export async function teardown() {
     // Give async operations time to complete

@@ -106,8 +106,8 @@ import {
     deployContracts,
     fundAccount,
     // killZombies, // Unused - setupLocalnet handles cleanup internally
-} from "./localnet";
-import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testnet";
+} from "./localnet.js";
+import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testnet.js";
 
 /**
  * Module augmentation to add our custom commands to Vitest's browser commands types.
