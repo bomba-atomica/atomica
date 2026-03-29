@@ -233,16 +233,11 @@ export class DockerTestnet {
         return new AptosAccount(privateKey, address);
     }
     getFaucetAccount() {
-        const rootKeysPath = pathResolve(this.composeDir, "genesis-artifacts", "root-account-private-keys.yaml");
-        if (!existsSync(rootKeysPath)) {
-            throw new Error(`Root account keys file not found: ${rootKeysPath}`);
-        }
-        const content = readFileSync(rootKeysPath, "utf-8");
-        const keyMatch = content.match(/account_private_key:\s*"0x([a-fA-F0-9]+)"/);
-        if (!keyMatch) {
-            throw new Error(`Failed to parse root account private key from ${rootKeysPath}`);
-        }
-        const privateKey = HexString.ensure(keyMatch[1]).toUint8Array();
+        // Use env var (with deterministic test default) for the root account private key.
+        // The root_key from layout.yaml controls the core resources account at 0xA550C18.
+        const FALLBACK_ROOT_KEY = "0x970daae6672b68f76de3418f2f61cc469ff6659393b95c25fc72142c1433fa2d";
+        const rawKey = process.env.APTOS_ROOT_ACCOUNT_PRIVATE_KEY || FALLBACK_ROOT_KEY;
+        const privateKey = HexString.ensure(rawKey).toUint8Array();
         const coreResourcesAddress = "0x00000000000000000000000000000000000000000000000000000000A550C18";
         return new AptosAccount(privateKey, coreResourcesAddress);
     }
