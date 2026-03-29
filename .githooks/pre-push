@@ -66,11 +66,18 @@ check_module "Ethereum Docker SDK" "source/docker-testnet/ethereum-testnet/types
 # 3. EVM Contracts Test Orchestrator
 check_module "EVM Contracts Test Orchestrator" "source/evm-contracts/test-orchestration" "bun run build" "bun run lint" "bun run format:check"
 
-# 4. Base Docker Testnet SDK (Optional/Skip if no node_modules)
-check_module "Docker Testnet SDK" "source/docker-testnet/typescript-sdk"
+# 4. Aptos Docker Testnet SDK (Optional/Skip if no node_modules)
+check_module "Aptos Docker Testnet SDK" "source/docker-testnet/aptos-testnet"
 
-# 5. Atomica Web (Optional/Skip if no node_modules)
-check_module "Atomica Web" "source/atomica-web" "bun x tsc -b" "bun run lint" "bun run format:check"
+# 5. Atomica SDK
+check_module "Atomica SDK" "source/atomica-sdk"
+
+# 6. Atomica Web UI
+check_module "Atomica Web UI" "source/atomica-web-ui" "bun run build" "bun run lint" "bun run format:check"
+
+# 7. Atomica Web Demo
+check_module "Atomica Web Demo" "source/atomica-web-demo" "bun run build" "bun run lint" "bun run format:check"
+
 
 echo "--------------------------------------------------"
 echo "🎉 Code quality checks passed! Push allowed."

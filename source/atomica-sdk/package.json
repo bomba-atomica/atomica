@@ -1,0 +1,34 @@
+{
+  "name": "@atomica/sdk",
+  "version": "0.1.0",
+  "description": "Atomica SDK - Account and transaction utilities for Aptos blockchain",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "dependencies": {
+    "@aptos-labs/ts-sdk": "^5.2.0",
+    "@noble/hashes": "^1.3.3",
+    "ethers": "^6.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "@vitest/browser": "^4.0.16",
+    "@vitest/browser-playwright": "^4.0.16",
+    "eslint": "^9.39.2",
+    "playwright": "^1.57.0",
+    "prettier": "^3.7.4",
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.54.0",
+    "vitest": "^4.0.0"
+  }
+}

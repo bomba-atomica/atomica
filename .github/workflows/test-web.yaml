@@ -2,9 +2,9 @@ name: Test Web (TypeScript/Vitest)
 
 on:
   pull_request:
-    
+
   push:
-    
+
   workflow_dispatch:
 
 jobs:
@@ -36,28 +36,43 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install dependencies (auto-builds local packages via prepare scripts)
+      - name: Build Ethereum Testnet SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
         run: |
-          cd source/atomica-web
-          bun install
-
-      - name: Build state-proof-verifier
-        run: |
-          cd source/state-proofs/typescript
           bun install
           bun run build
 
-      - name: Install Playwright browsers
+      - name: Build Atomica SDK
+        working-directory: source/atomica-sdk
         run: |
-          cd source/atomica-web
-          bunx playwright install --with-deps
+          bun install
+          bun run build
+
+      - name: Build State Proofs
+        if: matrix.type != 'unit'
+        working-directory: source/state-proofs/typescript
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Aptos Testnet SDK
+        working-directory: source/docker-testnet/aptos-testnet
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Atomica Web UI
+        if: matrix.type == 'ui' || matrix.type == 'meta'
+        working-directory: source/atomica-web-ui
+        run: |
+          bun install
+          bun run build
 
       - name: Install Aptos CLI
-        if: matrix.type == 'meta' || matrix.type == 'integration' || matrix.type == 'ui'
+        if: matrix.type == 'unit' || matrix.type == 'ui'
         run: |
           # Download aptos binary from atomica-aptos releases
-          APTOS_VERSION="binary-125d36b957"
-          # Extract hash from version tag (format: binary-HASH)
+          APTOS_VERSION="binary-fac20096d4"
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
           APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
@@ -73,11 +88,70 @@ jobs:
           aptos --version
           which aptos
 
-      - name: Install Foundry
-        if: matrix.type == 'meta' || matrix.type == 'integration' || matrix.type == 'ui'
-        uses: foundry-rs/foundry-toolchain@v1
-
-      - name: Run TypeScript tests with Vitest
+      - name: Pre-warm Move git dependency cache
+        if: matrix.type == 'unit' || matrix.type == 'ui'
         run: |
-          cd source/atomica-web
-          bun run test:${{ matrix.type }}
+          # Step 1: Fetch the atomica-aptos git dependency by compiling atomica-move-contracts.
+          # This clones the repo and generates Move.lock for atomica-move-contracts.
+          aptos move compile \
+            --package-dir source/atomica-move-contracts \
+            --named-addresses atomica=0x1
+          # Step 2: Compile the noop fixture using the already-cached dep
+          # (--skip-fetch-latest-git-deps avoids a second git fetch that fails
+          # with exit 128 when trying to reset an already-cloned repo).
+          aptos move compile \
+            --package-dir source/docker-testnet/aptos-testnet/test/fixtures/noop \
+            --named-addresses noop=0x1 \
+            --skip-fetch-latest-git-deps
+
+      # ── unit: Aptos Testnet SDK Tests ──────────────────────────────────────
+      - name: Run Aptos Testnet SDK tests
+        if: matrix.type == 'unit'
+        working-directory: source/docker-testnet/aptos-testnet
+        env:
+          APTOS_ROOT_ACCOUNT_ADDRESS: "0x585dd6daddafb44af185ea1e1bb7ac94c1fd9314787ce2b64ddaa70a8c9baf0c"
+          APTOS_ROOT_ACCOUNT_PRIVATE_KEY: "0x970daae6672b68f76de3418f2f61cc469ff6659393b95c25fc72142c1433fa2d"
+          APTOS_ROOT_ACCOUNT_PUBLIC_KEY: "0x9b34d9d1f7e943b6c9462a987d978125899c0ca8e84018f0a0afca93ac2fcfaf"
+          APTOS_DEPLOYER_ADDRESS: "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa"
+          APTOS_DEPLOYER_PRIVATE_KEY: "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717"
+          APTOS_VALIDATOR_0_SEED: "0000000000000000000000000000000000000000000000000000000000000001"
+          APTOS_VALIDATOR_1_SEED: "0000000000000000000000000000000000000000000000000000000000000002"
+          APTOS_VALIDATOR_2_SEED: "0000000000000000000000000000000000000000000000000000000000000003"
+          APTOS_VALIDATOR_3_SEED: "0000000000000000000000000000000000000000000000000000000000000004"
+          APTOS_VALIDATOR_4_SEED: "0000000000000000000000000000000000000000000000000000000000000005"
+          APTOS_VALIDATOR_5_SEED: "0000000000000000000000000000000000000000000000000000000000000006"
+          APTOS_VALIDATOR_6_SEED: "0000000000000000000000000000000000000000000000000000000000000007"
+        run: bun run test
+
+      # ── integration: State Proofs Tests ────────────────────────────────────
+      - name: Run IBE / State Proofs tests
+        if: matrix.type == 'integration'
+        working-directory: source/state-proofs/typescript
+        run: bun test tests/ibe.test.ts
+
+      # ── ui: Atomica Web UI browser component tests ─────────────────────────
+      - name: Install Playwright browsers (web UI)
+        if: matrix.type == 'ui'
+        working-directory: source/atomica-web-ui
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run Web UI tests
+        if: matrix.type == 'ui'
+        working-directory: source/atomica-web-ui
+        run: bunx vitest run tests/AccountStatus.test.tsx tests/TxButton.skip-submit.test.tsx
+
+      # ── meta: Web Demo unit tests ───────────────────────────────────────────
+      - name: Install demo dependencies
+        if: matrix.type == 'meta'
+        working-directory: source/atomica-web-demo
+        run: bun install
+
+      - name: Install Playwright browsers (demo)
+        if: matrix.type == 'meta'
+        working-directory: source/atomica-web-demo
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run Web Demo unit tests
+        if: matrix.type == 'meta'
+        working-directory: source/atomica-web-demo
+        run: bunx vitest run tests/simple.test.ts tests/sdk-import.test.ts tests/aptos-sdk.test.ts tests/mock-wallet.test.ts tests/app-import.test.ts tests/app-component.test.tsx

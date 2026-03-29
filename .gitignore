@@ -35,8 +35,7 @@ tests/Cargo.lock
 # Bun
 bun.lockb
 bun.lock
-**/dist/
 
-# Local Codex configuration
-.codex/config.toml
-.codex/rules/
+# Build artifacts
+dist/
+node_modules/

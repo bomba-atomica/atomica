@@ -1,0 +1,9 @@
+[package]
+name = "noop"
+version = "1.0.0"
+
+[dependencies]
+AptosFramework = { git = "https://github.com/bomba-atomica/atomica-aptos.git", subdir = "aptos-move/framework/aptos-framework", rev = "dev-atomica" }
+
+[addresses]
+noop = "_"

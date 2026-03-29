@@ -1,0 +1,44 @@
+{
+  "name": "@atomica/atomica-web-ui",
+  "version": "0.1.0",
+  "description": "Reusable UI components for Atomica web applications",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "pretest": "bun run prepare:deps",
+    "prepare:deps": "cd ../atomica-sdk && bun install && bun run build && cd ../docker-testnet/aptos-testnet && bun install && bun run build && cd ../../state-proofs/typescript && bun install && bun run build",
+    "lint": "eslint src/**/*.ts src/**/*.tsx",
+    "lint:fix": "eslint src/**/*.ts src/**/*.tsx --fix",
+    "format": "prettier --write 'src/**/*.ts' 'src/**/*.tsx'",
+    "format:check": "prettier --check 'src/**/*.ts' 'src/**/*.tsx'",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@atomica/aptos-docker-testnet": "file:../docker-testnet/aptos-testnet",
+    "@atomica/sdk": "../atomica-sdk",
+    "@atomica/state-proof-verifier": "file:../state-proofs/typescript",
+    "@heroicons/react": "^2.2.0"
+  },
+  "peerDependencies": {
+    "react": "^19.2.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^25.1.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "@vitest/browser": "^4.0.16",
+    "@vitest/browser-playwright": "^4.0.16",
+    "eslint": "^9.39.2",
+    "playwright": "^1.57.0",
+    "prettier": "^3.8.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.54.0",
+    "vitest": "^4.0.18"
+  }
+}

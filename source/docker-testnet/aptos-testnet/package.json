@@ -1,0 +1,65 @@
+{
+    "name": "@atomica/aptos-docker-testnet",
+    "version": "0.1.0",
+    "description": "Aptos testnet harness and SDK for Atomica integration tests",
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "require": "./dist/index.js"
+        },
+        "./browser": {
+            "types": "./dist/browser-index.d.ts",
+            "import": "./dist/browser-index.js"
+        },
+        "./browser-commands": {
+            "types": "./dist/browser-commands.d.ts",
+            "import": "./dist/browser-commands.js"
+        },
+        "./browser-utils/*": {
+            "types": "./dist/browser-utils/*.d.ts",
+            "import": "./dist/browser-utils/*.js"
+        }
+    },
+    "browser": {
+        "child_process": false,
+        "fs": false,
+        "path": false,
+        "os": false,
+        "crypto": false,
+        "util": false,
+        "url": false,
+        "dotenv": false
+    },
+    "scripts": {
+        "build": "tsc",
+        "prepare:deps": "cd ../../atomica-sdk && bun install && bun run build",
+        "test": "vitest run --no-file-parallelism --pool=forks --maxWorkers=1",
+        "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+        "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
+        "lint": "ESLINT_USE_FLAT_CONFIG=false eslint .",
+        "lint:fix": "eslint . --fix"
+    },
+    "dependencies": {
+        "@aptos-labs/ts-sdk": "^5.2.0",
+        "@atomica/ethereum-docker-testnet": "../../docker-testnet/ethereum-testnet/typescript-sdk",
+        "@atomica/sdk": "../../atomica-sdk",
+        "@noble/bls12-381": "^1.4.0",
+        "aptos": "^1.22.1",
+        "dotenv": "^16.3.1",
+        "ethers": "^6.16.0"
+    },
+    "devDependencies": {
+        "@types/bun": "^1.3.5",
+        "@types/node": "^20.10.0",
+        "@typescript-eslint/eslint-plugin": "^8.51.0",
+        "@typescript-eslint/parser": "^8.51.0",
+        "eslint": "^9.39.2",
+        "prettier": "^3.7.4",
+        "typescript": "^5.3.3",
+        "vitest": "^4.0.0"
+    }
+}

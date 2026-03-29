@@ -1,0 +1,1 @@
+{"version":3,"file":"useAuctionPoolTotals.d.ts","sourceRoot":"","sources":["../../src/hooks/useAuctionPoolTotals.ts"],"names":[],"mappings":"AAAA;;;;;;;GAOG;AAOH,MAAM,WAAW,iBAAiB;IAChC,6DAA6D;IAC7D,cAAc,EAAE,MAAM,CAAC;IACvB,0CAA0C;IAC1C,aAAa,EAAE,MAAM,CAAC;IACtB,OAAO,EAAE,OAAO,CAAC;IACjB,KAAK,CAAC,EAAE,MAAM,CAAC;CAChB;AAgBD,wBAAgB,oBAAoB,IAAI,iBAAiB,CAgCxD"}
