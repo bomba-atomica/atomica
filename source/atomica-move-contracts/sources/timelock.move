@@ -30,47 +30,42 @@ module atomica::timelock {
     // View functions (4 required by Phase 0 acceptance criteria)
     // ---------------------------------------------------------------------------
 
+    #[view]
     /// Returns `true` if the IBE Master Public Key has been set by DKG.
     ///
     /// Clients should check this before submitting encrypted bids.
-    #[view]
     public fun is_ibe_ready(): bool {
         ibe_config::is_ready()
     }
 
+    #[view]
     /// Returns `true` if the given timelock's deadline has passed.
     ///
-    /// `timelock_id` — identifier returned by `ibe_config::register_timelock`.
-    #[view]
+    /// `timelock_id` is the identifier returned by `ibe_config::register_timelock`.
     public fun is_timelock_expired(timelock_id: u64): bool {
         ibe_config::is_expired(timelock_id)
     }
 
+    #[view]
     /// Returns the 32-byte IBE identity for a registered timelock.
     ///
     /// Clients use this identity to encrypt bids:
     /// `ciphertext = IBE.Encrypt(mpk, identity, plaintext)`
     ///
-    /// The returned bytes must be passed unchanged to the off-chain
-    /// `aptos_dkg::ibe::extract(msk, identity)` call.
-    ///
-    /// `timelock_id` — identifier returned by `ibe_config::register_timelock`.
-    #[view]
+    /// `timelock_id` is the identifier returned by `ibe_config::register_timelock`.
     public fun get_timelock_identity(timelock_id: u64): vector<u8> {
         ibe_config::get_identity(timelock_id)
     }
 
+    #[view]
     /// Returns the decryption key for a revealed timelock.
     ///
     /// Aborts if the timelock has not yet been revealed (i.e. the threshold
-    /// of DK shares has not been submitted and `finalize_timelock_reveal`
-    /// called).
+    /// of DK shares has not been submitted).
     ///
-    /// Returns a 48-byte compressed G1 point that can be used as the IBE
-    /// decryption key `d_ID = DK`.
+    /// Returns a 48-byte compressed G1 point.
     ///
-    /// `timelock_id` — identifier returned by `ibe_config::register_timelock`.
-    #[view]
+    /// `timelock_id` is the identifier returned by `ibe_config::register_timelock`.
     public fun get_decryption_key(timelock_id: u64): vector<u8> {
         ibe_config::get_decryption_key(timelock_id)
     }

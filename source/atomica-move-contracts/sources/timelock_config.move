@@ -81,26 +81,26 @@ module atomica::timelock_config {
     // View functions (4 required by Phase 0 acceptance criteria)
     // ---------------------------------------------------------------------------
 
-    /// Returns the minimum allowed timelock duration in microseconds.
     #[view]
+    /// Returns the minimum allowed timelock duration in microseconds.
     public fun get_min_duration_us(): u64 {
         DEFAULT_MIN_DURATION_US
     }
 
-    /// Returns the maximum allowed timelock duration in microseconds.
     #[view]
+    /// Returns the maximum allowed timelock duration in microseconds.
     public fun get_max_duration_us(): u64 {
         DEFAULT_MAX_DURATION_US
     }
 
-    /// Returns the reveal threshold numerator (default 67 for 67%).
     #[view]
+    /// Returns the reveal threshold numerator (default 67 for 67%).
     public fun get_threshold_numerator(): u64 {
         DEFAULT_THRESHOLD_NUMERATOR
     }
 
-    /// Returns the reveal threshold denominator (default 100).
     #[view]
+    /// Returns the reveal threshold denominator (default 100).
     public fun get_threshold_denominator(): u64 {
         DEFAULT_THRESHOLD_DENOMINATOR
     }
