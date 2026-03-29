@@ -156,8 +156,12 @@ export async function areContractsDeployed(): Promise<boolean> {
         });
 
         // Check if fake_eth and fake_usd modules exist
-        const hasFakeEth = modules.some((m: { abi?: { name?: string } }) => m.abi?.name === "fake_eth");
-        const hasFakeUsd = modules.some((m: { abi?: { name?: string } }) => m.abi?.name === "fake_usd");
+        const hasFakeEth = modules.some(
+            (m: { abi?: { name?: string } }) => m.abi?.name === "fake_eth",
+        );
+        const hasFakeUsd = modules.some(
+            (m: { abi?: { name?: string } }) => m.abi?.name === "fake_usd",
+        );
 
         return hasFakeEth && hasFakeUsd;
     } catch (e) {

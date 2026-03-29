@@ -28,11 +28,15 @@ export async function prepareNativeTransaction(
     return sdkPrepare(aptos, ethAddress, payload);
 }
 
-export async function simulateNativeTransaction(preparedTx: PreparedTransaction): Promise<SimulateResult> {
+export async function simulateNativeTransaction(
+    preparedTx: PreparedTransaction,
+): Promise<SimulateResult> {
     return sdkSimulate(aptos, preparedTx) as Promise<SimulateResult>;
 }
 
-export async function submitPreparedTransaction(preparedTx: PreparedTransaction): Promise<SubmitResult> {
+export async function submitPreparedTransaction(
+    preparedTx: PreparedTransaction,
+): Promise<SubmitResult> {
     return sdkSubmitPrepared(aptos, preparedTx) as Promise<SubmitResult>;
 }
 
