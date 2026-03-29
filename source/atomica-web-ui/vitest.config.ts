@@ -27,11 +27,25 @@ export default defineConfig(async () => {
 
   return {
     plugins: [react()],
-    // Inject test credentials as compile-time globals so tests can use them
-    // as bare identifiers (e.g. APTOS_DEPLOYER_PRIVATE_KEY).
+    // Point Vite at source/.env.test so VITE_* vars are available via
+    // import.meta.env (used by e.g. src/lib/aptos/config.ts for CONTRACT_ADDR).
+    envDir: resolve(__dirname, ".."),
+    // Also inject all vars as compile-time bare-identifier globals so tests
+    // can reference them directly (e.g. APTOS_DEPLOYER_PRIVATE_KEY).
     define: Object.fromEntries(
       Object.entries(testEnv).map(([k, v]) => [k, JSON.stringify(v)]),
     ),
+    // Proxy /aptos-api/* to the localnet Aptos node so browser-mode tests
+    // (where window is defined) can reach the node via the same relative URL
+    // that the production app uses.
+    server: {
+      proxy: {
+        "/aptos-api": {
+          target: "http://127.0.0.1:8080",
+          rewrite: (path: string) => path.replace(/^\/aptos-api/, ""),
+        },
+      },
+    },
     test: {
       globals: true,
       setupFiles: ["./tests/setup.ts"],
