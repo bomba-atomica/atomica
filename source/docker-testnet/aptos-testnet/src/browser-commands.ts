@@ -108,6 +108,8 @@ import {
     // killZombies, // Unused - setupLocalnet handles cleanup internally
 } from "./localnet.js";
 import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testnet.js";
+import { setupDualChainTestnet, teardownDualChainTestnet } from "./dual-chain-testnet.js";
+import type { DualChainTestnetInfo } from "./dual-chain-testnet.js";
 
 /**
  * Module augmentation to add our custom commands to Vitest's browser commands types.
@@ -121,6 +123,8 @@ export interface EthereumTestnetInfo {
     chainId: number;
 }
 
+export type { DualChainTestnetInfo };
+
 declare module "vitest/browser" {
     interface BrowserCommands {
         setupLocalnet(): Promise<{ success: boolean }>;
@@ -130,6 +134,8 @@ declare module "vitest/browser" {
             address: string,
             amount?: number,
         ): Promise<{ success: boolean; txHash: string }>;
+        setupDualChainTestnet(): Promise<DualChainTestnetInfo>;
+        teardownDualChainTestnet(): Promise<{ success: boolean }>;
     }
 }
 
@@ -263,5 +269,28 @@ export const setupEthereumTestnetCommand: BrowserCommand<[]> = async () => {
  */
 export const teardownEthereumTestnetCommand: BrowserCommand<[]> = async () => {
     await teardownEthereumTestnet();
+    return { success: true };
+};
+
+/**
+ * Start both Ethereum and Aptos Docker testnets, deploy all contracts, and
+ * fund the seller and bidder test accounts.
+ *
+ * Returns JSON-serialisable connection info so the browser-side fixture can
+ * create wallet mocks and call contracts via RPC.
+ *
+ * EXECUTION: Node.js (browser can't start Docker containers)
+ */
+export const setupDualChainTestnetCommand: BrowserCommand<[]> = async () => {
+    return await setupDualChainTestnet();
+};
+
+/**
+ * Tear down both testnets started by setupDualChainTestnetCommand.
+ *
+ * EXECUTION: Node.js
+ */
+export const teardownDualChainTestnetCommand: BrowserCommand<[]> = async () => {
+    await teardownDualChainTestnet();
     return { success: true };
 };

@@ -104,6 +104,7 @@ deployContracts, fundAccount,
 // killZombies, // Unused - setupLocalnet handles cleanup internally
  } from "./localnet.js";
 import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testnet.js";
+import { setupDualChainTestnet, teardownDualChainTestnet } from "./dual-chain-testnet.js";
 /**
  * Start the local Aptos testnet.
  *
@@ -225,5 +226,26 @@ export const setupEthereumTestnetCommand = async () => {
  */
 export const teardownEthereumTestnetCommand = async () => {
     await teardownEthereumTestnet();
+    return { success: true };
+};
+/**
+ * Start both Ethereum and Aptos Docker testnets, deploy all contracts, and
+ * fund the seller and bidder test accounts.
+ *
+ * Returns JSON-serialisable connection info so the browser-side fixture can
+ * create wallet mocks and call contracts via RPC.
+ *
+ * EXECUTION: Node.js (browser can't start Docker containers)
+ */
+export const setupDualChainTestnetCommand = async () => {
+    return await setupDualChainTestnet();
+};
+/**
+ * Tear down both testnets started by setupDualChainTestnetCommand.
+ *
+ * EXECUTION: Node.js
+ */
+export const teardownDualChainTestnetCommand = async () => {
+    await teardownDualChainTestnet();
     return { success: true };
 };
