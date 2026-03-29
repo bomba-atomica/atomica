@@ -73,16 +73,18 @@ jobs:
 
       - name: Pre-warm Move git dependency cache
         run: |
-          # Compile all Move packages used in tests to:
-          # 1. Fetch and cache the atomica-aptos git dependency
-          # 2. Generate Move.lock files so --skip-fetch-latest-git-deps works
-          #    in subsequent aptos move publish calls during tests
+          # Step 1: Fetch the atomica-aptos git dependency by compiling atomica-move-contracts.
+          # This clones the repo and generates Move.lock for atomica-move-contracts.
           aptos move compile \
             --package-dir source/atomica-move-contracts \
             --named-addresses atomica=0x1
+          # Step 2: Compile the noop fixture using the already-cached dep
+          # (--skip-fetch-latest-git-deps avoids a second git fetch that fails
+          # with exit 128 when trying to reset an already-cloned repo).
           aptos move compile \
             --package-dir source/docker-testnet/aptos-testnet/test/fixtures/noop \
-            --named-addresses noop=0x1
+            --named-addresses noop=0x1 \
+            --skip-fetch-latest-git-deps
 
       - name: Run Aptos Testnet SDK tests
         working-directory: source/docker-testnet/aptos-testnet
