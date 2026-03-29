@@ -1,8 +1,8 @@
 # Timelock Encryption Implementation Plan
 
 **Document Type**: Technical Implementation Roadmap
-**Last Updated**: 2025-12-22
-**Status**: Planning Phase
+**Last Updated**: 2026-03-28
+**Status**: Planning Phase — Phase 0 complete in external repo; re-integration path pending decision
 **Target**: Risk #2 - Implement Timelock Encryption End-to-End
 
 ---
@@ -12,12 +12,13 @@
 1. [Executive Summary](#executive-summary)
 2. [Architecture Review](#architecture-review)
 3. [Current State Assessment](#current-state-assessment)
-4. [Phase 1: Confirm zapatos Functionality](#phase-1-confirm-zapatos-functionality-2-3-weeks)
-5. [Phase 2: atomica-move-contracts Integration](#phase-2-atomica-move-contracts-integration-3-4-weeks)
-6. [Phase 3: atomica-web Frontend Integration](#phase-3-atomica-web-frontend-integration-2-3-weeks)
-7. [Testing Strategy](#testing-strategy)
-8. [Success Criteria](#success-criteria)
-9. [Risk Mitigation](#risk-mitigation)
+4. [Phase 0: atomica-aptos Separation and Re-Integration Decision](#phase-0-atomica-aptos-separation-and-re-integration-decision)
+5. [Phase 1: Confirm zapatos Functionality](#phase-1-confirm-zapatos-functionality-2-3-weeks)
+6. [Phase 2: atomica-move-contracts Integration](#phase-2-atomica-move-contracts-integration-3-4-weeks)
+7. [Phase 3: atomica-web Frontend Integration](#phase-3-atomica-web-frontend-integration-2-3-weeks)
+8. [Testing Strategy](#testing-strategy)
+9. [Success Criteria](#success-criteria)
+10. [Risk Mitigation](#risk-mitigation)
 
 ---
 
@@ -234,6 +235,102 @@ Layer 3 (Inner): Auction Sellers (ElGamal, >33% stake threshold)
 - ❌ Reserve price form with encryption
 - ❌ Transaction status monitoring
 - ❌ Decryption countdown timer
+
+---
+
+## Phase 0: atomica-aptos Separation and Re-Integration Decision
+
+> **Last updated**: 2026-03-28
+> **Status**: OPEN DECISION — must be resolved before issue #28 implementation begins
+
+### Phase 0 Work Location
+
+Phase 0 scaffolding was implemented in the **external repository
+`bomba-atomica/atomica-aptos`** on branch **`implement-ibe-1.38.5`**, not in
+this repository. The `atomica-aptos` submodule was intentionally removed from
+this repo in **PR #7** (Dec 2025), commit **`55728c4`** (Jan 2026), because
+`atomica-aptos` had become a fully separate repository. PR #3 (`timelock-feature`)
+was subsequently closed as deprecated.
+
+### Phase 0 Artifacts in `bomba-atomica/atomica-aptos` (`implement-ibe-1.38.5`)
+
+| Artifact | Path in `atomica-aptos` | Description |
+|----------|------------------------|-------------|
+| IBE Rust stubs | `crates/aptos-dkg/src/ibe/mod.rs` | Boneh-Franklin IBE struct and function stubs |
+| IBE error types | `crates/aptos-dkg/src/ibe/errors.rs` | Error enum for IBE operations |
+| Timelock config module | `aptos-move/framework/aptos-framework/sources/timelock_config.move` | Configurable epoch intervals and genesis integration |
+| Timelock view functions | `aptos-move/framework/aptos-framework/sources/timelock.move` | 4 new view functions added to the base timelock module |
+| DKG epoch manager field | `dkg/src/epoch_manager.rs` | `TimelockEpochState` field and storage stubs in the DKG manager |
+| E2E smoke-test stub | `testsuite/smoke-test/src/timelock/` | End-to-end test skeleton, marked `#[ignore]` |
+
+This repo (`main`) contains parallel stub implementations that mirror the above:
+
+| Path in this repo | Status |
+|-------------------|--------|
+| `source/aptos-dkg/src/ibe/mod.rs` | Compiles; stubs only |
+| `source/aptos-dkg/src/epoch_manager.rs` | Compiles; stubs only |
+| `source/aptos-dkg/tests/timelock_e2e_smoke.rs` | Present; `#[ignore]` |
+| `source/atomica-move-contracts/sources/timelock_config.move` | Compiles; 4 tests (test assertions blocked — see scout findings) |
+| `source/atomica-move-contracts/sources/timelock_encryption.move.broken` | Excluded (`.broken` suffix — depends on `aptos_std::ibe` unavailable here) |
+
+### Submodule Removal History
+
+- **PR #7** (Dec 2025, `[deps] update cargo.toml to remove submodules`): Removed the
+  `atomica-aptos` submodule from this repository's Cargo workspace.
+- **Commit `55728c4`** (Jan 2026): Completed the cleanup so that no `atomica-aptos`
+  submodule reference remains in `main`.
+- **Rationale**: `bomba-atomica/atomica-aptos` had evolved into a fully separate
+  repository with its own CI, release process, and branching structure.
+  Maintaining it as a submodule created divergence risk and build fragility.
+
+### Open Re-Integration Decision
+
+Before issue #28 (`implement-timelock-phase-0`) begins, the following question
+**must be answered and recorded here**:
+
+#### Option A — Copy source files
+
+Copy the relevant source files from `bomba-atomica/atomica-aptos` (branch
+`implement-ibe-1.38.5`) into:
+- `source/atomica-move-contracts/` (Move modules)
+- `source/` directories (Rust crates)
+
+Then verify compilation locally. This gives maximum control and eliminates an
+external dependency but requires manual synchronisation whenever `atomica-aptos`
+changes.
+
+#### Option B — Depend on a published package
+
+Reference `bomba-atomica/atomica-aptos` as a published Move package or Rust
+crate dependency. This keeps changes upstream-authoritative but requires
+`atomica-aptos` to maintain a stable, versioned release process.
+
+#### Decision status: **NOT YET MADE**
+
+Neither option has been chosen. **Agents MUST NOT re-implement Phase 0
+scaffolding from scratch before this decision is recorded and resolved.**
+Re-implementing from scratch risks producing duplicate or conflicting work
+relative to the existing `implement-ibe-1.38.5` artifacts.
+
+When the decision is made, update this section to record:
+- Which option was chosen
+- Who made the decision and when
+- Any caveats or migration steps required
+
+### Scout Findings: Integration Seams (Issue #33)
+
+Issue #33 (`dev-scout`) discovered the following integration seams between the
+IBE Rust crate, Move contracts, and DKG validator layers. These must be
+addressed in Phase 1 after the re-integration decision is resolved. Full
+findings are in `docs/development/timelock-scout-findings.md`.
+
+| Seam | Risk | Description |
+|------|------|-------------|
+| `threshold_numerator` coupling | **High** | `TimelockConfig.threshold_numerator` must match the value passed to `aptos_dkg::ibe::recombine(shares, threshold)`. A mismatch is a silent correctness failure. |
+| Identity bytes encoding | **Medium** | `aptos_dkg::ibe::extract(_msk, identity: &[u8])` must receive the same byte encoding that Move produces for epoch identity (e.g. `bcs::to_bytes(&epoch_number)`). No shared constant or test exists yet. |
+| `IbeCiphertext` wire format | **High** | `aptos_dkg::ibe::IbeCiphertext` (empty struct) must serialise to the same layout expected by Move `EncryptedMessage.u` / `.ciphertext` fields. A mismatch compiles cleanly but fails at runtime. |
+| DKG→IBE bridge gap | **Medium** | `on_new_epoch` must be invoked before validators accept bids for a new epoch. Timing depends on the Aptos consensus `EpochChangeProof` handler in `atomica-aptos`; a race is hard to reproduce in unit tests. |
+| Move `ibe` module path | **Blocker** | `timelock_encryption.move` imports `aptos_std::ibe`, which only exists in the `atomica-aptos` fork of the Aptos framework. The module cannot compile until the re-integration path from this decision is executed. |
 
 ---
 
