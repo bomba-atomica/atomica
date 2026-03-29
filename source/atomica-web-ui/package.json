@@ -12,7 +12,9 @@
     "lint:fix": "eslint src/**/*.ts src/**/*.tsx --fix",
     "format": "prettier --write 'src/**/*.ts' 'src/**/*.tsx'",
     "format:check": "prettier --check 'src/**/*.ts' 'src/**/*.tsx'",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:metamask": "bun tests/browser-extension/run-metamask-test.ts",
+    "test:metamask:download-ext": "bash tests/browser-extension/download-metamask.sh"
   },
   "dependencies": {
     "@aptos-labs/ts-sdk": "^5.2.0",
