@@ -12,7 +12,7 @@ import { loadEnv } from "vite";
 import { resolve } from "path";
 
 // Load all vars from source/.env.test into the Vite server process (browser commands run here)
-const testEnv = loadEnv("test", resolve(__dirname, "../.."), "");
+const testEnv = loadEnv("test", resolve(__dirname, ".."), "");
 // Assign to process.env so browser commands (which run server-side) see these vars
 Object.assign(process.env, testEnv);
 
