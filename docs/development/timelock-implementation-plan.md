@@ -288,34 +288,37 @@ This repo (`main`) contains parallel stub implementations that mirror the above:
 Before issue #28 (`implement-timelock-phase-0`) begins, the following question
 **must be answered and recorded here**:
 
-#### Option A — Copy source files
+#### Decision status: **RESOLVED — Option B (git dependency, dev-atomica branch)**
 
-Copy the relevant source files from `bomba-atomica/atomica-aptos` (branch
-`implement-ibe-1.38.5`) into:
-- `source/atomica-move-contracts/` (Move modules)
-- `source/` directories (Rust crates)
+**Decided: 2026-03-29**
 
-Then verify compilation locally. This gives maximum control and eliminates an
-external dependency but requires manual synchronisation whenever `atomica-aptos`
-changes.
+`source/atomica-crosschain-testing/Cargo.toml` already pulls all Rust crates
+from `bomba-atomica/atomica-aptos` via git dependency on the `dev-atomica`
+branch. Inspection of that branch confirms it already contains all Phase 0
+artifacts:
 
-#### Option B — Depend on a published package
+- `aptos-move/framework/aptos-stdlib/sources/cryptography/ibe.move` — `aptos_std::ibe` Move module
+- `aptos-move/framework/aptos-framework/sources/ibe_config.move`
+- `aptos-move/framework/aptos-framework/tests/timelock_workflow_test.move`
+- `aptos-move/framework/src/natives/cryptography/algebra/ibe.rs` — native Rust
+- `aptos-move/aptos-vm/src/validator_txns/timelock.rs`
 
-Reference `bomba-atomica/atomica-aptos` as a published Move package or Rust
-crate dependency. This keeps changes upstream-authoritative but requires
-`atomica-aptos` to maintain a stable, versioned release process.
+**No branch switch is required.** The existing `dev-atomica` pin already
+provides the IBE native functions and Move modules.
 
-#### Decision status: **NOT YET MADE**
+**For Move contracts** (`timelock_config.move`, view functions in
+`timelock.move`): the Move package system does not support git dependencies the
+way Cargo does. These modules must be copied from
+`aptos-move/framework/aptos-framework/sources/` in `dev-atomica` into
+`source/atomica-move-contracts/sources/` and compilation verified locally.
 
-Neither option has been chosen. **Agents MUST NOT re-implement Phase 0
-scaffolding from scratch before this decision is recorded and resolved.**
-Re-implementing from scratch risks producing duplicate or conflicting work
-relative to the existing `implement-ibe-1.38.5` artifacts.
-
-When the decision is made, update this section to record:
-- Which option was chosen
-- Who made the decision and when
-- Any caveats or migration steps required
+**Agent instructions for issue #28:**
+1. Copy `timelock_config.move` and the updated `timelock.move` from
+   `dev-atomica` into `source/atomica-move-contracts/sources/`
+2. Verify `aptos move compile` passes
+3. Verify `aptos move test` passes (expected 4/4 timelock_config tests)
+4. The Rust IBE stubs (`aptos-dkg/src/ibe/`) are already available via the
+   existing Cargo git dependency — no Cargo.toml changes needed
 
 ### Scout Findings: Integration Seams (Issue #33)
 

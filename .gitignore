@@ -35,7 +35,11 @@ tests/Cargo.lock
 # Bun
 bun.lockb
 bun.lock
+**/dist/
 
-# Build artifacts
-dist/
-node_modules/
+# Local Codex configuration
+.codex/config.toml
+.codex/rules/
+
+# Agent assets (local only, not committed)
+.agents/
