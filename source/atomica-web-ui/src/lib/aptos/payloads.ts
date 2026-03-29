@@ -115,7 +115,9 @@ export async function areCoreContractsDeployed(): Promise<boolean> {
       accountAddress: CONTRACT_ADDR,
     });
     const deployed = new Set(
-      modules.map((module: { abi?: { name?: string } }) => module.abi?.name).filter(Boolean),
+      modules
+        .map((module: { abi?: { name?: string } }) => module.abi?.name)
+        .filter(Boolean),
     );
     return requiredModules.every((name) => deployed.has(name));
   } catch (e) {
