@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { existsSync, mkdirSync, rmSync } from "fs";
+import { existsSync, mkdirSync, rmSync, readFileSync } from "fs";
 import { resolve as pathResolve } from "path";
 /**
  * Genesis generation for multi-validator testnets using Docker
@@ -51,6 +51,23 @@ export async function generateGenesis(config) {
     });
     console.log(`Genesis generation complete!`);
 }
+function extractImageFromCompose(configDir) {
+    try {
+        const composePath = pathResolve(configDir, "docker-compose.yaml");
+        if (!existsSync(composePath))
+            return null;
+        const content = readFileSync(composePath, "utf-8");
+        // Look for image: "${IMAGE_NAME:-...}"
+        const match = content.match(/image:\s*"?\$\{IMAGE_NAME:-([^"}]+)\}"?/);
+        if (match && match[1]) {
+            return match[1];
+        }
+        return null;
+    }
+    catch {
+        return null;
+    }
+}
 /**
  * Run the genesis generation script inside Docker container
  * This ensures the aptos CLI version matches the Move framework version
@@ -60,30 +77,34 @@ function runGenesisScript(config) {
     return new Promise((resolve, reject) => {
         console.log(`  Running genesis script in Docker container...`);
         // Use the specific SHA pinned image for stability in CI and production.
+        // Priority: Env Var > Docker Compose Default > Hardcoded Fallback
+        // Try to extract from docker-compose to ensure consistency
+        const configDir = pathResolve(workspaceDir, "..", "config");
+        const composeImage = extractImageFromCompose(configDir);
         const genesisImage = process.env.IMAGE_NAME_GENESIS ||
             process.env.IMAGE_NAME ||
-            `${process.env.VALIDATOR_IMAGE_REPO || "ghcr.io/bomba-atomica/atomica-aptos/validator"}@sha256:aa5f6e8aa3f7d5172a6dbaaeab03c3234bf19043c47bca7aec1ae500a7393fda`;
+            composeImage ||
+            process.env.VALIDATOR_IMAGE_REPO ||
+            "ghcr.io/bomba-atomica/atomica-aptos/validator:latest";
         const validatorImage = genesisImage;
-        // Find the framework.mrb file - try multiple possible locations relative to workspaceDir
-        const possiblePaths = [
-            pathResolve(workspaceDir, "..", "move-framework-fixtures", "head.mrb"),
-            pathResolve(workspaceDir, "..", "..", "move-framework-fixtures", "head.mrb"),
-            pathResolve(process.cwd(), "..", "move-framework-fixtures", "head.mrb"),
-            pathResolve(process.cwd(), "source", "move-framework-fixtures", "head.mrb"),
-            "/home/lucas/atomica/source/move-framework-fixtures/head.mrb",
-        ];
         let frameworkPath = "";
-        for (const p of possiblePaths) {
-            if (existsSync(p)) {
-                frameworkPath = p;
-                break;
+        if (process.env.FORCE_LOCAL_FRAMEWORK) {
+            const overridePath = process.env.FORCE_LOCAL_FRAMEWORK;
+            // Basic check if it's a path or just a boolean flag
+            if (overridePath === "true" || overridePath === "1") {
+                console.warn("Warning: FORCE_LOCAL_FRAMEWORK set to 'true', but expected a file path. Using default image framework.");
+            }
+            else if (existsSync(overridePath)) {
+                frameworkPath = overridePath;
+                debug("Using local framework override at: " + frameworkPath);
+            }
+            else {
+                console.warn(`Warning: FORCE_LOCAL_FRAMEWORK path not found: ${overridePath}. Using default image framework.`);
             }
         }
-        if (!frameworkPath) {
-            reject(new Error(`Framework file not found. Tried: ${possiblePaths.join(", ")}`));
-            return;
+        else {
+            debug("Using framework from Docker image (default)");
         }
-        debug("Using framework at: " + frameworkPath);
         debug("Using genesis image: " + genesisImage);
         debug("Using validator image: " + validatorImage);
         // Run the script inside Docker container with the same image that will run validators
@@ -95,13 +116,11 @@ function runGenesisScript(config) {
             `${workspaceDir}:/workspace`,
             "-v",
             `${scriptPath}:/genesis-script.sh:ro`,
-            "-v",
-            `${frameworkPath}:/framework.mrb:ro`,
-            "-w",
-            "/workspace",
-            "--entrypoint",
-            "/bin/bash",
         ];
+        if (frameworkPath) {
+            dockerArgs.push("-v", `${frameworkPath}:/framework.mrb:ro`);
+        }
+        dockerArgs.push("-w", "/workspace", "--entrypoint", "/bin/bash");
         // Run as current user to avoid permission issues with bind mounts
         if (process.platform !== "win32" &&
             typeof process.getuid === "function" &&
@@ -113,6 +132,18 @@ function runGenesisScript(config) {
         // Pass ATOMICA_DEBUG_TESTNET to container if set
         if (process.env.ATOMICA_DEBUG_TESTNET) {
             dockerArgs.push("-e", `ATOMICA_DEBUG_TESTNET=${process.env.ATOMICA_DEBUG_TESTNET}`);
+        }
+        // Pass deterministic credentials so the genesis script produces reproducible keys
+        const credentialEnvVars = [
+            "APTOS_ROOT_ACCOUNT_PUBLIC_KEY",
+            ...Array.from({ length: config.numValidators }, (_, i) => `APTOS_VALIDATOR_${i}_SEED`),
+        ];
+        for (const varName of credentialEnvVars) {
+            const value = process.env[varName];
+            if (!value) {
+                throw new Error(`Missing required credential env var: ${varName}. Load source/.env.test before running genesis.`);
+            }
+            dockerArgs.push("-e", `${varName}=${value}`);
         }
         dockerArgs.push(genesisImage, "/genesis-script.sh", numValidators.toString(), chainId.toString(), baseIp);
         debug("Starting docker run with args:", { dockerArgs });

@@ -103,6 +103,7 @@ import { setupLocalnet,
 deployContracts, fundAccount,
 // killZombies, // Unused - setupLocalnet handles cleanup internally
  } from "./localnet";
+import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testnet";
 /**
  * Start the local Aptos testnet.
  *
@@ -205,4 +206,24 @@ export const deployContractsCommand = async () => {
 export const fundAccountCommand = async (_context, address, amount = 100_000_000) => {
     const result = await fundAccount(address, amount);
     return { success: true, txHash: result };
+};
+/**
+ * Start an Ethereum Docker testnet and deploy FakeETH + FakeUSD contracts.
+ *
+ * Returns JSON-serializable connection info so the browser test can set up
+ * its wallet mock and verify on-chain balances.
+ *
+ * EXECUTION: Node.js (browser can't start Docker containers)
+ */
+export const setupEthereumTestnetCommand = async () => {
+    return await setupEthereumTestnet();
+};
+/**
+ * Tear down the Ethereum Docker testnet started by setupEthereumTestnetCommand.
+ *
+ * EXECUTION: Node.js
+ */
+export const teardownEthereumTestnetCommand = async () => {
+    await teardownEthereumTestnet();
+    return { success: true };
 };

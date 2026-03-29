@@ -103,6 +103,13 @@ import type { BrowserCommand } from "vitest/node";
  * Module augmentation to add our custom commands to Vitest's browser commands types.
  * This provides TypeScript autocomplete and type checking in browser tests.
  */
+export interface EthereumTestnetInfo {
+    rpcUrl: string;
+    fakeETH: string;
+    fakeUSD: string;
+    signerPrivateKey: string;
+    chainId: number;
+}
 declare module "vitest/browser" {
     interface BrowserCommands {
         setupLocalnet(): Promise<{
@@ -208,3 +215,18 @@ export declare const deployContractsCommand: BrowserCommand<[]>;
  * See: test-utils/localnet.ts#fundAccount for implementation
  */
 export declare const fundAccountCommand: BrowserCommand<[address: string, amount?: number]>;
+/**
+ * Start an Ethereum Docker testnet and deploy FakeETH + FakeUSD contracts.
+ *
+ * Returns JSON-serializable connection info so the browser test can set up
+ * its wallet mock and verify on-chain balances.
+ *
+ * EXECUTION: Node.js (browser can't start Docker containers)
+ */
+export declare const setupEthereumTestnetCommand: BrowserCommand<[]>;
+/**
+ * Tear down the Ethereum Docker testnet started by setupEthereumTestnetCommand.
+ *
+ * EXECUTION: Node.js
+ */
+export declare const teardownEthereumTestnetCommand: BrowserCommand<[]>;

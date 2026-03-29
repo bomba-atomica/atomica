@@ -2,50 +2,50 @@ const STORAGE_KEY = "atomica-testnet-host";
 let runtimeHost: string | null = null;
 
 function getBrowserHost(): string {
-  return import.meta.env.VITE_HOST_IP || "localhost";
+    return import.meta.env.VITE_HOST_IP || "localhost";
 }
 
 export function getStoredHost(): string {
-  if (runtimeHost && runtimeHost.trim()) {
-    return runtimeHost.trim();
-  }
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)?.trim();
-    const resolved = stored || getBrowserHost();
-    runtimeHost = resolved;
-    return resolved;
-  } catch {
-    const fallback = getBrowserHost();
-    runtimeHost = fallback;
-    return fallback;
-  }
+    if (runtimeHost && runtimeHost.trim()) {
+        return runtimeHost.trim();
+    }
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY)?.trim();
+        const resolved = stored || getBrowserHost();
+        runtimeHost = resolved;
+        return resolved;
+    } catch {
+        const fallback = getBrowserHost();
+        runtimeHost = fallback;
+        return fallback;
+    }
 }
 
 export function setStoredHost(host: string): void {
-  runtimeHost = host.trim();
-  try {
-    localStorage.setItem(STORAGE_KEY, runtimeHost);
-  } catch {
-    // Persistence is best-effort; runtime host remains authoritative.
-  }
+    runtimeHost = host.trim();
+    try {
+        localStorage.setItem(STORAGE_KEY, runtimeHost);
+    } catch {
+        // Persistence is best-effort; runtime host remains authoritative.
+    }
 }
 
 function parseTargetHost(target: string): URL {
-  const trimmed = target.trim();
-  if (!trimmed) {
-    return new URL("http://localhost");
-  }
-  if (trimmed.includes("://")) {
-    return new URL(trimmed);
-  }
-  return new URL(`http://${trimmed}`);
+    const trimmed = target.trim();
+    if (!trimmed) {
+        return new URL("http://localhost");
+    }
+    if (trimmed.includes("://")) {
+        return new URL(trimmed);
+    }
+    return new URL(`http://${trimmed}`);
 }
 
 function ensurePort(url: URL, port: string): URL {
-  if (!url.port) {
-    url.port = port;
-  }
-  return url;
+    if (!url.port) {
+        url.port = port;
+    }
+    return url;
 }
 
 /**
@@ -60,21 +60,21 @@ function ensurePort(url: URL, port: string): URL {
  * using the stored host and the configured HTTP port.
  */
 export function buildEthRpcUrl(host: string): string {
-  if (typeof window !== "undefined") {
-    // Route through Vite's /eth-api proxy; path will be rewritten to "/"
-    return `${window.location.origin}/eth-api`;
-  }
-  // Node / test context — explicit override takes precedence, then derive from host
-  const override = import.meta.env.VITE_ETH_RPC_URL;
-  if (override) {
-    return override;
-  }
-  const port = import.meta.env.VITE_ETHEREUM_HTTP_PORT || "8545";
-  const url = ensurePort(parseTargetHost(host), port);
-  if (url.pathname === "/") {
-    url.pathname = "";
-  }
-  return url.toString();
+    if (typeof window !== "undefined") {
+        // Route through Vite's /eth-api proxy; path will be rewritten to "/"
+        return `${window.location.origin}/eth-api`;
+    }
+    // Node / test context — explicit override takes precedence, then derive from host
+    const override = import.meta.env.VITE_ETH_RPC_URL;
+    if (override) {
+        return override;
+    }
+    const port = import.meta.env.VITE_ETHEREUM_HTTP_PORT || "8545";
+    const url = ensurePort(parseTargetHost(host), port);
+    if (url.pathname === "/") {
+        url.pathname = "";
+    }
+    return url.toString();
 }
 
 /**
@@ -87,18 +87,18 @@ export function buildEthRpcUrl(host: string): string {
  * the configured HTTP port.
  */
 export function buildAptosFullnodeUrl(host: string): string {
-  if (typeof window !== "undefined") {
-    // Route through Vite's /aptos-api proxy; the rewrite strips /aptos-api
-    // so /aptos-api/v1 reaches the node at /v1
-    return `${window.location.origin}/aptos-api/v1`;
-  }
-  // Node / test context — explicit override takes precedence, then derive from host
-  const override = import.meta.env.VITE_APTOS_FULLNODE_URL;
-  if (override) {
-    return override;
-  }
-  const port = import.meta.env.VITE_APTOS_HTTP_PORT || "8080";
-  const url = ensurePort(parseTargetHost(host), port);
-  url.pathname = "/v1";
-  return url.toString();
+    if (typeof window !== "undefined") {
+        // Route through Vite's /aptos-api proxy; the rewrite strips /aptos-api
+        // so /aptos-api/v1 reaches the node at /v1
+        return `${window.location.origin}/aptos-api/v1`;
+    }
+    // Node / test context — explicit override takes precedence, then derive from host
+    const override = import.meta.env.VITE_APTOS_FULLNODE_URL;
+    if (override) {
+        return override;
+    }
+    const port = import.meta.env.VITE_APTOS_HTTP_PORT || "8080";
+    const url = ensurePort(parseTargetHost(host), port);
+    url.pathname = "/v1";
+    return url.toString();
 }

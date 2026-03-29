@@ -107,21 +107,18 @@ import {
     fundAccount,
     // killZombies, // Unused - setupLocalnet handles cleanup internally
 } from "./localnet";
-import {
-  setupEthereumTestnet,
-  teardownEthereumTestnet,
-} from "./ethereum-testnet";
+import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testnet";
 
 /**
  * Module augmentation to add our custom commands to Vitest's browser commands types.
  * This provides TypeScript autocomplete and type checking in browser tests.
  */
 export interface EthereumTestnetInfo {
-  rpcUrl: string;
-  fakeETH: string;
-  fakeUSD: string;
-  signerPrivateKey: string;
-  chainId: number;
+    rpcUrl: string;
+    fakeETH: string;
+    fakeUSD: string;
+    signerPrivateKey: string;
+    chainId: number;
 }
 
 declare module "vitest/browser" {
@@ -256,7 +253,7 @@ export const fundAccountCommand: BrowserCommand<[address: string, amount?: numbe
  * EXECUTION: Node.js (browser can't start Docker containers)
  */
 export const setupEthereumTestnetCommand: BrowserCommand<[]> = async () => {
-  return await setupEthereumTestnet();
+    return await setupEthereumTestnet();
 };
 
 /**
@@ -265,6 +262,6 @@ export const setupEthereumTestnetCommand: BrowserCommand<[]> = async () => {
  * EXECUTION: Node.js
  */
 export const teardownEthereumTestnetCommand: BrowserCommand<[]> = async () => {
-  await teardownEthereumTestnet();
-  return { success: true };
+    await teardownEthereumTestnet();
+    return { success: true };
 };
