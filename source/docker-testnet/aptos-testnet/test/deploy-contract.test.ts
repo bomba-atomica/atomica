@@ -46,7 +46,7 @@ describe.sequential("Move Contract Deployment", () => {
         expect(fundedBalance).toBe(1_000_000_000);
 
         // Path to noop contract (absolute path required by Docker SDK)
-        const NOOP_DIR = pathResolve(process.cwd(), "tests/fixtures/noop");
+        const NOOP_DIR = pathResolve(process.cwd(), "test/fixtures/noop");
 
         // Compile and publish the noop module using Docker SDK
         const testnet = getTestnet();

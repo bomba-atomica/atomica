@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
-import { AccountStatus, useTokenBalances } from "../src/index";
+import {
+  AccountStatus,
+  useTokenBalances,
+  NetworkConfigProvider,
+  WalletContext,
+  ContractStatusProvider,
+  BalancesProvider,
+} from "../src/index";
 import { commands } from "vitest/browser";
 import { MockWallet } from "@atomica/aptos-docker-testnet/browser-utils/MockWallet";
 import { setAptosInstance, Aptos, AptosConfig, Network } from "@atomica/aptos-docker-testnet/browser";

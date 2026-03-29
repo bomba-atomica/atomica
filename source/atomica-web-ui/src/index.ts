@@ -8,7 +8,11 @@ export { TxButton } from "./components/TxButton";
 
 export { useTokenBalances } from "./hooks/useTokenBalances";
 
-export { WalletProvider, useWallet } from "./context/WalletContext";
+export {
+  WalletContext,
+  WalletProvider,
+  useWallet,
+} from "./context/WalletContext";
 export { BalancesProvider, useBalances } from "./context/BalancesContext";
 export {
   ContractStatusProvider,

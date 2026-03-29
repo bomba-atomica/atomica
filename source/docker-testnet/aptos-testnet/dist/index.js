@@ -412,7 +412,6 @@ export class DockerTestnet {
             deployerPrivateKey,
             "--url",
             `http://127.0.0.1:${BASE_API_PORT}`,
-            "--skip-fetch-latest-git-deps",
             "--assume-yes",
         ];
         const result = await this.execCommand(getAptosBinary(), publishArgs);

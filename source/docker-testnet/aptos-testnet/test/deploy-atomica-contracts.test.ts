@@ -40,8 +40,8 @@ describe.sequential("Atomica Contract Deployment", () => {
         expect(fundedBalance).toBe(1_000_000_000);
 
         // Path to atomica-move-contracts (absolute path required by Docker SDK)
-        // Assuming structure: source/atomica-web and source/atomica-move-contracts are siblings
-        const CONTRACTS_DIR = pathResolve(process.cwd(), "../atomica-move-contracts");
+        // Structure: source/docker-testnet/aptos-testnet is the cwd; go up two levels to source/
+        const CONTRACTS_DIR = pathResolve(process.cwd(), "../../atomica-move-contracts");
 
         // Publish the atomica-move-contracts package using Docker SDK
         const testnet = getTestnet();
