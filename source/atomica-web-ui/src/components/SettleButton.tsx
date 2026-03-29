@@ -6,7 +6,11 @@ interface Props {
   disabled?: boolean;
 }
 
-export function SettleButton({ auctionId: _auctionId, onSettle, disabled }: Props) {
+export function SettleButton({
+  auctionId: _auctionId,
+  onSettle,
+  disabled,
+}: Props) {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 

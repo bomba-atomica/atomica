@@ -29,7 +29,10 @@ export function Step3Confirm({ txHash, lockBlock }: Props) {
       </div>
 
       {txHash && (
-        <div data-testid="confirm-tx-hash" className="text-xs text-zinc-600 font-mono break-all">
+        <div
+          data-testid="confirm-tx-hash"
+          className="text-xs text-zinc-600 font-mono break-all"
+        >
           Tx: {txHash}
         </div>
       )}

@@ -77,7 +77,10 @@ export function Step2Lock({ onLock, fakeEthBalance, loading, error }: Props) {
       </button>
 
       {error && (
-        <p data-testid="lock-error" className="text-xs text-red-400 font-mono break-all">
+        <p
+          data-testid="lock-error"
+          className="text-xs text-red-400 font-mono break-all"
+        >
           {error}
         </p>
       )}

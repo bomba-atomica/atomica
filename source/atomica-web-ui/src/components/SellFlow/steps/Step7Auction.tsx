@@ -54,7 +54,10 @@ export function Step7Auction({
       )}
 
       {txHash && (
-        <div data-testid="auction-tx-hash" className="text-xs text-zinc-600 font-mono break-all">
+        <div
+          data-testid="auction-tx-hash"
+          className="text-xs text-zinc-600 font-mono break-all"
+        >
           Tx: {txHash}
         </div>
       )}

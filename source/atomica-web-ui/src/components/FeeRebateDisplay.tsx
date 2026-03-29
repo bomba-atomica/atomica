@@ -18,7 +18,11 @@ export function FeeRebateDisplay({ rebateAmount, feeAmount }: Props) {
           <span className="text-zinc-500">Rebate</span>
           <span
             data-testid="rebate-amount"
-            className={rebateAmount >= 0n ? "text-green-400 font-mono" : "text-red-400 font-mono"}
+            className={
+              rebateAmount >= 0n
+                ? "text-green-400 font-mono"
+                : "text-red-400 font-mono"
+            }
           >
             {rebateAmount >= 0n ? "+" : "-"}${formatUsd(rebateAmount)}
           </span>
@@ -29,7 +33,11 @@ export function FeeRebateDisplay({ rebateAmount, feeAmount }: Props) {
           <span className="text-zinc-500">Fee</span>
           <span
             data-testid="fee-amount"
-            className={feeAmount <= 0n ? "text-zinc-400 font-mono" : "text-red-400 font-mono"}
+            className={
+              feeAmount <= 0n
+                ? "text-zinc-400 font-mono"
+                : "text-red-400 font-mono"
+            }
           >
             {feeAmount > 0n ? "-" : "+"}${formatUsd(feeAmount)}
           </span>

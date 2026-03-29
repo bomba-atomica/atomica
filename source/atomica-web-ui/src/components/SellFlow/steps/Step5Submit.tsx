@@ -35,7 +35,10 @@ export function Step5Submit({ loading, error, onSubmit }: Props) {
 
       {error && (
         <div className="flex flex-col gap-2">
-          <p data-testid="submit-status" className="text-xs text-red-400 font-mono break-all">
+          <p
+            data-testid="submit-status"
+            className="text-xs text-red-400 font-mono break-all"
+          >
             {error}
           </p>
           <button
