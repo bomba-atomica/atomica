@@ -111,6 +111,29 @@ export interface EthereumTestnetInfo {
     signerPrivateKey: string;
     chainId: number;
 }
+/**
+ * Serializable result of generateEthLockProofCommand.
+ * storageValue is a string to survive JSON serialisation over the RPC bridge
+ * (bigint cannot be transferred as-is).
+ */
+export interface EthLockProofResult {
+    lockId: string;
+    proof: {
+        blockNumber: number;
+        blockHash: string;
+        stateRoot: string;
+        contractAddress: string;
+        userAddress: string;
+        tokenAddress: string;
+        storageKey: string;
+        /** decimal string representation of the bigint storageValue */
+        storageValue: string;
+        accountProof: string[];
+        storageProof: string[];
+        timestamp: number;
+        generatedAt: number;
+    };
+}
 export type { DualChainTestnetInfo };
 declare module "vitest/browser" {
     interface BrowserCommands {
@@ -133,6 +156,7 @@ declare module "vitest/browser" {
         }>;
         setupEthereumTestnet(): Promise<EthereumTestnetInfo>;
         teardownEthereumTestnet(): Promise<void>;
+        generateEthLockProof(rpcUrl: string, sellerPrivateKey: string, fakeETHAddress: string, lockBoxAddress: string, lockAmountWei?: string, mintAmountWei?: string): Promise<EthLockProofResult>;
     }
 }
 /**
@@ -254,3 +278,30 @@ export declare const setupDualChainTestnetCommand: BrowserCommand<[]>;
  * EXECUTION: Node.js
  */
 export declare const teardownDualChainTestnetCommand: BrowserCommand<[]>;
+/**
+ * Generate an Ethereum storage proof for a locked balance.
+ *
+ * This command runs on the Node.js side because @ethereumjs/util (used
+ * transitively by @atomica/state-proof-verifier) accesses Node's EventEmitter
+ * which is not available in browser context.
+ *
+ * Steps:
+ *   1. Mint FakeETH to seller
+ *   2. Approve LockBox for lockAmount
+ *   3. Call LockBox.lock()
+ *   4. Wait 12 blocks for archive proof availability
+ *   5. Fetch eth_getProof storage proof
+ *   6. Compute lockId = keccak256(blockHash || contractAddress || userAddress || tokenAddress || storageKey)
+ *
+ * Returns a JSON-serialisable result (storageValue as decimal string).
+ *
+ * EXECUTION: Node.js (browser can't use @ethereumjs/* via EventEmitter)
+ */
+export declare const generateEthLockProofCommand: BrowserCommand<[
+    rpcUrl: string,
+    sellerPrivateKey: string,
+    fakeETHAddress: string,
+    lockBoxAddress: string,
+    lockAmountWei?: string,
+    mintAmountWei?: string
+]>;

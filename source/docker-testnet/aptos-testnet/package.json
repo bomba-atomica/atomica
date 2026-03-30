@@ -47,6 +47,7 @@
         "@aptos-labs/ts-sdk": "5.2.1",
         "@atomica/ethereum-docker-testnet": "../../docker-testnet/ethereum-testnet/typescript-sdk",
         "@atomica/sdk": "../../atomica-sdk",
+        "@atomica/state-proof-verifier": "../../state-proofs/typescript",
         "@noble/bls12-381": "^1.4.0",
         "aptos": "1.22.1",
         "dotenv": "^16.3.1",

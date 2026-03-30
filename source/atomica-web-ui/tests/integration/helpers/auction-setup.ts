@@ -3,7 +3,9 @@
  *
  * Provides reusable functions for the test setup chain:
  *
- *   generateEthLockProof()  — Mint → Approve → Lock on Ethereum, generate proof
+ *   generateEthLockProof()  — Mint → Approve → Lock on Ethereum, generate storage proof
+ *                             (runs via vitest browser command on Node.js side to avoid
+ *                             @ethereumjs/util EventEmitter incompatibility in browser)
  *   registerLockOnAptos()   — Register the proof on Aptos under an arbitrary account
  *   setupAuctionState()     — Combined convenience: both steps above using the
  *                             fixture deployer as the Aptos account
@@ -21,26 +23,33 @@ import {
   Account,
   Ed25519PrivateKey,
 } from "@aptos-labs/ts-sdk";
-import { generateLockedBalanceProof } from "../../../src/lib/ethereum/proofs/generator";
-import type { LockedBalanceProof } from "../../../src/lib/ethereum/proofs/generator";
+import { commands } from "vitest/browser";
+import type { EthLockProofResult as CommandEthLockProofResult } from "@atomica/aptos-docker-testnet/browser-commands";
 import type { IntegrationFixture } from "../fixtures/dual-chain";
-
-// ---------------------------------------------------------------------------
-// Minimal ABI fragments
-// ---------------------------------------------------------------------------
-
-const ERC20_ABI = [
-  "function mint(address to, uint256 amount) external",
-  "function approve(address spender, uint256 amount) external returns (bool)",
-];
-
-const LOCKBOX_ABI = [
-  "function lock(address token, uint256 amount) external",
-];
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/**
+ * LockedBalanceProof shape expected by getRegisterLockPayload and
+ * registerLockOnAptos. Mirrors atomica-web-ui's LockedBalanceProof but
+ * with storageValue as bigint (reconstructed after JSON round-trip).
+ */
+export interface LockedBalanceProof {
+  blockNumber: number;
+  blockHash: string;
+  stateRoot: string;
+  contractAddress: string;
+  userAddress: string;
+  tokenAddress: string;
+  storageKey: string;
+  storageValue: bigint;
+  accountProof: string[];
+  storageProof: string[];
+  timestamp: number;
+  generatedAt: number;
+}
 
 export interface EthLockProofResult {
   /** Keccak256 lock ID (hex with 0x prefix) */
@@ -65,6 +74,9 @@ export interface AuctionSetupResult extends EthLockProofResult {
  * the lock on Aptos.  Allows tests to choose which Aptos account to register
  * under without incurring a deployer registration in advance.
  *
+ * Delegates to commands.generateEthLockProof() which runs on the Node.js side
+ * (browser can't access @ethereumjs/util EventEmitter).
+ *
  * @param fixture    - Dual-chain integration fixture
  * @param lockAmount - Amount of FakeETH to lock (wei, default: 10 ETH)
  * @param mintAmount - Amount of FakeETH to mint (wei, default: 1000 ETH)
@@ -76,53 +88,23 @@ export async function generateEthLockProof(
 ): Promise<EthLockProofResult> {
   const { eth } = fixture;
 
-  const provider = new ethers.JsonRpcProvider(eth.rpcUrl);
-  const seller = new ethers.Wallet(eth.seller.privateKey, provider);
-
-  const fakeETH = new ethers.Contract(eth.contracts.fakeETH, ERC20_ABI, seller);
-  const lockBox = new ethers.Contract(eth.contracts.lockBox, LOCKBOX_ABI, seller);
-
-  const mintTx = await fakeETH.mint(seller.address, mintAmount);
-  await provider.waitForTransaction(mintTx.hash, 1);
-
-  let nonce = await seller.getNonce();
-  const approveTx = await fakeETH.approve(eth.contracts.lockBox, lockAmount, {
-    nonce: nonce++,
-  });
-  await provider.waitForTransaction(approveTx.hash, 1);
-
-  const lockTx = await lockBox.lock(eth.contracts.fakeETH, lockAmount, {
-    nonce: nonce++,
-  });
-  const lockReceipt = await provider.waitForTransaction(lockTx.hash, 1);
-  const lockBlockNumber = lockReceipt!.blockNumber;
-
-  // Wait for archive proof availability (12 blocks)
-  const targetBlock = lockBlockNumber + 12;
-  for (let i = 0; i < 180; i++) {
-    const current = await provider.getBlockNumber();
-    if (current >= targetBlock) break;
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-
-  const proof = await generateLockedBalanceProof(
-    provider,
-    eth.contracts.lockBox,
-    seller.address,
+  const result: CommandEthLockProofResult = await commands.generateEthLockProof(
+    eth.rpcUrl,
+    eth.seller.privateKey,
     eth.contracts.fakeETH,
-    lockBlockNumber,
+    eth.contracts.lockBox,
+    lockAmount.toString(),
+    mintAmount.toString(),
   );
 
-  const lockIdData = Buffer.concat([
-    Buffer.from(proof.blockHash.slice(2), "hex"),
-    Buffer.from(proof.contractAddress.slice(2), "hex"),
-    Buffer.from(proof.userAddress.slice(2), "hex"),
-    Buffer.from(proof.tokenAddress.slice(2), "hex"),
-    Buffer.from(proof.storageKey.slice(2), "hex"),
-  ]);
-  const lockId = ethers.keccak256(lockIdData);
-
-  return { lockId, proof };
+  return {
+    lockId: result.lockId,
+    proof: {
+      ...result.proof,
+      // Reconstruct bigint from decimal string (JSON serialization loses bigint)
+      storageValue: BigInt(result.proof.storageValue),
+    },
+  };
 }
 
 /**
