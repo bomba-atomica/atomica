@@ -157,7 +157,7 @@ export async function submitCreateAuction(ethAddress, amountEth, minPrice, durat
 }
 export function getBidPayload(sellerAddr, amountUsd, u, v) {
     return {
-        function: `${CONTRACT_ADDR}::auction::bid`,
+        function: `${CONTRACT_ADDR}::auction::submit_bid`,
         functionArguments: [sellerAddr, amountUsd, u, v],
     };
 }

@@ -212,7 +212,7 @@ export function getBidPayload(
     v: Uint8Array,
 ): InputGenerateTransactionPayloadData {
     return {
-        function: `${CONTRACT_ADDR}::auction::bid`,
+        function: `${CONTRACT_ADDR}::auction::submit_bid`,
         functionArguments: [sellerAddr, amountUsd, u, v],
     };
 }
