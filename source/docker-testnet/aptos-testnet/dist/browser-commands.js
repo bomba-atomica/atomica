@@ -106,7 +106,6 @@ deployContracts, fundAccount,
 import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testnet.js";
 import { setupDualChainTestnet, teardownDualChainTestnet } from "./dual-chain-testnet.js";
 import { ethers } from "ethers";
-import { fetchProof } from "@atomica/state-proof-verifier";
 /**
  * Start the local Aptos testnet.
  *
@@ -305,8 +304,6 @@ export const generateEthLockProofCommand = async (_ctx, rpcUrl, sellerPrivateKey
     // Calculate storage key (single-level mapping: keccak256(abi.encode(compositeKey, slot=0)))
     const compositeKey = ethers.keccak256(ethers.solidityPacked(["address", "address"], [ethers.getAddress(seller.address), ethers.getAddress(fakeETHAddress)]));
     const storageKey = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(["bytes32", "uint256"], [compositeKey, 0]));
-    // Fetch storage proof
-    const proofData = await fetchProof(rpcUrl, lockBoxAddress, [storageKey], lockBlockNumber);
     // Fetch block to get blockHash and stateRoot
     const block = await provider.getBlock(lockBlockNumber);
     if (!block) {
@@ -315,6 +312,12 @@ export const generateEthLockProofCommand = async (_ctx, rpcUrl, sellerPrivateKey
     if (!block.hash || !block.stateRoot) {
         throw new Error(`Block ${lockBlockNumber} missing hash or stateRoot`);
     }
+    // Fetch storage proof via eth_getProof directly (avoids @ethereumjs dependency)
+    const ethProof = await provider.send("eth_getProof", [
+        lockBoxAddress,
+        [storageKey],
+        `0x${lockBlockNumber.toString(16)}`,
+    ]);
     // Compute lockId
     const lockIdData = Buffer.concat([
         Buffer.from(block.hash.slice(2), "hex"),
@@ -334,9 +337,9 @@ export const generateEthLockProofCommand = async (_ctx, rpcUrl, sellerPrivateKey
             userAddress: ethers.getAddress(seller.address),
             tokenAddress: ethers.getAddress(fakeETHAddress),
             storageKey,
-            storageValue: proofData.storageProof[0].value.toString(),
-            accountProof: proofData.accountProof,
-            storageProof: proofData.storageProof[0].proof,
+            storageValue: BigInt(ethProof.storageProof[0].value).toString(),
+            accountProof: ethProof.accountProof,
+            storageProof: ethProof.storageProof[0].proof,
             timestamp: block.timestamp,
             generatedAt: Date.now(),
         },

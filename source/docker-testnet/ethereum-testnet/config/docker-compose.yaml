@@ -47,7 +47,7 @@ services:
         if [ ! -d /data/geth/geth/chaindata ]; then
           geth init --datadir=/data/geth /data/geth/genesis.json
         fi
-        exec geth --datadir=/data/geth --networkid=32382 --http --http.api=eth,net,web3,debug,engine,txpool --http.addr=0.0.0.0 --http.port=8545 --http.vhosts=* --http.corsdomain=* --ws --ws.api=eth,net,web3,debug,engine --ws.addr=0.0.0.0 --ws.port=8546 --ws.origins=* --authrpc.addr=0.0.0.0 --authrpc.port=8551 --authrpc.vhosts=* --authrpc.jwtsecret=/data/jwtsecret --nodiscover --syncmode=full --gcmode=archive --maxpeers=0 --txlookuplimit=0
+        exec geth --datadir=/data/geth --networkid=32382 --http --http.api=eth,net,web3,debug,engine,txpool --http.addr=0.0.0.0 --http.port=8545 --http.vhosts=* --http.corsdomain=* --ws --ws.api=eth,net,web3,debug,engine --ws.addr=0.0.0.0 --ws.port=8546 --ws.origins=* --authrpc.addr=0.0.0.0 --authrpc.port=8551 --authrpc.vhosts=* --authrpc.jwtsecret=/data/jwtsecret --nodiscover --syncmode=full --gcmode=archive --maxpeers=0 --txlookuplimit=0 --cache=256
     volumes:
       - testnet-data:/data
     ports:

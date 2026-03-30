@@ -103,7 +103,7 @@ export async function setupDualChainTestnet() {
     await mintFakeETH(provider, fakeETH, fakeETHArtifact.abi, deployer, bidderAddress, mintAmount);
     console.log(`[Dual-Chain] ✓ Minted FakeETH to bidder`);
     // ── Aptos ─────────────────────────────────────────────────────────────────
-    aptosTestnet = await DockerTestnet.new(4);
+    aptosTestnet = await DockerTestnet.new(1);
     await aptosTestnet.waitForBlocks(1, 120);
     const nodeUrl = `${aptosTestnet.validatorApiUrl(0)}/v1`;
     const aptosDeployerPrivateKey = process.env.APTOS_DEPLOYER_PRIVATE_KEY ||

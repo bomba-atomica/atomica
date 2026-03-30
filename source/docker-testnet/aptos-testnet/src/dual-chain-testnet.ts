@@ -181,7 +181,7 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
     console.log(`[Dual-Chain] ✓ Minted FakeETH to bidder`);
 
     // ── Aptos ─────────────────────────────────────────────────────────────────
-    aptosTestnet = await DockerTestnet.new(4);
+    aptosTestnet = await DockerTestnet.new(1);
     await aptosTestnet.waitForBlocks(1, 120);
 
     const nodeUrl = `${aptosTestnet.validatorApiUrl(0)}/v1`;
