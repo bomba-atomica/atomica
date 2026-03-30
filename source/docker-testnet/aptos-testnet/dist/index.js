@@ -294,7 +294,6 @@ export class DockerTestnet {
                     BCS.bcsSerializeUint64(amount),
                 ]));
                 const accountInfo = await client.getAccount(faucetAccount.address());
-                const initialSequenceNumber = BigInt(accountInfo.sequence_number);
                 const chainId = await client.getChainId();
                 let initialBalance = 0n;
                 try {
@@ -318,6 +317,7 @@ export class DockerTestnet {
                 const rawTxn = new TxnBuilderTypes.RawTransaction(TxnBuilderTypes.AccountAddress.fromHex(faucetAccount.address()), BigInt(accountInfo.sequence_number), entryFunctionPayload, BigInt(10000), BigInt(100), BigInt(Math.floor(Date.now() / 1000) + 600), new TxnBuilderTypes.ChainId(chainId));
                 const signedTxn = await client.signTransaction(faucetAccount, rawTxn);
                 const txnResponse = await client.submitTransaction(signedTxn);
+                await client.waitForTransaction(txnResponse.hash, { timeoutSecs: 120 });
                 const maxRetries = 300;
                 const retryDelayMs = 1000;
                 let retries = 0;
@@ -332,11 +332,8 @@ export class DockerTestnet {
                         if (result &&
                             result.length > 0 &&
                             BigInt(result[0]) >= targetBalance) {
-                            const updatedAccountInfo = await client.getAccount(faucetAccount.address());
-                            if (BigInt(updatedAccountInfo.sequence_number) > initialSequenceNumber) {
-                                confirmed = true;
-                                break;
-                            }
+                            confirmed = true;
+                            break;
                         }
                         retries++;
                         if (retries < maxRetries) {
