@@ -435,9 +435,10 @@ export class DockerTestnet {
 
                 const signedTxn = await client.signTransaction(faucetAccount, rawTxn);
                 const txnResponse = await client.submitTransaction(signedTxn);
-                const maxRetries = 40;
+                const maxRetries = 300;
                 const retryDelayMs = 1000;
                 let retries = 0;
+                let confirmed = false;
 
                 while (retries < maxRetries) {
                     try {
@@ -458,6 +459,7 @@ export class DockerTestnet {
                             if (
                                 BigInt(updatedAccountInfo.sequence_number) > initialSequenceNumber
                             ) {
+                                confirmed = true;
                                 break;
                             }
                         }
@@ -479,6 +481,12 @@ export class DockerTestnet {
                             break;
                         }
                     }
+                }
+
+                if (!confirmed) {
+                    throw new Error(
+                        `Timed out waiting for faucet confirmation for ${targetAddr} after ${retries} retries`,
+                    );
                 }
 
                 debug(`Faucet transfer complete`, {

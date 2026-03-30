@@ -318,9 +318,10 @@ export class DockerTestnet {
                 const rawTxn = new TxnBuilderTypes.RawTransaction(TxnBuilderTypes.AccountAddress.fromHex(faucetAccount.address()), BigInt(accountInfo.sequence_number), entryFunctionPayload, BigInt(10000), BigInt(100), BigInt(Math.floor(Date.now() / 1000) + 600), new TxnBuilderTypes.ChainId(chainId));
                 const signedTxn = await client.signTransaction(faucetAccount, rawTxn);
                 const txnResponse = await client.submitTransaction(signedTxn);
-                const maxRetries = 40;
+                const maxRetries = 300;
                 const retryDelayMs = 1000;
                 let retries = 0;
+                let confirmed = false;
                 while (retries < maxRetries) {
                     try {
                         const result = await client.view({
@@ -328,9 +329,12 @@ export class DockerTestnet {
                             type_arguments: ["0x1::aptos_coin::AptosCoin"],
                             arguments: [targetAddr],
                         });
-                        if (result && result.length > 0 && BigInt(result[0]) >= targetBalance) {
+                        if (result &&
+                            result.length > 0 &&
+                            BigInt(result[0]) >= targetBalance) {
                             const updatedAccountInfo = await client.getAccount(faucetAccount.address());
                             if (BigInt(updatedAccountInfo.sequence_number) > initialSequenceNumber) {
+                                confirmed = true;
                                 break;
                             }
                         }
@@ -353,6 +357,9 @@ export class DockerTestnet {
                             break;
                         }
                     }
+                }
+                if (!confirmed) {
+                    throw new Error(`Timed out waiting for faucet confirmation for ${targetAddr} after ${retries} retries`);
                 }
                 debug(`Faucet transfer complete`, {
                     to: targetAddr,
