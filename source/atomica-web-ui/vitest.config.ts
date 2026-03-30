@@ -25,6 +25,8 @@ export default defineConfig(async () => {
     fundAccountCommand,
     setupEthereumTestnetCommand,
     teardownEthereumTestnetCommand,
+    setupDualChainTestnetCommand,
+    teardownDualChainTestnetCommand,
   } = await import("@atomica/aptos-docker-testnet/browser-commands");
 
   return {
@@ -78,6 +80,8 @@ export default defineConfig(async () => {
           fundAccount: fundAccountCommand,
           setupEthereumTestnet: setupEthereumTestnetCommand,
           teardownEthereumTestnet: teardownEthereumTestnetCommand,
+          setupDualChainTestnet: setupDualChainTestnetCommand,
+          teardownDualChainTestnet: teardownDualChainTestnetCommand,
         },
       },
 
