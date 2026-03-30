@@ -1,0 +1,314 @@
+/**
+ * 10-settle.test.tsx
+ *
+ * Browser integration tests for SettleButton — the UI component that
+ * triggers auction settlement and displays the outcome.
+ *
+ * Scenarios:
+ *   1. Settle after auction expiry → SettleButton shows "Settled" (live chain)
+ *   2. Attempt settle before expiry → error shown (simulated via callback throw)
+ *   3. Double-settle rejected → error shown (live chain — uses settled auction)
+ *   4. No-bid auction settles cleanly → "Settled" shown (live chain)
+ *
+ * Tests 1, 3, and 4 create independent short-duration auctions on the live
+ * dual-chain testnet.  Test 2 uses a mock callback to isolate the UI error
+ * handling path without requiring an additional testnet auction.
+ *
+ * Each test that needs a live auction uses a separate Aptos seller account so
+ * that the single-auction-per-address Move constraint is not violated.
+ */
+
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  cleanup,
+} from "@testing-library/react";
+import { commands } from "vitest/browser";
+import {
+  setupIntegrationFixture,
+  teardownIntegrationFixture,
+  AUCTION_DURATION_SHORT,
+  type IntegrationFixture,
+} from "./fixtures/dual-chain";
+import { setupWalletMock } from "./fixtures/wallet-mock";
+import { settleButton } from "./helpers/selectors";
+import {
+  setupAuctionState,
+  generateEthLockProof,
+  registerLockOnAptos,
+  createAuctionDirect,
+  submitBidDirect,
+  settleAuctionDirect,
+  viewFunction,
+} from "./helpers/auction-setup";
+import { SettleButton } from "../../src/components/SettleButton";
+import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
+import { setAptosInstance } from "../../src/lib/aptos/config";
+
+const MIN_PRICE = 50n;
+const BID_PRICE = 200n;
+
+// ---------------------------------------------------------------------------
+// Test suite
+// ---------------------------------------------------------------------------
+
+describe.sequential("10: Settle Auction", () => {
+  let fixture: IntegrationFixture;
+  let aptosClient: Aptos;
+  let moduleAddr: string;
+
+  beforeAll(async () => {
+    fixture = await setupIntegrationFixture();
+
+    const aptosConfig = new AptosConfig({
+      network: Network.LOCAL,
+      fullnode: fixture.aptos.nodeUrl,
+    });
+    aptosClient = new Aptos(aptosConfig);
+    setAptosInstance(aptosClient);
+
+    moduleAddr = fixture.aptos.moduleAddress;
+
+    // Inject seller wallet mock (seller = Ethereum deployer account)
+    await setupWalletMock({
+      privateKey: fixture.eth.seller.privateKey,
+      rpcUrl: fixture.eth.rpcUrl,
+      chainId: fixture.eth.chainId,
+    });
+  }, 600_000);
+
+  afterAll(async () => {
+    await teardownIntegrationFixture();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  // ── Test 1: settle after close ─────────────────────────────────────────────
+
+  it(
+    "settle-status shows 'Settled' after AUCTION_DURATION_SHORT elapses",
+    async () => {
+      // Set up Ethereum lock + registration for this test's seller account
+      const testSetup = await setupAuctionState(fixture);
+      const testSeller = testSetup.deployerAccount;
+      const testSellerAddress = testSeller.accountAddress.toString();
+
+      await createAuctionDirect(
+        testSetup.aptosClient,
+        testSeller,
+        moduleAddr,
+        testSetup.lockId,
+        MIN_PRICE,
+        BigInt(AUCTION_DURATION_SHORT),
+      );
+
+      // Fund a bidder and submit a bid
+      const bidder = Account.generate();
+      await commands.fundAccount(bidder.accountAddress.toString(), 500_000_000);
+      await submitBidDirect(
+        testSetup.aptosClient,
+        bidder,
+        moduleAddr,
+        testSellerAddress,
+        BID_PRICE,
+      );
+
+      // Wait for auction to expire
+      await new Promise((r) =>
+        setTimeout(r, (AUCTION_DURATION_SHORT + 3) * 1000),
+      );
+
+      const onSettle = async () => {
+        await settleAuctionDirect(
+          testSetup.aptosClient,
+          testSeller,
+          moduleAddr,
+          testSellerAddress,
+        );
+      };
+
+      render(<SettleButton onSettle={onSettle} />);
+
+      fireEvent.click(screen.getByTestId(settleButton.settleButton));
+
+      await waitFor(
+        () => {
+          const statusEl = screen.getByTestId(settleButton.settleStatus);
+          expect(statusEl.textContent).toBe("Settled");
+        },
+        { timeout: 30_000 },
+      );
+
+      // Verify on-chain settled flag
+      const settled = await viewFunction(
+        aptosClient,
+        `${moduleAddr}::auction::is_settled`,
+        [],
+        [testSellerAddress],
+      );
+      expect(settled[0]).toBe(true);
+    },
+    600_000,
+  );
+
+  // ── Test 2: attempt settle before expiry (UI error path) ─────────────────
+
+  it(
+    "settle-status shows error when settle is called before auction closes",
+    async () => {
+      // Use a mock callback that throws the expected Move abort to test the
+      // UI error path without spinning up a full live auction for this case.
+      const onSettle = async () => {
+        throw new Error(
+          "Transaction failed: E_AUCTION_NOT_ENDED (Move abort 3)",
+        );
+      };
+
+      render(<SettleButton onSettle={onSettle} />);
+
+      fireEvent.click(screen.getByTestId(settleButton.settleButton));
+
+      await waitFor(
+        () => {
+          const statusEl = screen.getByTestId(settleButton.settleStatus);
+          expect(statusEl.textContent).toMatch(/Error/);
+        },
+        { timeout: 10_000 },
+      );
+    },
+    30_000,
+  );
+
+  // ── Test 3: double-settle rejected ────────────────────────────────────────
+
+  it(
+    "settle-status shows error on double-settle attempt (live chain)",
+    async () => {
+      // Set up a fresh short-duration auction with one bid using a NEW Aptos
+      // seller account (not the deployer) to avoid the single-auction-per-
+      // address constraint.
+      const ethProof = await generateEthLockProof(fixture);
+      const seller = Account.generate();
+      await commands.fundAccount(seller.accountAddress.toString(), 500_000_000);
+
+      await registerLockOnAptos(
+        aptosClient,
+        seller,
+        moduleAddr,
+        ethProof.proof,
+      );
+
+      await createAuctionDirect(
+        aptosClient,
+        seller,
+        moduleAddr,
+        ethProof.lockId,
+        MIN_PRICE,
+        BigInt(AUCTION_DURATION_SHORT),
+      );
+
+      const sellerAddress = seller.accountAddress.toString();
+
+      // Wait for expiry and settle once
+      await new Promise((r) =>
+        setTimeout(r, (AUCTION_DURATION_SHORT + 3) * 1000),
+      );
+      await settleAuctionDirect(aptosClient, seller, moduleAddr, sellerAddress);
+
+      // Attempt to settle again — should fail with E_ALREADY_SETTLED
+      const onSettle = async () => {
+        await settleAuctionDirect(
+          aptosClient,
+          seller,
+          moduleAddr,
+          sellerAddress,
+        );
+      };
+
+      render(<SettleButton onSettle={onSettle} />);
+
+      fireEvent.click(screen.getByTestId(settleButton.settleButton));
+
+      await waitFor(
+        () => {
+          const statusEl = screen.getByTestId(settleButton.settleStatus);
+          expect(statusEl.textContent).toMatch(/Error/);
+        },
+        { timeout: 30_000 },
+      );
+    },
+    600_000,
+  );
+
+  // ── Test 4: no-bid auction settles cleanly ────────────────────────────────
+
+  it(
+    "no-bid auction settle completes without error and shows 'Settled'",
+    async () => {
+      // Fresh auction with a new seller Aptos account — no bids submitted
+      const ethProof = await generateEthLockProof(fixture);
+      const seller = Account.generate();
+      await commands.fundAccount(seller.accountAddress.toString(), 500_000_000);
+
+      await registerLockOnAptos(
+        aptosClient,
+        seller,
+        moduleAddr,
+        ethProof.proof,
+      );
+
+      await createAuctionDirect(
+        aptosClient,
+        seller,
+        moduleAddr,
+        ethProof.lockId,
+        MIN_PRICE,
+        BigInt(AUCTION_DURATION_SHORT),
+      );
+
+      // Wait for expiry — no bid submitted
+      await new Promise((r) =>
+        setTimeout(r, (AUCTION_DURATION_SHORT + 3) * 1000),
+      );
+
+      const sellerAddress = seller.accountAddress.toString();
+
+      const onSettle = async () => {
+        await settleAuctionDirect(
+          aptosClient,
+          seller,
+          moduleAddr,
+          sellerAddress,
+        );
+      };
+
+      render(<SettleButton onSettle={onSettle} />);
+
+      fireEvent.click(screen.getByTestId(settleButton.settleButton));
+
+      // Should show "Settled" without error
+      await waitFor(
+        () => {
+          const statusEl = screen.getByTestId(settleButton.settleStatus);
+          expect(statusEl.textContent).toBe("Settled");
+        },
+        { timeout: 30_000 },
+      );
+
+      // Verify on-chain settled flag
+      const settled = await viewFunction(
+        aptosClient,
+        `${moduleAddr}::auction::is_settled`,
+        [],
+        [sellerAddress],
+      );
+      expect(settled[0]).toBe(true);
+    },
+    600_000,
+  );
+});
