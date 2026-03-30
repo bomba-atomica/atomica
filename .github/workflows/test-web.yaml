@@ -135,17 +135,21 @@ jobs:
         working-directory: source/atomica-web-ui
         run: bunx playwright install --with-deps chromium
 
-      - name: Run Web UI tests
+      - name: Run Web UI tests (unit and auction-create)
         if: matrix.type == 'ui'
         working-directory: source/atomica-web-ui
-        env:
-          NODE_OPTIONS: --max-old-space-size=8192
         run: >
           bunx vitest run
           tests/AccountStatus.test.tsx
           tests/TxButton.skip-submit.test.tsx
           tests/integration/07-create-auction.test.tsx
           tests/integration/08-auction-monitor.test.tsx
+
+      - name: Run Web UI tests (bid and settle)
+        if: matrix.type == 'ui'
+        working-directory: source/atomica-web-ui
+        run: >
+          bunx vitest run
           tests/integration/09-submit-bid.test.tsx
           tests/integration/10-settle.test.tsx
 
