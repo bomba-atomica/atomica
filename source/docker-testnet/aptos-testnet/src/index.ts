@@ -446,7 +446,11 @@ export class DockerTestnet {
                             arguments: [targetAddr],
                         });
 
-                        if (result && result.length > 0 && BigInt(result[0] as string) >= targetBalance) {
+                        if (
+                            result &&
+                            result.length > 0 &&
+                            BigInt(result[0] as string) >= targetBalance
+                        ) {
                             break;
                         }
 
