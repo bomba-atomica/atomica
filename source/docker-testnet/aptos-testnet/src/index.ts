@@ -401,6 +401,26 @@ export class DockerTestnet {
 
                 const accountInfo = await client.getAccount(faucetAccount.address());
                 const chainId = await client.getChainId();
+                let initialBalance = 0n;
+
+                try {
+                    const result = await client.view({
+                        function: "0x1::coin::balance",
+                        type_arguments: ["0x1::aptos_coin::AptosCoin"],
+                        arguments: [targetAddr],
+                    });
+
+                    if (result && result.length > 0) {
+                        initialBalance = BigInt(result[0] as string);
+                    }
+                } catch (e: unknown) {
+                    const message = e instanceof Error ? e.message : String(e);
+                    debug(`Warning: Could not read initial balance before faucet`, {
+                        targetAddr,
+                        error: message,
+                    });
+                }
+                const targetBalance = initialBalance + amount;
 
                 const rawTxn = new TxnBuilderTypes.RawTransaction(
                     TxnBuilderTypes.AccountAddress.fromHex(faucetAccount.address()),
@@ -426,7 +446,7 @@ export class DockerTestnet {
                             arguments: [targetAddr],
                         });
 
-                        if (result && result.length > 0 && BigInt(result[0] as string) >= amount) {
+                        if (result && result.length > 0 && BigInt(result[0] as string) >= targetBalance) {
                             break;
                         }
 

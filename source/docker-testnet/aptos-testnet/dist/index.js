@@ -295,6 +295,25 @@ export class DockerTestnet {
                 ]));
                 const accountInfo = await client.getAccount(faucetAccount.address());
                 const chainId = await client.getChainId();
+                let initialBalance = 0n;
+                try {
+                    const result = await client.view({
+                        function: "0x1::coin::balance",
+                        type_arguments: ["0x1::aptos_coin::AptosCoin"],
+                        arguments: [targetAddr],
+                    });
+                    if (result && result.length > 0) {
+                        initialBalance = BigInt(result[0]);
+                    }
+                }
+                catch (e) {
+                    const message = e instanceof Error ? e.message : String(e);
+                    debug(`Warning: Could not read initial balance before faucet`, {
+                        targetAddr,
+                        error: message,
+                    });
+                }
+                const targetBalance = initialBalance + amount;
                 const rawTxn = new TxnBuilderTypes.RawTransaction(TxnBuilderTypes.AccountAddress.fromHex(faucetAccount.address()), BigInt(accountInfo.sequence_number), entryFunctionPayload, BigInt(10000), BigInt(100), BigInt(Math.floor(Date.now() / 1000) + 600), new TxnBuilderTypes.ChainId(chainId));
                 const signedTxn = await client.signTransaction(faucetAccount, rawTxn);
                 const txnResponse = await client.submitTransaction(signedTxn);
@@ -308,7 +327,7 @@ export class DockerTestnet {
                             type_arguments: ["0x1::aptos_coin::AptosCoin"],
                             arguments: [targetAddr],
                         });
-                        if (result && result.length > 0 && BigInt(result[0]) >= amount) {
+                        if (result && result.length > 0 && BigInt(result[0]) >= targetBalance) {
                             break;
                         }
                         retries++;
