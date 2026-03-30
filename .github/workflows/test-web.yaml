@@ -139,7 +139,7 @@ jobs:
         if: matrix.type == 'ui'
         working-directory: source/atomica-web-ui
         env:
-          NODE_OPTIONS: "--max-old-space-size=4096"
+          NODE_OPTIONS: "--max-old-space-size=8192"
         run: >
           bunx vitest run
           tests/AccountStatus.test.tsx
@@ -151,7 +151,7 @@ jobs:
         if: matrix.type == 'ui'
         working-directory: source/atomica-web-ui
         env:
-          NODE_OPTIONS: "--max-old-space-size=4096"
+          NODE_OPTIONS: "--max-old-space-size=8192"
         run: >
           bunx vitest run
           tests/integration/09-submit-bid.test.tsx
