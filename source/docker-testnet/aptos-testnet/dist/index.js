@@ -317,7 +317,7 @@ export class DockerTestnet {
                 const rawTxn = new TxnBuilderTypes.RawTransaction(TxnBuilderTypes.AccountAddress.fromHex(faucetAccount.address()), BigInt(accountInfo.sequence_number), entryFunctionPayload, BigInt(10000), BigInt(100), BigInt(Math.floor(Date.now() / 1000) + 600), new TxnBuilderTypes.ChainId(chainId));
                 const signedTxn = await client.signTransaction(faucetAccount, rawTxn);
                 const txnResponse = await client.submitTransaction(signedTxn);
-                await client.waitForTransaction(txnResponse.hash, { timeoutSecs: 120 });
+                await client.waitForTransaction(txnResponse.hash, { timeoutSecs: 300 });
                 const maxRetries = 300;
                 const retryDelayMs = 1000;
                 let retries = 0;
