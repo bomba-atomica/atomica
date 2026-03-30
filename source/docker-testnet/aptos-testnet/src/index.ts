@@ -1,4 +1,4 @@
-import { AptosAccount, AptosClient, HexString, TxnBuilderTypes, BCS } from "aptos";
+import { AptosAccount, AptosClient, HexString } from "aptos";
 import { spawn } from "child_process";
 import * as dotenv from "dotenv";
 import { cpSync, existsSync, mkdirSync, readFileSync } from "fs";
