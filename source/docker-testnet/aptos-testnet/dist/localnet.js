@@ -232,6 +232,17 @@ export async function teardownLocalnet() {
     contractsDeployed = false;
 }
 /**
+ * Register an externally managed DockerTestnet instance with the localnet
+ * singleton so browser commands like fundAccount() can reuse it.
+ */
+export function setTestnet(testnetInstance) {
+    testnet = testnetInstance;
+    setupComplete = testnetInstance !== null;
+    if (testnetInstance === null) {
+        contractsDeployed = false;
+    }
+}
+/**
  * Get the underlying Docker testnet instance.
  *
  * This is useful for advanced operations that need direct access to the testnet.

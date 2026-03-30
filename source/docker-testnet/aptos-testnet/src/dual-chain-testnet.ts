@@ -12,6 +12,7 @@
 
 import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
 import { DockerTestnet } from "./index.js";
+import { setTestnet } from "./localnet.js";
 import { ethers } from "ethers";
 import { resolve as pathResolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -221,7 +222,8 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
     console.log(`[Dual-Chain] ✓ Minted FakeETH to bidder`);
 
     // ── Aptos ─────────────────────────────────────────────────────────────────
-    aptosTestnet = await DockerTestnet.new(1);
+    aptosTestnet = await DockerTestnet.new(2);
+    setTestnet(aptosTestnet);
     const nodeUrl = `${aptosTestnet.validatorApiUrl(0)}/v1`;
 
     const aptosDeployerPrivateKey =
@@ -288,6 +290,7 @@ export async function teardownDualChainTestnet(): Promise<void> {
         aptosTestnet
             ? aptosTestnet.teardown().finally(() => {
                   aptosTestnet = null;
+                  setTestnet(null);
               })
             : Promise.resolve(),
     ]);

@@ -387,20 +387,7 @@ export class DockerTestnet {
             debug(`Faucet funding ${targetAddr} with ${amount} octas`);
 
             try {
-                const entryFunctionPayload = new TxnBuilderTypes.TransactionPayloadEntryFunction(
-                    TxnBuilderTypes.EntryFunction.natural(
-                        "0x1::aptos_account",
-                        "transfer",
-                        [],
-                        [
-                            BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex(targetAddr)),
-                            BCS.bcsSerializeUint64(amount),
-                        ],
-                    ),
-                );
-
                 const accountInfo = await client.getAccount(faucetAccount.address());
-                const chainId = await client.getChainId();
                 let initialBalance = 0n;
 
                 try {
@@ -422,19 +409,39 @@ export class DockerTestnet {
                 }
                 const targetBalance = initialBalance + amount;
 
-                const rawTxn = new TxnBuilderTypes.RawTransaction(
-                    TxnBuilderTypes.AccountAddress.fromHex(faucetAccount.address()),
-                    BigInt(accountInfo.sequence_number),
-                    entryFunctionPayload,
-                    BigInt(10000),
-                    BigInt(100),
-                    BigInt(Math.floor(Date.now() / 1000) + 600),
-                    new TxnBuilderTypes.ChainId(chainId),
-                );
+                const transferPayload = {
+                    type: "entry_function_payload",
+                    function: "0x1::aptos_account::transfer",
+                    type_arguments: [],
+                    arguments: [targetAddr, amount.toString()],
+                };
 
-                const signedTxn = await client.signTransaction(faucetAccount, rawTxn);
+                const transferTxn = await client.generateTransaction(
+                    faucetAccount.address(),
+                    transferPayload,
+                );
+                debug(`Generated faucet transfer transaction`, {
+                    targetAddr,
+                    amount: amount.toString(),
+                    sequenceNumber: accountInfo.sequence_number,
+                });
+
+                const signedTxn = await client.signTransaction(faucetAccount, transferTxn);
                 const txnResponse = await client.submitTransaction(signedTxn);
-                await client.waitForTransaction(txnResponse.hash, { timeoutSecs: 600 });
+
+                // waitForTransaction can hang against local validators even when
+                // the transfer eventually lands. Keep it best-effort and fall
+                // back to balance-based confirmation below.
+                try {
+                    await client.waitForTransaction(txnResponse.hash, { timeoutSecs: 30 });
+                } catch (e: unknown) {
+                    const message = e instanceof Error ? e.message : String(e);
+                    debug(`Faucet waitForTransaction did not confirm in time`, {
+                        targetAddr,
+                        txn: txnResponse.hash,
+                        error: message,
+                    });
+                }
 
                 const maxRetries = 300;
                 const retryDelayMs = 1000;
