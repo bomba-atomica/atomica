@@ -15,7 +15,10 @@ import { execSync } from "child_process";
 import type { EthereumTestnetInfo } from "./browser-commands.js";
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
-const EVM_CONTRACTS_DIR = pathResolve(THIS_DIR, "../../evm-contracts");
+// Resolve from the compiled dist/ directory up three levels to reach source/evm-contracts.
+// The dist/ directory is at source/docker-testnet/aptos-testnet/dist/ so:
+//   dist/ → aptos-testnet/ → docker-testnet/ → source/ → evm-contracts
+const EVM_CONTRACTS_DIR = pathResolve(THIS_DIR, "../../../evm-contracts");
 
 let testnet: EthereumDockerTestnet | null = null;
 

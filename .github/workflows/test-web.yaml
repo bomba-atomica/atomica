@@ -163,6 +163,8 @@ jobs:
       - name: Run browser integration tests
         if: matrix.type == 'browser-integration'
         working-directory: source/atomica-web-ui
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
           bunx vitest run \
             tests/integration/01-faucet.test.tsx \
