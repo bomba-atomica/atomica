@@ -1,0 +1,142 @@
+name: Browser Tests (Vitest/Playwright)
+
+on:
+  pull_request:
+
+  push:
+
+  workflow_dispatch:
+
+jobs:
+  browser-tests:
+    name: Browser Tests (${{ matrix.chunk }})
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - chunk: component
+            test_files: >-
+              tests/AccountStatus.test.tsx
+              tests/TxButton.skip-submit.test.tsx
+          - chunk: faucet-wallet
+            test_files: >-
+              tests/integration/01-faucet.test.tsx
+              tests/integration/02-wallet-connect.test.tsx
+          - chunk: auction
+            test_files: >-
+              tests/integration/07-create-auction.test.tsx
+              tests/integration/08-auction-monitor.test.tsx
+          - chunk: bid-settle
+            test_files: >-
+              tests/integration/09-submit-bid.test.tsx
+              tests/integration/10-settle.test.tsx
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build Ethereum Testnet SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Atomica SDK
+        working-directory: source/atomica-sdk
+        run: |
+          bun install
+          bun run build
+
+      - name: Build State Proofs
+        if: matrix.chunk == 'auction' || matrix.chunk == 'bid-settle'
+        working-directory: source/state-proofs/typescript
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Aptos Testnet SDK
+        working-directory: source/docker-testnet/aptos-testnet
+        run: |
+          bun install
+          bun run build
+
+      - name: Install Foundry
+        if: matrix.chunk != 'component'
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Build EVM contracts
+        if: matrix.chunk != 'component'
+        working-directory: source/evm-contracts
+        run: forge build
+
+      - name: Install Aptos CLI
+        if: matrix.chunk == 'auction' || matrix.chunk == 'bid-settle'
+        run: |
+          APTOS_VERSION="binary-fac20096d4"
+          APTOS_HASH="${APTOS_VERSION#binary-}"
+          APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
+          APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
+
+          echo "Downloading aptos binary from ${APTOS_URL}..."
+          curl -L -o /tmp/aptos "${APTOS_URL}"
+
+          echo "Installing aptos binary to /usr/local/bin/aptos..."
+          chmod +x /tmp/aptos
+          sudo mv /tmp/aptos /usr/local/bin/aptos
+
+          echo "Verifying aptos installation..."
+          aptos --version
+          which aptos
+
+      - name: Pre-warm Move git dependency cache
+        if: matrix.chunk == 'auction' || matrix.chunk == 'bid-settle'
+        run: |
+          # Step 1: Fetch the atomica-aptos git dependency by compiling atomica-move-contracts.
+          # This clones the repo and generates Move.lock for atomica-move-contracts.
+          aptos move compile \
+            --package-dir source/atomica-move-contracts \
+            --named-addresses atomica=0x1
+          # Step 2: Compile the noop fixture using the already-cached dep
+          # (--skip-fetch-latest-git-deps avoids a second git fetch that fails
+          # with exit 128 when trying to reset an already-cloned repo).
+          aptos move compile \
+            --package-dir source/docker-testnet/aptos-testnet/test/fixtures/noop \
+            --named-addresses noop=0x1 \
+            --skip-fetch-latest-git-deps
+
+      - name: Install Web UI dependencies
+        working-directory: source/atomica-web-ui
+        run: bun install
+
+      - name: Build Atomica Web UI
+        if: matrix.chunk != 'faucet-wallet'
+        working-directory: source/atomica-web-ui
+        run: bun run build
+
+      - name: Install Playwright browsers
+        working-directory: source/atomica-web-ui
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        working-directory: source/atomica-web-ui
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
+        run: bunx vitest run ${{ matrix.test_files }}
