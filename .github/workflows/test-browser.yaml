@@ -66,7 +66,6 @@ jobs:
           bun run build
 
       - name: Build State Proofs
-        if: matrix.chunk == 'auction' || matrix.chunk == 'bid-settle'
         working-directory: source/state-proofs/typescript
         run: |
           bun install
