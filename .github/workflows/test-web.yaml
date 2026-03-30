@@ -61,6 +61,15 @@ jobs:
           bun install
           bun run build
 
+      - name: Install Foundry (ui)
+        if: matrix.type == 'ui'
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Build EVM contracts (ui)
+        if: matrix.type == 'ui'
+        working-directory: source/evm-contracts
+        run: forge build
+
       - name: Build Atomica Web UI
         if: matrix.type == 'ui' || matrix.type == 'meta'
         working-directory: source/atomica-web-ui
@@ -153,9 +162,17 @@ jobs:
         run: >
           bunx vitest run
           tests/integration/07-create-auction.test.tsx
+
+      - name: Run Web UI tests (auction-monitor)
+        if: matrix.type == 'ui'
+        working-directory: source/atomica-web-ui
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
+        run: >
+          bunx vitest run
           tests/integration/08-auction-monitor.test.tsx
 
-      - name: Run Web UI tests (bid and settle)
+      - name: Run Web UI tests (bid)
         if: matrix.type == 'ui'
         working-directory: source/atomica-web-ui
         env:
@@ -163,6 +180,14 @@ jobs:
         run: >
           bunx vitest run
           tests/integration/09-submit-bid.test.tsx
+
+      - name: Run Web UI tests (settle)
+        if: matrix.type == 'ui'
+        working-directory: source/atomica-web-ui
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
+        run: >
+          bunx vitest run
           tests/integration/10-settle.test.tsx
 
       # ── browser-integration: Faucet + Wallet-Connect browser integration tests
