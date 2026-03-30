@@ -558,7 +558,11 @@ export class DockerTestnet {
         deployerPrivateKey: string;
         deployerAddress?: string;
         namedAddresses?: Record<string, string>;
-        initFunctions?: Array<{ functionId: string; args: string[] }>;
+        initFunctions?: Array<{
+            functionId: string;
+            args: string[];
+            typeArgs?: string[];
+        }>;
         fundAmount?: bigint;
     }): Promise<void> {
         const {
@@ -625,6 +629,10 @@ export class DockerTestnet {
                 `http://127.0.0.1:${BASE_API_PORT}`,
                 "--assume-yes",
             ];
+
+            if (initFunc.typeArgs && initFunc.typeArgs.length > 0) {
+                args.push("--type-args", ...initFunc.typeArgs);
+            }
 
             if (initFunc.args.length > 0) {
                 args.push("--args", ...initFunc.args);

@@ -52,6 +52,7 @@ export declare class DockerTestnet {
         initFunctions?: Array<{
             functionId: string;
             args: string[];
+            typeArgs?: string[];
         }>;
         fundAmount?: bigint;
     }): Promise<void>;

@@ -250,6 +250,22 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
             },
             { functionId: `${aptosModuleAddress}::fake_eth::initialize`, args: [] },
             { functionId: `${aptosModuleAddress}::fake_usd::initialize`, args: [] },
+            {
+                functionId: `${aptosModuleAddress}::lock_receipt::initialize`,
+                typeArgs: [
+                    `${aptosModuleAddress}::lock_receipt::Ethereum`,
+                    `${aptosModuleAddress}::lock_receipt::FakeETH`,
+                ],
+                args: [],
+            },
+            {
+                functionId: `${aptosModuleAddress}::lock_receipt::initialize`,
+                typeArgs: [
+                    `${aptosModuleAddress}::lock_receipt::Ethereum`,
+                    `${aptosModuleAddress}::lock_receipt::FakeUSD`,
+                ],
+                args: [],
+            },
         ],
         fundAmount: 10_000_000_000n,
     });
