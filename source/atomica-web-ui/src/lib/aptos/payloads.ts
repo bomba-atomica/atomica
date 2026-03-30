@@ -207,7 +207,7 @@ export function getBidPayload(
 ): InputGenerateTransactionPayloadData {
   return {
     function: `${CONTRACT_ADDR}::auction::submit_bid`,
-    functionArguments: [sellerAddr, amountUsd, u, v],
+    functionArguments: [sellerAddr, amountUsd],
   };
 }
 
