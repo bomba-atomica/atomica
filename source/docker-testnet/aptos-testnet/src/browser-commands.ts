@@ -389,14 +389,28 @@ export const generateEthLockProofCommand: BrowserCommand<
     const lockBox = new ethers.Contract(lockBoxAddress, LOCKBOX_LOCK_ABI, seller);
 
     // Mint tokens
-    const mintTx = await (fakeETH.mint as (to: string, amount: bigint) => Promise<ethers.ContractTransactionResponse>)(seller.address, mintAmount);
+    const mintTx = await (
+        fakeETH.mint as (to: string, amount: bigint) => Promise<ethers.ContractTransactionResponse>
+    )(seller.address, mintAmount);
     await provider.waitForTransaction(mintTx.hash, 1);
 
     let nonce = await seller.getNonce();
-    const approveTx = await (fakeETH.approve as (spender: string, amount: bigint, opts: { nonce: number }) => Promise<ethers.ContractTransactionResponse>)(lockBoxAddress, lockAmount, { nonce: nonce++ });
+    const approveTx = await (
+        fakeETH.approve as (
+            spender: string,
+            amount: bigint,
+            opts: { nonce: number },
+        ) => Promise<ethers.ContractTransactionResponse>
+    )(lockBoxAddress, lockAmount, { nonce: nonce++ });
     await provider.waitForTransaction(approveTx.hash, 1);
 
-    const lockTx = await (lockBox.lock as (token: string, amount: bigint, opts: { nonce: number }) => Promise<ethers.ContractTransactionResponse>)(fakeETHAddress, lockAmount, { nonce: nonce++ });
+    const lockTx = await (
+        lockBox.lock as (
+            token: string,
+            amount: bigint,
+            opts: { nonce: number },
+        ) => Promise<ethers.ContractTransactionResponse>
+    )(fakeETHAddress, lockAmount, { nonce: nonce++ });
     const lockReceipt = await provider.waitForTransaction(lockTx.hash, 1);
     const lockBlockNumber = lockReceipt!.blockNumber;
 
