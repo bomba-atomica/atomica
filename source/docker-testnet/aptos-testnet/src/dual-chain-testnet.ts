@@ -185,8 +185,6 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
 
     // ── Aptos ─────────────────────────────────────────────────────────────────
     aptosTestnet = await DockerTestnet.new(1);
-    await aptosTestnet.waitForBlocks(1, 300);
-
     const nodeUrl = `${aptosTestnet.validatorApiUrl(0)}/v1`;
 
     const aptosDeployerPrivateKey =
