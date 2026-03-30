@@ -17,7 +17,10 @@ import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
 import { execSync } from "child_process";
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
-const EVM_CONTRACTS_DIR = pathResolve(THIS_DIR, "../../evm-contracts");
+// Resolve from the compiled dist/ directory up three levels to reach source/evm-contracts.
+// The browser-test fixture shares the same contract build output as the standalone
+// Ethereum testnet helper, so it should look in the root contracts package.
+const EVM_CONTRACTS_DIR = pathResolve(THIS_DIR, "../../../evm-contracts");
 // ---------------------------------------------------------------------------
 // Shared state — one fixture per Vitest worker process
 // ---------------------------------------------------------------------------
@@ -104,7 +107,6 @@ export async function setupDualChainTestnet() {
     console.log(`[Dual-Chain] ✓ Minted FakeETH to bidder`);
     // ── Aptos ─────────────────────────────────────────────────────────────────
     aptosTestnet = await DockerTestnet.new(1);
-    await aptosTestnet.waitForBlocks(1, 120);
     const nodeUrl = `${aptosTestnet.validatorApiUrl(0)}/v1`;
     const aptosDeployerPrivateKey = process.env.APTOS_DEPLOYER_PRIVATE_KEY ||
         "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";

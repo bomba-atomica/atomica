@@ -414,8 +414,6 @@ export class DockerTestnet {
 
                 const signedTxn = await client.signTransaction(faucetAccount, rawTxn);
                 const txnResponse = await client.submitTransaction(signedTxn);
-                await client.waitForTransaction(txnResponse.hash, { timeoutSecs: 300 });
-
                 const maxRetries = 40;
                 const retryDelayMs = 1000;
                 let retries = 0;
