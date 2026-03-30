@@ -28,17 +28,16 @@ import { setupWalletMock } from "./fixtures/wallet-mock";
 import { step7Auction } from "./helpers/selectors";
 import {
   generateEthLockProof,
+  registerLockOnAptos,
+  createAuctionDirect,
   type EthLockProofResult,
 } from "./helpers/auction-setup";
-import { getRegisterLockPayload } from "../../src/lib/aptos/payloads";
 import { Step7Auction } from "../../src/components/SellFlow/steps/Step7Auction";
-import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+import { Aptos, AptosConfig, Network, Account, Ed25519PrivateKey } from "@aptos-labs/ts-sdk";
 import { setAptosInstance, aptos as aptosGlobal } from "../../src/lib/aptos/config";
 import { ethers } from "ethers";
 import { getCreateAuctionPayload } from "../../src/lib/aptos/payloads";
 import { submitNativeTransaction } from "../../src/lib/aptos/transaction";
-import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
-import { commands } from "vitest/browser";
 
 const MIN_PRICE = 100n;
 const AUCTION_DURATION = 3600n;
@@ -97,6 +96,7 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
   let fixture: IntegrationFixture;
   let ethProof: EthLockProofResult;
   let sellerAddress: string;
+  let deployerAccount: Account;
 
   beforeAll(async () => {
     fixture = await setupIntegrationFixture();
@@ -109,26 +109,33 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     setAptosInstance(new Aptos(aptosConfig));
 
     // Inject seller wallet mock so SIWE signing works without MetaMask
+    // (used by Tests 3 and 4 which exercise UI error paths via SIWE)
     sellerAddress = await setupWalletMock({
       privateKey: fixture.eth.seller.privateKey,
       rpcUrl: fixture.eth.rpcUrl,
       chainId: fixture.eth.chainId,
     });
 
-    // Fund the seller's SIWE-derived Aptos address so transactions have gas
-    const sellerAptosAddress = await getDerivedAddress(
-      sellerAddress.toLowerCase(),
-    );
-    await commands.fundAccount(sellerAptosAddress.toString(), 500_000_000);
+    // Build the deployer's native Aptos account (@atomica admin).
+    // The Move contracts only allow @atomica or the zero-padded Ethereum
+    // address to call register_ethereum_lock and create_auction in this
+    // Demo phase (see lock_receipt.move E_UNAUTHORIZED_SIGNER check).
+    // The SIWE-derived address matches neither, so we use the deployer directly.
+    deployerAccount = Account.fromPrivateKey({
+      privateKey: new Ed25519PrivateKey(fixture.aptos.deployerPrivateKey),
+    });
 
     // Lock ETH on Ethereum and generate storage proof (no Aptos registration)
     ethProof = await generateEthLockProof(fixture);
 
-    // Register the lock on Aptos via SIWE (same path as the real app flow):
-    // The LockReceipt is stored at the seller's SIWE-derived Aptos address so
-    // create_auction (also SIWE-signed) can consume it.
-    const registerPayload = getRegisterLockPayload(ethProof.proof);
-    await submitNativeTransaction(aptosGlobal, sellerAddress, registerPayload);
+    // Register the lock on Aptos via the deployer account (@atomica).
+    // The contract authorizes @atomica to register on behalf of any user.
+    await registerLockOnAptos(
+      aptosGlobal,
+      deployerAccount,
+      fixture.aptos.moduleAddress,
+      ethProof.proof,
+    );
   }, 600_000);
 
   afterAll(async () => {
@@ -148,13 +155,19 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
   // ── Test 1: happy path ─────────────────────────────────────────────────────
 
   it("shows auction-spinner on mount and auction-tx-hash after successful create", async () => {
-    const lockIdBytes = ethers.getBytes(ethProof.lockId);
-    const mpk = new Uint8Array(0);
-
+    // Use the deployer account directly to call create_auction.
+    // The Move contract only authorizes @atomica or the zero-padded Ethereum
+    // address; SIWE-derived addresses are rejected in this Demo phase.
     const onCreateAuction = async () => {
-      const payload = getCreateAuctionPayload(lockIdBytes, MIN_PRICE, AUCTION_DURATION, mpk);
-      const result = await submitNativeTransaction(aptosGlobal, sellerAddress, payload);
-      return { txHash: (result as { hash?: string }).hash };
+      const txHash = await createAuctionDirect(
+        aptosGlobal,
+        deployerAccount,
+        fixture.aptos.moduleAddress,
+        ethProof.lockId,
+        MIN_PRICE,
+        AUCTION_DURATION,
+      );
+      return { txHash };
     };
 
     render(
@@ -201,15 +214,20 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
   // ── Test 3: receipt already claimed ───────────────────────────────────────
 
   it("shows Move abort error when receipt is already claimed (second call)", async () => {
-    // The auction was already created in Test 1.
-    // Attempting create_auction again on the same lockId should fail.
-    const lockIdBytes = ethers.getBytes(ethProof.lockId);
-    const mpk = new Uint8Array(0);
-
+    // The auction was already created (receipt claimed) in Test 1.
+    // Attempting create_auction again on the same lockId should fail with
+    // E_RECEIPT_ALREADY_CLAIMED. Use the deployer account so we reach the
+    // contract's status check rather than hitting E_UNAUTHORIZED_SIGNER first.
     const onCreateAuction = async () => {
-      const payload = getCreateAuctionPayload(lockIdBytes, MIN_PRICE, AUCTION_DURATION, mpk);
-      const result = await submitNativeTransaction(aptosGlobal, sellerAddress, payload);
-      return { txHash: (result as { hash?: string }).hash };
+      const txHash = await createAuctionDirect(
+        aptosGlobal,
+        deployerAccount,
+        fixture.aptos.moduleAddress,
+        ethProof.lockId,
+        MIN_PRICE,
+        AUCTION_DURATION,
+      );
+      return { txHash };
     };
 
     render(
