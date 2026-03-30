@@ -6,9 +6,11 @@
  *   generateEthLockProof()  — Mint → Approve → Lock on Ethereum, generate storage proof
  *                             (runs via vitest browser command on Node.js side to avoid
  *                             @ethereumjs/util EventEmitter incompatibility in browser)
- *   registerLockOnAptos()   — Register the proof on Aptos under an arbitrary account
+ *   registerLockOnAptos()   — Register the proof on Aptos using an authorized
+ *                             Demo-phase signer (`@atomica` deployer or the
+ *                             zero-padded Ethereum address from the proof)
  *   setupAuctionState()     — Combined convenience: both steps above using the
- *                             fixture deployer as the Aptos account
+ *                             fixture deployer as the Aptos signer
  *
  * All Aptos calls here use Account.fromPrivateKey + signAndSubmitTransaction
  * (no SIWE / MetaMask).  The UI callbacks in actual test cases DO go through
@@ -109,6 +111,10 @@ export async function generateEthLockProof(
 
 /**
  * Register a lock proof on Aptos under the given sender account.
+ *
+ * Demo-phase authorization is stricter than the generic signature suggests:
+ * `lock_receipt::register_ethereum_lock` only accepts the zero-padded Ethereum
+ * address embedded in the proof or the `@atomica` deployer/admin account.
  *
  * @param aptosClient - Aptos client
  * @param sender      - Account to sign the register transaction

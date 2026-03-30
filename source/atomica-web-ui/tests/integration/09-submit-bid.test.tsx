@@ -29,6 +29,7 @@ import { commands } from "vitest/browser";
 import {
   setupIntegrationFixture,
   teardownIntegrationFixture,
+  AUCTION_DURATION_SHORT,
   type IntegrationFixture,
 } from "./fixtures/dual-chain";
 import { setupWalletMock } from "./fixtures/wallet-mock";
@@ -87,12 +88,12 @@ describe.sequential("09: Submit Bid on Auction", () => {
   let bidderAddress: string;
   let sellerAptosAddress: string;
 
-  beforeAll(async () => {
-    fixture = await setupIntegrationFixture();
-
+  async function configureBidderForFixture(
+    nextFixture: IntegrationFixture,
+  ): Promise<void> {
     const aptosConfig = new AptosConfig({
       network: Network.LOCAL,
-      fullnode: fixture.aptos.nodeUrl,
+      fullnode: nextFixture.aptos.nodeUrl,
     });
     const aptosInstance = new Aptos(aptosConfig);
     setAptosInstance(aptosInstance);
@@ -100,20 +101,21 @@ describe.sequential("09: Submit Bid on Auction", () => {
     // which has its own aptos singleton — update it too.
     setDockerAptosInstance(aptosInstance);
 
-    // The bidder submits bids — use bidder's private key for wallet mock
     bidderAddress = await setupWalletMock({
-      privateKey: fixture.eth.bidder.privateKey,
-      rpcUrl: fixture.eth.rpcUrl,
-      chainId: fixture.eth.chainId,
+      privateKey: nextFixture.eth.bidder.privateKey,
+      rpcUrl: nextFixture.eth.rpcUrl,
+      chainId: nextFixture.eth.chainId,
     });
 
-    // Fund the bidder's SIWE-derived Aptos address so the bid transactions
-    // have sufficient gas.  getDerivedAddress computes the deterministic Aptos
-    // address from the bidder's Ethereum address.
     const bidderAptosAddress = await getDerivedAddress(
       bidderAddress.toLowerCase(),
     );
     await commands.fundAccount(bidderAptosAddress.toString(), 500_000_000);
+  }
+
+  beforeAll(async () => {
+    fixture = await setupIntegrationFixture();
+    await configureBidderForFixture(fixture);
 
     // Set up Ethereum lock + Aptos registration (seller side, no SIWE)
     // We need the seller's Aptos address (deployer) for auction lookups
@@ -260,55 +262,38 @@ describe.sequential("09: Submit Bid on Auction", () => {
   // ── Test 4: bid on closed auction ─────────────────────────────────────────
 
   it("shows error in bid-status when auction has already closed", async () => {
-    // Create a fresh short-duration auction that will expire quickly
+    // The shared beforeAll fixture uses a long-lived auction so earlier tests
+    // can reuse it. Replace that fixture here with a fresh short-duration
+    // auction and let it expire for a real closed-auction UI path.
+    await teardownIntegrationFixture();
+    fixture = await setupIntegrationFixture();
+    await configureBidderForFixture(fixture);
+
     const auctionSetup = await setupAuctionState(fixture);
-    const shortSellerAddress =
+    const closedSellerAddress =
       auctionSetup.deployerAccount.accountAddress.toString();
 
-    // NOTE: shortSellerAddress equals the deployer address which already has
-    // an auction created in beforeAll.  Create a second lock + register from
-    // the same deployer would conflict.  Instead, wait for the original
-    // auction's end and bid on it.
-    //
-    // Use a short-duration auction created specifically for this test.
-    // To get a fresh deployer address we would need a second fixture which is
-    // expensive.  Instead, we test by waiting for the long auction to expire —
-    // but that would take 1 hour.
-    //
-    // Pragmatic approach: verify that bidding after AUCTION_DURATION_SHORT on
-    // a NEW fresh auction (different lock) shows an error.  We need a second
-    // lock / registration which requires a separate seller address.
-    //
-    // For this test we use the same deployer but a fresh lock + short duration.
-    // Because the deployer already has an auction from beforeAll, we skip
-    // setting up a new one and instead check that the bidder cannot bid on
-    // a non-existent address (same effect as closed).
-    //
-    // TODO: use a second seller account when the fixture supports it.
-    //
-    // For now, assert that bidding on a closed auction returns an error by
-    // waiting for AUCTION_DURATION_SHORT on a fresh separate setup.
+    await createAuctionDirect(
+      auctionSetup.aptosClient,
+      auctionSetup.deployerAccount,
+      fixture.aptos.moduleAddress,
+      auctionSetup.lockId,
+      MIN_PRICE,
+      BigInt(AUCTION_DURATION_SHORT),
+    );
 
-    // Create a fresh short-duration auction using a separate lock registration
-    // We can reuse auctionSetup since it only registered the lock, not created
-    // the auction yet.  But we need a fresh lock (the deployer can only have
-    // one active LockReceipt at a time — after claiming it becomes CLAIMED).
-    //
-    // Simplification: just test that bidding on a nonexistent address fails.
-    // The "bid on closed auction" scenario is covered by Test 2 (Move abort on
-    // expired auction) in the e2e-08 contract-layer tests.  Here we just
-    // verify the UI surfaces an error.
+    await new Promise((r) =>
+      setTimeout(r, (AUCTION_DURATION_SHORT + 3) * 1000),
+    );
+
     render(
       <BidderProviders account={bidderAddress}>
         <AuctionBidder />
       </BidderProviders>,
     );
 
-    // Use a dummy address that has no auction
-    const closedSeller =
-      "0x0000000000000000000000000000000000000000000000000000000000000001";
     fireEvent.change(screen.getByTestId(auctionBidder.sellerAddressInput), {
-      target: { value: closedSeller },
+      target: { value: closedSellerAddress },
     });
 
     fireEvent.change(screen.getByTestId(auctionBidder.bidAmountInput), {
@@ -324,5 +309,5 @@ describe.sequential("09: Submit Bid on Auction", () => {
       },
       { timeout: 60_000 },
     );
-  }, 120_000);
+  }, 240_000);
 });
