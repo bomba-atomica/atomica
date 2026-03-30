@@ -400,6 +400,7 @@ export class DockerTestnet {
                 );
 
                 const accountInfo = await client.getAccount(faucetAccount.address());
+                const initialSequenceNumber = BigInt(accountInfo.sequence_number);
                 const chainId = await client.getChainId();
                 let initialBalance = 0n;
 
@@ -446,12 +447,11 @@ export class DockerTestnet {
                             arguments: [targetAddr],
                         });
 
-                        if (
-                            result &&
-                            result.length > 0 &&
-                            BigInt(result[0] as string) >= targetBalance
-                        ) {
-                            break;
+                        if (result && result.length > 0 && BigInt(result[0] as string) >= targetBalance) {
+                            const updatedAccountInfo = await client.getAccount(faucetAccount.address());
+                            if (BigInt(updatedAccountInfo.sequence_number) > initialSequenceNumber) {
+                                break;
+                            }
                         }
 
                         retries++;
