@@ -138,6 +138,8 @@ jobs:
       - name: Run Web UI tests (unit and auction-create)
         if: matrix.type == 'ui'
         working-directory: source/atomica-web-ui
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: >
           bunx vitest run
           tests/AccountStatus.test.tsx
@@ -148,6 +150,8 @@ jobs:
       - name: Run Web UI tests (bid and settle)
         if: matrix.type == 'ui'
         working-directory: source/atomica-web-ui
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: >
           bunx vitest run
           tests/integration/09-submit-bid.test.tsx
