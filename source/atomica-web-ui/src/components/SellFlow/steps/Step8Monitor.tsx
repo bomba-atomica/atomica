@@ -143,9 +143,7 @@ export function Step8Monitor({
         />
       )}
 
-      {ended && sellerAddress && (
-        <ClaimButton sellerAddress={sellerAddress} />
-      )}
+      {ended && sellerAddress && <ClaimButton sellerAddress={sellerAddress} />}
 
       {canUnlock && (
         <div className="flex flex-col gap-2">
