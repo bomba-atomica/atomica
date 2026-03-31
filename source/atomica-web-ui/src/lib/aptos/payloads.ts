@@ -202,8 +202,6 @@ export function getMintFakeEthPayload(
 export function getBidPayload(
   sellerAddr: string,
   amountUsd: bigint,
-  _u: Uint8Array,
-  _v: Uint8Array,
 ): InputGenerateTransactionPayloadData {
   return {
     function: `${CONTRACT_ADDR}::auction::submit_bid`,
@@ -221,6 +219,6 @@ export async function submitBid(
   return await submitNativeTransaction(
     aptos,
     ethAddress,
-    getBidPayload(sellerAddr, amountUsd, u, v),
+    getBidPayload(sellerAddr, amountUsd),
   );
 }

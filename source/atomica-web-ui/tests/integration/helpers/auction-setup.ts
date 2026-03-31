@@ -24,6 +24,7 @@ import {
   Network,
   Account,
   Ed25519PrivateKey,
+  type InputGenerateTransactionPayloadData,
 } from "@aptos-labs/ts-sdk";
 import { commands } from "vitest/browser";
 import type { EthLockProofResult as CommandEthLockProofResult } from "@atomica/aptos-docker-testnet/browser-commands";
@@ -70,6 +71,39 @@ export interface AuctionSetupResult extends EthLockProofResult {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Create an Aptos client pointed at the fixture's local Aptos node.
+ */
+export function createAptosClient(fixture: IntegrationFixture): Aptos {
+  return new Aptos(
+    new AptosConfig({ network: Network.LOCAL, fullnode: fixture.aptos.nodeUrl }),
+  );
+}
+
+/**
+ * Build, sign, submit, and await a simple Aptos transaction.
+ * Returns the transaction hash.
+ */
+async function submitSimpleTransaction(
+  aptosClient: Aptos,
+  signer: Account,
+  data: InputGenerateTransactionPayloadData,
+): Promise<string> {
+  const txn = await aptosClient.transaction.build.simple({
+    sender: signer.accountAddress,
+    data,
+  });
+  const submitted = await aptosClient.signAndSubmitTransaction({
+    signer,
+    transaction: txn,
+  });
+  await aptosClient.waitForTransaction({
+    transactionHash: submitted.hash,
+    options: { checkSuccess: true },
+  });
+  return submitted.hash;
+}
 
 /**
  * Lock FakeETH on Ethereum and generate a storage proof, but do NOT register
@@ -127,34 +161,21 @@ export async function registerLockOnAptos(
   moduleAddr: string,
   proof: LockedBalanceProof,
 ): Promise<void> {
-  const registerTxn = await aptosClient.transaction.build.simple({
-    sender: sender.accountAddress,
-    data: {
-      function: `${moduleAddr}::lock_receipt::register_ethereum_lock`,
-      typeArguments: [`${moduleAddr}::lock_receipt::FakeETH`],
-      functionArguments: [
-        proof.blockNumber,
-        ethers.getBytes(proof.blockHash),
-        ethers.getBytes(proof.stateRoot),
-        ethers.getBytes(proof.contractAddress),
-        ethers.getBytes(proof.userAddress),
-        ethers.getBytes(proof.tokenAddress),
-        ethers.getBytes(proof.storageKey),
-        proof.storageValue.toString(),
-        proof.accountProof.map((p: string) => ethers.getBytes(p)),
-        proof.storageProof.map((p: string) => ethers.getBytes(p)),
-      ],
-    },
-  });
-
-  const submitted = await aptosClient.signAndSubmitTransaction({
-    signer: sender,
-    transaction: registerTxn,
-  });
-
-  await aptosClient.waitForTransaction({
-    transactionHash: submitted.hash,
-    options: { checkSuccess: true },
+  await submitSimpleTransaction(aptosClient, sender, {
+    function: `${moduleAddr}::lock_receipt::register_ethereum_lock`,
+    typeArguments: [`${moduleAddr}::lock_receipt::FakeETH`],
+    functionArguments: [
+      proof.blockNumber,
+      ethers.getBytes(proof.blockHash),
+      ethers.getBytes(proof.stateRoot),
+      ethers.getBytes(proof.contractAddress),
+      ethers.getBytes(proof.userAddress),
+      ethers.getBytes(proof.tokenAddress),
+      ethers.getBytes(proof.storageKey),
+      proof.storageValue.toString(),
+      proof.accountProof.map((p: string) => ethers.getBytes(p)),
+      proof.storageProof.map((p: string) => ethers.getBytes(p)),
+    ],
   });
 }
 
@@ -181,11 +202,7 @@ export async function setupAuctionState(
   );
 
   // Step 2: Aptos client + deployer account
-  const aptosConfig = new AptosConfig({
-    network: Network.LOCAL,
-    fullnode: aptosInfo.nodeUrl,
-  });
-  const aptosClient = new Aptos(aptosConfig);
+  const aptosClient = createAptosClient(fixture);
 
   const deployerAccount = Account.fromPrivateKey({
     privateKey: new Ed25519PrivateKey(aptosInfo.deployerPrivateKey),
@@ -214,31 +231,11 @@ export async function createAuctionDirect(
   minPrice: bigint,
   duration: bigint,
 ): Promise<string> {
-  const createTxn = await aptosClient.transaction.build.simple({
-    sender: deployer.accountAddress,
-    data: {
-      function: `${moduleAddr}::auction::create_auction`,
-      typeArguments: [],
-      functionArguments: [
-        ethers.getBytes(lockId),
-        minPrice,
-        duration,
-        new Uint8Array(0),
-      ],
-    },
+  return submitSimpleTransaction(aptosClient, deployer, {
+    function: `${moduleAddr}::auction::create_auction`,
+    typeArguments: [],
+    functionArguments: [ethers.getBytes(lockId), minPrice, duration, new Uint8Array(0)],
   });
-
-  const submitted = await aptosClient.signAndSubmitTransaction({
-    signer: deployer,
-    transaction: createTxn,
-  });
-
-  await aptosClient.waitForTransaction({
-    transactionHash: submitted.hash,
-    options: { checkSuccess: true },
-  });
-
-  return submitted.hash;
 }
 
 /**
@@ -251,26 +248,11 @@ export async function submitBidDirect(
   sellerAddress: string,
   price: bigint,
 ): Promise<string> {
-  const bidTxn = await aptosClient.transaction.build.simple({
-    sender: bidder.accountAddress,
-    data: {
-      function: `${moduleAddr}::auction::submit_bid`,
-      typeArguments: [],
-      functionArguments: [sellerAddress, price],
-    },
+  return submitSimpleTransaction(aptosClient, bidder, {
+    function: `${moduleAddr}::auction::submit_bid`,
+    typeArguments: [],
+    functionArguments: [sellerAddress, price],
   });
-
-  const submitted = await aptosClient.signAndSubmitTransaction({
-    signer: bidder,
-    transaction: bidTxn,
-  });
-
-  await aptosClient.waitForTransaction({
-    transactionHash: submitted.hash,
-    options: { checkSuccess: true },
-  });
-
-  return submitted.hash;
 }
 
 /**
@@ -282,26 +264,11 @@ export async function settleAuctionDirect(
   moduleAddr: string,
   sellerAddress: string,
 ): Promise<string> {
-  const settleTxn = await aptosClient.transaction.build.simple({
-    sender: settler.accountAddress,
-    data: {
-      function: `${moduleAddr}::auction::settle`,
-      typeArguments: [],
-      functionArguments: [sellerAddress],
-    },
+  return submitSimpleTransaction(aptosClient, settler, {
+    function: `${moduleAddr}::auction::settle`,
+    typeArguments: [],
+    functionArguments: [sellerAddress],
   });
-
-  const submitted = await aptosClient.signAndSubmitTransaction({
-    signer: settler,
-    transaction: settleTxn,
-  });
-
-  await aptosClient.waitForTransaction({
-    transactionHash: submitted.hash,
-    options: { checkSuccess: true },
-  });
-
-  return submitted.hash;
 }
 
 /**

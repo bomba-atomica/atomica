@@ -208,8 +208,6 @@ export async function submitCreateAuction(
 export function getBidPayload(
     sellerAddr: string,
     amountUsd: bigint,
-    _u: Uint8Array,
-    _v: Uint8Array,
 ): InputGenerateTransactionPayloadData {
     return {
         function: `${CONTRACT_ADDR}::auction::submit_bid`,
@@ -224,5 +222,5 @@ export async function submitBid(
     u: Uint8Array,
     v: Uint8Array,
 ): Promise<SubmitResult> {
-    return await submitNativeTransaction(ethAddress, getBidPayload(sellerAddr, amountUsd, u, v));
+    return await submitNativeTransaction(ethAddress, getBidPayload(sellerAddr, amountUsd));
 }

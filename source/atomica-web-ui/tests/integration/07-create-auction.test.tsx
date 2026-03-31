@@ -30,10 +30,11 @@ import {
   generateEthLockProof,
   registerLockOnAptos,
   createAuctionDirect,
+  createAptosClient,
   type EthLockProofResult,
 } from "./helpers/auction-setup";
 import { Step7Auction } from "../../src/components/SellFlow/steps/Step7Auction";
-import { Aptos, AptosConfig, Network, Account, Ed25519PrivateKey } from "@aptos-labs/ts-sdk";
+import { Account, Ed25519PrivateKey } from "@aptos-labs/ts-sdk";
 import { setAptosInstance, aptos as aptosGlobal } from "../../src/lib/aptos/config";
 import { ethers } from "ethers";
 import { getCreateAuctionPayload } from "../../src/lib/aptos/payloads";
@@ -102,11 +103,7 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     fixture = await setupIntegrationFixture();
 
     // Point the global Aptos singleton at the testnet node
-    const aptosConfig = new AptosConfig({
-      network: Network.LOCAL,
-      fullnode: fixture.aptos.nodeUrl,
-    });
-    setAptosInstance(new Aptos(aptosConfig));
+    setAptosInstance(createAptosClient(fixture));
 
     // Inject seller wallet mock so SIWE signing works without MetaMask
     // (used by Tests 3 and 4 which exercise UI error paths via SIWE)

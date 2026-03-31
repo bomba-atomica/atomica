@@ -39,12 +39,13 @@ import { settleButton } from "./helpers/selectors";
 import {
   setupAuctionState,
   createAuctionDirect,
+  createAptosClient,
   submitBidDirect,
   settleAuctionDirect,
   viewFunction,
 } from "./helpers/auction-setup";
 import { SettleButton } from "../../src/components/SettleButton";
-import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
+import { Aptos, Account } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "../../src/lib/aptos/config";
 
 const MIN_PRICE = 50n;
@@ -68,11 +69,7 @@ describe.sequential("10: Settle Auction", () => {
   ): Promise<void> {
     const fixture = await setupIntegrationFixture();
 
-    const aptosConfig = new AptosConfig({
-      network: Network.LOCAL,
-      fullnode: fixture.aptos.nodeUrl,
-    });
-    const aptosClient = new Aptos(aptosConfig);
+    const aptosClient = createAptosClient(fixture);
     setAptosInstance(aptosClient);
 
     // SettleButton renders inside the browser environment, so keep the seller
@@ -213,6 +210,8 @@ describe.sequential("10: Settle Auction", () => {
         const seller = testSetup.deployerAccount;
         const sellerAddress = seller.accountAddress.toString();
 
+        const auctionStart = Date.now();
+
         await createAuctionDirect(
           aptosClient,
           seller,
@@ -222,9 +221,10 @@ describe.sequential("10: Settle Auction", () => {
           BigInt(AUCTION_DURATION_SHORT),
         );
 
-        await new Promise((r) =>
-          setTimeout(r, (AUCTION_DURATION_SHORT + 3) * 1000),
-        );
+        const elapsedMs3 = Date.now() - auctionStart;
+        const remainingMs3 = (AUCTION_DURATION_SHORT + 3) * 1000 - elapsedMs3;
+        if (remainingMs3 > 0) await new Promise((r) => setTimeout(r, remainingMs3));
+
         await settleAuctionDirect(aptosClient, seller, moduleAddr, sellerAddress);
 
         const onSettle = async () => {
@@ -262,6 +262,8 @@ describe.sequential("10: Settle Auction", () => {
         const seller = testSetup.deployerAccount;
         const sellerAddress = seller.accountAddress.toString();
 
+        const auctionStart4 = Date.now();
+
         await createAuctionDirect(
           aptosClient,
           seller,
@@ -271,9 +273,9 @@ describe.sequential("10: Settle Auction", () => {
           BigInt(AUCTION_DURATION_SHORT),
         );
 
-        await new Promise((r) =>
-          setTimeout(r, (AUCTION_DURATION_SHORT + 3) * 1000),
-        );
+        const elapsedMs4 = Date.now() - auctionStart4;
+        const remainingMs4 = (AUCTION_DURATION_SHORT + 3) * 1000 - elapsedMs4;
+        if (remainingMs4 > 0) await new Promise((r) => setTimeout(r, remainingMs4));
 
         const onSettle = async () => {
           await settleAuctionDirect(

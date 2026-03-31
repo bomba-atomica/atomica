@@ -37,6 +37,7 @@ import { auctionBidder } from "./helpers/selectors";
 import {
   setupAuctionState,
   createAuctionDirect,
+  createAptosClient,
   viewFunction,
 } from "./helpers/auction-setup";
 import { AuctionBidder } from "../../src/components/AuctionBidder";
@@ -46,7 +47,6 @@ import {
   ContractStatusProvider,
   BalancesProvider,
 } from "../../src/index";
-import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "../../src/lib/aptos/config";
 import {
   setAptosInstance as setDockerAptosInstance,
@@ -91,11 +91,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
   async function configureBidderForFixture(
     nextFixture: IntegrationFixture,
   ): Promise<void> {
-    const aptosConfig = new AptosConfig({
-      network: Network.LOCAL,
-      fullnode: nextFixture.aptos.nodeUrl,
-    });
-    const aptosInstance = new Aptos(aptosConfig);
+    const aptosInstance = createAptosClient(nextFixture);
     setAptosInstance(aptosInstance);
     // AuctionBidder uses submitBid from @atomica/aptos-docker-testnet/browser
     // which has its own aptos singleton — update it too.
@@ -178,11 +174,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
 
   it("shows error in bid-status and does not increment bid count on below-min bid", async () => {
     // Get current bid count before the test
-    const aptosConfig = new AptosConfig({
-      network: Network.LOCAL,
-      fullnode: fixture.aptos.nodeUrl,
-    });
-    const aptosClient = new Aptos(aptosConfig);
+    const aptosClient = createAptosClient(fixture);
     const countBefore = await viewFunction(
       aptosClient,
       `${fixture.aptos.moduleAddress}::auction::get_bid_count`,

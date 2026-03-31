@@ -89,6 +89,7 @@ import {
   generateEthLockProof,
   registerLockOnAptos,
   createAuctionDirect,
+  createAptosClient,
   submitBidDirect,
   settleAuctionDirect,
   viewFunction,
@@ -107,8 +108,6 @@ import {
 } from "../../src/index";
 import {
   Aptos,
-  AptosConfig,
-  Network,
   Account,
   Ed25519PrivateKey,
 } from "@aptos-labs/ts-sdk";
@@ -211,11 +210,7 @@ describe.sequential("14: Full demo happy-path end-to-end browser smoke test", ()
     console.log("[14-happy-path] Starting dual-chain testnet...");
     fixture = await setupIntegrationFixture();
 
-    const aptosConfig = new AptosConfig({
-      network: Network.LOCAL,
-      fullnode: fixture.aptos.nodeUrl,
-    });
-    aptosClient = new Aptos(aptosConfig);
+    aptosClient = createAptosClient(fixture);
     setAptosInstance(aptosClient);
     setDockerAptosInstance(aptosClient);
 

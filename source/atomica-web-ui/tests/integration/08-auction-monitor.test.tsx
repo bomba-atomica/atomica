@@ -33,9 +33,9 @@ import { step8Monitor } from "./helpers/selectors";
 import {
   setupAuctionState,
   createAuctionDirect,
+  createAptosClient,
 } from "./helpers/auction-setup";
 import { Step8Monitor } from "../../src/components/SellFlow/steps/Step8Monitor";
-import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "../../src/lib/aptos/config";
 
 const MIN_PRICE = 50n;
@@ -46,11 +46,7 @@ describe.sequential("08: Auction Monitor countdown and status", () => {
   beforeAll(async () => {
     fixture = await setupIntegrationFixture();
 
-    const aptosConfig = new AptosConfig({
-      network: Network.LOCAL,
-      fullnode: fixture.aptos.nodeUrl,
-    });
-    setAptosInstance(new Aptos(aptosConfig));
+    setAptosInstance(createAptosClient(fixture));
 
     await setupWalletMock({
       privateKey: fixture.eth.seller.privateKey,
