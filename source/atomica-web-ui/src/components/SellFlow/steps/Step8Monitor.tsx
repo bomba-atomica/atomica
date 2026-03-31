@@ -84,7 +84,9 @@ export function Step8Monitor({
   const remaining = useCountdown(auctionEndTime);
   const canUnlock = useIsUnlocked(unlockTime);
   const ended = remaining === 0 && auctionEndTime !== undefined;
-  const { entries: bidHistoryEntries, recordSettlement } = useBidHistory(sellerAddress ?? null);
+  const { entries: bidHistoryEntries, recordSettlement } = useBidHistory(
+    sellerAddress ?? null,
+  );
 
   const amountFormatted = amount
     ? (Number(amount) / 1e18).toFixed(4) + " FETH"

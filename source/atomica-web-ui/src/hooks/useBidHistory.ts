@@ -40,17 +40,17 @@ function loadEntries(walletAddress: string): BidHistoryEntry[] {
   }
 }
 
-function saveEntries(
-  walletAddress: string,
-  entries: BidHistoryEntry[],
-): void {
+function saveEntries(walletAddress: string, entries: BidHistoryEntry[]): void {
   try {
     const serialisable: PersistedEntry[] = entries.map((e) => ({
       auctionId: e.auctionId,
       clearingPrice: e.clearingPrice.toString(),
       settledAt: e.settledAt,
     }));
-    localStorage.setItem(storageKey(walletAddress), JSON.stringify(serialisable));
+    localStorage.setItem(
+      storageKey(walletAddress),
+      JSON.stringify(serialisable),
+    );
   } catch {
     // quota exceeded — ignore
   }
@@ -61,10 +61,7 @@ function saveEntries(
 export interface UseBidHistoryResult {
   entries: BidHistoryEntry[];
   /** Record a newly settled auction. Deduplicates by auctionId (seller address). */
-  recordSettlement: (
-    sellerAddress: string,
-    clearingPrice: bigint,
-  ) => void;
+  recordSettlement: (sellerAddress: string, clearingPrice: bigint) => void;
 }
 
 export function useBidHistory(

@@ -19,7 +19,11 @@ interface Props {
  * - the auction is already settled on-chain
  * - a transaction is in flight
  */
-export function SettleButton({ sellerAddress, auctionEndTime, onSettled }: Props) {
+export function SettleButton({
+  sellerAddress,
+  auctionEndTime,
+  onSettled,
+}: Props) {
   const { account } = useWallet();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
