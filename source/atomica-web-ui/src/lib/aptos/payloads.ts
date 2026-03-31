@@ -213,8 +213,8 @@ export async function submitBid(
   ethAddress: string,
   sellerAddr: string,
   amountUsd: bigint,
-  u: Uint8Array,
-  v: Uint8Array,
+  _u: Uint8Array,
+  _v: Uint8Array,
 ) {
   return await submitNativeTransaction(
     aptos,
