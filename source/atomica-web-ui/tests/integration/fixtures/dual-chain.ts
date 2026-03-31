@@ -39,6 +39,14 @@ import type { DualChainTestnetInfo } from "@atomica/aptos-docker-testnet/browser
 /** Short auction duration in seconds — use in settlement tests. */
 export const AUCTION_DURATION_SHORT = 2;
 
+/**
+ * Longer auction duration in seconds — use in tests that must submit a bid
+ * before the auction expires.  The ETH lock + proof + Aptos registration +
+ * account funding + bid submission chain can take 10–20 s on CI, so 30 s
+ * gives comfortable headroom.
+ */
+export const AUCTION_DURATION_BID = 30;
+
 // ---------------------------------------------------------------------------
 // Fixture types
 // ---------------------------------------------------------------------------

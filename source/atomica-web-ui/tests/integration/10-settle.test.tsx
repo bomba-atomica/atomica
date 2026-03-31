@@ -31,6 +31,7 @@ import {
   setupIntegrationFixture,
   teardownIntegrationFixture,
   AUCTION_DURATION_SHORT,
+  AUCTION_DURATION_BID,
   type IntegrationFixture,
 } from "./fixtures/dual-chain";
 import { setupWalletMock } from "./fixtures/wallet-mock";
@@ -103,13 +104,17 @@ describe.sequential("10: Settle Auction", () => {
         const testSeller = testSetup.deployerAccount;
         const testSellerAddress = testSeller.accountAddress.toString();
 
+        // Use AUCTION_DURATION_BID so the bid can land before the auction
+        // closes — the ETH lock/proof + fund + bid chain takes 10-20 s on CI.
+        const auctionStart = Date.now();
+
         await createAuctionDirect(
           testSetup.aptosClient,
           testSeller,
           moduleAddr,
           testSetup.lockId,
           MIN_PRICE,
-          BigInt(AUCTION_DURATION_SHORT),
+          BigInt(AUCTION_DURATION_BID),
         );
 
         const bidder = Account.generate();
@@ -125,9 +130,12 @@ describe.sequential("10: Settle Auction", () => {
           BID_PRICE,
         );
 
-        await new Promise((r) =>
-          setTimeout(r, (AUCTION_DURATION_SHORT + 3) * 1000),
-        );
+        // Wait for the remaining auction window to expire (+ 3 s buffer).
+        const elapsedMs = Date.now() - auctionStart;
+        const remainingMs = (AUCTION_DURATION_BID + 3) * 1000 - elapsedMs;
+        if (remainingMs > 0) {
+          await new Promise((r) => setTimeout(r, remainingMs));
+        }
 
         const onSettle = async () => {
           await settleAuctionDirect(
