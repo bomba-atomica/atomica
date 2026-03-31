@@ -104,8 +104,18 @@ describe.sequential("10: Settle Auction", () => {
         const testSeller = testSetup.deployerAccount;
         const testSellerAddress = testSeller.accountAddress.toString();
 
+        // Pre-fund the bidder BEFORE creating the auction so that the auction
+        // timer does not tick while we wait for the faucet (which can be slow
+        // on CI).
+        const bidder = Account.generate();
+        await commands.fundAccount(
+          bidder.accountAddress.toString(),
+          500_000_000,
+        );
+
         // Use AUCTION_DURATION_BID so the bid can land before the auction
-        // closes — the ETH lock/proof + fund + bid chain takes 10-20 s on CI.
+        // closes — now only the bid transaction itself needs to fit in the
+        // window.
         const auctionStart = Date.now();
 
         await createAuctionDirect(
@@ -117,11 +127,6 @@ describe.sequential("10: Settle Auction", () => {
           BigInt(AUCTION_DURATION_BID),
         );
 
-        const bidder = Account.generate();
-        await commands.fundAccount(
-          bidder.accountAddress.toString(),
-          500_000_000,
-        );
         await submitBidDirect(
           testSetup.aptosClient,
           bidder,
