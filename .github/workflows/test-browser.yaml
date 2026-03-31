@@ -39,6 +39,9 @@ jobs:
               tests/integration/11-claim-and-reclaim.test.tsx
               tests/integration/12-fee-rebate.test.tsx
               tests/integration/13-bid-history.test.tsx
+          - chunk: happy-path
+            test_files: >-
+              tests/integration/14-happy-path.test.tsx
 
     steps:
       - name: Checkout repository
@@ -92,7 +95,7 @@ jobs:
         run: forge build
 
       - name: Install Aptos CLI
-        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'claim-reclaim-fees'
+        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path'
         run: |
           APTOS_VERSION="binary-fac20096d4"
           APTOS_HASH="${APTOS_VERSION#binary-}"
@@ -111,7 +114,7 @@ jobs:
           which aptos
 
       - name: Pre-warm Move git dependency cache
-        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'claim-reclaim-fees'
+        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path'
         run: |
           # Step 1: Fetch the atomica-aptos git dependency by compiling atomica-move-contracts.
           # This clones the repo and generates Move.lock for atomica-move-contracts.
