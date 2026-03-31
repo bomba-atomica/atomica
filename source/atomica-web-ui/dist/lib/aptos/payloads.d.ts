@@ -45,6 +45,6 @@ export declare function getRegisterLockPayload(proof: LockedBalanceProof): Input
  * Used in Demo/MVP phases. Production may replace with receipt-direct-escrow.
  */
 export declare function getMintFakeEthPayload(lockId: Uint8Array): InputGenerateTransactionPayloadData;
-export declare function getBidPayload(sellerAddr: string, amountUsd: bigint, u: Uint8Array, v: Uint8Array): InputGenerateTransactionPayloadData;
+export declare function getBidPayload(sellerAddr: string, amountUsd: bigint, _u: Uint8Array, _v: Uint8Array): InputGenerateTransactionPayloadData;
 export declare function submitBid(ethAddress: string, sellerAddr: string, amountUsd: bigint, u: Uint8Array, v: Uint8Array): Promise<import("@aptos-labs/ts-sdk").PendingTransactionResponse>;
 //# sourceMappingURL=payloads.d.ts.map

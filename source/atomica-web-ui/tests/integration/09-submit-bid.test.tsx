@@ -262,9 +262,10 @@ describe.sequential("09: Submit Bid on Auction", () => {
   // ── Test 4: bid on closed auction ─────────────────────────────────────────
 
   it("shows error in bid-status when auction has already closed", async () => {
-    // The shared beforeAll fixture uses a long-lived auction so earlier tests
-    // can reuse it. Replace that fixture here with a fresh short-duration
-    // auction and let it expire for a real closed-auction UI path.
+    // This case intentionally replaces the shared long-lived fixture with a
+    // fresh short-duration auction so the UI hits the real closed-auction
+    // path. In CI, booting a new dual-chain fixture plus waiting for expiry
+    // can take longer than the default 4-minute browser-test budget.
     await teardownIntegrationFixture();
     fixture = await setupIntegrationFixture();
     await configureBidderForFixture(fixture);
@@ -309,5 +310,5 @@ describe.sequential("09: Submit Bid on Auction", () => {
       },
       { timeout: 60_000 },
     );
-  }, 240_000);
+  }, 600_000);
 });

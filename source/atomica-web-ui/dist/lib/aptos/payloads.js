@@ -138,7 +138,7 @@ export function getMintFakeEthPayload(lockId) {
         functionArguments: [lockId],
     };
 }
-export function getBidPayload(sellerAddr, amountUsd, u, v) {
+export function getBidPayload(sellerAddr, amountUsd, _u, _v) {
     return {
         function: `${CONTRACT_ADDR}::auction::submit_bid`,
         functionArguments: [sellerAddr, amountUsd],
