@@ -2,22 +2,21 @@
  * 10-settle.test.tsx
  *
  * Browser integration tests for SettleButton — the UI component that
- * triggers auction settlement and displays the outcome.
+ * triggers auction settlement via the live `auction::settle` entry function
+ * and displays the outcome (winner + clearing price).
  *
  * Scenarios:
- *   1. Settle after auction expiry → SettleButton shows "Settled" (live chain)
- *   2. Attempt settle before expiry → error shown (simulated via callback throw)
- *   3. Double-settle rejected → error shown (live chain — uses settled auction)
- *   4. No-bid auction settles cleanly → "Settled" shown (live chain)
- *
- * Tests 1, 3, and 4 create independent short-duration auctions on the live
- * dual-chain testnet.  Test 2 uses a mock callback to isolate the UI error
- * handling path without requiring an additional testnet auction.
+ *   1. Settle after auction expiry  -- SettleButton shows "Settled" + settlement result
+ *   2. Settle before expiry         -- button is disabled (auctionEndTime not reached)
+ *   3. Double-settle rejected       -- button shows "Already Settled" for pre-settled auction
+ *   4. No-bid auction settles       -- "Settled" shown with "0x0" winner
+ *   5. Step8Monitor integration     -- SettleButton appears after auction ends
  *
  * Each test that needs a live auction uses a separate Aptos seller account so
  * that the single-auction-per-address Move constraint is not violated.
  */
 
+import React from "react";
 import { describe, it, expect, afterEach } from "vitest";
 import {
   render,
@@ -35,7 +34,7 @@ import {
   type IntegrationFixture,
 } from "./fixtures/dual-chain";
 import { setupWalletMock } from "./fixtures/wallet-mock";
-import { settleButton } from "./helpers/selectors";
+import { settleButton, step8Monitor } from "./helpers/selectors";
 import {
   setupAuctionState,
   createAuctionDirect,
@@ -44,11 +43,35 @@ import {
   viewFunction,
 } from "./helpers/auction-setup";
 import { SettleButton } from "../../src/components/SettleButton";
+import { Step8Monitor } from "../../src/components/SellFlow/steps/Step8Monitor";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "../../src/lib/aptos/config";
+import { WalletContext, WalletProvider } from "../../src/context/WalletContext";
+import {
+  getDerivedAddress,
+} from "@atomica/aptos-docker-testnet/browser";
 
 const MIN_PRICE = 50n;
 const BID_PRICE = 200n;
+
+// ---------------------------------------------------------------------------
+// Minimal provider wrapper — provides account directly to avoid race conditions
+// with WalletProvider auto-detection.
+// ---------------------------------------------------------------------------
+
+function SettleProviders({
+  account,
+  children,
+}: {
+  account: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <WalletContext.Provider value={{ account, connect: async () => {} }}>
+      {children}
+    </WalletContext.Provider>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Test suite
@@ -64,6 +87,7 @@ describe.sequential("10: Settle Auction", () => {
       fixture: IntegrationFixture;
       aptosClient: Aptos;
       moduleAddr: string;
+      settlerEthAddress: string;
     }) => Promise<void>,
   ): Promise<void> {
     const fixture = await setupIntegrationFixture();
@@ -75,19 +99,27 @@ describe.sequential("10: Settle Auction", () => {
     const aptosClient = new Aptos(aptosConfig);
     setAptosInstance(aptosClient);
 
-    // SettleButton renders inside the browser environment, so keep the seller
-    // wallet mock available even though the live-chain callbacks sign directly.
-    await setupWalletMock({
+    // SettleButton uses submitSettle which goes through SIWE signing.
+    // Set up the wallet mock so window.ethereum returns the seller's ETH address.
+    const settlerEthAddress = await setupWalletMock({
       privateKey: fixture.eth.seller.privateKey,
       rpcUrl: fixture.eth.rpcUrl,
       chainId: fixture.eth.chainId,
     });
+
+    // Fund the SIWE-derived Aptos address with APT for gas so the settle
+    // transaction can be submitted on-chain.
+    const settlerAptosAddress = await getDerivedAddress(
+      settlerEthAddress.toLowerCase(),
+    );
+    await commands.fundAccount(settlerAptosAddress.toString(), 500_000_000);
 
     try {
       await run({
         fixture,
         aptosClient,
         moduleAddr: fixture.aptos.moduleAddress,
+        settlerEthAddress,
       });
     } finally {
       await teardownIntegrationFixture();
@@ -97,25 +129,21 @@ describe.sequential("10: Settle Auction", () => {
   // ── Test 1: settle after close ─────────────────────────────────────────────
 
   it(
-    "settle-status shows 'Settled' after AUCTION_DURATION_SHORT elapses",
+    "settle-status shows 'Settled' after AUCTION_DURATION_BID elapses",
     async () => {
-      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr }) => {
+      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr, settlerEthAddress }) => {
         const testSetup = await setupAuctionState(fixture);
         const testSeller = testSetup.deployerAccount;
         const testSellerAddress = testSeller.accountAddress.toString();
 
         // Pre-fund the bidder BEFORE creating the auction so that the auction
-        // timer does not tick while we wait for the faucet (which can be slow
-        // on CI).
+        // timer does not tick while we wait for the faucet.
         const bidder = Account.generate();
         await commands.fundAccount(
           bidder.accountAddress.toString(),
           500_000_000,
         );
 
-        // Use AUCTION_DURATION_BID so the bid can land before the auction
-        // closes — now only the bid transaction itself needs to fit in the
-        // window.
         const auctionStart = Date.now();
 
         await createAuctionDirect(
@@ -142,18 +170,18 @@ describe.sequential("10: Settle Auction", () => {
           await new Promise((r) => setTimeout(r, remainingMs));
         }
 
-        const onSettle = async () => {
-          await settleAuctionDirect(
-            testSetup.aptosClient,
-            testSeller,
-            moduleAddr,
-            testSellerAddress,
-          );
-        };
+        render(
+          <SettleProviders account={settlerEthAddress}>
+            <SettleButton
+              sellerAddress={testSellerAddress}
+              auctionEndTime={Math.floor(auctionStart / 1000) + AUCTION_DURATION_BID}
+            />
+          </SettleProviders>,
+        );
 
-        render(<SettleButton onSettle={onSettle} />);
-
-        fireEvent.click(screen.getByTestId(settleButton.settleButton));
+        // Button should be enabled (auction ended, not yet settled)
+        const btn = screen.getByTestId(settleButton.settleButton);
+        fireEvent.click(btn);
 
         await waitFor(
           () => {
@@ -163,6 +191,7 @@ describe.sequential("10: Settle Auction", () => {
           { timeout: 30_000 },
         );
 
+        // Verify on-chain
         const settled = await viewFunction(
           aptosClient,
           `${moduleAddr}::auction::is_settled`,
@@ -175,40 +204,35 @@ describe.sequential("10: Settle Auction", () => {
     600_000,
   );
 
-  // ── Test 2: attempt settle before expiry (UI error path) ─────────────────
+  // ── Test 2: button disabled before expiry ──────────────────────────────────
 
   it(
-    "settle-status shows error when settle is called before auction closes",
+    "settle button is disabled when auction has not ended",
     async () => {
-      // Use a mock callback that throws the expected Move abort to test the
-      // UI error path without spinning up a full live auction for this case.
-      const onSettle = async () => {
-        throw new Error(
-          "Transaction failed: E_AUCTION_NOT_ENDED (Move abort 3)",
-        );
-      };
+      // Render SettleButton with a far-future auctionEndTime
+      const futureEnd = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
 
-      render(<SettleButton onSettle={onSettle} />);
-
-      fireEvent.click(screen.getByTestId(settleButton.settleButton));
-
-      await waitFor(
-        () => {
-          const statusEl = screen.getByTestId(settleButton.settleStatus);
-          expect(statusEl.textContent).toMatch(/Error/);
-        },
-        { timeout: 10_000 },
+      render(
+        <WalletProvider>
+          <SettleButton
+            sellerAddress="0xdeadbeef"
+            auctionEndTime={futureEnd}
+          />
+        </WalletProvider>,
       );
+
+      const btn = screen.getByTestId(settleButton.settleButton);
+      expect(btn).toHaveProperty("disabled", true);
     },
     30_000,
   );
 
-  // ── Test 3: double-settle rejected ────────────────────────────────────────
+  // ── Test 3: already-settled auction shows "Already Settled" ────────────────
 
   it(
-    "settle-status shows error on double-settle attempt (live chain)",
+    "shows 'Already Settled' for pre-settled auction (live chain)",
     async () => {
-      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr }) => {
+      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr, settlerEthAddress }) => {
         const testSetup = await setupAuctionState(fixture);
         const seller = testSetup.deployerAccount;
         const sellerAddress = seller.accountAddress.toString();
@@ -227,26 +251,27 @@ describe.sequential("10: Settle Auction", () => {
         );
         await settleAuctionDirect(aptosClient, seller, moduleAddr, sellerAddress);
 
-        const onSettle = async () => {
-          await settleAuctionDirect(
-            aptosClient,
-            seller,
-            moduleAddr,
-            sellerAddress,
-          );
-        };
+        render(
+          <SettleProviders account={settlerEthAddress}>
+            <SettleButton
+              sellerAddress={sellerAddress}
+              auctionEndTime={Math.floor(Date.now() / 1000) - 10}
+            />
+          </SettleProviders>,
+        );
 
-        render(<SettleButton onSettle={onSettle} />);
-
-        fireEvent.click(screen.getByTestId(settleButton.settleButton));
-
+        // The component should detect on-chain settlement and show "Already Settled"
         await waitFor(
           () => {
             const statusEl = screen.getByTestId(settleButton.settleStatus);
-            expect(statusEl.textContent).toMatch(/Error/);
+            expect(statusEl.textContent).toBe("Already Settled");
           },
           { timeout: 30_000 },
         );
+
+        // Button text should also show "Already Settled"
+        const btn = screen.getByTestId(settleButton.settleButton);
+        expect(btn.textContent).toBe("Already Settled");
       });
     },
     600_000,
@@ -257,10 +282,12 @@ describe.sequential("10: Settle Auction", () => {
   it(
     "no-bid auction settle completes without error and shows 'Settled'",
     async () => {
-      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr }) => {
+      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr, settlerEthAddress }) => {
         const testSetup = await setupAuctionState(fixture);
         const seller = testSetup.deployerAccount;
         const sellerAddress = seller.accountAddress.toString();
+
+        const auctionStart = Date.now();
 
         await createAuctionDirect(
           aptosClient,
@@ -275,16 +302,14 @@ describe.sequential("10: Settle Auction", () => {
           setTimeout(r, (AUCTION_DURATION_SHORT + 3) * 1000),
         );
 
-        const onSettle = async () => {
-          await settleAuctionDirect(
-            aptosClient,
-            seller,
-            moduleAddr,
-            sellerAddress,
-          );
-        };
-
-        render(<SettleButton onSettle={onSettle} />);
+        render(
+          <SettleProviders account={settlerEthAddress}>
+            <SettleButton
+              sellerAddress={sellerAddress}
+              auctionEndTime={Math.floor(auctionStart / 1000) + AUCTION_DURATION_SHORT}
+            />
+          </SettleProviders>,
+        );
 
         fireEvent.click(screen.getByTestId(settleButton.settleButton));
 
@@ -306,5 +331,36 @@ describe.sequential("10: Settle Auction", () => {
       });
     },
     600_000,
+  );
+
+  // ── Test 5: Step8Monitor shows SettleButton after auction ends ─────────────
+
+  it(
+    "Step8Monitor renders SettleButton when auction has ended",
+    async () => {
+      const pastEnd = Math.floor(Date.now() / 1000) - 10;
+
+      render(
+        <WalletProvider>
+          <Step8Monitor
+            amount={1000000000000000000n}
+            minPrice={50000000n}
+            auctionEndTime={pastEnd}
+            sellerAddress="0xdeadbeef"
+            onCancelAndUnlock={async () => {}}
+            loading={false}
+          />
+        </WalletProvider>,
+      );
+
+      // SettleButton should be rendered because auction has ended
+      const btn = screen.getByTestId(settleButton.settleButton);
+      expect(btn).toBeTruthy();
+
+      // Status badge should show "Settled" (the ended state label)
+      const badge = screen.getByTestId(step8Monitor.auctionStatusBadge);
+      expect(badge.textContent).toBe("Settled");
+    },
+    30_000,
   );
 });

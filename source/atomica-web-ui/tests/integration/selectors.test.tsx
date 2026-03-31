@@ -279,7 +279,11 @@ describe("Selector contract — data-testid attributes", () => {
   });
 
   it("SettleButton: settle-button is present", () => {
-    render(<SettleButton onSettle={async () => {}} />);
+    render(
+      <MinimalProviders>
+        <SettleButton sellerAddress="0xdeadbeef" />
+      </MinimalProviders>,
+    );
     expect(
       screen.getByTestId(SELECTORS.settleButton.settleButton),
     ).toBeTruthy();

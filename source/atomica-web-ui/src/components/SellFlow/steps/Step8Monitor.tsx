@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { SettleButton } from "../../SettleButton";
 
 interface Props {
   amount?: bigint;
@@ -133,6 +134,13 @@ export function Step8Monitor({
           </span>
         </div>
       </div>
+
+      {ended && sellerAddress && (
+        <SettleButton
+          sellerAddress={sellerAddress}
+          auctionEndTime={auctionEndTime}
+        />
+      )}
 
       {canUnlock && (
         <div className="flex flex-col gap-2">

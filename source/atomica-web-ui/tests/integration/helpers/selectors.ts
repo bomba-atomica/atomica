@@ -72,6 +72,9 @@ export const SELECTORS = {
   settleButton: {
     settleButton: "settle-button",
     settleStatus: "settle-status",
+    settleResult: "settle-result",
+    settleWinner: "settle-winner",
+    settleClearingPrice: "settle-clearing-price",
   },
 
   // ClaimButton
