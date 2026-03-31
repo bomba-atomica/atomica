@@ -16,6 +16,7 @@
  * that the single-auction-per-address Move constraint is not violated.
  */
 
+import React from "react";
 import { describe, it, expect, afterEach } from "vitest";
 import {
   render,
@@ -45,10 +46,32 @@ import { SettleButton } from "../../src/components/SettleButton";
 import { Step8Monitor } from "../../src/components/SellFlow/steps/Step8Monitor";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "../../src/lib/aptos/config";
-import { WalletProvider } from "../../src/context/WalletContext";
+import { WalletContext, WalletProvider } from "../../src/context/WalletContext";
+import {
+  getDerivedAddress,
+} from "@atomica/aptos-docker-testnet/browser";
 
 const MIN_PRICE = 50n;
 const BID_PRICE = 200n;
+
+// ---------------------------------------------------------------------------
+// Minimal provider wrapper — provides account directly to avoid race conditions
+// with WalletProvider auto-detection.
+// ---------------------------------------------------------------------------
+
+function SettleProviders({
+  account,
+  children,
+}: {
+  account: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <WalletContext.Provider value={{ account, connect: async () => {} }}>
+      {children}
+    </WalletContext.Provider>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Test suite
@@ -64,6 +87,7 @@ describe.sequential("10: Settle Auction", () => {
       fixture: IntegrationFixture;
       aptosClient: Aptos;
       moduleAddr: string;
+      settlerEthAddress: string;
     }) => Promise<void>,
   ): Promise<void> {
     const fixture = await setupIntegrationFixture();
@@ -75,19 +99,27 @@ describe.sequential("10: Settle Auction", () => {
     const aptosClient = new Aptos(aptosConfig);
     setAptosInstance(aptosClient);
 
-    // SettleButton uses useWallet() internally, so set up the wallet mock
-    // so that it returns the seller's eth address.
-    await setupWalletMock({
+    // SettleButton uses submitSettle which goes through SIWE signing.
+    // Set up the wallet mock so window.ethereum returns the seller's ETH address.
+    const settlerEthAddress = await setupWalletMock({
       privateKey: fixture.eth.seller.privateKey,
       rpcUrl: fixture.eth.rpcUrl,
       chainId: fixture.eth.chainId,
     });
+
+    // Fund the SIWE-derived Aptos address with APT for gas so the settle
+    // transaction can be submitted on-chain.
+    const settlerAptosAddress = await getDerivedAddress(
+      settlerEthAddress.toLowerCase(),
+    );
+    await commands.fundAccount(settlerAptosAddress.toString(), 500_000_000);
 
     try {
       await run({
         fixture,
         aptosClient,
         moduleAddr: fixture.aptos.moduleAddress,
+        settlerEthAddress,
       });
     } finally {
       await teardownIntegrationFixture();
@@ -99,7 +131,7 @@ describe.sequential("10: Settle Auction", () => {
   it(
     "settle-status shows 'Settled' after AUCTION_DURATION_BID elapses",
     async () => {
-      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr }) => {
+      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr, settlerEthAddress }) => {
         const testSetup = await setupAuctionState(fixture);
         const testSeller = testSetup.deployerAccount;
         const testSellerAddress = testSeller.accountAddress.toString();
@@ -139,12 +171,12 @@ describe.sequential("10: Settle Auction", () => {
         }
 
         render(
-          <WalletProvider>
+          <SettleProviders account={settlerEthAddress}>
             <SettleButton
               sellerAddress={testSellerAddress}
               auctionEndTime={Math.floor(auctionStart / 1000) + AUCTION_DURATION_BID}
             />
-          </WalletProvider>,
+          </SettleProviders>,
         );
 
         // Button should be enabled (auction ended, not yet settled)
@@ -200,7 +232,7 @@ describe.sequential("10: Settle Auction", () => {
   it(
     "shows 'Already Settled' for pre-settled auction (live chain)",
     async () => {
-      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr }) => {
+      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr, settlerEthAddress }) => {
         const testSetup = await setupAuctionState(fixture);
         const seller = testSetup.deployerAccount;
         const sellerAddress = seller.accountAddress.toString();
@@ -220,12 +252,12 @@ describe.sequential("10: Settle Auction", () => {
         await settleAuctionDirect(aptosClient, seller, moduleAddr, sellerAddress);
 
         render(
-          <WalletProvider>
+          <SettleProviders account={settlerEthAddress}>
             <SettleButton
               sellerAddress={sellerAddress}
               auctionEndTime={Math.floor(Date.now() / 1000) - 10}
             />
-          </WalletProvider>,
+          </SettleProviders>,
         );
 
         // The component should detect on-chain settlement and show "Already Settled"
@@ -250,7 +282,7 @@ describe.sequential("10: Settle Auction", () => {
   it(
     "no-bid auction settle completes without error and shows 'Settled'",
     async () => {
-      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr }) => {
+      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr, settlerEthAddress }) => {
         const testSetup = await setupAuctionState(fixture);
         const seller = testSetup.deployerAccount;
         const sellerAddress = seller.accountAddress.toString();
@@ -271,12 +303,12 @@ describe.sequential("10: Settle Auction", () => {
         );
 
         render(
-          <WalletProvider>
+          <SettleProviders account={settlerEthAddress}>
             <SettleButton
               sellerAddress={sellerAddress}
               auctionEndTime={Math.floor(auctionStart / 1000) + AUCTION_DURATION_SHORT}
             />
-          </WalletProvider>,
+          </SettleProviders>,
         );
 
         fireEvent.click(screen.getByTestId(settleButton.settleButton));
