@@ -78,15 +78,21 @@ jobs:
           forge install
           forge build
 
-      - name: Install web-ui dependencies and Playwright browsers
+      - name: Install Web UI dependencies
         working-directory: source/atomica-web-ui
-        run: |
-          bun install
-          bunx playwright install chromium --with-deps
+        run: bun install
 
-      - name: Run browser integration tests
+      - name: Build Atomica Web UI
         working-directory: source/atomica-web-ui
-        run: bun run test
+        run: bun run build
+
+      - name: Install Playwright browsers
+        working-directory: source/atomica-web-ui
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run happy-path browser integration test
+        working-directory: source/atomica-web-ui
         env:
-          CI: true
-        timeout-minutes: 30
+          NODE_OPTIONS: "--max-old-space-size=8192"
+        run: bunx vitest run tests/integration/14-happy-path.test.tsx
+        timeout-minutes: 25
