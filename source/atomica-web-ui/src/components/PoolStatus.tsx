@@ -38,9 +38,7 @@ export function PoolStatus() {
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-zinc-500">Receipts on Aptos</span>
-            <span className="text-zinc-400 font-mono">
-              {totalReceipts}
-            </span>
+            <span className="text-zinc-400 font-mono">{totalReceipts}</span>
           </div>
 
           {hasDivergence && (
