@@ -39,10 +39,7 @@ export function loadBidPrice(
 }
 
 /** Remove a stored bid price (e.g. after claim). */
-export function clearBidPrice(
-  sellerAddr: string,
-  bidderAddr: string,
-): void {
+export function clearBidPrice(sellerAddr: string, bidderAddr: string): void {
   try {
     localStorage.removeItem(key(sellerAddr, bidderAddr));
   } catch {
