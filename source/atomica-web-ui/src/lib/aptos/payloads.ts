@@ -234,10 +234,7 @@ export function getSettlePayload(
   };
 }
 
-export async function submitSettle(
-  ethAddress: string,
-  sellerAddr: string,
-) {
+export async function submitSettle(ethAddress: string, sellerAddr: string) {
   return await submitNativeTransaction(
     aptos,
     ethAddress,
