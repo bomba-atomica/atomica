@@ -11,10 +11,22 @@ jobs:
   test-web:
     name: atomica-web-ui browser integration tests
     runs-on: ubuntu-latest
+    permissions:
+      packages: read
+      contents: read
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -36,30 +48,41 @@ jobs:
           sudo mv /tmp/aptos /usr/local/bin/aptos
           aptos --version
 
-      - name: Install Playwright browsers
+      - name: Build Ethereum Testnet SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
         run: |
-          cd source/atomica-web-ui
           bun install
-          bunx playwright install chromium --with-deps
+          bun run build
 
-      - name: Build SDK dependencies
+      - name: Build Atomica SDK
+        working-directory: source/atomica-sdk
         run: |
-          cd source/atomica-sdk
-          bun install && bun run build
-          cd ../docker-testnet/aptos-testnet
-          bun install && bun run build
-          cd ../../state-proofs/typescript
-          bun install && bun run build
+          bun install
+          bun run build
 
-      - name: Install web-ui dependencies
-        working-directory: source/atomica-web-ui
-        run: bun install
+      - name: Build State Proofs
+        working-directory: source/state-proofs/typescript
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Aptos Testnet SDK
+        working-directory: source/docker-testnet/aptos-testnet
+        run: |
+          bun install
+          bun run build
 
       - name: Build EVM contracts
         working-directory: source/evm-contracts
         run: |
           forge install
+          forge build
+
+      - name: Install web-ui dependencies and Playwright browsers
+        working-directory: source/atomica-web-ui
+        run: |
           bun install
+          bunx playwright install chromium --with-deps
 
       - name: Run browser integration tests
         working-directory: source/atomica-web-ui
