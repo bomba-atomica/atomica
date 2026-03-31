@@ -3,6 +3,9 @@ import { SettleButton } from "../../SettleButton";
 import { ClaimButton } from "../../ClaimButton";
 import { BidHistory } from "../../BidHistory";
 import { useBidHistory } from "../../../hooks/useBidHistory";
+import { FeeRebateDisplay } from "../../FeeRebateDisplay";
+import { useFeeRebate } from "../../../hooks/useFeeRebate";
+import { useWallet } from "../../../context/WalletContext";
 
 interface Props {
   amount?: bigint;
@@ -81,12 +84,14 @@ export function Step8Monitor({
   loading,
   error,
 }: Props) {
+  const { account } = useWallet();
   const remaining = useCountdown(auctionEndTime);
   const canUnlock = useIsUnlocked(unlockTime);
   const ended = remaining === 0 && auctionEndTime !== undefined;
   const { entries: bidHistoryEntries, recordSettlement } = useBidHistory(
     sellerAddress ?? null,
   );
+  const feeRebate = useFeeRebate(sellerAddress, account);
 
   const amountFormatted = amount
     ? (Number(amount) / 1e18).toFixed(4) + " FETH"
@@ -150,6 +155,13 @@ export function Step8Monitor({
       )}
 
       {ended && sellerAddress && <ClaimButton sellerAddress={sellerAddress} />}
+
+      {feeRebate.ready && feeRebate.isWinner && (
+        <FeeRebateDisplay
+          rebateAmount={feeRebate.rebateAmount}
+          feeAmount={feeRebate.feeAmount}
+        />
+      )}
 
       {/* Bid History — always visible in monitoring step */}
       <div className="mt-2">

@@ -3,6 +3,7 @@ import { ethers } from "ethers";
 import { submitBid } from "@atomica/aptos-docker-testnet/browser";
 import * as ibe from "@atomica/state-proof-verifier/ibe";
 import { useWallet } from "../context/WalletContext";
+import { saveBidPrice } from "../lib/bidStorage";
 
 export function AuctionBidder() {
   const { account } = useWallet();
@@ -30,6 +31,9 @@ export function AuctionBidder() {
       const amountBn = BigInt(bidAmount);
 
       const pendingTx = await submitBid(account, sellerAddr, amountBn, u, v);
+
+      // Persist bid price in localStorage for post-settlement rebate computation
+      saveBidPrice(sellerAddr, account, amountBn);
 
       // Access hash safely (type assertion if needed)
       const hash = (pendingTx as { hash?: string }).hash || "submitted";
