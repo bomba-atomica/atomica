@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { SettleButton } from "../../SettleButton";
+import { ClaimButton } from "../../ClaimButton";
 
 interface Props {
   amount?: bigint;
@@ -140,6 +141,10 @@ export function Step8Monitor({
           sellerAddress={sellerAddress}
           auctionEndTime={auctionEndTime}
         />
+      )}
+
+      {ended && sellerAddress && (
+        <ClaimButton sellerAddress={sellerAddress} />
       )}
 
       {canUnlock && (
