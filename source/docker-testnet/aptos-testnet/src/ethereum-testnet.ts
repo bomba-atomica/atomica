@@ -15,18 +15,23 @@ import { execSync } from "child_process";
 import type { EthereumTestnetInfo } from "./browser-commands.js";
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
-// Resolve from the compiled dist/ directory up three levels to reach source/evm-contracts.
-// The dist/ directory is at source/docker-testnet/aptos-testnet/dist/ so:
-//   dist/ → aptos-testnet/ → docker-testnet/ → source/ → evm-contracts
-const EVM_CONTRACTS_DIR = pathResolve(THIS_DIR, "../../../evm-contracts");
+// Resolve repo-local packages from the browser-test process first so local
+// workspace builds win over the package install location under node_modules.
+const EVM_CONTRACTS_CANDIDATES = [
+    pathResolve(process.cwd(), "../evm-contracts"),
+    pathResolve(process.cwd(), "../../evm-contracts"),
+    pathResolve(process.cwd(), "../../../evm-contracts"),
+    pathResolve(THIS_DIR, "../../../evm-contracts"),
+];
 
 let testnet: EthereumDockerTestnet | null = null;
 
 function ensureCompiled(): void {
-    const outDir = pathResolve(EVM_CONTRACTS_DIR, "out");
+    const evmContractsDir = findEvmContractsDir();
+    const outDir = pathResolve(evmContractsDir, "out");
     if (!existsSync(outDir)) {
         console.log("[Ethereum Testnet] Compiling Solidity contracts...");
-        execSync("forge build", { cwd: EVM_CONTRACTS_DIR, stdio: "inherit" });
+        execSync("forge build", { cwd: evmContractsDir, stdio: "inherit" });
         console.log("[Ethereum Testnet] ✓ Compiled");
     }
 }
@@ -35,13 +40,34 @@ function readArtifact(contractName: string): {
     abi: object[];
     bytecode: { object: string };
 } {
+    const evmContractsDir = findEvmContractsDir();
     const artifactPath = pathResolve(
-        EVM_CONTRACTS_DIR,
+        evmContractsDir,
         "out",
         `${contractName}.sol`,
         `${contractName}.json`,
     );
     return JSON.parse(readFileSync(artifactPath, "utf-8"));
+}
+
+function findExistingDir(candidates: string[], markerPath: string): string {
+    for (const candidate of candidates) {
+        if (existsSync(pathResolve(candidate, markerPath))) {
+            return candidate;
+        }
+    }
+
+    throw new Error(
+        [
+            `Unable to locate required directory containing ${markerPath}.`,
+            "Searched in:",
+            ...candidates.map((candidate) => `  - ${candidate}`),
+        ].join("\n"),
+    );
+}
+
+function findEvmContractsDir(): string {
+    return findExistingDir(EVM_CONTRACTS_CANDIDATES, "out");
 }
 
 /**

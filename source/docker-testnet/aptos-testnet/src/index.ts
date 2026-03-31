@@ -1,4 +1,4 @@
-import { AptosAccount, AptosClient, HexString, TxnBuilderTypes, BCS } from "aptos";
+import { AptosAccount, AptosClient, HexString } from "aptos";
 import { spawn } from "child_process";
 import * as dotenv from "dotenv";
 import { cpSync, existsSync, mkdirSync, readFileSync } from "fs";
@@ -387,38 +387,66 @@ export class DockerTestnet {
             debug(`Faucet funding ${targetAddr} with ${amount} octas`);
 
             try {
-                const entryFunctionPayload = new TxnBuilderTypes.TransactionPayloadEntryFunction(
-                    TxnBuilderTypes.EntryFunction.natural(
-                        "0x1::aptos_account",
-                        "transfer",
-                        [],
-                        [
-                            BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex(targetAddr)),
-                            BCS.bcsSerializeUint64(amount),
-                        ],
-                    ),
-                );
-
                 const accountInfo = await client.getAccount(faucetAccount.address());
-                const chainId = await client.getChainId();
+                let initialBalance = 0n;
 
-                const rawTxn = new TxnBuilderTypes.RawTransaction(
-                    TxnBuilderTypes.AccountAddress.fromHex(faucetAccount.address()),
-                    BigInt(accountInfo.sequence_number),
-                    entryFunctionPayload,
-                    BigInt(10000),
-                    BigInt(100),
-                    BigInt(Math.floor(Date.now() / 1000) + 600),
-                    new TxnBuilderTypes.ChainId(chainId),
+                try {
+                    const result = await client.view({
+                        function: "0x1::coin::balance",
+                        type_arguments: ["0x1::aptos_coin::AptosCoin"],
+                        arguments: [targetAddr],
+                    });
+
+                    if (result && result.length > 0) {
+                        initialBalance = BigInt(result[0] as string);
+                    }
+                } catch (e: unknown) {
+                    const message = e instanceof Error ? e.message : String(e);
+                    debug(`Warning: Could not read initial balance before faucet`, {
+                        targetAddr,
+                        error: message,
+                    });
+                }
+                const targetBalance = initialBalance + amount;
+
+                const transferPayload = {
+                    type: "entry_function_payload",
+                    function: "0x1::aptos_account::transfer",
+                    type_arguments: [],
+                    arguments: [targetAddr, amount.toString()],
+                };
+
+                const transferTxn = await client.generateTransaction(
+                    faucetAccount.address(),
+                    transferPayload,
                 );
+                debug(`Generated faucet transfer transaction`, {
+                    targetAddr,
+                    amount: amount.toString(),
+                    sequenceNumber: accountInfo.sequence_number,
+                });
 
-                const signedTxn = await client.signTransaction(faucetAccount, rawTxn);
+                const signedTxn = await client.signTransaction(faucetAccount, transferTxn);
                 const txnResponse = await client.submitTransaction(signedTxn);
-                await client.waitForTransaction(txnResponse.hash, { timeoutSecs: 60 });
 
-                const maxRetries = 40;
+                // waitForTransaction can hang against local validators even when
+                // the transfer eventually lands. Keep it best-effort and fall
+                // back to balance-based confirmation below.
+                try {
+                    await client.waitForTransaction(txnResponse.hash, { timeoutSecs: 30 });
+                } catch (e: unknown) {
+                    const message = e instanceof Error ? e.message : String(e);
+                    debug(`Faucet waitForTransaction did not confirm in time`, {
+                        targetAddr,
+                        txn: txnResponse.hash,
+                        error: message,
+                    });
+                }
+
+                const maxRetries = 300;
                 const retryDelayMs = 1000;
                 let retries = 0;
+                let confirmed = false;
 
                 while (retries < maxRetries) {
                     try {
@@ -428,7 +456,12 @@ export class DockerTestnet {
                             arguments: [targetAddr],
                         });
 
-                        if (result && result.length > 0 && BigInt(result[0] as string) >= amount) {
+                        if (
+                            result &&
+                            result.length > 0 &&
+                            BigInt(result[0] as string) >= targetBalance
+                        ) {
+                            confirmed = true;
                             break;
                         }
 
@@ -449,6 +482,12 @@ export class DockerTestnet {
                             break;
                         }
                     }
+                }
+
+                if (!confirmed) {
+                    throw new Error(
+                        `Timed out waiting for faucet confirmation for ${targetAddr} after ${retries} retries`,
+                    );
                 }
 
                 debug(`Faucet transfer complete`, {
@@ -519,7 +558,11 @@ export class DockerTestnet {
         deployerPrivateKey: string;
         deployerAddress?: string;
         namedAddresses?: Record<string, string>;
-        initFunctions?: Array<{ functionId: string; args: string[] }>;
+        initFunctions?: Array<{
+            functionId: string;
+            args: string[];
+            typeArgs?: string[];
+        }>;
         fundAmount?: bigint;
     }): Promise<void> {
         const {
@@ -586,6 +629,10 @@ export class DockerTestnet {
                 `http://127.0.0.1:${BASE_API_PORT}`,
                 "--assume-yes",
             ];
+
+            if (initFunc.typeArgs && initFunc.typeArgs.length > 0) {
+                args.push("--type-args", ...initFunc.typeArgs);
+            }
 
             if (initFunc.args.length > 0) {
                 args.push("--args", ...initFunc.args);

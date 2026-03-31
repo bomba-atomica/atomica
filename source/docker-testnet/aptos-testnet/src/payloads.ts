@@ -208,12 +208,12 @@ export async function submitCreateAuction(
 export function getBidPayload(
     sellerAddr: string,
     amountUsd: bigint,
-    u: Uint8Array,
-    v: Uint8Array,
+    _u: Uint8Array,
+    _v: Uint8Array,
 ): InputGenerateTransactionPayloadData {
     return {
-        function: `${CONTRACT_ADDR}::auction::bid`,
-        functionArguments: [sellerAddr, amountUsd, u, v],
+        function: `${CONTRACT_ADDR}::auction::submit_bid`,
+        functionArguments: [sellerAddr, amountUsd],
     };
 }
 

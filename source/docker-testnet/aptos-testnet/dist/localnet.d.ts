@@ -144,6 +144,11 @@ export declare function deployContracts(): Promise<void>;
  */
 export declare function teardownLocalnet(): Promise<void>;
 /**
+ * Register an externally managed DockerTestnet instance with the localnet
+ * singleton so browser commands like fundAccount() can reuse it.
+ */
+export declare function setTestnet(testnetInstance: DockerTestnet | null): void;
+/**
  * Get the underlying Docker testnet instance.
  *
  * This is useful for advanced operations that need direct access to the testnet.

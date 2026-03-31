@@ -12,14 +12,29 @@
 
 import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
 import { DockerTestnet } from "./index.js";
+import { setTestnet } from "./localnet.js";
 import { ethers } from "ethers";
-import { resolve as pathResolve, dirname, join } from "path";
+import { resolve as pathResolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
 import { execSync } from "child_process";
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
-const EVM_CONTRACTS_DIR = pathResolve(THIS_DIR, "../../evm-contracts");
+// Resolve repo-local packages from the browser-test process first so local
+// workspace builds win over the package install location under node_modules.
+const EVM_CONTRACTS_CANDIDATES = [
+    pathResolve(process.cwd(), "../evm-contracts"),
+    pathResolve(process.cwd(), "../../evm-contracts"),
+    pathResolve(process.cwd(), "../../../evm-contracts"),
+    pathResolve(THIS_DIR, "../../../evm-contracts"),
+];
+
+const MOVE_CONTRACTS_CANDIDATES = [
+    pathResolve(process.cwd(), "../atomica-move-contracts"),
+    pathResolve(process.cwd(), "../../atomica-move-contracts"),
+    pathResolve(process.cwd(), "../../../atomica-move-contracts"),
+    pathResolve(THIS_DIR, "../../../atomica-move-contracts"),
+];
 
 // ---------------------------------------------------------------------------
 // Shared state — one fixture per Vitest worker process
@@ -59,11 +74,36 @@ export interface DualChainTestnetInfo {
 // Helpers
 // ---------------------------------------------------------------------------
 
+function findExistingDir(candidates: string[], markerPath: string): string {
+    for (const candidate of candidates) {
+        if (existsSync(pathResolve(candidate, markerPath))) {
+            return candidate;
+        }
+    }
+
+    throw new Error(
+        [
+            `Unable to locate required directory containing ${markerPath}.`,
+            "Searched in:",
+            ...candidates.map((candidate) => `  - ${candidate}`),
+        ].join("\n"),
+    );
+}
+
+function findEvmContractsDir(): string {
+    return findExistingDir(EVM_CONTRACTS_CANDIDATES, "out");
+}
+
+function findMoveContractsDir(): string {
+    return findExistingDir(MOVE_CONTRACTS_CANDIDATES, "Move.toml");
+}
+
 function ensureCompiled(): void {
-    const outDir = pathResolve(EVM_CONTRACTS_DIR, "out");
+    const evmContractsDir = findEvmContractsDir();
+    const outDir = pathResolve(evmContractsDir, "out");
     if (!existsSync(outDir)) {
         console.log("[Dual-Chain] Compiling Solidity contracts...");
-        execSync("forge build", { cwd: EVM_CONTRACTS_DIR, stdio: "inherit" });
+        execSync("forge build", { cwd: evmContractsDir, stdio: "inherit" });
         console.log("[Dual-Chain] ✓ Compiled");
     }
 }
@@ -72,8 +112,9 @@ function readArtifact(contractName: string): {
     abi: object[];
     bytecode: { object: string };
 } {
+    const evmContractsDir = findEvmContractsDir();
     const artifactPath = pathResolve(
-        EVM_CONTRACTS_DIR,
+        evmContractsDir,
         "out",
         `${contractName}.sol`,
         `${contractName}.json`,
@@ -181,9 +222,8 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
     console.log(`[Dual-Chain] ✓ Minted FakeETH to bidder`);
 
     // ── Aptos ─────────────────────────────────────────────────────────────────
-    aptosTestnet = await DockerTestnet.new(4);
-    await aptosTestnet.waitForBlocks(1, 120);
-
+    aptosTestnet = await DockerTestnet.new(2);
+    setTestnet(aptosTestnet);
     const nodeUrl = `${aptosTestnet.validatorApiUrl(0)}/v1`;
 
     const aptosDeployerPrivateKey =
@@ -197,7 +237,7 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
     await aptosTestnet.faucet(aptosModuleAddress, 100_000_000_000n);
     console.log(`[Dual-Chain] ✓ Funded Aptos deployer: ${aptosModuleAddress}`);
 
-    const contractsDir = join(THIS_DIR, "../../../atomica-move-contracts");
+    const contractsDir = findMoveContractsDir();
     await aptosTestnet.deployContracts({
         contractsDir,
         deployerPrivateKey: aptosDeployerPrivateKey,
@@ -210,6 +250,22 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
             },
             { functionId: `${aptosModuleAddress}::fake_eth::initialize`, args: [] },
             { functionId: `${aptosModuleAddress}::fake_usd::initialize`, args: [] },
+            {
+                functionId: `${aptosModuleAddress}::lock_receipt::initialize`,
+                typeArgs: [
+                    `${aptosModuleAddress}::lock_receipt::Ethereum`,
+                    `${aptosModuleAddress}::lock_receipt::FakeETH`,
+                ],
+                args: [],
+            },
+            {
+                functionId: `${aptosModuleAddress}::lock_receipt::initialize`,
+                typeArgs: [
+                    `${aptosModuleAddress}::lock_receipt::Ethereum`,
+                    `${aptosModuleAddress}::lock_receipt::FakeUSD`,
+                ],
+                args: [],
+            },
         ],
         fundAmount: 10_000_000_000n,
     });
@@ -250,6 +306,7 @@ export async function teardownDualChainTestnet(): Promise<void> {
         aptosTestnet
             ? aptosTestnet.teardown().finally(() => {
                   aptosTestnet = null;
+                  setTestnet(null);
               })
             : Promise.resolve(),
     ]);

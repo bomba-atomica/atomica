@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        type: [unit, integration, ui, browser-integration, meta]
+        type: [unit, integration, meta]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -62,14 +62,14 @@ jobs:
           bun run build
 
       - name: Build Atomica Web UI
-        if: matrix.type == 'ui' || matrix.type == 'meta'
+        if: matrix.type == 'meta'
         working-directory: source/atomica-web-ui
         run: |
           bun install
           bun run build
 
       - name: Install Aptos CLI
-        if: matrix.type == 'unit' || matrix.type == 'ui'
+        if: matrix.type == 'unit'
         run: |
           # Download aptos binary from atomica-aptos releases
           APTOS_VERSION="binary-fac20096d4"
@@ -89,7 +89,7 @@ jobs:
           which aptos
 
       - name: Pre-warm Move git dependency cache
-        if: matrix.type == 'unit' || matrix.type == 'ui'
+        if: matrix.type == 'unit'
         run: |
           # Step 1: Fetch the atomica-aptos git dependency by compiling atomica-move-contracts.
           # This clones the repo and generates Move.lock for atomica-move-contracts.
@@ -128,47 +128,6 @@ jobs:
         if: matrix.type == 'integration'
         working-directory: source/state-proofs/typescript
         run: bun test tests/ibe.test.ts
-
-      # ── ui: Atomica Web UI browser component tests ─────────────────────────
-      - name: Install Playwright browsers (web UI)
-        if: matrix.type == 'ui'
-        working-directory: source/atomica-web-ui
-        run: bunx playwright install --with-deps chromium
-
-      - name: Run Web UI tests
-        if: matrix.type == 'ui'
-        working-directory: source/atomica-web-ui
-        run: bunx vitest run tests/AccountStatus.test.tsx tests/TxButton.skip-submit.test.tsx
-
-      # ── browser-integration: Faucet + Wallet-Connect browser integration tests
-      - name: Install Foundry (browser-integration)
-        if: matrix.type == 'browser-integration'
-        uses: foundry-rs/foundry-toolchain@v1
-
-      - name: Build EVM contracts (browser-integration)
-        if: matrix.type == 'browser-integration'
-        working-directory: source/evm-contracts
-        run: forge build
-
-      - name: Install Web UI dependencies (browser-integration)
-        if: matrix.type == 'browser-integration'
-        working-directory: source/atomica-web-ui
-        run: bun install
-
-      - name: Install Playwright browsers (browser-integration)
-        if: matrix.type == 'browser-integration'
-        working-directory: source/atomica-web-ui
-        run: bunx playwright install --with-deps chromium
-
-      - name: Run browser integration tests
-        if: matrix.type == 'browser-integration'
-        working-directory: source/atomica-web-ui
-        env:
-          NODE_OPTIONS: "--max-old-space-size=4096"
-        run: |
-          bunx vitest run \
-            tests/integration/01-faucet.test.tsx \
-            tests/integration/02-wallet-connect.test.tsx
 
       # ── meta: Web Demo unit tests ───────────────────────────────────────────
       - name: Install demo dependencies

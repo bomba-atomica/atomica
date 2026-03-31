@@ -110,6 +110,7 @@ import {
 import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testnet.js";
 import { setupDualChainTestnet, teardownDualChainTestnet } from "./dual-chain-testnet.js";
 import type { DualChainTestnetInfo } from "./dual-chain-testnet.js";
+import { ethers } from "ethers";
 
 /**
  * Module augmentation to add our custom commands to Vitest's browser commands types.
@@ -121,6 +122,30 @@ export interface EthereumTestnetInfo {
     fakeUSD: string;
     signerPrivateKey: string;
     chainId: number;
+}
+
+/**
+ * Serializable result of generateEthLockProofCommand.
+ * storageValue is a string to survive JSON serialisation over the RPC bridge
+ * (bigint cannot be transferred as-is).
+ */
+export interface EthLockProofResult {
+    lockId: string;
+    proof: {
+        blockNumber: number;
+        blockHash: string;
+        stateRoot: string;
+        contractAddress: string;
+        userAddress: string;
+        tokenAddress: string;
+        storageKey: string;
+        /** decimal string representation of the bigint storageValue */
+        storageValue: string;
+        accountProof: string[];
+        storageProof: string[];
+        timestamp: number;
+        generatedAt: number;
+    };
 }
 
 export type { DualChainTestnetInfo };
@@ -138,6 +163,14 @@ declare module "vitest/browser" {
         teardownDualChainTestnet(): Promise<{ success: boolean }>;
         setupEthereumTestnet(): Promise<EthereumTestnetInfo>;
         teardownEthereumTestnet(): Promise<void>;
+        generateEthLockProof(
+            rpcUrl: string,
+            sellerPrivateKey: string,
+            fakeETHAddress: string,
+            lockBoxAddress: string,
+            lockAmountWei?: string,
+            mintAmountWei?: string,
+        ): Promise<EthLockProofResult>;
     }
 }
 
@@ -295,4 +328,151 @@ export const setupDualChainTestnetCommand: BrowserCommand<[]> = async () => {
 export const teardownDualChainTestnetCommand: BrowserCommand<[]> = async () => {
     await teardownDualChainTestnet();
     return { success: true };
+};
+
+// ---------------------------------------------------------------------------
+// Minimal ABI fragments for LockBox proof generation
+// ---------------------------------------------------------------------------
+
+const ERC20_MINT_ABI = [
+    "function mint(address to, uint256 amount) external",
+    "function approve(address spender, uint256 amount) external returns (bool)",
+];
+
+const LOCKBOX_LOCK_ABI = ["function lock(address token, uint256 amount) external"];
+
+/**
+ * Generate an Ethereum storage proof for a locked balance.
+ *
+ * This command runs on the Node.js side because @ethereumjs/util (used
+ * transitively by @atomica/state-proof-verifier) accesses Node's EventEmitter
+ * which is not available in browser context.
+ *
+ * Steps:
+ *   1. Mint FakeETH to seller
+ *   2. Approve LockBox for lockAmount
+ *   3. Call LockBox.lock()
+ *   4. Wait 12 blocks for archive proof availability
+ *   5. Fetch eth_getProof storage proof
+ *   6. Compute lockId = keccak256(blockHash || contractAddress || userAddress || tokenAddress || storageKey)
+ *
+ * Returns a JSON-serialisable result (storageValue as decimal string).
+ *
+ * EXECUTION: Node.js (browser can't use @ethereumjs/* via EventEmitter)
+ */
+export const generateEthLockProofCommand: BrowserCommand<
+    [
+        rpcUrl: string,
+        sellerPrivateKey: string,
+        fakeETHAddress: string,
+        lockBoxAddress: string,
+        lockAmountWei?: string,
+        mintAmountWei?: string,
+    ]
+> = async (
+    _ctx,
+    rpcUrl: string,
+    sellerPrivateKey: string,
+    fakeETHAddress: string,
+    lockBoxAddress: string,
+    lockAmountWei: string = ethers.parseEther("10").toString(),
+    mintAmountWei: string = ethers.parseEther("1000").toString(),
+): Promise<EthLockProofResult> => {
+    const lockAmount = BigInt(lockAmountWei);
+    const mintAmount = BigInt(mintAmountWei);
+
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const seller = new ethers.Wallet(sellerPrivateKey, provider);
+
+    const fakeETH = new ethers.Contract(fakeETHAddress, ERC20_MINT_ABI, seller);
+    const lockBox = new ethers.Contract(lockBoxAddress, LOCKBOX_LOCK_ABI, seller);
+
+    // Mint tokens
+    const mintTx = await (
+        fakeETH.mint as (to: string, amount: bigint) => Promise<ethers.ContractTransactionResponse>
+    )(seller.address, mintAmount);
+    await provider.waitForTransaction(mintTx.hash, 1);
+
+    let nonce = await seller.getNonce();
+    const approveTx = await (
+        fakeETH.approve as (
+            spender: string,
+            amount: bigint,
+            opts: { nonce: number },
+        ) => Promise<ethers.ContractTransactionResponse>
+    )(lockBoxAddress, lockAmount, { nonce: nonce++ });
+    await provider.waitForTransaction(approveTx.hash, 1);
+
+    const lockTx = await (
+        lockBox.lock as (
+            token: string,
+            amount: bigint,
+            opts: { nonce: number },
+        ) => Promise<ethers.ContractTransactionResponse>
+    )(fakeETHAddress, lockAmount, { nonce: nonce++ });
+    const lockReceipt = await provider.waitForTransaction(lockTx.hash, 1);
+    const lockBlockNumber = lockReceipt!.blockNumber;
+
+    // Wait for archive proof availability (12 blocks)
+    const targetBlock = lockBlockNumber + 12;
+    for (let i = 0; i < 180; i++) {
+        const current = await provider.getBlockNumber();
+        if (current >= targetBlock) break;
+        await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    // Calculate storage key (single-level mapping: keccak256(abi.encode(compositeKey, slot=0)))
+    const compositeKey = ethers.keccak256(
+        ethers.solidityPacked(
+            ["address", "address"],
+            [ethers.getAddress(seller.address), ethers.getAddress(fakeETHAddress)],
+        ),
+    );
+    const storageKey = ethers.keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(["bytes32", "uint256"], [compositeKey, 0]),
+    );
+
+    // Fetch block to get blockHash and stateRoot
+    const block = await provider.getBlock(lockBlockNumber);
+    if (!block) {
+        throw new Error(`Block ${lockBlockNumber} not found`);
+    }
+    if (!block.hash || !block.stateRoot) {
+        throw new Error(`Block ${lockBlockNumber} missing hash or stateRoot`);
+    }
+
+    // Fetch storage proof via eth_getProof directly (avoids @ethereumjs dependency)
+    const ethProof = await provider.send("eth_getProof", [
+        lockBoxAddress,
+        [storageKey],
+        `0x${lockBlockNumber.toString(16)}`,
+    ]);
+
+    // Compute lockId
+    const lockIdData = Buffer.concat([
+        Buffer.from(block.hash.slice(2), "hex"),
+        Buffer.from(ethers.getAddress(lockBoxAddress).slice(2), "hex"),
+        Buffer.from(ethers.getAddress(seller.address).slice(2), "hex"),
+        Buffer.from(ethers.getAddress(fakeETHAddress).slice(2), "hex"),
+        Buffer.from(storageKey.slice(2), "hex"),
+    ]);
+    const lockId = ethers.keccak256(lockIdData);
+
+    return {
+        lockId,
+        proof: {
+            blockNumber: lockBlockNumber,
+            blockHash: block.hash,
+            stateRoot: block.stateRoot,
+            contractAddress: ethers.getAddress(lockBoxAddress),
+            userAddress: ethers.getAddress(seller.address),
+            tokenAddress: ethers.getAddress(fakeETHAddress),
+            storageKey,
+            storageValue: BigInt(ethProof.storageProof[0].value).toString(),
+            accountProof: ethProof.accountProof as string[],
+            storageProof: ethProof.storageProof[0].proof as string[],
+            timestamp: block.timestamp,
+            generatedAt: Date.now(),
+        },
+    };
 };
