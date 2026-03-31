@@ -224,3 +224,57 @@ export async function submitBid(
     getBidPayload(sellerAddr, amountUsd, u, v),
   );
 }
+
+export function getSettlePayload(
+  sellerAddr: string,
+): InputGenerateTransactionPayloadData {
+  return {
+    function: `${CONTRACT_ADDR}::auction::settle`,
+    functionArguments: [sellerAddr],
+  };
+}
+
+export async function submitSettle(
+  ethAddress: string,
+  sellerAddr: string,
+) {
+  return await submitNativeTransaction(
+    aptos,
+    ethAddress,
+    getSettlePayload(sellerAddr),
+  );
+}
+
+/**
+ * Query `auction::is_settled` view function.
+ * Returns true if the auction for the given seller has been settled.
+ */
+export async function isSettled(sellerAddr: string): Promise<boolean> {
+  const result = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::auction::is_settled`,
+      functionArguments: [sellerAddr],
+    },
+  });
+  return result[0] as boolean;
+}
+
+/**
+ * Query `auction::get_settlement` view function.
+ * Returns { winner, clearingPrice } after settlement.
+ * winner == "0x0" means no valid bid was found.
+ */
+export async function getSettlement(
+  sellerAddr: string,
+): Promise<{ winner: string; clearingPrice: bigint }> {
+  const result = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::auction::get_settlement`,
+      functionArguments: [sellerAddr],
+    },
+  });
+  return {
+    winner: result[0] as string,
+    clearingPrice: BigInt(result[1] as string),
+  };
+}

@@ -101,6 +101,7 @@ import { BidHistory, type BidHistoryEntry } from "../../src/components/BidHistor
 import { Step8Monitor } from "../../src/components/SellFlow/steps/Step8Monitor";
 import {
   WalletContext,
+  WalletProvider,
   NetworkConfigProvider,
   ContractStatusProvider,
   BalancesProvider,
@@ -463,14 +464,25 @@ describe.sequential("14: Full demo happy-path end-to-end browser smoke test", ()
       console.log(`[14-happy-path] Winner: ${winnerAddr}`);
       console.log(`[14-happy-path] Clearing price: ${clearingPrice}`);
 
-      // Render SettleButton and confirm UI shows "Settled"
-      // (Re-settle will error — render with a mock callback that returns immediately
-      // to verify the UI reflects a settled state)
-      const onSettle = async () => {};
-      render(<SettleButton onSettle={onSettle} />);
+      // Render SettleButton and confirm UI shows "Already Settled"
+      // The component queries on-chain state and detects the auction is settled.
+      render(
+        <WalletProvider>
+          <SettleButton
+            sellerAddress={sellerAptosAddress}
+            auctionEndTime={auctionEndTime}
+          />
+        </WalletProvider>,
+      );
 
-      // The settle-status element is only present after a click; just assert
-      // the settle button renders cleanly post-settlement
+      // The component checks on-chain settled state on mount
+      await waitFor(
+        () => {
+          const statusEl = screen.getByTestId(settleButton.settleStatus);
+          expect(statusEl.textContent).toBe("Already Settled");
+        },
+        { timeout: 10_000 },
+      );
       expect(screen.getByTestId(settleButton.settleButton)).toBeTruthy();
     },
     120_000,
