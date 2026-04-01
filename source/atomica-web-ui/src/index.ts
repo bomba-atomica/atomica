@@ -14,6 +14,9 @@ export type { BidHistoryEntry } from "./components/BidHistory";
 export { useTokenBalances } from "./hooks/useTokenBalances";
 export { useBidHistory } from "./hooks/useBidHistory";
 export type { UseBidHistoryResult } from "./hooks/useBidHistory";
+export { useFeeRebate } from "./hooks/useFeeRebate";
+export type { FeeRebateResult } from "./hooks/useFeeRebate";
+export { saveBidPrice, loadBidPrice, clearBidPrice } from "./lib/bidStorage";
 
 export {
   WalletContext,
