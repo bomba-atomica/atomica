@@ -191,6 +191,24 @@ describe.sequential("10: Settle Auction", () => {
           { timeout: 30_000 },
         );
 
+        // Verify winner and clearing price are displayed in the UI
+        await waitFor(
+          () => {
+            const winnerEl = screen.getByTestId(settleButton.settleWinner);
+            expect(winnerEl.textContent).toBeTruthy();
+            // The winner should be the bidder's Aptos address
+            expect(winnerEl.textContent).toContain(
+              bidder.accountAddress.toString().substring(0, 6),
+            );
+
+            const priceEl = screen.getByTestId(settleButton.settleClearingPrice);
+            expect(priceEl.textContent).toBeTruthy();
+            // Clearing price should contain a dollar amount
+            expect(priceEl.textContent).toContain("$");
+          },
+          { timeout: 10_000 },
+        );
+
         // Verify on-chain
         const settled = await viewFunction(
           aptosClient,
