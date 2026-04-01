@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { SettleButton } from "../../SettleButton";
 import { ClaimButton } from "../../ClaimButton";
+import { BidHistory } from "../../BidHistory";
+import { useBidHistory } from "../../../hooks/useBidHistory";
 
 interface Props {
   amount?: bigint;
@@ -82,6 +84,9 @@ export function Step8Monitor({
   const remaining = useCountdown(auctionEndTime);
   const canUnlock = useIsUnlocked(unlockTime);
   const ended = remaining === 0 && auctionEndTime !== undefined;
+  const { entries: bidHistoryEntries, recordSettlement } = useBidHistory(
+    sellerAddress ?? null,
+  );
 
   const amountFormatted = amount
     ? (Number(amount) / 1e18).toFixed(4) + " FETH"
@@ -140,10 +145,19 @@ export function Step8Monitor({
         <SettleButton
           sellerAddress={sellerAddress}
           auctionEndTime={auctionEndTime}
+          onSettled={recordSettlement}
         />
       )}
 
       {ended && sellerAddress && <ClaimButton sellerAddress={sellerAddress} />}
+
+      {/* Bid History — always visible in monitoring step */}
+      <div className="mt-2">
+        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">
+          Settlement History
+        </h3>
+        <BidHistory entries={bidHistoryEntries} />
+      </div>
 
       {canUnlock && (
         <div className="flex flex-col gap-2">

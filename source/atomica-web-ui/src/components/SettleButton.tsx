@@ -5,6 +5,8 @@ import { useWallet } from "../context/WalletContext";
 interface Props {
   sellerAddress: string;
   auctionEndTime?: number;
+  /** Called when a settlement is observed (either fresh or already settled). */
+  onSettled?: (sellerAddress: string, clearingPrice: bigint) => void;
 }
 
 /**
@@ -17,7 +19,11 @@ interface Props {
  * - the auction is already settled on-chain
  * - a transaction is in flight
  */
-export function SettleButton({ sellerAddress, auctionEndTime }: Props) {
+export function SettleButton({
+  sellerAddress,
+  auctionEndTime,
+  onSettled,
+}: Props) {
   const { account } = useWallet();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -52,6 +58,7 @@ export function SettleButton({ sellerAddress, auctionEndTime }: Props) {
           setWinner(result.winner);
           setClearingPrice(result.clearingPrice);
           setStatus("Already Settled");
+          onSettled?.(sellerAddress, result.clearingPrice);
         }
       } catch {
         // View function may fail if auction doesn't exist yet — ignore
@@ -61,7 +68,7 @@ export function SettleButton({ sellerAddress, auctionEndTime }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [sellerAddress]);
+  }, [sellerAddress, onSettled]);
 
   const handleSettle = useCallback(async () => {
     if (!account) return;
@@ -76,6 +83,7 @@ export function SettleButton({ sellerAddress, auctionEndTime }: Props) {
       setClearingPrice(result.clearingPrice);
       setSettled(true);
       setStatus("Settled");
+      onSettled?.(sellerAddress, result.clearingPrice);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       // Surface Move abort codes in a human-readable way
