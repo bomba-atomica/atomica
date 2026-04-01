@@ -47,4 +47,38 @@ export declare function getRegisterLockPayload(proof: LockedBalanceProof): Input
 export declare function getMintFakeEthPayload(lockId: Uint8Array): InputGenerateTransactionPayloadData;
 export declare function getBidPayload(sellerAddr: string, amountUsd: bigint, _u: Uint8Array, _v: Uint8Array): InputGenerateTransactionPayloadData;
 export declare function submitBid(ethAddress: string, sellerAddr: string, amountUsd: bigint, u: Uint8Array, v: Uint8Array): Promise<import("@aptos-labs/ts-sdk").PendingTransactionResponse>;
+export declare function getSettlePayload(sellerAddr: string): InputGenerateTransactionPayloadData;
+export declare function submitSettle(ethAddress: string, sellerAddr: string): Promise<import("@aptos-labs/ts-sdk").PendingTransactionResponse>;
+/**
+ * Query `auction::is_settled` view function.
+ * Returns true if the auction for the given seller has been settled.
+ */
+export declare function isSettled(sellerAddr: string): Promise<boolean>;
+/**
+ * Query `auction::get_settlement` view function.
+ * Returns { winner, clearingPrice } after settlement.
+ * winner == "0x0" means no valid bid was found.
+ */
+export declare function getSettlement(sellerAddr: string): Promise<{
+    winner: string;
+    clearingPrice: bigint;
+}>;
+/**
+ * Build payload for fake_eth::mint (Demo-phase winner payout).
+ *
+ * Entry function: mint(account: &signer, amount: u64)
+ * In Demo phase, `mint` is a public faucet anyone can call. It mints FakeETH
+ * to the signer's own Aptos account. The winner calls this directly via SIWE
+ * to self-mint the payout amount.
+ */
+export declare function getClaimMintPayload(amount: bigint): InputGenerateTransactionPayloadData;
+/**
+ * Submit a Demo-phase claim: the winner self-mints FakeETH via SIWE.
+ */
+export declare function submitClaim(ethAddress: string, amount: bigint): Promise<import("@aptos-labs/ts-sdk").PendingTransactionResponse>;
+/**
+ * Query `fake_eth::balance` view function.
+ * Returns the FakeETH FA balance for the given Aptos address.
+ */
+export declare function getFakeEthBalance(ownerAddr: string): Promise<bigint>;
 //# sourceMappingURL=payloads.d.ts.map

@@ -490,20 +490,21 @@ describe.sequential("14: Full demo happy-path end-to-end browser smoke test", ()
 
   // ── Step 5: Bidder claims → assert Aptos FakeETH FA balance increased ───────
   //
-  // In the Demo phase, `create_auction` already claimed the LockReceipt
-  // (calling lock_receipt::claim internally) which proved the ETH was locked.
-  // The winner's payout is minted separately via fake_eth::mint which the
-  // deployer (@atomica admin) can call directly as the authorized Demo-phase
-  // signer.
+  // In the Demo phase, `fake_eth::mint` is a public faucet anyone can call.
+  // The ClaimButton queries `get_settlement`, compares the winner to the
+  // current user's derived Aptos address, and calls `submitClaim` (which
+  // invokes `fake_eth::mint` via SIWE) to self-mint the clearing price as
+  // FakeETH to the winner's own Aptos account.
   //
-  // We verify two things here:
-  //   1. The ClaimButton UI fires its onClaim callback and shows "Claimed"
-  //   2. The winner's Aptos FakeETH FA balance increased after the callback
+  // We verify:
+  //   1. The ClaimButton renders, detects the bidder as winner, enables Claim
+  //   2. After clicking Claim, status shows "Claimed"
+  //   3. The bidder's Aptos FakeETH FA balance increased
 
   it(
-    "step 11 — bidder claim: FakeETH FA balance is greater after claim than before",
+    "step 11 — bidder claim: ClaimButton detects winner and mints FakeETH via SIWE",
     async () => {
-      console.log("[14-happy-path] Step 11: Bidder claim");
+      console.log("[14-happy-path] Step 11: Bidder claim via ClaimButton");
 
       // Restore bidder wallet mock
       bidderEthAddress = await setupWalletMock({
@@ -512,86 +513,60 @@ describe.sequential("14: Full demo happy-path end-to-end browser smoke test", ()
         chainId: fixture.eth.chainId,
       });
 
-      // Read deployer's Aptos FakeETH FA balance before claim
-      // (the mint goes to the deployer as the authorized signer in Demo phase)
-      const claimRecipient = deployerAccount.accountAddress.toString();
-      const [balanceBeforeRaw] = await viewFunction(
-        aptosClient,
-        `${moduleAddr}::fake_eth::balance`,
-        [],
-        [claimRecipient],
+      // Read bidder's Aptos FakeETH FA balance before claim
+      const bidderAptosAddress = (
+        await getDerivedAddress(bidderEthAddress.toLowerCase())
+      ).toString();
+
+      let balanceBefore = 0n;
+      try {
+        const [raw] = await viewFunction(
+          aptosClient,
+          `${moduleAddr}::fake_eth::balance`,
+          [],
+          [bidderAptosAddress],
+        );
+        balanceBefore = BigInt(raw);
+      } catch {
+        // Account may not have a FakeETH store yet
+      }
+      console.log(`[14-happy-path] Bidder FakeETH before claim: ${balanceBefore}`);
+
+      // Render ClaimButton with the bidder's wallet context
+      withProviders(
+        bidderEthAddress,
+        <ClaimButton sellerAddress={sellerAptosAddress} />,
       );
-      const balanceBefore = BigInt(balanceBeforeRaw);
-      console.log(`[14-happy-path] Deployer Aptos FakeETH before claim: ${balanceBefore}`);
 
-      // Track whether onClaim was called
-      let claimCalled = false;
-
-      // onClaim mints FakeETH FA to the bidder's Aptos address as the
-      // Demo-phase payout. The deployer (@atomica) is authorized to call
-      // fake_eth::mint directly (Demo phase — full settlement logic in MVP).
-      //
-      // The amount minted matches the clearing price (in micro-FUSD units here
-      // we use the clearing price as the FakeETH FA amount for demo purposes).
-      const onClaim = async () => {
-        claimCalled = true;
-
-        // Mint FakeETH FA to the winner (bidder's derived Aptos address)
-        // as the Demo payout. Uses the deployer's admin mint capability.
-        const mintAmount = clearingPrice > 0n ? clearingPrice : 1_000_000n;
-
-        const mintTxn = await aptosClient.transaction.build.simple({
-          sender: deployerAccount.accountAddress,
-          data: {
-            function: `${moduleAddr}::fake_eth::mint`,
-            typeArguments: [],
-            functionArguments: [mintAmount],
-          },
-        });
-
-        const submitted = await aptosClient.signAndSubmitTransaction({
-          signer: deployerAccount,
-          transaction: mintTxn,
-        });
-
-        await aptosClient.waitForTransaction({
-          transactionHash: submitted.hash,
-          options: { checkSuccess: true },
-        });
-
-        console.log(`[14-happy-path] FakeETH mint tx (deployer): ${submitted.hash}`);
-      };
-
-      render(
-        <ClaimButton
-          onClaim={onClaim}
-          onReclaim={async () => {}}
-          isWinner={true}
-        />,
+      // Wait for settlement check to complete — Claim button should be enabled
+      await waitFor(
+        () => {
+          const claimBtn = screen.getByTestId("claim-button");
+          expect((claimBtn as HTMLButtonElement).disabled).toBe(false);
+        },
+        { timeout: 30_000 },
       );
 
       fireEvent.click(screen.getByTestId("claim-button"));
 
-      // Wait for "Claimed" status in ClaimButton UI
+      // Wait for "Claimed" status
       await waitFor(
         () => {
-          expect(screen.queryByText("Claimed")).not.toBeNull();
+          const statusEl = screen.getByTestId("claim-status");
+          expect(statusEl.textContent).toBe("Claimed");
         },
         { timeout: 60_000 },
       );
 
-      expect(claimCalled).toBe(true);
-
-      // Deployer's Aptos FakeETH FA balance should have increased after mint
-      // (deployer is the signer so the FA is minted to deployer's address)
+      // Bidder's Aptos FakeETH FA balance should have increased
       const [balanceAfterRaw] = await viewFunction(
         aptosClient,
         `${moduleAddr}::fake_eth::balance`,
         [],
-        [deployerAccount.accountAddress.toString()],
+        [bidderAptosAddress],
       );
       const balanceAfter = BigInt(balanceAfterRaw);
-      console.log(`[14-happy-path] Deployer Aptos FakeETH after claim: ${balanceAfter}`);
+      console.log(`[14-happy-path] Bidder FakeETH after claim: ${balanceAfter}`);
       expect(balanceAfter).toBeGreaterThan(balanceBefore);
     },
     120_000,

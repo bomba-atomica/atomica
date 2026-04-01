@@ -275,3 +275,45 @@ export async function getSettlement(
     clearingPrice: BigInt(result[1] as string),
   };
 }
+
+/**
+ * Build payload for fake_eth::mint (Demo-phase winner payout).
+ *
+ * Entry function: mint(account: &signer, amount: u64)
+ * In Demo phase, `mint` is a public faucet anyone can call. It mints FakeETH
+ * to the signer's own Aptos account. The winner calls this directly via SIWE
+ * to self-mint the payout amount.
+ */
+export function getClaimMintPayload(
+  amount: bigint,
+): InputGenerateTransactionPayloadData {
+  return {
+    function: `${CONTRACT_ADDR}::fake_eth::mint`,
+    functionArguments: [amount],
+  };
+}
+
+/**
+ * Submit a Demo-phase claim: the winner self-mints FakeETH via SIWE.
+ */
+export async function submitClaim(ethAddress: string, amount: bigint) {
+  return await submitNativeTransaction(
+    aptos,
+    ethAddress,
+    getClaimMintPayload(amount),
+  );
+}
+
+/**
+ * Query `fake_eth::balance` view function.
+ * Returns the FakeETH FA balance for the given Aptos address.
+ */
+export async function getFakeEthBalance(ownerAddr: string): Promise<bigint> {
+  const result = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::fake_eth::balance`,
+      functionArguments: [ownerAddr],
+    },
+  });
+  return BigInt(result[0] as string);
+}

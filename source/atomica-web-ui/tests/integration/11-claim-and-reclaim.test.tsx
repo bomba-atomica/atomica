@@ -2,212 +2,238 @@
  * @file 11-claim-and-reclaim.test.tsx
  * @description Browser integration tests for the ClaimButton component.
  *
- * Covers post-settlement claim/reclaim scenarios:
- *   - Winner can click Claim; callback fires and status updates
- *   - Non-winner claim button is disabled
- *   - Winner reclaim button is disabled
- *   - Loser can click Reclaim; callback fires and status updates
- *   - Error from claim callback is surfaced in status text
- *   - Error from reclaim callback is surfaced in status text
+ * The ClaimButton now accepts `sellerAddress` and queries settlement state
+ * on-chain. It compares the winner against the current user's derived Aptos
+ * address and, if the user is the winner, enables a Claim button that calls
+ * `fake_eth::mint` via SIWE.
  *
- * Tests run against the stub component created by issue #41.  The stub accepts
- * `onClaim` / `onReclaim` callbacks and an `isWinner` flag, which is sufficient
- * to cover all acceptance criteria that can be expressed at the UI layer.
+ * These unit-level tests mock the payload helpers to cover:
+ *   - Unsettled auction: both buttons disabled, status shows "not yet settled"
+ *   - Winner: claim enabled, click fires mint, status shows "Claimed"
+ *   - Non-winner: claim disabled, status shows "not the winner"
+ *   - Claim error: error message displayed in status
+ *   - Reclaim button: always disabled in Demo phase
  *
- * When the full implementation is wired to real Move transactions the callbacks
- * will be replaced by contract calls — these tests remain valid because they
- * assert behaviour at the callback boundary, not the transport layer.
+ * Integration tests against live testnets are in 14-happy-path.test.tsx.
  */
 
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { vi, describe, it, expect, afterEach, beforeEach } from "vitest";
+
+// ── Mocks ────────────────────────────────────────────────────────────────
+
+// vi.mock factories are hoisted — they must not reference outer variables.
+
+vi.mock("../../src/lib/aptos/payloads", () => ({
+  isSettled: vi.fn(),
+  getSettlement: vi.fn(),
+  submitClaim: vi.fn(),
+  getFakeEthBalance: vi.fn(),
+}));
+
+vi.mock("../../src/lib/aptos/siwe", () => ({
+  getDerivedAddress: vi.fn().mockResolvedValue({
+    toString: () => "0xabc123",
+  }),
+}));
+
+vi.mock("../../src/context/WalletContext", () => ({
+  useWallet: vi.fn().mockReturnValue({
+    account: "0xdeadbeef",
+    connect: vi.fn(),
+  }),
+}));
+
+// ── Imports (after mocks) ────────────────────────────────────────────────
+
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { ClaimButton } from "../../src/components/ClaimButton";
 import { SELECTORS } from "./helpers/selectors";
+import {
+  isSettled,
+  getSettlement,
+  submitClaim,
+  getFakeEthBalance,
+} from "../../src/lib/aptos/payloads";
+
+// Cast to mock types for easy setup in tests
+const mockIsSettled = vi.mocked(isSettled);
+const mockGetSettlement = vi.mocked(getSettlement);
+const mockSubmitClaim = vi.mocked(submitClaim);
+const mockGetFakeEthBalance = vi.mocked(getFakeEthBalance);
+
+const SELLER_ADDR = "0xseller";
+const MOCK_DERIVED_ADDR = "0xabc123";
 
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
 });
 
-describe("11: ClaimButton — winner claim, loser reclaim, error handling", () => {
-  // ── 11-1: Winner can click Claim ──────────────────────────────────────────
+describe("11: ClaimButton — settlement-aware claim with Demo-phase mint", () => {
+  // ── 11-1: Unsettled auction ────────────────────────────────────────────
 
-  it("winner: claim button is enabled and fires onClaim callback", async () => {
-    const onClaim = vi.fn().mockResolvedValue(undefined);
-    const onReclaim = vi.fn().mockResolvedValue(undefined);
+  it("unsettled auction: both buttons disabled, status shows 'not yet settled'", async () => {
+    mockIsSettled.mockResolvedValue(false);
 
-    render(
-      <ClaimButton onClaim={onClaim} onReclaim={onReclaim} isWinner={true} />,
-    );
-
-    const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
-    expect(claimBtn).toBeTruthy();
-    expect((claimBtn as HTMLButtonElement).disabled).toBe(false);
-
-    fireEvent.click(claimBtn);
+    render(<ClaimButton sellerAddress={SELLER_ADDR} />);
 
     await waitFor(() => {
-      expect(onClaim).toHaveBeenCalledTimes(1);
+      const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
+      expect(status.textContent).toContain("Auction not yet settled");
     });
-  });
-
-  // ── 11-2: Claim status shows "Claimed" after successful claim ─────────────
-
-  it("winner: status updates to 'Claimed' after successful claim", async () => {
-    const onClaim = vi.fn().mockResolvedValue(undefined);
-    const onReclaim = vi.fn().mockResolvedValue(undefined);
-
-    render(
-      <ClaimButton onClaim={onClaim} onReclaim={onReclaim} isWinner={true} />,
-    );
-
-    fireEvent.click(screen.getByTestId(SELECTORS.claimButton.claimButton));
-
-    await waitFor(() => {
-      const status = screen.queryByText("Claimed");
-      expect(status).not.toBeNull();
-    });
-  });
-
-  // ── 11-3: Non-winner claim button is disabled ─────────────────────────────
-
-  it("non-winner: claim button is disabled", () => {
-    render(
-      <ClaimButton
-        onClaim={async () => {}}
-        onReclaim={async () => {}}
-        isWinner={false}
-      />,
-    );
-
-    const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
-    expect((claimBtn as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  // ── 11-4: Non-winner cannot trigger onClaim ────────────────────────────────
-
-  it("non-winner: clicking disabled claim button does not fire onClaim", () => {
-    const onClaim = vi.fn().mockResolvedValue(undefined);
-
-    render(
-      <ClaimButton
-        onClaim={onClaim}
-        onReclaim={async () => {}}
-        isWinner={false}
-      />,
-    );
-
-    fireEvent.click(screen.getByTestId(SELECTORS.claimButton.claimButton));
-    // Callback must not have been called — disabled button prevents the click handler
-    expect(onClaim).not.toHaveBeenCalled();
-  });
-
-  // ── 11-5: Loser can click Reclaim ─────────────────────────────────────────
-
-  it("loser: reclaim button is enabled and fires onReclaim callback", async () => {
-    const onClaim = vi.fn().mockResolvedValue(undefined);
-    const onReclaim = vi.fn().mockResolvedValue(undefined);
-
-    render(
-      <ClaimButton onClaim={onClaim} onReclaim={onReclaim} isWinner={false} />,
-    );
-
-    const reclaimBtn = screen.getByTestId(SELECTORS.claimButton.reclaimButton);
-    expect((reclaimBtn as HTMLButtonElement).disabled).toBe(false);
-
-    fireEvent.click(reclaimBtn);
-
-    await waitFor(() => {
-      expect(onReclaim).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  // ── 11-6: Reclaim status shows "Reclaimed" ────────────────────────────────
-
-  it("loser: status updates to 'Reclaimed' after successful reclaim", async () => {
-    const onReclaim = vi.fn().mockResolvedValue(undefined);
-
-    render(
-      <ClaimButton
-        onClaim={async () => {}}
-        onReclaim={onReclaim}
-        isWinner={false}
-      />,
-    );
-
-    fireEvent.click(screen.getByTestId(SELECTORS.claimButton.reclaimButton));
-
-    await waitFor(() => {
-      const status = screen.queryByText("Reclaimed");
-      expect(status).not.toBeNull();
-    });
-  });
-
-  // ── 11-7: Winner reclaim button is disabled ───────────────────────────────
-
-  it("winner: reclaim button is disabled", () => {
-    render(
-      <ClaimButton
-        onClaim={async () => {}}
-        onReclaim={async () => {}}
-        isWinner={true}
-      />,
-    );
-
-    const reclaimBtn = screen.getByTestId(SELECTORS.claimButton.reclaimButton);
-    expect((reclaimBtn as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  // ── 11-8: Claim error surfaces in status text ─────────────────────────────
-
-  it("winner: onClaim rejection surfaces error message in status", async () => {
-    const onClaim = vi.fn().mockRejectedValue(new Error("Move abort: E_NOT_WINNER"));
-    const onReclaim = vi.fn().mockResolvedValue(undefined);
-
-    render(
-      <ClaimButton onClaim={onClaim} onReclaim={onReclaim} isWinner={true} />,
-    );
-
-    fireEvent.click(screen.getByTestId(SELECTORS.claimButton.claimButton));
-
-    await waitFor(() => {
-      const statusEl = screen.queryByText(/Error: Move abort: E_NOT_WINNER/);
-      expect(statusEl).not.toBeNull();
-    });
-  });
-
-  // ── 11-9: Reclaim error surfaces in status text ───────────────────────────
-
-  it("loser: onReclaim rejection surfaces error message in status", async () => {
-    const onReclaim = vi.fn().mockRejectedValue(new Error("Move abort: E_ALREADY_CLAIMED"));
-    const onClaim = vi.fn().mockResolvedValue(undefined);
-
-    render(
-      <ClaimButton onClaim={onClaim} onReclaim={onReclaim} isWinner={false} />,
-    );
-
-    fireEvent.click(screen.getByTestId(SELECTORS.claimButton.reclaimButton));
-
-    await waitFor(() => {
-      const statusEl = screen.queryByText(/Error: Move abort: E_ALREADY_CLAIMED/);
-      expect(statusEl).not.toBeNull();
-    });
-  });
-
-  // ── 11-10: Disabled prop disables both buttons ────────────────────────────
-
-  it("disabled prop disables both claim and reclaim buttons regardless of isWinner", () => {
-    render(
-      <ClaimButton
-        onClaim={async () => {}}
-        onReclaim={async () => {}}
-        isWinner={true}
-        disabled={true}
-      />,
-    );
 
     const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
     const reclaimBtn = screen.getByTestId(SELECTORS.claimButton.reclaimButton);
     expect((claimBtn as HTMLButtonElement).disabled).toBe(true);
     expect((reclaimBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  // ── 11-2: Winner can claim ─────────────────────────────────────────────
+
+  it("winner: claim button enabled, click triggers mint, status shows 'Claimed'", async () => {
+    mockIsSettled.mockResolvedValue(true);
+    mockGetSettlement.mockResolvedValue({
+      winner: MOCK_DERIVED_ADDR,
+      clearingPrice: 200_000_000n,
+    });
+    mockSubmitClaim.mockResolvedValue({ hash: "0xtxhash" } as never);
+    mockGetFakeEthBalance
+      .mockResolvedValueOnce(0n)
+      .mockResolvedValueOnce(200_000_000n);
+
+    render(<ClaimButton sellerAddress={SELLER_ADDR} />);
+
+    await waitFor(() => {
+      const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
+      expect((claimBtn as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    fireEvent.click(screen.getByTestId(SELECTORS.claimButton.claimButton));
+
+    await waitFor(() => {
+      const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
+      expect(status.textContent).toBe("Claimed");
+    });
+
+    expect(mockSubmitClaim).toHaveBeenCalledWith("0xdeadbeef", 200_000_000n);
+  });
+
+  // ── 11-3: Non-winner claim disabled ────────────────────────────────────
+
+  it("non-winner: claim button disabled, status shows 'not the winner'", async () => {
+    mockIsSettled.mockResolvedValue(true);
+    mockGetSettlement.mockResolvedValue({
+      winner: "0xsomeoneelse",
+      clearingPrice: 100n,
+    });
+
+    render(<ClaimButton sellerAddress={SELLER_ADDR} />);
+
+    await waitFor(() => {
+      const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
+      expect(status.textContent).toContain("not the auction winner");
+    });
+
+    const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
+    expect((claimBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  // ── 11-4: Claim error surfaces in status ───────────────────────────────
+
+  it("claim error: error message displayed in status text", async () => {
+    mockIsSettled.mockResolvedValue(true);
+    mockGetSettlement.mockResolvedValue({
+      winner: MOCK_DERIVED_ADDR,
+      clearingPrice: 100n,
+    });
+    mockSubmitClaim.mockRejectedValue(new Error("Move abort: E_EXCEEDS_MAX_MINT"));
+    mockGetFakeEthBalance.mockResolvedValue(0n);
+
+    render(<ClaimButton sellerAddress={SELLER_ADDR} />);
+
+    await waitFor(() => {
+      const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
+      expect((claimBtn as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    fireEvent.click(screen.getByTestId(SELECTORS.claimButton.claimButton));
+
+    await waitFor(() => {
+      const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
+      expect(status.textContent).toContain("Error: Move abort: E_EXCEEDS_MAX_MINT");
+    });
+  });
+
+  // ── 11-5: Reclaim always disabled in Demo ──────────────────────────────
+
+  it("reclaim button is always disabled and shows 'Not applicable (Demo)'", async () => {
+    mockIsSettled.mockResolvedValue(true);
+    mockGetSettlement.mockResolvedValue({
+      winner: MOCK_DERIVED_ADDR,
+      clearingPrice: 100n,
+    });
+
+    render(<ClaimButton sellerAddress={SELLER_ADDR} />);
+
+    const reclaimBtn = screen.getByTestId(SELECTORS.claimButton.reclaimButton);
+    expect((reclaimBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(reclaimBtn.textContent).toBe("Not applicable (Demo)");
+  });
+
+  // ── 11-6: Winner sees claimed amount after successful claim ────────────
+
+  it("winner: after successful claim, displays the amount received", async () => {
+    mockIsSettled.mockResolvedValue(true);
+    mockGetSettlement.mockResolvedValue({
+      winner: MOCK_DERIVED_ADDR,
+      clearingPrice: 500_000_000n,
+    });
+    mockSubmitClaim.mockResolvedValue({ hash: "0xtx" } as never);
+    mockGetFakeEthBalance
+      .mockResolvedValueOnce(100_000_000n)
+      .mockResolvedValueOnce(600_000_000n);
+
+    render(<ClaimButton sellerAddress={SELLER_ADDR} />);
+
+    await waitFor(() => {
+      const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
+      expect((claimBtn as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    fireEvent.click(screen.getByTestId(SELECTORS.claimButton.claimButton));
+
+    await waitFor(() => {
+      const amountEl = screen.getByTestId(SELECTORS.claimButton.claimAmount);
+      expect(amountEl.textContent).toContain("5.00000000 FAKEETH");
+    });
+  });
+
+  // ── 11-7: Claim button disabled after successful claim ─────────────────
+
+  it("winner: claim button shows 'Claimed' and is disabled after successful claim", async () => {
+    mockIsSettled.mockResolvedValue(true);
+    mockGetSettlement.mockResolvedValue({
+      winner: MOCK_DERIVED_ADDR,
+      clearingPrice: 100n,
+    });
+    mockSubmitClaim.mockResolvedValue({ hash: "0xtx" } as never);
+    mockGetFakeEthBalance
+      .mockResolvedValueOnce(0n)
+      .mockResolvedValueOnce(100n);
+
+    render(<ClaimButton sellerAddress={SELLER_ADDR} />);
+
+    await waitFor(() => {
+      const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
+      expect((claimBtn as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    fireEvent.click(screen.getByTestId(SELECTORS.claimButton.claimButton));
+
+    await waitFor(() => {
+      const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
+      expect(claimBtn.textContent).toBe("Claimed");
+      expect((claimBtn as HTMLButtonElement).disabled).toBe(true);
+    });
   });
 });

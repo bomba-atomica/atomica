@@ -147,4 +147,76 @@ export function getBidPayload(sellerAddr, amountUsd, _u, _v) {
 export async function submitBid(ethAddress, sellerAddr, amountUsd, u, v) {
     return await submitNativeTransaction(aptos, ethAddress, getBidPayload(sellerAddr, amountUsd, u, v));
 }
+export function getSettlePayload(sellerAddr) {
+    return {
+        function: `${CONTRACT_ADDR}::auction::settle`,
+        functionArguments: [sellerAddr],
+    };
+}
+export async function submitSettle(ethAddress, sellerAddr) {
+    return await submitNativeTransaction(aptos, ethAddress, getSettlePayload(sellerAddr));
+}
+/**
+ * Query `auction::is_settled` view function.
+ * Returns true if the auction for the given seller has been settled.
+ */
+export async function isSettled(sellerAddr) {
+    const result = await aptos.view({
+        payload: {
+            function: `${CONTRACT_ADDR}::auction::is_settled`,
+            functionArguments: [sellerAddr],
+        },
+    });
+    return result[0];
+}
+/**
+ * Query `auction::get_settlement` view function.
+ * Returns { winner, clearingPrice } after settlement.
+ * winner == "0x0" means no valid bid was found.
+ */
+export async function getSettlement(sellerAddr) {
+    const result = await aptos.view({
+        payload: {
+            function: `${CONTRACT_ADDR}::auction::get_settlement`,
+            functionArguments: [sellerAddr],
+        },
+    });
+    return {
+        winner: result[0],
+        clearingPrice: BigInt(result[1]),
+    };
+}
+/**
+ * Build payload for fake_eth::mint (Demo-phase winner payout).
+ *
+ * Entry function: mint(account: &signer, amount: u64)
+ * In Demo phase, `mint` is a public faucet anyone can call. It mints FakeETH
+ * to the signer's own Aptos account. The winner calls this directly via SIWE
+ * to self-mint the payout amount.
+ */
+export function getClaimMintPayload(amount) {
+    return {
+        function: `${CONTRACT_ADDR}::fake_eth::mint`,
+        functionArguments: [amount],
+    };
+}
+/**
+ * Submit a Demo-phase claim: the winner self-mints FakeETH via SIWE.
+ */
+export async function submitClaim(ethAddress, amount) {
+    return await submitNativeTransaction(aptos, ethAddress, getClaimMintPayload(amount));
+}
+/**
+ * Query `fake_eth::balance` view function.
+ * Returns the FakeETH FA balance for the given Aptos address.
+ */
+export async function getFakeEthBalance(ownerAddr) {
+    const result = await aptos.view({
+        payload: {
+            function: `${CONTRACT_ADDR}::fake_eth::balance`,
+            functionArguments: [ownerAddr],
+        },
+    });
+    return BigInt(result[0]);
+}
 //# sourceMappingURL=payloads.js.map

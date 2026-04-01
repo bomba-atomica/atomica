@@ -81,6 +81,9 @@ export const SELECTORS = {
   claimButton: {
     claimButton: "claim-button",
     reclaimButton: "reclaim-button",
+    claimStatus: "claim-status",
+    claimResult: "claim-result",
+    claimAmount: "claim-amount",
   },
 
   // FeeRebateDisplay

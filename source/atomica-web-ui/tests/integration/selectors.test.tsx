@@ -291,7 +291,9 @@ describe("Selector contract — data-testid attributes", () => {
 
   it("ClaimButton: claim-button is present", () => {
     render(
-      <ClaimButton onClaim={async () => {}} onReclaim={async () => {}} />,
+      <MinimalProviders>
+        <ClaimButton sellerAddress="0xdeadbeef" />
+      </MinimalProviders>,
     );
     expect(
       screen.getByTestId(SELECTORS.claimButton.claimButton),
@@ -300,7 +302,9 @@ describe("Selector contract — data-testid attributes", () => {
 
   it("ClaimButton: reclaim-button is present", () => {
     render(
-      <ClaimButton onClaim={async () => {}} onReclaim={async () => {}} />,
+      <MinimalProviders>
+        <ClaimButton sellerAddress="0xdeadbeef" />
+      </MinimalProviders>,
     );
     expect(
       screen.getByTestId(SELECTORS.claimButton.reclaimButton),
