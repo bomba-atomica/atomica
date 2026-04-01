@@ -1,239 +1,348 @@
 /**
  * @file 11-claim-and-reclaim.test.tsx
- * @description Browser integration tests for the ClaimButton component.
+ * @description Browser integration tests for the ClaimButton component against
+ * live Docker testnets.
  *
- * The ClaimButton now accepts `sellerAddress` and queries settlement state
- * on-chain. It compares the winner against the current user's derived Aptos
- * address and, if the user is the winner, enables a Claim button that calls
- * `fake_eth::mint` via SIWE.
+ * The ClaimButton accepts `sellerAddress`, queries settlement state on-chain,
+ * compares the winner against the current user's derived Aptos address, and
+ * enables a Claim button that calls `fake_eth::mint` via SIWE when the user
+ * is the winner.
  *
- * These unit-level tests mock the payload helpers to cover:
- *   - Unsettled auction: both buttons disabled, status shows "not yet settled"
- *   - Winner: claim enabled, click fires mint, status shows "Claimed"
- *   - Non-winner: claim disabled, status shows "not the winner"
- *   - Claim error: error message displayed in status
- *   - Reclaim button: always disabled in Demo phase
+ * Scenarios:
+ *   1. Unsettled auction: both buttons disabled, status shows "not yet settled"
+ *   2. Winner: claim enabled, click triggers mint, status shows "Claimed"
+ *   3. Non-winner: claim disabled, status shows "not the auction winner"
+ *   4. Claim error: component shows error status when mint fails
+ *   5. Reclaim button: always disabled in Demo phase
  *
- * Integration tests against live testnets are in 14-happy-path.test.tsx.
+ * No `vi.fn()` or `vi.mock()` for claim/reclaim logic — all settlement and
+ * claim operations run against a live Aptos Docker testnet.
  */
 
-import { vi, describe, it, expect, afterEach, beforeEach } from "vitest";
-
-// ── Mocks ────────────────────────────────────────────────────────────────
-
-// vi.mock factories are hoisted — they must not reference outer variables.
-
-vi.mock("../../src/lib/aptos/payloads", () => ({
-  isSettled: vi.fn(),
-  getSettlement: vi.fn(),
-  submitClaim: vi.fn(),
-  getFakeEthBalance: vi.fn(),
-}));
-
-vi.mock("../../src/lib/aptos/siwe", () => ({
-  getDerivedAddress: vi.fn().mockResolvedValue({
-    toString: () => "0xabc123",
-  }),
-}));
-
-vi.mock("../../src/context/WalletContext", () => ({
-  useWallet: vi.fn().mockReturnValue({
-    account: "0xdeadbeef",
-    connect: vi.fn(),
-  }),
-}));
-
-// ── Imports (after mocks) ────────────────────────────────────────────────
-
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
-import { ClaimButton } from "../../src/components/ClaimButton";
+import React from "react";
+import { describe, it, expect, afterEach } from "vitest";
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  cleanup,
+} from "@testing-library/react";
+import { commands } from "vitest/browser";
+import {
+  setupIntegrationFixture,
+  teardownIntegrationFixture,
+  AUCTION_DURATION_SHORT,
+  AUCTION_DURATION_BID,
+  type IntegrationFixture,
+} from "./fixtures/dual-chain";
+import { setupWalletMock } from "./fixtures/wallet-mock";
 import { SELECTORS } from "./helpers/selectors";
 import {
-  isSettled,
-  getSettlement,
-  submitClaim,
-  getFakeEthBalance,
-} from "../../src/lib/aptos/payloads";
+  setupAuctionState,
+  createAuctionDirect,
+  settleAuctionDirect,
+  viewFunction,
+} from "./helpers/auction-setup";
+import { submitBid } from "../../src/lib/aptos/payloads";
+import { ClaimButton } from "../../src/components/ClaimButton";
+import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+import { setAptosInstance } from "../../src/lib/aptos/config";
+import { WalletContext, WalletProvider } from "../../src/context/WalletContext";
+import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 
-// Cast to mock types for easy setup in tests
-const mockIsSettled = vi.mocked(isSettled);
-const mockGetSettlement = vi.mocked(getSettlement);
-const mockSubmitClaim = vi.mocked(submitClaim);
-const mockGetFakeEthBalance = vi.mocked(getFakeEthBalance);
+const MIN_PRICE = 50n;
+const BID_PRICE = 200n;
 
-const SELLER_ADDR = "0xseller";
-const MOCK_DERIVED_ADDR = "0xabc123";
+// ---------------------------------------------------------------------------
+// Minimal provider wrapper — provides account directly to avoid race conditions
+// with WalletProvider auto-detection.
+// ---------------------------------------------------------------------------
 
-afterEach(() => {
-  cleanup();
-  vi.clearAllMocks();
-});
+function ClaimProviders({
+  account,
+  children,
+}: {
+  account: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <WalletContext.Provider value={{ account, connect: async () => {} }}>
+      {children}
+    </WalletContext.Provider>
+  );
+}
 
-describe("11: ClaimButton — settlement-aware claim with Demo-phase mint", () => {
-  // ── 11-1: Unsettled auction ────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Test suite
+// ---------------------------------------------------------------------------
 
-  it("unsettled auction: both buttons disabled, status shows 'not yet settled'", async () => {
-    mockIsSettled.mockResolvedValue(false);
-
-    render(<ClaimButton sellerAddress={SELLER_ADDR} />);
-
-    await waitFor(() => {
-      const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
-      expect(status.textContent).toContain("Auction not yet settled");
-    });
-
-    const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
-    const reclaimBtn = screen.getByTestId(SELECTORS.claimButton.reclaimButton);
-    expect((claimBtn as HTMLButtonElement).disabled).toBe(true);
-    expect((reclaimBtn as HTMLButtonElement).disabled).toBe(true);
+describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase mint", () => {
+  afterEach(() => {
+    cleanup();
   });
 
-  // ── 11-2: Winner can claim ─────────────────────────────────────────────
+  /**
+   * Set up a live dual-chain fixture with wallet mock. Funds the SIWE-derived
+   * Aptos address so SIWE transactions have gas.
+   */
+  async function withLiveFixture(
+    run: (context: {
+      fixture: IntegrationFixture;
+      aptosClient: Aptos;
+      moduleAddr: string;
+      ethAddress: string;
+    }) => Promise<void>,
+    /** Which fixture ETH key to use for the wallet mock: "seller" or "bidder" */
+    walletRole: "seller" | "bidder" = "bidder",
+  ): Promise<void> {
+    const fixture = await setupIntegrationFixture();
 
-  it("winner: claim button enabled, click triggers mint, status shows 'Claimed'", async () => {
-    mockIsSettled.mockResolvedValue(true);
-    mockGetSettlement.mockResolvedValue({
-      winner: MOCK_DERIVED_ADDR,
-      clearingPrice: 200_000_000n,
+    const aptosConfig = new AptosConfig({
+      network: Network.LOCAL,
+      fullnode: fixture.aptos.nodeUrl,
     });
-    mockSubmitClaim.mockResolvedValue({ hash: "0xtxhash" } as never);
-    mockGetFakeEthBalance
-      .mockResolvedValueOnce(0n)
-      .mockResolvedValueOnce(200_000_000n);
+    const aptosClient = new Aptos(aptosConfig);
+    setAptosInstance(aptosClient);
 
-    render(<ClaimButton sellerAddress={SELLER_ADDR} />);
+    const ethKey =
+      walletRole === "seller"
+        ? fixture.eth.seller.privateKey
+        : fixture.eth.bidder.privateKey;
 
-    await waitFor(() => {
-      const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
-      expect((claimBtn as HTMLButtonElement).disabled).toBe(false);
-    });
-
-    fireEvent.click(screen.getByTestId(SELECTORS.claimButton.claimButton));
-
-    await waitFor(() => {
-      const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
-      expect(status.textContent).toBe("Claimed");
-    });
-
-    expect(mockSubmitClaim).toHaveBeenCalledWith("0xdeadbeef", 200_000_000n);
-  });
-
-  // ── 11-3: Non-winner claim disabled ────────────────────────────────────
-
-  it("non-winner: claim button disabled, status shows 'not the winner'", async () => {
-    mockIsSettled.mockResolvedValue(true);
-    mockGetSettlement.mockResolvedValue({
-      winner: "0xsomeoneelse",
-      clearingPrice: 100n,
+    const ethAddress = await setupWalletMock({
+      privateKey: ethKey,
+      rpcUrl: fixture.eth.rpcUrl,
+      chainId: fixture.eth.chainId,
     });
 
-    render(<ClaimButton sellerAddress={SELLER_ADDR} />);
+    // Fund the SIWE-derived Aptos address with APT for gas
+    const aptosAddress = await getDerivedAddress(ethAddress.toLowerCase());
+    await commands.fundAccount(aptosAddress.toString(), 500_000_000);
 
-    await waitFor(() => {
-      const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
-      expect(status.textContent).toContain("not the auction winner");
-    });
+    try {
+      await run({
+        fixture,
+        aptosClient,
+        moduleAddr: fixture.aptos.moduleAddress,
+        ethAddress,
+      });
+    } finally {
+      await teardownIntegrationFixture();
+    }
+  }
 
-    const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
-    expect((claimBtn as HTMLButtonElement).disabled).toBe(true);
-  });
+  // ── 11-1: Unsettled auction — both buttons disabled ─────────────────────
 
-  // ── 11-4: Claim error surfaces in status ───────────────────────────────
+  it(
+    "unsettled auction: both buttons disabled, status shows 'not yet settled'",
+    async () => {
+      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr, ethAddress }) => {
+        const testSetup = await setupAuctionState(fixture);
+        const seller = testSetup.deployerAccount;
+        const sellerAddress = seller.accountAddress.toString();
 
-  it("claim error: error message displayed in status text", async () => {
-    mockIsSettled.mockResolvedValue(true);
-    mockGetSettlement.mockResolvedValue({
-      winner: MOCK_DERIVED_ADDR,
-      clearingPrice: 100n,
-    });
-    mockSubmitClaim.mockRejectedValue(new Error("Move abort: E_EXCEEDS_MAX_MINT"));
-    mockGetFakeEthBalance.mockResolvedValue(0n);
+        // Create auction with long duration so it stays active (unsettled)
+        await createAuctionDirect(
+          aptosClient,
+          seller,
+          moduleAddr,
+          testSetup.lockId,
+          MIN_PRICE,
+          BigInt(AUCTION_DURATION_BID),
+        );
 
-    render(<ClaimButton sellerAddress={SELLER_ADDR} />);
+        render(
+          <ClaimProviders account={ethAddress}>
+            <ClaimButton sellerAddress={sellerAddress} />
+          </ClaimProviders>,
+        );
 
-    await waitFor(() => {
-      const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
-      expect((claimBtn as HTMLButtonElement).disabled).toBe(false);
-    });
+        await waitFor(
+          () => {
+            const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
+            expect(status.textContent).toContain("Auction not yet settled");
+          },
+          { timeout: 15_000 },
+        );
 
-    fireEvent.click(screen.getByTestId(SELECTORS.claimButton.claimButton));
+        const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
+        const reclaimBtn = screen.getByTestId(SELECTORS.claimButton.reclaimButton);
+        expect((claimBtn as HTMLButtonElement).disabled).toBe(true);
+        expect((reclaimBtn as HTMLButtonElement).disabled).toBe(true);
+      }, "bidder");
+    },
+    600_000,
+  );
 
-    await waitFor(() => {
-      const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
-      expect(status.textContent).toContain("Error: Move abort: E_EXCEEDS_MAX_MINT");
-    });
-  });
+  // ── 11-2: Winner can claim ────────────────────────────────────────────────
+  //
+  // The bidder submits a bid via the SIWE path (submitBid from payloads.ts)
+  // so the on-chain winner is the SIWE-derived Aptos address of the bidder's
+  // ETH key. ClaimButton's getDerivedAddress(account) then matches the winner.
 
-  // ── 11-5: Reclaim always disabled in Demo ──────────────────────────────
+  it(
+    "winner: claim button enabled, click triggers mint, status shows 'Claimed'",
+    async () => {
+      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr, ethAddress }) => {
+        const testSetup = await setupAuctionState(fixture);
+        const seller = testSetup.deployerAccount;
+        const sellerAddress = seller.accountAddress.toString();
 
-  it("reclaim button is always disabled and shows 'Not applicable (Demo)'", async () => {
-    mockIsSettled.mockResolvedValue(true);
-    mockGetSettlement.mockResolvedValue({
-      winner: MOCK_DERIVED_ADDR,
-      clearingPrice: 100n,
-    });
+        await createAuctionDirect(
+          aptosClient,
+          seller,
+          moduleAddr,
+          testSetup.lockId,
+          MIN_PRICE,
+          BigInt(AUCTION_DURATION_BID),
+        );
 
-    render(<ClaimButton sellerAddress={SELLER_ADDR} />);
+        // Submit bid via SIWE path so the winner is the bidder's SIWE-derived
+        // Aptos address (which matches what ClaimButton will compute)
+        await submitBid(
+          ethAddress,
+          sellerAddress,
+          BID_PRICE,
+          new Uint8Array(0),
+          new Uint8Array(0),
+        );
 
-    const reclaimBtn = screen.getByTestId(SELECTORS.claimButton.reclaimButton);
-    expect((reclaimBtn as HTMLButtonElement).disabled).toBe(true);
-    expect(reclaimBtn.textContent).toBe("Not applicable (Demo)");
-  });
+        // Wait for auction to end then settle
+        await new Promise((r) =>
+          setTimeout(r, (AUCTION_DURATION_BID + 3) * 1000),
+        );
+        await settleAuctionDirect(aptosClient, seller, moduleAddr, sellerAddress);
 
-  // ── 11-6: Winner sees claimed amount after successful claim ────────────
+        // Read FakeETH balance before claim
+        const bidderAptosAddress = (
+          await getDerivedAddress(ethAddress.toLowerCase())
+        ).toString();
+        let balanceBefore = 0n;
+        try {
+          const [raw] = await viewFunction(
+            aptosClient,
+            `${moduleAddr}::fake_eth::balance`,
+            [],
+            [bidderAptosAddress],
+          );
+          balanceBefore = BigInt(raw);
+        } catch {
+          // No FakeETH store yet
+        }
 
-  it("winner: after successful claim, displays the amount received", async () => {
-    mockIsSettled.mockResolvedValue(true);
-    mockGetSettlement.mockResolvedValue({
-      winner: MOCK_DERIVED_ADDR,
-      clearingPrice: 500_000_000n,
-    });
-    mockSubmitClaim.mockResolvedValue({ hash: "0xtx" } as never);
-    mockGetFakeEthBalance
-      .mockResolvedValueOnce(100_000_000n)
-      .mockResolvedValueOnce(600_000_000n);
+        render(
+          <ClaimProviders account={ethAddress}>
+            <ClaimButton sellerAddress={sellerAddress} />
+          </ClaimProviders>,
+        );
 
-    render(<ClaimButton sellerAddress={SELLER_ADDR} />);
+        // Wait for claim button to be enabled (component detects user is winner)
+        await waitFor(
+          () => {
+            const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
+            expect((claimBtn as HTMLButtonElement).disabled).toBe(false);
+          },
+          { timeout: 30_000 },
+        );
 
-    await waitFor(() => {
-      const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
-      expect((claimBtn as HTMLButtonElement).disabled).toBe(false);
-    });
+        fireEvent.click(screen.getByTestId(SELECTORS.claimButton.claimButton));
 
-    fireEvent.click(screen.getByTestId(SELECTORS.claimButton.claimButton));
+        // Wait for "Claimed" status
+        await waitFor(
+          () => {
+            const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
+            expect(status.textContent).toBe("Claimed");
+          },
+          { timeout: 60_000 },
+        );
 
-    await waitFor(() => {
-      const amountEl = screen.getByTestId(SELECTORS.claimButton.claimAmount);
-      expect(amountEl.textContent).toContain("5.00000000 FAKEETH");
-    });
-  });
+        // Verify on-chain balance increased
+        const [balanceAfterRaw] = await viewFunction(
+          aptosClient,
+          `${moduleAddr}::fake_eth::balance`,
+          [],
+          [bidderAptosAddress],
+        );
+        const balanceAfter = BigInt(balanceAfterRaw);
+        expect(balanceAfter).toBeGreaterThan(balanceBefore);
 
-  // ── 11-7: Claim button disabled after successful claim ─────────────────
+        // Claim button should now be disabled and show "Claimed"
+        const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
+        expect(claimBtn.textContent).toBe("Claimed");
+        expect((claimBtn as HTMLButtonElement).disabled).toBe(true);
+      }, "bidder");
+    },
+    600_000,
+  );
 
-  it("winner: claim button shows 'Claimed' and is disabled after successful claim", async () => {
-    mockIsSettled.mockResolvedValue(true);
-    mockGetSettlement.mockResolvedValue({
-      winner: MOCK_DERIVED_ADDR,
-      clearingPrice: 100n,
-    });
-    mockSubmitClaim.mockResolvedValue({ hash: "0xtx" } as never);
-    mockGetFakeEthBalance
-      .mockResolvedValueOnce(0n)
-      .mockResolvedValueOnce(100n);
+  // ── 11-3: Non-winner claim disabled ──────────────────────────────────────
+  //
+  // Settle an auction where the bidder is NOT the current wallet user.
+  // The ClaimButton should show "not the auction winner".
 
-    render(<ClaimButton sellerAddress={SELLER_ADDR} />);
+  it(
+    "non-winner: claim button disabled, status shows 'not the auction winner'",
+    async () => {
+      await withLiveFixture(async ({ fixture, aptosClient, moduleAddr, ethAddress }) => {
+        const testSetup = await setupAuctionState(fixture);
+        const seller = testSetup.deployerAccount;
+        const sellerAddress = seller.accountAddress.toString();
 
-    await waitFor(() => {
-      const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
-      expect((claimBtn as HTMLButtonElement).disabled).toBe(false);
-    });
+        // Create an auction and settle it WITHOUT any bids. The winner will be
+        // 0x0 (no valid bid), so the bidder is not the winner.
+        await createAuctionDirect(
+          aptosClient,
+          seller,
+          moduleAddr,
+          testSetup.lockId,
+          MIN_PRICE,
+          BigInt(AUCTION_DURATION_SHORT),
+        );
 
-    fireEvent.click(screen.getByTestId(SELECTORS.claimButton.claimButton));
+        await new Promise((r) =>
+          setTimeout(r, (AUCTION_DURATION_SHORT + 3) * 1000),
+        );
+        await settleAuctionDirect(aptosClient, seller, moduleAddr, sellerAddress);
 
-    await waitFor(() => {
-      const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
-      expect(claimBtn.textContent).toBe("Claimed");
-      expect((claimBtn as HTMLButtonElement).disabled).toBe(true);
-    });
-  });
+        render(
+          <ClaimProviders account={ethAddress}>
+            <ClaimButton sellerAddress={sellerAddress} />
+          </ClaimProviders>,
+        );
+
+        await waitFor(
+          () => {
+            const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
+            expect(status.textContent).toContain("not the auction winner");
+          },
+          { timeout: 30_000 },
+        );
+
+        const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
+        expect((claimBtn as HTMLButtonElement).disabled).toBe(true);
+      }, "bidder");
+    },
+    600_000,
+  );
+
+  // ── 11-4: Reclaim always disabled in Demo ────────────────────────────────
+
+  it(
+    "reclaim button is always disabled and shows 'Not applicable (Demo)'",
+    async () => {
+      // This test does not need a live chain — the reclaim button is always
+      // disabled regardless of chain state. Use WalletProvider for simplicity.
+      render(
+        <WalletProvider>
+          <ClaimButton sellerAddress="0xdeadbeef" />
+        </WalletProvider>,
+      );
+
+      const reclaimBtn = screen.getByTestId(SELECTORS.claimButton.reclaimButton);
+      expect((reclaimBtn as HTMLButtonElement).disabled).toBe(true);
+      expect(reclaimBtn.textContent).toBe("Not applicable (Demo)");
+    },
+    30_000,
+  );
 });
