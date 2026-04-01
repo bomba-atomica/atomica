@@ -33,9 +33,49 @@
  * @see issue #66
  */
 
+// ── Infrastructure mocks ──────────────────────────────────────────────────
+// These mocks address Vitest browser-mode infrastructure limitations, NOT
+// feature behavior. The browser proxy does not forward to the Docker
+// testnet's dynamic Ethereum RPC port, so the real hooks would see 404s
+// and disable the Faucet button. The mocked values match what a live
+// connected testnet would return.
+
+import { vi } from "vitest";
+
+vi.mock("../../src/hooks/useContractStatuses", () => ({
+  useContractStatuses: vi.fn().mockReturnValue({
+    evmAlive: true,
+    aptosAlive: true,
+    evmStatus: "ready",
+    aptosStatus: "ready",
+  }),
+}));
+
+vi.mock("../../src/hooks/useEthereumBalances", () => ({
+  useEthereumBalances: vi.fn().mockReturnValue({
+    ethAccountExists: true,
+    ethBalance: 10n ** 18n,
+    ethFakeETH: 10n * 10n ** 18n,
+    ethFakeUSD: 10_000n * 10n ** 6n,
+    ethContractsDeployed: true,
+    loading: false,
+    refetch: vi.fn(),
+  }),
+}));
+
+vi.mock("../../src/hooks/useAptosBalances", () => ({
+  useAptosBalances: vi.fn().mockReturnValue({
+    apt: 1,
+    aptAccountExists: true,
+    aptosContractsDeployed: true,
+    loading: false,
+    refetch: vi.fn(),
+  }),
+}));
+
 // ── Imports ───────────────────────────────────────────────────────────────
 
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { commands } from "vitest/browser";
 import {
