@@ -9,7 +9,7 @@
  *   )
  *   auction::create_auction(lock_id, min_price, duration, mpk)
  *
- * Note: getMintFakeEthPayload removed — fake tokens mint on Ethereum, not Aptos.
+ * Note: Aptos-side fake token mint payload removed — fake tokens mint on Ethereum.
  */
 
 import { describe, it, expect, vi } from "vitest";
