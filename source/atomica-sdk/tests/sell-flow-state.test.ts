@@ -168,21 +168,25 @@ describe("useSellFlow state machine", () => {
 
   // ── Blockchain-dependent transitions (stubbed, pending infra) ────────────
 
-  it.todo(
-    "lockEth: transitions connect → lock → confirming after approve + lock tx",
+  it.skip(
+    "lockEth: transitions connect → lock → confirming after approve + lock tx — tracked in #89",
   );
-  it.todo(
-    "generateProof: transitions confirming → generating-proof → submitting-proof",
+  it.skip(
+    "generateProof: transitions confirming → generating-proof → submitting-proof — tracked in #89",
   );
-  it.todo(
-    "submitProof: transitions submitting-proof → creating-auction after Aptos tx",
+  it.skip(
+    "submitProof: transitions submitting-proof → creating-auction after Aptos tx — tracked in #89",
   );
-  it.todo(
-    "createAuction: transitions creating-auction → monitoring after Aptos tx",
+  it.skip(
+    "createAuction: transitions creating-auction → monitoring after Aptos tx — tracked in #89",
   );
-  it.todo("cancelAndUnlock: calls withdrawFakeEth and resets flow");
-  it.todo("lockEth error: sets error message and stays at current step");
-  it.todo(
-    "submitProof error: sets error message and stays at submitting-proof",
+  it.skip(
+    "cancelAndUnlock: calls withdrawFakeEth and resets flow — tracked in #89",
+  );
+  it.skip(
+    "lockEth error: sets error message and stays at current step — tracked in #89",
+  );
+  it.skip(
+    "submitProof error: sets error message and stays at submitting-proof — tracked in #89",
   );
 });

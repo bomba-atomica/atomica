@@ -30,8 +30,6 @@ export {
     CONTRACT_ADDR,
     testSimpleAPTTransfer,
     requestAPT,
-    getMintFakeEthPayload,
-    getMintFakeUsdPayload,
     requestTestTokens,
     areContractsDeployed,
     submitFaucet,

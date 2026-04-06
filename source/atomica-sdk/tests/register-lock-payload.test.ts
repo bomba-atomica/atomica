@@ -1,6 +1,5 @@
 /**
- * Unit tests for getRegisterLockPayload, getMintFakeEthPayload, and
- * getCreateAuctionPayload.
+ * Unit tests for getRegisterLockPayload and getCreateAuctionPayload.
  *
  * Verifies parameter order and types match the Move entry function signatures:
  *   lock_receipt::register_ethereum_lock<FakeETH>(
@@ -8,8 +7,9 @@
  *     contract_address, user_address, token_address, storage_key,
  *     storage_value, account_proof, storage_proof
  *   )
- *   fake_eth::mint_from_lock(account, lock_id)
  *   auction::create_auction(lock_id, min_price, duration, mpk)
+ *
+ * Note: getMintFakeEthPayload removed — fake tokens mint on Ethereum, not Aptos.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -31,7 +31,6 @@ vi.mock("../../src/lib/aptos/transaction", () => ({
 
 import {
   getRegisterLockPayload,
-  getMintFakeEthPayload,
   getCreateAuctionPayload,
 } from "../../src/lib/aptos/payloads";
 import type { LockedBalanceProof } from "../../src/lib/ethereum/proofs/generator";
@@ -165,29 +164,6 @@ describe("getRegisterLockPayload", () => {
     const p2 = getRegisterLockPayload(proof) as InputEntryFunctionData;
     expect(p1.function).toBe(p2.function);
     expect(p1.functionArguments![0]).toBe(p2.functionArguments![0]);
-  });
-});
-
-// ── getMintFakeEthPayload ─────────────────────────────────────────────────────
-
-describe("getMintFakeEthPayload", () => {
-  it("targets fake_eth::mint_from_lock", () => {
-    const lockId = new Uint8Array(32).fill(0xab);
-    const payload = getMintFakeEthPayload(lockId) as InputEntryFunctionData;
-    expect(payload.function).toContain("::fake_eth::mint_from_lock");
-  });
-
-  it("passes lock_id as the sole argument", () => {
-    const lockId = new Uint8Array(32).fill(0xab);
-    const payload = getMintFakeEthPayload(lockId);
-    expect(payload.functionArguments!.length).toBe(1);
-    expect(payload.functionArguments![0]).toBe(lockId);
-  });
-
-  it("does not add type arguments", () => {
-    const lockId = new Uint8Array(32).fill(0xab);
-    const payload = getMintFakeEthPayload(lockId);
-    expect(payload.typeArguments).toBeUndefined();
   });
 });
 

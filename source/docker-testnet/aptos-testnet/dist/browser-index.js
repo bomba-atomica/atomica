@@ -11,7 +11,7 @@
  */
 export { Aptos, AptosConfig, Network, } from "@aptos-labs/ts-sdk";
 export { constructSIWEMessage, getDerivedAddress, calculateAbstractDigest, serializeSIWEAbstractSignature, serializeSIWEAbstractPublicKey, SIWEAccountAuthenticator, } from "./siwe.js";
-export { CONTRACT_ADDR, testSimpleAPTTransfer, requestAPT, getMintFakeEthPayload, getMintFakeUsdPayload, requestTestTokens, areContractsDeployed, submitFaucet, getCreateAuctionPayload, submitCreateAuction, getBidPayload, submitBid, } from "./payloads.js";
+export { CONTRACT_ADDR, testSimpleAPTTransfer, requestAPT, requestTestTokens, areContractsDeployed, submitFaucet, getCreateAuctionPayload, submitCreateAuction, getBidPayload, submitBid, } from "./payloads.js";
 export { prepareNativeTransaction, simulateNativeTransaction, submitPreparedTransaction, submitNativeTransaction, } from "./transaction.js";
 export { aptos, setAptosInstance } from "./config.js";
 export { MockWallet } from "./browser-utils/MockWallet.js";
