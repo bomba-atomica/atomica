@@ -90,9 +90,7 @@ export async function areContractsDeployed(): Promise<boolean> {
             accountAddress: CONTRACT_ADDR,
         });
         const deployed = new Set(
-            modules
-                .map((m: { abi?: { name?: string } }) => m.abi?.name)
-                .filter(Boolean),
+            modules.map((m: { abi?: { name?: string } }) => m.abi?.name).filter(Boolean),
         );
         return deployed.has("auction") && deployed.has("lock_receipt");
     } catch (e) {
