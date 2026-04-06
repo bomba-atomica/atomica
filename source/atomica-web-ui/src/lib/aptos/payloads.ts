@@ -184,21 +184,6 @@ export function getRegisterLockPayload(
   };
 }
 
-/**
- * Build payload for fake_eth::mint_from_lock.
- *
- * Entry function: mint_from_lock(account: &signer, lock_id: vector<u8>)
- * Used in Demo/MVP phases. Production may replace with receipt-direct-escrow.
- */
-export function getMintFakeEthPayload(
-  lockId: Uint8Array,
-): InputGenerateTransactionPayloadData {
-  return {
-    function: `${CONTRACT_ADDR}::fake_eth::mint_from_lock`,
-    functionArguments: [lockId],
-  };
-}
-
 export function getBidPayload(
   sellerAddr: string,
   amountUsd: bigint,

@@ -21,38 +21,21 @@ export declare function requestAPT(ethAddress: string): Promise<{
     hash: string;
 }>;
 /**
- * Mint FAKEETH Payload Builder
- */
-export declare function getMintFakeEthPayload(): Promise<InputGenerateTransactionPayloadData>;
-/**
- * Mint FAKEETH (10 ETH)
- */
-export declare function mintFakeEth(ethAddress: string): Promise<SubmitResult>;
-/**
- * Mint FAKEUSD Payload Builder
- */
-export declare function getMintFakeUsdPayload(): Promise<InputGenerateTransactionPayloadData>;
-/**
- * Mint FAKEUSD (10,000 USD)
- */
-export declare function mintFakeUsd(ethAddress: string): Promise<SubmitResult>;
-/**
- * Step 2: Mint test tokens (FAKEETH and FAKEUSD)
- * Requires contracts to be deployed
- * @deprecated Use mintFakeEth and mintFakeUsd separately
- */
-export declare function requestTestTokens(ethAddress: string): Promise<{
-    hash: string;
-}>;
-/**
- * Check if test token contracts are deployed
+ * Check if core auction contracts are deployed on Aptos.
+ * Fake token minting happens on Ethereum — there are no fake_eth/fake_usd Move modules.
  */
 export declare function areContractsDeployed(): Promise<boolean>;
 /**
- * Legacy function for backward compatibility
- * @deprecated Use requestAPT() and requestTestTokens() separately
+ * Fund account with APT gas tokens.
  */
 export declare function submitFaucet(ethAddress: string): Promise<{
+    hash: string;
+}>;
+/**
+ * @deprecated Fake tokens mint on Ethereum — this no-op stub remains for
+ * backward-compatible callers during the Phase 1→2 transition.
+ */
+export declare function requestTestTokens(_ethAddress: string): Promise<{
     hash: string;
 }>;
 export declare function getCreateAuctionPayload(amountEth: bigint, minPrice: bigint, duration: bigint, mpk: Uint8Array): InputGenerateTransactionPayloadData;

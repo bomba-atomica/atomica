@@ -50,20 +50,8 @@ describe("ERC20 Deployment Integration", () => {
     expect(balance).toBeGreaterThan(0n);
   });
 
-  it.todo("should deploy FakeETH contract", async () => {
-    // TODO: Integrate with Foundry deployment script
-    // This will be implemented when we add the full deployment flow
-  });
-
-  it.todo("should deploy FakeUSD contract", async () => {
-    // TODO: Integrate with Foundry deployment script
-  });
-
-  it.todo("should verify FakeETH properties", async () => {
-    // TODO: Call name(), symbol(), decimals() on deployed contract
-  });
-
-  it.todo("should verify FakeUSD properties", async () => {
-    // TODO: Call name(), symbol(), decimals() on deployed contract
-  });
+  it.skip("should deploy FakeETH contract — tracked in #86");
+  it.skip("should deploy FakeUSD contract — tracked in #86");
+  it.skip("should verify FakeETH properties — tracked in #86");
+  it.skip("should verify FakeUSD properties — tracked in #86");
 });

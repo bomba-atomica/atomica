@@ -65,72 +65,18 @@ export async function requestAPT(ethAddress) {
     return { hash: "apt-funded" };
 }
 /**
- * Mint FAKEETH Payload Builder
- */
-export async function getMintFakeEthPayload() {
-    // Verify contracts are deployed before building payload
-    const deployed = await areContractsDeployed();
-    if (!deployed) {
-        throw new Error("fake_eth contract not deployed yet. Please wait for contract deployment to complete.");
-    }
-    const amountEth = BigInt(10) * BigInt(100_000_000); // 10 FAKEETH with 8 decimals
-    return {
-        function: `${CONTRACT_ADDR}::fake_eth::mint`,
-        functionArguments: [amountEth],
-    };
-}
-/**
- * Mint FAKEETH (10 ETH)
- */
-export async function mintFakeEth(ethAddress) {
-    console.log("\n=== Minting FAKEETH ===");
-    return await submitNativeTransaction(ethAddress, await getMintFakeEthPayload());
-}
-/**
- * Mint FAKEUSD Payload Builder
- */
-export async function getMintFakeUsdPayload() {
-    // Verify contracts are deployed before building payload
-    const deployed = await areContractsDeployed();
-    if (!deployed) {
-        throw new Error("fake_usd contract not deployed yet. Please wait for contract deployment to complete.");
-    }
-    const amountUsd = BigInt(10000) * BigInt(1_000_000); // 10,000 USD with 6 decimals
-    return {
-        function: `${CONTRACT_ADDR}::fake_usd::mint`,
-        functionArguments: [amountUsd],
-    };
-}
-/**
- * Mint FAKEUSD (10,000 USD)
- */
-export async function mintFakeUsd(ethAddress) {
-    console.log("\n=== Minting FAKEUSD ===");
-    return await submitNativeTransaction(ethAddress, await getMintFakeUsdPayload());
-}
-/**
- * Step 2: Mint test tokens (FAKEETH and FAKEUSD)
- * Requires contracts to be deployed
- * @deprecated Use mintFakeEth and mintFakeUsd separately
- */
-export async function requestTestTokens(ethAddress) {
-    await mintFakeEth(ethAddress);
-    await mintFakeUsd(ethAddress);
-    return { hash: "test-tokens-minted" };
-}
-/**
- * Check if test token contracts are deployed
+ * Check if core auction contracts are deployed on Aptos.
+ * Fake token minting happens on Ethereum — there are no fake_eth/fake_usd Move modules.
  */
 export async function areContractsDeployed() {
     try {
-        // Try to get account modules at the contract address
         const modules = await aptos.getAccountModules({
             accountAddress: CONTRACT_ADDR,
         });
-        // Check if fake_eth and fake_usd modules exist
-        const hasFakeEth = modules.some((m) => m.abi?.name === "fake_eth");
-        const hasFakeUsd = modules.some((m) => m.abi?.name === "fake_usd");
-        return hasFakeEth && hasFakeUsd;
+        const deployed = new Set(modules
+            .map((m) => m.abi?.name)
+            .filter(Boolean));
+        return deployed.has("auction") && deployed.has("lock_receipt");
     }
     catch (e) {
         console.log("Contracts not yet deployed:", e);
@@ -138,13 +84,19 @@ export async function areContractsDeployed() {
     }
 }
 /**
- * Legacy function for backward compatibility
- * @deprecated Use requestAPT() and requestTestTokens() separately
+ * Fund account with APT gas tokens.
  */
 export async function submitFaucet(ethAddress) {
     await requestAPT(ethAddress);
-    await requestTestTokens(ethAddress);
-    return { hash: "gas-fakeeth-fakeusd-minted" };
+    return { hash: "gas-funded" };
+}
+/**
+ * @deprecated Fake tokens mint on Ethereum — this no-op stub remains for
+ * backward-compatible callers during the Phase 1→2 transition.
+ */
+export async function requestTestTokens(_ethAddress) {
+    console.warn("requestTestTokens: fake token minting moved to Ethereum side");
+    return { hash: "noop" };
 }
 export function getCreateAuctionPayload(amountEth, minPrice, duration, mpk) {
     return {

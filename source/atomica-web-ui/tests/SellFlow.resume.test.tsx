@@ -173,9 +173,13 @@ describe("SellFlow localStorage resume", () => {
 
   // ── Pending: requires live blockchain infrastructure ──────────────────────
 
-  it.todo(
-    "auto-progresses from confirming to generating-proof after 1 block confirmation",
+  it.skip(
+    "auto-progresses from confirming to generating-proof after 1 block confirmation — tracked in #89",
   );
-  it.todo("auto-progresses steps 5→6→7 on successful Aptos transactions");
-  it.todo("shows correct resume state after browser tab closes mid-lock");
+  it.skip(
+    "auto-progresses steps 5→6→7 on successful Aptos transactions — tracked in #89",
+  );
+  it.skip(
+    "shows correct resume state after browser tab closes mid-lock — tracked in #89",
+  );
 });
