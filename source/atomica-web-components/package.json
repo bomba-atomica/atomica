@@ -1,0 +1,14 @@
+{
+  "name": "@atomica/atomica-web-components",
+  "version": "0.1.0",
+  "description": "Reusable React UI components for Atomica — target name for atomica-web-ui (in-place rename, Phase 3a)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "dependencies": {
+    "@atomica/sdk": "../atomica-sdk"
+  },
+  "notes": "This directory is a placeholder stub. See docs/architecture/v0-architecture.md §1 for the renaming plan. Implementation lives in source/atomica-web-ui until the rename is executed."
+}
