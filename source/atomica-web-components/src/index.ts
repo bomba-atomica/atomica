@@ -16,7 +16,11 @@ export { useBidHistory } from "./hooks/useBidHistory";
 export type { UseBidHistoryResult } from "./hooks/useBidHistory";
 export { useFeeRebate } from "./hooks/useFeeRebate";
 export type { FeeRebateResult } from "./hooks/useFeeRebate";
-export { saveBidPrice, loadBidPrice, clearBidPrice } from "./storage/bidStorage";
+export {
+  saveBidPrice,
+  loadBidPrice,
+  clearBidPrice,
+} from "./storage/bidStorage";
 
 export {
   WalletContext,
