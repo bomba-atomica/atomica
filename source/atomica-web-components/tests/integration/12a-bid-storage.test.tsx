@@ -11,7 +11,7 @@ import {
   saveBidPrice,
   loadBidPrice,
   clearBidPrice,
-} from "../../src/lib/bidStorage";
+} from "../../src/storage/bidStorage";
 
 beforeEach(() => {
   localStorage.clear();

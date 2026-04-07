@@ -117,7 +117,7 @@ import {
   Account,
   Ed25519PrivateKey,
 } from "@aptos-labs/ts-sdk";
-import { setAptosInstance } from "../../src/lib/aptos/config";
+import { setAptosInstance } from "@atomica/sdk/aptos";
 import {
   setAptosInstance as setDockerAptosInstance,
   getDerivedAddress,

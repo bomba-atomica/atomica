@@ -34,10 +34,10 @@ import {
 } from "./helpers/auction-setup";
 import { Step7Auction } from "../../src/components/SellFlow/steps/Step7Auction";
 import { Aptos, AptosConfig, Network, Account, Ed25519PrivateKey } from "@aptos-labs/ts-sdk";
-import { setAptosInstance, aptos as aptosGlobal } from "../../src/lib/aptos/config";
+import { setAptosInstance, aptos as aptosGlobal } from "@atomica/sdk/aptos";
 import { ethers } from "ethers";
-import { getCreateAuctionPayload } from "../../src/lib/aptos/payloads";
-import { submitNativeTransaction } from "../../src/lib/aptos/transaction";
+import { getCreateAuctionPayload } from "@atomica/sdk/aptos";
+import { submitNativeTransaction } from "@atomica/sdk";
 
 const MIN_PRICE = 100n;
 const AUCTION_DURATION = 3600n;

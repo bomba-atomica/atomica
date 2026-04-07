@@ -30,7 +30,7 @@ import { useState } from "react";
 import { commands } from "vitest/browser";
 import { setupEthereumMintMock } from "../../test-utils/browser-utils/EthereumMintMock";
 import type { EthereumTestnetInfo } from "../../test-utils/browser-commands";
-import { FAKE_ETH_ABI, FAKE_USD_ABI } from "../../src/lib/ethereum/abis";
+import { FAKE_ETH_ABI, FAKE_USD_ABI } from "@atomica/sdk/ethereum";
 
 // ---------------------------------------------------------------------------
 // Minimal test component: a "Mint 10 ETH" button with pending / success state.

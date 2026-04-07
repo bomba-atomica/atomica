@@ -47,7 +47,7 @@ import {
   BalancesProvider,
 } from "../../src/index";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { setAptosInstance } from "../../src/lib/aptos/config";
+import { setAptosInstance } from "@atomica/sdk/aptos";
 import {
   setAptosInstance as setDockerAptosInstance,
   getDerivedAddress,

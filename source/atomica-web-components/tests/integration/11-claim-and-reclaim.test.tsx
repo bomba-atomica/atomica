@@ -44,10 +44,10 @@ import {
   settleAuctionDirect,
   viewFunction,
 } from "./helpers/auction-setup";
-import { submitBid } from "../../src/lib/aptos/payloads";
+import { submitBid } from "@atomica/sdk/aptos";
 import { ClaimButton } from "../../src/components/ClaimButton";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { setAptosInstance } from "../../src/lib/aptos/config";
+import { setAptosInstance } from "@atomica/sdk/aptos";
 import { WalletContext, WalletProvider } from "../../src/context/WalletContext";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 

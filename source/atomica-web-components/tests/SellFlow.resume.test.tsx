@@ -13,7 +13,7 @@ import { render, screen, cleanup, act } from "@testing-library/react";
 import { WalletContext } from "../../src/context/WalletContext";
 
 // Prevent real network calls from blockchain dependencies.
-vi.mock("../../src/lib/chain-config", () => ({
+vi.mock("@atomica/sdk/chain-config", () => ({
   getChainConfig: vi.fn().mockReturnValue({
     ethereum: {
       rpcUrl: "http://localhost:9999",
@@ -23,20 +23,18 @@ vi.mock("../../src/lib/chain-config", () => ({
     aptos: {},
   }),
 }));
-vi.mock("../../src/lib/ethereum/lockbox", () => ({
+vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeEth: vi.fn(),
   lockFakeEth: vi.fn(),
   getUnlockTime: vi.fn(),
   withdrawFakeEth: vi.fn(),
-}));
-vi.mock("../../src/lib/ethereum/proofs/generator", () => ({
   generateLockedBalanceProof: vi.fn(),
 }));
-vi.mock("../../src/lib/aptos/payloads", () => ({
+vi.mock("@atomica/sdk/aptos", () => ({
   getRegisterLockPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
 }));
-vi.mock("../../src/lib/aptos/transaction", () => ({
+vi.mock("@atomica/sdk", () => ({
   submitNativeTransaction: vi.fn(),
 }));
 vi.mock("../../src/hooks/useEthereumBalances", () => ({

@@ -40,12 +40,12 @@ import {
   createAuctionDirect,
   settleAuctionDirect,
 } from "./helpers/auction-setup";
-import { submitBid } from "../../src/lib/aptos/payloads";
-import { saveBidPrice } from "../../src/lib/bidStorage";
+import { submitBid } from "@atomica/sdk/aptos";
+import { saveBidPrice } from "../../src/storage/bidStorage";
 import { FeeRebateDisplay } from "../../src/components/FeeRebateDisplay";
 import { useFeeRebate } from "../../src/hooks/useFeeRebate";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { setAptosInstance } from "../../src/lib/aptos/config";
+import { setAptosInstance } from "@atomica/sdk/aptos";
 import { WalletContext } from "../../src/context/WalletContext";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 

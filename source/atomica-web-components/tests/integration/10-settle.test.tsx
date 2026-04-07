@@ -45,7 +45,7 @@ import {
 import { SettleButton } from "../../src/components/SettleButton";
 import { Step8Monitor } from "../../src/components/SellFlow/steps/Step8Monitor";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
-import { setAptosInstance } from "../../src/lib/aptos/config";
+import { setAptosInstance } from "@atomica/sdk/aptos";
 import { WalletContext, WalletProvider } from "../../src/context/WalletContext";
 import {
   getDerivedAddress,
