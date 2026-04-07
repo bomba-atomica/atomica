@@ -1,6 +1,10 @@
-# Aptos Docker Testnet
+# docker-testnet
 
-Full-featured Aptos testnet running in Docker with **production-like account funding**.
+Status: `live`
+
+## Overview
+
+Full-featured Aptos testnet running in Docker with production-like account funding.
 
 ## Quick Start
 

@@ -96,7 +96,8 @@ contract LockBox {
      * @notice Lock tokens for auction participation
      * @param token Address of token to lock (must be fakeETH or fakeUSD)
      * @param amount Amount of tokens to lock
-     * @dev Tokens must be approved before calling this function
+     * @dev Tokens must be approved before calling this function.
+     * @dev See docs/architecture/v0-architecture.md#§3-cross-chain-settlement-v01-bls-relayer-flow
      */
     function lock(address token, uint256 amount) external {
         require(

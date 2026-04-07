@@ -1,119 +1,62 @@
-# Atomica Web UI
+# atomica-web-components
 
-React UI component library for Aptos blockchain applications with Ethereum wallet integration.
+Status: `live`
 
 ## Purpose
 
-This package provides reusable React components for building Aptos dApps that use Ethereum wallets (MetaMask) for authentication and transaction signing.
+React UI component library and custom hooks for the Atomica auction interface. Provides all user-facing components — auction creation, bid submission, settlement, claim, fee-rebate display, bid history, and wallet/network context — as well as the React hooks that wire those components to on-chain state. Depends on `@atomica/sdk` for headless protocol logic and has zero awareness of testnet orchestration or deployment scripts.
 
-## What's Inside
+## Public API surface
 
-### UI Components
+### Entry point
 
-#### Account Management
-- **`AccountStatus`**: Display account balance and status
-- **`Faucet`**: Request testnet tokens (APT, FAKEETH, FAKEUSD)
-- **`NetworkStatus`**: Show current blockchain network and block height
+`src/index.ts` — re-exports everything below.
 
-#### Transaction Components
-- **`TxButton`**: Smart transaction button with simulate/submit workflow
-  - Automatic simulation before submission
-  - Gas estimation display
-  - Error handling with detailed feedback
-  - "Skip & Submit" option for advanced users
+### Exported components
 
-#### Auction Components
-- **`AuctionCreator`**: Create sealed-bid auctions with IBE encryption
-- **`AuctionBidder`**: Submit encrypted bids on auctions
-- **`SanityTest`**: Development utility for testing signature verification
+| Export | File |
+|---|---|
+| `Faucet` | `src/components/Faucet.tsx` |
+| `SanityTest` | `src/components/SanityTest.tsx` |
+| `AuctionCreator` | `src/components/AuctionCreator.tsx` |
+| `AuctionBidder` | `src/components/AuctionBidder.tsx` |
+| `AccountStatus` | `src/components/AccountStatus.tsx` |
+| `NetworkStatus` | `src/components/NetworkStatus.tsx` |
+| `TxButton` | `src/components/TxButton.tsx` |
+| `SettleButton` | `src/components/SettleButton.tsx` |
+| `ClaimButton` | `src/components/ClaimButton.tsx` |
+| `FeeRebateDisplay` | `src/components/FeeRebateDisplay.tsx` |
+| `BidHistory`, `BidHistoryEntry` | `src/components/BidHistory.tsx` |
 
-### Custom Hooks
-- **`useTokenBalances`**: Hook for fetching account token balances
-  - Polls for balance updates
-  - Handles multiple token types (APT, FAKEETH, FAKEUSD)
-  - Contract deployment detection
+### Exported hooks
 
-## Architecture
+| Export | File |
+|---|---|
+| `useTokenBalances` | `src/hooks/useTokenBalances.ts` |
+| `useBidHistory`, `UseBidHistoryResult` | `src/hooks/useBidHistory.ts` |
+| `useFeeRebate`, `FeeRebateResult` | `src/hooks/useFeeRebate.ts` |
 
-**Component Design**:
-- Self-contained components with minimal props
-- Built-in error handling and loading states
-- Tailwind CSS styling
-- TypeScript for type safety
+### Exported context / providers
 
-**Dependencies**:
-- `@atomica/sdk`: Core account and transaction utilities
-- `@atomica/aptos-docker-testnet`: Test utilities (dev dependency)
-- `@atomica/state-proof-verifier`: IBE encryption for auctions
-- `react`: UI framework
-- `ethers`: Ethereum wallet integration
+| Export | File |
+|---|---|
+| `WalletContext`, `WalletProvider`, `useWallet` | `src/context/WalletContext.tsx` |
+| `BalancesProvider`, `useBalances` | `src/context/BalancesContext.tsx` |
+| `ContractStatusProvider`, `useContractStatus` | `src/context/ContractStatusContext.tsx` |
+| `NetworkConfigProvider` | `src/network/network-config-context.tsx` |
+| `useNetworkConfig` | `src/network/network-config-state.ts` |
 
-## Testing
+### Exported storage helpers
 
-Component tests verify:
-- Component rendering and user interactions
-- Account connection flows
-- Transaction submission (with simulation skip)
-- Balance updates after transactions
+| Export | File |
+|---|---|
+| `saveBidPrice`, `loadBidPrice`, `clearBidPrice` | `src/storage/bidStorage.ts` |
 
-Tests use Vitest browser mode with real browser environment.
+## Dependents
 
-Run tests:
-```bash
-bun test
-```
+- `source/atomica-demo` — imports all components and hooks from this package to build the auction demo application.
 
-## Component Examples
+## See also
 
-### TxButton
-```tsx
-import { TxButton } from "@atomica/atomica-web-ui";
-
-<TxButton
-  label="Mint 10 ETH"
-  accountAddress={ethAddress}
-  prepareTransaction={() => ({
-    function: `${CONTRACT}::fake_eth::mint`,
-    functionArguments: [1_000_000_000]
-  })}
-  onSuccess={(txHash) => console.log("Success!", txHash)}
-/>
-```
-
-### AccountStatus
-```tsx
-import { AccountStatus, useTokenBalances } from "@atomica/atomica-web-ui";
-
-function MyApp() {
-  const balances = useTokenBalances(ethAddress);
-  
-  return <AccountStatus ethAddress={ethAddress} balances={balances} />;
-}
-```
-
-## Styling
-
-Components use Tailwind CSS with a dark theme:
-- Background: `zinc-950`
-- Text: `zinc-400`
-- Accents: `zinc-100`
-- Borders: `zinc-800`
-
-Customize by wrapping in your own styled containers or overriding Tailwind classes.
-
-## Development
-
-Build the library:
-```bash
-bun run build
-```
-
-This generates:
-- `dist/index.js`: ESM bundle
-- `dist/index.d.ts`: TypeScript definitions
-
-## Related Packages
-
-- `@atomica/sdk`: Core SDK used by these components
-- `@atomica/aptos-docker-testnet`: Testnet infrastructure for development
-- `@atomica/atomica-web-demo`: Example app using these components
+- `docs/architecture/v0-architecture.md` §1 — package layout and dependency rules
+- `docs/specifications/prd.md` — user-facing feature requirements

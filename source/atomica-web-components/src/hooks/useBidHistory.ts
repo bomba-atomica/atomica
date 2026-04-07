@@ -58,12 +58,28 @@ function saveEntries(walletAddress: string, entries: BidHistoryEntry[]): void {
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Return value of {@link useBidHistory}.
+ *
+ * @see docs/specifications/prd.md
+ */
 export interface UseBidHistoryResult {
+  /** Sorted (newest-first) list of settled auction entries for the wallet. */
   entries: BidHistoryEntry[];
   /** Record a newly settled auction. Deduplicates by auctionId (seller address). */
   recordSettlement: (sellerAddress: string, clearingPrice: bigint) => void;
 }
 
+/**
+ * Persistent bid history hook keyed by wallet address.
+ *
+ * Loads entries from localStorage on mount and persists new entries via
+ * `recordSettlement`. Entries are sorted newest-first by `settledAt`.
+ *
+ * @param walletAddress - The connected wallet address (lowercase Ethereum hex). Pass `null` when disconnected.
+ * @returns `{ entries, recordSettlement }` — see {@link UseBidHistoryResult}
+ * @see docs/specifications/prd.md
+ */
 export function useBidHistory(
   walletAddress: string | null,
 ): UseBidHistoryResult {

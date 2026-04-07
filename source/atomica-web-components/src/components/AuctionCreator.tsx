@@ -4,6 +4,18 @@ import { submitCreateAuction } from "@atomica/sdk/aptos";
 import * as ibe from "@atomica/state-proof-verifier/ibe";
 import { useWallet } from "../context/WalletContext";
 
+/**
+ * UI panel for creating a new sealed-bid auction on Aptos.
+ *
+ * Generates an IBE Master Public Key, collects the LockBox `lock_id` and
+ * minimum price from the seller, then calls `auction::create_auction` via
+ * the SIWE-authenticated Aptos transaction flow. The seller's Ethereum
+ * lock receipt is consumed by the contract to prove asset escrow.
+ *
+ * Requires {@link WalletContext} to be mounted above this component.
+ *
+ * @see docs/architecture/v0-architecture.md#§2-auction-mechanism-v01-beta
+ */
 export function AuctionCreator() {
   const { account } = useWallet();
   const [lockIdHex, setLockIdHex] = useState("");

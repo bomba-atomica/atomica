@@ -1,4 +1,8 @@
-# Atomica EVM Contracts
+# evm-contracts
+
+Status: `live` (core escrow and tokens live; `Settlement.sol` and `BLSVerifier.sol` scaffold — not wired to a relayer)
+
+## Overview
 
 Ethereum smart contracts for Atomica's cross-chain atomic deposit system.
 

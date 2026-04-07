@@ -2,6 +2,11 @@ import { useState, useEffect } from "react";
 import { getSettlement, isSettled } from "@atomica/sdk/aptos";
 import { loadBidPrice } from "../storage/bidStorage";
 
+/**
+ * Result returned by {@link useFeeRebate}.
+ *
+ * @see docs/specifications/prd.md
+ */
 export interface FeeRebateResult {
   /** Whether we have enough data to display fee/rebate. */
   ready: boolean;
@@ -22,6 +27,11 @@ export interface FeeRebateResult {
  * - Fee is always 0 in Demo phase (no fee mechanism).
  *
  * Returns `ready: false` until settlement data and bid price are both available.
+ *
+ * @param sellerAddress - Seller (auction) address to query settlement for
+ * @param bidderAddress - Connected bidder address to compare against the winner
+ * @returns {@link FeeRebateResult} — `ready` is `false` until data is available
+ * @see docs/specifications/prd.md
  */
 export function useFeeRebate(
   sellerAddress: string | null | undefined,

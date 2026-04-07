@@ -2,6 +2,8 @@
 ///
 /// Receipt-based auction using LockReceipts from Ethereum.
 ///
+/// @see docs/architecture/v0-architecture.md#§2-auction-mechanism-v01-beta
+///
 /// FakeETH and FakeUSD are ERC20 tokens that exist ONLY on Ethereum.
 /// On Aptos, a lock is represented by a LockReceipt<Ethereum, FakeETH> stored in
 /// the ReceiptRegistry. This module consumes those receipts to prove the seller
@@ -159,6 +161,8 @@ module atomica::auction {
     /// the seller on the Ethereum side.
     ///
     /// Anyone can call settle after end_time.
+    ///
+    /// @see docs/architecture/v0-architecture.md#§3-cross-chain-settlement-v01-bls-relayer-flow
     public entry fun settle(
         _caller: &signer,
         seller_addr: address,

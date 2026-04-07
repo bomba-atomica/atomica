@@ -1,6 +1,8 @@
 /// Lock Receipt Module
 ///
 /// Provides a generic framework for verifying and registering cross-chain asset locks.
+///
+/// @see docs/architecture/v0-architecture.md#§3-cross-chain-settlement-v01-bls-relayer-flow
 /// Uses phantom types to create type-safe receipts for any asset locked on any chain.
 ///
 /// Example: A receipt for FakeETH locked on Ethereum is represented as:

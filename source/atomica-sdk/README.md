@@ -1,88 +1,73 @@
-# Atomica SDK
+# atomica-sdk
 
-Core SDK for building Aptos blockchain applications with Ethereum account abstraction.
+Status: `live`
 
 ## Purpose
 
-This package provides the fundamental utilities for account management and transaction handling on Aptos, enabling Ethereum wallets (like MetaMask) to interact with the Aptos blockchain through SIWE (Sign-In with Ethereum) authentication.
+Headless TypeScript SDK for building Aptos applications with Ethereum account abstraction. Provides SIWE (Sign-In with Ethereum) authentication, Aptos address derivation from Ethereum addresses, transaction preparation/simulation/submission, and chain configuration helpers. Contains zero React imports — enforced by CI pre-push hook — making it safe to import in both browser and Node.js contexts.
 
-## What's Inside
+## Public API surface
 
-### Account Management
-- **SIWE Integration**: Sign-In with Ethereum message construction and verification
-- **Address Derivation**: Derive Aptos addresses from Ethereum addresses
-- **Abstract Authentication**: Support for Ethereum secp256k1 signatures on Aptos
+Sub-path exports are available via the `"exports"` field in `package.json`.
 
-### Transaction Utilities
-- **Transaction Preparation**: Build transactions with proper authentication
-- **Transaction Signing**: Sign transactions using MetaMask/Ethereum wallets
-- **Transaction Submission**: Submit signed transactions to Aptos network
-- **Simulation Support**: Pre-flight transaction simulation for gas estimation
+### Root — `@atomica/sdk`
 
-## Key Functions
+| Export | Description |
+|---|---|
+| `constructSIWEMessage` | Build a SIWE message string for MetaMask signing |
+| `getDerivedAddress` | Derive the Aptos address for a given Ethereum address |
+| `calculateAbstractDigest` | SHA-3 digest used by Move's abstract-auth scheme |
+| `serializeSIWEAbstractSignature` | BCS-serialize a SIWE abstract signature |
+| `serializeSIWEAbstractPublicKey` | BCS-serialize a SIWE abstract public key |
+| `SIWEAccountAuthenticator` | `AccountAuthenticator` subclass for SIWE-signed Aptos transactions |
+| `PreparedTransaction` | Interface returned by `prepareNativeTransaction` |
+| `prepareNativeTransaction` | Build + authenticate an Aptos transaction using MetaMask |
+| `simulateNativeTransaction` | Pre-flight simulate a prepared transaction |
+| `submitPreparedTransaction` | Submit a prepared transaction and wait for execution |
+| `submitNativeTransaction` | All-in-one: prepare → simulate → submit |
 
-```typescript
-// Prepare a transaction with Ethereum wallet signature
-prepareNativeTransaction(aptos, ethAddress, payload)
+### `@atomica/sdk/aptos`
 
-// Simulate transaction before submission
-simulateNativeTransaction(aptos, preparedTx)
+Aptos contract interaction helpers.
 
-// Submit signed transaction
-submitPreparedTransaction(aptos, preparedTx)
+| Export | File |
+|---|---|
+| `aptos`, `setAptosInstance`, `CONTRACT_ADDR` | `src/aptos/config.ts` |
+| `*` (payloads) | `src/aptos/payloads.ts` |
 
-// All-in-one: prepare, simulate, and submit
-submitNativeTransaction(aptos, ethAddress, payload)
-```
+### `@atomica/sdk/ethereum`
 
-## Architecture
+Ethereum contract interaction helpers.
 
-This SDK is **runtime-agnostic** and **network-agnostic**:
-- Accepts an `Aptos` instance as a parameter (no hardcoded configuration)
-- Works in browser environments (requires `window.ethereum` for wallet access)
-- Pure account and transaction logic - no testnet/deployment concerns
+| Export | File |
+|---|---|
+| `*` (config, ABIs, contracts, transactions, balances, lockbox) | `src/ethereum/index.ts` |
 
-## Dependencies
+> Note: `@atomica/sdk/ethereum/proofs` is intentionally NOT re-exported from the ethereum sub-path because it transitively imports heavy Node.js dependencies. Import it directly when needed.
 
-- `@aptos-labs/ts-sdk`: Official Aptos TypeScript SDK
-- `ethers`: Ethereum wallet integration
-- `@noble/hashes`: Cryptographic hashing utilities
+### `@atomica/sdk/chain-config`
 
-## Testing
+| Export | Description |
+|---|---|
+| `ChainConfig` | Type for dual-chain RPC and contract address configuration |
+| `DEFAULT_CHAIN_CONFIG` | Config resolved from `VITE_*` env vars or hardcoded defaults |
+| `getChainConfig` | Runtime accessor; reads `globalThis.__ATOMICA_CHAIN_CONFIG__` or default |
 
-Unit tests are located in `tests/` and cover:
-- SIWE message construction and signature verification
-- Address derivation consistency
-- Authenticator serialization (BCS encoding)
-- Secp256k1 key handling
+### `@atomica/sdk/contract-check`
 
-Run tests:
-```bash
-bun test
-```
+Contract deployment status helpers.
 
-## Usage
+### `@atomica/sdk/network-host`
 
-```typescript
-import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { submitNativeTransaction } from "@atomica/sdk";
+Network host resolution helpers.
 
-// Configure Aptos client
-const config = new AptosConfig({ network: Network.MAINNET });
-const aptos = new Aptos(config);
+## Dependents
 
-// Prepare transaction payload
-const payload = {
-  function: "0x1::aptos_account::transfer",
-  functionArguments: [recipient, amount]
-};
+- `source/atomica-web-components` — imports SIWE and transaction utilities via root export
+- `source/atomica-demo` — imports via sub-path exports for Aptos and Ethereum interactions
+- `source/atomica-crosschain-testing` — imports Ethereum helpers for cross-chain test setup
 
-// Submit with Ethereum wallet (MetaMask)
-const tx = await submitNativeTransaction(aptos, myEthAddress, payload);
-```
+## See also
 
-## Related Packages
-
-- `@atomica/aptos-docker-testnet`: Docker-based testnet for development
-- `@atomica/atomica-web-ui`: React UI components for Aptos apps
-- `@atomica/state-proof-verifier`: State proof verification and IBE crypto
+- `docs/architecture/v0-architecture.md` §1 — package layout and no-React constraint
+- `docs/architecture/v0-architecture.md` §2 — auction mechanism the SDK transactions invoke

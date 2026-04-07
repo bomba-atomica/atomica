@@ -1,3 +1,11 @@
+/// FakeUSD fungible asset module — Aptos-side test stablecoin.
+///
+/// Manages the FAKEUSD fungible asset on Aptos. Mirrors `fake_eth.move`;
+/// `mint` is a legacy faucet and `mint_from_lock` converts a verified
+/// Ethereum FakeUSD LockReceipt into Aptos FA. Canonical issuance is
+/// EVM-only.
+///
+/// @see docs/architecture/v0-architecture.md#§3-cross-chain-settlement-v01-bls-relayer-flow
 module atomica::fake_usd {
     use aptos_framework::fungible_asset::{Self, MintRef, TransferRef, BurnRef, Metadata};
     use aptos_framework::object::{Self, Object};

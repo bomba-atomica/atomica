@@ -5,6 +5,18 @@ import * as ibe from "@atomica/state-proof-verifier/ibe";
 import { useWallet } from "../context/WalletContext";
 import { saveBidPrice } from "../storage/bidStorage";
 
+/**
+ * UI panel for submitting a sealed bid on an active auction.
+ *
+ * Encrypts the bid price with IBE (Boneh-Franklin) using the seller address as
+ * the identity, then calls `auction::submit_bid` via the SIWE-authenticated
+ * Aptos transaction flow. Persists the bid price to localStorage so
+ * {@link useFeeRebate} can compute the post-settlement rebate.
+ *
+ * Requires {@link WalletContext} to be mounted above this component.
+ *
+ * @see docs/architecture/v0-architecture.md#§2-auction-mechanism-v01-beta
+ */
 export function AuctionBidder() {
   const { account } = useWallet();
   const [sellerAddr, setSellerAddr] = useState("");

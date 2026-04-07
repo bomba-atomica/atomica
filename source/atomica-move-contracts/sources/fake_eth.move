@@ -1,3 +1,11 @@
+/// FakeETH fungible asset module — Aptos-side test token.
+///
+/// Manages the FAKEETH fungible asset on Aptos. Canonical fake-token issuance
+/// is EVM-only (via `LockBox.sol`); this module's `mint` function is a legacy
+/// faucet retained for Aptos-only developer flows. `mint_from_lock` is the
+/// bridge path that converts a verified Ethereum LockReceipt into Aptos FA.
+///
+/// @see docs/architecture/v0-architecture.md#§3-cross-chain-settlement-v01-bls-relayer-flow
 module atomica::fake_eth {
     use aptos_framework::fungible_asset::{Self, MintRef, TransferRef, BurnRef, Metadata};
     use aptos_framework::object::{Self, Object};
