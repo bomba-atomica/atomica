@@ -75,8 +75,8 @@ check_module "Atomica SDK" "source/atomica-sdk"
 # 6. Atomica Web Components
 check_module "Atomica Web Components" "source/atomica-web-components" "bun run build" "bun run lint" "bun run format:check"
 
-# 7. Atomica Demo
-check_module "Atomica Demo" "source/atomica-demo" "bun run build" "bun run lint" "bun run format:check"
+# 7. Atomica Demo (type-check only; full vite build requires testnet images)
+check_module "Atomica Demo" "source/atomica-demo" "bunx tsc -b --noEmit" "bun run lint" "bun run format:check"
 
 # --------------------------------------------------
 # 8. SDK Dependency Boundary Check
