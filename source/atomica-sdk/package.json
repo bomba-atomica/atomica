@@ -5,6 +5,36 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./ethereum": {
+      "import": "./dist/ethereum/index.js",
+      "types": "./dist/ethereum/index.d.ts"
+    },
+    "./ethereum/proofs": {
+      "import": "./dist/ethereum/proofs/generator.js",
+      "types": "./dist/ethereum/proofs/generator.d.ts"
+    },
+    "./aptos": {
+      "import": "./dist/aptos/index.js",
+      "types": "./dist/aptos/index.d.ts"
+    },
+    "./network-host": {
+      "import": "./dist/network-host.js",
+      "types": "./dist/network-host.d.ts"
+    },
+    "./chain-config": {
+      "import": "./dist/chain-config.js",
+      "types": "./dist/chain-config.d.ts"
+    },
+    "./contract-check": {
+      "import": "./dist/contract-check.js",
+      "types": "./dist/contract-check.d.ts"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -15,6 +45,7 @@
   },
   "dependencies": {
     "@aptos-labs/ts-sdk": "^5.2.0",
+    "@atomica/state-proof-verifier": "file:../state-proofs/typescript",
     "@noble/hashes": "^1.3.3",
     "ethers": "^6.16.0"
   },
@@ -29,6 +60,7 @@
     "prettier": "^3.7.4",
     "typescript": "^5.3.3",
     "typescript-eslint": "^8.54.0",
+    "vite": "^7.0.0",
     "vitest": "^4.0.0"
   }
 }

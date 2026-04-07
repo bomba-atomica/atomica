@@ -5,15 +5,15 @@ on:
     
     paths:
       - 'source/atomica-sdk/**'
-      - 'source/atomica-web-ui/**'
-      - 'source/atomica-web-demo/**'
+      - 'source/atomica-web-components/**'
+      - 'source/atomica-demo/**'
       - '.github/workflows/lint-web.yaml'
   push:
     
     paths:
       - 'source/atomica-sdk/**'
-      - 'source/atomica-web-ui/**'
-      - 'source/atomica-web-demo/**'
+      - 'source/atomica-web-components/**'
+      - 'source/atomica-demo/**'
       - '.github/workflows/lint-web.yaml'
   workflow_dispatch:
 
@@ -26,7 +26,19 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      
+
+      - name: Build Ethereum Testnet SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: |
+          bun install
+          bun run build
+
+      - name: Build State Proofs
+        working-directory: source/state-proofs/typescript
+        run: |
+          bun install
+          bun run build
+
       - name: Install dependencies
         working-directory: source/atomica-sdk
         run: bun install
@@ -58,14 +70,14 @@ jobs:
           bun install
           bun run build
 
-      - name: Build Atomica SDK
-        working-directory: source/atomica-sdk
+      - name: Build State Proofs
+        working-directory: source/state-proofs/typescript
         run: |
           bun install
           bun run build
 
-      - name: Build State Proofs
-        working-directory: source/state-proofs/typescript
+      - name: Build Atomica SDK
+        working-directory: source/atomica-sdk
         run: |
           bun install
           bun run build
@@ -77,19 +89,19 @@ jobs:
           bun run build
 
       - name: Install dependencies
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: bun install
 
       - name: Lint
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: bun run lint
 
       - name: Format Check
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: bun run format:check
 
       - name: Type Check
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: bun run build
 
   lint-web-demo:
@@ -107,14 +119,14 @@ jobs:
           bun install
           bun run build
 
-      - name: Build Atomica SDK
-        working-directory: source/atomica-sdk
+      - name: Build State Proofs
+        working-directory: source/state-proofs/typescript
         run: |
           bun install
           bun run build
 
-      - name: Build State Proofs
-        working-directory: source/state-proofs/typescript
+      - name: Build Atomica SDK
+        working-directory: source/atomica-sdk
         run: |
           bun install
           bun run build
@@ -125,24 +137,24 @@ jobs:
           bun install
           bun run build
 
-      - name: Build Web UI
-        working-directory: source/atomica-web-ui
+      - name: Build Web Components
+        working-directory: source/atomica-web-components
         run: |
           bun install
           bun run build
 
       - name: Install dependencies
-        working-directory: source/atomica-web-demo
+        working-directory: source/atomica-demo
         run: bun install
 
       - name: Lint
-        working-directory: source/atomica-web-demo
+        working-directory: source/atomica-demo
         run: bun run lint
 
       - name: Format Check
-        working-directory: source/atomica-web-demo
+        working-directory: source/atomica-demo
         run: bun run format:check
 
       - name: Type Check
-        working-directory: source/atomica-web-demo
-        run: bun run build
+        working-directory: source/atomica-demo
+        run: bunx tsc -b --noEmit

@@ -1,1 +1,0 @@
-{"version":3,"file":"SettleButton.d.ts","sourceRoot":"","sources":["../../src/components/SettleButton.tsx"],"names":[],"mappings":"AAEA,UAAU,KAAK;IACb,SAAS,CAAC,EAAE,MAAM,CAAC;IACnB,QAAQ,EAAE,MAAM,OAAO,CAAC,IAAI,CAAC,CAAC;IAC9B,QAAQ,CAAC,EAAE,OAAO,CAAC;CACpB;AAED,wBAAgB,YAAY,CAAC,EAC3B,SAAS,EAAE,UAAU,EACrB,QAAQ,EACR,QAAQ,GACT,EAAE,KAAK,2CAyCP"}

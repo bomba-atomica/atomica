@@ -1,0 +1,9 @@
+/**
+ * Contract ABIs for FakeETH and FakeUSD tokens
+ *
+ * These ABIs define the interface for interacting with the ERC20 contracts
+ */
+export declare const FAKE_ETH_ABI: readonly ["function name() view returns (string)", "function symbol() view returns (string)", "function decimals() view returns (uint8)", "function totalSupply() view returns (uint256)", "function balanceOf(address) view returns (uint256)", "function transfer(address to, uint256 amount) returns (bool)", "function allowance(address owner, address spender) view returns (uint256)", "function approve(address spender, uint256 amount) returns (bool)", "function transferFrom(address from, address to, uint256 amount) returns (bool)", "event Transfer(address indexed from, address indexed to, uint256 value)", "event Approval(address indexed owner, address indexed spender, uint256 value)", "function mint(address to, uint256 amount)", "function MAX_MINT_AMOUNT() view returns (uint256)"];
+export declare const FAKE_USD_ABI: readonly ["function name() view returns (string)", "function symbol() view returns (string)", "function decimals() view returns (uint8)", "function totalSupply() view returns (uint256)", "function balanceOf(address) view returns (uint256)", "function transfer(address to, uint256 amount) returns (bool)", "function allowance(address owner, address spender) view returns (uint256)", "function approve(address spender, uint256 amount) returns (bool)", "function transferFrom(address from, address to, uint256 amount) returns (bool)", "event Transfer(address indexed from, address indexed to, uint256 value)", "event Approval(address indexed owner, address indexed spender, uint256 value)", "function mint(address to, uint256 amount)", "function MAX_MINT_AMOUNT() view returns (uint256)"];
+export type FakeETHABI = typeof FAKE_ETH_ABI;
+export type FakeUSDABI = typeof FAKE_USD_ABI;
