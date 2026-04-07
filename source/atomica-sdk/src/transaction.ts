@@ -34,8 +34,8 @@ export interface PreparedTransaction {
   auth: AccountAuthenticator;
   /** The derived Aptos address of the Ethereum signer. */
   senderAddress: AccountAddress;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   /** Diagnostic data included in submission errors. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   debugState: any;
   payload: InputGenerateTransactionPayloadData;
 }
