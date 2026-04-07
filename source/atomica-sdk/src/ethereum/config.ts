@@ -8,12 +8,14 @@ import { ethers } from "ethers";
 import { buildEthRpcUrl, getStoredHost } from "../network-host.js";
 import { getChainConfig } from "../chain-config.js";
 
+// Safe env access: works in Node (test/ts-node) and in Vite browser builds
+const _env =
+  (import.meta as { env?: Record<string, string> }).env || process.env || {};
+
 // Build-time env vars are kept for backwards compatibility constants below.
 // Runtime RPC host is always derived from the selector state (localStorage/page host).
-const ENV_ETH_WS_URL = import.meta.env.VITE_ETH_WS_URL as string | undefined;
-const ENV_ETH_BEACON_URL = import.meta.env.VITE_ETH_BEACON_URL as
-  | string
-  | undefined;
+const ENV_ETH_WS_URL = _env.VITE_ETH_WS_URL as string | undefined;
+const ENV_ETH_BEACON_URL = _env.VITE_ETH_BEACON_URL as string | undefined;
 
 export function getEthRpcUrl(): string {
   return buildEthRpcUrl(getStoredHost());
@@ -25,7 +27,7 @@ const { ethereum } = getChainConfig();
 export const ETH_RPC_URL = ethereum.rpcUrl;
 
 // Ensure we at least resolve the host based on Vite env variables if not explicitly provided
-const fallbackHost = import.meta.env.VITE_HOST_IP || "localhost";
+const fallbackHost = _env.VITE_HOST_IP || "localhost";
 export const ETH_WS_URL = ENV_ETH_WS_URL || `ws://${fallbackHost}:8546`;
 export const ETH_BEACON_URL =
   ENV_ETH_BEACON_URL || `http://${fallbackHost}:5052`;
