@@ -1,3 +1,8 @@
+/**
+ * Props for {@link FeeRebateDisplay}.
+ *
+ * @see docs/specifications/prd.md
+ */
 interface Props {
   /** Rebate amount in USD micro-units (6 decimals). Positive = rebate. */
   rebateAmount?: bigint;
@@ -10,6 +15,17 @@ function formatUsd(amount: bigint): string {
   return (Number(abs) / 1e6).toFixed(2);
 }
 
+/**
+ * Displays the post-settlement fee and rebate for the connected bidder.
+ *
+ * Renders two rows — Rebate and Fee — using amounts in USD micro-units
+ * (6 decimals). Omits a row when its value is `undefined`. In the Demo
+ * phase the fee is always 0; the rebate is `bidPrice - clearingPrice`.
+ *
+ * Driven by {@link useFeeRebate} in the parent component.
+ *
+ * @see docs/specifications/prd.md
+ */
 export function FeeRebateDisplay({ rebateAmount, feeAmount }: Props) {
   return (
     <div className="flex flex-col gap-2 rounded border border-zinc-800 bg-zinc-950/60 p-3 text-sm">

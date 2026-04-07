@@ -3,6 +3,17 @@ import { testSimpleAPTTransfer } from "@atomica/aptos-docker-testnet/browser";
 import { useWallet } from "../context/WalletContext";
 import { useBalances } from "../context/BalancesContext";
 
+/**
+ * Developer diagnostic component for verifying SIWE signature flow end-to-end.
+ *
+ * Executes a minimal APT transfer to confirm that address derivation,
+ * SIWE message construction, and transaction submission all work correctly.
+ * Only enabled when the account has APT balance.
+ *
+ * Requires {@link WalletContext} and {@link BalancesContext} to be mounted above.
+ *
+ * @see docs/architecture/v0-architecture.md#§1-package-layout
+ */
 export function SanityTest() {
   const { account } = useWallet();
   const { aptosBalances } = useBalances();

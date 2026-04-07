@@ -9,6 +9,8 @@
 /// 2. Extract storage root from account data
 /// 3. Verify storage proof against storage root
 /// 4. Extract and return the locked token amount
+///
+/// @see docs/architecture/v0-architecture.md#§3-cross-chain-settlement-v01-bls-relayer-flow
 module atomica::eth_proof {
     use std::vector;
     use aptos_std::aptos_hash::keccak256;

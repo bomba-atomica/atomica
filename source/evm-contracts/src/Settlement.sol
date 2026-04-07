@@ -126,6 +126,7 @@ contract Settlement is ReentrancyGuard, Ownable {
      * @param ethAmounts ETH amounts for each winner
      * @param usdcAmounts USDC amounts for each winner
      * @return True if settlement successful
+     * @dev See docs/architecture/v0-architecture.md#§3-cross-chain-settlement-v01-bls-relayer-flow
      *
      * Requirements:
      * - BLS signature must be valid (verifies blockHash)

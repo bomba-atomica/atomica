@@ -1,10 +1,10 @@
-# Atomica Web Demo
+# atomica-demo
 
-Demo application showcasing Ethereum wallet integration with Aptos blockchain.
+Status: `live`
 
 ## Purpose
 
-This is a reference implementation demonstrating how to build Aptos dApps that use Ethereum wallets (MetaMask) for authentication. It serves as both a working example and an integration test suite.
+Demo application showcasing Ethereum wallet integration with Aptos blockchain. Reference implementation for Aptos dApps that use Ethereum wallets (MetaMask) for authentication. Serves as both a working example and the integration test shell for end-to-end flows.
 
 ## What's Inside
 
