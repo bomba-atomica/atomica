@@ -10,9 +10,12 @@ export { ClaimButton } from "./components/ClaimButton";
 export { FeeRebateDisplay } from "./components/FeeRebateDisplay";
 export { BidHistory } from "./components/BidHistory";
 export { useTokenBalances } from "./hooks/useTokenBalances";
+export { useBidHistory } from "./hooks/useBidHistory";
+export { useFeeRebate } from "./hooks/useFeeRebate";
+export { saveBidPrice, loadBidPrice, clearBidPrice, } from "./storage/bidStorage";
 export { WalletContext, WalletProvider, useWallet, } from "./context/WalletContext";
 export { BalancesProvider, useBalances } from "./context/BalancesContext";
 export { ContractStatusProvider, useContractStatus, } from "./context/ContractStatusContext";
-export { NetworkConfigProvider } from "./lib/network-config-context";
-export { useNetworkConfig } from "./lib/network-config-state";
+export { NetworkConfigProvider } from "./network/network-config-context";
+export { useNetworkConfig } from "./network/network-config-state";
 //# sourceMappingURL=index.js.map

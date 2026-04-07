@@ -1,7 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useState, useEffect } from "react";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
-import { formatETHBalance, formatFakeETHBalance, formatUSDBalance, } from "../lib/ethereum/balances";
+import { formatETHBalance, formatFakeETHBalance, formatUSDBalance, } from "@atomica/sdk/ethereum";
 import { useWallet } from "../context/WalletContext";
 import { useBalances } from "../context/BalancesContext";
 /**

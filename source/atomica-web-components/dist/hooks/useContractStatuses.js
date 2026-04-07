@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNetworkConfig } from "../lib/network-config-state";
-import { checkAptosAlive, checkAptosContracts, checkEthereumAlive, checkEVMContracts, } from "../lib/contract-check";
+import { useNetworkConfig } from "../network/network-config-state";
+import { checkAptosAlive, checkAptosContracts, checkEthereumAlive, checkEVMContracts, } from "@atomica/sdk/contract-check";
 export function useContractStatuses() {
     const { host } = useNetworkConfig();
     const [evmAlive, setEvmAlive] = useState(null);

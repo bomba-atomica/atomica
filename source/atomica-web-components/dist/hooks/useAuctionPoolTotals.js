@@ -2,24 +2,40 @@
  * useAuctionPoolTotals — Poll both chains for auction pool metrics.
  *
  * Ethereum side: sums all TokensLocked events from LockBox (real).
- * Aptos side:    total lock receipt count (stub — infrastructure pending, I-D4).
+ * Aptos side:    total lock receipt count via lock_receipt::get_receipt_count view function.
  *
  * Refreshes every 30 seconds.
  */
 import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
-import { getTotalLockedEth } from "../lib/ethereum/lockbox";
-import { getChainConfig } from "../lib/chain-config";
+import { getTotalLockedEth } from "@atomica/sdk/ethereum";
+import { getChainConfig } from "@atomica/sdk/chain-config";
+import { aptos, CONTRACT_ADDR } from "@atomica/sdk/aptos";
 /**
  * Fetch total lock receipts from Aptos lock_receipt module.
  *
- * TODO (I-D4): Query lock_receipt view function once the Aptos module exposes
- * a receipt count endpoint. Returns 0 until infrastructure is ready.
+ * Calls the `lock_receipt::get_receipt_count<Ethereum, FakeETH>()` view function
+ * which returns the total number of lock receipts registered for Ethereum/FakeETH.
+ * Falls back to 0 if the Aptos node is unreachable.
  */
 async function getTotalReceipts() {
-    // STUB: Aptos infrastructure pending (I-D4).
-    // When lock_receipt.move exposes a count view function, query it here via aptos.view().
-    return 0;
+    try {
+        const result = await aptos.view({
+            payload: {
+                function: `${CONTRACT_ADDR}::lock_receipt::get_receipt_count`,
+                typeArguments: [
+                    `${CONTRACT_ADDR}::lock_receipt::Ethereum`,
+                    `${CONTRACT_ADDR}::lock_receipt::FakeETH`,
+                ],
+                functionArguments: [],
+            },
+        });
+        return Number(result[0]);
+    }
+    catch {
+        // Aptos node unreachable or module not deployed — fall back to 0.
+        return 0;
+    }
 }
 const POLL_INTERVAL_MS = 30_000;
 export function useAuctionPoolTotals() {

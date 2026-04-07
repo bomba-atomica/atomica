@@ -1,7 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState } from "react";
 import { requestAPT } from "@atomica/aptos-docker-testnet/browser";
-import { requestEthTokens } from "../lib/ethereum/transaction";
+import { requestEthTokens } from "@atomica/sdk/ethereum";
 import { useWallet } from "../context/WalletContext";
 import { useBalances } from "../context/BalancesContext";
 import { useContractStatus } from "../context/ContractStatusContext";

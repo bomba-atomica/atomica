@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { aptos, getDerivedAddress, areContractsDeployed } from "../lib/aptos";
-import { useNetworkConfig } from "../lib/network-config-state";
+import { aptos } from "@atomica/sdk/aptos";
+import { getDerivedAddress } from "@atomica/sdk";
+import { areCoreContractsDeployed as areContractsDeployed } from "@atomica/sdk/aptos";
+import { useNetworkConfig } from "../network/network-config-state";
 const EMPTY_STATE = {
     apt: 0,
     aptAccountExists: false,

@@ -14,6 +14,10 @@
       "import": "./dist/ethereum/index.js",
       "types": "./dist/ethereum/index.d.ts"
     },
+    "./ethereum/proofs": {
+      "import": "./dist/ethereum/proofs/generator.js",
+      "types": "./dist/ethereum/proofs/generator.d.ts"
+    },
     "./aptos": {
       "import": "./dist/aptos/index.js",
       "types": "./dist/aptos/index.d.ts"

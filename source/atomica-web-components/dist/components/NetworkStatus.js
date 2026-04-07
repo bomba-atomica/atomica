@@ -1,8 +1,8 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState, useEffect } from "react";
 import { aptos } from "@atomica/aptos-docker-testnet/browser";
-import { getEthereumProvider } from "../lib/ethereum/config";
-import { useNetworkConfig } from "../lib/network-config-state";
+import { getEthereumProvider } from "@atomica/sdk/ethereum";
+import { useNetworkConfig } from "../network/network-config-state";
 export function NetworkStatus() {
     const { host } = useNetworkConfig();
     const [aptosBlock, setAptosBlock] = useState("0");

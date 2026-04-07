@@ -1,7 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState } from "react";
 import { ethers } from "ethers";
-import { submitCreateAuction } from "../lib/aptos/payloads";
+import { submitCreateAuction } from "@atomica/sdk/aptos";
 import * as ibe from "@atomica/state-proof-verifier/ibe";
 import { useWallet } from "../context/WalletContext";
 export function AuctionCreator() {

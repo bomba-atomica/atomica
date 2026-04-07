@@ -11,8 +11,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ethers } from "ethers";
-import { generateLockedBalanceProof } from "@atomica/sdk/ethereum";
-import type { LockedBalanceProof } from "@atomica/sdk/ethereum";
+import { generateLockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
+import type { LockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
 import {
   approveFakeEth,
   lockFakeEth,

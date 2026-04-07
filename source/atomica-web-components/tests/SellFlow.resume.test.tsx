@@ -28,6 +28,8 @@ vi.mock("@atomica/sdk/ethereum", () => ({
   lockFakeEth: vi.fn(),
   getUnlockTime: vi.fn(),
   withdrawFakeEth: vi.fn(),
+}));
+vi.mock("@atomica/sdk/ethereum/proofs", () => ({
   generateLockedBalanceProof: vi.fn(),
 }));
 vi.mock("@atomica/sdk/aptos", () => ({

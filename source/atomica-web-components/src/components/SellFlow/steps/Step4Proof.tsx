@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { LockedBalanceProof } from "@atomica/sdk/ethereum";
+import type { LockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
 
 interface Props {
   proof?: LockedBalanceProof;

@@ -10,12 +10,12 @@
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ethers } from "ethers";
-import { generateLockedBalanceProof } from "../lib/ethereum/proofs/generator";
-import { approveFakeEth, lockFakeEth, getUnlockTime, withdrawFakeEth, } from "../lib/ethereum/lockbox";
-import { getChainConfig } from "../lib/chain-config";
-import { getRegisterLockPayload, getCreateAuctionPayload, } from "../lib/aptos/payloads";
-import { submitNativeTransaction } from "../lib/aptos/transaction";
-import { aptos } from "../lib/aptos/config";
+import { generateLockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
+import { approveFakeEth, lockFakeEth, getUnlockTime, withdrawFakeEth, } from "@atomica/sdk/ethereum";
+import { getChainConfig } from "@atomica/sdk/chain-config";
+import { getRegisterLockPayload, getCreateAuctionPayload, } from "@atomica/sdk/aptos";
+import { submitNativeTransaction } from "@atomica/sdk";
+import { aptos } from "@atomica/sdk/aptos";
 // ── Constants ─────────────────────────────────────────────────────────────────
 const CONFIRMATION_TARGET = 1; // Demo: 1 block; MVP: 64
 // ── Persistence helpers ───────────────────────────────────────────────────────

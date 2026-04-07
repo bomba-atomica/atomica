@@ -8,7 +8,7 @@
  * State is persisted to localStorage keyed by wallet address so the user
  * can resume after a page reload.
  */
-import type { LockedBalanceProof } from "../lib/ethereum/proofs/generator";
+import type { LockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
 export type SellFlowStep = "connect" | "lock" | "confirming" | "generating-proof" | "submitting-proof" | "creating-auction" | "monitoring";
 export interface SellFlowState {
     step: SellFlowStep;

@@ -1,4 +1,4 @@
-import type { LockedBalanceProof } from "../../../lib/ethereum/proofs/generator";
+import type { LockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
 interface Props {
     proof?: LockedBalanceProof;
     loading: boolean;

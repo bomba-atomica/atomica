@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { getAllBalances } from "../lib/ethereum/balances";
-import { areContractsDeployed } from "../lib/ethereum/contracts";
-import { getEthereumProvider } from "../lib/ethereum/config";
+import { getAllBalances } from "@atomica/sdk/ethereum";
+import { areContractsDeployed } from "@atomica/sdk/ethereum";
+import { getEthereumProvider } from "@atomica/sdk/ethereum";
 export function useEthereumBalances(ethAddress) {
     const [state, setState] = useState({
         ethAccountExists: false,

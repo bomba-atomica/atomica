@@ -2,7 +2,7 @@
  * useAuctionPoolTotals — Poll both chains for auction pool metrics.
  *
  * Ethereum side: sums all TokensLocked events from LockBox (real).
- * Aptos side:    total lock receipt count (stub — infrastructure pending, I-D4).
+ * Aptos side:    total lock receipt count via lock_receipt::get_receipt_count view function.
  *
  * Refreshes every 30 seconds.
  */

@@ -1,7 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState, useEffect, useCallback } from "react";
-import { isSettled, getSettlement, submitClaim, getFakeEthBalance, } from "../lib/aptos/payloads";
-import { getDerivedAddress } from "../lib/aptos/siwe";
+import { isSettled, getSettlement, submitClaim, getFakeEthBalance, } from "@atomica/sdk/aptos";
+import { getDerivedAddress } from "@atomica/sdk";
 import { useWallet } from "../context/WalletContext";
 /**
  * ClaimButton — Demo-phase winner payout via direct `fake_eth::mint`.

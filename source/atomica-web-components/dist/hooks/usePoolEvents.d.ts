@@ -1,19 +1,27 @@
 /**
  * usePoolEvents — Subscribe to real-time pool events from both chains.
  *
- * Intended to trigger a refresh callback whenever:
- *   - TokensLocked fires on Ethereum (user locked FakeETH in LockBox)
- *   - LockReceiptCreated fires on Aptos (user submitted a proof)
+ * Phase 1 (current): Subscribes to `TokensLocked` events on the Ethereum
+ * LockBox contract via ethers.js. Calls the provided `onEvent` callback
+ * whenever a new lock is detected, enabling immediate UI refresh.
  *
- * STUB: Both subscriptions are pending infrastructure work.
- *   - Ethereum: blocked on a stable event-subscription setup (ethers.js
- *     WebSocket provider or polling filter). Use useAuctionPoolTotals for
- *     periodic polling in the meantime.
- *   - Aptos: blocked on lock_receipt.move emitting a queryable event handle
- *     (I-D4). Query the Aptos event API once the module is deployed.
+ * Phase 2 (future — Aptos events):
+ *   - Poll Aptos event stream for `LockRegistered` events from lock_receipt module
+ *   - Or use Aptos indexer when available
  *
- * When implemented, call `onEvent()` whenever either chain emits a relevant
- * event so callers can re-fetch totals immediately.
+ * When Ethereum RPC is not configured (zero address lockBox), the hook
+ * gracefully falls back to a no-op.
  */
-export declare function usePoolEvents(_onEvent: () => void): void;
+/**
+ * Subscribe to `TokensLocked` events on the Ethereum LockBox contract.
+ *
+ * Calls `onEvent()` each time a new `TokensLocked` event is received.
+ * Cleans up the event listener when the component unmounts or `onEvent`
+ * changes.
+ *
+ * Falls back to a no-op if:
+ *   - The LockBox address is the zero address (not configured)
+ *   - The Ethereum RPC URL is unreachable
+ */
+export declare function usePoolEvents(onEvent: () => void): void;
 //# sourceMappingURL=usePoolEvents.d.ts.map
