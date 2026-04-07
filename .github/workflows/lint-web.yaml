@@ -5,15 +5,15 @@ on:
     
     paths:
       - 'source/atomica-sdk/**'
-      - 'source/atomica-web-ui/**'
-      - 'source/atomica-web-demo/**'
+      - 'source/atomica-web-components/**'
+      - 'source/atomica-demo/**'
       - '.github/workflows/lint-web.yaml'
   push:
     
     paths:
       - 'source/atomica-sdk/**'
-      - 'source/atomica-web-ui/**'
-      - 'source/atomica-web-demo/**'
+      - 'source/atomica-web-components/**'
+      - 'source/atomica-demo/**'
       - '.github/workflows/lint-web.yaml'
   workflow_dispatch:
 
@@ -77,19 +77,19 @@ jobs:
           bun run build
 
       - name: Install dependencies
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: bun install
 
       - name: Lint
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: bun run lint
 
       - name: Format Check
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: bun run format:check
 
       - name: Type Check
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: bun run build
 
   lint-web-demo:
@@ -126,23 +126,23 @@ jobs:
           bun run build
 
       - name: Build Web UI
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: |
           bun install
           bun run build
 
       - name: Install dependencies
-        working-directory: source/atomica-web-demo
+        working-directory: source/atomica-demo
         run: bun install
 
       - name: Lint
-        working-directory: source/atomica-web-demo
+        working-directory: source/atomica-demo
         run: bun run lint
 
       - name: Format Check
-        working-directory: source/atomica-web-demo
+        working-directory: source/atomica-demo
         run: bun run format:check
 
       - name: Type Check
-        working-directory: source/atomica-web-demo
+        working-directory: source/atomica-demo
         run: bun run build

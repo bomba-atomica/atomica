@@ -9,7 +9,7 @@ on:
 
 jobs:
   test-web:
-    name: atomica-web-ui browser integration tests
+    name: atomica-web-components browser integration tests
     runs-on: ubuntu-latest
     permissions:
       packages: read
@@ -79,19 +79,19 @@ jobs:
           forge build
 
       - name: Install Web UI dependencies
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: bun install
 
       - name: Build Atomica Web UI
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: bun run build
 
       - name: Install Playwright browsers
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: bunx playwright install --with-deps chromium
 
       - name: Run happy-path browser integration test
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         env:
           NODE_OPTIONS: "--max-old-space-size=8192"
         run: bunx vitest run tests/integration/14-happy-path.test.tsx

@@ -72,12 +72,39 @@ check_module "Aptos Docker Testnet SDK" "source/docker-testnet/aptos-testnet"
 # 5. Atomica SDK
 check_module "Atomica SDK" "source/atomica-sdk"
 
-# 6. Atomica Web UI
-check_module "Atomica Web UI" "source/atomica-web-ui" "bun run build" "bun run lint" "bun run format:check"
+# 6. Atomica Web Components
+check_module "Atomica Web Components" "source/atomica-web-components" "bun run build" "bun run lint" "bun run format:check"
 
-# 7. Atomica Web Demo
-check_module "Atomica Web Demo" "source/atomica-web-demo" "bun run build" "bun run lint" "bun run format:check"
+# 7. Atomica Demo
+check_module "Atomica Demo" "source/atomica-demo" "bun run build" "bun run lint" "bun run format:check"
 
+# --------------------------------------------------
+# 8. SDK Dependency Boundary Check
+# --------------------------------------------------
+echo "--------------------------------------------------"
+echo "🔒 Checking SDK dependency boundaries..."
+
+SDK_SRC="$REPO_ROOT/source/atomica-sdk/src"
+
+# Fail if any SDK source file imports react or react-dom
+if grep -r --include="*.ts" --include="*.tsx" \
+    "from ['\"]react['\"]\\|from ['\"]react-dom['\"]\\|from ['\"]react/" \
+    "$SDK_SRC" 2>/dev/null | grep -v "//"; then
+    echo "❌ SDK boundary violation: atomica-sdk/src must not import react or react-dom."
+    echo "   Move React-dependent code to atomica-web-components."
+    exit 1
+fi
+
+# Fail if any SDK source file imports @atomica/atomica-web-components
+if grep -r --include="*.ts" --include="*.tsx" \
+    "@atomica/atomica-web-components" \
+    "$SDK_SRC" 2>/dev/null; then
+    echo "❌ SDK boundary violation: atomica-sdk/src must not import @atomica/atomica-web-components."
+    echo "   The dependency direction must be: atomica-web-components -> atomica-sdk (not the reverse)."
+    exit 1
+fi
+
+echo "✅ SDK dependency boundaries clean."
 
 echo "--------------------------------------------------"
 echo "🎉 Code quality checks passed! Push allowed."

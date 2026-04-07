@@ -63,7 +63,7 @@ jobs:
 
       - name: Build Atomica Web UI
         if: matrix.type == 'meta'
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: |
           bun install
           bun run build
@@ -132,15 +132,15 @@ jobs:
       # ── meta: Web Demo unit tests ───────────────────────────────────────────
       - name: Install demo dependencies
         if: matrix.type == 'meta'
-        working-directory: source/atomica-web-demo
+        working-directory: source/atomica-demo
         run: bun install
 
       - name: Install Playwright browsers (demo)
         if: matrix.type == 'meta'
-        working-directory: source/atomica-web-demo
+        working-directory: source/atomica-demo
         run: bunx playwright install --with-deps chromium
 
       - name: Run Web Demo unit tests
         if: matrix.type == 'meta'
-        working-directory: source/atomica-web-demo
+        working-directory: source/atomica-demo
         run: bunx vitest run tests/simple.test.ts tests/sdk-import.test.ts tests/aptos-sdk.test.ts tests/mock-wallet.test.ts tests/app-import.test.ts tests/app-component.test.tsx

@@ -130,20 +130,20 @@ jobs:
             --skip-fetch-latest-git-deps
 
       - name: Install Web UI dependencies
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: bun install
 
       - name: Build Atomica Web UI
         if: matrix.chunk != 'faucet-wallet'
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: bun run build
 
       - name: Install Playwright browsers
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         run: bunx playwright install --with-deps chromium
 
       - name: Run browser tests
-        working-directory: source/atomica-web-ui
+        working-directory: source/atomica-web-components
         env:
           NODE_OPTIONS: "--max-old-space-size=8192"
         run: bunx vitest run ${{ matrix.test_files }}
