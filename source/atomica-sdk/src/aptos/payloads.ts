@@ -1,9 +1,9 @@
 import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
 import { ethers } from "ethers";
-import { CONTRACT_ADDR, aptos } from "./config";
-import { getDerivedAddress } from "../siwe";
-import { submitNativeTransaction } from "../transaction";
-import type { LockedBalanceProof } from "../ethereum/proofs/generator";
+import { CONTRACT_ADDR, aptos } from "./config.js";
+import { getDerivedAddress } from "../siwe.js";
+import { submitNativeTransaction } from "../transaction.js";
+import type { LockedBalanceProof } from "../ethereum/proofs/generator.js";
 
 /**
  * Sanity Test: Simple APT transfer using MetaMask signature

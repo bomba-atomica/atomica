@@ -1,5 +1,5 @@
-import { areContractsDeployed as areEVMContractsDeployed } from "./ethereum/contracts";
-import { areCoreContractsDeployed as areAptosCoreContractsDeployed } from "./aptos/payloads";
+import { areContractsDeployed as areEVMContractsDeployed } from "./ethereum/contracts.js";
+import { areCoreContractsDeployed as areAptosCoreContractsDeployed } from "./aptos/payloads.js";
 
 export async function checkAptosAlive(): Promise<boolean> {
   try {

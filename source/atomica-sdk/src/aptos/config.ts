@@ -1,5 +1,5 @@
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { buildAptosFullnodeUrl, getStoredHost } from "../network-host";
+import { buildAptosFullnodeUrl, getStoredHost } from "../network-host.js";
 
 // Use safer env access that works in Node (test/ts-node) and Vite
 const env =

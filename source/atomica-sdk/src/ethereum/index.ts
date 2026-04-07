@@ -5,22 +5,22 @@
  */
 
 // Configuration
-export * from "./config";
+export * from "./config.js";
 
 // ABIs
-export * from "./abis";
+export * from "./abis.js";
 
 // Contracts
-export * from "./contracts";
+export * from "./contracts.js";
 
 // Transactions
-export * from "./transaction";
+export * from "./transaction.js";
 
 // Balances
-export * from "./balances";
+export * from "./balances.js";
 
 // Lockbox
-export * from "./lockbox";
+export * from "./lockbox.js";
 
 // Proof generation
-export * from "./proofs/generator";
+export * from "./proofs/generator.js";

@@ -11,7 +11,7 @@ import {
   type EthereumProof,
   type StorageProof,
 } from "@atomica/state-proof-verifier";
-import { calculateLockedBalanceStorageKey } from "./storage-key";
+import { calculateLockedBalanceStorageKey } from "./storage-key.js";
 
 /**
  * Complete state proof for locked balance in LockBox contract

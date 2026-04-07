@@ -5,8 +5,8 @@
  */
 
 import { ethers } from "ethers";
-import { getFakeETHContract, getFakeUSDContract } from "./contracts";
-import { getEthereumProvider } from "./config";
+import { getFakeETHContract, getFakeUSDContract } from "./contracts.js";
+import { getEthereumProvider } from "./config.js";
 
 export interface TokenBalances {
   eth: bigint;

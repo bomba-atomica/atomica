@@ -6,8 +6,8 @@
  */
 
 import { ethers, type TransactionReceipt } from "ethers";
-import { getChainConfig } from "../chain-config";
-import { FAKE_ETH_ABI } from "./abis";
+import { getChainConfig } from "../chain-config.js";
+import { FAKE_ETH_ABI } from "./abis.js";
 
 // ── ABI ──────────────────────────────────────────────────────────────────────
 

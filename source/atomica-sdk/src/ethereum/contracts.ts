@@ -5,13 +5,13 @@
  */
 
 import { ethers, Contract } from "ethers";
-import { FAKE_ETH_ABI, FAKE_USD_ABI } from "./abis";
+import { FAKE_ETH_ABI, FAKE_USD_ABI } from "./abis.js";
 import {
   FAKE_ETH_ADDRESS,
   FAKE_USD_ADDRESS,
   getEthereumProvider,
   getMetaMaskProvider,
-} from "./config";
+} from "./config.js";
 
 /**
  * Get FakeETH contract instance (read-only)

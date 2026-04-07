@@ -8,13 +8,13 @@ import { ethers } from "ethers";
 import {
   getFakeETHContractWithSigner,
   getFakeUSDContractWithSigner,
-} from "./contracts";
+} from "./contracts.js";
 import {
   connectMetaMask,
   isCorrectNetwork,
   switchToTestnet,
   getEthereumProvider,
-} from "./config";
+} from "./config.js";
 
 export interface TransactionResult {
   hash: string;
