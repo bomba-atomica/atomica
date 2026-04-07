@@ -54,14 +54,14 @@ jobs:
           bun install
           bun run build
 
-      - name: Build Atomica SDK
-        working-directory: source/atomica-sdk
+      - name: Build State Proofs
+        working-directory: source/state-proofs/typescript
         run: |
           bun install
           bun run build
 
-      - name: Build State Proofs
-        working-directory: source/state-proofs/typescript
+      - name: Build Atomica SDK
+        working-directory: source/atomica-sdk
         run: |
           bun install
           bun run build
