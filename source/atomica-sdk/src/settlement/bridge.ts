@@ -110,17 +110,47 @@ export async function submitSettlement(
 }
 
 /**
- * Scaffold hook for bidder collateral refund path.
+ * Typed descriptor for a losing bidder's collateral refund request.
  *
- * Called when a losing bid's `collateral_lock_id` must be released after
- * settlement. Implemented in issue #87.
+ * Created when settlement determines a bid did not win.  The
+ * `collateral_lock_id` is the FakeUSD LockReceipt ID that was consumed by
+ * `auction::submit_bid`.  The off-chain relayer or user calls
+ * `releaseBidderCollateral` with this descriptor to trigger the Ethereum-side
+ * unlock of the frozen FakeUSD.
  *
- * @param collateralLockId  FakeUSD LockReceipt ID from the losing bid
+ * @see docs/architecture/v0-architecture.md §2.8 — Collateral Refund Path
+ * @see #87 (Phase 3b — bidder collateral scaffold)
+ * @see #89 (Phase 3d — cross-chain settlement) where full release logic lands
+ */
+export interface BidderCollateralRefund {
+  /** FakeUSD LockReceipt ID consumed by auction::submit_bid */
+  collateralLockId: Uint8Array;
+  /** Bidder Aptos address (zero-padded Ethereum address) */
+  bidderAddress: string;
+  /** auction_window_id for which this bid was submitted */
+  windowId: bigint;
+  /** BCS-encoded trading pair that identifies the auction window */
+  pairBcs: Uint8Array;
+}
+
+/**
+ * Release bidder collateral for a losing bid.
+ *
+ * Called after settlement when a bid did not win the uniform-price clearing.
+ * In the production flow this calls the Ethereum LockBox to unfreeze the
+ * FakeUSD that was locked as margin.
+ *
+ * Scaffold body — implemented in issue #87 (this issue) as a typed stub.
+ * Full cross-chain release logic (including BLS proof generation and
+ * `BLSVerifierTestnet.sol` call) lands in #89.
+ *
+ * @param refund  Collateral refund descriptor from the losing bid
+ * @see docs/architecture/v0-architecture.md §2.8
  */
 export async function releaseBidderCollateral(
-  _collateralLockId: Uint8Array,
+  _refund: BidderCollateralRefund,
 ): Promise<TxHash> {
   throw new Error(
-    "NOT_IMPLEMENTED: releaseBidderCollateral — implement in #87",
+    "NOT_IMPLEMENTED: releaseBidderCollateral — full cross-chain release implements in #89",
   );
 }

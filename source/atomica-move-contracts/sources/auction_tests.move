@@ -16,6 +16,7 @@ module atomica::auction_tests {
     use std::vector;
     use aptos_framework::timestamp;
     use atomica::auction::{Self};
+    use atomica::lock_receipt::{Self, Ethereum, FakeUSD};
 
     // ===================== Constants =====================
 
@@ -193,14 +194,82 @@ module atomica::auction_tests {
         auction::create_auction(seller, WINDOW_ID, pair_bcs, lock_id, 100u64, mpk_bytes);
     }
 
-    #[test(framework = @0x1, bidder = @0x1111)]
-    #[expected_failure(abort_code = 99, location = atomica::auction)] // E_NOT_IMPLEMENTED
-    fun test_submit_bid_aborts_not_implemented(framework: &signer, bidder: &signer) {
+    // ===================== Bidder collateral claim path (Phase 3b) =====================
+    //
+    // End-to-end test for submit_bid:
+    //   1. Initialize LockReceipt registry for Ethereum / FakeUSD.
+    //   2. Insert a FakeUSD LockReceipt via test helper (bypasses proof verification).
+    //   3. Insert a WindowState so submit_bid can find the window.
+    //   4. Call submit_bid — verifies receipt is consumed and bid is stored.
+    //
+    // @see docs/architecture/v0-architecture.md §2.5
+
+    #[test(framework = @0x1, atomica = @atomica, bidder = @0x1111)]
+    fun test_submit_bid_consumes_lock_receipt_and_stores_bid(
+        framework: &signer,
+        atomica:   &signer,
+        bidder:    &signer,
+    ) {
         setup(framework);
+
+        // 1. Initialize FakeUSD LockReceipt registry at @atomica (= @0xcafe in tests).
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+
+        // 2. Insert a FakeUSD LockReceipt for the bidder, bypassing proof verification.
+        //    Receipt ID is a simple 32-byte vector for test clarity.
+        let collateral_lock_id = b"fakeusd_lock_receipt_id_32bytes_";
+        let bidder_addr = @0x1111;
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(
+            collateral_lock_id,
+            bidder_addr,
+            500_000_000u256, // 500 FakeUSD with 6 decimals
+            100u64,          // block_number
+        );
+
+        // 3. Insert a WindowState so submit_bid can locate the window.
+        let pair_bcs = default_pair_bcs();
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0);
+
+        // Pre-condition: zero bids before submit_bid.
+        assert!(auction::get_bid_count(WINDOW_ID, pair_bcs) == 0, 1);
+
+        // 4. Call submit_bid — consumes receipt and stores the sealed bid.
+        let u_bytes    = b"G1_ephemeral_point_48_bytes_pad_";
+        let ciphertext = b"aes_gcm_ciphertext_of_price_";
+        auction::submit_bid(
+            bidder,
+            WINDOW_ID,
+            pair_bcs,
+            u_bytes,
+            ciphertext,
+            collateral_lock_id,
+        );
+
+        // Bid count must have incremented to 1.
+        assert!(auction::get_bid_count(WINDOW_ID, pair_bcs) == 1, 2);
+
+        // Receipt must now be claimed (STATUS_CLAIMED = 1).
+        // We check via is_lock_claimed — after claim() the lock_id is in claimed_locks.
+        assert!(lock_receipt::is_lock_claimed<Ethereum, FakeUSD>(collateral_lock_id), 3);
+    }
+
+    // Verify that submit_bid aborts when the FakeUSD LockReceipt registry has not
+    // been initialized.  This guards against callers that skip initialization.
+    #[test(framework = @0x1, atomica = @atomica, bidder = @0x1111)]
+    #[expected_failure(abort_code = 6, location = atomica::lock_receipt)] // E_REGISTRY_NOT_INITIALIZED
+    fun test_submit_bid_aborts_when_receipt_registry_not_initialized(
+        framework: &signer,
+        atomica:   &signer,
+        bidder:    &signer,
+    ) {
+        setup(framework);
+        // Registry NOT initialized — lock_receipt::claim must abort.
         let pair_bcs           = default_pair_bcs();
         let u_bytes            = vector::empty<u8>();
         let ciphertext         = vector::empty<u8>();
         let collateral_lock_id = vector::empty<u8>();
+        // Insert window so submit_bid reaches the claim call.
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0);
         auction::submit_bid(bidder, WINDOW_ID, pair_bcs, u_bytes, ciphertext, collateral_lock_id);
     }
 

@@ -40,10 +40,12 @@
 ///
 /// @see docs/architecture/v0-architecture.md#§2-auction-mechanism-v01-beta
 module atomica::auction {
+    use std::signer;
     use std::vector;
     use aptos_framework::timestamp;
     use aptos_framework::table::{Self, Table};
     use aptos_std::bcs;
+    use atomica::lock_receipt::{Self, Ethereum, FakeUSD};
 
     // ===================== Error Codes =====================
 
@@ -172,10 +174,14 @@ module atomica::auction {
 
     /// Submit a sealed bid for `(window_id, pair)`.
     ///
-    /// Stores the IBE-encrypted bid without revealing the plaintext price.
-    /// The `collateral_lock_id` links the bidder's FakeUSD LockReceipt (margin).
+    /// Claims the bidder's `LockReceipt<Ethereum, FakeUSD>` identified by
+    /// `collateral_lock_id` as collateral margin, then stores the IBE-encrypted
+    /// bid in the window's bid list.  The receipt is consumed (status →
+    /// STATUS_CLAIMED) so it cannot be double-spent.
     ///
-    /// Body: scaffold — aborts with E_NOT_IMPLEMENTED (99).
+    /// The window must exist (created via `create_auction`).  This function
+    /// aborts with E_AUCTION_NOT_FOUND if no entry exists for (window_id,
+    /// pair_bcs).
     ///
     /// Call-site break from Demo phase:
     ///   payloads.ts::getBidPayload(sellerAddr, amountUsd, u, v)
@@ -185,14 +191,36 @@ module atomica::auction {
     ///
     /// @see docs/architecture/v0-architecture.md §2.5
     public entry fun submit_bid(
-        _bidder:             &signer,
-        _window_id:          u64,
-        _pair_bcs:           vector<u8>,
-        _u_bytes:            vector<u8>,
-        _ciphertext:         vector<u8>,
-        _collateral_lock_id: vector<u8>,
-    ) {
-        abort E_NOT_IMPLEMENTED
+        bidder:             &signer,
+        window_id:          u64,
+        pair_bcs:           vector<u8>,
+        u_bytes:            vector<u8>,
+        ciphertext:         vector<u8>,
+        collateral_lock_id: vector<u8>,
+    ) acquires AuctionRegistry {
+        // 1. Consume the bidder's FakeUSD LockReceipt as collateral margin.
+        //    `lock_receipt::claim` marks the receipt STATUS_CLAIMED and returns
+        //    the locked amount (informational — not stored in the bid for Phase 3b).
+        let bidder_addr = signer::address_of(bidder);
+        let _collateral_amount = lock_receipt::claim<Ethereum, FakeUSD>(
+            bidder_addr,
+            collateral_lock_id,
+        );
+
+        // 2. Locate the window in the global registry.
+        assert!(exists<AuctionRegistry>(@atomica), E_AUCTION_NOT_FOUND);
+        let registry = borrow_global_mut<AuctionRegistry>(@atomica);
+        let key = make_window_key(window_id, pair_bcs);
+        assert!(table::contains(&registry.windows, key), E_AUCTION_NOT_FOUND);
+
+        // 3. Store the sealed bid.
+        let state = table::borrow_mut(&mut registry.windows, key);
+        vector::push_back(&mut state.bids, SealedBid {
+            bidder: bidder_addr,
+            u_bytes,
+            ciphertext,
+            collateral_lock_id,
+        });
     }
 
     /// Reveal cleartexts and run uniform-price clearing for `(window_id, pair)`.
@@ -333,9 +361,6 @@ module atomica::auction {
     }
 
     // ===================== Test helpers =====================
-
-    #[test_only]
-    use std::signer;
 
     // Append a SealedBid directly to an existing WindowState for unit tests,
     // bypassing submit_bid (which aborts with E_NOT_IMPLEMENTED).
