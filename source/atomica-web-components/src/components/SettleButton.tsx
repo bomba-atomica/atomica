@@ -3,24 +3,34 @@ import { submitSettle, isSettled, getSettlement } from "@atomica/sdk/aptos";
 import { useWallet } from "../context/WalletContext";
 
 interface Props {
-  sellerAddress: string;
+  windowId: bigint;
+  pairBcs: Uint8Array;
   auctionEndTime?: number;
   /** Called when a settlement is observed (either fresh or already settled). */
-  onSettled?: (sellerAddress: string, clearingPrice: bigint) => void;
+  onSettled?: (windowId: bigint, clearingPrice: bigint) => void;
 }
 
 /**
- * SettleButton — calls `auction::settle` on-chain and displays the settlement
- * outcome (winner address + clearing price).
+ * SettleButton — calls `auction::settle` on-chain (v0 Beta global-registry).
+ *
+ * Displays the settlement outcome (clearing price and total filled) after
+ * the window closes.
+ *
+ * v0 Beta breaking change from Demo phase: `settle` now takes
+ * `(window_id, pair_bcs)` instead of `(seller_addr)`. The view functions
+ * `is_settled` and `get_settlement` are also window-keyed.
  *
  * The button is disabled when:
  * - the connected wallet is missing
- * - the auction has not yet ended (current time <= auctionEndTime)
- * - the auction is already settled on-chain
+ * - the auction window has not yet ended (current time <= auctionEndTime)
+ * - the window is already settled on-chain
  * - a transaction is in flight
+ *
+ * @see docs/architecture/v0-architecture.md#§2-auction-mechanism-v01-beta
  */
 export function SettleButton({
-  sellerAddress,
+  windowId,
+  pairBcs,
   auctionEndTime,
   onSettled,
 }: Props) {
@@ -28,11 +38,11 @@ export function SettleButton({
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [settled, setSettled] = useState(false);
-  const [winner, setWinner] = useState<string | null>(null);
   const [clearingPrice, setClearingPrice] = useState<bigint | null>(null);
+  const [totalFilled, setTotalFilled] = useState<bigint | null>(null);
   const [auctionEnded, setAuctionEnded] = useState(false);
 
-  // Poll whether auction time has passed
+  // Poll whether auction window time has passed
   useEffect(() => {
     if (!auctionEndTime) return;
     const check = () => {
@@ -49,55 +59,59 @@ export function SettleButton({
     let cancelled = false;
     async function check() {
       try {
-        const s = await isSettled(sellerAddress);
+        const s = await isSettled(windowId, pairBcs);
         if (cancelled) return;
         setSettled(s);
         if (s) {
-          const result = await getSettlement(sellerAddress);
+          const result = await getSettlement(windowId, pairBcs);
           if (cancelled) return;
-          setWinner(result.winner);
           setClearingPrice(result.clearingPrice);
+          setTotalFilled(result.totalFilled);
           setStatus("Already Settled");
-          onSettled?.(sellerAddress, result.clearingPrice);
+          onSettled?.(windowId, result.clearingPrice);
         }
       } catch {
-        // View function may fail if auction doesn't exist yet — ignore
+        // View function may fail if registry or window doesn't exist yet — ignore
       }
     }
     check();
     return () => {
       cancelled = true;
     };
-  }, [sellerAddress, onSettled]);
+  }, [windowId, pairBcs, onSettled]);
 
   const handleSettle = useCallback(async () => {
     if (!account) return;
     setLoading(true);
-    setStatus("Settling auction\u2026");
+    setStatus("Settling auction…");
     try {
-      await submitSettle(account, sellerAddress);
+      await submitSettle(account, windowId, pairBcs);
 
       // Query settlement result
-      const result = await getSettlement(sellerAddress);
-      setWinner(result.winner);
+      const result = await getSettlement(windowId, pairBcs);
       setClearingPrice(result.clearingPrice);
+      setTotalFilled(result.totalFilled);
       setSettled(true);
       setStatus("Settled");
-      onSettled?.(sellerAddress, result.clearingPrice);
+      onSettled?.(windowId, result.clearingPrice);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unknown error";
-      // Surface Move abort codes in a human-readable way
       if (msg.includes("E_AUCTION_NOT_ENDED") || msg.includes("abort 3")) {
-        setStatus("Error: Auction has not ended yet");
-      } else if (msg.includes("E_ALREADY_SETTLED") || msg.includes("abort 4")) {
+        setStatus("Error: Auction window has not ended yet");
+      } else if (msg.includes("E_ALREADY_SETTLED") || msg.includes("abort 5")) {
         setStatus("Error: Auction already settled");
+      } else if (
+        msg.includes("E_NOT_IMPLEMENTED") ||
+        msg.includes("abort 99")
+      ) {
+        setStatus("Error: Settlement not yet implemented (Phase 3a scaffold)");
       } else {
         setStatus(`Error: ${msg}`);
       }
     } finally {
       setLoading(false);
     }
-  }, [account, sellerAddress]);
+  }, [account, windowId, pairBcs, onSettled]);
 
   const disabled = loading || settled || !auctionEnded || !account;
 
@@ -113,11 +127,7 @@ export function SettleButton({
             : "bg-zinc-100 hover:bg-white text-zinc-900"
         }`}
       >
-        {loading
-          ? "Settling\u2026"
-          : settled
-            ? "Already Settled"
-            : "Settle Auction"}
+        {loading ? "Settling…" : settled ? "Already Settled" : "Settle Auction"}
       </button>
       {status && (
         <div
@@ -127,29 +137,25 @@ export function SettleButton({
           {status}
         </div>
       )}
-      {settled && winner && (
+      {settled && clearingPrice !== null && (
         <div
           data-testid="settle-result"
           className="text-xs font-mono p-2 bg-zinc-950 rounded border border-zinc-800 flex flex-col gap-1"
         >
           <div className="flex justify-between">
-            <span className="text-zinc-500">Winner</span>
-            <span
-              data-testid="settle-winner"
-              className="text-zinc-300 truncate max-w-[200px]"
-              title={winner}
-            >
-              {winner === "0x0" ? "No winner (no valid bids)" : winner}
-            </span>
-          </div>
-          <div className="flex justify-between">
             <span className="text-zinc-500">Clearing price</span>
             <span data-testid="settle-clearing-price" className="text-zinc-300">
-              {clearingPrice !== null
-                ? `$${(Number(clearingPrice) / 1e6).toFixed(2)}`
-                : "\u2014"}
+              {`$${(Number(clearingPrice) / 1e6).toFixed(2)}`}
             </span>
           </div>
+          {totalFilled !== null && (
+            <div className="flex justify-between">
+              <span className="text-zinc-500">Total filled</span>
+              <span data-testid="settle-total-filled" className="text-zinc-300">
+                {`${(Number(totalFilled) / 1e18).toFixed(4)} ETH`}
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>

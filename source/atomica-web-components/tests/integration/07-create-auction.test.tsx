@@ -152,13 +152,16 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     });
   });
 
-  // ── Test 1: happy path ─────────────────────────────────────────────────────
+  // ── Test 1: scaffold abort (Phase 3a) ─────────────────────────────────────
+  //
+  // Phase 3a: create_auction aborts with E_NOT_IMPLEMENTED (99). The UI
+  // component surfaces this as a red error element. A successful tx hash
+  // is not expected until Phase 3b (#86b) implements the full body.
 
-  it("shows auction-spinner on mount and auction-tx-hash after successful create", async () => {
-    // Use the deployer account directly to call create_auction.
-    // The Move contract only authorizes @atomica or the zero-padded Ethereum
-    // address; SIWE-derived addresses are rejected in this Demo phase.
+  it("shows spinner on mount then error when create_auction aborts (Phase 3a scaffold)", async () => {
     const onCreateAuction = async () => {
+      // createAuctionDirect now uses checkSuccess: false; the helper throws
+      // because the underlying waitForTransaction sees a failed tx.
       const txHash = await createAuctionDirect(
         aptosGlobal,
         deployerAccount,
@@ -181,16 +184,14 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     // spinner shown on mount while auto-creating
     expect(screen.getByTestId(step7Auction.auctionSpinner)).toBeTruthy();
 
-    // After create succeeds, tx hash element should appear
+    // Phase 3a: create_auction aborts with E_NOT_IMPLEMENTED — error element shown
     await waitFor(
       () => {
-        expect(screen.getByTestId(step7Auction.auctionTxHash)).toBeTruthy();
+        const errorEl = document.querySelector(".text-red-400");
+        expect(errorEl).toBeTruthy();
       },
       { timeout: 60_000 },
     );
-
-    const txHashEl = screen.getByTestId(step7Auction.auctionTxHash);
-    expect(txHashEl.textContent).toMatch(/Tx:/);
   }, 90_000);
 
   // ── Test 2: amount and min price displayed ─────────────────────────────────
@@ -211,13 +212,14 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     expect(text).toContain("$0.00");
   });
 
-  // ── Test 3: receipt already claimed ───────────────────────────────────────
+  // ── Test 3: scaffold abort (Phase 3a) — error surfaced ───────────────────
+  //
+  // Phase 3a: any call to create_auction aborts with E_NOT_IMPLEMENTED (99).
+  // The UI must surface an error element (red text). This test doubles as
+  // a regression guard: once Phase 3b lands and the scaffold is replaced, this
+  // test should be updated to check for E_RECEIPT_ALREADY_CLAIMED on re-use.
 
-  it("shows Move abort error when receipt is already claimed (second call)", async () => {
-    // The auction was already created (receipt claimed) in Test 1.
-    // Attempting create_auction again on the same lockId should fail with
-    // E_RECEIPT_ALREADY_CLAIMED. Use the deployer account so we reach the
-    // contract's status check rather than hitting E_UNAUTHORIZED_SIGNER first.
+  it("shows Move abort error element when create_auction aborts (Phase 3a scaffold repeat)", async () => {
     const onCreateAuction = async () => {
       const txHash = await createAuctionDirect(
         aptosGlobal,
@@ -281,7 +283,14 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     const mpk = new Uint8Array(0);
 
     const onCreateAuction = async () => {
-      const payload = getCreateAuctionPayload(lockIdBytes, MIN_PRICE, AUCTION_DURATION, mpk);
+      // v0 Beta: getCreateAuctionPayload(windowId, pairBcs, lockId, minPrice, mpkBytes)
+      const payload = getCreateAuctionPayload(
+        0n,                // windowId
+        new Uint8Array(0), // pairBcs (empty — scaffold body aborts regardless)
+        lockIdBytes,
+        MIN_PRICE,
+        mpk,
+      );
       const result = await submitNativeTransaction(aptosGlobal, sellerAddress, payload);
       return { txHash: (result as { hash?: string }).hash };
     };

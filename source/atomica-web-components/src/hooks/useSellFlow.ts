@@ -375,15 +375,22 @@ export function useSellFlow(
 
     try {
       const lockIdBytes = ethers.getBytes(state.lockId);
-      // Duration: 1 hour default for demo
-      const duration = BigInt(3600);
-      // MPK: empty bytes for demo (timelock encryption deferred to Production)
+      // v0 Beta: use current_window_id formula (epoch*2 + offset)
+      // Client-side approximation — the contract will use the on-chain clock.
+      const nowSec = BigInt(Math.floor(Date.now() / 1000));
+      const epoch = nowSec / 43200n;
+      const tmod = nowSec % 43200n;
+      const windowId = epoch * 2n + (tmod >= 28500n ? 1n : 0n);
+      // pairBcs: empty bytes for scaffold (create_auction body aborts E_NOT_IMPLEMENTED)
+      const pairBcs = new Uint8Array(0);
+      // MPK: empty bytes for scaffold (timelock encryption deferred to Production)
       const mpk = new Uint8Array(0);
 
       const payload = getCreateAuctionPayload(
+        windowId,
+        pairBcs,
         lockIdBytes,
         state.minPrice,
-        duration,
         mpk,
       );
       await submitNativeTransaction(aptos, account, payload);

@@ -12,7 +12,12 @@ interface Props {
   minPrice?: bigint;
   auctionEndTime?: number;
   unlockTime?: number;
+  /** @deprecated v0 Beta — use windowId + pairBcs instead */
   sellerAddress?: string | null;
+  /** v0 Beta: auction window ID (from auction::current_window_id) */
+  windowId?: bigint | null;
+  /** v0 Beta: BCS-encoded Pair struct */
+  pairBcs?: Uint8Array | null;
   onCancelAndUnlock: () => Promise<void>;
   loading: boolean;
   error?: string;
@@ -80,6 +85,8 @@ export function Step8Monitor({
   auctionEndTime,
   unlockTime,
   sellerAddress,
+  windowId,
+  pairBcs,
   onCancelAndUnlock,
   loading,
   error,
@@ -91,7 +98,8 @@ export function Step8Monitor({
   const { entries: bidHistoryEntries, recordSettlement } = useBidHistory(
     sellerAddress ?? null,
   );
-  const feeRebate = useFeeRebate(sellerAddress, account);
+  // v0 Beta: useFeeRebate now takes (windowId, pairBcs, bidderAddress)
+  const feeRebate = useFeeRebate(windowId ?? null, pairBcs ?? null, account);
 
   const amountFormatted = amount
     ? (Number(amount) / 1e18).toFixed(4) + " FETH"
@@ -146,15 +154,22 @@ export function Step8Monitor({
         </div>
       </div>
 
-      {ended && sellerAddress && (
+      {ended && windowId != null && pairBcs != null && (
         <SettleButton
-          sellerAddress={sellerAddress}
+          windowId={windowId}
+          pairBcs={pairBcs}
           auctionEndTime={auctionEndTime}
-          onSettled={recordSettlement}
+          onSettled={(wid, cp) => recordSettlement(wid.toString(), cp)}
         />
       )}
 
-      {ended && sellerAddress && <ClaimButton sellerAddress={sellerAddress} />}
+      {ended && windowId != null && pairBcs != null && (
+        <ClaimButton
+          windowId={windowId}
+          pairBcs={pairBcs}
+          sellerAddress={sellerAddress ?? undefined}
+        />
+      )}
 
       {feeRebate.ready && feeRebate.isWinner && (
         <FeeRebateDisplay

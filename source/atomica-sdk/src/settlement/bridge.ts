@@ -27,14 +27,13 @@
  *     - Merge order: #86 → #87 → #89.
  *
  * Call-site dependencies:
- *   - `queryAuctionSettledEvents` reads `auction::AuctionSettledV1` events from
- *     the Aptos node. The event shape is defined in auction.move::AuctionSettledV1
- *     (added by scout #96, fully implemented in #86).
+ *   - `queryAuctionSettledEvents` reads `auction::AuctionSettled` events from
+ *     the Aptos node. The event shape is defined in auction.move::AuctionSettled
+ *     (implemented in #86 as the Phase 3a global-registry event).
  *   - `submitSettlement` calls `BLSVerifierTestnet.sol::authorizeSettlement`
  *     (stub created in issue #83; implemented in #89).
- *   - Winner addresses for `submitSettlement` come from the AuctionSettled event,
- *     NOT from a per-seller Aptos lookup — the current `get_settlement(sellerAddr)`
- *     view function is removed when #86 merges.
+ *   - Winner addresses for `submitSettlement` come from the AuctionSettled event;
+ *     the per-seller view functions from Demo phase are removed in #86.
  */
 
 // Scaffold created by dev-scout issue #96. Implement in #87 and #89.
@@ -55,9 +54,9 @@ export interface Pair {
 }
 
 /**
- * Mirrors the on-chain `auction::AuctionSettledV1` event.
+ * Mirrors the on-chain `auction::AuctionSettled` event.
  * @see docs/architecture/v0-architecture.md §2.9
- * Implemented in auction.move as `AuctionSettledV1` (scout #96 stub; full in #86).
+ * Implemented in auction.move as `AuctionSettled` (Phase 3a #86).
  */
 export interface AuctionSettledEvent {
   windowId: bigint;
@@ -78,7 +77,7 @@ export type TxHash = string;
 // ============================================================
 
 /**
- * Query Aptos node for `auction::AuctionSettledV1` events for a given window/pair.
+ * Query Aptos node for `auction::AuctionSettled` events for a given window/pair.
  *
  * Implemented in issue #89.
  *

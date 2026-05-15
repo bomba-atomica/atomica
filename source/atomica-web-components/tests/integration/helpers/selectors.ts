@@ -60,9 +60,13 @@ export const SELECTORS = {
     auctionSellerAddress: "auction-seller-address",
   },
 
-  // AuctionBidder
+  // AuctionBidder — v0 Beta (Phase 3a)
+  // seller-address-input replaced by window-id-input and pair-bcs-input
   auctionBidder: {
+    /** @deprecated v0 Beta: use windowIdInput instead */
     sellerAddressInput: "seller-address-input",
+    windowIdInput: "window-id-input",
+    collateralLockIdInput: "collateral-lock-id-input",
     bidAmountInput: "bid-amount-input",
     submitBidButton: "submit-bid-button",
     bidStatus: "bid-status",

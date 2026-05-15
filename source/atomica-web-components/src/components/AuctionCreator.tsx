@@ -5,12 +5,17 @@ import * as ibe from "@atomica/state-proof-verifier/ibe";
 import { useWallet } from "../context/WalletContext";
 
 /**
- * UI panel for creating a new sealed-bid auction on Aptos.
+ * UI panel for creating a new sealed-bid auction on Aptos (v0 Beta).
  *
- * Generates an IBE Master Public Key, collects the LockBox `lock_id` and
- * minimum price from the seller, then calls `auction::create_auction` via
- * the SIWE-authenticated Aptos transaction flow. The seller's Ethereum
- * lock receipt is consumed by the contract to prove asset escrow.
+ * Generates an IBE Master Public Key, collects the LockBox `lock_id`,
+ * window ID, pair BCS bytes, and minimum price from the seller, then calls
+ * `auction::create_auction` via the SIWE-authenticated Aptos transaction flow.
+ * The seller's Ethereum lock receipt is consumed by the contract to prove
+ * asset escrow.
+ *
+ * v0 Beta breaking change from Demo phase: `create_auction` now takes
+ * `(window_id, pair_bcs, lock_id, min_price, mpk_bytes)` instead of
+ * `(lock_id, min_price, duration, mpk_bytes)`.
  *
  * Requires {@link WalletContext} to be mounted above this component.
  *
@@ -19,8 +24,9 @@ import { useWallet } from "../context/WalletContext";
 export function AuctionCreator() {
   const { account } = useWallet();
   const [lockIdHex, setLockIdHex] = useState("");
+  const [windowId, setWindowId] = useState("0");
+  const [pairBcsHex, setPairBcsHex] = useState("");
   const [minPrice, setMinPrice] = useState("100");
-  const [duration, setDuration] = useState("3600"); // 1 hour
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -29,22 +35,27 @@ export function AuctionCreator() {
     setLoading(true);
     setStatus("Generating IBE keys...");
     try {
-      // 1. Generate MPK (Master Public Key) for this auction
+      // 1. Generate MPK (Master Public Key) for this auction window
       const { mpk } = await ibe.generateSystemParameters();
 
       // 2. Submit Transaction
       setStatus("Please sign the transaction in MetaMask...");
 
-      // Convert inputs — lockIdHex is a 0x-prefixed hex string from the proof step
+      // Convert inputs
       const lockId = ethers.getBytes(lockIdHex || "0x" + "00".repeat(32));
-      const minPriceWei = BigInt(minPrice);
-      const durationSec = BigInt(duration);
+      const windowIdBn = BigInt(windowId);
+      // pairBcs: BCS-encoded Pair struct; demo uses empty bytes (scaffold body aborts anyway)
+      const pairBcs = pairBcsHex
+        ? ethers.getBytes(pairBcsHex)
+        : new Uint8Array(0);
+      const minPriceBn = BigInt(minPrice);
 
       const pendingTx = await submitCreateAuction(
         account,
+        windowIdBn,
+        pairBcs,
         lockId,
-        minPriceWei,
-        durationSec,
+        minPriceBn,
         mpk,
       );
 
@@ -65,6 +76,27 @@ export function AuctionCreator() {
       <h2 className="text-xl font-bold mb-4 text-zinc-300">Sell</h2>
       <div className="space-y-4">
         <div>
+          <label className="block text-zinc-500 text-sm mb-1">Window ID</label>
+          <input
+            type="number"
+            value={windowId}
+            onChange={(e) => setWindowId(e.target.value)}
+            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
+          />
+        </div>
+        <div>
+          <label className="block text-zinc-500 text-sm mb-1">
+            Pair BCS (0x hex, optional)
+          </label>
+          <input
+            type="text"
+            value={pairBcsHex}
+            onChange={(e) => setPairBcsHex(e.target.value)}
+            placeholder="0x... (leave empty for default)"
+            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500 font-mono text-xs"
+          />
+        </div>
+        <div>
           <label className="block text-zinc-500 text-sm mb-1">
             Lock ID (0x hex from proof step)
           </label>
@@ -84,17 +116,6 @@ export function AuctionCreator() {
             type="number"
             value={minPrice}
             onChange={(e) => setMinPrice(e.target.value)}
-            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
-          />
-        </div>
-        <div>
-          <label className="block text-zinc-500 text-sm mb-1">
-            Duration (seconds)
-          </label>
-          <input
-            type="number"
-            value={duration}
-            onChange={(e) => setDuration(e.target.value)}
             className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
           />
         </div>

@@ -1,21 +1,18 @@
 /**
  * @file 12-fee-rebate.test.tsx
  * @description Browser integration tests for the FeeRebateDisplay component
- * rendered with real computed values from the `useFeeRebate` hook.
+ * and useFeeRebate hook.
  *
- * Each test creates a settled auction on a live Aptos Docker testnet with
- * known bid and clearing prices, then verifies the computed rebate and fee
- * amounts rendered by FeeRebateDisplay.
+ * Phase 3a: all Move entry functions abort with E_NOT_IMPLEMENTED (99).
+ * The useFeeRebate hook uses new v0 Beta interface (windowId, pairBcs, bidderAddress).
+ * Since settlement never completes on-chain in Phase 3a, tests verify:
+ *   1. FeeRebateDisplay renders correctly with directly-passed props
+ *   2. useFeeRebate stays in "not ready" state when auction is not settled
+ *   3. FeeRebateDisplay shows $0.00 fee in Demo/scaffold phase
+ *   4. Component renders correctly in the scaffold context
  *
- * Scenarios:
- *   1. Bid above clearing price: rebate = bidPrice - clearingPrice
- *   2. Single bidder: rebate = 0 (clearingPrice === bidPrice)
- *   3. Non-winner: fee display only, no rebate
- *   4. Fee is always 0 in Demo phase
- *
- * No hardcoded `rebateAmount` or `feeAmount` props — values come from
- * the real `useFeeRebate` hook reading settlement data from the live chain
- * and bid prices from localStorage via `bidStorage`.
+ * Full on-chain settlement tests (rebate from live clearing price) are
+ * deferred to Phase 3b (#86b) when settle() is implemented.
  */
 
 import React from "react";
@@ -26,44 +23,26 @@ import {
   waitFor,
   cleanup,
 } from "@testing-library/react";
-import { commands } from "vitest/browser";
-import {
-  setupIntegrationFixture,
-  teardownIntegrationFixture,
-  AUCTION_DURATION_BID,
-  type IntegrationFixture,
-} from "./fixtures/dual-chain";
-import { setupWalletMock } from "./fixtures/wallet-mock";
 import { SELECTORS } from "./helpers/selectors";
-import {
-  setupAuctionState,
-  createAuctionDirect,
-  settleAuctionDirect,
-} from "./helpers/auction-setup";
-import { submitBid } from "@atomica/sdk/aptos";
-import { saveBidPrice } from "../../src/storage/bidStorage";
 import { FeeRebateDisplay } from "../../src/components/FeeRebateDisplay";
 import { useFeeRebate } from "../../src/hooks/useFeeRebate";
-import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { setAptosInstance } from "@atomica/sdk/aptos";
 import { WalletContext } from "../../src/context/WalletContext";
-import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
-
-const MIN_PRICE = 50n;
 
 // ---------------------------------------------------------------------------
-// Test harness — wraps useFeeRebate + FeeRebateDisplay so the rebate and fee
-// values are computed from real on-chain settlement data, not hardcoded.
+// Test harness — wraps useFeeRebate + FeeRebateDisplay
+// Phase 3a: uses new v0 Beta interface (windowId, pairBcs, bidderAddress)
 // ---------------------------------------------------------------------------
 
 function FeeRebateHarness({
-  sellerAddress,
+  windowId,
+  pairBcs,
   bidderAddress,
 }: {
-  sellerAddress: string;
+  windowId: bigint | null;
+  pairBcs: Uint8Array | null;
   bidderAddress: string;
 }) {
-  const result = useFeeRebate(sellerAddress, bidderAddress);
+  const result = useFeeRebate(windowId, pairBcs, bidderAddress);
 
   if (!result.ready) {
     return <div data-testid="fee-rebate-loading">Loading...</div>;
@@ -105,7 +84,7 @@ function FeeRebateProviders({
 // Test suite
 // ---------------------------------------------------------------------------
 
-describe.sequential("12: FeeRebateDisplay — computed rebate from real settlement data", () => {
+describe.sequential("12: FeeRebateDisplay — Phase 3a scaffold tests", () => {
   afterEach(() => {
     cleanup();
     // Clean up localStorage bid prices
@@ -115,289 +94,96 @@ describe.sequential("12: FeeRebateDisplay — computed rebate from real settleme
     keys.forEach((k) => localStorage.removeItem(k));
   });
 
-  /**
-   * Set up a live dual-chain fixture with wallet mock and a settled auction.
-   * Returns all context needed to render FeeRebateHarness.
-   */
-  async function withSettledAuction(
-    run: (context: {
-      fixture: IntegrationFixture;
-      aptosClient: Aptos;
-      moduleAddr: string;
-      ethAddress: string;
-      sellerAddress: string;
-      bidderAptosAddress: string;
-    }) => Promise<void>,
-    /** Bid price to use (default: 200n) */
-    bidPrice: bigint = 200n,
-  ): Promise<void> {
-    const fixture = await setupIntegrationFixture();
-
-    const aptosConfig = new AptosConfig({
-      network: Network.LOCAL,
-      fullnode: fixture.aptos.nodeUrl,
-    });
-    const aptosClient = new Aptos(aptosConfig);
-    setAptosInstance(aptosClient);
-
-    const ethAddress = await setupWalletMock({
-      privateKey: fixture.eth.bidder.privateKey,
-      rpcUrl: fixture.eth.rpcUrl,
-      chainId: fixture.eth.chainId,
-    });
-
-    // Fund the SIWE-derived Aptos address
-    const bidderAptosAddress = (
-      await getDerivedAddress(ethAddress.toLowerCase())
-    ).toString();
-    await commands.fundAccount(bidderAptosAddress, 500_000_000);
-
-    const moduleAddr = fixture.aptos.moduleAddress;
-    const testSetup = await setupAuctionState(fixture);
-    const seller = testSetup.deployerAccount;
-    const sellerAddress = seller.accountAddress.toString();
-
-    // Create auction and submit bid via SIWE path
-    await createAuctionDirect(
-      aptosClient,
-      seller,
-      moduleAddr,
-      testSetup.lockId,
-      MIN_PRICE,
-      BigInt(AUCTION_DURATION_BID),
-    );
-
-    await submitBid(
-      ethAddress,
-      sellerAddress,
-      bidPrice,
-      new Uint8Array(0),
-      new Uint8Array(0),
-    );
-
-    // Wait for auction to end then settle
-    await new Promise((r) =>
-      setTimeout(r, (AUCTION_DURATION_BID + 3) * 1000),
-    );
-    await settleAuctionDirect(aptosClient, seller, moduleAddr, sellerAddress);
-
-    try {
-      await run({
-        fixture,
-        aptosClient,
-        moduleAddr,
-        ethAddress,
-        sellerAddress,
-        bidderAptosAddress,
-      });
-    } finally {
-      await teardownIntegrationFixture();
-    }
-  }
-
-  // ── 12-1: Bid above clearing price shows rebate ───────────────────────────
+  // ── 12-1: FeeRebateDisplay renders with hardcoded props ──────────────────
 
   it(
-    "bid above clearing price: rebate = bidPrice - clearingPrice, shown as +$X.XX",
-    async () => {
-      const bidPrice = 200n;
-
-      await withSettledAuction(async ({ ethAddress, sellerAddress, bidderAptosAddress }) => {
-        // Save the bid price to localStorage (as the real bidding UI would)
-        saveBidPrice(sellerAddress, bidderAptosAddress, bidPrice);
-
-        render(
-          <FeeRebateProviders account={ethAddress}>
-            <FeeRebateHarness
-              sellerAddress={sellerAddress}
-              bidderAddress={bidderAptosAddress}
-            />
-          </FeeRebateProviders>,
-        );
-
-        // Wait for hook to compute values from live chain
-        await waitFor(
-          () => {
-            expect(screen.getByTestId("fee-rebate-ready")).toBeTruthy();
-          },
-          { timeout: 30_000 },
-        );
-
-        // Winner with single bid: clearing price equals bid price, rebate = 0
-        const isWinner = screen.getByTestId("fee-rebate-is-winner").textContent;
-        expect(isWinner).toBe("true");
-
-        // With a single bidder, clearingPrice = bidPrice, so rebate = 0
-        const rebateEl = screen.getByTestId(SELECTORS.feeRebateDisplay.rebateAmount);
-        expect(rebateEl.textContent).toContain("$0.00");
-
-        // Fee is always 0 in Demo phase
-        const feeEl = screen.getByTestId(SELECTORS.feeRebateDisplay.feeAmount);
-        expect(feeEl.textContent).toContain("$0.00");
-      }, bidPrice);
-    },
-    600_000,
-  );
-
-  // ── 12-2: Single bidder → rebate = 0 ─────────────────────────────────────
-
-  it(
-    "single bidder: clearingPrice equals bidPrice, rebate is $0.00",
-    async () => {
-      const bidPrice = 150n;
-
-      await withSettledAuction(async ({ ethAddress, sellerAddress, bidderAptosAddress }) => {
-        saveBidPrice(sellerAddress, bidderAptosAddress, bidPrice);
-
-        render(
-          <FeeRebateProviders account={ethAddress}>
-            <FeeRebateHarness
-              sellerAddress={sellerAddress}
-              bidderAddress={bidderAptosAddress}
-            />
-          </FeeRebateProviders>,
-        );
-
-        await waitFor(
-          () => {
-            expect(screen.getByTestId("fee-rebate-ready")).toBeTruthy();
-          },
-          { timeout: 30_000 },
-        );
-
-        // Single bidder: clearingPrice === bidPrice, so rebate = 0
-        const rebateEl = screen.getByTestId(SELECTORS.feeRebateDisplay.rebateAmount);
-        expect(rebateEl.textContent).toContain("$0.00");
-      }, bidPrice);
-    },
-    600_000,
-  );
-
-  // ── 12-3: Non-winner sees no rebate, fee = 0 ─────────────────────────────
-
-  it(
-    "non-winner: no rebate displayed, fee shows $0.00",
-    async () => {
-      // Use the seller wallet mock — the seller is not the auction winner
-      const fixture = await setupIntegrationFixture();
-
-      const aptosConfig = new AptosConfig({
-        network: Network.LOCAL,
-        fullnode: fixture.aptos.nodeUrl,
-      });
-      const aptosClient = new Aptos(aptosConfig);
-      setAptosInstance(aptosClient);
-
-      // Set up bidder wallet and fund it
-      const bidderEthAddress = await setupWalletMock({
-        privateKey: fixture.eth.bidder.privateKey,
-        rpcUrl: fixture.eth.rpcUrl,
-        chainId: fixture.eth.chainId,
-      });
-      const bidderAptosAddress = (
-        await getDerivedAddress(bidderEthAddress.toLowerCase())
-      ).toString();
-      await commands.fundAccount(bidderAptosAddress, 500_000_000);
-
-      const moduleAddr = fixture.aptos.moduleAddress;
-      const testSetup = await setupAuctionState(fixture);
-      const seller = testSetup.deployerAccount;
-      const sellerAddress = seller.accountAddress.toString();
-
-      // Create auction, bidder bids, settle
-      await createAuctionDirect(
-        aptosClient,
-        seller,
-        moduleAddr,
-        testSetup.lockId,
-        MIN_PRICE,
-        BigInt(AUCTION_DURATION_BID),
+    "FeeRebateDisplay renders rebate and fee amounts from props",
+    () => {
+      // Test the display component directly (no hook, no chain)
+      render(
+        <FeeRebateDisplay rebateAmount={50_000_000n} feeAmount={0n} />,
       );
 
-      await submitBid(
-        bidderEthAddress,
-        sellerAddress,
-        200n,
-        new Uint8Array(0),
-        new Uint8Array(0),
-      );
+      const rebateEl = screen.getByTestId(SELECTORS.feeRebateDisplay.rebateAmount);
+      expect(rebateEl).toBeTruthy();
+      // 50_000_000 / 1e6 = $50.00
+      expect(rebateEl.textContent).toContain("$50.00");
 
-      await new Promise((r) =>
-        setTimeout(r, (AUCTION_DURATION_BID + 3) * 1000),
-      );
-      await settleAuctionDirect(aptosClient, seller, moduleAddr, sellerAddress);
-
-      // Now switch to seller wallet mock — seller is NOT the winner
-      const sellerEthAddress = await setupWalletMock({
-        privateKey: fixture.eth.seller.privateKey,
-        rpcUrl: fixture.eth.rpcUrl,
-        chainId: fixture.eth.chainId,
-      });
-      const sellerDerivedAddress = (
-        await getDerivedAddress(sellerEthAddress.toLowerCase())
-      ).toString();
-
-      try {
-        render(
-          <FeeRebateProviders account={sellerEthAddress}>
-            <FeeRebateHarness
-              sellerAddress={sellerAddress}
-              bidderAddress={sellerDerivedAddress}
-            />
-          </FeeRebateProviders>,
-        );
-
-        await waitFor(
-          () => {
-            expect(screen.getByTestId("fee-rebate-ready")).toBeTruthy();
-          },
-          { timeout: 30_000 },
-        );
-
-        // Non-winner: no rebate amount displayed
-        expect(screen.getByTestId("fee-rebate-is-winner").textContent).toBe("false");
-        expect(screen.queryByTestId(SELECTORS.feeRebateDisplay.rebateAmount)).toBeNull();
-
-        // Fee = 0 in Demo phase
-        const feeEl = screen.getByTestId(SELECTORS.feeRebateDisplay.feeAmount);
-        expect(feeEl.textContent).toContain("$0.00");
-      } finally {
-        await teardownIntegrationFixture();
-      }
+      const feeEl = screen.getByTestId(SELECTORS.feeRebateDisplay.feeAmount);
+      expect(feeEl).toBeTruthy();
+      expect(feeEl.textContent).toContain("$0.00");
     },
-    600_000,
+    30_000,
   );
 
-  // ── 12-4: Fee is always 0 in Demo phase ──────────────────────────────────
+  // ── 12-2: FeeRebateDisplay renders zero amounts ───────────────────────────
 
   it(
-    "fee is always 0n in Demo phase regardless of bid/clearing spread",
-    async () => {
-      const bidPrice = 500n;
+    "FeeRebateDisplay renders $0.00 for zero rebate and fee",
+    () => {
+      render(
+        <FeeRebateDisplay rebateAmount={0n} feeAmount={0n} />,
+      );
 
-      await withSettledAuction(async ({ ethAddress, sellerAddress, bidderAptosAddress }) => {
-        saveBidPrice(sellerAddress, bidderAptosAddress, bidPrice);
-
-        render(
-          <FeeRebateProviders account={ethAddress}>
-            <FeeRebateHarness
-              sellerAddress={sellerAddress}
-              bidderAddress={bidderAptosAddress}
-            />
-          </FeeRebateProviders>,
-        );
-
-        await waitFor(
-          () => {
-            expect(screen.getByTestId("fee-rebate-ready")).toBeTruthy();
-          },
-          { timeout: 30_000 },
-        );
-
-        const feeEl = screen.getByTestId(SELECTORS.feeRebateDisplay.feeAmount);
-        expect(feeEl.textContent).toContain("$0.00");
-      }, bidPrice);
+      expect(screen.getByTestId(SELECTORS.feeRebateDisplay.rebateAmount).textContent)
+        .toContain("$0.00");
+      expect(screen.getByTestId(SELECTORS.feeRebateDisplay.feeAmount).textContent)
+        .toContain("$0.00");
     },
-    600_000,
+    30_000,
+  );
+
+  // ── 12-3: useFeeRebate stays in "not ready" when windowId is null ─────────
+  //
+  // Phase 3a: useFeeRebate hook requires (windowId, pairBcs, bidderAddress).
+  // When windowId is null, the hook returns { ready: false } immediately.
+
+  it(
+    "useFeeRebate stays loading when windowId is null",
+    async () => {
+      render(
+        <FeeRebateProviders account="0xdeadbeef">
+          <FeeRebateHarness
+            windowId={null}
+            pairBcs={new Uint8Array(0)}
+            bidderAddress="0xdeadbeef"
+          />
+        </FeeRebateProviders>,
+      );
+
+      // With null windowId, hook returns immediately without setting ready
+      expect(screen.getByTestId("fee-rebate-loading")).toBeTruthy();
+    },
+    30_000,
+  );
+
+  // ── 12-4: useFeeRebate stays in "not ready" for unsettled window ──────────
+  //
+  // Phase 3a: the is_settled view returns false for non-existent windows.
+  // Hook never transitions to ready.
+
+  it(
+    "useFeeRebate stays loading when no settlement data on chain (Phase 3a scaffold)",
+    async () => {
+      render(
+        <FeeRebateProviders account="0xdeadbeef">
+          <FeeRebateHarness
+            windowId={0n}
+            pairBcs={new Uint8Array(0)}
+            bidderAddress="0xdeadbeef"
+          />
+        </FeeRebateProviders>,
+      );
+
+      // Check that loading state is shown (hook queries is_settled → false)
+      // We don't wait for ready since settlement never happens in Phase 3a
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("fee-rebate-loading")).toBeTruthy();
+        },
+        { timeout: 5_000 },
+      );
+    },
+    30_000,
   );
 });
