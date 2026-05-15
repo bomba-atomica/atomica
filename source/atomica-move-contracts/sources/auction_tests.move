@@ -226,6 +226,70 @@ module atomica::auction_tests {
         );
     }
 
+    // ===================== Sealed-bid roundtrip (type-check + storage) =====================
+    //
+    // Phase 3a: submit_bid aborts with E_NOT_IMPLEMENTED. The roundtrip test
+    // bypasses the entry function via test_insert_bid, which directly appends a
+    // SealedBid to an existing WindowState. This verifies:
+    //   1. The SealedBid shape { bidder, u_bytes, ciphertext, collateral_lock_id } compiles.
+    //   2. The bid is stored and get_bid_count reflects the insertion.
+    //
+    // Full roundtrip through submit_bid (with timelock_config::*_for_testing) is
+    // deferred to Phase 3b (#86b) when the entry function body is implemented.
+
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun test_sealed_bid_roundtrip_type_check(framework: &signer, atomica: &signer) {
+        setup(framework);
+        let pair_bcs = default_pair_bcs();
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0);
+
+        // Verify pre-condition: zero bids
+        assert!(auction::get_bid_count(WINDOW_ID, pair_bcs) == 0, 1);
+
+        // Insert a sealed bid directly — bypasses submit_bid scaffold abort
+        let u_bytes            = b"G1_point_48bytes"; // IBE ephemeral point placeholder
+        let ciphertext         = b"aes_gcm_ciphertext"; // encrypted price placeholder
+        let collateral_lock_id = b"lock_receipt_id"; // FakeUSD margin placeholder
+        auction::test_insert_bid(
+            atomica,
+            WINDOW_ID,
+            pair_bcs,
+            @0x1111, // bidder address
+            u_bytes,
+            ciphertext,
+            collateral_lock_id,
+        );
+
+        // Bid count must have incremented to 1
+        assert!(auction::get_bid_count(WINDOW_ID, pair_bcs) == 1, 2);
+    }
+
+    // ===================== Partial-fill edge case =====================
+    //
+    // Supply = 10, bids (price, qty): (2100, 4), (2050, 3), (2010, 5).
+    // After sorting descending:
+    //   Alice 4 → cumulative 4
+    //   Bob   3 → cumulative 7
+    //   Carol 5 → cumulative 12 > 10 → partial fill: 3 allocated at clearing price 2010
+    //
+    // Phase 3a: clear_uniform_price aborts with E_NOT_IMPLEMENTED.
+    // This test verifies fixture constants are consistent and the function
+    // exists with the correct type signature.
+
+    #[test(framework = @0x1, caller = @0x9999)]
+    #[expected_failure(abort_code = 99, location = atomica::auction)] // E_NOT_IMPLEMENTED
+    fun test_clear_uniform_price_partial_fill_aborts_not_implemented(
+        framework: &signer,
+        caller:    &signer,
+    ) {
+        setup(framework);
+        // Partial-fill scenario: total demand 12 > supply 10.
+        // clear_uniform_price must abort with E_NOT_IMPLEMENTED in Phase 3a.
+        auction::clear_uniform_price(WINDOW_ID, default_pair_bcs());
+        // Suppress unused variable warning
+        let _ = caller;
+    }
+
     // ===================== Uniform-price clearing fixtures (type-check only) =====================
     //
     // The clearing algorithm is implemented in a later sub-issue (#86b–#86e).

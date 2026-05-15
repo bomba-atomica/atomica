@@ -214,6 +214,25 @@ module atomica::auction {
         abort E_NOT_IMPLEMENTED
     }
 
+    /// Sort sealed bids descending by revealed price and compute the marginal
+    /// (uniform) clearing price that allocates the full supply.  Partial fill
+    /// is applied to the last qualifying bid so that total allocation equals
+    /// `total_supply` exactly.
+    ///
+    /// Called internally by `settle` after `submit_cleartext_and_clear` has
+    /// populated the cleartext prices.  Exposed as a separate entry function
+    /// so it can be invoked independently for testing or gas-profiling.
+    ///
+    /// Body: scaffold — aborts with E_NOT_IMPLEMENTED (99).
+    ///
+    /// @see docs/architecture/v0-architecture.md §2.6
+    public entry fun clear_uniform_price(
+        _window_id: u64,
+        _pair_bcs:  vector<u8>,
+    ) {
+        abort E_NOT_IMPLEMENTED
+    }
+
     /// Settle the window and emit `AuctionSettled`.
     ///
     /// Runs uniform-price clearing (sort descending, accumulate to supply,
@@ -317,6 +336,32 @@ module atomica::auction {
 
     #[test_only]
     use std::signer;
+
+    // Append a SealedBid directly to an existing WindowState for unit tests,
+    // bypassing submit_bid (which aborts with E_NOT_IMPLEMENTED).
+    // Allows tests to verify the SealedBid shape compiles and that bid_count
+    // increments correctly.
+    #[test_only]
+    public fun test_insert_bid(
+        atomica:            &signer,
+        window_id:          u64,
+        pair_bcs:           vector<u8>,
+        bidder:             address,
+        u_bytes:            vector<u8>,
+        ciphertext:         vector<u8>,
+        collateral_lock_id: vector<u8>,
+    ) acquires AuctionRegistry {
+        let addr = signer::address_of(atomica);
+        let key = make_window_key(window_id, pair_bcs);
+        let registry = borrow_global_mut<AuctionRegistry>(addr);
+        let state = table::borrow_mut(&mut registry.windows, key);
+        vector::push_back(&mut state.bids, SealedBid {
+            bidder,
+            u_bytes,
+            ciphertext,
+            collateral_lock_id,
+        });
+    }
 
     // Insert a WindowState directly for unit tests, bypassing create_auction.
     // Allows tests to exercise view functions and settle path without
