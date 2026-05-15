@@ -140,9 +140,7 @@ export function AuctionRevealer() {
 
   return (
     <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-800">
-      <h2 className="text-xl font-bold mb-4 text-zinc-300">
-        Auction Revealer
-      </h2>
+      <h2 className="text-xl font-bold mb-4 text-zinc-300">Auction Revealer</h2>
 
       <div className="space-y-4">
         {/* Window ID */}
@@ -233,7 +231,8 @@ export function AuctionRevealer() {
           >
             <p className="text-xs text-zinc-500">
               Enter the decrypted bid prices (comma-separated u64 values) in
-              bid-submission order, then submit to trigger uniform-price clearing.
+              bid-submission order, then submit to trigger uniform-price
+              clearing.
             </p>
             <div>
               <label className="block text-zinc-500 text-sm mb-1">
