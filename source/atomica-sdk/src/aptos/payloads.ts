@@ -218,7 +218,13 @@ export function getBidPayload(
 ): InputGenerateTransactionPayloadData {
   return {
     function: `${CONTRACT_ADDR}::auction::submit_bid`,
-    functionArguments: [windowId, pairBcs, uBytes, ciphertext, collateralLockId],
+    functionArguments: [
+      windowId,
+      pairBcs,
+      uBytes,
+      ciphertext,
+      collateralLockId,
+    ],
   };
 }
 
