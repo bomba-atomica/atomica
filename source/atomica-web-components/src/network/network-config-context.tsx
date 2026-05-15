@@ -58,10 +58,10 @@ export function NetworkConfigProvider({
 
   // Apply the host on mount so the Aptos singleton uses the persisted host
   // on first render, not just after the first user interaction.
+  // Deps array is intentionally empty: one-time mount initialization only.
   useEffect(() => {
     applyHost(host);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // intentional: mount-only
 
   // Re-apply whenever network.aptosRpc changes.
   useEffect(() => {
