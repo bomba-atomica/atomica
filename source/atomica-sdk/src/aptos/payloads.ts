@@ -372,7 +372,7 @@ export async function fetchRebates(
     if (
       msg.includes("E_NOT_IMPLEMENTED") ||
       msg.includes("ABORTED") ||
-      msg.includes("abort_code\":99") ||
+      msg.includes('abort_code":99') ||
       msg.includes("abort_code: 99")
     ) {
       return null;
