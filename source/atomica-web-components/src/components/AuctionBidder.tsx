@@ -199,10 +199,7 @@ export function AuctionBidder() {
 
       {/* ── Step 1: Lock FakeUSD collateral ─────────────────────────────── */}
       {bidStep === "lock-collateral" && (
-        <div
-          data-testid="lock-collateral-step"
-          className="space-y-4"
-        >
+        <div data-testid="lock-collateral-step" className="space-y-4">
           <p className="text-sm text-zinc-400">
             Lock FakeUSD in the Ethereum LockBox as collateral margin. You'll
             need to confirm two MetaMask transactions: approve and lock.
@@ -256,12 +253,11 @@ export function AuctionBidder() {
 
       {/* ── Step 2: Submit encrypted bid ────────────────────────────────── */}
       {bidStep === "submit-bid" && (
-        <div
-          data-testid="submit-bid-step"
-          className="space-y-4"
-        >
+        <div data-testid="submit-bid-step" className="space-y-4">
           <div>
-            <label className="block text-zinc-500 text-sm mb-1">Window ID</label>
+            <label className="block text-zinc-500 text-sm mb-1">
+              Window ID
+            </label>
             <input
               data-testid="window-id-input"
               type="number"
