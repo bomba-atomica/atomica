@@ -57,9 +57,9 @@ export function AuctionBidder() {
 
       const collateralLockId = collateralLockIdHex
         ? new Uint8Array(
-            (
-              collateralLockIdHex.replace(/^0x/, "").match(/.{1,2}/g) ?? []
-            ).map((b) => parseInt(b, 16)),
+            (collateralLockIdHex.replace(/^0x/, "").match(/.{1,2}/g) ?? []).map(
+              (b) => parseInt(b, 16),
+            ),
           )
         : new Uint8Array(32); // placeholder: 32 zero bytes
 
@@ -96,9 +96,7 @@ export function AuctionBidder() {
       <h2 className="text-xl font-bold mb-4 text-zinc-300">Buy</h2>
       <div className="space-y-4">
         <div>
-          <label className="block text-zinc-500 text-sm mb-1">
-            Window ID
-          </label>
+          <label className="block text-zinc-500 text-sm mb-1">Window ID</label>
           <input
             data-testid="window-id-input"
             type="number"

@@ -100,7 +100,10 @@ export function SettleButton({
         setStatus("Error: Auction window has not ended yet");
       } else if (msg.includes("E_ALREADY_SETTLED") || msg.includes("abort 5")) {
         setStatus("Error: Auction already settled");
-      } else if (msg.includes("E_NOT_IMPLEMENTED") || msg.includes("abort 99")) {
+      } else if (
+        msg.includes("E_NOT_IMPLEMENTED") ||
+        msg.includes("abort 99")
+      ) {
         setStatus("Error: Settlement not yet implemented (Phase 3a scaffold)");
       } else {
         setStatus(`Error: ${msg}`);
@@ -124,11 +127,7 @@ export function SettleButton({
             : "bg-zinc-100 hover:bg-white text-zinc-900"
         }`}
       >
-        {loading
-          ? "Settling…"
-          : settled
-            ? "Already Settled"
-            : "Settle Auction"}
+        {loading ? "Settling…" : settled ? "Already Settled" : "Settle Auction"}
       </button>
       {status && (
         <div

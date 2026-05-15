@@ -76,9 +76,7 @@ export function AuctionCreator() {
       <h2 className="text-xl font-bold mb-4 text-zinc-300">Sell</h2>
       <div className="space-y-4">
         <div>
-          <label className="block text-zinc-500 text-sm mb-1">
-            Window ID
-          </label>
+          <label className="block text-zinc-500 text-sm mb-1">Window ID</label>
           <input
             type="number"
             value={windowId}
