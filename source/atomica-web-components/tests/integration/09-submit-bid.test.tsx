@@ -162,6 +162,10 @@ describe.sequential("09: Submit Bid on Auction", () => {
       </BidderProviders>,
     );
 
+    // Phase 3b: AuctionBidder starts in the "lock-collateral" step.
+    // Skip to the bid submission step (no real on-chain lock needed in CI).
+    fireEvent.click(screen.getByTestId(auctionBidder.skipToBidButton));
+
     // v0 Beta: fill in window ID instead of seller address
     const windowInput = screen.getByTestId(auctionBidder.windowIdInput);
     fireEvent.change(windowInput, { target: { value: "0" } });
@@ -210,6 +214,9 @@ describe.sequential("09: Submit Bid on Auction", () => {
       </BidderProviders>,
     );
 
+    // Phase 3b: skip to bid step before filling the form.
+    fireEvent.click(screen.getByTestId(auctionBidder.skipToBidButton));
+
     // v0 Beta: fill window ID (was seller address)
     fireEvent.change(screen.getByTestId(auctionBidder.windowIdInput), {
       target: { value: "0" },
@@ -250,6 +257,9 @@ describe.sequential("09: Submit Bid on Auction", () => {
         <AuctionBidder />
       </BidderProviders>,
     );
+
+    // Phase 3b: skip to bid step before filling the form.
+    fireEvent.click(screen.getByTestId(auctionBidder.skipToBidButton));
 
     // v0 Beta: use a large window ID that has no registered auction
     fireEvent.change(screen.getByTestId(auctionBidder.windowIdInput), {
@@ -305,6 +315,9 @@ describe.sequential("09: Submit Bid on Auction", () => {
         <AuctionBidder />
       </BidderProviders>,
     );
+
+    // Phase 3b: skip to bid step before filling the form.
+    fireEvent.click(screen.getByTestId(auctionBidder.skipToBidButton));
 
     // v0 Beta: use window ID 0
     fireEvent.change(screen.getByTestId(auctionBidder.windowIdInput), {
