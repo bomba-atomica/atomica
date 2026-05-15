@@ -63,7 +63,7 @@ export function ClaimButton({ windowId, pairBcs, sellerAddress }: Props) {
 
         if (!s) {
           setSettled(false);
-          setStatus("Auction window not yet settled");
+          setStatus("Auction not yet settled");
           return;
         }
 
