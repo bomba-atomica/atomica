@@ -423,6 +423,11 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         <AuctionBidder />,
       );
 
+      // Phase 3b: AuctionBidder starts in the "lock-collateral" step.
+      // Skip to the bid submission step (no real on-chain lock needed in CI).
+      const skipBtn = screen.getByTestId(auctionBidder.skipToBidButton);
+      fireEvent.click(skipBtn);
+
       // v0 Beta: AuctionBidder uses windowId input (not seller address)
       // Phase 3a: submit_bid aborts with E_NOT_IMPLEMENTED — expect error
       const windowInput = screen.getByTestId(auctionBidder.windowIdInput);
