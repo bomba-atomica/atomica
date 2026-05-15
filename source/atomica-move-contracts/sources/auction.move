@@ -1,4 +1,4 @@
-/// Auction module — Demo phase
+/// Auction module — Demo phase + v0 Beta Scaffold stubs
 ///
 /// Receipt-based auction using LockReceipts from Ethereum.
 ///
@@ -23,11 +23,58 @@
 ///   - Single seller per Aptos address (one active auction at a time)
 ///   - Plaintext bid prices (Production: IBE-encrypted sealed bids)
 ///   - No Ethereum settlement integration yet (Settlement.sol deferred to later phase)
+///
+/// ============================================================
+/// v0 Beta Scaffold stubs (Phase 3a integration seams — #86)
+/// ============================================================
+///
+/// The structs and entry functions below are compile-clean stubs for the
+/// global AuctionRegistry shape described in:
+///   docs/architecture/v0-architecture.md §2.3 – §2.6
+///
+/// INTEGRATION RISK (scout #96):
+///
+/// 1. Shape change breaks ALL current call sites:
+///    - `atomica-sdk/src/aptos/payloads.ts`:
+///        getCreateAuctionPayload(lockId, minPrice, duration, mpk)
+///        → must become (window_id, pair_bcs, lock_id, min_price, mpk_bytes)
+///        getBidPayload(sellerAddr, amountUsd, u, v)
+///        → must become (window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)
+///        getSettlePayload(sellerAddr)
+///        → must become (window_id, pair_bcs)
+///        isSettled(sellerAddr) / getSettlement(sellerAddr)
+///        → must become window-keyed queries against AuctionRegistry at @atomica
+///    - `source/atomica-web-components/src/components/AuctionBidder.tsx`:
+///        submitBid(account, sellerAddr, amountBn, u, v) call must change to
+///        pass (window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)
+///    - `auction_tests.move`: all test calls to create_auction / submit_bid / settle
+///        must be updated; existing tests will fail to compile after #86 merges
+///
+/// 2. Shared-file pressure (serialization constraint):
+///    - AuctionBidder.tsx is edited by BOTH #87 (collateral wiring) and #90 (IBE
+///        MPK on-chain fetch). These must merge in strict order: #86 → #87 → #90.
+///    - bridge.ts (atomica-sdk/src/settlement/bridge.ts) is edited by BOTH #87
+///        (submitBidPayload field flow) and #89 (queryAuctionSettledEvents /
+///        submitSettlement scaffold). These must merge: #86 → #87 → #89.
+///
+/// 3. AuctionRegistry is stored at @atomica (the contract deployer address).
+///    The current per-seller `Auction has key` stored at the seller's address.
+///    TypeScript callers currently borrow_global<Auction>(sellerAddr) — these
+///    must switch to `exists<AuctionRegistry>(@atomica)` after #86 merges.
+///
+/// 4. `submit_cleartext_and_clear` depends on timelock_config::get_decryption_key
+///    (see timelock_config.move). That module must expose get_decryption_key before
+///    #86 can compile the full reveal path.
+///
+/// None of the stub entry functions below contain real logic. All bodies abort
+/// with E_NOT_IMPLEMENTED (code 99). Existing Demo-phase code (below this block)
+/// is preserved unchanged until #86 rewrites it.
 module atomica::auction {
     use std::signer;
     use std::vector;
     use aptos_framework::event;
     use aptos_framework::timestamp;
+    use aptos_framework::table::Table;
     use atomica::lock_receipt::{Self, Ethereum, FakeETH};
 
     // ===================== Error Codes =====================
@@ -37,6 +84,156 @@ module atomica::auction {
     const E_AUCTION_NOT_ENDED: u64 = 3;
     const E_BID_TOO_LOW: u64 = 4;
     const E_ALREADY_SETTLED: u64 = 5;
+
+    /// Scaffold stub sentinel — Phase 3a entry functions abort with this code
+    /// until their bodies are implemented in issue #86.
+    const E_NOT_IMPLEMENTED: u64 = 99;
+
+    // ===================== v0 Beta Scaffold — AuctionRegistry types =====================
+    //
+    // These types implement docs/architecture/v0-architecture.md §2.3 – §2.6.
+    // They coexist with the Demo-phase structs below and do NOT replace them yet.
+    // Issue #86 will delete the Demo-phase structs once all call sites are updated.
+    //
+    // Call-site mapping (all break when #86 merges):
+    //   payloads.ts::getCreateAuctionPayload   → create_auction_v1
+    //   payloads.ts::getBidPayload             → submit_bid_v1
+    //   payloads.ts::getSettlePayload          → settle_v1
+    //   AuctionBidder.tsx::submitBid call      → submit_bid_v1 (shared with #90)
+    //   bridge.ts::submitSettlement            → settle_v1 / queryAuctionSettledEvents (shared with #89)
+
+    /// Trading pair descriptor.
+    /// @see docs/architecture/v0-architecture.md §2.4
+    struct Pair has copy, drop, store {
+        base_chain:  vector<u8>,   // e.g. b"ethereum"
+        base_token:  vector<u8>,   // e.g. b"FakeETH"
+        quote_chain: vector<u8>,   // e.g. b"aptos"
+        quote_token: vector<u8>,   // e.g. b"FakeUSD"
+    }
+
+    /// IBE sealed bid — plaintext price never stored on-chain.
+    /// @see docs/architecture/v0-architecture.md §2.5
+    struct SealedBid has store {
+        bidder:             address,
+        u_bytes:            vector<u8>,   // IBE ephemeral point U = rG (48-byte G1)
+        ciphertext:         vector<u8>,   // AES-GCM ciphertext of plaintext price
+        collateral_lock_id: vector<u8>,   // FakeUSD LockReceipt ID held as margin
+    }
+
+    /// Per-window clearing state within the global registry.
+    /// @see docs/architecture/v0-architecture.md §2.3
+    struct WindowState has store {
+        pair:           Pair,
+        window_id:      u64,
+        total_supply:   u256,              // sum of all seller lock amounts (FakeETH wei)
+        bids:           vector<SealedBid>,
+        settled:        bool,
+        clearing_price: u64,
+        lock_ids:       vector<vector<u8>>, // seller receipts
+    }
+
+    /// Global registry stored at the @atomica deployer address (not per-seller).
+    /// Key: BCS-encoded (auction_window_id: u64, pair: Pair).
+    /// @see docs/architecture/v0-architecture.md §2.3
+    struct AuctionRegistry has key {
+        windows: Table<vector<u8>, WindowState>,
+    }
+
+    // Settlement event for the v0 Beta shape (replaces the Demo AuctionSettled below).
+    // @see docs/architecture/v0-architecture.md §2.9
+    #[event]
+    struct AuctionSettledV1 has drop, store {
+        window_id:      u64,
+        pair:           Pair,
+        clearing_price: u64,
+        total_filled:   u256,              // wei of base token transferred to winners
+        winner_count:   u64,
+        lock_ids:       vector<vector<u8>>, // seller receipt IDs consumed
+    }
+
+    // ===================== v0 Beta Scaffold — helper =====================
+
+    /// Compute `auction_window_id` from on-chain clock.
+    /// epoch_index = unix_seconds / 43200
+    /// window_offset = 1 if time_in_epoch >= 28500, else 0
+    /// window_id = epoch_index * 2 + window_offset
+    /// @see docs/architecture/v0-architecture.md §2.2
+    fun current_window_id(): u64 {
+        let s = timestamp::now_seconds();
+        let epoch = s / 43200;
+        let tmod  = s % 43200;
+        epoch * 2 + if (tmod >= 28500) { 1 } else { 0 }
+    }
+
+    // ===================== v0 Beta Scaffold — entry function stubs =====================
+    //
+    // All bodies abort with E_NOT_IMPLEMENTED (99). Signatures are final;
+    // implementations land in issue #86.
+    //
+    // INTEGRATION RISK: these replace the Demo-phase entry functions below.
+    // Callers in payloads.ts and AuctionBidder.tsx must be updated in #86 before
+    // the Demo-phase entry functions are removed.
+
+    /// Create a new global-registry auction for `(window_id, pair)`.
+    ///
+    /// Integration seam for issue #86.
+    /// Call-site break: payloads.ts::getCreateAuctionPayload must pass
+    ///   (window_id: u64, pair_bcs: vector<u8>, lock_id, min_price, mpk_bytes).
+    public entry fun create_auction_v1(
+        _seller:    &signer,
+        _window_id: u64,
+        _pair_bcs:  vector<u8>,
+        _lock_id:   vector<u8>,
+        _min_price: u64,
+        _mpk_bytes: vector<u8>,
+    ) {
+        abort E_NOT_IMPLEMENTED
+    }
+
+    /// Submit a sealed bid for `(window_id, pair)`.
+    ///
+    /// Integration seam for issues #86 and #87 (collateral wiring).
+    /// Call-site break: payloads.ts::getBidPayload and AuctionBidder.tsx::submitBid
+    ///   must pass (window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id).
+    /// Shared-file pressure: AuctionBidder.tsx is also edited by #90 (IBE MPK fetch).
+    public entry fun submit_bid_v1(
+        _bidder:             &signer,
+        _window_id:          u64,
+        _pair_bcs:           vector<u8>,
+        _u_bytes:            vector<u8>,
+        _ciphertext:         vector<u8>,
+        _collateral_lock_id: vector<u8>,
+    ) {
+        abort E_NOT_IMPLEMENTED
+    }
+
+    /// Reveal cleartexts and run uniform-price clearing for `(window_id, pair)`.
+    ///
+    /// Integration seam for issue #86.
+    /// Consults timelock_config::get_decryption_key — timelock_config.move must
+    /// expose that function before this body can be implemented.
+    /// @see docs/architecture/v0-architecture.md §2.6
+    public entry fun submit_cleartext_and_clear(
+        _settler:    &signer,
+        _window_id:  u64,
+        _pair_bcs:   vector<u8>,
+        _cleartexts: vector<u64>,
+    ) {
+        abort E_NOT_IMPLEMENTED
+    }
+
+    /// Settle the window and emit AuctionSettledV1.
+    ///
+    /// Integration seam for issue #86 and #89 (bridge.ts queryAuctionSettledEvents).
+    /// Call-site break: payloads.ts::getSettlePayload must pass (window_id, pair_bcs).
+    /// Shared-file pressure: bridge.ts is also edited by #87 (collateral refund path).
+    public entry fun settle_v1(
+        _caller:    &signer,
+        _window_id: u64,
+        _pair_bcs:  vector<u8>,
+    ) {
+        abort E_NOT_IMPLEMENTED
+    }
 
     // ===================== Structs =====================
 
