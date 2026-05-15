@@ -37,6 +37,10 @@
     "./settlement/bridge": {
       "import": "./dist/settlement/bridge.js",
       "types": "./dist/settlement/bridge.d.ts"
+    },
+    "./ibe": {
+      "import": "./dist/ibe/index.js",
+      "types": "./dist/ibe/index.d.ts"
     }
   },
   "scripts": {

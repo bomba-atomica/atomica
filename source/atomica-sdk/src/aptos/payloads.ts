@@ -422,3 +422,87 @@ export async function getFakeEthBalance(ownerAddr: string): Promise<bigint> {
   });
   return BigInt(result[0] as string);
 }
+
+/**
+ * Query `timelock_config::get_mpk` view function.
+ *
+ * Returns the Master Public Key bytes (compressed G1, 48 bytes) stored
+ * on-chain by the timelock / IBE configuration module.
+ *
+ * Used by `AuctionCreator` and `AuctionBidder` to replace locally generated
+ * ephemeral MPKs with the authoritative on-chain value.
+ *
+ * @see docs/architecture/v0-architecture.md §2 — sealed-bid reveal path
+ */
+export async function getMpk(): Promise<Uint8Array> {
+  const result = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::timelock_config::get_mpk`,
+      functionArguments: [],
+    },
+  });
+  const hex = result[0] as string;
+  const clean = hex.replace(/^0x/, "");
+  const bytes = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+/**
+ * Query `timelock_config::is_revealed` view function.
+ *
+ * Returns true once the DKG committee has published the decryption key for
+ * the given timelock ID, enabling off-chain bid decryption.
+ *
+ * @param timelockId - Window / timelock identifier
+ * @see docs/architecture/v0-architecture.md §2 — sealed-bid reveal path
+ */
+export async function isRevealed(timelockId: bigint): Promise<boolean> {
+  const result = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::timelock_config::is_revealed`,
+      functionArguments: [timelockId],
+    },
+  });
+  return result[0] as boolean;
+}
+
+/**
+ * Build payload for `auction::submit_cleartext_and_clear`.
+ *
+ * Called by `AuctionRevealer` after the DKG key is published and bids have
+ * been decrypted off-chain.
+ *
+ * Parameters:
+ *   settler    — signer (derived from the caller's Ethereum address)
+ *   window_id  — auction window identifier
+ *   pair_bcs   — BCS-encoded Pair struct
+ *   cleartexts — plaintext bid prices (u64[]) in bid-submission order
+ *
+ * @see docs/architecture/v0-architecture.md §2.6
+ */
+export function getSubmitCleartextPayload(
+  windowId: bigint,
+  pairBcs: Uint8Array,
+  cleartexts: bigint[],
+): InputGenerateTransactionPayloadData {
+  return {
+    function: `${CONTRACT_ADDR}::auction::submit_cleartext_and_clear`,
+    functionArguments: [windowId, pairBcs, cleartexts],
+  };
+}
+
+export async function submitCleartextAndClear(
+  ethAddress: string,
+  windowId: bigint,
+  pairBcs: Uint8Array,
+  cleartexts: bigint[],
+) {
+  return await submitNativeTransaction(
+    aptos,
+    ethAddress,
+    getSubmitCleartextPayload(windowId, pairBcs, cleartexts),
+  );
+}

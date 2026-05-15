@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { ethers } from "ethers";
-import { submitCreateAuction } from "@atomica/sdk/aptos";
-import * as ibe from "@atomica/state-proof-verifier/ibe";
+import { submitCreateAuction, getMpk } from "@atomica/sdk/aptos";
 import { useWallet } from "../context/WalletContext";
 
 /**
  * UI panel for creating a new sealed-bid auction on Aptos (v0 Beta).
  *
- * Generates an IBE Master Public Key, collects the LockBox `lock_id`,
- * window ID, pair BCS bytes, and minimum price from the seller, then calls
- * `auction::create_auction` via the SIWE-authenticated Aptos transaction flow.
- * The seller's Ethereum lock receipt is consumed by the contract to prove
- * asset escrow.
+ * Fetches the IBE Master Public Key from `timelock_config::get_mpk()` on-chain
+ * (Phase 3e), collects the LockBox `lock_id`, window ID, pair BCS bytes, and
+ * minimum price from the seller, then calls `auction::create_auction` via the
+ * SIWE-authenticated Aptos transaction flow.
+ *
+ * Phase 3e change: no local `generateSystemParameters()` — MPK is fetched from
+ * the on-chain timelock_config module so all auction participants share the same
+ * authoritative key.
  *
  * v0 Beta breaking change from Demo phase: `create_auction` now takes
  * `(window_id, pair_bcs, lock_id, min_price, mpk_bytes)` instead of
@@ -33,10 +35,10 @@ export function AuctionCreator() {
   const handleCreateAuction = async () => {
     if (!account) return;
     setLoading(true);
-    setStatus("Generating IBE keys...");
+    setStatus("Fetching MPK from chain...");
     try {
-      // 1. Generate MPK (Master Public Key) for this auction window
-      const { mpk } = await ibe.generateSystemParameters();
+      // 1. Fetch Master Public Key from on-chain timelock_config::get_mpk()
+      const mpk = await getMpk();
 
       // 2. Submit Transaction
       setStatus("Please sign the transaction in MetaMask...");
