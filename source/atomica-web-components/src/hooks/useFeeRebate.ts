@@ -101,8 +101,7 @@ export function useFeeRebate(
 
         // Find this bidder's rebate entry from the typed response.
         const myRebate = rebates.find(
-          (r) =>
-            r.bidder.toLowerCase() === bidderAddress!.toLowerCase(),
+          (r) => r.bidder.toLowerCase() === bidderAddress!.toLowerCase(),
         );
 
         // Per-winner determination deferred to Phase 3b (#86b).
