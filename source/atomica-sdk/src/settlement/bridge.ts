@@ -37,6 +37,8 @@
  *     view function is removed when #86 merges.
  */
 
+// Scaffold created by dev-scout issue #96. Implement in #87 and #89.
+
 // ============================================================
 // Types
 // ============================================================
