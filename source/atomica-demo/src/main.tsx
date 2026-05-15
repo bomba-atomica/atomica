@@ -3,14 +3,21 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
 import { initRemoteLogger } from "./debug-logger";
-import { NetworkConfigProvider } from "@atomica/atomica-web-components";
+import {
+  AppStateProvider,
+  NetworkConfigProvider,
+} from "@atomica/atomica-web-components";
 
 initRemoteLogger();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <NetworkConfigProvider>
-      <App />
-    </NetworkConfigProvider>
+    {/* AppStateProvider is the outermost provider — all child providers read
+        from / write to it instead of maintaining independent state. */}
+    <AppStateProvider>
+      <NetworkConfigProvider>
+        <App />
+      </NetworkConfigProvider>
+    </AppStateProvider>
   </StrictMode>,
 );
