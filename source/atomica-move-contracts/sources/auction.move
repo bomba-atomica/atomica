@@ -364,20 +364,20 @@ module atomica::auction {
         table::contains(&registry.windows, key)
     }
 
-    /// Compute per-bidder fee/rebate curve for a cleared auction window.
-    ///
-    /// The rebate amount for each winning bidder is proportional to the distance
-    /// between the bidder's submitted price and the uniform clearing price,
-    /// scaled by REBATE_COEFFICIENT.  Coefficient calibration is TBD in v0 —
-    /// this scaffold defines the function signature and redistribution flow;
-    /// the body aborts with E_NOT_IMPLEMENTED (99) until Phase 3c impl lands.
-    ///
-    /// Returns a vector of Rebate { bidder, amount } for all bidders in the
-    /// specified window.  Non-winning bidders receive amount = 0.
-    ///
-    /// Body: scaffold — aborts with E_NOT_IMPLEMENTED (99).
-    ///
-    /// @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
+    // Compute per-bidder fee/rebate curve for a cleared auction window.
+    //
+    // The rebate amount for each winning bidder is proportional to the distance
+    // between the bidder's submitted price and the uniform clearing price,
+    // scaled by REBATE_COEFFICIENT.  Coefficient calibration is TBD in v0 —
+    // this scaffold defines the function signature and redistribution flow;
+    // the body aborts with E_NOT_IMPLEMENTED (99) until Phase 3c impl lands.
+    //
+    // Returns a vector of Rebate { bidder, amount } for all bidders in the
+    // specified window.  Non-winning bidders receive amount = 0.
+    //
+    // Body: scaffold — aborts with E_NOT_IMPLEMENTED (99).
+    //
+    // @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
     #[view]
     public fun compute_rebates(
         _window_id:      u64,
