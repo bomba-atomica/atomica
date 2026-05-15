@@ -42,6 +42,7 @@ import {
 import { AuctionBidder } from "../../src/components/AuctionBidder";
 import {
   WalletContext,
+  AppStateProvider,
   NetworkConfigProvider,
   ContractStatusProvider,
   BalancesProvider,
@@ -69,13 +70,15 @@ function BidderProviders({
   children: React.ReactNode;
 }) {
   return (
-    <NetworkConfigProvider>
-      <WalletContext.Provider value={{ account, connect: async () => {} }}>
-        <ContractStatusProvider>
-          <BalancesProvider>{children}</BalancesProvider>
-        </ContractStatusProvider>
-      </WalletContext.Provider>
-    </NetworkConfigProvider>
+    <AppStateProvider>
+      <NetworkConfigProvider>
+        <WalletContext.Provider value={{ account, connect: async () => {} }}>
+          <ContractStatusProvider>
+            <BalancesProvider>{children}</BalancesProvider>
+          </ContractStatusProvider>
+        </WalletContext.Provider>
+      </NetworkConfigProvider>
+    </AppStateProvider>
   );
 }
 

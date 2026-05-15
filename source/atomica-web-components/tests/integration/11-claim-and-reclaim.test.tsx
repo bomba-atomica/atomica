@@ -47,6 +47,7 @@ import { ClaimButton } from "../../src/components/ClaimButton";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "@atomica/sdk/aptos";
 import { WalletContext, WalletProvider } from "../../src/context/WalletContext";
+import { AppStateProvider } from "../../src/state/app-state";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 
 const MIN_PRICE = 50n;
@@ -290,9 +291,11 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
       // disabled regardless of chain state. Use WalletProvider for simplicity.
       // v0 Beta: ClaimButton uses windowId + pairBcs instead of sellerAddress.
       render(
-        <WalletProvider>
-          <ClaimButton windowId={0n} pairBcs={new Uint8Array(0)} />
-        </WalletProvider>,
+        <AppStateProvider>
+          <WalletProvider>
+            <ClaimButton windowId={0n} pairBcs={new Uint8Array(0)} />
+          </WalletProvider>
+        </AppStateProvider>,
       );
 
       const reclaimBtn = screen.getByTestId(SELECTORS.claimButton.reclaimButton);

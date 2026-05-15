@@ -3,6 +3,7 @@ import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import {
   AccountStatus,
   useTokenBalances,
+  AppStateProvider,
   NetworkConfigProvider,
   WalletContext,
   ContractStatusProvider,
@@ -20,17 +21,19 @@ describe.sequential("AccountStatus Integration", () => {
   // via WalletContext.Provider so BalancesProvider polls the right address.
   function WrappedAccountStatus() {
     return (
-      <NetworkConfigProvider>
-        <WalletContext.Provider
-          value={{ account: mockWallet.address, connect: async () => {} }}
-        >
-          <ContractStatusProvider>
-            <BalancesProvider>
-              <AccountStatus />
-            </BalancesProvider>
-          </ContractStatusProvider>
-        </WalletContext.Provider>
-      </NetworkConfigProvider>
+      <AppStateProvider>
+        <NetworkConfigProvider>
+          <WalletContext.Provider
+            value={{ account: mockWallet.address, connect: async () => {} }}
+          >
+            <ContractStatusProvider>
+              <BalancesProvider>
+                <AccountStatus />
+              </BalancesProvider>
+            </ContractStatusProvider>
+          </WalletContext.Provider>
+        </NetworkConfigProvider>
+      </AppStateProvider>
     );
   }
 

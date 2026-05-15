@@ -20,6 +20,7 @@ import { setupWalletMock } from "./fixtures/wallet-mock";
 import { step2Lock, step3Confirm, step4Proof } from "./helpers/selectors";
 import { Step3Confirm } from "../../src/components/SellFlow/steps/Step3Confirm";
 import { WalletProvider } from "../../src/context/WalletContext";
+import { AppStateProvider } from "../../src/state/app-state";
 import { BalancesProvider } from "../../src/context/BalancesContext";
 import { SellFlow } from "../../src/components/SellFlow/SellFlow";
 
@@ -82,11 +83,13 @@ describe.sequential("04 — lock confirmation", () => {
             });
 
             render(
-                <WalletProvider>
-                    <BalancesProvider>
-                        <SellFlow />
-                    </BalancesProvider>
-                </WalletProvider>,
+                <AppStateProvider>
+                    <WalletProvider>
+                        <BalancesProvider>
+                            <SellFlow />
+                        </BalancesProvider>
+                    </WalletProvider>
+                </AppStateProvider>,
             );
 
             // Wait for Step2Lock to appear (wallet auto-connects)

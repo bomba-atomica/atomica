@@ -30,7 +30,7 @@ import {
 } from "@testing-library/react";
 import { setupWalletMock } from "./fixtures/wallet-mock";
 import { step1Connect } from "./helpers/selectors";
-import { WalletProvider, WalletContext, useWallet } from "../../src/index";
+import { WalletProvider, WalletContext, useWallet, AppStateProvider } from "../../src/index";
 
 // ── Test account (standard Hardhat/Anvil account #0 — not secret) ─────────
 
@@ -67,9 +67,11 @@ function ConnectFlow() {
 /** Thin wrapper so WalletProvider is always the root. */
 function WrappedConnectFlow() {
   return (
-    <WalletProvider>
-      <ConnectFlow />
-    </WalletProvider>
+    <AppStateProvider>
+      <WalletProvider>
+        <ConnectFlow />
+      </WalletProvider>
+    </AppStateProvider>
   );
 }
 
