@@ -245,14 +245,14 @@ describe("Selector contract — data-testid attributes", () => {
     ).toBeTruthy();
   });
 
-  it("AuctionBidder: seller-address-input is present", () => {
+  it("AuctionBidder: window-id-input is present (v0 Beta — replaces seller-address-input)", () => {
     render(
       <MinimalProviders>
         <AuctionBidder />
       </MinimalProviders>,
     );
     expect(
-      screen.getByTestId(SELECTORS.auctionBidder.sellerAddressInput),
+      screen.getByTestId(SELECTORS.auctionBidder.windowIdInput),
     ).toBeTruthy();
   });
 
@@ -278,10 +278,10 @@ describe("Selector contract — data-testid attributes", () => {
     ).toBeTruthy();
   });
 
-  it("SettleButton: settle-button is present", () => {
+  it("SettleButton: settle-button is present (v0 Beta — windowId + pairBcs props)", () => {
     render(
       <MinimalProviders>
-        <SettleButton sellerAddress="0xdeadbeef" />
+        <SettleButton windowId={0n} pairBcs={new Uint8Array(0)} />
       </MinimalProviders>,
     );
     expect(
@@ -289,10 +289,10 @@ describe("Selector contract — data-testid attributes", () => {
     ).toBeTruthy();
   });
 
-  it("ClaimButton: claim-button is present", () => {
+  it("ClaimButton: claim-button is present (v0 Beta — windowId + pairBcs props)", () => {
     render(
       <MinimalProviders>
-        <ClaimButton sellerAddress="0xdeadbeef" />
+        <ClaimButton windowId={0n} pairBcs={new Uint8Array(0)} />
       </MinimalProviders>,
     );
     expect(
@@ -300,10 +300,10 @@ describe("Selector contract — data-testid attributes", () => {
     ).toBeTruthy();
   });
 
-  it("ClaimButton: reclaim-button is present", () => {
+  it("ClaimButton: reclaim-button is present (v0 Beta — windowId + pairBcs props)", () => {
     render(
       <MinimalProviders>
-        <ClaimButton sellerAddress="0xdeadbeef" />
+        <ClaimButton windowId={0n} pairBcs={new Uint8Array(0)} />
       </MinimalProviders>,
     );
     expect(
@@ -368,7 +368,7 @@ describe("Selector contract — data-testid attributes", () => {
     expect(s.step8Monitor.auctionCountdown).toBe("auction-countdown");
     expect(s.step8Monitor.auctionStatusBadge).toBe("auction-status-badge");
     expect(s.step8Monitor.auctionSellerAddress).toBe("auction-seller-address");
-    expect(s.auctionBidder.sellerAddressInput).toBe("seller-address-input");
+    expect(s.auctionBidder.windowIdInput).toBe("window-id-input");
     expect(s.auctionBidder.bidAmountInput).toBe("bid-amount-input");
     expect(s.auctionBidder.submitBidButton).toBe("submit-bid-button");
     expect(s.auctionBidder.bidStatus).toBe("bid-status");

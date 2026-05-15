@@ -3,17 +3,15 @@
  * @description Browser integration tests for the ClaimButton component against
  * live Docker testnets.
  *
- * The ClaimButton accepts `sellerAddress`, queries settlement state on-chain,
- * compares the winner against the current user's derived Aptos address, and
- * enables a Claim button that calls `fake_eth::mint` via SIWE when the user
- * is the winner.
+ * Phase 3a: all Move entry functions abort with E_NOT_IMPLEMENTED (99).
+ * ClaimButton uses new v0 Beta interface (windowId + pairBcs).
+ * Tests verify the component renders and handles scaffold abort errors.
  *
  * Scenarios:
- *   1. Unsettled auction: both buttons disabled, status shows "not yet settled"
- *   2. Winner: claim enabled, click triggers mint, status shows "Claimed"
- *   3. Non-winner: claim disabled, status shows "not the auction winner"
- *   4. Claim error: component shows error status when mint fails
- *   5. Reclaim button: always disabled in Demo phase
+ *   1. Unsettled auction: both buttons disabled (Phase 3a: scaffold view returns false)
+ *   2. Claim attempt: shows error (Phase 3a: claim aborts with E_NOT_IMPLEMENTED)
+ *   3. Non-winner path: Phase 3a — all settle attempts abort first
+ *   4. Reclaim button: always disabled (per Phase 3a design)
  *
  * No `vi.fn()` or `vi.mock()` for claim/reclaim logic — all settlement and
  * claim operations run against a live Aptos Docker testnet.
@@ -133,6 +131,10 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
   }
 
   // ── 11-1: Unsettled auction — both buttons disabled ─────────────────────
+  //
+  // Phase 3a: ClaimButton uses new v0 Beta interface (windowId + pairBcs).
+  // The is_settled view function returns false for a non-existent window,
+  // so both buttons remain disabled and status shows "not yet settled".
 
   it(
     "unsettled auction: both buttons disabled, status shows 'not yet settled'",
@@ -140,9 +142,8 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
       await withLiveFixture(async ({ fixture, aptosClient, moduleAddr, ethAddress }) => {
         const testSetup = await setupAuctionState(fixture);
         const seller = testSetup.deployerAccount;
-        const sellerAddress = seller.accountAddress.toString();
 
-        // Create auction with long duration so it stays active (unsettled)
+        // Phase 3a: create_auction aborts — catch and continue
         await createAuctionDirect(
           aptosClient,
           seller,
@@ -150,11 +151,13 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
           testSetup.lockId,
           MIN_PRICE,
           BigInt(AUCTION_DURATION_BID),
-        );
+        ).catch(() => {
+          // Expected: scaffold body aborts with E_NOT_IMPLEMENTED
+        });
 
         render(
           <ClaimProviders account={ethAddress}>
-            <ClaimButton sellerAddress={sellerAddress} />
+            <ClaimButton windowId={0n} pairBcs={new Uint8Array(0)} />
           </ClaimProviders>,
         );
 
@@ -175,20 +178,20 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
     600_000,
   );
 
-  // ── 11-2: Winner can claim ────────────────────────────────────────────────
+  // ── 11-2: Claim shows "not yet settled" (Phase 3a scaffold) ─────────────
   //
-  // The bidder submits a bid via the SIWE path (submitBid from payloads.ts)
-  // so the on-chain winner is the SIWE-derived Aptos address of the bidder's
-  // ETH key. ClaimButton's getDerivedAddress(account) then matches the winner.
+  // Phase 3a: settle aborts with E_NOT_IMPLEMENTED, so the auction is never
+  // settled on-chain. ClaimButton detects "not settled" and both buttons remain
+  // disabled. Full winner claim flow is deferred to Phase 3b (#86b).
 
   it(
-    "winner: claim button enabled, click triggers mint, status shows 'Claimed'",
+    "claim buttons remain disabled (auction unsettled due to Phase 3a scaffold)",
     async () => {
       await withLiveFixture(async ({ fixture, aptosClient, moduleAddr, ethAddress }) => {
         const testSetup = await setupAuctionState(fixture);
         const seller = testSetup.deployerAccount;
-        const sellerAddress = seller.accountAddress.toString();
 
+        // Phase 3a: create_auction aborts — catch and continue
         await createAuctionDirect(
           aptosClient,
           seller,
@@ -196,101 +199,46 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
           testSetup.lockId,
           MIN_PRICE,
           BigInt(AUCTION_DURATION_BID),
-        );
-
-        // Submit bid via SIWE path so the winner is the bidder's SIWE-derived
-        // Aptos address (which matches what ClaimButton will compute)
-        await submitBid(
-          ethAddress,
-          sellerAddress,
-          BID_PRICE,
-          new Uint8Array(0),
-          new Uint8Array(0),
-        );
-
-        // Wait for auction to end then settle
-        await new Promise((r) =>
-          setTimeout(r, (AUCTION_DURATION_BID + 3) * 1000),
-        );
-        await settleAuctionDirect(aptosClient, seller, moduleAddr, sellerAddress);
-
-        // Read FakeETH balance before claim
-        const bidderAptosAddress = (
-          await getDerivedAddress(ethAddress.toLowerCase())
-        ).toString();
-        let balanceBefore = 0n;
-        try {
-          const [raw] = await viewFunction(
-            aptosClient,
-            `${moduleAddr}::fake_eth::balance`,
-            [],
-            [bidderAptosAddress],
-          );
-          balanceBefore = BigInt(raw);
-        } catch {
-          // No FakeETH store yet
-        }
+        ).catch(() => {
+          // Expected: scaffold body aborts with E_NOT_IMPLEMENTED
+        });
 
         render(
           <ClaimProviders account={ethAddress}>
-            <ClaimButton sellerAddress={sellerAddress} />
+            <ClaimButton windowId={0n} pairBcs={new Uint8Array(0)} />
           </ClaimProviders>,
         );
 
-        // Wait for claim button to be enabled (component detects user is winner)
-        await waitFor(
-          () => {
-            const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
-            expect((claimBtn as HTMLButtonElement).disabled).toBe(false);
-          },
-          { timeout: 30_000 },
-        );
-
-        fireEvent.click(screen.getByTestId(SELECTORS.claimButton.claimButton));
-
-        // Wait for "Claimed" status
+        // Phase 3a: is_settled returns false (no registry entry exists)
+        // → status shows "not yet settled", buttons disabled
         await waitFor(
           () => {
             const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
-            expect(status.textContent).toBe("Claimed");
+            expect(status.textContent).toContain("Auction not yet settled");
           },
-          { timeout: 60_000 },
+          { timeout: 15_000 },
         );
 
-        // Verify on-chain balance increased
-        const [balanceAfterRaw] = await viewFunction(
-          aptosClient,
-          `${moduleAddr}::fake_eth::balance`,
-          [],
-          [bidderAptosAddress],
-        );
-        const balanceAfter = BigInt(balanceAfterRaw);
-        expect(balanceAfter).toBeGreaterThan(balanceBefore);
-
-        // Claim button should now be disabled and show "Claimed"
         const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
-        expect(claimBtn.textContent).toBe("Claimed");
         expect((claimBtn as HTMLButtonElement).disabled).toBe(true);
       }, "bidder");
     },
     600_000,
   );
 
-  // ── 11-3: Non-winner claim disabled ──────────────────────────────────────
+  // ── 11-3: ClaimButton renders with new interface (Phase 3a scaffold) ──────
   //
-  // Settle an auction where the bidder is NOT the current wallet user.
-  // The ClaimButton should show "not the auction winner".
+  // Phase 3a: settle aborts with E_NOT_IMPLEMENTED. ClaimButton shows
+  // "not yet settled" for any window. This tests the new v0 Beta interface.
 
   it(
-    "non-winner: claim button disabled, status shows 'not the auction winner'",
+    "claim button disabled for any window in Phase 3a scaffold",
     async () => {
       await withLiveFixture(async ({ fixture, aptosClient, moduleAddr, ethAddress }) => {
         const testSetup = await setupAuctionState(fixture);
         const seller = testSetup.deployerAccount;
-        const sellerAddress = seller.accountAddress.toString();
 
-        // Create an auction and settle it WITHOUT any bids. The winner will be
-        // 0x0 (no valid bid), so the bidder is not the winner.
+        // Phase 3a: create + settle abort — catch and continue
         await createAuctionDirect(
           aptosClient,
           seller,
@@ -298,23 +246,30 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
           testSetup.lockId,
           MIN_PRICE,
           BigInt(AUCTION_DURATION_SHORT),
-        );
+        ).catch(() => {});
 
         await new Promise((r) =>
           setTimeout(r, (AUCTION_DURATION_SHORT + 3) * 1000),
         );
-        await settleAuctionDirect(aptosClient, seller, moduleAddr, sellerAddress);
+
+        await settleAuctionDirect(
+          aptosClient,
+          seller,
+          moduleAddr,
+          seller.accountAddress.toString(),
+        ).catch(() => {});
 
         render(
           <ClaimProviders account={ethAddress}>
-            <ClaimButton sellerAddress={sellerAddress} />
+            <ClaimButton windowId={0n} pairBcs={new Uint8Array(0)} />
           </ClaimProviders>,
         );
 
+        // Phase 3a: is_settled returns false → claim button stays disabled
         await waitFor(
           () => {
             const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
-            expect(status.textContent).toContain("not the auction winner");
+            expect(status.textContent).toContain("Auction not yet settled");
           },
           { timeout: 30_000 },
         );
@@ -326,22 +281,22 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
     600_000,
   );
 
-  // ── 11-4: Reclaim always disabled in Demo ────────────────────────────────
+  // ── 11-4: Reclaim always disabled in Phase 3a ───────────────────────────
 
   it(
-    "reclaim button is always disabled and shows 'Not applicable (Demo)'",
+    "reclaim button is always disabled (Phase 3a scaffold — not yet implemented)",
     async () => {
       // This test does not need a live chain — the reclaim button is always
       // disabled regardless of chain state. Use WalletProvider for simplicity.
+      // v0 Beta: ClaimButton uses windowId + pairBcs instead of sellerAddress.
       render(
         <WalletProvider>
-          <ClaimButton sellerAddress="0xdeadbeef" />
+          <ClaimButton windowId={0n} pairBcs={new Uint8Array(0)} />
         </WalletProvider>,
       );
 
       const reclaimBtn = screen.getByTestId(SELECTORS.claimButton.reclaimButton);
       expect((reclaimBtn as HTMLButtonElement).disabled).toBe(true);
-      expect(reclaimBtn.textContent).toBe("Not applicable (Demo)");
     },
     30_000,
   );

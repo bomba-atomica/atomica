@@ -203,7 +203,31 @@ export async function setupAuctionState(
 }
 
 /**
+ * Default pair BCS bytes used by test helpers.
+ *
+ * Phase 3a scaffold: all entry functions abort with E_NOT_IMPLEMENTED (99),
+ * so the actual pair value does not matter for tests. An empty byte array
+ * is accepted by the Move ABI parser.
+ */
+export const TEST_PAIR_BCS = new Uint8Array(0);
+
+/**
+ * Default window ID used by test helpers (Phase 3a scaffold).
+ *
+ * The value 0 is passed to the new v0 Beta function signatures. Since all
+ * entry functions abort with E_NOT_IMPLEMENTED, the window ID is never
+ * validated on-chain in this phase.
+ */
+export const TEST_WINDOW_ID = 0n;
+
+/**
  * Create an auction directly (no SIWE) using the deployer's native account.
+ *
+ * v0 Beta signature: create_auction(seller, window_id, pair_bcs, lock_id, min_price, mpk_bytes)
+ *
+ * Phase 3a: the body aborts with E_NOT_IMPLEMENTED (99). This helper uses
+ * Throws if the transaction aborts (including Phase 3a E_NOT_IMPLEMENTED).
+ *
  * Returns the Aptos transaction hash.
  */
 export async function createAuctionDirect(
@@ -212,7 +236,9 @@ export async function createAuctionDirect(
   moduleAddr: string,
   lockId: string,
   minPrice: bigint,
-  duration: bigint,
+  _duration: bigint,
+  windowId: bigint = TEST_WINDOW_ID,
+  pairBcs: Uint8Array = TEST_PAIR_BCS,
 ): Promise<string> {
   const createTxn = await aptosClient.transaction.build.simple({
     sender: deployer.accountAddress,
@@ -220,10 +246,11 @@ export async function createAuctionDirect(
       function: `${moduleAddr}::auction::create_auction`,
       typeArguments: [],
       functionArguments: [
+        windowId,
+        pairBcs,
         ethers.getBytes(lockId),
         minPrice,
-        duration,
-        new Uint8Array(0),
+        new Uint8Array(0), // mpk_bytes
       ],
     },
   });
@@ -233,6 +260,9 @@ export async function createAuctionDirect(
     transaction: createTxn,
   });
 
+  // Phase 3a: the scaffold body aborts with E_NOT_IMPLEMENTED (99).
+  // checkSuccess: true causes waitForTransaction to throw on abort.
+  // Tests that rely on successful setup must catch this error.
   await aptosClient.waitForTransaction({
     transactionHash: submitted.hash,
     options: { checkSuccess: true },
@@ -243,20 +273,33 @@ export async function createAuctionDirect(
 
 /**
  * Submit a bid directly (no SIWE) using the given bidder Account.
+ *
+ * v0 Beta signature: submit_bid(bidder, window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)
+ *
+ * Phase 3a: the body aborts with E_NOT_IMPLEMENTED (99). This helper uses
+ * Throws if the transaction aborts (including Phase 3a E_NOT_IMPLEMENTED).
  */
 export async function submitBidDirect(
   aptosClient: Aptos,
   bidder: Account,
   moduleAddr: string,
-  sellerAddress: string,
-  price: bigint,
+  _sellerAddress: string,
+  _price: bigint,
+  windowId: bigint = TEST_WINDOW_ID,
+  pairBcs: Uint8Array = TEST_PAIR_BCS,
 ): Promise<string> {
   const bidTxn = await aptosClient.transaction.build.simple({
     sender: bidder.accountAddress,
     data: {
       function: `${moduleAddr}::auction::submit_bid`,
       typeArguments: [],
-      functionArguments: [sellerAddress, price],
+      functionArguments: [
+        windowId,
+        pairBcs,
+        new Uint8Array(0), // u_bytes (IBE ephemeral point)
+        new Uint8Array(0), // ciphertext
+        new Uint8Array(0), // collateral_lock_id
+      ],
     },
   });
 
@@ -265,6 +308,8 @@ export async function submitBidDirect(
     transaction: bidTxn,
   });
 
+  // Phase 3a: the scaffold body aborts with E_NOT_IMPLEMENTED (99).
+  // checkSuccess: true causes waitForTransaction to throw on abort.
   await aptosClient.waitForTransaction({
     transactionHash: submitted.hash,
     options: { checkSuccess: true },
@@ -275,19 +320,26 @@ export async function submitBidDirect(
 
 /**
  * Settle an auction directly (no SIWE) using the given settler Account.
+ *
+ * v0 Beta signature: settle(caller, window_id, pair_bcs)
+ *
+ * Phase 3a: the body aborts with E_NOT_IMPLEMENTED (99). This helper uses
+ * Throws if the transaction aborts (including Phase 3a E_NOT_IMPLEMENTED).
  */
 export async function settleAuctionDirect(
   aptosClient: Aptos,
   settler: Account,
   moduleAddr: string,
-  sellerAddress: string,
+  _sellerAddress: string,
+  windowId: bigint = TEST_WINDOW_ID,
+  pairBcs: Uint8Array = TEST_PAIR_BCS,
 ): Promise<string> {
   const settleTxn = await aptosClient.transaction.build.simple({
     sender: settler.accountAddress,
     data: {
       function: `${moduleAddr}::auction::settle`,
       typeArguments: [],
-      functionArguments: [sellerAddress],
+      functionArguments: [windowId, pairBcs],
     },
   });
 
@@ -296,6 +348,8 @@ export async function settleAuctionDirect(
     transaction: settleTxn,
   });
 
+  // Phase 3a: the scaffold body aborts with E_NOT_IMPLEMENTED (99).
+  // checkSuccess: true causes waitForTransaction to throw on abort.
   await aptosClient.waitForTransaction({
     transactionHash: submitted.hash,
     options: { checkSuccess: true },

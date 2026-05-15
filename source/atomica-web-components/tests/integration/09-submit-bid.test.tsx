@@ -118,12 +118,13 @@ describe.sequential("09: Submit Bid on Auction", () => {
     await configureBidderForFixture(fixture);
 
     // Set up Ethereum lock + Aptos registration (seller side, no SIWE)
-    // We need the seller's Aptos address (deployer) for auction lookups
     const auctionSetup = await setupAuctionState(fixture);
     sellerAptosAddress =
       auctionSetup.deployerAccount.accountAddress.toString();
 
-    // Create the auction using the deployer's native account
+    // Phase 3a: create_auction aborts with E_NOT_IMPLEMENTED (99).
+    // Catch the error — the bidder UI tests still exercise the AuctionBidder
+    // component's error-handling and the new windowId input interface.
     await createAuctionDirect(
       auctionSetup.aptosClient,
       auctionSetup.deployerAccount,
@@ -131,7 +132,9 @@ describe.sequential("09: Submit Bid on Auction", () => {
       auctionSetup.lockId,
       MIN_PRICE,
       AUCTION_DURATION,
-    );
+    ).catch(() => {
+      // Expected: scaffold body aborts with E_NOT_IMPLEMENTED
+    });
   }, 600_000);
 
   afterAll(async () => {
@@ -142,20 +145,25 @@ describe.sequential("09: Submit Bid on Auction", () => {
     cleanup();
   });
 
-  // ── Test 1: happy path bid ─────────────────────────────────────────────────
+  // ── Test 1: scaffold abort (Phase 3a) ─────────────────────────────────────
+  //
+  // Phase 3a: submit_bid aborts with E_NOT_IMPLEMENTED (99). AuctionBidder
+  // now uses windowId instead of sellerAddress. The test verifies that:
+  //   - window-id-input is present (new v0 Beta interface)
+  //   - bid submission surfaces an Error status (scaffold abort)
 
-  it("shows tx hash in bid-status after successful bid above min_price", async () => {
+  it("shows error in bid-status when submit_bid aborts (Phase 3a scaffold)", async () => {
     render(
       <BidderProviders account={bidderAddress}>
         <AuctionBidder />
       </BidderProviders>,
     );
 
-    // Fill in seller address
-    const sellerInput = screen.getByTestId(auctionBidder.sellerAddressInput);
-    fireEvent.change(sellerInput, { target: { value: sellerAptosAddress } });
+    // v0 Beta: fill in window ID instead of seller address
+    const windowInput = screen.getByTestId(auctionBidder.windowIdInput);
+    fireEvent.change(windowInput, { target: { value: "0" } });
 
-    // Set bid amount above min_price (MIN_PRICE = 100, so use 150)
+    // Set bid amount
     const bidInput = screen.getByTestId(auctionBidder.bidAmountInput);
     fireEvent.change(bidInput, { target: { value: "150" } });
 
@@ -163,12 +171,12 @@ describe.sequential("09: Submit Bid on Auction", () => {
     const submitBtn = screen.getByTestId(auctionBidder.submitBidButton);
     fireEvent.click(submitBtn);
 
-    // Wait for status to show a successful submission (Tx: ... hash)
+    // Phase 3a: submit_bid aborts with E_NOT_IMPLEMENTED — error shown
     await waitFor(
       () => {
         const statusEl = screen.getByTestId(auctionBidder.bidStatus);
         expect(statusEl).toBeTruthy();
-        expect(statusEl.textContent).toMatch(/Bid Submitted!/);
+        expect(statusEl.textContent).toMatch(/Error/);
       },
       { timeout: 60_000 },
     );
@@ -176,18 +184,20 @@ describe.sequential("09: Submit Bid on Auction", () => {
 
   // ── Test 2: bid below min_price ────────────────────────────────────────────
 
-  it("shows error in bid-status and does not increment bid count on below-min bid", async () => {
-    // Get current bid count before the test
+  it("shows error in bid-status on any bid submission (Phase 3a scaffold)", async () => {
+    // Phase 3a: submit_bid aborts with E_NOT_IMPLEMENTED (99) regardless of
+    // bid amount. Bid count remains 0 (get_bid_count returns 0 for non-existent windows).
     const aptosConfig = new AptosConfig({
       network: Network.LOCAL,
       fullnode: fixture.aptos.nodeUrl,
     });
     const aptosClient = new Aptos(aptosConfig);
+    // v0 Beta: get_bid_count takes (window_id, pair_bcs); returns 0 when window not found
     const countBefore = await viewFunction(
       aptosClient,
       `${fixture.aptos.moduleAddress}::auction::get_bid_count`,
       [],
-      [sellerAptosAddress],
+      [0n, new Uint8Array(0)],
     );
     const bidCountBefore = BigInt(countBefore[0]);
 
@@ -197,19 +207,18 @@ describe.sequential("09: Submit Bid on Auction", () => {
       </BidderProviders>,
     );
 
-    // Fill in seller address
-    fireEvent.change(screen.getByTestId(auctionBidder.sellerAddressInput), {
-      target: { value: sellerAptosAddress },
+    // v0 Beta: fill window ID (was seller address)
+    fireEvent.change(screen.getByTestId(auctionBidder.windowIdInput), {
+      target: { value: "0" },
     });
 
-    // Bid amount below min_price (MIN_PRICE = 100, so use 50)
     fireEvent.change(screen.getByTestId(auctionBidder.bidAmountInput), {
       target: { value: "50" },
     });
 
     fireEvent.click(screen.getByTestId(auctionBidder.submitBidButton));
 
-    // Status should surface an Error
+    // Phase 3a: any submit_bid call aborts — error surfaced in UI
     await waitFor(
       () => {
         const statusEl = screen.getByTestId(auctionBidder.bidStatus);
@@ -219,28 +228,29 @@ describe.sequential("09: Submit Bid on Auction", () => {
       { timeout: 60_000 },
     );
 
-    // Bid count must not have changed
+    // Bid count must not have changed (still 0 for window 0)
     const countAfter = await viewFunction(
       aptosClient,
       `${fixture.aptos.moduleAddress}::auction::get_bid_count`,
       [],
-      [sellerAptosAddress],
+      [0n, new Uint8Array(0)],
     );
     expect(BigInt(countAfter[0])).toBe(bidCountBefore);
   }, 90_000);
 
   // ── Test 3: bid on nonexistent auction ────────────────────────────────────
 
-  it("shows error in bid-status when auction does not exist", async () => {
+  it("shows error in bid-status for any window ID (Phase 3a scaffold)", async () => {
+    // Phase 3a: submit_bid aborts with E_NOT_IMPLEMENTED (99) for any window.
     render(
       <BidderProviders account={bidderAddress}>
         <AuctionBidder />
       </BidderProviders>,
     );
 
-    // Use an address that has no auction
-    fireEvent.change(screen.getByTestId(auctionBidder.sellerAddressInput), {
-      target: { value: NONEXISTENT_SELLER },
+    // v0 Beta: use a large window ID that has no registered auction
+    fireEvent.change(screen.getByTestId(auctionBidder.windowIdInput), {
+      target: { value: "999999" },
     });
 
     fireEvent.change(screen.getByTestId(auctionBidder.bidAmountInput), {
@@ -261,19 +271,17 @@ describe.sequential("09: Submit Bid on Auction", () => {
 
   // ── Test 4: bid on closed auction ─────────────────────────────────────────
 
-  it("shows error in bid-status when auction has already closed", async () => {
-    // This case intentionally replaces the shared long-lived fixture with a
-    // fresh short-duration auction so the UI hits the real closed-auction
-    // path. In CI, booting a new dual-chain fixture plus waiting for expiry
-    // can take longer than the default 4-minute browser-test budget.
+  it("shows error in bid-status after auction window elapses (Phase 3a scaffold)", async () => {
+    // Phase 3a: submit_bid aborts with E_NOT_IMPLEMENTED (99) before any
+    // window-closed check can occur. This test verifies the UI error path
+    // using the new v0 Beta windowId interface.
     await teardownIntegrationFixture();
     fixture = await setupIntegrationFixture();
     await configureBidderForFixture(fixture);
 
     const auctionSetup = await setupAuctionState(fixture);
-    const closedSellerAddress =
-      auctionSetup.deployerAccount.accountAddress.toString();
 
+    // Phase 3a: create_auction aborts — catch and continue
     await createAuctionDirect(
       auctionSetup.aptosClient,
       auctionSetup.deployerAccount,
@@ -281,7 +289,9 @@ describe.sequential("09: Submit Bid on Auction", () => {
       auctionSetup.lockId,
       MIN_PRICE,
       BigInt(AUCTION_DURATION_SHORT),
-    );
+    ).catch(() => {
+      // Expected: scaffold body aborts with E_NOT_IMPLEMENTED
+    });
 
     await new Promise((r) =>
       setTimeout(r, (AUCTION_DURATION_SHORT + 3) * 1000),
@@ -293,8 +303,9 @@ describe.sequential("09: Submit Bid on Auction", () => {
       </BidderProviders>,
     );
 
-    fireEvent.change(screen.getByTestId(auctionBidder.sellerAddressInput), {
-      target: { value: closedSellerAddress },
+    // v0 Beta: use window ID 0
+    fireEvent.change(screen.getByTestId(auctionBidder.windowIdInput), {
+      target: { value: "0" },
     });
 
     fireEvent.change(screen.getByTestId(auctionBidder.bidAmountInput), {

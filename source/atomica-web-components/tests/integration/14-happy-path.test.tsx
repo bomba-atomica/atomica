@@ -97,7 +97,6 @@ import {
   generateEthLockProof,
   registerLockOnAptos,
   createAuctionDirect,
-  viewFunction,
 } from "./helpers/auction-setup";
 import { Faucet } from "../../src/components/Faucet";
 import { AuctionBidder } from "../../src/components/AuctionBidder";
@@ -215,9 +214,6 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
 
   // Bidder state
   let bidderEthAddress: string;
-
-  // Settlement state
-  let clearingPrice: bigint;
 
   // ── Setup ─────────────────────────────────────────────────────────────────
 
@@ -350,7 +346,8 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       // Register lock on Aptos (deployer is authorized in Demo phase)
       await registerLockOnAptos(aptosClient, deployerAccount, moduleAddr, proofResult.proof);
 
-      // Create auction with short duration for fast settlement
+      // Phase 3a: create_auction aborts with E_NOT_IMPLEMENTED — catch and continue.
+      // auctionEndTime is set from local clock; the UI timer does not need on-chain state.
       const auctionCreatedAt = Math.floor(Date.now() / 1000);
       await createAuctionDirect(
         aptosClient,
@@ -359,7 +356,9 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         lockId,
         MIN_PRICE,
         BigInt(AUCTION_DURATION_BID),
-      );
+      ).catch(() => {
+        // Expected: scaffold body aborts with E_NOT_IMPLEMENTED
+      });
 
       auctionEndTime = auctionCreatedAt + AUCTION_DURATION_BID;
       sellerAptosAddress = deployerAccount.accountAddress.toString();
@@ -421,26 +420,28 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         <AuctionBidder />,
       );
 
-      // Fill in seller address
-      const sellerInput = screen.getByTestId(auctionBidder.sellerAddressInput);
-      fireEvent.change(sellerInput, { target: { value: sellerAptosAddress } });
+      // v0 Beta: AuctionBidder uses windowId input (not seller address)
+      // Phase 3a: submit_bid aborts with E_NOT_IMPLEMENTED — expect error
+      const windowInput = screen.getByTestId(auctionBidder.windowIdInput);
+      fireEvent.change(windowInput, { target: { value: "0" } });
 
       // Set bid amount above min_price
       const bidInput = screen.getByTestId(auctionBidder.bidAmountInput);
       fireEvent.change(bidInput, { target: { value: BID_PRICE.toString() } });
 
-      // Submit bid — real SIWE transaction
+      // Submit bid — Phase 3a: aborts with E_NOT_IMPLEMENTED
       fireEvent.click(screen.getByTestId(auctionBidder.submitBidButton));
 
       await waitFor(
         () => {
           const statusEl = screen.getByTestId(auctionBidder.bidStatus);
-          expect(statusEl.textContent).toMatch(/Bid Submitted!/);
+          // Phase 3a: submit_bid aborts — error status shown
+          expect(statusEl.textContent).toMatch(/Error/);
         },
         { timeout: 60_000 },
       );
 
-      console.log("[14-happy-path] Bid submitted successfully");
+      console.log("[14-happy-path] Bid submission surfaced error (Phase 3a scaffold expected)");
     },
     90_000,
   );
@@ -470,11 +471,12 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         chainId: fixture.eth.chainId,
       });
 
-      // Render real SettleButton with WalletContext providing seller account
+      // Phase 3a: SettleButton uses new v0 Beta interface (windowId + pairBcs)
       render(
         <WalletContext.Provider value={{ account: sellerEthAddress, connect: async () => {} }}>
           <SettleButton
-            sellerAddress={sellerAptosAddress}
+            windowId={0n}
+            pairBcs={new Uint8Array(0)}
             auctionEndTime={auctionEndTime}
           />
         </WalletContext.Provider>,
@@ -490,63 +492,35 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         { timeout: 10_000 },
       );
 
-      // Click the real SettleButton — triggers submitSettle via SIWE
+      // Click the real SettleButton — Phase 3a: settle aborts with E_NOT_IMPLEMENTED
       fireEvent.click(btn);
 
-      // Wait for "Settled" status (real on-chain settlement)
+      // Phase 3a: settle aborts — error status shown
       await waitFor(
         () => {
           const statusEl = screen.getByTestId(settleButton.settleStatus);
-          expect(statusEl.textContent).toBe("Settled");
+          expect(statusEl.textContent).toMatch(/Error/);
         },
         { timeout: 60_000 },
       );
 
-      console.log("[14-happy-path] Auction settled via real SettleButton");
-
-      // Verify on-chain settlement state
-      const [isSettledResult] = await viewFunction(
-        aptosClient,
-        `${moduleAddr}::auction::is_settled`,
-        [],
-        [sellerAptosAddress],
-      );
-      expect(isSettledResult).toBe(true);
-
-      // Verify winner is the bidder's derived Aptos address
-      const settlementResult = await viewFunction(
-        aptosClient,
-        `${moduleAddr}::auction::get_settlement`,
-        [],
-        [sellerAptosAddress],
-      );
-      const [winnerAddr, priceRaw] = settlementResult;
-      clearingPrice = BigInt(priceRaw);
-
-      const bidderAptosAddress = await getDerivedAddress(bidderEthAddress.toLowerCase());
-      expect(winnerAddr.toString().toLowerCase()).toBe(
-        bidderAptosAddress.toString().toLowerCase(),
-      );
-
-      // Assert clearing price > 0
-      expect(clearingPrice).toBeGreaterThan(0n);
-
-      console.log(`[14-happy-path] Winner: ${winnerAddr}`);
-      console.log(`[14-happy-path] Clearing price: ${clearingPrice}`);
+      console.log("[14-happy-path] Settle surfaced error (Phase 3a scaffold expected)");
     },
     120_000,
   );
 
-  // ── Step 11: Bidder claims via real ClaimButton ───────────────────────────
+  // ── Step 11: Bidder claim — Phase 3a scaffold ────────────────────────────
   //
-  // Renders the real ClaimButton component. It queries get_settlement,
-  // compares the winner to the current user's derived Aptos address, and
-  // calls submitClaim (which invokes fake_eth::mint via SIWE).
+  // Phase 3a: ClaimButton uses new v0 Beta interface (windowId + pairBcs).
+  // Since settle() aborts with E_NOT_IMPLEMENTED, is_settled returns false,
+  // and ClaimButton shows "Auction not yet settled" with buttons disabled.
+  // Full winner claim flow (balance increase, "Claimed" status) is deferred
+  // to Phase 3b (#86b) when settle() is implemented.
 
   it(
-    "step 11 — bidder claim: ClaimButton detects winner and mints FakeETH via SIWE",
+    "step 11 — bidder claim: ClaimButton shows 'not yet settled' (Phase 3a scaffold)",
     async () => {
-      console.log("[14-happy-path] Step 11: Bidder claim via real ClaimButton");
+      console.log("[14-happy-path] Step 11: Bidder claim via real ClaimButton (Phase 3a scaffold)");
 
       // Restore bidder wallet mock
       bidderEthAddress = await setupWalletMock({
@@ -555,126 +529,80 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         chainId: fixture.eth.chainId,
       });
 
-      // Read bidder's Aptos FakeETH FA balance before claim
-      const bidderAptosAddress = (
-        await getDerivedAddress(bidderEthAddress.toLowerCase())
-      ).toString();
-
-      let balanceBefore = 0n;
-      try {
-        const [raw] = await viewFunction(
-          aptosClient,
-          `${moduleAddr}::fake_eth::balance`,
-          [],
-          [bidderAptosAddress],
-        );
-        balanceBefore = BigInt(raw);
-      } catch {
-        // Account may not have a FakeETH store yet
-      }
-      console.log(`[14-happy-path] Bidder FakeETH before claim: ${balanceBefore}`);
-
-      // Render real ClaimButton with bidder's wallet context (real hooks)
+      // Phase 3a: ClaimButton uses new v0 Beta interface (windowId + pairBcs)
+      // is_settled returns false → both buttons disabled, status "not yet settled"
       withProviders(
         bidderEthAddress,
-        <ClaimButton sellerAddress={sellerAptosAddress} />,
+        <ClaimButton windowId={0n} pairBcs={new Uint8Array(0)} />,
       );
 
-      // Wait for settlement check to complete — Claim button should be enabled
+      // Phase 3a: is_settled returns false → "Auction not yet settled"
       await waitFor(
         () => {
-          const claimBtn = screen.getByTestId(claimButton.claimButton);
-          expect((claimBtn as HTMLButtonElement).disabled).toBe(false);
+          const statusEl = screen.getByTestId(claimButton.claimStatus);
+          expect(statusEl.textContent).toContain("Auction not yet settled");
         },
         { timeout: 30_000 },
       );
 
-      // Click the real ClaimButton — triggers submitClaim via SIWE
-      fireEvent.click(screen.getByTestId(claimButton.claimButton));
+      // Both buttons must be disabled in Phase 3a
+      const claimBtn = screen.getByTestId(claimButton.claimButton);
+      const reclaimBtn = screen.getByTestId(claimButton.reclaimButton);
+      expect((claimBtn as HTMLButtonElement).disabled).toBe(true);
+      expect((reclaimBtn as HTMLButtonElement).disabled).toBe(true);
 
-      // Wait for "Claimed" status
-      await waitFor(
-        () => {
-          const statusEl = screen.getByTestId(claimButton.claimStatus);
-          expect(statusEl.textContent).toBe("Claimed");
-        },
-        { timeout: 60_000 },
-      );
-
-      // Bidder's Aptos FakeETH FA balance should have increased
-      const [balanceAfterRaw] = await viewFunction(
-        aptosClient,
-        `${moduleAddr}::fake_eth::balance`,
-        [],
-        [bidderAptosAddress],
-      );
-      const balanceAfter = BigInt(balanceAfterRaw);
-      console.log(`[14-happy-path] Bidder FakeETH after claim: ${balanceAfter}`);
-      expect(balanceAfter).toBeGreaterThan(balanceBefore);
+      console.log("[14-happy-path] ClaimButton shows 'not yet settled' (Phase 3a scaffold expected)");
     },
     120_000,
   );
 
-  // ── Step 12: Bid history from real useBidHistory data ───────────────────
+  // ── Step 12: Step8Monitor renders with new v0 Beta interface ─────────────
   //
-  // Renders Step8Monitor which embeds BidHistory, SettleButton, and ClaimButton.
-  // The SettleButton's onSettled callback feeds useBidHistory.recordSettlement,
-  // which persists to localStorage. Since the auction was settled in step 10,
-  // SettleButton detects "Already Settled" and fires onSettled, populating
-  // BidHistory with real data (not hand-constructed entries).
+  // Phase 3a: Step8Monitor uses new v0 Beta interface (windowId + pairBcs).
+  // Since settle() aborts, the auction is never settled on-chain:
+  //   - SettleButton renders (auction ended) and shows error on click
+  //   - BidHistory has no rows (no on-chain bid data)
+  //   - Status badge shows "Settled" (time-based label for ended auction)
+  // Full BidHistory population from real on-chain data is deferred to Phase 3b.
 
   it(
-    "step 12 — bid history: Step8Monitor BidHistory shows one row with correct clearing price from real data",
+    "step 12 — bid history: Step8Monitor renders with v0 Beta interface (Phase 3a scaffold)",
     async () => {
-      console.log("[14-happy-path] Step 12: Bid history via real useBidHistory in Step8Monitor");
+      console.log("[14-happy-path] Step 12: Step8Monitor with v0 Beta windowId + pairBcs (Phase 3a scaffold)");
 
-      // Clear any stale localStorage bid history so we test fresh recording
+      // Clear any stale localStorage bid history
       localStorage.clear();
 
-      // Render Step8Monitor with a past auctionEndTime so it shows as "Settled"
-      // The SettleButton embedded in Step8Monitor will detect the already-settled
-      // auction and fire onSettled -> recordSettlement -> BidHistory updates
+      // Phase 3a: Step8Monitor uses new v0 Beta interface (windowId + pairBcs).
+      // SettleButton renders only when windowId + pairBcs are provided.
       withProviders(
         sellerEthAddress,
         <Step8Monitor
           auctionEndTime={auctionEndTime}
+          windowId={0n}
+          pairBcs={new Uint8Array(0)}
           sellerAddress={sellerAptosAddress}
           onCancelAndUnlock={async () => {}}
           loading={false}
         />,
       );
 
-      // Wait for SettleButton to detect "Already Settled" and fire onSettled
-      // which records the settlement into useBidHistory -> BidHistory renders a row
-      await waitFor(
-        () => {
-          const statusEl = screen.getByTestId(settleButton.settleStatus);
-          expect(statusEl.textContent).toBe("Already Settled");
-        },
-        { timeout: 30_000 },
-      );
-
-      // BidHistory should now have one row populated from real on-chain data
-      await waitFor(
-        () => {
-          const rows = screen.getAllByTestId(bidHistory.bidHistoryRow);
-          expect(rows).toHaveLength(1);
-        },
+      // Status badge should show "Settled" (time-based — auction window expired)
+      const badgeEl = await waitFor(
+        () => screen.getByTestId(step8Monitor.auctionStatusBadge),
         { timeout: 10_000 },
       );
+      expect(badgeEl.textContent).toBe("Settled");
 
-      const rows = screen.getAllByTestId(bidHistory.bidHistoryRow);
+      // SettleButton should be rendered (auction ended + windowId/pairBcs provided)
+      const settleBtn = screen.getByTestId(settleButton.settleButton);
+      expect(settleBtn).toBeTruthy();
 
-      // Row should contain the seller address as auction ID
-      expect(rows[0].textContent).toContain(sellerAptosAddress);
+      // Phase 3a: BidHistory has no rows (no on-chain bid data, settle never happened)
+      const rows = screen.queryAllByTestId(bidHistory.bidHistoryRow);
+      expect(rows).toHaveLength(0);
 
-      // Row should display the clearing price in USD format
-      const expectedUsd = (Number(clearingPrice) / 1e6).toFixed(2);
-      expect(rows[0].textContent).toContain(`$${expectedUsd}`);
-
-      console.log(
-        `[14-happy-path] Bid history row verified from real data. Clearing price: $${expectedUsd}`,
-      );
+      console.log("[14-happy-path] Step8Monitor renders correctly with v0 Beta interface (Phase 3a scaffold)");
     },
     60_000,
   );
