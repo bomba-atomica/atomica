@@ -359,6 +359,49 @@ module atomica::auction_tests {
         let _ = caller;
     }
 
+    // ===================== compute_rebates scaffold fixtures (Phase 3c) =====================
+    //
+    // Both fixtures verify that compute_rebates exists with the correct signature and
+    // aborts with E_NOT_IMPLEMENTED (99) — the body is a scaffold pending Phase 3c impl.
+
+    // Single-bidder fixture: with one bidder at the clearing price the rebate is 0.
+    // The function must still abort with E_NOT_IMPLEMENTED until implemented.
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 99, location = atomica::auction)] // E_NOT_IMPLEMENTED
+    fun test_compute_rebates_single_bidder_aborts_not_implemented(
+        framework: &signer,
+        atomica:   &signer,
+    ) {
+        setup(framework);
+        let pair_bcs = default_pair_bcs();
+        // Insert a settled window with clearing_price = 2000 for context.
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, true, 2000);
+        // Single bidder at exactly the clearing price → rebate = 0 once implemented.
+        // Phase 3c scaffold: aborts with E_NOT_IMPLEMENTED.
+        auction::compute_rebates(WINDOW_ID, pair_bcs, 2000u64);
+    }
+
+    // Multi-bidder known-distance fixture: three bidders above clearing price.
+    // Alice (2100), Bob (2050), Carol (2010) vs clearing_price = 2010.
+    // Expected distances: Alice +90, Bob +40, Carol 0 — rebates are TBD calibration.
+    // Phase 3c scaffold: aborts with E_NOT_IMPLEMENTED.
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 99, location = atomica::auction)] // E_NOT_IMPLEMENTED
+    fun test_compute_rebates_multi_bidder_known_distances_aborts_not_implemented(
+        framework: &signer,
+        atomica:   &signer,
+    ) {
+        setup(framework);
+        let pair_bcs = default_pair_bcs();
+        // Clearing price = CLEARING_PRICE_FIXTURE (2010).
+        auction::test_insert_window(
+            atomica, WINDOW_ID, pair_bcs, SUPPLY_FIXTURE, true, CLEARING_PRICE_FIXTURE,
+        );
+        // Bidders: Alice 2100 (+90), Bob 2050 (+40), Carol 2010 (0 distance).
+        // Rebate computation is TBD until Phase 3c impl; scaffold aborts 99.
+        auction::compute_rebates(WINDOW_ID, pair_bcs, CLEARING_PRICE_FIXTURE);
+    }
+
     // ===================== Uniform-price clearing fixtures (type-check only) =====================
     //
     // The clearing algorithm is implemented in a later sub-issue (#86b–#86e).

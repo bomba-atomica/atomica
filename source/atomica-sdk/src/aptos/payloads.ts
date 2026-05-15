@@ -319,6 +319,69 @@ export async function getSettlement(
 }
 
 /**
+ * Per-bidder rebate entry returned by the `auction::compute_rebates` view function.
+ *
+ * @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
+ */
+export interface Rebate {
+  /** Aptos address of the bidder. */
+  bidder: string;
+  /** Rebate amount in quote-token micro-units. 0 until Phase 3c impl. */
+  amount: bigint;
+}
+
+/**
+ * Query `auction::compute_rebates` view function (Phase 3c scaffold).
+ *
+ * Returns a `Rebate[]` for all bidders in the specified window based on their
+ * distance to the uniform clearing price.  Coefficient calibration is TBD in v0;
+ * the Move body aborts with E_NOT_IMPLEMENTED (99) until Phase 3c impl lands.
+ *
+ * Callers must handle the `E_NOT_IMPLEMENTED` abort gracefully — this function
+ * returns `null` when the on-chain function is not yet implemented, allowing
+ * the UI to show a "pending" state.
+ *
+ * @param windowId      - Auction window ID
+ * @param pairBcs       - BCS-encoded Pair struct
+ * @param clearingPrice - Uniform clearing price from `get_settlement`
+ * @returns Array of {@link Rebate} entries, or `null` if not yet implemented.
+ *
+ * @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
+ */
+export async function fetchRebates(
+  windowId: bigint,
+  pairBcs: Uint8Array,
+  clearingPrice: bigint,
+): Promise<Rebate[] | null> {
+  try {
+    const result = await aptos.view({
+      payload: {
+        function: `${CONTRACT_ADDR}::auction::compute_rebates`,
+        functionArguments: [windowId, pairBcs, clearingPrice],
+      },
+    });
+    // The Move function returns vector<Rebate> serialised as an array of objects.
+    const raw = result[0] as Array<{ bidder: string; amount: string }>;
+    return raw.map(({ bidder, amount }) => ({
+      bidder,
+      amount: BigInt(amount),
+    }));
+  } catch (e: unknown) {
+    // E_NOT_IMPLEMENTED (99) abort from scaffold — return null for "pending" state.
+    const msg = e instanceof Error ? e.message : String(e);
+    if (
+      msg.includes("E_NOT_IMPLEMENTED") ||
+      msg.includes("ABORTED") ||
+      msg.includes("abort_code\":99") ||
+      msg.includes("abort_code: 99")
+    ) {
+      return null;
+    }
+    throw e;
+  }
+}
+
+/**
  * Build payload for fake_eth::mint (Demo-phase winner payout).
  *
  * Entry function: mint(account: &signer, amount: u64)
