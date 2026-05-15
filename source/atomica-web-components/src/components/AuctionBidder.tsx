@@ -1,17 +1,20 @@
 import { useState } from "react";
-import { ethers } from "ethers";
-import { submitBid } from "@atomica/aptos-docker-testnet/browser";
+import { submitBid } from "@atomica/sdk/aptos";
 import * as ibe from "@atomica/state-proof-verifier/ibe";
 import { useWallet } from "../context/WalletContext";
 import { saveBidPrice } from "../storage/bidStorage";
 
 /**
- * UI panel for submitting a sealed bid on an active auction.
+ * UI panel for submitting a sealed bid on an active auction (v0 Beta).
  *
- * Encrypts the bid price with IBE (Boneh-Franklin) using the seller address as
- * the identity, then calls `auction::submit_bid` via the SIWE-authenticated
- * Aptos transaction flow. Persists the bid price to localStorage so
- * {@link useFeeRebate} can compute the post-settlement rebate.
+ * Encrypts the bid price with IBE (Boneh-Franklin) using the window ID and
+ * pair as the identity context, then calls `auction::submit_bid` via the
+ * SIWE-authenticated Aptos transaction flow. Persists the bid price to
+ * localStorage so {@link useFeeRebate} can compute the post-settlement rebate.
+ *
+ * v0 Beta breaking change from Demo phase: `submit_bid` now takes
+ * `(window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)` instead of
+ * `(seller_addr, amount_usd)`.
  *
  * Requires {@link WalletContext} to be mounted above this component.
  *
@@ -19,7 +22,9 @@ import { saveBidPrice } from "../storage/bidStorage";
  */
 export function AuctionBidder() {
   const { account } = useWallet();
-  const [sellerAddr, setSellerAddr] = useState("");
+  const [windowId, setWindowId] = useState("0");
+  const [pairBcsHex, setPairBcsHex] = useState("");
+  const [collateralLockIdHex, setCollateralLockIdHex] = useState("");
   const [bidAmount, setBidAmount] = useState("110");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -29,25 +34,51 @@ export function AuctionBidder() {
     setLoading(true);
     setStatus("Encrypting Bid...");
     try {
-      // 1. Encrypt Bid (IBE)
-      // Identity = Auction ID (here we use Seller Address as ID for simplicity in Demo)
-      const identityBytes = ethers.getBytes(sellerAddr);
+      // 1. Encrypt Bid with IBE (Boneh-Franklin)
+      // Identity bytes: window_id (u64 big-endian) used as timelock identity
+      const windowIdBn = BigInt(windowId);
+      const identityBytes = new Uint8Array(8);
+      const view = new DataView(identityBytes.buffer);
+      view.setBigUint64(0, windowIdBn, false); // big-endian
 
-      // Generate dummy MPK for demo purposes (real encryption logic handles point generation)
+      // Generate system parameters and encrypt the bid price
       const { mpk } = await ibe.generateSystemParameters();
       const payload = new TextEncoder().encode(bidAmount);
       const { u, v } = await ibe.encrypt(mpk, identityBytes, payload);
 
-      // 2. Submit
-      setStatus("Please sign the transaction...");
-      const amountBn = BigInt(bidAmount);
+      // 2. Prepare sealed-bid arguments
+      const pairBcs = pairBcsHex
+        ? new Uint8Array(
+            (pairBcsHex.replace(/^0x/, "").match(/.{1,2}/g) ?? []).map((b) =>
+              parseInt(b, 16),
+            ),
+          )
+        : new Uint8Array(0);
 
-      const pendingTx = await submitBid(account, sellerAddr, amountBn, u, v);
+      const collateralLockId = collateralLockIdHex
+        ? new Uint8Array(
+            (
+              collateralLockIdHex.replace(/^0x/, "").match(/.{1,2}/g) ?? []
+            ).map((b) => parseInt(b, 16)),
+          )
+        : new Uint8Array(32); // placeholder: 32 zero bytes
+
+      // 3. Submit
+      setStatus("Please sign the transaction...");
+
+      const pendingTx = await submitBid(
+        account,
+        windowIdBn,
+        pairBcs,
+        u,
+        v,
+        collateralLockId,
+      );
 
       // Persist bid price in localStorage for post-settlement rebate computation
-      saveBidPrice(sellerAddr, account, amountBn);
+      // Key: windowId (string) used as auction identifier in this v0 shape
+      saveBidPrice(windowId, account, BigInt(bidAmount));
 
-      // Access hash safely (type assertion if needed)
       const hash = (pendingTx as { hash?: string }).hash || "submitted";
       setStatus(`Bid Submitted! Tx: ${hash}`);
     } catch (error: unknown) {
@@ -66,13 +97,37 @@ export function AuctionBidder() {
       <div className="space-y-4">
         <div>
           <label className="block text-zinc-500 text-sm mb-1">
-            Auction/Seller Address
+            Window ID
           </label>
           <input
-            data-testid="seller-address-input"
+            data-testid="window-id-input"
+            type="number"
+            value={windowId}
+            onChange={(e) => setWindowId(e.target.value)}
+            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
+          />
+        </div>
+        <div>
+          <label className="block text-zinc-500 text-sm mb-1">
+            Pair BCS (0x hex, optional)
+          </label>
+          <input
             type="text"
-            value={sellerAddr}
-            onChange={(e) => setSellerAddr(e.target.value)}
+            value={pairBcsHex}
+            onChange={(e) => setPairBcsHex(e.target.value)}
+            placeholder="0x... (leave empty for default)"
+            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 text-xs font-mono border border-zinc-700 focus:outline-none focus:border-zinc-500"
+          />
+        </div>
+        <div>
+          <label className="block text-zinc-500 text-sm mb-1">
+            Collateral Lock ID (0x hex)
+          </label>
+          <input
+            data-testid="collateral-lock-id-input"
+            type="text"
+            value={collateralLockIdHex}
+            onChange={(e) => setCollateralLockIdHex(e.target.value)}
             className="w-full bg-zinc-800 text-zinc-200 rounded p-2 text-xs font-mono border border-zinc-700 focus:outline-none focus:border-zinc-500"
             placeholder="0x..."
           />

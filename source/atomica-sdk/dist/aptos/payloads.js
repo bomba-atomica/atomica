@@ -88,14 +88,25 @@ export async function areCoreContractsDeployed() {
         return false;
     }
 }
-export function getCreateAuctionPayload(lockId, minPrice, duration, mpk) {
+/**
+ * Build payload for auction::create_auction (v0 Beta global-registry).
+ *
+ * Parameters match the Phase 3a rewrite from issue #86:
+ *   create_auction(seller, window_id, pair_bcs, lock_id, min_price, mpk_bytes)
+ *
+ * `pairBcs` is the BCS-encoded Pair struct; callers can compute it with
+ * `bcs.serialize` or pass a pre-encoded byte array.
+ *
+ * @see docs/architecture/v0-architecture.md §2.3
+ */
+export function getCreateAuctionPayload(windowId, pairBcs, lockId, minPrice, mpkBytes) {
     return {
         function: `${CONTRACT_ADDR}::auction::create_auction`,
-        functionArguments: [lockId, minPrice, duration, mpk],
+        functionArguments: [windowId, pairBcs, lockId, minPrice, mpkBytes],
     };
 }
-export async function submitCreateAuction(ethAddress, lockId, minPrice, duration, mpk) {
-    return await submitNativeTransaction(aptos, ethAddress, getCreateAuctionPayload(lockId, minPrice, duration, mpk));
+export async function submitCreateAuction(ethAddress, windowId, pairBcs, lockId, minPrice, mpkBytes) {
+    return await submitNativeTransaction(aptos, ethAddress, getCreateAuctionPayload(windowId, pairBcs, lockId, minPrice, mpkBytes));
 }
 /**
  * Build payload for lock_receipt::register_ethereum_lock<FakeETH>.
@@ -126,52 +137,79 @@ export function getRegisterLockPayload(proof) {
         ],
     };
 }
-export function getBidPayload(sellerAddr, amountUsd, _u, _v) {
+/**
+ * Build payload for auction::submit_bid (v0 Beta sealed-bid).
+ *
+ * Parameters match the Phase 3a rewrite from issue #86:
+ *   submit_bid(bidder, window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)
+ *
+ * `uBytes`    — IBE ephemeral point U = rG (48-byte G1, Boneh-Franklin)
+ * `ciphertext` — AES-GCM ciphertext of the plaintext price
+ * `collateralLockId` — FakeUSD LockReceipt ID held as margin
+ *
+ * @see docs/architecture/v0-architecture.md §2.5
+ */
+export function getBidPayload(windowId, pairBcs, uBytes, ciphertext, collateralLockId) {
     return {
         function: `${CONTRACT_ADDR}::auction::submit_bid`,
-        functionArguments: [sellerAddr, amountUsd],
+        functionArguments: [windowId, pairBcs, uBytes, ciphertext, collateralLockId],
     };
 }
-export async function submitBid(ethAddress, sellerAddr, amountUsd, u, v) {
-    return await submitNativeTransaction(aptos, ethAddress, getBidPayload(sellerAddr, amountUsd, u, v));
-}
-export function getSettlePayload(sellerAddr) {
-    return {
-        function: `${CONTRACT_ADDR}::auction::settle`,
-        functionArguments: [sellerAddr],
-    };
-}
-export async function submitSettle(ethAddress, sellerAddr) {
-    return await submitNativeTransaction(aptos, ethAddress, getSettlePayload(sellerAddr));
+export async function submitBid(ethAddress, windowId, pairBcs, uBytes, ciphertext, collateralLockId) {
+    return await submitNativeTransaction(aptos, ethAddress, getBidPayload(windowId, pairBcs, uBytes, ciphertext, collateralLockId));
 }
 /**
- * Query `auction::is_settled` view function.
- * Returns true if the auction for the given seller has been settled.
+ * Build payload for auction::settle (v0 Beta global-registry).
+ *
+ * Parameters match the Phase 3a rewrite from issue #86:
+ *   settle(caller, window_id, pair_bcs)
+ *
+ * @see docs/architecture/v0-architecture.md §2.7
  */
-export async function isSettled(sellerAddr) {
+export function getSettlePayload(windowId, pairBcs) {
+    return {
+        function: `${CONTRACT_ADDR}::auction::settle`,
+        functionArguments: [windowId, pairBcs],
+    };
+}
+export async function submitSettle(ethAddress, windowId, pairBcs) {
+    return await submitNativeTransaction(aptos, ethAddress, getSettlePayload(windowId, pairBcs));
+}
+/**
+ * Query `auction::is_settled` view function (v0 Beta window-keyed).
+ *
+ * Returns true if the auction window identified by (windowId, pairBcs) has
+ * been settled. Returns false if no window exists.
+ *
+ * @see docs/architecture/v0-architecture.md §2.3
+ */
+export async function isSettled(windowId, pairBcs) {
     const result = await aptos.view({
         payload: {
             function: `${CONTRACT_ADDR}::auction::is_settled`,
-            functionArguments: [sellerAddr],
+            functionArguments: [windowId, pairBcs],
         },
     });
     return result[0];
 }
 /**
- * Query `auction::get_settlement` view function.
- * Returns { winner, clearingPrice } after settlement.
- * winner == "0x0" means no valid bid was found.
+ * Query `auction::get_settlement` view function (v0 Beta window-keyed).
+ *
+ * Returns { clearingPrice, totalFilled } after settlement.
+ * Aborts if no window exists for (windowId, pairBcs).
+ *
+ * @see docs/architecture/v0-architecture.md §2.7
  */
-export async function getSettlement(sellerAddr) {
+export async function getSettlement(windowId, pairBcs) {
     const result = await aptos.view({
         payload: {
             function: `${CONTRACT_ADDR}::auction::get_settlement`,
-            functionArguments: [sellerAddr],
+            functionArguments: [windowId, pairBcs],
         },
     });
     return {
-        winner: result[0],
-        clearingPrice: BigInt(result[1]),
+        clearingPrice: BigInt(result[0]),
+        totalFilled: BigInt(result[1]),
     };
 }
 /**

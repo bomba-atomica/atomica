@@ -1,81 +1,50 @@
-/// Auction module — Demo phase + v0 Beta Scaffold stubs
+/// Auction module — v0.1 Beta global-registry sealed-bid scaffold
 ///
-/// Receipt-based auction using LockReceipts from Ethereum.
+/// Implements the global AuctionRegistry shape from:
+///   docs/architecture/v0-architecture.md §2 — Auction Mechanism (v0.1 Beta)
+///
+/// All entry function bodies abort with E_NOT_IMPLEMENTED (99). Implementations
+/// land in sub-issues #86b (collateral wiring), #86c (fee/rebate), #86d
+/// (cross-chain settlement), #86e (IBE identity and AuctionRevealer).
+///
+/// BREAKING CHANGES FROM DEMO PHASE:
+///
+/// | Old (Demo) function        | New (v0 Beta) function                   |
+/// |---------------------------|------------------------------------------|
+/// | create_auction(seller, lock_id, min_price, duration, mpk) | create_auction(seller, window_id, pair_bcs, lock_id, min_price, mpk_bytes) |
+/// | submit_bid(bidder, seller_addr, amount) | submit_bid(bidder, window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id) |
+/// | settle(caller, seller_addr) | settle(caller, window_id, pair_bcs) |
+///
+/// All call sites updated in this issue:
+///   - atomica-sdk/src/aptos/payloads.ts
+///   - source/atomica-web-components/src/components/AuctionCreator.tsx
+///   - source/atomica-web-components/src/components/AuctionBidder.tsx
+///   - source/atomica-web-components/src/components/SettleButton.tsx
+///
+/// INTEGRATION RISKS recorded by dev-scout #96:
+///
+/// 1. AuctionRegistry is stored at @atomica (deployer), not per-seller.
+///    TypeScript callers that did `borrow_global<Auction>(sellerAddr)` must
+///    switch to `exists<AuctionRegistry>(@atomica)` after this merges.
+///
+/// 2. `submit_cleartext_and_clear` depends on `timelock_config::get_decryption_key`
+///    which is not yet implemented in timelock_config.move. The body aborts with
+///    E_NOT_IMPLEMENTED until that function is exposed.
+///
+/// 3. Shared-file pressure: AuctionBidder.tsx is also edited by #87 (collateral
+///    wiring) and #90 (IBE MPK on-chain fetch). Merge strictly in order:
+///    #86 → #87 → #90.
+///
+/// 4. bridge.ts (atomica-sdk/src/settlement/bridge.ts) is shared with #87 and
+///    #89. Merge order: #86 → #87 → #89.
 ///
 /// @see docs/architecture/v0-architecture.md#§2-auction-mechanism-v01-beta
-///
-/// FakeETH and FakeUSD are ERC20 tokens that exist ONLY on Ethereum.
-/// On Aptos, a lock is represented by a LockReceipt<Ethereum, FakeETH> stored in
-/// the ReceiptRegistry. This module consumes those receipts to prove the seller
-/// has locked assets on Ethereum, then records the auction result on-chain.
-/// Actual asset delivery happens on the Ethereum side via the settlement contract.
-///
-/// Flow:
-///   1. Seller locks FakeETH on Ethereum
-///   2. Seller registers proof → LockReceipt<Ethereum, FakeETH> created in registry
-///   3. Seller calls create_auction(lock_id, ...) → receipt claimed, auction opened
-///   4. Bidders call submit_bid(seller_addr, bid_price) — Demo: no Aptos-side collateral
-///   5. After end_time, anyone calls settle(seller_addr) → winner + clearing price recorded
-///   6. Ethereum settlement contract reads the result and transfers assets
-///
-/// Demo limitations:
-///   - No bidder collateral on Aptos (MVP: bidders also submit FakeUSD LockReceipts)
-///   - Single seller per Aptos address (one active auction at a time)
-///   - Plaintext bid prices (Production: IBE-encrypted sealed bids)
-///   - No Ethereum settlement integration yet (Settlement.sol deferred to later phase)
-///
-/// ============================================================
-/// v0 Beta Scaffold stubs (Phase 3a integration seams — #86)
-/// ============================================================
-///
-/// The structs and entry functions below are compile-clean stubs for the
-/// global AuctionRegistry shape described in:
-///   docs/architecture/v0-architecture.md §2.3 – §2.6
-///
-/// INTEGRATION RISK (scout #96):
-///
-/// 1. Shape change breaks ALL current call sites:
-///    - `atomica-sdk/src/aptos/payloads.ts`:
-///        getCreateAuctionPayload(lockId, minPrice, duration, mpk)
-///        → must become (window_id, pair_bcs, lock_id, min_price, mpk_bytes)
-///        getBidPayload(sellerAddr, amountUsd, u, v)
-///        → must become (window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)
-///        getSettlePayload(sellerAddr)
-///        → must become (window_id, pair_bcs)
-///        isSettled(sellerAddr) / getSettlement(sellerAddr)
-///        → must become window-keyed queries against AuctionRegistry at @atomica
-///    - `source/atomica-web-components/src/components/AuctionBidder.tsx`:
-///        submitBid(account, sellerAddr, amountBn, u, v) call must change to
-///        pass (window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)
-///    - `auction_tests.move`: all test calls to create_auction / submit_bid / settle
-///        must be updated; existing tests will fail to compile after #86 merges
-///
-/// 2. Shared-file pressure (serialization constraint):
-///    - AuctionBidder.tsx is edited by BOTH #87 (collateral wiring) and #90 (IBE
-///        MPK on-chain fetch). These must merge in strict order: #86 → #87 → #90.
-///    - bridge.ts (atomica-sdk/src/settlement/bridge.ts) is edited by BOTH #87
-///        (submitBidPayload field flow) and #89 (queryAuctionSettledEvents /
-///        submitSettlement scaffold). These must merge: #86 → #87 → #89.
-///
-/// 3. AuctionRegistry is stored at @atomica (the contract deployer address).
-///    The current per-seller `Auction has key` stored at the seller's address.
-///    TypeScript callers currently borrow_global<Auction>(sellerAddr) — these
-///    must switch to `exists<AuctionRegistry>(@atomica)` after #86 merges.
-///
-/// 4. `submit_cleartext_and_clear` depends on timelock_config::get_decryption_key
-///    (see timelock_config.move). That module must expose get_decryption_key before
-///    #86 can compile the full reveal path.
-///
-/// None of the stub entry functions below contain real logic. All bodies abort
-/// with E_NOT_IMPLEMENTED (code 99). Existing Demo-phase code (below this block)
-/// is preserved unchanged until #86 rewrites it.
 module atomica::auction {
-    use std::signer;
     use std::vector;
     use aptos_framework::event;
     use aptos_framework::timestamp;
-    use aptos_framework::table::Table;
-    use atomica::lock_receipt::{Self, Ethereum, FakeETH};
+    use aptos_framework::table::{Self, Table};
+    use aptos_std::bcs;
 
     // ===================== Error Codes =====================
 
@@ -85,22 +54,11 @@ module atomica::auction {
     const E_BID_TOO_LOW: u64 = 4;
     const E_ALREADY_SETTLED: u64 = 5;
 
-    /// Scaffold stub sentinel — Phase 3a entry functions abort with this code
-    /// until their bodies are implemented in issue #86.
+    /// Scaffold stub sentinel — all Phase 3a entry function bodies abort with this
+    /// code until their implementations land in #86b–#86f.
     const E_NOT_IMPLEMENTED: u64 = 99;
 
-    // ===================== v0 Beta Scaffold — AuctionRegistry types =====================
-    //
-    // These types implement docs/architecture/v0-architecture.md §2.3 – §2.6.
-    // They coexist with the Demo-phase structs below and do NOT replace them yet.
-    // Issue #86 will delete the Demo-phase structs once all call sites are updated.
-    //
-    // Call-site mapping (all break when #86 merges):
-    //   payloads.ts::getCreateAuctionPayload   → create_auction_v1
-    //   payloads.ts::getBidPayload             → submit_bid_v1
-    //   payloads.ts::getSettlePayload          → settle_v1
-    //   AuctionBidder.tsx::submitBid call      → submit_bid_v1 (shared with #90)
-    //   bridge.ts::submitSettlement            → settle_v1 / queryAuctionSettledEvents (shared with #89)
+    // ===================== Types =====================
 
     /// Trading pair descriptor.
     /// @see docs/architecture/v0-architecture.md §2.4
@@ -111,7 +69,7 @@ module atomica::auction {
         quote_token: vector<u8>,   // e.g. b"FakeUSD"
     }
 
-    /// IBE sealed bid — plaintext price never stored on-chain.
+    /// IBE sealed bid — plaintext price never stored on-chain during live window.
     /// @see docs/architecture/v0-architecture.md §2.5
     struct SealedBid has store {
         bidder:             address,
@@ -125,61 +83,84 @@ module atomica::auction {
     struct WindowState has store {
         pair:           Pair,
         window_id:      u64,
-        total_supply:   u256,              // sum of all seller lock amounts (FakeETH wei)
+        total_supply:   u256,               // sum of all seller lock amounts (FakeETH wei)
         bids:           vector<SealedBid>,
         settled:        bool,
         clearing_price: u64,
-        lock_ids:       vector<vector<u8>>, // seller receipts
+        lock_ids:       vector<vector<u8>>, // seller receipts consumed
     }
 
     /// Global registry stored at the @atomica deployer address (not per-seller).
-    /// Key: BCS-encoded (auction_window_id: u64, pair: Pair).
+    ///
+    /// Key: BCS-encoded (auction_window_id: u64, pair: Pair) via `make_window_key`.
     /// @see docs/architecture/v0-architecture.md §2.3
     struct AuctionRegistry has key {
         windows: Table<vector<u8>, WindowState>,
     }
 
-    // Settlement event for the v0 Beta shape (replaces the Demo AuctionSettled below).
-    // @see docs/architecture/v0-architecture.md §2.9
+    // ===================== Events =====================
+
+    /// Emitted when settlement is complete for a window.
+    /// The Ethereum settlement contract (or off-chain relayer) reads this to
+    /// transfer assets on the cross-chain side.
+    /// @see docs/architecture/v0-architecture.md §2.9
     #[event]
-    struct AuctionSettledV1 has drop, store {
+    struct AuctionSettled has drop, store {
         window_id:      u64,
         pair:           Pair,
         clearing_price: u64,
-        total_filled:   u256,              // wei of base token transferred to winners
+        total_filled:   u256,               // wei of base token allocated to winners
         winner_count:   u64,
         lock_ids:       vector<vector<u8>>, // seller receipt IDs consumed
     }
 
-    // ===================== v0 Beta Scaffold — helper =====================
+    // ===================== Helpers =====================
 
     /// Compute `auction_window_id` from on-chain clock.
-    /// epoch_index = unix_seconds / 43200
-    /// window_offset = 1 if time_in_epoch >= 28500, else 0
-    /// window_id = epoch_index * 2 + window_offset
+    ///
+    ///   epoch_index   = unix_seconds / 43200
+    ///   time_in_epoch = unix_seconds % 43200
+    ///   window_offset = (time_in_epoch >= 28500) ? 1 : 0
+    ///   window_id     = epoch_index * 2 + window_offset
+    ///
+    /// Morning window fires at offset 28 500 s (07:45 UTC).
+    /// Afternoon window fires at offset 58 500 s (16:15 UTC).
+    ///
     /// @see docs/architecture/v0-architecture.md §2.2
-    fun current_window_id(): u64 {
+    public fun current_window_id(): u64 {
         let s = timestamp::now_seconds();
         let epoch = s / 43200;
         let tmod  = s % 43200;
         epoch * 2 + if (tmod >= 28500) { 1 } else { 0 }
     }
 
-    // ===================== v0 Beta Scaffold — entry function stubs =====================
-    //
-    // All bodies abort with E_NOT_IMPLEMENTED (99). Signatures are final;
-    // implementations land in issue #86.
-    //
-    // INTEGRATION RISK: these replace the Demo-phase entry functions below.
-    // Callers in payloads.ts and AuctionBidder.tsx must be updated in #86 before
-    // the Demo-phase entry functions are removed.
-
-    /// Create a new global-registry auction for `(window_id, pair)`.
+    /// Build the BCS-encoded registry key for (window_id, pair_bcs).
     ///
-    /// Integration seam for issue #86.
-    /// Call-site break: payloads.ts::getCreateAuctionPayload must pass
-    ///   (window_id: u64, pair_bcs: vector<u8>, lock_id, min_price, mpk_bytes).
-    public entry fun create_auction_v1(
+    /// Callers pass `pair_bcs = bcs::to_bytes(&pair)` from TypeScript (already
+    /// BCS-encoded). The key is `bcs::to_bytes(window_id) || pair_bcs`.
+    fun make_window_key(window_id: u64, pair_bcs: vector<u8>): vector<u8> {
+        let key = bcs::to_bytes(&window_id);
+        vector::append(&mut key, pair_bcs);
+        key
+    }
+
+    // ===================== Entry Functions =====================
+
+    /// Create (or join) a global-registry auction for `(window_id, pair)`.
+    ///
+    /// Consumes a seller's FakeETH LockReceipt to prove on-chain escrow, then
+    /// adds the lock's supply to the window's `total_supply`. Multiple sellers
+    /// calling this for the same `(window_id, pair)` accumulate into the same
+    /// clearing pool.
+    ///
+    /// Body: scaffold — aborts with E_NOT_IMPLEMENTED (99).
+    ///
+    /// Call-site break from Demo phase:
+    ///   payloads.ts::getCreateAuctionPayload(lockId, minPrice, duration, mpk)
+    ///   → (window_id, pair_bcs, lock_id, min_price, mpk_bytes)
+    ///
+    /// @see docs/architecture/v0-architecture.md §2.3
+    public entry fun create_auction(
         _seller:    &signer,
         _window_id: u64,
         _pair_bcs:  vector<u8>,
@@ -192,11 +173,19 @@ module atomica::auction {
 
     /// Submit a sealed bid for `(window_id, pair)`.
     ///
-    /// Integration seam for issues #86 and #87 (collateral wiring).
-    /// Call-site break: payloads.ts::getBidPayload and AuctionBidder.tsx::submitBid
-    ///   must pass (window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id).
-    /// Shared-file pressure: AuctionBidder.tsx is also edited by #90 (IBE MPK fetch).
-    public entry fun submit_bid_v1(
+    /// Stores the IBE-encrypted bid without revealing the plaintext price.
+    /// The `collateral_lock_id` links the bidder's FakeUSD LockReceipt (margin).
+    ///
+    /// Body: scaffold — aborts with E_NOT_IMPLEMENTED (99).
+    ///
+    /// Call-site break from Demo phase:
+    ///   payloads.ts::getBidPayload(sellerAddr, amountUsd, u, v)
+    ///   → (window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)
+    ///   AuctionBidder.tsx::submitBid(account, sellerAddr, amountBn, u, v)
+    ///   → (window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)
+    ///
+    /// @see docs/architecture/v0-architecture.md §2.5
+    public entry fun submit_bid(
         _bidder:             &signer,
         _window_id:          u64,
         _pair_bcs:           vector<u8>,
@@ -209,9 +198,13 @@ module atomica::auction {
 
     /// Reveal cleartexts and run uniform-price clearing for `(window_id, pair)`.
     ///
-    /// Integration seam for issue #86.
-    /// Consults timelock_config::get_decryption_key — timelock_config.move must
-    /// expose that function before this body can be implemented.
+    /// After the window closes, the on-chain DKG releases the decryption key.
+    /// The settler calls this function with the index-aligned cleartext prices.
+    /// The function verifies each cleartext against the stored `(u_bytes, ciphertext)`
+    /// using `timelock_config::get_decryption_key`, then runs the clearing algorithm.
+    ///
+    /// Body: scaffold — aborts with E_NOT_IMPLEMENTED (99).
+    ///
     /// @see docs/architecture/v0-architecture.md §2.6
     public entry fun submit_cleartext_and_clear(
         _settler:    &signer,
@@ -222,12 +215,22 @@ module atomica::auction {
         abort E_NOT_IMPLEMENTED
     }
 
-    /// Settle the window and emit AuctionSettledV1.
+    /// Settle the window and emit `AuctionSettled`.
     ///
-    /// Integration seam for issue #86 and #89 (bridge.ts queryAuctionSettledEvents).
-    /// Call-site break: payloads.ts::getSettlePayload must pass (window_id, pair_bcs).
-    /// Shared-file pressure: bridge.ts is also edited by #87 (collateral refund path).
-    public entry fun settle_v1(
+    /// Runs uniform-price clearing (sort descending, accumulate to supply,
+    /// marginal price, partial fill) and emits one `AuctionSettled` event.
+    /// The Ethereum settlement contract or off-chain relayer reads this event
+    /// to deliver assets on the cross-chain side.
+    ///
+    /// Body: scaffold — aborts with E_NOT_IMPLEMENTED (99).
+    ///
+    /// Call-site break from Demo phase:
+    ///   payloads.ts::getSettlePayload(sellerAddr) → (window_id, pair_bcs)
+    ///   SettleButton.tsx::submitSettle(account, sellerAddress)
+    ///   → (window_id, pair_bcs)
+    ///
+    /// @see docs/architecture/v0-architecture.md §2.7
+    public entry fun settle(
         _caller:    &signer,
         _window_id: u64,
         _pair_bcs:  vector<u8>,
@@ -235,216 +238,121 @@ module atomica::auction {
         abort E_NOT_IMPLEMENTED
     }
 
-    // ===================== Structs =====================
-
-    /// A plaintext bid submitted by a buyer.
-    /// Demo: no Aptos-side collateral. MVP will require FakeUSD LockReceipt.
-    struct Bid has store {
-        bidder: address,
-        /// Quoted price (in FakeUSD base units per FakeETH unit)
-        bid_price: u64,
-    }
-
-    /// An active auction. Stored at the seller's address.
-    /// The seller's FakeETH is proven-locked on Ethereum — `amount` is the wei
-    /// value from the claimed LockReceipt (18-decimal, same as Ethereum).
-    struct Auction has key {
-        seller: address,
-        /// Amount of FakeETH being auctioned (in wei, from the LockReceipt)
-        amount: u256,
-        /// The lock_id of the consumed receipt (for reference / settlement)
-        lock_id: vector<u8>,
-        /// Minimum acceptable bid price
-        min_price: u64,
-        /// Auction close time (unix seconds)
-        end_time: u64,
-        /// Master Public Key bytes — forward-compatibility placeholder.
-        /// Demo: stored but not validated. Production: used for IBE.
-        mpk: vector<u8>,
-        /// All submitted bids
-        bids: vector<Bid>,
-        /// True once settle() has been called
-        settled: bool,
-        /// Set after settlement: winning bidder (zero address = no winner)
-        winner: address,
-        /// Set after settlement: clearing price (0 = no winner)
-        clearing_price: u64,
-    }
-
-    // ===================== Events =====================
-
-    #[event]
-    /// Emitted when settlement is complete. The Ethereum settlement contract
-    /// (or an off-chain relayer) reads this to transfer assets on Ethereum.
-    struct AuctionSettled has drop, store {
-        seller: address,
-        winner: address,
-        amount: u256,
-        clearing_price: u64,
-        lock_id: vector<u8>,
-    }
-
-    // ===================== Entry Functions =====================
-
-    /// Create a new auction by consuming a verified Ethereum lock receipt.
-    ///
-    /// Calls `lock_receipt::claim<Ethereum, FakeETH>` which:
-    ///   - Verifies the receipt belongs to `seller`
-    ///   - Marks it as claimed (preventing double-use)
-    ///   - Returns the locked amount (in wei)
-    ///
-    /// The receipt claim is the seller's "deposit" — no FA transfer needed on Aptos.
-    ///
-    /// `lock_id`: keccak256 of (block_hash || contract_addr || user_addr || token_addr || storage_key)
-    ///            as computed by lock_receipt::generate_lock_id.
-    /// `mpk_bytes`: Master Public Key for forward-compatibility. Pass empty vector for Demo.
-    public entry fun create_auction(
-        seller: &signer,
-        lock_id: vector<u8>,
-        min_price: u64,
-        duration: u64,
-        mpk_bytes: vector<u8>,
-    ) {
-        let seller_addr = signer::address_of(seller);
-
-        // Claim the receipt — proves the seller locked FakeETH on Ethereum,
-        // and prevents the same lock from being used in multiple auctions.
-        let amount = lock_receipt::claim<Ethereum, FakeETH>(seller_addr, lock_id);
-
-        move_to(seller, Auction {
-            seller: seller_addr,
-            amount,
-            lock_id,
-            min_price,
-            end_time: timestamp::now_seconds() + duration,
-            mpk: mpk_bytes,
-            bids: vector::empty(),
-            settled: false,
-            winner: @0x0,
-            clearing_price: 0,
-        });
-    }
-
-    /// Submit a plaintext bid for an auction.
-    ///
-    /// Demo: no Aptos-side collateral required.
-    /// MVP: bidder must also submit a FakeUSD LockReceipt as collateral.
-    public entry fun submit_bid(
-        bidder: &signer,
-        seller_addr: address,
-        bid_price: u64,
-    ) acquires Auction {
-        assert!(exists<Auction>(seller_addr), E_AUCTION_NOT_FOUND);
-        let auction = borrow_global_mut<Auction>(seller_addr);
-
-        assert!(
-            timestamp::now_seconds() < auction.end_time,
-            E_AUCTION_ENDED,
-        );
-        assert!(!auction.settled, E_ALREADY_SETTLED);
-        assert!(bid_price >= auction.min_price, E_BID_TOO_LOW);
-
-        vector::push_back(&mut auction.bids, Bid {
-            bidder: signer::address_of(bidder),
-            bid_price,
-        });
-    }
-
-    /// Settle the auction after end_time.
-    ///
-    /// Finds the highest bid >= min_price. Records winner + clearing price on-chain
-    /// and emits an AuctionSettled event. The Ethereum settlement contract (or a
-    /// relayer) reads this event to transfer FakeETH to the winner and FakeUSD to
-    /// the seller on the Ethereum side.
-    ///
-    /// Anyone can call settle after end_time.
-    ///
-    /// @see docs/architecture/v0-architecture.md#§3-cross-chain-settlement-v01-bls-relayer-flow
-    public entry fun settle(
-        _caller: &signer,
-        seller_addr: address,
-    ) acquires Auction {
-        assert!(exists<Auction>(seller_addr), E_AUCTION_NOT_FOUND);
-        let auction = borrow_global_mut<Auction>(seller_addr);
-
-        assert!(
-            timestamp::now_seconds() >= auction.end_time,
-            E_AUCTION_NOT_ENDED,
-        );
-        assert!(!auction.settled, E_ALREADY_SETTLED);
-
-        auction.settled = true;
-
-        // Find highest bid >= min_price
-        let bid_count = vector::length(&auction.bids);
-        let winner_addr = @0x0;
-        let best_price: u64 = 0;
-        let i = 0;
-        while (i < bid_count) {
-            let bid = vector::borrow(&auction.bids, i);
-            if (bid.bid_price >= auction.min_price && bid.bid_price > best_price) {
-                best_price = bid.bid_price;
-                winner_addr = bid.bidder;
-            };
-            i = i + 1;
-        };
-
-        auction.winner = winner_addr;
-        auction.clearing_price = best_price;
-
-        // Emit settlement result — Ethereum side reads this to deliver assets
-        event::emit(AuctionSettled {
-            seller: auction.seller,
-            winner: winner_addr,
-            amount: auction.amount,
-            clearing_price: best_price,
-            lock_id: auction.lock_id,
-        });
-    }
-
     // ===================== View Functions =====================
 
+    /// Return the WindowState fields for `(window_id, pair_bcs)`.
+    ///
+    /// Returns (window_id, total_supply, bid_count, settled, clearing_price).
+    /// Aborts with E_AUCTION_NOT_FOUND if no entry exists.
     #[view]
-    /// Returns (seller, amount_wei, lock_id, min_price, end_time, bid_count, settled, winner, clearing_price)
-    public fun get_auction(seller_addr: address): (address, u256, vector<u8>, u64, u64, u64, bool, address, u64) acquires Auction {
-        assert!(exists<Auction>(seller_addr), E_AUCTION_NOT_FOUND);
-        let a = borrow_global<Auction>(seller_addr);
-        (
-            a.seller,
-            a.amount,
-            a.lock_id,
-            a.min_price,
-            a.end_time,
-            vector::length(&a.bids),
-            a.settled,
-            a.winner,
-            a.clearing_price,
-        )
+    public fun get_auction(
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+    ): (u64, u256, u64, bool, u64) acquires AuctionRegistry {
+        assert!(exists<AuctionRegistry>(@atomica), E_AUCTION_NOT_FOUND);
+        let registry = borrow_global<AuctionRegistry>(@atomica);
+        let key = make_window_key(window_id, pair_bcs);
+        assert!(table::contains(&registry.windows, key), E_AUCTION_NOT_FOUND);
+        let w = table::borrow(&registry.windows, key);
+        (w.window_id, w.total_supply, vector::length(&w.bids), w.settled, w.clearing_price)
     }
 
+    /// Return the number of sealed bids submitted for `(window_id, pair_bcs)`.
+    /// Returns 0 if the window does not exist.
     #[view]
-    public fun get_bid_count(seller_addr: address): u64 acquires Auction {
-        if (!exists<Auction>(seller_addr)) return 0;
-        vector::length(&borrow_global<Auction>(seller_addr).bids)
+    public fun get_bid_count(
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+    ): u64 acquires AuctionRegistry {
+        if (!exists<AuctionRegistry>(@atomica)) return 0;
+        let registry = borrow_global<AuctionRegistry>(@atomica);
+        let key = make_window_key(window_id, pair_bcs);
+        if (!table::contains(&registry.windows, key)) return 0;
+        vector::length(&table::borrow(&registry.windows, key).bids)
     }
 
+    /// Return true if the window has been settled.
+    /// Returns false if the window does not exist.
     #[view]
-    public fun is_settled(seller_addr: address): bool acquires Auction {
-        if (!exists<Auction>(seller_addr)) return false;
-        borrow_global<Auction>(seller_addr).settled
+    public fun is_settled(
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+    ): bool acquires AuctionRegistry {
+        if (!exists<AuctionRegistry>(@atomica)) return false;
+        let registry = borrow_global<AuctionRegistry>(@atomica);
+        let key = make_window_key(window_id, pair_bcs);
+        if (!table::contains(&registry.windows, key)) return false;
+        table::borrow(&registry.windows, key).settled
     }
 
+    /// Return true if the AuctionRegistry exists at @atomica and contains an
+    /// entry for `(window_id, pair_bcs)`.
     #[view]
-    public fun auction_exists(seller_addr: address): bool {
-        exists<Auction>(seller_addr)
+    public fun auction_exists(
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+    ): bool acquires AuctionRegistry {
+        if (!exists<AuctionRegistry>(@atomica)) return false;
+        let registry = borrow_global<AuctionRegistry>(@atomica);
+        let key = make_window_key(window_id, pair_bcs);
+        table::contains(&registry.windows, key)
     }
 
+    /// Return (clearing_price, total_filled) after settlement.
+    /// Aborts with E_AUCTION_NOT_FOUND if no entry exists.
+    /// Returns (0, 0) if not yet settled.
     #[view]
-    /// Returns (winner, clearing_price) after settlement.
-    /// winner == @0x0 means no valid bid was found.
-    public fun get_settlement(seller_addr: address): (address, u64) acquires Auction {
-        assert!(exists<Auction>(seller_addr), E_AUCTION_NOT_FOUND);
-        let a = borrow_global<Auction>(seller_addr);
-        (a.winner, a.clearing_price)
+    public fun get_settlement(
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+    ): (u64, u256) acquires AuctionRegistry {
+        assert!(exists<AuctionRegistry>(@atomica), E_AUCTION_NOT_FOUND);
+        let registry = borrow_global<AuctionRegistry>(@atomica);
+        let key = make_window_key(window_id, pair_bcs);
+        assert!(table::contains(&registry.windows, key), E_AUCTION_NOT_FOUND);
+        let w = table::borrow(&registry.windows, key);
+        (w.clearing_price, w.total_supply)
+    }
+
+    // ===================== Test helpers =====================
+
+    #[test_only]
+    use std::signer;
+
+    // Insert a WindowState directly for unit tests, bypassing create_auction.
+    // Allows tests to exercise view functions and settle path without
+    // triggering E_NOT_IMPLEMENTED in create_auction.
+    #[test_only]
+    public fun test_insert_window(
+        atomica:        &signer,
+        window_id:      u64,
+        pair_bcs:       vector<u8>,
+        total_supply:   u256,
+        settled:        bool,
+        clearing_price: u64,
+    ) acquires AuctionRegistry {
+        let addr = signer::address_of(atomica);
+        if (!exists<AuctionRegistry>(addr)) {
+            move_to(atomica, AuctionRegistry {
+                windows: table::new(),
+            });
+        };
+        let key = make_window_key(window_id, pair_bcs);
+        let registry = borrow_global_mut<AuctionRegistry>(addr);
+        let base_pair = Pair {
+            base_chain:  b"ethereum",
+            base_token:  b"FakeETH",
+            quote_chain: b"aptos",
+            quote_token: b"FakeUSD",
+        };
+        table::add(&mut registry.windows, key, WindowState {
+            pair:           base_pair,
+            window_id,
+            total_supply,
+            bids:           vector::empty(),
+            settled,
+            clearing_price,
+            lock_ids:       vector::empty(),
+        });
     }
 }

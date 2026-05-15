@@ -19,22 +19,29 @@ export interface FeeRebateResult {
 }
 
 /**
- * Compute fee and rebate for the connected user after auction settlement.
+ * Compute fee and rebate for the connected user after auction settlement (v0 Beta).
  *
- * - Queries `get_settlement()` for clearing price and winner.
- * - Loads the user's bid price from localStorage.
+ * - Queries `auction::get_settlement(windowId, pairBcs)` for clearing price.
+ * - Loads the user's bid price from localStorage (keyed by windowId string).
  * - Computes rebate = bidPrice - clearingPrice.
- * - Fee is always 0 in Demo phase (no fee mechanism).
+ * - Fee is always 0 in Demo/Phase-3a (no fee mechanism yet).
+ * - Per-winner determination is deferred to Phase 3b (#86b) when collateral
+ *   verification is implemented.
  *
  * Returns `ready: false` until settlement data and bid price are both available.
  *
- * @param sellerAddress - Seller (auction) address to query settlement for
- * @param bidderAddress - Connected bidder address to compare against the winner
+ * v0 Beta breaking change: parameters are now `(windowId, pairBcs)` instead of
+ * `(sellerAddress)`. The `isWinner` field is always false until Phase 3b.
+ *
+ * @param windowId    - Auction window ID (from current_window_id or stored)
+ * @param pairBcs     - BCS-encoded Pair struct
+ * @param bidderAddress - Connected bidder address
  * @returns {@link FeeRebateResult} — `ready` is `false` until data is available
- * @see docs/specifications/prd.md
+ * @see docs/architecture/v0-architecture.md §2
  */
 export function useFeeRebate(
-  sellerAddress: string | null | undefined,
+  windowId: bigint | null | undefined,
+  pairBcs: Uint8Array | null | undefined,
   bidderAddress: string | null | undefined,
 ): FeeRebateResult {
   const [result, setResult] = useState<FeeRebateResult>({
@@ -45,26 +52,24 @@ export function useFeeRebate(
   });
 
   useEffect(() => {
-    if (!sellerAddress || !bidderAddress) return;
+    if (windowId == null || !pairBcs || !bidderAddress) return;
 
     let cancelled = false;
 
     async function compute() {
       try {
-        const settled = await isSettled(sellerAddress!);
+        const settled = await isSettled(windowId!, pairBcs!);
         if (cancelled || !settled) return;
 
-        const settlement = await getSettlement(sellerAddress!);
+        const settlement = await getSettlement(windowId!, pairBcs!);
         if (cancelled) return;
 
-        const winnerNorm = settlement.winner.toLowerCase();
-        const bidderNorm = bidderAddress!.toLowerCase();
-        const userIsWinner = winnerNorm === bidderNorm;
+        // Per-winner determination deferred to Phase 3b (#86b).
+        // Phase 3a: show clearing price from storage, isWinner always false.
+        const windowKey = windowId!.toString();
+        const bidPrice = loadBidPrice(windowKey, bidderAddress!);
 
-        const bidPrice = loadBidPrice(sellerAddress!, bidderAddress!);
-
-        if (!userIsWinner) {
-          // Not the winner — show fee=0, rebate hidden
+        if (bidPrice === null) {
           setResult({
             ready: true,
             isWinner: false,
@@ -74,21 +79,10 @@ export function useFeeRebate(
           return;
         }
 
-        if (bidPrice === null) {
-          // Winner but no stored bid price — can't compute rebate
-          setResult({
-            ready: true,
-            isWinner: true,
-            rebateAmount: undefined,
-            feeAmount: 0n,
-          });
-          return;
-        }
-
         const rebate = bidPrice - settlement.clearingPrice;
         setResult({
           ready: true,
-          isWinner: true,
+          isWinner: false, // Phase 3b will determine per-bidder winner status
           rebateAmount: rebate >= 0n ? rebate : 0n,
           feeAmount: 0n,
         });
@@ -102,7 +96,7 @@ export function useFeeRebate(
     return () => {
       cancelled = true;
     };
-  }, [sellerAddress, bidderAddress]);
+  }, [windowId, pairBcs, bidderAddress]);
 
   return result;
 }
