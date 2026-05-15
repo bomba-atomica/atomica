@@ -46,10 +46,10 @@
  * @see docs/architecture/v0-architecture.md §2.4
  */
 export interface Pair {
-  baseChain: string;   // e.g. "ethereum"
-  baseToken: string;   // e.g. "FakeETH"
-  quoteChain: string;  // e.g. "aptos"
-  quoteToken: string;  // e.g. "FakeUSD"
+  baseChain: string; // e.g. "ethereum"
+  baseToken: string; // e.g. "FakeETH"
+  quoteChain: string; // e.g. "aptos"
+  quoteToken: string; // e.g. "FakeUSD"
 }
 
 /**
@@ -61,7 +61,7 @@ export interface AuctionSettledEvent {
   windowId: bigint;
   pair: Pair;
   clearingPrice: bigint;
-  totalFilled: bigint;   // wei of base token transferred to winners
+  totalFilled: bigint; // wei of base token transferred to winners
   winnerCount: bigint;
   lockIds: Uint8Array[]; // seller receipt IDs consumed
 }
@@ -87,7 +87,9 @@ export async function queryAuctionSettledEvents(
   _windowId: bigint,
   _pair: Pair,
 ): Promise<AuctionSettledEvent[]> {
-  throw new Error("NOT_IMPLEMENTED: queryAuctionSettledEvents — implement in #89");
+  throw new Error(
+    "NOT_IMPLEMENTED: queryAuctionSettledEvents — implement in #89",
+  );
 }
 
 /**
@@ -117,5 +119,7 @@ export async function submitSettlement(
 export async function releaseBidderCollateral(
   _collateralLockId: Uint8Array,
 ): Promise<TxHash> {
-  throw new Error("NOT_IMPLEMENTED: releaseBidderCollateral — implement in #87");
+  throw new Error(
+    "NOT_IMPLEMENTED: releaseBidderCollateral — implement in #87",
+  );
 }
