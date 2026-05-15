@@ -81,7 +81,11 @@ export type AppAction =
   | { type: "WALLET_CONNECTED"; address: string; chainId: number | null }
   | { type: "WALLET_DISCONNECTED" }
   | { type: "NETWORK_CONFIG_UPDATED"; patch: Partial<NetworkState> }
-  | { type: "CHAIN_HEALTH_UPDATED"; ethereum?: boolean | null; aptos?: boolean | null }
+  | {
+      type: "CHAIN_HEALTH_UPDATED";
+      ethereum?: boolean | null;
+      aptos?: boolean | null;
+    }
   | { type: "POLLING_SET_INTERVAL"; interval: number }
   | { type: "POLLING_SET_ACTIVE"; active: boolean }
   | { type: "TX_PENDING" }
@@ -169,7 +173,11 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case "TX_ERROR":
       return {
         ...state,
-        tx: { pending: false, lastHash: state.tx.lastHash, error: action.error },
+        tx: {
+          pending: false,
+          lastHash: state.tx.lastHash,
+          error: action.error,
+        },
       };
     case "TX_RESET":
       return {
@@ -205,7 +213,11 @@ const AppStateContext = createContext<AppStateContextValue | null>(null);
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(appReducer, undefined, buildInitialState);
+  const [state, dispatch] = useReducer(
+    appReducer,
+    undefined,
+    buildInitialState,
+  );
 
   // Persist network config and polling interval whenever they change.
   useEffect(() => {
@@ -217,7 +229,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       pollingInterval: state.polling.interval,
     };
     saveConfig(updated);
-  }, [state.network.ethereumRpc, state.network.aptosRpc, state.polling.interval]);
+  }, [
+    state.network.ethereumRpc,
+    state.network.aptosRpc,
+    state.polling.interval,
+  ]);
 
   return (
     <AppStateContext.Provider value={{ state, dispatch }}>

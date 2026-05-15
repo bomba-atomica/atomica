@@ -92,7 +92,11 @@ function appReducer(state, action) {
         case "TX_ERROR":
             return {
                 ...state,
-                tx: { pending: false, lastHash: state.tx.lastHash, error: action.error },
+                tx: {
+                    pending: false,
+                    lastHash: state.tx.lastHash,
+                    error: action.error,
+                },
             };
         case "TX_RESET":
             return {
@@ -129,7 +133,11 @@ export function AppStateProvider({ children }) {
             pollingInterval: state.polling.interval,
         };
         saveConfig(updated);
-    }, [state.network.ethereumRpc, state.network.aptosRpc, state.polling.interval]);
+    }, [
+        state.network.ethereumRpc,
+        state.network.aptosRpc,
+        state.polling.interval,
+    ]);
     return (_jsx(AppStateContext.Provider, { value: { state, dispatch }, children: children }));
 }
 // ── Hook ──────────────────────────────────────────────────────────────────────
