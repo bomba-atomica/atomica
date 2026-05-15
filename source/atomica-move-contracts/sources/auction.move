@@ -41,7 +41,6 @@
 /// @see docs/architecture/v0-architecture.md#§2-auction-mechanism-v01-beta
 module atomica::auction {
     use std::vector;
-    use aptos_framework::event;
     use aptos_framework::timestamp;
     use aptos_framework::table::{Self, Table};
     use aptos_std::bcs;
@@ -100,10 +99,10 @@ module atomica::auction {
 
     // ===================== Events =====================
 
-    /// Emitted when settlement is complete for a window.
-    /// The Ethereum settlement contract (or off-chain relayer) reads this to
-    /// transfer assets on the cross-chain side.
-    /// @see docs/architecture/v0-architecture.md §2.9
+    // Emitted when settlement is complete for a window.
+    // The Ethereum settlement contract (or off-chain relayer) reads this to
+    // transfer assets on the cross-chain side.
+    // @see docs/architecture/v0-architecture.md §2.9
     #[event]
     struct AuctionSettled has drop, store {
         window_id:      u64,
@@ -240,10 +239,10 @@ module atomica::auction {
 
     // ===================== View Functions =====================
 
-    /// Return the WindowState fields for `(window_id, pair_bcs)`.
-    ///
-    /// Returns (window_id, total_supply, bid_count, settled, clearing_price).
-    /// Aborts with E_AUCTION_NOT_FOUND if no entry exists.
+    // Return the WindowState fields for (window_id, pair_bcs).
+    //
+    // Returns (window_id, total_supply, bid_count, settled, clearing_price).
+    // Aborts with E_AUCTION_NOT_FOUND if no entry exists.
     #[view]
     public fun get_auction(
         window_id: u64,
@@ -257,8 +256,8 @@ module atomica::auction {
         (w.window_id, w.total_supply, vector::length(&w.bids), w.settled, w.clearing_price)
     }
 
-    /// Return the number of sealed bids submitted for `(window_id, pair_bcs)`.
-    /// Returns 0 if the window does not exist.
+    // Return the number of sealed bids submitted for (window_id, pair_bcs).
+    // Returns 0 if the window does not exist.
     #[view]
     public fun get_bid_count(
         window_id: u64,
@@ -271,8 +270,8 @@ module atomica::auction {
         vector::length(&table::borrow(&registry.windows, key).bids)
     }
 
-    /// Return true if the window has been settled.
-    /// Returns false if the window does not exist.
+    // Return true if the window has been settled.
+    // Returns false if the window does not exist.
     #[view]
     public fun is_settled(
         window_id: u64,
@@ -285,8 +284,8 @@ module atomica::auction {
         table::borrow(&registry.windows, key).settled
     }
 
-    /// Return true if the AuctionRegistry exists at @atomica and contains an
-    /// entry for `(window_id, pair_bcs)`.
+    // Return true if the AuctionRegistry exists at @atomica and contains an
+    // entry for (window_id, pair_bcs).
     #[view]
     public fun auction_exists(
         window_id: u64,
@@ -298,9 +297,9 @@ module atomica::auction {
         table::contains(&registry.windows, key)
     }
 
-    /// Return (clearing_price, total_filled) after settlement.
-    /// Aborts with E_AUCTION_NOT_FOUND if no entry exists.
-    /// Returns (0, 0) if not yet settled.
+    // Return (clearing_price, total_filled) after settlement.
+    // Aborts with E_AUCTION_NOT_FOUND if no entry exists.
+    // Returns (0, 0) if not yet settled.
     #[view]
     public fun get_settlement(
         window_id: u64,
