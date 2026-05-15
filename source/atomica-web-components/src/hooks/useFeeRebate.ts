@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { getSettlement, isSettled, fetchRebates } from "@atomica/sdk/aptos";
-import { loadBidPrice } from "../storage/bidStorage";
 
 /**
  * Result returned by {@link useFeeRebate}.
