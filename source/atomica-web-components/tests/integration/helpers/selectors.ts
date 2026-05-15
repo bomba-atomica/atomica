@@ -60,11 +60,15 @@ export const SELECTORS = {
     auctionSellerAddress: "auction-seller-address",
   },
 
-  // AuctionBidder — v0 Beta (Phase 3a)
-  // seller-address-input replaced by window-id-input and pair-bcs-input
+  // AuctionBidder — v0 Beta (Phase 3b)
+  // Phase 3b: two-step flow — lock FakeUSD collateral then submit sealed bid.
+  // skipToBidButton advances from Step 1 (lock) to Step 2 (bid) without
+  // performing a real on-chain lock (for integration test use).
   auctionBidder: {
     /** @deprecated v0 Beta: use windowIdInput instead */
     sellerAddressInput: "seller-address-input",
+    /** Step 1 — skip the FakeUSD lock and go straight to the bid form. */
+    skipToBidButton: "skip-to-bid-button",
     windowIdInput: "window-id-input",
     collateralLockIdInput: "collateral-lock-id-input",
     bidAmountInput: "bid-amount-input",
