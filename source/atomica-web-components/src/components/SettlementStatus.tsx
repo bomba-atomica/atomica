@@ -95,9 +95,14 @@ export function SettlementStatus({
       )}
 
       {state.status === "settled" && (
-        <div data-testid="settlement-status-settled" className="flex flex-col gap-2">
+        <div
+          data-testid="settlement-status-settled"
+          className="flex flex-col gap-2"
+        >
           {state.events.length === 0 ? (
-            <p className="text-xs text-zinc-500">No settled events for this window.</p>
+            <p className="text-xs text-zinc-500">
+              No settled events for this window.
+            </p>
           ) : (
             state.events.map((ev, i) => (
               <div
@@ -105,8 +110,8 @@ export function SettlementStatus({
                 className="rounded border border-emerald-900/40 bg-emerald-950/20 px-2 py-1.5 text-xs text-emerald-400"
               >
                 <span className="font-mono">
-                  Window {ev.windowId.toString()} — {ev.winnerCount.toString()} winner(s),
-                  clearing price {ev.clearingPrice.toString()}
+                  Window {ev.windowId.toString()} — {ev.winnerCount.toString()}{" "}
+                  winner(s), clearing price {ev.clearingPrice.toString()}
                 </span>
               </div>
             ))
