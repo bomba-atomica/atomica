@@ -73,7 +73,7 @@ export function AuctionBidder() {
     setLockStatus("Waiting for MetaMask — Approve FakeUSD...");
     try {
       const provider = new ethers.BrowserProvider(
-        (window as unknown as { ethereum: Parameters<typeof ethers.BrowserProvider>[0] }).ethereum,
+        (window as unknown as { ethereum: ethers.Eip1193Provider }).ethereum,
       );
       const amountWei = ethers.parseUnits(collateralAmount || "0", 6); // FakeUSD uses 6 decimals
 
