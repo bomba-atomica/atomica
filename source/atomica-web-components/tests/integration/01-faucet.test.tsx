@@ -78,6 +78,7 @@ import { Faucet } from "../../src/components/Faucet";
 import type { EthereumTestnetInfo } from "@atomica/aptos-docker-testnet/browser-commands";
 import {
   WalletContext,
+  AppStateProvider,
   NetworkConfigProvider,
   ContractStatusProvider,
   BalancesProvider,
@@ -98,15 +99,17 @@ const ERC20_BALANCE_ABI = [
  */
 function renderFaucet(account: string) {
   return render(
-    <NetworkConfigProvider>
-      <WalletContext.Provider value={{ account, connect: async () => {} }}>
-        <ContractStatusProvider>
-          <BalancesProvider>
-            <Faucet />
-          </BalancesProvider>
-        </ContractStatusProvider>
-      </WalletContext.Provider>
-    </NetworkConfigProvider>,
+    <AppStateProvider>
+      <NetworkConfigProvider>
+        <WalletContext.Provider value={{ account, connect: async () => {} }}>
+          <ContractStatusProvider>
+            <BalancesProvider>
+              <Faucet />
+            </BalancesProvider>
+          </ContractStatusProvider>
+        </WalletContext.Provider>
+      </NetworkConfigProvider>
+    </AppStateProvider>,
   );
 }
 

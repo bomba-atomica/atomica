@@ -22,6 +22,7 @@ import {
 import { setupWalletMock } from "./fixtures/wallet-mock";
 import { step2Lock, step3Confirm } from "./helpers/selectors";
 import { WalletProvider } from "../../src/context/WalletContext";
+import { AppStateProvider } from "../../src/state/app-state";
 import { BalancesProvider } from "../../src/context/BalancesContext";
 import { SellFlow } from "../../src/components/SellFlow/SellFlow";
 import { Step2Lock } from "../../src/components/SellFlow/steps/Step2Lock";
@@ -32,11 +33,13 @@ import { Step2Lock } from "../../src/components/SellFlow/steps/Step2Lock";
 
 function renderSellFlow() {
     return render(
-        <WalletProvider>
-            <BalancesProvider>
-                <SellFlow />
-            </BalancesProvider>
-        </WalletProvider>,
+        <AppStateProvider>
+            <WalletProvider>
+                <BalancesProvider>
+                    <SellFlow />
+                </BalancesProvider>
+            </WalletProvider>
+        </AppStateProvider>,
     );
 }
 

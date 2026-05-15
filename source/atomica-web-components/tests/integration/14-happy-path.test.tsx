@@ -105,6 +105,7 @@ import { ClaimButton } from "../../src/components/ClaimButton";
 import { Step8Monitor } from "../../src/components/SellFlow/steps/Step8Monitor";
 import {
   WalletContext,
+  AppStateProvider,
   NetworkConfigProvider,
   ContractStatusProvider,
   BalancesProvider,
@@ -183,13 +184,15 @@ function buildFundStub(
  */
 function withProviders(account: string, children: React.ReactNode) {
   return render(
-    <NetworkConfigProvider>
-      <WalletContext.Provider value={{ account, connect: async () => {} }}>
-        <ContractStatusProvider>
-          <BalancesProvider>{children}</BalancesProvider>
-        </ContractStatusProvider>
-      </WalletContext.Provider>
-    </NetworkConfigProvider>,
+    <AppStateProvider>
+      <NetworkConfigProvider>
+        <WalletContext.Provider value={{ account, connect: async () => {} }}>
+          <ContractStatusProvider>
+            <BalancesProvider>{children}</BalancesProvider>
+          </ContractStatusProvider>
+        </WalletContext.Provider>
+      </NetworkConfigProvider>
+    </AppStateProvider>,
   );
 }
 

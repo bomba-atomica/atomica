@@ -18,6 +18,7 @@ import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { setupWalletMock } from "./fixtures/wallet-mock";
 import { WalletProvider, useWallet } from "../../src/context/WalletContext";
+import { AppStateProvider } from "../../src/state/app-state";
 
 // ── Test account (from .env.test) ────────────────────────────────────────────
 //
@@ -61,9 +62,11 @@ describe.sequential("wallet-mock smoke", () => {
         expect(injectedAddress.toLowerCase()).toBe(TEST_ADDRESS.toLowerCase());
 
         render(
-            <WalletProvider>
-                <ConnectButton />
-            </WalletProvider>,
+            <AppStateProvider>
+                <WalletProvider>
+                    <ConnectButton />
+                </WalletProvider>
+            </AppStateProvider>,
         );
 
         // Before clicking connect: WalletContext's useEffect auto-connects if
@@ -113,9 +116,11 @@ describe.sequential("wallet-mock smoke", () => {
         (window as any).ethereum = undefined;
 
         render(
-            <WalletProvider>
-                <ConnectButton />
-            </WalletProvider>,
+            <AppStateProvider>
+                <WalletProvider>
+                    <ConnectButton />
+                </WalletProvider>
+            </AppStateProvider>,
         );
 
         // The WalletContext useEffect will not find window.ethereum and should

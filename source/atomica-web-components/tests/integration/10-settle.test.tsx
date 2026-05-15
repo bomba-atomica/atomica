@@ -51,6 +51,7 @@ import { Step8Monitor } from "../../src/components/SellFlow/steps/Step8Monitor";
 import { Aptos, AptosConfig, Network, Account } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "@atomica/sdk/aptos";
 import { WalletContext, WalletProvider } from "../../src/context/WalletContext";
+import { AppStateProvider } from "../../src/state/app-state";
 import {
   getDerivedAddress,
 } from "@atomica/aptos-docker-testnet/browser";
@@ -214,13 +215,15 @@ describe.sequential("10: Settle Auction", () => {
       const futureEnd = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
 
       render(
-        <WalletProvider>
-          <SettleButton
-            windowId={0n}
-            pairBcs={new Uint8Array(0)}
-            auctionEndTime={futureEnd}
-          />
-        </WalletProvider>,
+        <AppStateProvider>
+          <WalletProvider>
+            <SettleButton
+              windowId={0n}
+              pairBcs={new Uint8Array(0)}
+              auctionEndTime={futureEnd}
+            />
+          </WalletProvider>
+        </AppStateProvider>,
       );
 
       const btn = screen.getByTestId(settleButton.settleButton);
@@ -363,18 +366,20 @@ describe.sequential("10: Settle Auction", () => {
       const pastEnd = Math.floor(Date.now() / 1000) - 10;
 
       render(
-        <WalletProvider>
-          <Step8Monitor
-            amount={1000000000000000000n}
-            minPrice={50000000n}
-            auctionEndTime={pastEnd}
-            windowId={0n}
-            pairBcs={new Uint8Array(0)}
-            sellerAddress="0xdeadbeef"
-            onCancelAndUnlock={async () => {}}
-            loading={false}
-          />
-        </WalletProvider>,
+        <AppStateProvider>
+          <WalletProvider>
+            <Step8Monitor
+              amount={1000000000000000000n}
+              minPrice={50000000n}
+              auctionEndTime={pastEnd}
+              windowId={0n}
+              pairBcs={new Uint8Array(0)}
+              sellerAddress="0xdeadbeef"
+              onCancelAndUnlock={async () => {}}
+              loading={false}
+            />
+          </WalletProvider>
+        </AppStateProvider>,
       );
 
       // SettleButton should be rendered because auction has ended and

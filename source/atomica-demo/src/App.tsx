@@ -8,6 +8,7 @@ import {
   WalletProvider,
   BalancesProvider,
   ContractStatusProvider,
+  AppStateProvider,
   useWallet,
 } from "@atomica/atomica-web-components";
 
@@ -63,12 +64,14 @@ function AppShell() {
 
 export default function App() {
   return (
-    <WalletProvider>
-      <ContractStatusProvider>
-        <BalancesProvider>
-          <AppShell />
-        </BalancesProvider>
-      </ContractStatusProvider>
-    </WalletProvider>
+    <AppStateProvider>
+      <WalletProvider>
+        <ContractStatusProvider>
+          <BalancesProvider>
+            <AppShell />
+          </BalancesProvider>
+        </ContractStatusProvider>
+      </WalletProvider>
+    </AppStateProvider>
   );
 }

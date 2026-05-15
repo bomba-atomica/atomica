@@ -29,6 +29,7 @@ import { BidHistory } from "../../src/components/BidHistory";
 import type { BidHistoryEntry } from "../../src/components/BidHistory";
 import {
   WalletContext,
+  AppStateProvider,
   NetworkConfigProvider,
   ContractStatusProvider,
   BalancesProvider,
@@ -41,15 +42,17 @@ afterEach(() => {
 // Minimal providers for components that need context
 function MinimalProviders({ children }: { children: React.ReactNode }) {
   return (
-    <NetworkConfigProvider>
-      <WalletContext.Provider
-        value={{ account: "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", connect: async () => {} }}
-      >
-        <ContractStatusProvider>
-          <BalancesProvider>{children}</BalancesProvider>
-        </ContractStatusProvider>
-      </WalletContext.Provider>
-    </NetworkConfigProvider>
+    <AppStateProvider>
+      <NetworkConfigProvider>
+        <WalletContext.Provider
+          value={{ account: "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", connect: async () => {} }}
+        >
+          <ContractStatusProvider>
+            <BalancesProvider>{children}</BalancesProvider>
+          </ContractStatusProvider>
+        </WalletContext.Provider>
+      </NetworkConfigProvider>
+    </AppStateProvider>
   );
 }
 
