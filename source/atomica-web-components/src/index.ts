@@ -62,3 +62,9 @@ export {
 } from "./state/app-config";
 export type { AppConfig } from "./state/app-config";
 export { AppSettings } from "./components/AppSettings";
+
+// ── Phase 3d — cross-chain settlement scaffold (#89) ─────────────────────────
+export { SettlementStatus } from "./components/SettlementStatus";
+export type { SettlementStatusProps } from "./components/SettlementStatus";
+export { WithdrawWinnings } from "./components/WithdrawWinnings";
+export type { WithdrawWinningsProps } from "./components/WithdrawWinnings";

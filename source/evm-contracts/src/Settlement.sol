@@ -39,7 +39,15 @@ import "./BLSVerifier.sol";
 contract Settlement is ReentrancyGuard, Ownable {
     /**
      * @notice BLS verifier contract for Ethereum block header validation
-     * @dev Immutable reference set at construction
+     * @dev Immutable reference set at construction.
+     *
+     *      ADR (Phase 3d, issue #89) — testnet deployments:
+     *      Deploy BLSVerifierTestnet.sol at `blsVerifierAddress` instead of
+     *      BLSVerifier.sol.  The Settlement constructor accepts any address,
+     *      so no import change is required; the `BLSVerifier` type cast is
+     *      Solidity ABI duck-typing and is safe as long as BLSVerifierTestnet
+     *      exposes `verifyBlockHash(bytes32,bytes)`.  Switch this import to
+     *      BLSVerifier.sol once EIP-2537 is stable on target networks.
      */
     BLSVerifier public immutable blsVerifier;
 
