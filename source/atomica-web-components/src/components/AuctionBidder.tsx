@@ -1,13 +1,20 @@
 import { useState } from "react";
 import { ethers } from "ethers";
-import { submitBid } from "@atomica/sdk/aptos";
-import * as ibe from "@atomica/state-proof-verifier/ibe";
+import { submitBid, getMpk } from "@atomica/sdk/aptos";
+import { computeIdentity } from "@atomica/sdk/ibe";
+import { encrypt } from "@atomica/state-proof-verifier/ibe";
 import { approveFakeUsd, lockFakeUsd } from "@atomica/sdk/ethereum";
 import { useWallet } from "../context/WalletContext";
 import { saveBidPrice } from "../storage/bidStorage";
 
 /**
  * UI panel for submitting a sealed bid on an active auction (v0 Beta).
+ *
+ * Phase 3e wires the IBE identity and MPK plumbing:
+ *   - Identity bytes derived via `computeIdentity(timelockId, deadlineUs)` from
+ *     `@atomica/sdk/ibe`, matching `timelock_config::compute_identity` on-chain.
+ *   - MPK fetched from `timelock_config::get_mpk()` via `@atomica/sdk/aptos`.
+ *   - No local `generateSystemParameters()` — the on-chain MPK is authoritative.
  *
  * Phase 3b adds a two-step flow that mirrors the seller's Step2Lock:
  *
@@ -25,20 +32,16 @@ import { saveBidPrice } from "../storage/bidStorage";
  *
  *   Step 2 — Submit Encrypted Bid:
  *     Encrypts the bid price with IBE (Boneh-Franklin) using the window ID as
- *     the timelock identity, then calls `auction::submit_bid` via the
- *     SIWE-authenticated Aptos transaction flow, passing the lock ID as
- *     collateral margin.  Persists the bid price to localStorage so
- *     {@link useFeeRebate} can compute the post-settlement rebate.
+ *     the timelock identity (via `computeIdentity`), then calls
+ *     `auction::submit_bid` via the SIWE-authenticated Aptos transaction flow,
+ *     passing the lock ID as collateral margin.  Persists the bid price to
+ *     localStorage so {@link useFeeRebate} can compute the post-settlement rebate.
  *
  * v0 Beta breaking change from Demo phase: `submit_bid` now takes
  * `(window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)` instead of
  * `(seller_addr, amount_usd)`.
  *
  * Requires {@link WalletContext} to be mounted above this component.
- *
- * INTEGRATION RISK (scout #96):
- *   Shared-file pressure — also edited by #90 (IBE MPK on-chain fetch).
- *   Merge order: #86 → #87 → #90.
  *
  * @see docs/architecture/v0-architecture.md#§2-auction-mechanism-v01-beta
  * @see docs/architecture/v0-architecture.md#§2-5-bidder-collateral
@@ -60,6 +63,7 @@ export function AuctionBidder() {
 
   // ── Step 2: Submit encrypted bid ──────────────────────────────────────────
   const [windowId, setWindowId] = useState("0");
+  const [deadlineUs, setDeadlineUs] = useState("0");
   const [pairBcsHex, setPairBcsHex] = useState("");
   const [collateralLockIdHex, setCollateralLockIdHex] = useState("");
   const [bidAmount, setBidAmount] = useState("110");
@@ -110,21 +114,21 @@ export function AuctionBidder() {
   const handleBid = async () => {
     if (!account) return;
     setLoading(true);
-    setStatus("Encrypting Bid...");
+    setStatus("Fetching MPK from chain...");
     try {
-      // 1. Encrypt Bid with IBE (Boneh-Franklin)
-      // Identity bytes: window_id (u64 big-endian) used as timelock identity
       const windowIdBn = BigInt(windowId);
-      const identityBytes = new Uint8Array(8);
-      const view = new DataView(identityBytes.buffer);
-      view.setBigUint64(0, windowIdBn, false); // big-endian
+      const deadlineUsBn = BigInt(deadlineUs);
 
-      // Generate system parameters and encrypt the bid price
-      const { mpk } = await ibe.generateSystemParameters();
+      // 1. Derive IBE identity bytes via computeIdentity (matches Move on-chain)
+      const identityBytes = computeIdentity(Number(windowIdBn), deadlineUsBn);
+
+      // 2. Fetch MPK from on-chain timelock_config::get_mpk()
+      setStatus("Encrypting Bid...");
+      const mpk = await getMpk();
       const payload = new TextEncoder().encode(bidAmount);
-      const { u, v } = await ibe.encrypt(mpk, identityBytes, payload);
+      const { u, v } = await encrypt(mpk, identityBytes, payload);
 
-      // 2. Prepare sealed-bid arguments
+      // 3. Prepare sealed-bid arguments
       const pairBcs = pairBcsHex
         ? new Uint8Array(
             (pairBcsHex.replace(/^0x/, "").match(/.{1,2}/g) ?? []).map((b) =>
@@ -141,7 +145,7 @@ export function AuctionBidder() {
           )
         : new Uint8Array(32); // placeholder: 32 zero bytes
 
-      // 3. Submit
+      // 4. Submit
       setStatus("Please sign the transaction...");
 
       const pendingTx = await submitBid(
@@ -263,6 +267,18 @@ export function AuctionBidder() {
               type="number"
               value={windowId}
               onChange={(e) => setWindowId(e.target.value)}
+              className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
+            />
+          </div>
+          <div>
+            <label className="block text-zinc-500 text-sm mb-1">
+              Deadline (microseconds)
+            </label>
+            <input
+              data-testid="deadline-us-input"
+              type="number"
+              value={deadlineUs}
+              onChange={(e) => setDeadlineUs(e.target.value)}
               className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
             />
           </div>

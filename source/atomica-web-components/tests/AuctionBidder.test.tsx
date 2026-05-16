@@ -1,17 +1,20 @@
 /**
- * UI component tests for AuctionBidder (Phase 3b bidder collateral flow).
+ * UI component tests for AuctionBidder (Phase 3e IBE wiring closure).
  *
  * Verifies that:
  *   1. The component renders the FakeUSD lock step (Step 1) by default.
  *   2. The step indicator shows the active step correctly.
  *   3. Navigating to Step 2 via "Skip" renders the bid submission form.
- *   4. The collateral_lock_id field is present in the bid submission step.
+ *   4. The collateral_lock_id and deadline fields are present in Step 2.
  *
- * Uses vi.mock to stub @atomica/sdk/* and @atomica/state-proof-verifier/ibe
+ * Phase 3e change: `generateSystemParameters` is gone — replaced by `getMpk`
+ * (on-chain fetch) and `computeIdentity` (from `@atomica/sdk/ibe`).
+ *
+ * Uses vi.mock to stub `@atomica/sdk/*` and `@atomica/state-proof-verifier/ibe`
  * so tests run without blockchain or cryptographic dependencies.
  *
  * @see docs/architecture/v0-architecture.md §2.5 — Bidder Collateral
- * @see #87 — Phase 3b bidder collateral scaffold
+ * @see #90 — Phase 3e IBE wiring closure
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -21,6 +24,7 @@ import { WalletContext } from "../../src/context/WalletContext";
 // Stub SDK modules so no blockchain calls are made.
 vi.mock("@atomica/sdk/aptos", () => ({
   submitBid: vi.fn().mockResolvedValue({ hash: "0xabc123" }),
+  getMpk: vi.fn().mockResolvedValue(new Uint8Array(48)),
 }));
 
 vi.mock("@atomica/sdk/ethereum", () => ({
@@ -28,12 +32,16 @@ vi.mock("@atomica/sdk/ethereum", () => ({
   lockFakeUsd: vi.fn().mockResolvedValue({ hash: "0xlock123" }),
 }));
 
+// Phase 3e: encrypt is imported directly (not via ibe.encrypt), computeIdentity via @atomica/sdk/ibe.
 vi.mock("@atomica/state-proof-verifier/ibe", () => ({
-  generateSystemParameters: vi.fn().mockResolvedValue({ mpk: new Uint8Array(48) }),
   encrypt: vi.fn().mockResolvedValue({
     u: new Uint8Array(48),
     v: new Uint8Array(32),
   }),
+}));
+
+vi.mock("@atomica/sdk/ibe", () => ({
+  computeIdentity: vi.fn().mockReturnValue(new Uint8Array(32)),
 }));
 
 vi.mock("../../src/storage/bidStorage", () => ({
@@ -52,7 +60,7 @@ function renderBidder(account: string | null = ACCOUNT) {
   );
 }
 
-describe("AuctionBidder — Phase 3b FakeUSD lock step", () => {
+describe("AuctionBidder — Phase 3e IBE wiring", () => {
   afterEach(() => {
     cleanup();
   });
@@ -87,6 +95,12 @@ describe("AuctionBidder — Phase 3b FakeUSD lock step", () => {
     expect(screen.getByTestId("collateral-lock-id-input")).toBeTruthy();
     expect(screen.getByTestId("bid-amount-input")).toBeTruthy();
     expect(screen.getByTestId("window-id-input")).toBeTruthy();
+  });
+
+  it("shows the deadline-us input field in Step 2 (Phase 3e addition)", () => {
+    renderBidder();
+    fireEvent.click(screen.getByTestId("skip-to-bid-button"));
+    expect(screen.getByTestId("deadline-us-input")).toBeTruthy();
   });
 
   it("shows Step 2 as active in step indicator after skipping to bid", () => {
