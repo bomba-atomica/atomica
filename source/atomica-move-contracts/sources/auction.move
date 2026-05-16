@@ -59,6 +59,14 @@ module atomica::auction {
     /// code until their implementations land in #86b–#86f.
     const E_NOT_IMPLEMENTED: u64 = 99;
 
+    // ===================== Fee/Rebate Constants =====================
+
+    /// Distance-to-clearing rebate coefficient.
+    /// Formula calibration is explicitly TBD in v0 — this placeholder will be
+    /// replaced with a calibrated value in the Phase 3c implementation follow-up.
+    /// @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
+    const REBATE_COEFFICIENT: u64 = 0; // TBD calibration Phase 3c impl
+
     // ===================== Types =====================
 
     /// Trading pair descriptor.
@@ -68,6 +76,18 @@ module atomica::auction {
         base_token:  vector<u8>,   // e.g. b"FakeETH"
         quote_chain: vector<u8>,   // e.g. b"aptos"
         quote_token: vector<u8>,   // e.g. b"FakeUSD"
+    }
+
+    /// Per-bidder rebate entry returned by `compute_rebates`.
+    ///
+    /// The rebate amount is proportional to the distance between the bidder's
+    /// revealed price and the uniform clearing price.  Coefficient calibration
+    /// is deferred to the Phase 3c implementation follow-up.
+    ///
+    /// @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
+    struct Rebate has copy, drop, store {
+        bidder: address,
+        amount: u64,
     }
 
     /// IBE sealed bid — plaintext price never stored on-chain during live window.
@@ -342,6 +362,31 @@ module atomica::auction {
         let registry = borrow_global<AuctionRegistry>(@atomica);
         let key = make_window_key(window_id, pair_bcs);
         table::contains(&registry.windows, key)
+    }
+
+    // Compute per-bidder fee/rebate curve for a cleared auction window.
+    //
+    // The rebate amount for each winning bidder is proportional to the distance
+    // between the bidder's submitted price and the uniform clearing price,
+    // scaled by REBATE_COEFFICIENT.  Coefficient calibration is TBD in v0 —
+    // this scaffold defines the function signature and redistribution flow;
+    // the body aborts with E_NOT_IMPLEMENTED (99) until Phase 3c impl lands.
+    //
+    // Returns a vector of Rebate { bidder, amount } for all bidders in the
+    // specified window.  Non-winning bidders receive amount = 0.
+    //
+    // Body: scaffold — aborts with E_NOT_IMPLEMENTED (99).
+    //
+    // @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
+    #[view]
+    public fun compute_rebates(
+        _window_id:      u64,
+        _pair_bcs:       vector<u8>,
+        _clearing_price: u64,
+    ): vector<Rebate> {
+        // REBATE_COEFFICIENT is defined but calibration is TBD — body is a scaffold.
+        let _coeff = REBATE_COEFFICIENT;
+        abort E_NOT_IMPLEMENTED
     }
 
     // Return (clearing_price, total_filled) after settlement.
