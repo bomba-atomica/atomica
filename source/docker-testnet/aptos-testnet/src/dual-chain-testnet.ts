@@ -195,10 +195,11 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
     await waitForFirstBlock(provider);
     ensureCompiled();
 
-    const fakeETH = await deployContract(deployer, readArtifact("FakeETH"));
+    const [fakeETH, fakeUSD] = await Promise.all([
+        deployContract(deployer, readArtifact("FakeETH")),
+        deployContract(deployer, readArtifact("FakeUSD")),
+    ]);
     console.log(`[Dual-Chain] ✓ FakeETH: ${fakeETH}`);
-
-    const fakeUSD = await deployContract(deployer, readArtifact("FakeUSD"));
     console.log(`[Dual-Chain] ✓ FakeUSD: ${fakeUSD}`);
 
     const lockBox = await deployContract(deployer, readArtifact("LockBox"), [fakeETH, fakeUSD]);
@@ -208,17 +209,11 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
     const fakeETHArtifact = readArtifact("FakeETH");
     const mintAmount = ethers.parseEther("10000");
 
-    await mintFakeETH(
-        provider,
-        fakeETH,
-        fakeETHArtifact.abi,
-        deployer,
-        deployerAddress,
-        mintAmount,
-    );
+    await Promise.all([
+        mintFakeETH(provider, fakeETH, fakeETHArtifact.abi, deployer, deployerAddress, mintAmount),
+        mintFakeETH(provider, fakeETH, fakeETHArtifact.abi, deployer, bidderAddress, mintAmount),
+    ]);
     console.log(`[Dual-Chain] ✓ Minted FakeETH to seller`);
-
-    await mintFakeETH(provider, fakeETH, fakeETHArtifact.abi, deployer, bidderAddress, mintAmount);
     console.log(`[Dual-Chain] ✓ Minted FakeETH to bidder`);
 
     // ── Aptos ─────────────────────────────────────────────────────────────────

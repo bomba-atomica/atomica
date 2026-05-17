@@ -144,8 +144,6 @@ export async function submitCreateAuction(
 export function getBidPayload(
     sellerAddr: string,
     amountUsd: bigint,
-    _u: Uint8Array,
-    _v: Uint8Array,
 ): InputGenerateTransactionPayloadData {
     return {
         function: `${CONTRACT_ADDR}::auction::submit_bid`,
@@ -157,8 +155,10 @@ export async function submitBid(
     ethAddress: string,
     sellerAddr: string,
     amountUsd: bigint,
-    u: Uint8Array,
-    v: Uint8Array,
+    _u: Uint8Array,
+    _v: Uint8Array,
 ): Promise<SubmitResult> {
-    return await submitNativeTransaction(ethAddress, getBidPayload(sellerAddr, amountUsd, u, v));
+    // _u and _v are IBE params not yet wired up at this layer; kept in the
+    // signature so callers don't need to change when IBE is wired in.
+    return await submitNativeTransaction(ethAddress, getBidPayload(sellerAddr, amountUsd));
 }
