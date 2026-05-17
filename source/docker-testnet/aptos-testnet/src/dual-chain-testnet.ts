@@ -210,11 +210,19 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
     const fakeETHArtifact = readArtifact("FakeETH");
     const mintAmount = ethers.parseEther("10000");
 
-    await Promise.all([
-        mintFakeETH(provider, fakeETH, fakeETHArtifact.abi, deployer, deployerAddress, mintAmount),
-        mintFakeETH(provider, fakeETH, fakeETHArtifact.abi, deployer, bidderAddress, mintAmount),
-    ]);
+    // Mint calls share the deployer signer and must be sequential to avoid
+    // nonce collisions (ethers v6 does not serialize concurrent transactions).
+    await mintFakeETH(
+        provider,
+        fakeETH,
+        fakeETHArtifact.abi,
+        deployer,
+        deployerAddress,
+        mintAmount,
+    );
     console.log(`[Dual-Chain] ✓ Minted FakeETH to seller`);
+
+    await mintFakeETH(provider, fakeETH, fakeETHArtifact.abi, deployer, bidderAddress, mintAmount);
     console.log(`[Dual-Chain] ✓ Minted FakeETH to bidder`);
 
     // ── Aptos ─────────────────────────────────────────────────────────────────
