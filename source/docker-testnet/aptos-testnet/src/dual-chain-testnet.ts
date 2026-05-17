@@ -195,11 +195,12 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
     await waitForFirstBlock(provider);
     ensureCompiled();
 
-    const [fakeETH, fakeUSD] = await Promise.all([
-        deployContract(deployer, readArtifact("FakeETH")),
-        deployContract(deployer, readArtifact("FakeUSD")),
-    ]);
+    // FakeETH and FakeUSD share the same deployer signer, so they must be
+    // deployed sequentially to avoid nonce collisions.
+    const fakeETH = await deployContract(deployer, readArtifact("FakeETH"));
     console.log(`[Dual-Chain] ✓ FakeETH: ${fakeETH}`);
+
+    const fakeUSD = await deployContract(deployer, readArtifact("FakeUSD"));
     console.log(`[Dual-Chain] ✓ FakeUSD: ${fakeUSD}`);
 
     const lockBox = await deployContract(deployer, readArtifact("LockBox"), [fakeETH, fakeUSD]);
