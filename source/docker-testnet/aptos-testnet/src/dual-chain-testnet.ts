@@ -195,6 +195,8 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
     await waitForFirstBlock(provider);
     ensureCompiled();
 
+    // FakeETH and FakeUSD share the same deployer signer, so they must be
+    // deployed sequentially to avoid nonce collisions.
     const fakeETH = await deployContract(deployer, readArtifact("FakeETH"));
     console.log(`[Dual-Chain] ✓ FakeETH: ${fakeETH}`);
 
@@ -208,6 +210,8 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
     const fakeETHArtifact = readArtifact("FakeETH");
     const mintAmount = ethers.parseEther("10000");
 
+    // Mint calls share the deployer signer and must be sequential to avoid
+    // nonce collisions (ethers v6 does not serialize concurrent transactions).
     await mintFakeETH(
         provider,
         fakeETH,
