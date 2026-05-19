@@ -45,7 +45,7 @@ module atomica::auction {
     use aptos_framework::timestamp;
     use aptos_framework::table::{Self, Table};
     use aptos_std::bcs;
-    use atomica::lock_receipt::{Self, Ethereum, FakeUSD};
+    use atomica::lock_receipt::{Self, Ethereum, FakeETH, FakeUSD};
 
     // ===================== Error Codes =====================
 
@@ -54,6 +54,10 @@ module atomica::auction {
     const E_AUCTION_NOT_ENDED: u64 = 3;
     const E_BID_TOO_LOW: u64 = 4;
     const E_ALREADY_SETTLED: u64 = 5;
+
+    /// Caller supplied a window_id that is strictly less than the current window.
+    /// Only the current window and the immediately next window are accepted.
+    const E_STALE_WINDOW_ID: u64 = 6;
 
     /// Scaffold stub sentinel — all Phase 3a entry function bodies abort with this
     /// code until their implementations land in #86b–#86f.
@@ -108,7 +112,8 @@ module atomica::auction {
         bids:           vector<SealedBid>,
         settled:        bool,
         clearing_price: u64,
-        lock_ids:       vector<vector<u8>>, // seller receipts consumed
+        lock_ids:       vector<vector<u8>>, // seller LockReceipt IDs consumed (index-aligned with min_prices)
+        min_prices:     vector<u64>,        // per-seller minimum acceptable clearing price
     }
 
     /// Global registry stored at the @atomica deployer address (not per-seller).
@@ -174,7 +179,19 @@ module atomica::auction {
     /// calling this for the same `(window_id, pair)` accumulate into the same
     /// clearing pool.
     ///
-    /// Body: scaffold — aborts with E_NOT_IMPLEMENTED (99).
+    /// Window validation: only the current window and the immediately next window
+    /// are accepted. A stale `window_id` (strictly less than `current_window_id()`)
+    /// aborts with E_STALE_WINDOW_ID (6). Windows more than one step ahead are
+    /// also rejected (> current + 1) to prevent pre-registration of far-future
+    /// windows.
+    ///
+    /// Multiple sellers may call `create_auction` with the same `(window_id,
+    /// pair_bcs)`. Each call claims its `lock_id` receipt, adds the locked amount
+    /// to `total_supply`, and appends the `lock_id` and `min_price` to the
+    /// parallel vectors `lock_ids` / `min_prices`.
+    ///
+    /// `mpk_bytes` is accepted but not stored in Phase 3a — IBE MPK on-chain
+    /// fetch is wired in follow-up issue #90.
     ///
     /// Call-site break from Demo phase:
     ///   payloads.ts::getCreateAuctionPayload(lockId, minPrice, duration, mpk)
@@ -182,14 +199,65 @@ module atomica::auction {
     ///
     /// @see docs/architecture/v0-architecture.md §2.3
     public entry fun create_auction(
-        _seller:    &signer,
-        _window_id: u64,
-        _pair_bcs:  vector<u8>,
-        _lock_id:   vector<u8>,
-        _min_price: u64,
-        _mpk_bytes: vector<u8>,
-    ) {
-        abort E_NOT_IMPLEMENTED
+        seller:     &signer,
+        window_id:  u64,
+        pair_bcs:   vector<u8>,
+        lock_id:    vector<u8>,
+        min_price:  u64,
+        _mpk_bytes: vector<u8>,  // reserved — IBE MPK wired in #90
+    ) acquires AuctionRegistry {
+        // 1. Validate window_id: reject stale (< current) and far-future (> current + 1).
+        let current = current_window_id();
+        assert!(window_id >= current, E_STALE_WINDOW_ID);
+        assert!(window_id <= current + 1, E_STALE_WINDOW_ID);
+
+        // 2. Claim the seller's FakeETH LockReceipt to prove on-chain escrow.
+        //    `claim` marks the receipt STATUS_CLAIMED and returns the locked amount.
+        let seller_addr = signer::address_of(seller);
+        let locked_amount = lock_receipt::claim<Ethereum, FakeETH>(seller_addr, lock_id);
+
+        // 3. Ensure the global AuctionRegistry exists at @atomica.
+        //
+        // On first call the registry is bootstrapped lazily. Only the @atomica
+        // deployer can bootstrap it (move_to publishes at the signer's address,
+        // so the registry lands at @atomica only when seller == @atomica). Non-
+        // deployer sellers will find the registry already present after the
+        // deployer has made the first create_auction call.
+        if (!exists<AuctionRegistry>(@atomica)) {
+            move_to(seller, AuctionRegistry {
+                windows: table::new(),
+            });
+        };
+
+        // 4. Build the registry key and either create or update the window.
+        let key = make_window_key(window_id, pair_bcs);
+        let registry = borrow_global_mut<AuctionRegistry>(@atomica);
+
+        if (!table::contains(&registry.windows, key)) {
+            // First seller for this (window_id, pair) — create a fresh WindowState.
+            let base_pair = Pair {
+                base_chain:  b"ethereum",
+                base_token:  b"FakeETH",
+                quote_chain: b"aptos",
+                quote_token: b"FakeUSD",
+            };
+            table::add(&mut registry.windows, key, WindowState {
+                pair:           base_pair,
+                window_id,
+                total_supply:   (locked_amount as u256),
+                bids:           vector::empty(),
+                settled:        false,
+                clearing_price: 0,
+                lock_ids:       vector::singleton(lock_id),
+                min_prices:     vector::singleton(min_price),
+            });
+        } else {
+            // Subsequent seller — accumulate supply and append metadata.
+            let state = table::borrow_mut(&mut registry.windows, key);
+            state.total_supply = state.total_supply + (locked_amount as u256);
+            vector::push_back(&mut state.lock_ids, lock_id);
+            vector::push_back(&mut state.min_prices, min_price);
+        };
     }
 
     /// Submit a sealed bid for `(window_id, pair)`.
@@ -467,6 +535,7 @@ module atomica::auction {
             settled,
             clearing_price,
             lock_ids:       vector::empty(),
+            min_prices:     vector::empty(),
         });
     }
 }
