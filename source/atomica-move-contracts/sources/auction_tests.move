@@ -5,8 +5,8 @@
 //   - Sealed-bid type-check (section 2.5) — verifies new Bid shape compiles and stores
 //   - View function behaviour against test-inserted WindowState
 //   - create_auction implementation: happy path, stale/far-future window rejection, accumulation
-//   - Scaffold abort paths: submit_bid / settle / submit_cleartext_and_clear
-//     must all abort with E_NOT_IMPLEMENTED (99)
+//   - submit_cleartext_and_clear: happy path, invalid cleartext, before-window-close abort
+//   - Scaffold abort paths: settle must abort with E_NOT_IMPLEMENTED (99)
 //
 // Demo-phase tests (per-seller Auction has key) are removed. All tests now
 // operate on the global AuctionRegistry shape.
@@ -15,7 +15,10 @@
 #[test_only]
 module atomica::auction_tests {
     use std::vector;
+    use aptos_framework::ibe_config;
+    use aptos_framework::ibe_golden_vector_fixtures as fixtures;
     use aptos_framework::timestamp;
+    use aptos_std::crypto_algebra;
     use atomica::auction::{Self};
     use atomica::lock_receipt::{Self, Ethereum, FakeETH, FakeUSD};
 
@@ -221,7 +224,8 @@ module atomica::auction_tests {
         // current_window_id() == 0 at t=0; use window 0 (current).
         let window_id = auction::current_window_id();
         let mpk_bytes = vector::empty<u8>();
-        auction::create_auction(atomica, window_id, pair_bcs, lock_id, 2000u64, mpk_bytes);
+        let timelock_id = 0u64; // test timelock_id
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id, 2000u64, timelock_id, mpk_bytes);
 
         // get_auction must return the registered window.
         let (wid, supply, bid_count, settled, clearing_price) =
@@ -247,7 +251,8 @@ module atomica::auction_tests {
         // window_id = current + 1 must be accepted.
         let window_id = auction::current_window_id() + 1;
         let mpk_bytes = vector::empty<u8>();
-        auction::create_auction(atomica, window_id, pair_bcs, lock_id, 1900u64, mpk_bytes);
+        let timelock_id = 0u64;
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id, 1900u64, timelock_id, mpk_bytes);
 
         let (wid, supply, _, _, _) = auction::get_auction(window_id, pair_bcs);
         assert!(wid == window_id, 1);
@@ -261,11 +266,12 @@ module atomica::auction_tests {
         setup(framework);
         // Advance time so current_window_id() > 0; then supply window_id = 0 (stale).
         timestamp::fast_forward_seconds(43200); // epoch 1, window_id = 2
-        let pair_bcs  = default_pair_bcs();
-        let lock_id   = vector::empty<u8>();
-        let mpk_bytes = vector::empty<u8>();
+        let pair_bcs    = default_pair_bcs();
+        let lock_id     = vector::empty<u8>();
+        let mpk_bytes   = vector::empty<u8>();
+        let timelock_id = 0u64;
         // window_id 0 < current 2 → stale.
-        auction::create_auction(atomica, 0u64, pair_bcs, lock_id, 100u64, mpk_bytes);
+        auction::create_auction(atomica, 0u64, pair_bcs, lock_id, 100u64, timelock_id, mpk_bytes);
     }
 
     // Far-future window_id (> current + 1) aborts with E_STALE_WINDOW_ID.
@@ -274,10 +280,11 @@ module atomica::auction_tests {
     fun test_create_auction_far_future_window_id_aborts(framework: &signer, atomica: &signer) {
         setup(framework);
         // current == 0; window_id 100 > 0 + 1 → too far in the future.
-        let pair_bcs  = default_pair_bcs();
-        let lock_id   = vector::empty<u8>();
-        let mpk_bytes = vector::empty<u8>();
-        auction::create_auction(atomica, 100u64, pair_bcs, lock_id, 100u64, mpk_bytes);
+        let pair_bcs    = default_pair_bcs();
+        let lock_id     = vector::empty<u8>();
+        let mpk_bytes   = vector::empty<u8>();
+        let timelock_id = 0u64;
+        auction::create_auction(atomica, 100u64, pair_bcs, lock_id, 100u64, timelock_id, mpk_bytes);
     }
 
     // Duplicate create_auction for same (window_id, pair) accumulates total_supply.
@@ -301,13 +308,14 @@ module atomica::auction_tests {
             lock_id_b, seller_addr, amount_b, 2u64,
         );
 
-        let window_id = auction::current_window_id();
-        let mpk_bytes = vector::empty<u8>();
+        let window_id   = auction::current_window_id();
+        let mpk_bytes   = vector::empty<u8>();
+        let timelock_id = 0u64;
 
         // First seller creates the window.
-        auction::create_auction(atomica, window_id, pair_bcs, lock_id_a, 2000u64, mpk_bytes);
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id_a, 2000u64, timelock_id, mpk_bytes);
         // Second seller joins the same window — supply accumulates.
-        auction::create_auction(atomica, window_id, pair_bcs, lock_id_b, 1900u64, mpk_bytes);
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id_b, 1900u64, timelock_id, mpk_bytes);
 
         let (_, supply, _, _, _) = auction::get_auction(window_id, pair_bcs);
         assert!(supply == expected, 1);
@@ -399,19 +407,64 @@ module atomica::auction_tests {
         auction::settle(caller, WINDOW_ID, default_pair_bcs());
     }
 
-    #[test(framework = @0x1, settler = @0x9999)]
-    #[expected_failure(abort_code = 99, location = atomica::auction)] // E_NOT_IMPLEMENTED
-    fun test_submit_cleartext_and_clear_aborts_not_implemented(
+    // submit_cleartext_and_clear aborts with E_WINDOW_NOT_CLOSED (7) if the
+    // auction window timelock has not yet expired.
+    //
+    // Uses ibe_config::initialize_for_testing to set up both ibe_config and
+    // the timestamp module (so setup(framework) is NOT called separately).
+    #[test(framework = @0x1, atomica = @atomica, settler = @0x9999)]
+    #[expected_failure(abort_code = 7, location = atomica::auction)] // E_WINDOW_NOT_CLOSED
+    fun test_submit_cleartext_aborts_before_window_close(
         framework: &signer,
-        settler: &signer,
+        atomica:   &signer,
+        settler:   &signer,
     ) {
-        setup(framework);
+        ibe_config::initialize_for_testing(framework);
+        // Register a timelock with a deadline far in the future.
+        // timestamp starts at 0 us; deadline is 2000000000000 us (far future).
+        let deadline_us = 2000000000000u64;
+        ibe_config::register_timelock(framework, deadline_us);
+        let timelock_id = 0u64; // first registered timelock
+
+        // Insert a window linked to the not-yet-expired timelock.
+        let pair_bcs = default_pair_bcs();
+        auction::test_insert_window_with_timelock(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0, timelock_id);
+
+        // Calling submit_cleartext_and_clear before timelock expires must abort with
+        // E_WINDOW_NOT_CLOSED (7). Count check passes (0 bids, 0 cleartexts).
         auction::submit_cleartext_and_clear(
             settler,
             WINDOW_ID,
-            default_pair_bcs(),
+            pair_bcs,
             vector::empty<u64>(),
         );
+    }
+
+    // submit_cleartext_and_clear aborts with E_CLEARTEXT_COUNT_MISMATCH (9) if
+    // the number of cleartexts does not match the number of bids.
+    //
+    // Count check happens before timelock expiry check, so no timelock setup is needed.
+    #[test(framework = @0x1, atomica = @atomica, settler = @0x9999)]
+    #[expected_failure(abort_code = 9, location = atomica::auction)] // E_CLEARTEXT_COUNT_MISMATCH
+    fun test_submit_cleartext_aborts_on_count_mismatch(
+        framework: &signer,
+        atomica:   &signer,
+        settler:   &signer,
+    ) {
+        setup(framework);
+
+        let pair_bcs    = default_pair_bcs();
+        let timelock_id = 0u64;
+        // Insert window with 1 bid but supply 2 cleartexts.
+        auction::test_insert_window_with_timelock(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0, timelock_id);
+        auction::test_insert_bid(
+            atomica, WINDOW_ID, pair_bcs, @0x1111,
+            b"u_bytes_96", b"ciphertext_bytes", b"lock_id",
+        );
+
+        // 2 cleartexts but only 1 bid → count mismatch aborts.
+        let cleartexts = vector[1u64, 2u64];
+        auction::submit_cleartext_and_clear(settler, WINDOW_ID, pair_bcs, cleartexts);
     }
 
     // ===================== Sealed-bid roundtrip (type-check + storage) =====================
@@ -548,5 +601,106 @@ module atomica::auction_tests {
         // type-check: fixture constants defined above compile correctly
         assert!(CLEARING_PRICE_FIXTURE == 2010, 1);
         assert!(SUPPLY_FIXTURE == 10u256, 2);
+    }
+
+    // ===================== submit_cleartext_and_clear: IBE pairing tests =====================
+    //
+    // Uses the `timelock_basic` golden vectors from `ibe_golden_vector_fixtures`:
+    //   - 5 validators, threshold 3, equal weights
+    //   - timelock_id = 0, deadline = 1000000000000 us
+    //   - plaintext = b"Timelock test message" (21 bytes)
+    //   - U = 96-byte G2 ephemeral point (timelock_basic_ciphertext_u)
+    //   - V = 21-byte XOR-encrypted ciphertext (timelock_basic_ciphertext_v)
+    //   - DK = 48-byte G1 reconstructed key (timelock_basic_reconstructed_dk)
+    //
+    // The expected cleartext (u64) is the first 8 bytes of the plaintext
+    // b"Timelock" decoded as little-endian.
+    //   T=0x54 i=0x69 m=0x6d e=0x65 l=0x6c o=0x6f c=0x63 k=0x6b
+    //   LE u64: 0x6b636f6c656d6954 = 7738542499763048276
+    //
+    // Note: the production path uses `submit_cleartext_and_clear` which calls
+    // `timelock::get_decryption_key` internally. The tests use the test-only
+    // variant `test_submit_cleartext_with_dk` to inject the DK directly,
+    // bypassing the IBE DK reconstruction native (`reconstruct_ibe_dk_internal`)
+    // which is not available in the Move test VM. The pairing-based IBE
+    // decryption logic is identical in both paths.
+    //
+    // @see docs/architecture/v0-architecture.md §2.6
+
+    // Expected little-endian u64 from first 8 bytes of b"Timelock test message".
+    // T=0x54 i=0x69 m=0x6d e=0x65 l=0x6c o=0x6f c=0x63 k=0x6b
+    // python3: int.from_bytes(b'Timelock', 'little') == 7738151096101464404
+    const CLEARTEXT_FROM_GOLDEN_PLAINTEXT: u64 = 7738151096101464404u64;
+
+    // Happy path: valid cleartext passes pairing-based IBE verification and is stored.
+    //
+    // Uses timelock_basic golden vectors. The ciphertext was encrypted with
+    // plaintext b"Timelock test message". The test supplies the known DK directly
+    // via `test_submit_cleartext_with_dk` to bypass ibe_config dependency.
+    // `enable_cryptography_algebra_natives` is called to enable BLS12-381 pairing.
+    #[test(framework = @0x1, atomica = @atomica, settler = @0x9999)]
+    fun test_submit_cleartext_happy_path_stores_revealed_price(
+        framework: &signer,
+        atomica:   &signer,
+        settler:   &signer,
+    ) {
+        // Enable BLS12-381 pairing native functions required by the verification.
+        crypto_algebra::enable_cryptography_algebra_natives(framework);
+
+        let pair_bcs = default_pair_bcs();
+        auction::test_insert_window_with_timelock(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0, 0u64);
+
+        // Insert a sealed bid using the golden vector ciphertext.
+        // u_bytes = U (96-byte G2 ephemeral point)
+        // ciphertext = V (21-byte XOR-encrypted plaintext)
+        let u_bytes    = fixtures::timelock_basic_ciphertext_u();
+        let ciphertext = fixtures::timelock_basic_ciphertext_v();
+        auction::test_insert_bid(
+            atomica, WINDOW_ID, pair_bcs, @0x1111,
+            u_bytes, ciphertext, b"collateral_lock_id",
+        );
+
+        // Supply the known DK from golden vectors and the expected cleartext.
+        let dk_bytes  = fixtures::timelock_basic_reconstructed_dk();
+        let cleartext = CLEARTEXT_FROM_GOLDEN_PLAINTEXT;
+        let cleartexts = vector[cleartext];
+        auction::test_submit_cleartext_with_dk(settler, WINDOW_ID, pair_bcs, cleartexts, dk_bytes);
+
+        // Verify revealed prices are stored index-aligned to bids.
+        let revealed = auction::test_get_revealed_prices(WINDOW_ID, pair_bcs);
+        assert!(vector::length(&revealed) == 1, 1);
+        assert!(*vector::borrow(&revealed, 0) == cleartext, 2);
+    }
+
+    // Invalid cleartext: wrong price aborts with E_INVALID_CLEARTEXT (10).
+    //
+    // Uses timelock_basic golden vectors. Supplying a wrong cleartext means the
+    // pairing-decrypted price will not match the settler-provided value.
+    #[test(framework = @0x1, atomica = @atomica, settler = @0x9999)]
+    #[expected_failure(abort_code = 10, location = atomica::auction)] // E_INVALID_CLEARTEXT
+    fun test_submit_cleartext_wrong_price_aborts(
+        framework: &signer,
+        atomica:   &signer,
+        settler:   &signer,
+    ) {
+        // Enable BLS12-381 pairing native functions.
+        crypto_algebra::enable_cryptography_algebra_natives(framework);
+
+        let pair_bcs = default_pair_bcs();
+        auction::test_insert_window_with_timelock(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0, 0u64);
+
+        // Insert a sealed bid using the golden vector ciphertext.
+        let u_bytes    = fixtures::timelock_basic_ciphertext_u();
+        let ciphertext = fixtures::timelock_basic_ciphertext_v();
+        auction::test_insert_bid(
+            atomica, WINDOW_ID, pair_bcs, @0x1111,
+            u_bytes, ciphertext, b"collateral_lock_id",
+        );
+
+        // Supply the correct DK but a WRONG cleartext — verification must fail.
+        let dk_bytes        = fixtures::timelock_basic_reconstructed_dk();
+        let wrong_cleartext = 9999u64;
+        let cleartexts      = vector[wrong_cleartext];
+        auction::test_submit_cleartext_with_dk(settler, WINDOW_ID, pair_bcs, cleartexts, dk_bytes);
     }
 }

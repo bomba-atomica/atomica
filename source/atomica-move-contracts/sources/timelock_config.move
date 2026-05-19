@@ -27,6 +27,7 @@
 ///   A mismatch is a silent correctness failure.
 /// - See `docs/development/timelock-scout-findings.md` § 3a for details.
 module atomica::timelock_config {
+    use aptos_framework::ibe_config;
 
     // ---------------------------------------------------------------------------
     // Default constants
@@ -103,6 +104,30 @@ module atomica::timelock_config {
     /// Returns the reveal threshold denominator (default 100).
     public fun get_threshold_denominator(): u64 {
         DEFAULT_THRESHOLD_DENOMINATOR
+    }
+
+    #[view]
+    /// Returns the IBE Master Public Key (96-byte G2 compressed point) set by DKG.
+    ///
+    /// Returns an empty vector if the IBE MPK has not been set yet.
+    /// Delegates to `aptos_framework::ibe_config::get_mpk`.
+    ///
+    /// @see docs/architecture/v0-architecture.md §2.6
+    public fun get_mpk(): vector<u8> {
+        ibe_config::get_mpk()
+    }
+
+    #[view]
+    /// Returns `true` if the decryption key for `timelock_id` has been revealed.
+    ///
+    /// Returns `false` if the timelock does not exist or the threshold has not
+    /// been reached yet. Delegates to `aptos_framework::ibe_config::is_revealed`.
+    ///
+    /// `timelock_id` — the ID returned by `ibe_config::register_timelock`.
+    ///
+    /// @see docs/architecture/v0-architecture.md §2.6
+    public fun is_revealed(timelock_id: u64): bool {
+        ibe_config::is_revealed(timelock_id)
     }
 
     // ---------------------------------------------------------------------------
