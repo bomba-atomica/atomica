@@ -13,8 +13,32 @@ import { useEffect, useState } from "react";
 import {
   queryAuctionSettledEvents,
   type AuctionSettledEvent,
+  type BridgeConfig,
   type Pair,
 } from "@atomica/sdk/settlement/bridge";
+
+// Safe env access: works in Vite browser builds and Node tests.
+const _env =
+  (import.meta as { env?: Record<string, string> }).env || process.env || {};
+
+/**
+ * Default bridge config derived from Vite environment variables.
+ * In production the relayer handles settlement; this is used for read-only
+ * event polling in the UI (issue #113 will wire full read path).
+ */
+const DEFAULT_UI_BRIDGE_CONFIG: BridgeConfig = {
+  aptosRpcUrl: _env.VITE_APTOS_RPC_URL ?? "http://localhost:8080/v1",
+  contractAddress:
+    _env.VITE_CONTRACT_ADDRESS ??
+    "0x0000000000000000000000000000000000000000000000000000000000000000",
+  ethRpcUrl: _env.VITE_ETH_RPC_URL ?? "http://localhost:8545",
+  blsVerifierAddress:
+    _env.VITE_BLS_VERIFIER_ADDRESS ??
+    "0x0000000000000000000000000000000000000000",
+  // The UI does not have a relayer private key — settlement is relayer-driven.
+  // Any call to submitSettlement from the UI will fail with NotTrustedRelayer.
+  relayerPrivateKey: "",
+};
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -55,7 +79,11 @@ export function SettlementStatus({
 
     async function poll() {
       try {
-        const events = await queryAuctionSettledEvents(windowId, pair);
+        const events = await queryAuctionSettledEvents(
+          windowId,
+          pair,
+          DEFAULT_UI_BRIDGE_CONFIG,
+        );
         if (!cancelled) {
           setState({ status: "settled", events });
         }
