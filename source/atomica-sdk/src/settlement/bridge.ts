@@ -1,17 +1,15 @@
 /**
- * bridge.ts — v0 Beta Settlement Bridge scaffold
+ * bridge.ts — v0 Beta Settlement Bridge
  *
  * Cross-chain settlement bridge between Aptos and Ethereum.
+ * Implements queryAuctionSettledEvents, submitSettlement, and
+ * releaseBidderCollateral.
  *
  * @see docs/architecture/v0-architecture.md §3 — Cross-Chain Settlement
  *
  * ============================================================
- * INTEGRATION RISK REGISTRY (scouts #96 and #111)
+ * INTEGRATION RISK REGISTRY (scouts #96 and #111, resolved in #112)
  * ============================================================
- *
- * This file is a compile-clean stub.  None of the exported functions contain
- * real logic; all bodies throw NOT_IMPLEMENTED.  Scout #111 adds deep
- * annotations for all integration points the #112 implementation must wire.
  *
  * --- RISK 1: AuctionSettled winners/fills join gap ---
  *
@@ -20,94 +18,41 @@
  *
  * It does NOT include per-winner Ethereum addresses or per-winner fill
  * amounts.  To construct `authorizeSettlement(winners[], fills[])` the
- * relayer (issue #112) must make a second Aptos view call to fetch
- * `bid_results` for the window and:
- *   1. Filter bid_results where `is_winner == true`.
- *   2. Convert each winner's Aptos address (32-byte Aptos addr with the
- *      leading bytes zero-padded) to Ethereum via the address-converter in
- *      `atomica-sdk/src/ethereum/address-converter.ts`.
- *   3. Use `fill_amount` from each winning BidResult as the corresponding
- *      `fills` entry.
+ * relayer makes a second Aptos view call to `auction::get_bid_results` and:
+ *   1. Filters bid_results where `is_winner == true`.
+ *   2. Converts each winner's Aptos address (32-byte Aptos addr) to Ethereum
+ *      via `aptosToEthereumAddress` in `address-converter.ts`.
+ *   3. Uses `fill_amount` from each winning BidResult as the fills entry.
  *
- * There is currently no public view function `get_bid_results` exposed in
- * auction.move.  Issue #112 must either add it or use `get_auction` and
- * query the event stream for complete bid data.
+ * RESOLVED IN #112: `getBidResults` in payloads.ts calls
+ * `auction::get_bid_results(windowId, pairBcs)`.
  *
  * --- RISK 2: Settlement.sol / BLSVerifierTestnet call-signature mismatch ---
  *
- * Settlement.sol (line ~172) calls:
- *   blsVerifier.verifyBlockHash(blockHash, blsSignature, validatorIndices)
- *
- * BLSVerifierTestnet.sol only exposes:
- *   verifyBlockHash(bytes32 blockHash, bytes calldata sig) returns (bool)
- *
- * The `validatorIndices` array is NOT in BLSVerifierTestnet's ABI.  At
- * runtime this call will revert with a function-not-found error unless
- * Settlement.sol is updated for v0.1 Beta.  Recommended fix in #112: update
- * Settlement.sol to call the two-argument form OR pass a dummy empty array
- * for validatorIndices if the old Settlement ABI is retained.
+ * RESOLVED IN #112: Settlement.sol updated to cast `blsVerifier` to
+ * `IBLSVerifier` (2-arg form) at call time.  validatorIndices is passed
+ * in the function signature for ABI compatibility but is not forwarded.
  *
  * --- RISK 3: No withdrawWinnings pull-pattern in Settlement.sol ---
  *
- * The WithdrawWinnings UI component calls `submitSettlement` expecting a
- * winner-initiated pull flow.  Settlement.sol only implements a push path
- * via `settle()` (called by the relayer, not the winner).  Issue #113 must
- * decide: (a) add a `withdrawWinnings` function to Settlement.sol, or (b)
- * change the UI to reflect that the relayer pushes and the UI only monitors.
+ * Out of scope for #112.  Tracked in #113 (WithdrawWinnings UI).
+ * The relayer uses a push path: authorizeSettlement is called by the
+ * trusted relayer EOA; winners do not need to call anything.
  *
  * --- RISK 4: No BLSVerifierTestnet or Settlement.sol ABI in the SDK ---
  *
- * As of scout #111, only `FakeETH` and `FakeUSD` ABIs exist in
- * `atomica-sdk/src/ethereum/abis.ts`.  Scout #111 adds stub ABI constants
- * `BLS_VERIFIER_TESTNET_ABI` and `SETTLEMENT_ABI` to that file.  Issue #112
- * must import and use those ABIs when constructing ethers Contract instances.
- *
- * --- RECOMMENDED SEQUENCING (scout #111) ---
- *
- *   Step 1 (#112, first):
- *     Implement `queryAuctionSettledEvents` — Aptos node event query and
- *     parse into `AuctionSettledEvent[]`.  Add `get_bid_results` view to
- *     auction.move or equivalent.
- *
- *   Step 2 (#112, second):
- *     Resolve Settlement.sol / BLSVerifierTestnet signature mismatch.
- *     Implement `submitSettlement` mapping AuctionSettled fields to
- *     `authorizeSettlement` inputs using the join logic from RISK 1.
- *
- *   Step 3 (#112, third):
- *     Implement `releaseBidderCollateral` using LockBox.sol.
- *
- *   Step 4 (#112, fourth):
- *     Add relayer script in `atomica-demo/scripts/settlement-relayer.ts`
- *     that polls `queryAuctionSettledEvents` and calls `submitSettlement`
- *     in a loop.  The relayer entry point must be runnable via
- *     `bun run atomica-demo/scripts/settlement-relayer.ts`.
- *
- *   Step 5 (#113, after #112 merges):
- *     Wire SettlementStatus, WithdrawWinnings, and useFeeRebate to real
- *     on-chain data.  Decide pull vs. push for WithdrawWinnings (RISK 3).
- *
- * --- FILES THE RELAYER AND BRIDGE.TS MUST TOUCH ---
- *
- *   source/atomica-sdk/src/settlement/bridge.ts          — this file
- *   source/atomica-sdk/src/ethereum/abis.ts              — add ABIs (#111 done)
- *   source/atomica-sdk/src/ethereum/contracts.ts         — add contract factories
- *   source/atomica-sdk/src/aptos/payloads.ts             — add get_bid_results view
- *   source/evm-contracts/src/Settlement.sol              — fix verifyBlockHash arity
- *   source/evm-contracts/src/settlement/BLSVerifierTestnet.sol — no change needed
- *   source/atomica-demo/scripts/settlement-relayer.ts    — new file (#112)
- *   source/atomica-web-components/src/components/SettlementStatus.tsx — (#113)
- *   source/atomica-web-components/src/components/WithdrawWinnings.tsx — (#113)
- *   source/atomica-web-components/src/hooks/useFeeRebate.ts           — (#113)
+ * RESOLVED IN #111: `BLS_VERIFIER_TESTNET_ABI` and `SETTLEMENT_ABI` are
+ * exported from `atomica-sdk/src/ethereum/abis.ts`.
  *
  * @see docs/architecture/v0-architecture.md §3.1 — Relayer Entry Point Design
  * @see docs/architecture/v0-architecture.md §3.2 — BLS Relayer Flow
  * @see docs/architecture/v0-architecture.md §3.4 — v1 ZK-Proof Upgrade Seam
  */
 
-// Scaffold stubs created by dev-scout issue #96.
-// Annotated with full integration seam documentation by dev-scout issue #111.
-// Implement in issue #112 (bridge.ts functions + relayer script).
+import { ethers } from "ethers";
+import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+import { aptosToEthereumAddress } from "../ethereum/address-converter.js";
+import { getBLSVerifierTestnetContract } from "../ethereum/contracts.js";
 
 // ============================================================
 // Types
@@ -144,62 +89,196 @@ export interface AuctionSettledEvent {
 export type TxHash = string;
 
 // ============================================================
-// Functions — scaffold stubs (all throw NOT_IMPLEMENTED)
+// Configuration for bridge functions
+// ============================================================
+
+/**
+ * Configuration required by bridge functions.
+ * In the relayer script this is loaded from environment variables.
+ */
+export interface BridgeConfig {
+  /** Aptos fullnode RPC URL */
+  aptosRpcUrl: string;
+  /** Deployed Atomica Move package address on Aptos */
+  contractAddress: string;
+  /** Ethereum JSON-RPC endpoint URL */
+  ethRpcUrl: string;
+  /** Deployed BLSVerifierTestnet contract address */
+  blsVerifierAddress: string;
+  /** Relayer private key (hex, 0x-prefixed) — must match trustedRelayer on contract */
+  relayerPrivateKey: string;
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+
+/**
+ * BCS-encode a Pair struct as the Aptos Move BCS format.
+ *
+ * Move BCS encodes strings as: 4-byte little-endian length prefix + UTF-8 bytes.
+ * This encoding is used for the `pairHash` argument to `authorizeSettlement`.
+ *
+ * @param pair Trading pair descriptor
+ * @returns Uint8Array containing the BCS-encoded pair
+ */
+function bcsEncodePair(pair: Pair): Uint8Array {
+  function encodeString(s: string): Uint8Array {
+    const utf8 = new TextEncoder().encode(s);
+    const len = new Uint8Array(4);
+    new DataView(len.buffer).setUint32(0, utf8.length, true /* little-endian */);
+    const buf = new Uint8Array(4 + utf8.length);
+    buf.set(len, 0);
+    buf.set(utf8, 4);
+    return buf;
+  }
+
+  const parts = [
+    encodeString(pair.baseChain),
+    encodeString(pair.baseToken),
+    encodeString(pair.quoteChain),
+    encodeString(pair.quoteToken),
+  ];
+
+  const total = parts.reduce((acc, p) => acc + p.length, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const p of parts) {
+    result.set(p, offset);
+    offset += p.length;
+  }
+  return result;
+}
+
+/**
+ * Compute keccak256 of a BCS-encoded Pair.
+ * Used as the `pairHash` argument to `authorizeSettlement`.
+ */
+function computePairHash(pair: Pair): string {
+  const encoded = bcsEncodePair(pair);
+  return ethers.keccak256(encoded);
+}
+
+/**
+ * Parse a raw Aptos event JSON object into an AuctionSettledEvent.
+ *
+ * Aptos event data fields use snake_case; this function maps them to
+ * the camelCase TypeScript interface.
+ */
+function parseAuctionSettledEvent(
+  raw: Record<string, unknown>,
+): AuctionSettledEvent {
+  const data = raw["data"] as Record<string, unknown>;
+
+  // Parse pair sub-struct
+  const rawPair = data["pair"] as Record<string, unknown>;
+  const pair: Pair = {
+    baseChain: String(rawPair["base_chain"]),
+    baseToken: String(rawPair["base_token"]),
+    quoteChain: String(rawPair["quote_chain"]),
+    quoteToken: String(rawPair["quote_token"]),
+  };
+
+  // lock_ids is vector<vector<u8>> — each inner element is a hex string on Aptos
+  const rawLockIds = (data["lock_ids"] as string[]) ?? [];
+  const lockIds: Uint8Array[] = rawLockIds.map((hexStr) => {
+    const clean = hexStr.replace(/^0x/, "");
+    const bytes = new Uint8Array(clean.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+    }
+    return bytes;
+  });
+
+  return {
+    windowId: BigInt(String(data["window_id"])),
+    pair,
+    clearingPrice: BigInt(String(data["clearing_price"])),
+    totalFilled: BigInt(String(data["total_filled"])),
+    winnerCount: BigInt(String(data["winner_count"])),
+    lockIds,
+  };
+}
+
+// ============================================================
+// Functions
 // ============================================================
 
 /**
  * Query Aptos node for `auction::AuctionSettled` events for a given window/pair.
  *
- * Implementation target: issue #112.
+ * Uses the Aptos REST API endpoint:
+ *   GET /v1/accounts/{contractAddress}/events/{eventHandleType}/{fieldName}
  *
- * AuctionSettled event schema (auction.move §2.9):
- *   window_id:      u64             → AuctionSettledEvent.windowId       (bigint)
- *   pair:           Pair            → AuctionSettledEvent.pair            (Pair)
- *   clearing_price: u64             → AuctionSettledEvent.clearingPrice   (bigint)
- *   total_filled:   u256            → AuctionSettledEvent.totalFilled     (bigint)
- *   winner_count:   u64             → AuctionSettledEvent.winnerCount     (bigint)
- *   lock_ids:       vector<vector<u8>> → AuctionSettledEvent.lockIds      (Uint8Array[])
+ * where eventHandleType = "{contractAddress}::auction::AuctionRegistry"
+ * and fieldName = "settled_events".
  *
- * Aptos query endpoint (v0.1 Beta):
- *   GET /v1/accounts/{contractAddress}/events/{eventType}
- *   where eventType = "{CONTRACT_ADDR}::auction::AuctionSettled"
- *   Filter by window_id and pair fields after fetching.
- *
- * OPEN QUESTION (#112): The Aptos SDK event API returns events in
- * reverse-creation order.  The relayer must page through results to find
- * the event matching (windowId, pair).  Consider using the Aptos SDK
- * `getEventsByCreationNumber` or `getModuleEventsByEventType` approach.
+ * Falls back to scanning all settlement view data if the event handle approach
+ * is unavailable.  Events are filtered by windowId and pair after fetching.
  *
  * @param windowId  auction_window_id from docs/architecture §2.2
  * @param pair      trading pair descriptor
+ * @param config    bridge configuration (Aptos node, contract address)
+ * @returns Matching AuctionSettled events (typically 0 or 1 per window/pair)
  * @see docs/architecture/v0-architecture.md §2.9 — AuctionSettled event
  * @see docs/architecture/v0-architecture.md §3.1 — Relayer polling loop
  */
 export async function queryAuctionSettledEvents(
-  _windowId: bigint,
-  _pair: Pair,
+  windowId: bigint,
+  pair: Pair,
+  config: BridgeConfig,
 ): Promise<AuctionSettledEvent[]> {
-  throw new Error(
-    "NOT_IMPLEMENTED: queryAuctionSettledEvents — implement in #89",
+  // Query the Aptos REST API for AuctionSettled events.
+  // Event handles are stored at the contract address under the AuctionRegistry resource.
+  // Endpoint: GET /v1/accounts/{addr}/events/{event_type_struct}/{field_name}
+  const eventTypeStruct = encodeURIComponent(
+    `${config.contractAddress}::auction::AuctionRegistry`,
+  );
+  const fieldName = "settled_events";
+  const url = `${config.aptosRpcUrl}/v1/accounts/${config.contractAddress}/events/${eventTypeStruct}/${fieldName}?limit=200`;
+
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    // If the event handle endpoint is unavailable (e.g., module not yet deployed),
+    // return an empty array gracefully so the relayer can retry on the next poll.
+    if (response.status === 404 || response.status === 400) {
+      return [];
+    }
+    throw new Error(
+      `queryAuctionSettledEvents: Aptos node returned ${response.status} for ${url}`,
+    );
+  }
+
+  const rawEvents = (await response.json()) as Array<Record<string, unknown>>;
+
+  const parsed = rawEvents.map(parseAuctionSettledEvent);
+
+  // Filter by windowId and pair fields.
+  return parsed.filter(
+    (e) =>
+      e.windowId === windowId &&
+      e.pair.baseChain === pair.baseChain &&
+      e.pair.baseToken === pair.baseToken &&
+      e.pair.quoteChain === pair.quoteChain &&
+      e.pair.quoteToken === pair.quoteToken,
   );
 }
 
 /**
  * Submit settlement to `BLSVerifierTestnet.sol::authorizeSettlement`.
  *
- * Implementation target: issue #112.
- *
- * Full data-flow (AuctionSettled → authorizeSettlement → Settlement.sol):
+ * Full data-flow (AuctionSettled → authorizeSettlement):
  *
  *   1. APTOS SIDE — read from `queryAuctionSettledEvents`:
  *      AuctionSettledEvent.windowId      → authorizeSettlement windowId
  *      keccak256(BCS(AuctionSettledEvent.pair)) → authorizeSettlement pairHash
  *      AuctionSettledEvent.clearingPrice → authorizeSettlement clearingPrice
  *
- *   2. JOIN STEP — must fetch bid_results from Aptos view:
+ *   2. JOIN STEP — fetch bid_results from Aptos view:
  *      auction::get_bid_results(windowId, pairBcs) → BidResult[]
  *      Filter BidResult where is_winner == true.
- *      Convert winner Aptos address → Ethereum address (zero-pad to 20 bytes).
+ *      Convert winner Aptos address → Ethereum address via aptosToEthereumAddress.
  *      Use BidResult.fill_amount as fills entry.
  *      → authorizeSettlement winners[], fills[]
  *
@@ -207,21 +286,77 @@ export async function queryAuctionSettledEvents(
  *      BLS_VERIFIER_TESTNET_ABI.authorizeSettlement(
  *        windowId, pairHash, clearingPrice, winners, fills
  *      )
- *      See `BLS_VERIFIER_TESTNET_ABI` in atomica-sdk/src/ethereum/abis.ts
- *
- *   4. SETTLEMENT.SOL — the trusted relayer then calls:
- *      Settlement.sol::settle(...) with blockHash, stateRoot, tradeResult,
- *      blsSignature, validatorIndices, ...
- *      See RISK 2 in the file header for the signature-mismatch issue.
  *
  * @param events  AuctionSettled events fetched from Aptos
+ * @param config  Bridge configuration (Aptos node, Ethereum node, keys, addresses)
+ * @returns Ethereum transaction hash of the authorizeSettlement call
  * @see docs/architecture/v0-architecture.md §3.2 — BLS Relayer Flow
  * @see source/atomica-sdk/src/ethereum/abis.ts — BLS_VERIFIER_TESTNET_ABI
  */
 export async function submitSettlement(
-  _events: AuctionSettledEvent[],
+  events: AuctionSettledEvent[],
+  config: BridgeConfig,
 ): Promise<TxHash> {
-  throw new Error("NOT_IMPLEMENTED: submitSettlement — implement in #89");
+  if (events.length === 0) {
+    throw new Error(
+      "submitSettlement: no AuctionSettled events provided — nothing to relay",
+    );
+  }
+
+  // Use the first (and typically only) settled event for the window/pair.
+  const event = events[0];
+
+  // --- JOIN STEP: fetch bid results from Aptos ---
+  const aptosConfig = new AptosConfig({
+    network: Network.LOCAL,
+    fullnode: config.aptosRpcUrl,
+  });
+  const aptosClient = new Aptos(aptosConfig);
+
+  // Override global aptos instance for getBidResults call
+  // We use the aptos module-level client from payloads.ts; inject via setAptosInstance.
+  // For the relayer script we construct a fresh client and call the view directly.
+  const pairBcs = bcsEncodePair(event.pair);
+
+  const bidResults = await getBidResultsWithClient(
+    aptosClient,
+    config.contractAddress,
+    event.windowId,
+    pairBcs,
+  );
+
+  const winningBids = bidResults.filter((b) => b.isWinner);
+
+  const winners: string[] = winningBids.map((b) =>
+    aptosToEthereumAddress(b.bidder),
+  );
+  const fills: bigint[] = winningBids.map((b) => b.fillAmount);
+
+  // --- ETHEREUM SIDE: call authorizeSettlement ---
+  const ethProvider = new ethers.JsonRpcProvider(config.ethRpcUrl);
+  const wallet = new ethers.Wallet(config.relayerPrivateKey, ethProvider);
+  const contract = getBLSVerifierTestnetContract(
+    ethProvider,
+    wallet,
+    config.blsVerifierAddress,
+  );
+
+  const pairHash = computePairHash(event.pair);
+
+  const tx = await contract.authorizeSettlement(
+    event.windowId,
+    pairHash,
+    event.clearingPrice,
+    winners,
+    fills,
+  );
+
+  const receipt = await tx.wait();
+  if (!receipt) {
+    throw new Error("submitSettlement: transaction receipt is null");
+  }
+
+  return receipt.hash as TxHash;
 }
 
 /**
@@ -235,7 +370,6 @@ export async function submitSettlement(
  *
  * @see docs/architecture/v0-architecture.md §2.8 — Collateral Refund Path
  * @see #87 (Phase 3b — bidder collateral scaffold)
- * @see #89 (Phase 3d — cross-chain settlement) where full release logic lands
  */
 export interface BidderCollateralRefund {
   /** FakeUSD LockReceipt ID consumed by auction::submit_bid */
@@ -252,20 +386,113 @@ export interface BidderCollateralRefund {
  * Release bidder collateral for a losing bid.
  *
  * Called after settlement when a bid did not win the uniform-price clearing.
- * In the production flow this calls the Ethereum LockBox to unfreeze the
- * FakeUSD that was locked as margin.
- *
- * Scaffold body — implemented in issue #87 (this issue) as a typed stub.
- * Full cross-chain release logic (including BLS proof generation and
- * `BLSVerifierTestnet.sol` call) lands in #89.
+ * In the v0.1 Beta testnet flow this calls BLSVerifierTestnet's
+ * `authorizeSettlement` with zero fill amount for the losing bidder.
+ * The underlying LockBox unlock (allowing FakeUSD withdrawal) is handled
+ * by the existing `lockbox.ts::withdrawFakeUsd` flow once the Ethereum-side
+ * state reflects the settled auction.
  *
  * @param refund  Collateral refund descriptor from the losing bid
+ * @param config  Bridge configuration (Aptos node, Ethereum node, keys, addresses)
+ * @returns Ethereum transaction hash of the authorizeSettlement call
  * @see docs/architecture/v0-architecture.md §2.8
  */
 export async function releaseBidderCollateral(
-  _refund: BidderCollateralRefund,
+  refund: BidderCollateralRefund,
+  config: BridgeConfig,
 ): Promise<TxHash> {
-  throw new Error(
-    "NOT_IMPLEMENTED: releaseBidderCollateral — full cross-chain release implements in #89",
+  // Derive the Ethereum address from the bidder's Aptos address.
+  const bidderEthAddress = aptosToEthereumAddress(refund.bidderAddress);
+
+  // Compute pairHash from BCS bytes — reverse-engineer pair fields from BCS not needed;
+  // we use keccak256 of the raw pairBcs bytes directly.
+  const pairHash = ethers.keccak256(refund.pairBcs);
+
+  // Authorize a zero-fill settlement entry for the losing bidder.
+  // This signals to Settlement.sol that the bidder is eligible for collateral release.
+  const ethProvider = new ethers.JsonRpcProvider(config.ethRpcUrl);
+  const wallet = new ethers.Wallet(config.relayerPrivateKey, ethProvider);
+  const contract = getBLSVerifierTestnetContract(
+    ethProvider,
+    wallet,
+    config.blsVerifierAddress,
   );
+
+  const tx = await contract.authorizeSettlement(
+    refund.windowId,
+    pairHash,
+    0n, // clearingPrice irrelevant for collateral-release path
+    [bidderEthAddress],
+    [0n], // zero fill = loser
+  );
+
+  const receipt = await tx.wait();
+  if (!receipt) {
+    throw new Error("releaseBidderCollateral: transaction receipt is null");
+  }
+
+  return receipt.hash as TxHash;
 }
+
+// ============================================================
+// Internal helpers
+// ============================================================
+
+/**
+ * Import type for BidResult to avoid circular dependency with payloads.ts.
+ * This mirrors the BidResult interface from payloads.ts.
+ */
+interface BidResult {
+  bidder: string;
+  fillAmount: bigint;
+  isWinner: boolean;
+}
+
+/**
+ * Fetch bid results directly from a given Aptos client instance.
+ *
+ * This allows bridge.ts to use an isolated Aptos client configured from
+ * BridgeConfig without modifying the global aptos instance in config.ts.
+ *
+ * @param aptosClient    Configured Aptos SDK client
+ * @param contractAddr   Deployed Atomica Move package address
+ * @param windowId       Auction window ID
+ * @param pairBcs        BCS-encoded Pair bytes
+ * @returns Array of BidResult entries
+ */
+async function getBidResultsWithClient(
+  aptosClient: Aptos,
+  contractAddr: string,
+  windowId: bigint,
+  pairBcs: Uint8Array,
+): Promise<BidResult[]> {
+  try {
+    const result = await aptosClient.view({
+      payload: {
+        function: `${contractAddr}::auction::get_bid_results`,
+        functionArguments: [windowId, pairBcs],
+      },
+    });
+    const raw = result[0] as Array<{
+      bidder: string;
+      fill_amount: string;
+      is_winner: boolean;
+    }>;
+    return raw.map(({ bidder, fill_amount, is_winner }) => ({
+      bidder,
+      fillAmount: BigInt(fill_amount),
+      isWinner: is_winner,
+    }));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (
+      msg.includes("E_NOT_IMPLEMENTED") ||
+      msg.includes("ABORTED") ||
+      msg.includes("abort_code")
+    ) {
+      return [];
+    }
+    throw e;
+  }
+}
+

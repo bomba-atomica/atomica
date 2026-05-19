@@ -9,6 +9,19 @@ import "./DepositBox.sol";
 import "./BLSVerifier.sol";
 
 /**
+ * @title IBLSVerifier
+ * @notice Minimal interface shared by BLSVerifier.sol (v1) and BLSVerifierTestnet.sol (v0.1).
+ * @dev v0.1 Beta: BLSVerifierTestnet.verifyBlockHash only accepts (blockHash, sig).
+ *      Settlement.sol casts its `blsVerifier` to this interface at call time so that
+ *      testnet deployments route through BLSVerifierTestnet without reverting on the
+ *      3-arg form.  Switch back to the full BLSVerifier signature once EIP-2537 is stable.
+ *      See docs/architecture/v0-architecture.md §3.2 and bridge.ts RISK 2.
+ */
+interface IBLSVerifier {
+    function verifyBlockHash(bytes32 blockHash, bytes calldata sig) external returns (bool);
+}
+
+/**
  * @title Atomica Settlement Contract
  * @notice Executes atomic trades based on BLS-verified Ethereum state proofs
  * @dev Part of Atomica's cross-chain atomic deposit system
@@ -168,11 +181,16 @@ contract Settlement is ReentrancyGuard, Ownable {
         require(winners.length == usdcAmounts.length, "Settlement: USDC amounts mismatch");
         require(winners.length > 0, "Settlement: empty winners");
 
-        // Verify BLS signature on block hash
-        bool verified = blsVerifier.verifyBlockHash(
+        // Verify BLS signature on block hash.
+        // v0.1 Beta: cast to IBLSVerifier (2-arg form) so BLSVerifierTestnet deployments
+        // do not revert on the missing validatorIndices parameter.
+        // The validatorIndices array is kept in the function signature for v1 ABI compatibility
+        // but is not forwarded to the verifier on the testnet path.
+        // See docs/architecture/v0-architecture.md §3.2 and bridge.ts RISK 2.
+        validatorIndices; // acknowledged: unused on v0.1 testnet path
+        bool verified = IBLSVerifier(address(blsVerifier)).verifyBlockHash(
             blockHash,
-            blsSignature,
-            validatorIndices
+            blsSignature
         );
         require(verified, "Settlement: BLS verification failed");
 

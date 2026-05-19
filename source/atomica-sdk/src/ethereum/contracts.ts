@@ -1,11 +1,15 @@
 /**
- * Contract instances and helpers for FakeETH and FakeUSD
+ * Contract instances and helpers for FakeETH, FakeUSD, BLSVerifierTestnet, and Settlement.
  *
- * Provides typed contract instances using ethers.js
+ * Provides typed contract instances using ethers.js.
+ * Settlement bridge factories are used by bridge.ts (issue #112).
+ *
+ * @see source/atomica-sdk/src/settlement/bridge.ts
+ * @see docs/architecture/v0-architecture.md §3.2 — BLS Relayer Flow
  */
 
 import { ethers, Contract } from "ethers";
-import { FAKE_ETH_ABI, FAKE_USD_ABI } from "./abis.js";
+import { FAKE_ETH_ABI, FAKE_USD_ABI, BLS_VERIFIER_TESTNET_ABI, SETTLEMENT_ABI } from "./abis.js";
 import {
   FAKE_ETH_ADDRESS,
   FAKE_USD_ADDRESS,
@@ -53,6 +57,44 @@ export async function getFakeUSDContractWithSigner(): Promise<Contract> {
 
   const signer = await provider.getSigner();
   return new ethers.Contract(FAKE_USD_ADDRESS, FAKE_USD_ABI, signer);
+}
+
+// ── Settlement bridge contract factories (issue #112) ─────────────────────────
+
+/**
+ * Get a BLSVerifierTestnet contract instance with a signer attached.
+ *
+ * Used by bridge.ts::submitSettlement to call authorizeSettlement.
+ * The `blsVerifierAddress` must be the deployed BLSVerifierTestnet address.
+ *
+ * @param provider  ethers JsonRpcProvider (Node.js / relayer script)
+ * @param signer    ethers Wallet or JsonRpcSigner — must be the trustedRelayer EOA
+ * @param blsVerifierAddress  Deployed BLSVerifierTestnet contract address
+ * @returns Contract instance with signer
+ * @see docs/architecture/v0-architecture.md §3.2
+ */
+export function getBLSVerifierTestnetContract(
+  provider: ethers.JsonRpcProvider,
+  signer: ethers.Signer,
+  blsVerifierAddress: string,
+): Contract {
+  void provider; // provider may be used for read-only calls; signer provides write access
+  return new ethers.Contract(blsVerifierAddress, BLS_VERIFIER_TESTNET_ABI, signer);
+}
+
+/**
+ * Get a Settlement contract instance (read-only) for querying state.
+ *
+ * @param provider         ethers JsonRpcProvider
+ * @param settlementAddress Deployed Settlement.sol contract address
+ * @returns Read-only Contract instance
+ * @see docs/architecture/v0-architecture.md §3.2
+ */
+export function getSettlementContract(
+  provider: ethers.JsonRpcProvider,
+  settlementAddress: string,
+): Contract {
+  return new ethers.Contract(settlementAddress, SETTLEMENT_ABI, provider);
 }
 
 /**
