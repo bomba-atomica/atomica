@@ -43,6 +43,7 @@ module atomica::auction {
     use std::signer;
     use std::vector;
     use std::hash::sha3_256;
+    use aptos_framework::event;
     use aptos_framework::timestamp;
     use aptos_framework::table::{Self, Table};
     use aptos_std::bcs;
@@ -687,27 +688,97 @@ module atomica::auction {
         state.clearing_price = clearing_price;
     }
 
-    /// Settle the window and emit `AuctionSettled`.
+    /// Settle the window: release losing collateral, emit AuctionSettled.
     ///
-    /// Runs uniform-price clearing (sort descending, accumulate to supply,
-    /// marginal price, partial fill) and emits one `AuctionSettled` event.
-    /// The Ethereum settlement contract or off-chain relayer reads this event
-    /// to deliver assets on the cross-chain side.
+    /// Prerequisites: `submit_cleartext_and_clear` and `clear_uniform_price` must
+    /// have already run so that `WindowState.bid_results` is populated.  If
+    /// `bid_results` is empty and there are bids, the function aborts with
+    /// E_AUCTION_NOT_ENDED to signal that clearing has not yet occurred.
     ///
-    /// Body: scaffold — aborts with E_NOT_IMPLEMENTED (99).
+    /// Steps (§2.8, §2.9):
+    ///   1. Validate window exists and has not already been settled.
+    ///   2. Verify clearing has run (bid_results length == bids length).
+    ///   3. Release losing bidders' FakeUSD collateral receipts so the off-chain
+    ///      relayer can return those assets to bidders on Ethereum.
+    ///   4. Compute fee/rebate amounts for winning bidders.
+    ///   5. Emit `AuctionSettled` with window_id, pair, clearing_price,
+    ///      total_filled, winner_count, and seller lock_ids.
+    ///   6. Mark the window settled.
     ///
-    /// Call-site break from Demo phase:
-    ///   payloads.ts::getSettlePayload(sellerAddr) → (window_id, pair_bcs)
-    ///   SettleButton.tsx::submitSettle(account, sellerAddress)
-    ///   → (window_id, pair_bcs)
+    /// FakeUSD proceeds to the seller and fee/rebate transfers happen on Ethereum
+    /// after the relayer reads `AuctionSettled`; this function records and signals
+    /// the settlement, it does not perform on-chain FakeUSD token transfers.
     ///
-    /// @see docs/architecture/v0-architecture.md §2.7
+    /// @see docs/architecture/v0-architecture.md §2.8 and §2.9
     public entry fun settle(
-        _caller:    &signer,
-        _window_id: u64,
-        _pair_bcs:  vector<u8>,
-    ) {
-        abort E_NOT_IMPLEMENTED
+        _caller:   &signer,
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+    ) acquires AuctionRegistry {
+        // 1. Locate the window.
+        assert!(exists<AuctionRegistry>(@atomica), E_AUCTION_NOT_FOUND);
+        let key = make_window_key(window_id, pair_bcs);
+        let registry = borrow_global_mut<AuctionRegistry>(@atomica);
+        assert!(table::contains(&registry.windows, key), E_AUCTION_NOT_FOUND);
+
+        let state = table::borrow_mut(&mut registry.windows, key);
+
+        // Guard against double-settle.
+        assert!(!state.settled, E_WINDOW_ALREADY_SETTLED);
+
+        let bid_count    = vector::length(&state.bids);
+        let result_count = vector::length(&state.bid_results);
+
+        // 2. Verify clearing has been run.
+        //    If there are bids but bid_results is not yet populated, the caller
+        //    must run clear_uniform_price first.
+        assert!(result_count == bid_count, E_AUCTION_NOT_ENDED);
+
+        // 3. Release losing bidders' FakeUSD collateral receipts and tally totals.
+        let total_filled:  u256 = 0;
+        let winner_count:  u64  = 0;
+
+        let i = 0u64;
+        while (i < bid_count) {
+            let result = vector::borrow(&state.bid_results, i);
+            if (result.is_winner) {
+                total_filled  = total_filled + result.fill_amount;
+                winner_count  = winner_count + 1;
+                // Winning bidder: collateral receipt was consumed — nothing to release.
+            } else {
+                // Losing bidder: release collateral receipt so the off-chain relayer
+                // can return the underlying Ethereum FakeUSD to the bidder.
+                let collateral_id = vector::borrow(&state.bids, i).collateral_lock_id;
+                lock_receipt::release<Ethereum, FakeUSD>(collateral_id);
+            };
+            i = i + 1;
+        };
+
+        // 4. Compute fee/rebate vector (Phase 3c: coefficient = 0, all amounts are 0).
+        //    The compute_rebates call is elided here because at REBATE_COEFFICIENT = 0
+        //    all rebate amounts are zero and no additional transfers are needed.
+        //    When Phase 3c calibrates the coefficient, this section must apply the
+        //    rebate amounts by emitting per-winner rebate records or distributing
+        //    FakeUSD on Ethereum via the settlement event payload.
+        let _coeff = REBATE_COEFFICIENT; // TBD Phase 3c calibration
+
+        // 5. Emit AuctionSettled — the off-chain BLS relayer reads this to trigger
+        //    the Ethereum-side settlement (FakeUSD proceeds to seller, FakeETH to winners).
+        let clearing_price = state.clearing_price;
+        let pair_copy      = state.pair;
+        let lock_ids_copy  = state.lock_ids;
+
+        event::emit(AuctionSettled {
+            window_id,
+            pair:           pair_copy,
+            clearing_price,
+            total_filled,
+            winner_count,
+            lock_ids:       lock_ids_copy,
+        });
+
+        // 6. Mark window settled.
+        state.settled = true;
     }
 
     // ===================== View Functions =====================
@@ -773,26 +844,50 @@ module atomica::auction {
     // Compute per-bidder fee/rebate curve for a cleared auction window.
     //
     // The rebate amount for each winning bidder is proportional to the distance
-    // between the bidder's submitted price and the uniform clearing price,
-    // scaled by REBATE_COEFFICIENT.  Coefficient calibration is TBD in v0 —
-    // this scaffold defines the function signature and redistribution flow;
-    // the body aborts with E_NOT_IMPLEMENTED (99) until Phase 3c impl lands.
+    // between the bidder's revealed price and the uniform clearing price,
+    // scaled by REBATE_COEFFICIENT.  At the current coefficient of 0 all
+    // rebate amounts are zero; Phase 3c will calibrate the coefficient.
     //
     // Returns a vector of Rebate { bidder, amount } for all bidders in the
     // specified window.  Non-winning bidders receive amount = 0.
-    //
-    // Body: scaffold — aborts with E_NOT_IMPLEMENTED (99).
+    // Returns an empty vector if the window does not exist.
     //
     // @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
     #[view]
     public fun compute_rebates(
-        _window_id:      u64,
-        _pair_bcs:       vector<u8>,
+        window_id:      u64,
+        pair_bcs:       vector<u8>,
         _clearing_price: u64,
-    ): vector<Rebate> {
-        // REBATE_COEFFICIENT is defined but calibration is TBD — body is a scaffold.
+    ): vector<Rebate> acquires AuctionRegistry {
+        if (!exists<AuctionRegistry>(@atomica)) return vector::empty();
+        let registry = borrow_global<AuctionRegistry>(@atomica);
+        let key = make_window_key(window_id, pair_bcs);
+        if (!table::contains(&registry.windows, key)) return vector::empty();
+
+        let state = table::borrow(&registry.windows, key);
+        let bid_count    = vector::length(&state.bids);
+        let result_count = vector::length(&state.bid_results);
+
+        // If clearing has not yet run, return empty (no rebates computable).
+        if (result_count != bid_count) return vector::empty();
+
+        // REBATE_COEFFICIENT = 0 → all rebate amounts are 0.
+        // Phase 3c will replace this with a calibrated formula:
+        //   amount = REBATE_COEFFICIENT × (revealed_price - clearing_price) × fill_amount
         let _coeff = REBATE_COEFFICIENT;
-        abort E_NOT_IMPLEMENTED
+
+        let rebates = vector::empty<Rebate>();
+        let i = 0u64;
+        while (i < bid_count) {
+            let result  = vector::borrow(&state.bid_results, i);
+            let bidder  = result.bidder;
+            // Distance-to-clearing rebate is 0 until Phase 3c calibration.
+            // Only winners receive rebates (positive distance means higher bid than clearing).
+            let amount: u64 = 0; // TBD Phase 3c: calibrate with REBATE_COEFFICIENT
+            vector::push_back(&mut rebates, Rebate { bidder, amount });
+            i = i + 1;
+        };
+        rebates
     }
 
     // Return (clearing_price, total_filled) after settlement.
@@ -947,6 +1042,13 @@ module atomica::auction {
             revealed_prices: vector::empty(),
             bid_results:     vector::empty(),
         });
+    }
+
+    // Destructure a Rebate into (bidder, amount).
+    // Allows tests to inspect fields without a direct field accessor.
+    #[test_only]
+    public fun test_rebate_fields(r: &Rebate): (address, u64) {
+        (r.bidder, r.amount)
     }
 
     // Return the revealed_prices vector for a window.

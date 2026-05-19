@@ -41,6 +41,12 @@ module atomica::lock_receipt {
     const STATUS_CLAIMED: u8 = 1;
     const STATUS_REVOKED: u8 = 2;
 
+    // Public constant accessors — allow callers to compare against status values
+    // without hardcoding magic numbers in external modules or tests.
+    public fun status_active(): u8  { STATUS_ACTIVE }
+    public fun status_claimed(): u8 { STATUS_CLAIMED }
+    public fun status_revoked(): u8 { STATUS_REVOKED }
+
     // ===================== Phantom Type Markers =====================
 
     /// Ethereum chain marker
@@ -314,6 +320,40 @@ module atomica::lock_receipt {
     }
 
     // ===================== Claiming Functions =====================
+
+    /// Release (return) a previously claimed lock receipt to its original owner.
+    ///
+    /// Called by auction::settle for losing bidders whose collateral receipt was
+    /// consumed by submit_bid.  Marks the receipt STATUS_REVOKED so the off-chain
+    /// relayer knows to release the underlying Ethereum collateral to the bidder.
+    ///
+    /// Only receipts in STATUS_CLAIMED state can be released — releasing an
+    /// already-active or revoked receipt aborts with E_INVALID_STATUS.
+    ///
+    /// @see docs/architecture/v0-architecture.md §2.8
+    public fun release<Chain, Asset>(
+        lock_id: vector<u8>,
+    ) acquires ReceiptRegistry {
+        assert!(
+            exists<ReceiptRegistry<Chain, Asset>>(@atomica),
+            E_REGISTRY_NOT_INITIALIZED
+        );
+
+        let registry = borrow_global_mut<ReceiptRegistry<Chain, Asset>>(@atomica);
+
+        assert!(
+            table::contains(&registry.receipts, lock_id),
+            E_RECEIPT_NOT_FOUND
+        );
+
+        let receipt = table::borrow_mut(&mut registry.receipts, lock_id);
+
+        // Only STATUS_CLAIMED receipts can be released (returned to owner).
+        assert!(receipt.status == STATUS_CLAIMED, E_INVALID_STATUS);
+
+        // Mark as revoked — signals to the off-chain relayer to return collateral.
+        receipt.status = STATUS_REVOKED;
+    }
 
     /// Claim a lock receipt
     ///

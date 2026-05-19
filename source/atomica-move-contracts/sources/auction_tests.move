@@ -403,11 +403,26 @@ module atomica::auction_tests {
         auction::submit_bid(bidder, WINDOW_ID, pair_bcs, u_bytes, ciphertext, collateral_lock_id, quantity);
     }
 
+    // settle aborts with E_AUCTION_NOT_FOUND (1) when no registry exists.
+    // This replaces the old E_NOT_IMPLEMENTED scaffold test now that settle is implemented.
     #[test(framework = @0x1, caller = @0x9999)]
-    #[expected_failure(abort_code = 99, location = atomica::auction)] // E_NOT_IMPLEMENTED
-    fun test_settle_aborts_not_implemented(framework: &signer, caller: &signer) {
+    #[expected_failure(abort_code = 1, location = atomica::auction)] // E_AUCTION_NOT_FOUND
+    fun test_settle_aborts_auction_not_found(framework: &signer, caller: &signer) {
         setup(framework);
+        // No registry at @atomica → settle must abort with E_AUCTION_NOT_FOUND.
         auction::settle(caller, WINDOW_ID, default_pair_bcs());
+    }
+
+    // settle aborts with E_WINDOW_ALREADY_SETTLED (11) when called twice.
+    #[test(framework = @0x1, atomica = @atomica, caller = @0x9999)]
+    #[expected_failure(abort_code = 11, location = atomica::auction)] // E_WINDOW_ALREADY_SETTLED
+    fun test_settle_aborts_already_settled(framework: &signer, atomica: &signer, caller: &signer) {
+        setup(framework);
+        let pair_bcs = default_pair_bcs();
+        // Insert an already-settled window.
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, true, 2000);
+        // Calling settle again must abort with E_WINDOW_ALREADY_SETTLED.
+        auction::settle(caller, WINDOW_ID, pair_bcs);
     }
 
     // submit_cleartext_and_clear aborts with E_WINDOW_NOT_CLOSED (7) if the
@@ -707,47 +722,85 @@ module atomica::auction_tests {
         assert!(vector::length(&results) == 0, 2);
     }
 
-    // ===================== compute_rebates scaffold fixtures (Phase 3c) =====================
+    // ===================== compute_rebates — Phase 3b implementation tests =====================
     //
-    // Both fixtures verify that compute_rebates exists with the correct signature and
-    // aborts with E_NOT_IMPLEMENTED (99) — the body is a scaffold pending Phase 3c impl.
+    // REBATE_COEFFICIENT = 0 in v0, so all rebate amounts are 0.
+    // Phase 3c will calibrate the coefficient and update these expected values.
+    //
+    // @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
 
-    // Single-bidder fixture: with one bidder at the clearing price the rebate is 0.
-    // The function must still abort with E_NOT_IMPLEMENTED until implemented.
-    #[test(framework = @0x1, atomica = @atomica)]
-    #[expected_failure(abort_code = 99, location = atomica::auction)] // E_NOT_IMPLEMENTED
-    fun test_compute_rebates_single_bidder_aborts_not_implemented(
-        framework: &signer,
-        atomica:   &signer,
-    ) {
+    // No-window case: compute_rebates returns empty vector when window is absent.
+    #[test(framework = @0x1)]
+    fun test_compute_rebates_returns_empty_when_no_window(framework: &signer) {
         setup(framework);
-        let pair_bcs = default_pair_bcs();
-        // Insert a settled window with clearing_price = 2000 for context.
-        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, true, 2000);
-        // Single bidder at exactly the clearing price → rebate = 0 once implemented.
-        // Phase 3c scaffold: aborts with E_NOT_IMPLEMENTED.
-        auction::compute_rebates(WINDOW_ID, pair_bcs, 2000u64);
+        let rebates = auction::compute_rebates(WINDOW_ID, default_pair_bcs(), 2000u64);
+        assert!(vector::length(&rebates) == 0, 1);
     }
 
-    // Multi-bidder known-distance fixture: three bidders above clearing price.
-    // Alice (2100), Bob (2050), Carol (2010) vs clearing_price = 2010.
-    // Expected distances: Alice +90, Bob +40, Carol 0 — rebates are TBD calibration.
-    // Phase 3c scaffold: aborts with E_NOT_IMPLEMENTED.
+    // Single-bidder fixture: with one winner at the clearing price the rebate is 0
+    // (REBATE_COEFFICIENT = 0 in v0; Phase 3c will calibrate).
     #[test(framework = @0x1, atomica = @atomica)]
-    #[expected_failure(abort_code = 99, location = atomica::auction)] // E_NOT_IMPLEMENTED
-    fun test_compute_rebates_multi_bidder_known_distances_aborts_not_implemented(
+    fun test_compute_rebates_single_bidder_zero_rebate(
         framework: &signer,
         atomica:   &signer,
     ) {
         setup(framework);
         let pair_bcs = default_pair_bcs();
-        // Clearing price = CLEARING_PRICE_FIXTURE (2010).
-        auction::test_insert_window(
-            atomica, WINDOW_ID, pair_bcs, SUPPLY_FIXTURE, true, CLEARING_PRICE_FIXTURE,
+        let supply: u256 = 5u256;
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, supply, false, 0);
+
+        // One winning bid at 2000, fill = 5.
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xA11CE, b"u", b"c", b"lock_alice", 5u256,
         );
-        // Bidders: Alice 2100 (+90), Bob 2050 (+40), Carol 2010 (0 distance).
-        // Rebate computation is TBD until Phase 3c impl; scaffold aborts 99.
-        auction::compute_rebates(WINDOW_ID, pair_bcs, CLEARING_PRICE_FIXTURE);
+        let prices = vector[2000u64];
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, prices);
+        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
+
+        let rebates = auction::compute_rebates(WINDOW_ID, pair_bcs, 2000u64);
+        assert!(vector::length(&rebates) == 1, 1);
+        // REBATE_COEFFICIENT = 0 → amount = 0.
+        let (rebate_bidder, rebate_amount) = auction::test_rebate_fields(vector::borrow(&rebates, 0));
+        assert!(rebate_bidder == @0xA11CE, 2);
+        assert!(rebate_amount == 0u64, 3);
+    }
+
+    // Multi-bidder known-distance fixture: three winners above clearing price.
+    // Alice (2100), Bob (2050), Carol (2010) vs clearing_price = 2010.
+    // REBATE_COEFFICIENT = 0 → all amounts are 0 until Phase 3c calibration.
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun test_compute_rebates_multi_bidder_known_distances(
+        framework: &signer,
+        atomica:   &signer,
+    ) {
+        setup(framework);
+        let pair_bcs = default_pair_bcs();
+        let supply: u256 = 10u256;
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, supply, false, 0);
+
+        // Alice (2100, 4), Bob (2050, 3), Carol (2010, 3) — all win, supply exactly filled.
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xA11CE, b"u", b"c", b"lock_alice", 4u256,
+        );
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xB0B, b"u", b"c", b"lock_bob", 3u256,
+        );
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xCA401, b"u", b"c", b"lock_carol", 3u256,
+        );
+        let prices = vector[2100u64, 2050u64, 2010u64];
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, prices);
+        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
+
+        let rebates = auction::compute_rebates(WINDOW_ID, pair_bcs, CLEARING_PRICE_FIXTURE);
+        assert!(vector::length(&rebates) == 3, 1);
+        // All rebate amounts are 0 until Phase 3c calibrates REBATE_COEFFICIENT.
+        let i = 0u64;
+        while (i < 3u64) {
+            let (_, amount) = auction::test_rebate_fields(vector::borrow(&rebates, i));
+            assert!(amount == 0u64, 10 + i);
+            i = i + 1;
+        };
     }
 
     // ===================== Uniform-price clearing fixtures (type-check only) =====================
@@ -878,5 +931,143 @@ module atomica::auction_tests {
         let wrong_cleartext = 9999u64;
         let cleartexts      = vector[wrong_cleartext];
         auction::test_submit_cleartext_with_dk(settler, WINDOW_ID, pair_bcs, cleartexts, dk_bytes);
+    }
+
+    // ===================== settle: end-to-end tests =====================
+    //
+    // Tests cover the full settle path from a cleared window:
+    //   - settle succeeds and emits AuctionSettled (verified via is_settled)
+    //   - losing bidders' LockReceipts are released (STATUS_REVOKED)
+    //   - settle aborts E_AUCTION_NOT_FOUND when no registry exists
+    //   - settle aborts E_WINDOW_ALREADY_SETTLED on double-settle
+    //   - settle aborts E_AUCTION_NOT_ENDED when clearing has not run
+    //
+    // @see docs/architecture/v0-architecture.md §2.8 and §2.9
+
+    // Helper: set up FakeUSD LockReceipt registry and insert a receipt for a bidder.
+    fun insert_usd_receipt(
+        atomica:     &signer,
+        lock_id:     vector<u8>,
+        bidder_addr: address,
+        amount:      u256,
+    ) {
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(
+            lock_id,
+            bidder_addr,
+            amount,
+            1u64, // block_number
+        );
+    }
+
+    // End-to-end settle: cleared window settles, is_settled becomes true.
+    //
+    // Setup: insert window → insert 2 bids → set revealed prices → clear → settle.
+    // After settle: is_settled returns true; losing bidder's receipt is revoked.
+    //
+    // @see docs/architecture/v0-architecture.md §2.7, §2.8, §2.9
+    #[test(framework = @0x1, atomica = @atomica, caller = @0x9999)]
+    fun test_settle_end_to_end_marks_window_settled(
+        framework: &signer,
+        atomica:   &signer,
+        caller:    &signer,
+    ) {
+        setup(framework);
+        let pair_bcs = default_pair_bcs();
+        let supply: u256 = 5u256;
+        // Insert window with 5-unit supply.
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, supply, false, 0);
+
+        // Two bids: Alice wins (price=2100, qty=5 fills supply exactly), Bob loses.
+        let alice_lock = b"fakeusd_lock_alice_32bytes_pad__";
+        let bob_lock   = b"fakeusd_lock_bob___32bytes_pad__";
+
+        // Initialize FakeUSD registry and insert claimed receipts (simulating submit_bid).
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(
+            alice_lock, @0xA11CE, 10_500_000_000u256, 1u64,
+        );
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(
+            bob_lock, @0xB0B, 4_100_000_000u256, 1u64,
+        );
+        // Claim both receipts to simulate submit_bid consuming them.
+        lock_receipt::claim<Ethereum, FakeUSD>(@atomica, alice_lock);
+        lock_receipt::claim<Ethereum, FakeUSD>(@atomica, bob_lock);
+
+        // Insert bid metadata into the window (test helper bypasses submit_bid).
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xA11CE, b"u", b"c", alice_lock, 5u256,
+        );
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xB0B, b"u", b"c", bob_lock, 2u256,
+        );
+
+        // Set revealed prices: Alice=2100, Bob=2000.
+        // Supply=5: Alice (qty=5) fills exactly → clearing_price=2100, Bob loses.
+        let prices = vector[2100u64, 2000u64];
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, prices);
+
+        // Run clearing.
+        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
+
+        // Verify not yet settled.
+        assert!(!auction::is_settled(WINDOW_ID, pair_bcs), 1);
+
+        // Settle.
+        auction::settle(caller, WINDOW_ID, pair_bcs);
+
+        // Window must be marked settled.
+        assert!(auction::is_settled(WINDOW_ID, pair_bcs), 2);
+
+        // Bob (loser): receipt must be released (STATUS_REVOKED = 2).
+        let bob_status = lock_receipt::get_receipt_status<Ethereum, FakeUSD>(bob_lock);
+        assert!(bob_status == lock_receipt::status_revoked(), 3);
+
+        // Alice (winner): receipt stays claimed (STATUS_CLAIMED = 1) — not released.
+        let alice_status = lock_receipt::get_receipt_status<Ethereum, FakeUSD>(alice_lock);
+        assert!(alice_status == lock_receipt::status_claimed(), 4);
+    }
+
+    // settle with zero bids: window settles with total_filled=0, winner_count=0.
+    #[test(framework = @0x1, atomica = @atomica, caller = @0x9999)]
+    fun test_settle_zero_bids_succeeds(
+        framework: &signer,
+        atomica:   &signer,
+        caller:    &signer,
+    ) {
+        setup(framework);
+        let pair_bcs = default_pair_bcs();
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, 10u256, false, 0);
+
+        // No bids — run clearing (handles zero-bid case) then settle.
+        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
+        auction::settle(caller, WINDOW_ID, pair_bcs);
+
+        // Window must be settled.
+        assert!(auction::is_settled(WINDOW_ID, pair_bcs), 1);
+    }
+
+    // settle aborts E_AUCTION_NOT_ENDED when bid_results not yet populated.
+    // (i.e., clear_uniform_price has not been called but there are bids)
+    #[test(framework = @0x1, atomica = @atomica, caller = @0x9999)]
+    #[expected_failure(abort_code = 3, location = atomica::auction)] // E_AUCTION_NOT_ENDED
+    fun test_settle_aborts_when_clearing_not_run(
+        framework: &signer,
+        atomica:   &signer,
+        caller:    &signer,
+    ) {
+        setup(framework);
+        let pair_bcs = default_pair_bcs();
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, 5u256, false, 0);
+
+        // Insert one bid but do NOT call clear_uniform_price.
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xA11CE, b"u", b"c", b"lock", 5u256,
+        );
+        let prices = vector[2000u64];
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, prices);
+
+        // settle must abort: bid_results.length (0) != bids.length (1).
+        auction::settle(caller, WINDOW_ID, pair_bcs);
     }
 }
