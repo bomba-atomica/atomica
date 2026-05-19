@@ -9,7 +9,12 @@
  */
 
 import { ethers, Contract } from "ethers";
-import { FAKE_ETH_ABI, FAKE_USD_ABI, BLS_VERIFIER_TESTNET_ABI, SETTLEMENT_ABI } from "./abis.js";
+import {
+  FAKE_ETH_ABI,
+  FAKE_USD_ABI,
+  BLS_VERIFIER_TESTNET_ABI,
+  SETTLEMENT_ABI,
+} from "./abis.js";
 import {
   FAKE_ETH_ADDRESS,
   FAKE_USD_ADDRESS,
@@ -79,7 +84,11 @@ export function getBLSVerifierTestnetContract(
   blsVerifierAddress: string,
 ): Contract {
   void provider; // provider may be used for read-only calls; signer provides write access
-  return new ethers.Contract(blsVerifierAddress, BLS_VERIFIER_TESTNET_ABI, signer);
+  return new ethers.Contract(
+    blsVerifierAddress,
+    BLS_VERIFIER_TESTNET_ABI,
+    signer,
+  );
 }
 
 /**

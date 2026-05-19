@@ -244,7 +244,9 @@ describe("submitSettlement", () => {
       }),
     };
     vi.mocked(getBLSVerifierTestnetContract).mockReturnValueOnce(
-      mockContract as unknown as ReturnType<typeof getBLSVerifierTestnetContract>,
+      mockContract as unknown as ReturnType<
+        typeof getBLSVerifierTestnetContract
+      >,
     );
 
     const txHash = await submitSettlement([event], TEST_CONFIG);
@@ -267,9 +269,8 @@ describe("submitSettlement", () => {
     // This test verifies the conversion logic directly (since mocking Aptos constructor
     // per-test in browser mode is complex). The address conversion is tested in the
     // dedicated "Aptos to Ethereum address conversion" suite below.
-    const { aptosToEthereumAddress } = await import(
-      "../src/ethereum/address-converter.js"
-    );
+    const { aptosToEthereumAddress } =
+      await import("../src/ethereum/address-converter.js");
     const winnerAptosAddr =
       "0x" + "00".repeat(12) + "1234567890abcdef1234567890abcdef12345678";
     const winnerEthAddr = "0x1234567890abcdef1234567890abcdef12345678";
@@ -299,13 +300,23 @@ describe("pairHash determinism", () => {
     const makeContract = () => ({
       authorizeSettlement: vi.fn().mockImplementation((...args: unknown[]) => {
         calls.push(args);
-        return Promise.resolve({ wait: vi.fn().mockResolvedValue({ hash: "0xabc" }) });
+        return Promise.resolve({
+          wait: vi.fn().mockResolvedValue({ hash: "0xabc" }),
+        });
       }),
     });
 
     vi.mocked(getBLSVerifierTestnetContract)
-      .mockReturnValueOnce(makeContract() as unknown as ReturnType<typeof getBLSVerifierTestnetContract>)
-      .mockReturnValueOnce(makeContract() as unknown as ReturnType<typeof getBLSVerifierTestnetContract>);
+      .mockReturnValueOnce(
+        makeContract() as unknown as ReturnType<
+          typeof getBLSVerifierTestnetContract
+        >,
+      )
+      .mockReturnValueOnce(
+        makeContract() as unknown as ReturnType<
+          typeof getBLSVerifierTestnetContract
+        >,
+      );
 
     await submitSettlement([event], TEST_CONFIG);
     await submitSettlement([event], TEST_CONFIG);
@@ -322,23 +333,43 @@ describe("pairHash determinism", () => {
     const pairB: Pair = { ...TEST_PAIR, baseToken: "WBTC" };
 
     const eventA: AuctionSettledEvent = {
-      windowId: 1n, pair: pairA, clearingPrice: 100n, totalFilled: 0n, winnerCount: 0n, lockIds: [],
+      windowId: 1n,
+      pair: pairA,
+      clearingPrice: 100n,
+      totalFilled: 0n,
+      winnerCount: 0n,
+      lockIds: [],
     };
     const eventB: AuctionSettledEvent = {
-      windowId: 1n, pair: pairB, clearingPrice: 100n, totalFilled: 0n, winnerCount: 0n, lockIds: [],
+      windowId: 1n,
+      pair: pairB,
+      clearingPrice: 100n,
+      totalFilled: 0n,
+      winnerCount: 0n,
+      lockIds: [],
     };
 
     const calls: unknown[][] = [];
     const makeContract = () => ({
       authorizeSettlement: vi.fn().mockImplementation((...args: unknown[]) => {
         calls.push(args);
-        return Promise.resolve({ wait: vi.fn().mockResolvedValue({ hash: "0xabc" }) });
+        return Promise.resolve({
+          wait: vi.fn().mockResolvedValue({ hash: "0xabc" }),
+        });
       }),
     });
 
     vi.mocked(getBLSVerifierTestnetContract)
-      .mockReturnValueOnce(makeContract() as unknown as ReturnType<typeof getBLSVerifierTestnetContract>)
-      .mockReturnValueOnce(makeContract() as unknown as ReturnType<typeof getBLSVerifierTestnetContract>);
+      .mockReturnValueOnce(
+        makeContract() as unknown as ReturnType<
+          typeof getBLSVerifierTestnetContract
+        >,
+      )
+      .mockReturnValueOnce(
+        makeContract() as unknown as ReturnType<
+          typeof getBLSVerifierTestnetContract
+        >,
+      );
 
     await submitSettlement([eventA], TEST_CONFIG);
     await submitSettlement([eventB], TEST_CONFIG);
@@ -353,9 +384,8 @@ describe("pairHash determinism", () => {
 
 describe("Aptos to Ethereum address conversion", () => {
   it("correctly converts a zero-padded 32-byte Aptos address to 20-byte Ethereum address", async () => {
-    const { aptosToEthereumAddress } = await import(
-      "../src/ethereum/address-converter.js"
-    );
+    const { aptosToEthereumAddress } =
+      await import("../src/ethereum/address-converter.js");
 
     const aptosAddr =
       "0x" + "00".repeat(12) + "1234567890abcdef1234567890abcdef12345678";
@@ -366,9 +396,8 @@ describe("Aptos to Ethereum address conversion", () => {
   });
 
   it("throws on invalid (non-32-byte) Aptos address", async () => {
-    const { aptosToEthereumAddress } = await import(
-      "../src/ethereum/address-converter.js"
-    );
+    const { aptosToEthereumAddress } =
+      await import("../src/ethereum/address-converter.js");
 
     expect(() => aptosToEthereumAddress("0x1234")).toThrow(
       "Invalid Aptos address",

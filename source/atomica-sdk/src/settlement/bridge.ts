@@ -126,7 +126,11 @@ function bcsEncodePair(pair: Pair): Uint8Array {
   function encodeString(s: string): Uint8Array {
     const utf8 = new TextEncoder().encode(s);
     const len = new Uint8Array(4);
-    new DataView(len.buffer).setUint32(0, utf8.length, true /* little-endian */);
+    new DataView(len.buffer).setUint32(
+      0,
+      utf8.length,
+      true /* little-endian */,
+    );
     const buf = new Uint8Array(4 + utf8.length);
     buf.set(len, 0);
     buf.set(utf8, 4);
@@ -495,4 +499,3 @@ async function getBidResultsWithClient(
     throw e;
   }
 }
-
