@@ -633,7 +633,8 @@ module atomica::auction {
             } else {
                 // Partial fill — this bid overfills; allocate the remainder.
                 let remaining = supply - accumulated;
-                accumulated = supply;
+                // accumulated is not read again after this point.
+                let _ = accumulated;
                 clearing_price = price;
                 marginal_sorted_pos = s;
                 marginal_fill = remaining;
