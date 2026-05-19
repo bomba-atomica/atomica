@@ -4,8 +4,9 @@
  * Polls `queryAuctionSettledEvents` from bridge.ts on a configurable interval
  * and displays settled / pending state for the provided windowId and pair.
  *
+ * Wired to live on-chain data via bridge.ts (issue #113).
+ *
  * @see docs/architecture/v0-architecture.md §3 — Cross-Chain Settlement
- * @see #89 — Phase 3d scaffold
  * @see atomica-sdk/src/settlement/bridge.ts
  */
 
@@ -63,9 +64,8 @@ type SettlementState =
 /**
  * SettlementStatus polls for AuctionSettled events and renders the result.
  *
- * Scaffold: `queryAuctionSettledEvents` throws NOT_IMPLEMENTED until the
- * full bridge.ts implementation lands (issue #89 follow-up).  The component
- * handles the error gracefully and shows an "unavailable" state.
+ * Uses the live `queryAuctionSettledEvents` implementation from bridge.ts (#112).
+ * Handles transient errors gracefully and shows an "unavailable" state.
  */
 export function SettlementStatus({
   windowId,
@@ -152,9 +152,7 @@ export function SettlementStatus({
           data-testid="settlement-status-error"
           className="rounded border border-amber-900/60 bg-amber-950/20 px-2 py-1.5 text-xs text-amber-400"
         >
-          {state.message.includes("NOT_IMPLEMENTED")
-            ? "Settlement queries not yet available (bridge scaffold)."
-            : state.message}
+          {state.message}
         </div>
       )}
     </div>

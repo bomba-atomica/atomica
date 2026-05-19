@@ -1,16 +1,16 @@
 /**
- * Unit tests for SettlementStatus component — Phase 3d (#89).
+ * Unit tests for SettlementStatus component — issue #113.
  *
  * Verifies:
  *   1. Component renders in pending state before the first poll completes.
- *   2. Component shows scaffold notice when queryAuctionSettledEvents throws
- *      NOT_IMPLEMENTED (the default scaffold behaviour).
+ *   2. Component shows a live error message when queryAuctionSettledEvents rejects.
  *   3. Component shows settled events when the mock returns data.
+ *   4. Component shows empty message when the mock returns zero events.
  *
  * Uses vi.mock to stub @atomica/sdk/settlement/bridge so no network is required.
  *
  * @see docs/architecture/v0-architecture.md §3 — Cross-Chain Settlement
- * @see #89 — Phase 3d scaffold
+ * @see source/atomica-sdk/src/settlement/bridge.ts
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -24,9 +24,6 @@ const mockQueryAuctionSettledEvents = vi.fn();
 vi.mock("@atomica/sdk/settlement/bridge", () => ({
   queryAuctionSettledEvents: (...args: unknown[]) =>
     mockQueryAuctionSettledEvents(...args),
-  submitSettlement: vi.fn().mockRejectedValue(
-    new Error("NOT_IMPLEMENTED: submitSettlement — implement in #89"),
-  ),
 }));
 
 // Import AFTER vi.mock so the hoisted mock is in place.
@@ -57,10 +54,8 @@ const MOCK_EVENT: AuctionSettledEvent = {
 describe("SettlementStatus", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default: simulate NOT_IMPLEMENTED (scaffold state)
-    mockQueryAuctionSettledEvents.mockRejectedValue(
-      new Error("NOT_IMPLEMENTED: queryAuctionSettledEvents — implement in #89"),
-    );
+    // Default: resolve with no events (live empty response)
+    mockQueryAuctionSettledEvents.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -80,7 +75,11 @@ describe("SettlementStatus", () => {
     expect(screen.getByTestId("settlement-status-pending")).toBeTruthy();
   });
 
-  it("shows scaffold notice when queryAuctionSettledEvents throws NOT_IMPLEMENTED", async () => {
+  it("shows live error message when queryAuctionSettledEvents rejects", async () => {
+    mockQueryAuctionSettledEvents.mockRejectedValue(
+      new Error("network timeout"),
+    );
+
     render(<SettlementStatus windowId={WINDOW_ID} pair={PAIR} />);
 
     await waitFor(() => {
@@ -88,7 +87,7 @@ describe("SettlementStatus", () => {
     });
 
     const errorEl = screen.getByTestId("settlement-status-error");
-    expect(errorEl.textContent).toContain("not yet available");
+    expect(errorEl.textContent).toContain("network timeout");
   });
 
   it("shows settled events when the query succeeds with data", async () => {
@@ -113,8 +112,8 @@ describe("SettlementStatus", () => {
       expect(screen.getByTestId("settlement-status-settled")).toBeTruthy();
     });
 
-    expect(screen.getByTestId("settlement-status-settled").textContent).toContain(
-      "No settled events",
-    );
+    expect(
+      screen.getByTestId("settlement-status-settled").textContent,
+    ).toContain("No settled events");
   });
 });
