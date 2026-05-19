@@ -4,7 +4,8 @@
 //   - Window ID math (section 2.2 of v0-architecture.md)
 //   - Sealed-bid type-check (section 2.5) — verifies new Bid shape compiles and stores
 //   - View function behaviour against test-inserted WindowState
-//   - Scaffold abort paths: create_auction / submit_bid / settle / submit_cleartext_and_clear
+//   - create_auction implementation: happy path, stale/far-future window rejection, accumulation
+//   - Scaffold abort paths: submit_bid / settle / submit_cleartext_and_clear
 //     must all abort with E_NOT_IMPLEMENTED (99)
 //
 // Demo-phase tests (per-seller Auction has key) are removed. All tests now
@@ -16,7 +17,7 @@ module atomica::auction_tests {
     use std::vector;
     use aptos_framework::timestamp;
     use atomica::auction::{Self};
-    use atomica::lock_receipt::{Self, Ethereum, FakeUSD};
+    use atomica::lock_receipt::{Self, Ethereum, FakeETH, FakeUSD};
 
     // ===================== Constants =====================
 
@@ -175,23 +176,141 @@ module atomica::auction_tests {
         assert!(supply == TOTAL_SUPPLY, 2);
     }
 
-    // ===================== Scaffold abort paths =====================
+    // ===================== create_auction tests =====================
     //
-    // Each Phase 3a entry function must abort with E_NOT_IMPLEMENTED (99).
-    // These tests document the expected abort code and prove the function
-    // exists with the correct type signature.
+    // Tests cover:
+    //   - Happy path: create_auction registers the window, get_auction returns it.
+    //   - Stale window_id aborts with E_STALE_WINDOW_ID (6).
+    //   - Far-future window_id (> current + 1) aborts with E_STALE_WINDOW_ID (6).
+    //   - Duplicate create_auction for same (window_id, pair) accumulates supply.
+    //
+    // The seller signer is @atomica (= @0xcafe in dev) so that the lazy registry
+    // bootstrap (move_to(seller, ...)) publishes the AuctionRegistry at @atomica.
+    // Real sellers calling after the first create_auction find the registry already
+    // present. A pre-inserted FakeETH LockReceipt is required for each call so
+    // that lock_receipt::claim can succeed without proof verification.
 
-    #[test(framework = @0x1, seller = @0xcafe)]
-    #[expected_failure(abort_code = 99, location = atomica::auction)] // E_NOT_IMPLEMENTED
-    fun test_create_auction_aborts_not_implemented(
-        framework: &signer,
-        seller:    &signer,
+    // Helper: initialize FakeETH registry and insert a receipt for a given lock_id.
+    fun insert_eth_receipt(
+        atomica:     &signer,
+        lock_id:     vector<u8>,
+        seller_addr: address,
+        amount:      u256,
     ) {
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        lock_receipt::insert_test_receipt<Ethereum, FakeETH>(
+            lock_id,
+            seller_addr,
+            amount,
+            1u64, // block_number
+        );
+    }
+
+    // Happy path: create_auction registers the window, get_auction returns fields.
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun test_create_auction_happy_path(framework: &signer, atomica: &signer) {
         setup(framework);
+        let pair_bcs    = default_pair_bcs();
+        let lock_id     = b"eth_lock_receipt_id_32bytes_pad__";
+        let seller_addr = @atomica; // @0xcafe in dev
+        let lock_amount = 5_000_000_000_000_000_000u256; // 5 ETH in wei
+
+        // Set up FakeETH receipt for the seller.
+        insert_eth_receipt(atomica, lock_id, seller_addr, lock_amount);
+
+        // current_window_id() == 0 at t=0; use window 0 (current).
+        let window_id = auction::current_window_id();
+        let mpk_bytes = vector::empty<u8>();
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id, 2000u64, mpk_bytes);
+
+        // get_auction must return the registered window.
+        let (wid, supply, bid_count, settled, clearing_price) =
+            auction::get_auction(window_id, pair_bcs);
+        assert!(wid == window_id, 1);
+        assert!(supply == lock_amount, 2);
+        assert!(bid_count == 0, 3);
+        assert!(!settled, 4);
+        assert!(clearing_price == 0, 5);
+    }
+
+    // Next-window registration: create_auction accepts window_id == current + 1.
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun test_create_auction_next_window_accepted(framework: &signer, atomica: &signer) {
+        setup(framework);
+        let pair_bcs    = default_pair_bcs();
+        let lock_id     = b"eth_lock_receipt_next_window_pad_";
+        let seller_addr = @atomica;
+        let lock_amount = 1_000_000_000_000_000_000u256; // 1 ETH in wei
+
+        insert_eth_receipt(atomica, lock_id, seller_addr, lock_amount);
+
+        // window_id = current + 1 must be accepted.
+        let window_id = auction::current_window_id() + 1;
+        let mpk_bytes = vector::empty<u8>();
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id, 1900u64, mpk_bytes);
+
+        let (wid, supply, _, _, _) = auction::get_auction(window_id, pair_bcs);
+        assert!(wid == window_id, 1);
+        assert!(supply == lock_amount, 2);
+    }
+
+    // Stale window_id (strictly less than current) aborts with E_STALE_WINDOW_ID.
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 6, location = atomica::auction)] // E_STALE_WINDOW_ID
+    fun test_create_auction_stale_window_id_aborts(framework: &signer, atomica: &signer) {
+        setup(framework);
+        // Advance time so current_window_id() > 0; then supply window_id = 0 (stale).
+        timestamp::fast_forward_seconds(43200); // epoch 1, window_id = 2
         let pair_bcs  = default_pair_bcs();
         let lock_id   = vector::empty<u8>();
         let mpk_bytes = vector::empty<u8>();
-        auction::create_auction(seller, WINDOW_ID, pair_bcs, lock_id, 100u64, mpk_bytes);
+        // window_id 0 < current 2 → stale.
+        auction::create_auction(atomica, 0u64, pair_bcs, lock_id, 100u64, mpk_bytes);
+    }
+
+    // Far-future window_id (> current + 1) aborts with E_STALE_WINDOW_ID.
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 6, location = atomica::auction)] // E_STALE_WINDOW_ID
+    fun test_create_auction_far_future_window_id_aborts(framework: &signer, atomica: &signer) {
+        setup(framework);
+        // current == 0; window_id 100 > 0 + 1 → too far in the future.
+        let pair_bcs  = default_pair_bcs();
+        let lock_id   = vector::empty<u8>();
+        let mpk_bytes = vector::empty<u8>();
+        auction::create_auction(atomica, 100u64, pair_bcs, lock_id, 100u64, mpk_bytes);
+    }
+
+    // Duplicate create_auction for same (window_id, pair) accumulates total_supply.
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun test_create_auction_duplicate_accumulates_supply(framework: &signer, atomica: &signer) {
+        setup(framework);
+        let pair_bcs     = default_pair_bcs();
+        let lock_id_a    = b"eth_lock_receipt_seller_a_32byte_";
+        let lock_id_b    = b"eth_lock_receipt_seller_b_32byte_";
+        let seller_addr  = @atomica;
+        let amount_a     = 3_000_000_000_000_000_000u256; // 3 ETH
+        let amount_b     = 7_000_000_000_000_000_000u256; // 7 ETH
+        let expected     = amount_a + amount_b;
+
+        // Two separate FakeETH receipts.
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        lock_receipt::insert_test_receipt<Ethereum, FakeETH>(
+            lock_id_a, seller_addr, amount_a, 1u64,
+        );
+        lock_receipt::insert_test_receipt<Ethereum, FakeETH>(
+            lock_id_b, seller_addr, amount_b, 2u64,
+        );
+
+        let window_id = auction::current_window_id();
+        let mpk_bytes = vector::empty<u8>();
+
+        // First seller creates the window.
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id_a, 2000u64, mpk_bytes);
+        // Second seller joins the same window — supply accumulates.
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id_b, 1900u64, mpk_bytes);
+
+        let (_, supply, _, _, _) = auction::get_auction(window_id, pair_bcs);
+        assert!(supply == expected, 1);
     }
 
     // ===================== Bidder collateral claim path (Phase 3b) =====================
