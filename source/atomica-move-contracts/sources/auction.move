@@ -42,10 +42,14 @@
 module atomica::auction {
     use std::signer;
     use std::vector;
+    use std::hash::sha3_256;
     use aptos_framework::timestamp;
     use aptos_framework::table::{Self, Table};
     use aptos_std::bcs;
+    use aptos_std::bls12381_algebra::{G1, G2, Gt, FormatG1Compr, FormatG2Compr, FormatGt};
+    use aptos_std::crypto_algebra::{deserialize, pairing, serialize};
     use atomica::lock_receipt::{Self, Ethereum, FakeETH, FakeUSD};
+    use atomica::timelock;
 
     // ===================== Error Codes =====================
 
@@ -58,6 +62,27 @@ module atomica::auction {
     /// Caller supplied a window_id that is strictly less than the current window.
     /// Only the current window and the immediately next window are accepted.
     const E_STALE_WINDOW_ID: u64 = 6;
+
+    /// The auction window has not yet closed. submit_cleartext_and_clear requires
+    /// the timelock to be expired before decryption keys are released.
+    const E_WINDOW_NOT_CLOSED: u64 = 7;
+
+    /// The decryption key for this window's timelock has not been revealed yet.
+    /// Validators must submit threshold shares before submit_cleartext_and_clear
+    /// can proceed.
+    const E_DECRYPTION_KEY_NOT_REVEALED: u64 = 8;
+
+    /// The number of cleartext prices does not match the number of sealed bids.
+    /// The settler must supply exactly one cleartext per bid, index-aligned.
+    const E_CLEARTEXT_COUNT_MISMATCH: u64 = 9;
+
+    /// A cleartext price fails IBE verification against the stored (u_bytes, ciphertext).
+    /// The plaintext recovered from IBE decryption does not match the cleartext supplied
+    /// by the settler.
+    const E_INVALID_CLEARTEXT: u64 = 10;
+
+    /// The window has already been settled.
+    const E_WINDOW_ALREADY_SETTLED: u64 = 11;
 
     /// Scaffold stub sentinel — all Phase 3a entry function bodies abort with this
     /// code until their implementations land in #86b–#86f.
@@ -106,14 +131,24 @@ module atomica::auction {
     /// Per-window clearing state within the global registry.
     /// @see docs/architecture/v0-architecture.md §2.3
     struct WindowState has store {
-        pair:           Pair,
-        window_id:      u64,
-        total_supply:   u256,               // sum of all seller lock amounts (FakeETH wei)
-        bids:           vector<SealedBid>,
-        settled:        bool,
-        clearing_price: u64,
-        lock_ids:       vector<vector<u8>>, // seller LockReceipt IDs consumed (index-aligned with min_prices)
-        min_prices:     vector<u64>,        // per-seller minimum acceptable clearing price
+        pair:             Pair,
+        window_id:        u64,
+        /// Registered timelock ID from ibe_config::register_timelock.
+        /// Links this auction window to the on-chain DKG timelock that controls
+        /// when the IBE decryption key is released.
+        /// @see docs/architecture/v0-architecture.md §2.6
+        timelock_id:      u64,
+        total_supply:     u256,               // sum of all seller lock amounts (FakeETH wei)
+        bids:             vector<SealedBid>,
+        settled:          bool,
+        clearing_price:   u64,
+        lock_ids:         vector<vector<u8>>, // seller LockReceipt IDs consumed (index-aligned with min_prices)
+        min_prices:       vector<u64>,        // per-seller minimum acceptable clearing price
+        /// Revealed cleartext prices, index-aligned to bids.
+        /// Populated by submit_cleartext_and_clear after IBE decryption key is released.
+        /// Empty until submit_cleartext_and_clear succeeds.
+        /// @see docs/architecture/v0-architecture.md §2.6
+        revealed_prices:  vector<u64>,
     }
 
     /// Global registry stored at the @atomica deployer address (not per-seller).
@@ -193,18 +228,23 @@ module atomica::auction {
     /// `mpk_bytes` is accepted but not stored in Phase 3a — IBE MPK on-chain
     /// fetch is wired in follow-up issue #90.
     ///
+    /// `timelock_id` is the on-chain timelock registered via
+    /// `ibe_config::register_timelock` that controls IBE key release for this
+    /// window. It must be registered before calling `create_auction`.
+    ///
     /// Call-site break from Demo phase:
     ///   payloads.ts::getCreateAuctionPayload(lockId, minPrice, duration, mpk)
-    ///   → (window_id, pair_bcs, lock_id, min_price, mpk_bytes)
+    ///   → (window_id, pair_bcs, lock_id, min_price, timelock_id, mpk_bytes)
     ///
     /// @see docs/architecture/v0-architecture.md §2.3
     public entry fun create_auction(
-        seller:     &signer,
-        window_id:  u64,
-        pair_bcs:   vector<u8>,
-        lock_id:    vector<u8>,
-        min_price:  u64,
-        _mpk_bytes: vector<u8>,  // reserved — IBE MPK wired in #90
+        seller:      &signer,
+        window_id:   u64,
+        pair_bcs:    vector<u8>,
+        lock_id:     vector<u8>,
+        min_price:   u64,
+        timelock_id: u64,
+        _mpk_bytes:  vector<u8>,  // reserved — IBE MPK wired in #90
     ) acquires AuctionRegistry {
         // 1. Validate window_id: reject stale (< current) and far-future (> current + 1).
         let current = current_window_id();
@@ -242,14 +282,16 @@ module atomica::auction {
                 quote_token: b"FakeUSD",
             };
             table::add(&mut registry.windows, key, WindowState {
-                pair:           base_pair,
+                pair:            base_pair,
                 window_id,
-                total_supply:   (locked_amount as u256),
-                bids:           vector::empty(),
-                settled:        false,
-                clearing_price: 0,
-                lock_ids:       vector::singleton(lock_id),
-                min_prices:     vector::singleton(min_price),
+                timelock_id,
+                total_supply:    (locked_amount as u256),
+                bids:            vector::empty(),
+                settled:         false,
+                clearing_price:  0,
+                lock_ids:        vector::singleton(lock_id),
+                min_prices:      vector::singleton(min_price),
+                revealed_prices: vector::empty(),
             });
         } else {
             // Subsequent seller — accumulate supply and append metadata.
@@ -311,23 +353,156 @@ module atomica::auction {
         });
     }
 
-    /// Reveal cleartexts and run uniform-price clearing for `(window_id, pair)`.
+    /// Reveal cleartexts and store them for the uniform-price clearing step.
     ///
-    /// After the window closes, the on-chain DKG releases the decryption key.
-    /// The settler calls this function with the index-aligned cleartext prices.
-    /// The function verifies each cleartext against the stored `(u_bytes, ciphertext)`
-    /// using `timelock_config::get_decryption_key`, then runs the clearing algorithm.
+    /// After the auction window closes, the on-chain DKG releases the IBE
+    /// decryption key. The settler calls this function with index-aligned
+    /// cleartext prices. The function:
     ///
-    /// Body: scaffold — aborts with E_NOT_IMPLEMENTED (99).
+    ///   1. Verifies the timelock is expired (`E_WINDOW_NOT_CLOSED` if not).
+    ///   2. Fetches the 48-byte G1 decryption key via `timelock::get_decryption_key`
+    ///      (aborts with `E_DECRYPTION_KEY_NOT_REVEALED` if DK not yet released).
+    ///   3. Checks `len(cleartexts) == len(bids)` (`E_CLEARTEXT_COUNT_MISMATCH` if not).
+    ///   4. For each bid, verifies the cleartext against the stored `(u_bytes, ciphertext)`
+    ///      using pairing-based IBE decryption: computes `K = e(dk, U)` via BLS12-381
+    ///      pairing, derives the XOR key `sha3_256(serialize(K))`, decrypts the
+    ///      ciphertext, and compares the recovered price to the cleartext.
+    ///      Aborts with `E_INVALID_CLEARTEXT` if any bid fails verification.
+    ///   5. Stores the revealed prices in `WindowState.revealed_prices`.
     ///
     /// @see docs/architecture/v0-architecture.md §2.6
     public entry fun submit_cleartext_and_clear(
-        _settler:    &signer,
-        _window_id:  u64,
-        _pair_bcs:   vector<u8>,
-        _cleartexts: vector<u64>,
-    ) {
-        abort E_NOT_IMPLEMENTED
+        _settler:   &signer,
+        window_id:  u64,
+        pair_bcs:   vector<u8>,
+        cleartexts: vector<u64>,
+    ) acquires AuctionRegistry {
+        // 1. Locate the window.
+        assert!(exists<AuctionRegistry>(@atomica), E_AUCTION_NOT_FOUND);
+        let key = make_window_key(window_id, pair_bcs);
+        let registry = borrow_global_mut<AuctionRegistry>(@atomica);
+        assert!(table::contains(&registry.windows, key), E_AUCTION_NOT_FOUND);
+
+        let state = table::borrow_mut(&mut registry.windows, key);
+        assert!(!state.settled, E_WINDOW_ALREADY_SETTLED);
+
+        let timelock_id = state.timelock_id;
+
+        // 2. Verify cleartext count matches bid count (fast fail before DK fetch).
+        let bid_count = vector::length(&state.bids);
+        assert!(vector::length(&cleartexts) == bid_count, E_CLEARTEXT_COUNT_MISMATCH);
+
+        // 3. Verify timelock has expired — window must be closed before decryption.
+        assert!(timelock::is_timelock_expired(timelock_id), E_WINDOW_NOT_CLOSED);
+
+        // 4. Fetch the IBE decryption key — aborts if DK not yet revealed.
+        //    `timelock::get_decryption_key` delegates to `ibe_config::get_decryption_key`
+        //    which aborts with `E_DECRYPTION_KEY_NOT_REVEALED` (5) from ibe_config when
+        //    `is_revealed == false`.
+        let dk_bytes = timelock::get_decryption_key(timelock_id);
+
+        // 5. Deserialize the 48-byte G1 decryption key (shared across all bids).
+        let dk_opt = deserialize<G1, FormatG1Compr>(&dk_bytes);
+        assert!(std::option::is_some(&dk_opt), E_INVALID_CLEARTEXT);
+        let dk_point = std::option::destroy_some(dk_opt);
+
+        // 6. Verify each cleartext via pairing-based IBE decryption.
+        let i = 0;
+        let revealed = vector::empty<u64>();
+        while (i < bid_count) {
+            let bid = vector::borrow(&state.bids, i);
+            let cleartext = *vector::borrow(&cleartexts, i);
+
+            // Deserialize the 96-byte G2 ephemeral point U from u_bytes.
+            let u_opt = deserialize<G2, FormatG2Compr>(&bid.u_bytes);
+            assert!(std::option::is_some(&u_opt), E_INVALID_CLEARTEXT);
+            let u_point = std::option::destroy_some(u_opt);
+
+            // Compute the shared secret K = e(dk, U) ∈ Gt.
+            // BLS12-381 pairing: e: G1 × G2 → Gt
+            let k_gt = pairing<G1, G2, Gt>(&dk_point, &u_point);
+
+            // Derive the XOR key using the Atomica IBE key derivation scheme.
+            // Matches `derive_key_stream` in aptos-dkg/src/ibe/mod.rs:
+            //   gt_bytes = bcs::to_bytes(gt)  (FormatGt serialization)
+            //   key_block = SHA3-256("APTOS_IBE_KEY_DERIVATION_DST" || gt_bytes || 0u32_le)
+            let k_bytes = serialize<Gt, FormatGt>(&k_gt);
+            let xor_key = ibe_derive_key_block(&k_bytes, 0u32);
+
+            // Decrypt: msg_bytes = ciphertext XOR xor_key[:len(ciphertext)].
+            let cipher = &bid.ciphertext;
+            let cipher_len = vector::length(cipher);
+            let msg_bytes = xor_prefix(cipher, &xor_key, cipher_len);
+
+            // Parse the recovered price from the first 8 bytes (little-endian u64).
+            let recovered_price = le_bytes_to_u64(&msg_bytes);
+
+            // Reject if recovered price does not match the supplied cleartext.
+            assert!(recovered_price == cleartext, E_INVALID_CLEARTEXT);
+
+            vector::push_back(&mut revealed, cleartext);
+            i = i + 1;
+        };
+
+        // 7. Store revealed prices in WindowState.
+        state.revealed_prices = revealed;
+    }
+
+    /// Derives one 32-byte key block from a serialized Gt element.
+    ///
+    /// Matches the Atomica IBE key derivation from `aptos-dkg/src/ibe/mod.rs`:
+    ///   `derive_key_stream(gt, len)` with counter-mode KDF:
+    ///   `block = SHA3-256("APTOS_IBE_KEY_DERIVATION_DST" || gt_bytes || counter_le32)`
+    ///
+    /// For ciphertexts up to 32 bytes (e.g., a single u64 price), only counter=0
+    /// is needed. Longer messages would require multiple blocks, but v0 Beta
+    /// prices are always ≤ 8 bytes (u64 LE), so one block suffices.
+    ///
+    /// `gt_bytes` — output of `serialize<Gt, FormatGt>(&k_gt)` (576 bytes)
+    /// `counter`  — 0 for the first (and for prices: only) block
+    fun ibe_derive_key_block(gt_bytes: &vector<u8>, counter: u32): vector<u8> {
+        // Domain separation tag matches Rust: b"APTOS_IBE_KEY_DERIVATION_DST"
+        let dst = b"APTOS_IBE_KEY_DERIVATION_DST";
+        let input = vector::empty<u8>();
+        vector::append(&mut input, dst);
+        vector::append(&mut input, *gt_bytes);
+        // Append counter as little-endian u32 (4 bytes).
+        vector::push_back(&mut input, (counter & 0xff) as u8);
+        vector::push_back(&mut input, ((counter >> 8) & 0xff) as u8);
+        vector::push_back(&mut input, ((counter >> 16) & 0xff) as u8);
+        vector::push_back(&mut input, ((counter >> 24) & 0xff) as u8);
+        sha3_256(input)
+    }
+
+    /// XOR the first `len` bytes of `data` against the prefix of `key`.
+    ///
+    /// Returns a new vector of length `len`.  Asserts `key` is at least `len` bytes.
+    fun xor_prefix(data: &vector<u8>, key: &vector<u8>, len: u64): vector<u8> {
+        assert!(vector::length(key) >= len, E_INVALID_CLEARTEXT);
+        let result = vector::empty<u8>();
+        let i = 0;
+        while (i < len) {
+            let d = *vector::borrow(data, i);
+            let k = *vector::borrow(key, i);
+            vector::push_back(&mut result, d ^ k);
+            i = i + 1;
+        };
+        result
+    }
+
+    /// Decode a little-endian u64 from the first 8 bytes of `bytes`.
+    ///
+    /// BCS-encodes u64 as 8 bytes little-endian.
+    fun le_bytes_to_u64(bytes: &vector<u8>): u64 {
+        assert!(vector::length(bytes) >= 8, E_INVALID_CLEARTEXT);
+        let result = 0u64;
+        let i = 0u64;
+        while (i < 8) {
+            let byte = (*vector::borrow(bytes, i) as u64);
+            result = result | (byte << (8 * (i as u8)));
+            i = i + 1;
+        };
+        result
     }
 
     /// Sort sealed bids descending by revealed price and compute the marginal
@@ -513,6 +688,22 @@ module atomica::auction {
         settled:        bool,
         clearing_price: u64,
     ) acquires AuctionRegistry {
+        test_insert_window_with_timelock(atomica, window_id, pair_bcs, total_supply, settled, clearing_price, 0)
+    }
+
+    // Insert a WindowState with explicit timelock_id for unit tests.
+    // Use this variant when testing submit_cleartext_and_clear to control
+    // which timelock_id is associated with the window.
+    #[test_only]
+    public fun test_insert_window_with_timelock(
+        atomica:        &signer,
+        window_id:      u64,
+        pair_bcs:       vector<u8>,
+        total_supply:   u256,
+        settled:        bool,
+        clearing_price: u64,
+        timelock_id:    u64,
+    ) acquires AuctionRegistry {
         let addr = signer::address_of(atomica);
         if (!exists<AuctionRegistry>(addr)) {
             move_to(atomica, AuctionRegistry {
@@ -528,14 +719,91 @@ module atomica::auction {
             quote_token: b"FakeUSD",
         };
         table::add(&mut registry.windows, key, WindowState {
-            pair:           base_pair,
+            pair:            base_pair,
             window_id,
+            timelock_id,
             total_supply,
-            bids:           vector::empty(),
+            bids:            vector::empty(),
             settled,
             clearing_price,
-            lock_ids:       vector::empty(),
-            min_prices:     vector::empty(),
+            lock_ids:        vector::empty(),
+            min_prices:      vector::empty(),
+            revealed_prices: vector::empty(),
         });
+    }
+
+    // Return the revealed_prices vector for a window.
+    // Used by tests to verify submit_cleartext_and_clear stored prices correctly.
+    #[test_only]
+    public fun test_get_revealed_prices(
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+    ): vector<u64> acquires AuctionRegistry {
+        let registry = borrow_global<AuctionRegistry>(@atomica);
+        let key = make_window_key(window_id, pair_bcs);
+        let state = table::borrow(&registry.windows, key);
+        state.revealed_prices
+    }
+
+    // Test-only variant of submit_cleartext_and_clear that accepts the DK bytes
+    // directly, bypassing the timelock expiry and ibe_config::get_decryption_key
+    // checks. This is used to test the IBE pairing verification logic in isolation
+    // without requiring the IBE DK reconstruction native function
+    // (`reconstruct_ibe_dk_internal`), which is not available in the Move test VM.
+    //
+    // IMPORTANT: Do NOT use this in production code. The production path must
+    // always fetch the DK from ibe_config after verifying the timelock is expired.
+    //
+    // @see submit_cleartext_and_clear for the production implementation.
+    #[test_only]
+    public fun test_submit_cleartext_with_dk(
+        _settler:   &signer,
+        window_id:  u64,
+        pair_bcs:   vector<u8>,
+        cleartexts: vector<u64>,
+        dk_bytes:   vector<u8>,
+    ) acquires AuctionRegistry {
+        assert!(exists<AuctionRegistry>(@atomica), E_AUCTION_NOT_FOUND);
+        let key = make_window_key(window_id, pair_bcs);
+        let registry = borrow_global_mut<AuctionRegistry>(@atomica);
+        assert!(table::contains(&registry.windows, key), E_AUCTION_NOT_FOUND);
+
+        let state = table::borrow_mut(&mut registry.windows, key);
+        assert!(!state.settled, E_WINDOW_ALREADY_SETTLED);
+
+        let bid_count = vector::length(&state.bids);
+        assert!(vector::length(&cleartexts) == bid_count, E_CLEARTEXT_COUNT_MISMATCH);
+
+        // Deserialize the 48-byte G1 decryption key.
+        let dk_opt = deserialize<G1, FormatG1Compr>(&dk_bytes);
+        assert!(std::option::is_some(&dk_opt), E_INVALID_CLEARTEXT);
+        let dk_point = std::option::destroy_some(dk_opt);
+
+        let i = 0;
+        let revealed = vector::empty<u64>();
+        while (i < bid_count) {
+            let bid = vector::borrow(&state.bids, i);
+            let cleartext = *vector::borrow(&cleartexts, i);
+
+            let u_opt = deserialize<G2, FormatG2Compr>(&bid.u_bytes);
+            assert!(std::option::is_some(&u_opt), E_INVALID_CLEARTEXT);
+            let u_point = std::option::destroy_some(u_opt);
+
+            let k_gt = pairing<G1, G2, Gt>(&dk_point, &u_point);
+            let k_bytes = serialize<Gt, FormatGt>(&k_gt);
+            let xor_key = ibe_derive_key_block(&k_bytes, 0u32);
+
+            let cipher = &bid.ciphertext;
+            let cipher_len = vector::length(cipher);
+            let msg_bytes = xor_prefix(cipher, &xor_key, cipher_len);
+
+            let recovered_price = le_bytes_to_u64(&msg_bytes);
+            assert!(recovered_price == cleartext, E_INVALID_CLEARTEXT);
+
+            vector::push_back(&mut revealed, cleartext);
+            i = i + 1;
+        };
+
+        state.revealed_prices = revealed;
     }
 }
