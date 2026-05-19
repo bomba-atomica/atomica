@@ -56,7 +56,7 @@ const START_WINDOW_ID = BigInt(env.START_WINDOW_ID ?? "0");
 
 function validateConfig(): void {
   const missing: string[] = [];
-  if (!CONTRACT_ADDRESS)   missing.push("CONTRACT_ADDRESS");
+  if (!CONTRACT_ADDRESS) missing.push("CONTRACT_ADDRESS");
   if (!BLS_VERIFIER_ADDRESS) missing.push("BLS_VERIFIER_ADDRESS");
   if (!RELAYER_PRIVATE_KEY) missing.push("RELAYER_PRIVATE_KEY");
 
