@@ -5,16 +5,12 @@ import "forge-std/Test.sol";
 import "../../src/DepositBox.sol";
 import "../../src/Settlement.sol";
 import "../../src/BLSVerifier.sol";
-import "../../src/Governance.sol";
-import "../../src/AuctionRegistry.sol";
 import "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 
 contract DepositSettleIntegrationTest is Test {
     DepositBox depositBox;
     Settlement settlement;
     BLSVerifier blsVerifier;
-    Governance governance;
-    AuctionRegistry auctionRegistry;
     ERC20Mock usdcMock;
 
     address alice = makeAddr("alice");
@@ -23,14 +19,12 @@ contract DepositSettleIntegrationTest is Test {
 
     uint256 constant DEPOSIT_AMOUNT = 1 ether;
     uint256 constant USDC_DEPOSIT_AMOUNT = 1500e6;
-    uint64 auctionId;
+    uint64 auctionId = 1;
 
     function setUp() public {
         usdcMock = new ERC20Mock();
-        auctionRegistry = new AuctionRegistry();
 
-        governance = new Governance(address(usdcMock));
-        depositBox = new DepositBox(address(usdcMock), address(auctionRegistry));
+        depositBox = new DepositBox(address(usdcMock));
         blsVerifier = new BLSVerifier();
         settlement = new Settlement(
             address(blsVerifier),
@@ -42,35 +36,12 @@ contract DepositSettleIntegrationTest is Test {
         pubkeys[0] = hex"a8a5c53d9c0c34b9c7b3e3b5c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5";
         blsVerifier.initialize(pubkeys);
 
-        governance.genesis(
-            address(depositBox),
-            address(blsVerifier),
-            address(settlement)
-        );
-
         depositBox.setSettlementContract(address(settlement));
-        
-        auctionId = _registerAuction();
-        auctionRegistry.transferOwnership(address(governance));
 
         vm.deal(alice, 100 ether);
         vm.deal(bob, 100 ether);
         usdcMock.mint(alice, 100000e6);
         usdcMock.mint(bob, 100000e6);
-    }
-
-    function _registerAuction() internal returns (uint64) {
-        DepositTypes.AuctionConfig memory config = DepositTypes.AuctionConfig({
-            nonce: 0,
-            description: "test-auction",
-            deadlineMicro: uint64(block.timestamp + 3600) * 1_000_000,
-            minPrice: 0,
-            maxPrice: 0,
-            minEthAmount: 0,
-            minUsdcAmount: 0
-        });
-
-        return auctionRegistry.registerAuction(config);
     }
 
     function testFullDepositSettleFlow() public {

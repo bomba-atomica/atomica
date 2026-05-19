@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./libraries/DepositTypes.sol";
-import "./AuctionRegistry.sol";
 
 /**
  * @title DepositBox
@@ -33,12 +32,6 @@ contract DepositBox is ReentrancyGuard, Ownable {
      * @dev Immutable after deployment - set in constructor
      */
     IERC20 public immutable usdcToken;
-
-    /**
-     * @notice Auction registry contract reference
-     * @dev Immutable after deployment - set in constructor
-     */
-    AuctionRegistry public immutable auctionRegistry;
 
     /**
      * @notice Time period after which deposits can be refunded
@@ -166,14 +159,11 @@ contract DepositBox is ReentrancyGuard, Ownable {
     /**
      * @notice Constructor
      * @param usdcTokenAddress Address of USDC token contract
-     * @param auctionRegistryAddress Address of AuctionRegistry contract
      * @dev Sets immutable references and initializes nonce counter
      */
-    constructor(address usdcTokenAddress, address auctionRegistryAddress) Ownable(msg.sender) {
+    constructor(address usdcTokenAddress) Ownable(msg.sender) {
         require(usdcTokenAddress != address(0), "DepositBox: invalid USDC address");
-        require(auctionRegistryAddress != address(0), "DepositBox: invalid auction registry");
         usdcToken = IERC20(usdcTokenAddress);
-        auctionRegistry = AuctionRegistry(auctionRegistryAddress);
         depositNonceCounter = 1;
     }
 
@@ -197,8 +187,6 @@ contract DepositBox is ReentrancyGuard, Ownable {
      *
      * Requirements:
      * - Must send positive ETH amount
-     * - Auction must exist and be in OPEN state
-     * - Auction deadline must not have passed
      *
      * Emits:
      * - ETHDeposited event
@@ -209,9 +197,6 @@ contract DepositBox is ReentrancyGuard, Ownable {
         nonReentrant
     {
         require(msg.value > 0, "DepositBox: zero deposit");
-        require(auctionId < auctionRegistry.nextAuctionNonce(), "DepositBox: invalid auction");
-        require(auctionRegistry.getAuctionState(auctionId) == DepositTypes.AuctionState.OPEN, "DepositBox: auction not open");
-        require(block.timestamp < auctionRegistry.getDeadline(auctionId), "DepositBox: auction deadline passed");
 
         bytes32 storageKey = _computeStorageKey(auctionId, msg.sender, nonce);
         require(deposits[storageKey].amount == 0, "DepositBox: nonce already used");
@@ -242,8 +227,6 @@ contract DepositBox is ReentrancyGuard, Ownable {
      * Requirements:
      * - Must have approved USDC spending
      * - Amount must be positive
-     * - Auction must exist and be in OPEN state
-     * - Auction deadline must not have passed
      *
      * Emits:
      * - USDCDeposited event
@@ -253,9 +236,6 @@ contract DepositBox is ReentrancyGuard, Ownable {
         nonReentrant
     {
         require(amount > 0, "DepositBox: zero deposit");
-        require(auctionId < auctionRegistry.nextAuctionNonce(), "DepositBox: invalid auction");
-        require(auctionRegistry.getAuctionState(auctionId) == DepositTypes.AuctionState.OPEN, "DepositBox: auction not open");
-        require(block.timestamp < auctionRegistry.getDeadline(auctionId), "DepositBox: auction deadline passed");
 
         bytes32 storageKey = _computeStorageKey(auctionId, msg.sender, nonce);
         require(deposits[storageKey].amount == 0, "DepositBox: nonce already used");

@@ -7,8 +7,6 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 import "../DepositBox.sol";
 import "../Settlement.sol";
 import "../BLSVerifier.sol";
-import "../Governance.sol";
-import "../AuctionRegistry.sol";
 
 /**
  * @title MockUSDC
@@ -82,19 +80,9 @@ contract Deploy is Script {
             console.log("Using existing USDC token at:", usdcAddr);
         }
 
-        // Deploy AuctionRegistry
-        console.log("\nDeploying AuctionRegistry...");
-        AuctionRegistry auctionRegistry = new AuctionRegistry();
-        console.log("  AuctionRegistry:", address(auctionRegistry));
-
-        // Deploy Governance
-        console.log("Deploying Governance...");
-        Governance governance = new Governance(usdcAddr);
-        console.log("  Governance:", address(governance));
-
         // Deploy DepositBox
-        console.log("Deploying DepositBox...");
-        DepositBox depositBox = new DepositBox(usdcAddr, address(auctionRegistry));
+        console.log("\nDeploying DepositBox...");
+        DepositBox depositBox = new DepositBox(usdcAddr);
         console.log("  DepositBox:", address(depositBox));
 
         // Deploy BLSVerifier
@@ -118,23 +106,9 @@ contract Deploy is Script {
         blsVerifier.initialize(pubkeys);
         console.log("  BLS verifier initialized with 1 validator");
 
-        // Initialize system via governance
-        console.log("\nInitializing system via Governance...");
-        governance.genesis(
-            address(depositBox),
-            address(blsVerifier),
-            address(settlement)
-        );
-        console.log("  System initialized");
-
         // Set settlement contract in deposit box
         depositBox.setSettlementContract(address(settlement));
         console.log("  Settlement contract set in DepositBox");
-
-        // Transfer AuctionRegistry ownership to governance
-        console.log("Transferring AuctionRegistry ownership to governance...");
-        auctionRegistry.transferOwnership(address(governance));
-        console.log("  AuctionRegistry ownership transferred");
 
         vm.stopBroadcast();
 
@@ -143,8 +117,6 @@ contract Deploy is Script {
         console.log("  DEPLOYMENT COMPLETE");
         console.log("============================================================");
         console.log("USDC Token:", usdcAddr);
-        console.log("AuctionRegistry:", address(auctionRegistry));
-        console.log("Governance:", address(governance));
         console.log("DepositBox:", address(depositBox));
         console.log("BLSVerifier:", address(blsVerifier));
         console.log("Settlement:", address(settlement));
@@ -153,8 +125,6 @@ contract Deploy is Script {
         // Save deployment info
         _saveDeployment(
             deployer,
-            address(auctionRegistry),
-            address(governance),
             address(depositBox),
             address(blsVerifier),
             address(settlement),
@@ -168,8 +138,6 @@ contract Deploy is Script {
 
     function _saveDeployment(
         address deployer,
-        address auctionRegistry,
-        address governance,
         address depositBox,
         address blsVerifier,
         address settlement,
@@ -185,8 +153,6 @@ contract Deploy is Script {
         string memory json = string.concat(
             "{\n",
             '  "Deployer": "', vm.toString(deployer), '",\n',
-            '  "AuctionRegistry": "', vm.toString(auctionRegistry), '",\n',
-            '  "Governance": "', vm.toString(governance), '",\n',
             '  "DepositBox": "', vm.toString(depositBox), '",\n',
             '  "BLSVerifier": "', vm.toString(blsVerifier), '",\n',
             '  "Settlement": "', vm.toString(settlement), '",\n',
