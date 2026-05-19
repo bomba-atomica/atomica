@@ -1,6 +1,6 @@
 import { DockerTestnet } from "@atomica/docker-testnet";
 import { spawn, execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,7 +17,6 @@ const __dirname = dirname(__filename);
 const WORKSPACE_ROOT = join(__dirname, "../../..");
 const ZAPATOS_DIR = join(WORKSPACE_ROOT, "source/atomica-aptos");
 const CONTRACTS_DIR = join(WORKSPACE_ROOT, "source/atomica-move-contracts");
-const WEB_DIR = join(WORKSPACE_ROOT, "source/atomica-web-demo");
 
 // Test Keys (NOT FOR MAINNET)
 const DEPLOYER_PK = APTOS_DEPLOYER_PRIVATE_KEY;
@@ -49,31 +48,7 @@ async function main() {
   console.log(`🔒 Using isolated Aptos Config: ${ISOLATED_CONFIG_DIR}`);
 
   // 0. Cleanup Zombies
-  cleanupPorts([8080, 8081, 5173]);
-
-  // 3. Start Webapp (Dev Mode)
-  console.log("🌐 Starting Webapp (Dev Mode)...");
-  await runCommand("bun", ["install"], WEB_DIR);
-
-  console.log("👉 OPEN IN BROWSER: http://localhost:5173");
-
-  const webProcess = spawn(
-    "bun",
-    ["run", "dev", "--", "--port", "5173", "--host"],
-    {
-      cwd: WEB_DIR,
-      stdio: "inherit",
-      env: {
-        ...process.env,
-        VITE_CONTRACT_ADDRESS: DEPLOYER_ADDR,
-      },
-    },
-  );
-
-  // Wait for Webapp Health
-  console.log("⏳ Waiting for Webapp availability...");
-  await waitForUrl("http://localhost:5173");
-  console.log("✅ Webapp is Live!");
+  cleanupPorts([8080, 8081]);
 
   // 2. Find Aptos CLI
   console.log("🔍 Looking for 'aptos' binary...");
@@ -269,10 +244,9 @@ async function main() {
   );
 
   // Handle Cleanup on Exit
-  // Note: DockerTestnet handles its own cleanup on signal, but we also want to stop webapp.
+  // Note: DockerTestnet handles its own cleanup on signal.
   process.on("SIGINT", () => {
     console.log("\n🛑 Shutting down...");
-    webProcess.kill();
     // testnet.teardown() will be called by SDK's own handler
   });
 }
