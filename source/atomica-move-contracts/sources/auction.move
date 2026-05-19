@@ -126,6 +126,21 @@ module atomica::auction {
         u_bytes:            vector<u8>,   // IBE ephemeral point U = rG (48-byte G1)
         ciphertext:         vector<u8>,   // AES-GCM ciphertext of plaintext price
         collateral_lock_id: vector<u8>,   // FakeUSD LockReceipt ID held as margin
+        quantity:           u256,         // bid quantity in wei (FakeETH base token)
+    }
+
+    /// Per-bid fill result written by clear_uniform_price.
+    ///
+    /// After clearing, each bid in the window is assigned a BidResult recording
+    /// whether it won, its fill amount, and the uniform clearing price it pays.
+    /// Losing bids have fill_amount = 0 and is_winner = false.
+    ///
+    /// @see docs/architecture/v0-architecture.md §2.7
+    struct BidResult has copy, drop, store {
+        bidder:         address,
+        is_winner:      bool,
+        fill_amount:    u256,   // wei allocated to this bidder (0 for losers)
+        clearing_price: u64,    // uniform clearing price all winners pay
     }
 
     /// Per-window clearing state within the global registry.
@@ -149,6 +164,10 @@ module atomica::auction {
         /// Empty until submit_cleartext_and_clear succeeds.
         /// @see docs/architecture/v0-architecture.md §2.6
         revealed_prices:  vector<u64>,
+        /// Per-bid fill results written by clear_uniform_price.
+        /// Index-aligned to bids. Empty until clear_uniform_price succeeds.
+        /// @see docs/architecture/v0-architecture.md §2.7
+        bid_results:      vector<BidResult>,
     }
 
     /// Global registry stored at the @atomica deployer address (not per-seller).
@@ -292,6 +311,7 @@ module atomica::auction {
                 lock_ids:        vector::singleton(lock_id),
                 min_prices:      vector::singleton(min_price),
                 revealed_prices: vector::empty(),
+                bid_results:     vector::empty(),
             });
         } else {
             // Subsequent seller — accumulate supply and append metadata.
@@ -313,11 +333,14 @@ module atomica::auction {
     /// aborts with E_AUCTION_NOT_FOUND if no entry exists for (window_id,
     /// pair_bcs).
     ///
+    /// `quantity` is the bid quantity in wei (FakeETH base token). It is stored
+    /// in the SealedBid for use by clear_uniform_price after bids are revealed.
+    ///
     /// Call-site break from Demo phase:
     ///   payloads.ts::getBidPayload(sellerAddr, amountUsd, u, v)
-    ///   → (window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)
+    ///   → (window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id, quantity)
     ///   AuctionBidder.tsx::submitBid(account, sellerAddr, amountBn, u, v)
-    ///   → (window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)
+    ///   → (window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id, quantity)
     ///
     /// @see docs/architecture/v0-architecture.md §2.5
     public entry fun submit_bid(
@@ -327,6 +350,7 @@ module atomica::auction {
         u_bytes:            vector<u8>,
         ciphertext:         vector<u8>,
         collateral_lock_id: vector<u8>,
+        quantity:           u256,
     ) acquires AuctionRegistry {
         // 1. Consume the bidder's FakeUSD LockReceipt as collateral margin.
         //    `lock_receipt::claim` marks the receipt STATUS_CLAIMED and returns
@@ -343,13 +367,14 @@ module atomica::auction {
         let key = make_window_key(window_id, pair_bcs);
         assert!(table::contains(&registry.windows, key), E_AUCTION_NOT_FOUND);
 
-        // 3. Store the sealed bid.
+        // 3. Store the sealed bid with quantity.
         let state = table::borrow_mut(&mut registry.windows, key);
         vector::push_back(&mut state.bids, SealedBid {
             bidder: bidder_addr,
             u_bytes,
             ciphertext,
             collateral_lock_id,
+            quantity,
         });
     }
 
@@ -510,18 +535,155 @@ module atomica::auction {
     /// is applied to the last qualifying bid so that total allocation equals
     /// `total_supply` exactly.
     ///
+    /// Algorithm (§2.7):
+    ///   1. Build an index array sorted descending by revealed_prices.
+    ///   2. Walk sorted indices, accumulating quantity until total_supply is met.
+    ///   3. The last bid whose cumulative quantity does not exceed supply sets
+    ///      the clearing price. If that bid would overfill, it gets a partial
+    ///      fill equal to the remaining supply. All bids at higher prices win
+    ///      fully; all bids below the clearing price are marked losing.
+    ///   4. Write BidResult for each bid into WindowState.bid_results.
+    ///   5. Write clearing_price into WindowState.clearing_price.
+    ///
+    /// Precondition: submit_cleartext_and_clear must have already populated
+    /// revealed_prices. Aborts with E_AUCTION_NOT_FOUND if window is missing.
+    ///
     /// Called internally by `settle` after `submit_cleartext_and_clear` has
     /// populated the cleartext prices.  Exposed as a separate entry function
     /// so it can be invoked independently for testing or gas-profiling.
     ///
-    /// Body: scaffold — aborts with E_NOT_IMPLEMENTED (99).
-    ///
-    /// @see docs/architecture/v0-architecture.md §2.6
+    /// @see docs/architecture/v0-architecture.md §2.7
     public entry fun clear_uniform_price(
-        _window_id: u64,
-        _pair_bcs:  vector<u8>,
-    ) {
-        abort E_NOT_IMPLEMENTED
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+    ) acquires AuctionRegistry {
+        assert!(exists<AuctionRegistry>(@atomica), E_AUCTION_NOT_FOUND);
+        let key = make_window_key(window_id, pair_bcs);
+        let registry = borrow_global_mut<AuctionRegistry>(@atomica);
+        assert!(table::contains(&registry.windows, key), E_AUCTION_NOT_FOUND);
+
+        let state = table::borrow_mut(&mut registry.windows, key);
+        let bid_count = vector::length(&state.bids);
+
+        // 1. Handle zero-bid case: no clearing possible — set clearing_price=0,
+        //    bid_results stays empty, and return without aborting.
+        if (bid_count == 0) {
+            state.clearing_price = 0;
+            return
+        };
+
+        // 2. Build a sorted index array (descending by revealed price).
+        //    Insertion sort O(n^2) — acceptable for small auction windows (≤ 100 bids).
+        //    sorted_idx[i] = original index of the i-th highest-priced bid.
+        let sorted_idx = vector::empty<u64>();
+        let k = 0u64;
+        while (k < bid_count) {
+            vector::push_back(&mut sorted_idx, k);
+            k = k + 1;
+        };
+
+        // Insertion sort: sort sorted_idx descending by revealed_prices[sorted_idx[i]].
+        let i = 1u64;
+        while (i < bid_count) {
+            let j = i;
+            while (j > 0) {
+                let idx_j   = *vector::borrow(&sorted_idx, j);
+                let idx_j1  = *vector::borrow(&sorted_idx, j - 1);
+                let price_j  = *vector::borrow(&state.revealed_prices, idx_j);
+                let price_j1 = *vector::borrow(&state.revealed_prices, idx_j1);
+                if (price_j > price_j1) {
+                    // Swap
+                    *vector::borrow_mut(&mut sorted_idx, j)     = idx_j1;
+                    *vector::borrow_mut(&mut sorted_idx, j - 1) = idx_j;
+                    j = j - 1;
+                } else {
+                    break
+                };
+            };
+            i = i + 1;
+        };
+
+        // 3. Walk sorted bids and accumulate quantity to supply.
+        let supply = state.total_supply;
+        let accumulated: u256 = 0;
+        let clearing_price: u64 = 0;
+        // marginal_sorted_pos: the position in sorted_idx of the marginal bid
+        // (the last bid that contributes to fill).
+        let marginal_sorted_pos: u64 = 0;
+        let marginal_fill: u256 = 0;  // partial fill for the marginal bid
+        let found_marginal = false;
+
+        let s = 0u64;
+        while (s < bid_count) {
+            let orig_idx = *vector::borrow(&sorted_idx, s);
+            let qty = vector::borrow(&state.bids, orig_idx).quantity;
+            let price = *vector::borrow(&state.revealed_prices, orig_idx);
+
+            if (accumulated + qty <= supply) {
+                // Full fill — this bid fits entirely.
+                accumulated = accumulated + qty;
+                clearing_price = price;
+                marginal_sorted_pos = s;
+                marginal_fill = qty;
+
+                if (accumulated == supply) {
+                    found_marginal = true;
+                    break
+                };
+            } else {
+                // Partial fill — this bid overfills; allocate the remainder.
+                let remaining = supply - accumulated;
+                accumulated = supply;
+                clearing_price = price;
+                marginal_sorted_pos = s;
+                marginal_fill = remaining;
+                found_marginal = true;
+                break
+            };
+            s = s + 1;
+        };
+
+        // If we exhausted all bids without filling supply, the last processed
+        // bid is already recorded in marginal_sorted_pos / clearing_price /
+        // marginal_fill above.  found_marginal may still be false if all bids
+        // fit under supply without exactly hitting it — that is fine; the loop
+        // above sets clearing_price / marginal_sorted_pos on every iteration.
+        // Suppress unused variable warning.
+        let _ = found_marginal;
+
+        // 4. Build BidResult vector aligned to bids (not to sorted order).
+        //    Initialise all results as losing with fill_amount = 0.
+        let results = vector::empty<BidResult>();
+        let r = 0u64;
+        while (r < bid_count) {
+            let bidder_addr = vector::borrow(&state.bids, r).bidder;
+            vector::push_back(&mut results, BidResult {
+                bidder: bidder_addr,
+                is_winner: false,
+                fill_amount: 0,
+                clearing_price,
+            });
+            r = r + 1;
+        };
+
+        // Mark winners: positions 0..marginal_sorted_pos-1 are full fills;
+        // position marginal_sorted_pos gets marginal_fill.
+        let w = 0u64;
+        while (w <= marginal_sorted_pos) {
+            let orig_idx = *vector::borrow(&sorted_idx, w);
+            let result = vector::borrow_mut(&mut results, orig_idx);
+            result.is_winner = true;
+            if (w < marginal_sorted_pos) {
+                result.fill_amount = vector::borrow(&state.bids, orig_idx).quantity;
+            } else {
+                result.fill_amount = marginal_fill;
+            };
+            w = w + 1;
+        };
+
+        // 5. Commit results.
+        state.bid_results = results;
+        state.clearing_price = clearing_price;
     }
 
     /// Settle the window and emit `AuctionSettled`.
@@ -651,9 +813,8 @@ module atomica::auction {
     // ===================== Test helpers =====================
 
     // Append a SealedBid directly to an existing WindowState for unit tests,
-    // bypassing submit_bid (which aborts with E_NOT_IMPLEMENTED).
-    // Allows tests to verify the SealedBid shape compiles and that bid_count
-    // increments correctly.
+    // bypassing submit_bid. Quantity defaults to 0; use test_insert_bid_with_qty
+    // when the clearing algorithm needs a non-zero quantity.
     #[test_only]
     public fun test_insert_bid(
         atomica:            &signer,
@@ -664,6 +825,23 @@ module atomica::auction {
         ciphertext:         vector<u8>,
         collateral_lock_id: vector<u8>,
     ) acquires AuctionRegistry {
+        test_insert_bid_with_qty(atomica, window_id, pair_bcs, bidder, u_bytes, ciphertext, collateral_lock_id, 0u256);
+    }
+
+    // Append a SealedBid with an explicit quantity for clearing algorithm tests.
+    // Also appends a revealed price placeholder (0) to keep revealed_prices length
+    // in sync with bids. Callers must overwrite via test_set_revealed_prices.
+    #[test_only]
+    public fun test_insert_bid_with_qty(
+        atomica:            &signer,
+        window_id:          u64,
+        pair_bcs:           vector<u8>,
+        bidder:             address,
+        u_bytes:            vector<u8>,
+        ciphertext:         vector<u8>,
+        collateral_lock_id: vector<u8>,
+        quantity:           u256,
+    ) acquires AuctionRegistry {
         let addr = signer::address_of(atomica);
         let key = make_window_key(window_id, pair_bcs);
         let registry = borrow_global_mut<AuctionRegistry>(addr);
@@ -673,7 +851,44 @@ module atomica::auction {
             u_bytes,
             ciphertext,
             collateral_lock_id,
+            quantity,
         });
+    }
+
+    // Overwrite the revealed_prices vector for a window (test-only).
+    // Use after inserting bids to set the prices that clear_uniform_price will read.
+    #[test_only]
+    public fun test_set_revealed_prices(
+        atomica:   &signer,
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+        prices:    vector<u64>,
+    ) acquires AuctionRegistry {
+        let addr = signer::address_of(atomica);
+        let key = make_window_key(window_id, pair_bcs);
+        let registry = borrow_global_mut<AuctionRegistry>(addr);
+        let state = table::borrow_mut(&mut registry.windows, key);
+        state.revealed_prices = prices;
+    }
+
+    // Return the bid_results vector for a window (test-only).
+    // Used to verify clear_uniform_price assigned fills correctly.
+    #[test_only]
+    public fun test_get_bid_results(
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+    ): vector<BidResult> acquires AuctionRegistry {
+        let registry = borrow_global<AuctionRegistry>(@atomica);
+        let key = make_window_key(window_id, pair_bcs);
+        let state = table::borrow(&registry.windows, key);
+        state.bid_results
+    }
+
+    // Destructure a BidResult into (is_winner, fill_amount, clearing_price).
+    // Allows tests to inspect fields without requiring BidResult to have `drop` in scope.
+    #[test_only]
+    public fun test_bid_result_fields(r: &BidResult): (bool, u256, u64) {
+        (r.is_winner, r.fill_amount, r.clearing_price)
     }
 
     // Insert a WindowState directly for unit tests, bypassing create_auction.
@@ -729,6 +944,7 @@ module atomica::auction {
             lock_ids:        vector::empty(),
             min_prices:      vector::empty(),
             revealed_prices: vector::empty(),
+            bid_results:     vector::empty(),
         });
     }
 
