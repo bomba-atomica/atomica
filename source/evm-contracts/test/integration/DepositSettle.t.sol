@@ -139,9 +139,10 @@ contract DepositSettleIntegrationTest is Test {
         ethAmounts[0] = 0;
         usdcAmounts[0] = DEPOSIT_AMOUNT * 1500e6 / 1e18;
 
+        // Settlement.sol calls IBLSVerifier.verifyBlockHash(bytes32,bytes) — 2-arg form
         vm.mockCall(
             address(blsVerifier),
-            abi.encodeWithSelector(BLSVerifier.verifyBlockHash.selector, blockHash, blsSignature, validatorIndices),
+            abi.encodeWithSignature("verifyBlockHash(bytes32,bytes)", blockHash, blsSignature),
             abi.encode(true)
         );
 
