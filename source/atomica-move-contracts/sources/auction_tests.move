@@ -363,6 +363,7 @@ module atomica::auction_tests {
         // 4. Call submit_bid — consumes receipt and stores the sealed bid.
         let u_bytes    = b"G1_ephemeral_point_48_bytes_pad_";
         let ciphertext = b"aes_gcm_ciphertext_of_price_";
+        let quantity   = 1_000_000_000_000_000_000u256; // 1 ETH in wei
         auction::submit_bid(
             bidder,
             WINDOW_ID,
@@ -370,6 +371,7 @@ module atomica::auction_tests {
             u_bytes,
             ciphertext,
             collateral_lock_id,
+            quantity,
         );
 
         // Bid count must have incremented to 1.
@@ -395,9 +397,10 @@ module atomica::auction_tests {
         let u_bytes            = vector::empty<u8>();
         let ciphertext         = vector::empty<u8>();
         let collateral_lock_id = vector::empty<u8>();
+        let quantity           = 0u256;
         // Insert window so submit_bid reaches the claim call.
         auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0);
-        auction::submit_bid(bidder, WINDOW_ID, pair_bcs, u_bytes, ciphertext, collateral_lock_id);
+        auction::submit_bid(bidder, WINDOW_ID, pair_bcs, u_bytes, ciphertext, collateral_lock_id, quantity);
     }
 
     #[test(framework = @0x1, caller = @0x9999)]
@@ -505,30 +508,203 @@ module atomica::auction_tests {
         assert!(auction::get_bid_count(WINDOW_ID, pair_bcs) == 1, 2);
     }
 
-    // ===================== Partial-fill edge case =====================
+    // ===================== clear_uniform_price: §2.7 worked numeric example =====================
     //
-    // Supply = 10, bids (price, qty): (2100, 4), (2050, 3), (2010, 5).
+    // Supply = 10 ETH (10u256 for test simplicity).
+    // Bids (price, qty): Alice(2100, 4), Bob(2050, 3), Carol(2010, 5), Dave(1980, 2).
     // After sorting descending:
     //   Alice 4 → cumulative 4
     //   Bob   3 → cumulative 7
     //   Carol 5 → cumulative 12 > 10 → partial fill: 3 allocated at clearing price 2010
+    //   Dave  loses (collateral to be released in settle)
     //
-    // Phase 3a: clear_uniform_price aborts with E_NOT_IMPLEMENTED.
-    // This test verifies fixture constants are consistent and the function
-    // exists with the correct type signature.
+    // Expected clearing price = 2010.
+    // Expected fills: Alice=4, Bob=3, Carol=3 (partial), Dave=0.
+    //
+    // @see docs/architecture/v0-architecture.md §2.7
 
-    #[test(framework = @0x1, caller = @0x9999)]
-    #[expected_failure(abort_code = 99, location = atomica::auction)] // E_NOT_IMPLEMENTED
-    fun test_clear_uniform_price_partial_fill_aborts_not_implemented(
-        framework: &signer,
-        caller:    &signer,
-    ) {
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun test_clear_uniform_price_architecture_example(framework: &signer, atomica: &signer) {
         setup(framework);
-        // Partial-fill scenario: total demand 12 > supply 10.
-        // clear_uniform_price must abort with E_NOT_IMPLEMENTED in Phase 3a.
-        auction::clear_uniform_price(WINDOW_ID, default_pair_bcs());
-        // Suppress unused variable warning
-        let _ = caller;
+        let pair_bcs = default_pair_bcs();
+        // Supply = 10 (using unit quantities for test clarity, not wei)
+        let supply: u256 = 10u256;
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, supply, false, 0);
+
+        // Insert bids in arbitrary (unsorted) order to exercise the sort.
+        // Dave (1980, 2) — will lose
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xDA7E,
+            b"u", b"c", b"lock_dave", 2u256,
+        );
+        // Carol (2010, 5) — partial fill = 3
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xCA401,
+            b"u", b"c", b"lock_carol", 5u256,
+        );
+        // Alice (2100, 4) — full fill
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xA11CE,
+            b"u", b"c", b"lock_alice", 4u256,
+        );
+        // Bob (2050, 3) — full fill
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xB0B,
+            b"u", b"c", b"lock_bob", 3u256,
+        );
+
+        // Bids are inserted at indices: [0=Dave, 1=Carol, 2=Alice, 3=Bob]
+        // Set revealed prices index-aligned to bids.
+        let prices = vector[1980u64, 2010u64, 2100u64, 2050u64];
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, prices);
+
+        // Run the clearing algorithm.
+        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
+
+        // Verify clearing_price is 2010 (Carol's marginal price).
+        let (_, _, _, _, clearing_price) = auction::get_auction(WINDOW_ID, pair_bcs);
+        assert!(clearing_price == 2010, 1);
+
+        // Verify fill amounts per bid.
+        let results = auction::test_get_bid_results(WINDOW_ID, pair_bcs);
+        assert!(vector::length(&results) == 4, 2);
+
+        // Index 0 = Dave: loser
+        let (dave_win, dave_fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 0));
+        assert!(!dave_win, 3);
+        assert!(dave_fill == 0u256, 4);
+
+        // Index 1 = Carol: partial fill = 3
+        let (carol_win, carol_fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 1));
+        assert!(carol_win, 5);
+        assert!(carol_fill == 3u256, 6);
+
+        // Index 2 = Alice: full fill = 4
+        let (alice_win, alice_fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 2));
+        assert!(alice_win, 7);
+        assert!(alice_fill == 4u256, 8);
+
+        // Index 3 = Bob: full fill = 3
+        let (bob_win, bob_fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 3));
+        assert!(bob_win, 9);
+        assert!(bob_fill == 3u256, 10);
+    }
+
+    // Single bid fills entire supply at that price.
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun test_clear_uniform_price_single_bid(framework: &signer, atomica: &signer) {
+        setup(framework);
+        let pair_bcs = default_pair_bcs();
+        let supply: u256 = 5u256;
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, supply, false, 0);
+
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xA11CE,
+            b"u", b"c", b"lock_alice", 5u256,
+        );
+        let prices = vector[3000u64];
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, prices);
+
+        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
+
+        let (_, _, _, _, clearing_price) = auction::get_auction(WINDOW_ID, pair_bcs);
+        assert!(clearing_price == 3000, 1);
+
+        let results = auction::test_get_bid_results(WINDOW_ID, pair_bcs);
+        let (alice_win, alice_fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 0));
+        assert!(alice_win, 2);
+        assert!(alice_fill == 5u256, 3);
+    }
+
+    // Exact fill: total bid quantity == supply, no partial fill needed.
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun test_clear_uniform_price_exact_fill(framework: &signer, atomica: &signer) {
+        setup(framework);
+        let pair_bcs = default_pair_bcs();
+        let supply: u256 = 7u256;
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, supply, false, 0);
+
+        // Alice (2100, 4) + Bob (2050, 3) = 7 = supply exactly.
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xA11CE,
+            b"u", b"c", b"lock_alice", 4u256,
+        );
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xB0B,
+            b"u", b"c", b"lock_bob", 3u256,
+        );
+        let prices = vector[2100u64, 2050u64];
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, prices);
+
+        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
+
+        let (_, _, _, _, clearing_price) = auction::get_auction(WINDOW_ID, pair_bcs);
+        assert!(clearing_price == 2050, 1);
+
+        let results = auction::test_get_bid_results(WINDOW_ID, pair_bcs);
+        let (alice_win, alice_fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 0));
+        assert!(alice_win, 2);
+        assert!(alice_fill == 4u256, 3);
+
+        let (bob_win, bob_fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 1));
+        assert!(bob_win, 4);
+        assert!(bob_fill == 3u256, 5);
+    }
+
+    // Insufficient bids to fill supply: all bids win at their prices.
+    // When total bid quantity < supply, all bids are fully filled;
+    // clearing price = lowest bid price.
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun test_clear_uniform_price_insufficient_bids(framework: &signer, atomica: &signer) {
+        setup(framework);
+        let pair_bcs = default_pair_bcs();
+        let supply: u256 = 20u256; // More supply than total bids
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, supply, false, 0);
+
+        // Alice (2100, 4) + Bob (2050, 3) = 7 < 20.
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xA11CE,
+            b"u", b"c", b"lock_alice", 4u256,
+        );
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, pair_bcs, @0xB0B,
+            b"u", b"c", b"lock_bob", 3u256,
+        );
+        let prices = vector[2100u64, 2050u64];
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, prices);
+
+        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
+
+        // Clearing price = lowest winning bid = 2050 (Bob, last processed).
+        let (_, _, _, _, clearing_price) = auction::get_auction(WINDOW_ID, pair_bcs);
+        assert!(clearing_price == 2050, 1);
+
+        let results = auction::test_get_bid_results(WINDOW_ID, pair_bcs);
+        // Both bids win fully.
+        let (alice_win, alice_fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 0));
+        assert!(alice_win, 2);
+        assert!(alice_fill == 4u256, 3);
+        let (bob_win, bob_fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 1));
+        assert!(bob_win, 4);
+        assert!(bob_fill == 3u256, 5);
+    }
+
+    // Zero bids: clear_uniform_price handles empty bid list without panic.
+    // Clearing price remains 0, bid_results is empty.
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun test_clear_uniform_price_zero_bids(framework: &signer, atomica: &signer) {
+        setup(framework);
+        let pair_bcs = default_pair_bcs();
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, 10u256, false, 0);
+
+        // No bids, no revealed prices — call must succeed without panic.
+        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
+
+        let (_, _, _, _, clearing_price) = auction::get_auction(WINDOW_ID, pair_bcs);
+        assert!(clearing_price == 0, 1);
+
+        let results = auction::test_get_bid_results(WINDOW_ID, pair_bcs);
+        assert!(vector::length(&results) == 0, 2);
     }
 
     // ===================== compute_rebates scaffold fixtures (Phase 3c) =====================
