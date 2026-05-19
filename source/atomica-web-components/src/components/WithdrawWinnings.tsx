@@ -17,7 +17,32 @@ import { useState } from "react";
 import {
   submitSettlement,
   type AuctionSettledEvent,
+  type BridgeConfig,
 } from "@atomica/sdk/settlement/bridge";
+
+// Safe env access: works in Vite browser builds and Node tests.
+const _env =
+  (import.meta as { env?: Record<string, string> }).env || process.env || {};
+
+/**
+ * Default bridge config derived from Vite environment variables.
+ * The relayer private key is intentionally empty — settlement is relayer-driven.
+ * The WithdrawWinnings component will receive NOT_IMPLEMENTED or NotTrustedRelayer
+ * unless wired to a proper signer (issue #113).
+ */
+const DEFAULT_UI_BRIDGE_CONFIG: BridgeConfig = {
+  aptosRpcUrl: _env.VITE_APTOS_RPC_URL ?? "http://localhost:8080/v1",
+  contractAddress:
+    _env.VITE_CONTRACT_ADDRESS ??
+    "0x0000000000000000000000000000000000000000000000000000000000000000",
+  ethRpcUrl: _env.VITE_ETH_RPC_URL ?? "http://localhost:8545",
+  blsVerifierAddress:
+    _env.VITE_BLS_VERIFIER_ADDRESS ??
+    "0x0000000000000000000000000000000000000000",
+  // The UI does not hold the relayer key — this will fail with NotTrustedRelayer.
+  // Full settlement pull-path wiring is tracked in issue #113.
+  relayerPrivateKey: "",
+};
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -54,7 +79,7 @@ export function WithdrawWinnings({ events, onSuccess }: WithdrawWinningsProps) {
   async function handleWithdraw() {
     setTxState({ phase: "submitting" });
     try {
-      const txHash = await submitSettlement(events);
+      const txHash = await submitSettlement(events, DEFAULT_UI_BRIDGE_CONFIG);
       setTxState({ phase: "success", txHash });
       onSuccess?.(txHash);
     } catch (err) {

@@ -318,6 +318,84 @@ export async function getSettlement(
   };
 }
 
+// ── Bid result view (issue #112) ──────────────────────────────────────────────
+
+/**
+ * A single bid result entry returned by `auction::get_bid_results`.
+ *
+ * Mirrors the on-chain `auction::BidResult` struct used to join AuctionSettled
+ * events with per-winner Ethereum addresses and fill amounts.
+ *
+ * @see docs/architecture/v0-architecture.md §2.9 — AuctionSettled event
+ * @see bridge.ts RISK 1 — winners/fills join gap
+ */
+export interface BidResult {
+  /** Aptos address (32-byte hex) of the bidder. */
+  bidder: string;
+  /** Fill amount in base-token wei (0 for losers). */
+  fillAmount: bigint;
+  /** True if this bidder won and was filled at the clearing price. */
+  isWinner: boolean;
+}
+
+/**
+ * Query `auction::get_bid_results` view function (issue #112).
+ *
+ * Returns the full list of bid results for a settled auction window.
+ * Used by the settlement relayer to derive per-winner Ethereum addresses
+ * and fill amounts for `BLSVerifierTestnet::authorizeSettlement`.
+ *
+ * The relayer must:
+ *   1. Filter results where `is_winner == true`.
+ *   2. Convert each winner's Aptos address to Ethereum via `aptosToEthereumAddress`.
+ *   3. Use `fill_amount` from each winning BidResult as the `fills` entry.
+ *
+ * NOTE: This function will return an empty array if called before settlement
+ * is finalized for the given window/pair combination.
+ *
+ * @param windowId - Auction window ID
+ * @param pairBcs  - BCS-encoded Pair struct
+ * @returns Array of {@link BidResult} entries (empty if not yet settled).
+ *
+ * @see docs/architecture/v0-architecture.md §2.9
+ * @see bridge.ts — submitSettlement join step
+ */
+export async function getBidResults(
+  windowId: bigint,
+  pairBcs: Uint8Array,
+): Promise<BidResult[]> {
+  try {
+    const result = await aptos.view({
+      payload: {
+        function: `${CONTRACT_ADDR}::auction::get_bid_results`,
+        functionArguments: [windowId, pairBcs],
+      },
+    });
+    // The Move function returns vector<BidResult> serialised as an array of objects.
+    const raw = result[0] as Array<{
+      bidder: string;
+      fill_amount: string;
+      is_winner: boolean;
+    }>;
+    return raw.map(({ bidder, fill_amount, is_winner }) => ({
+      bidder,
+      fillAmount: BigInt(fill_amount),
+      isWinner: is_winner,
+    }));
+  } catch (e: unknown) {
+    // Return empty array for not-yet-settled windows to allow callers to handle gracefully.
+    const msg = e instanceof Error ? e.message : String(e);
+    if (
+      msg.includes("E_NOT_IMPLEMENTED") ||
+      msg.includes("ABORTED") ||
+      msg.includes("abort_code")
+    ) {
+      return [];
+    }
+    throw e;
+  }
+}
+
 /**
  * Per-bidder rebate entry returned by the `auction::compute_rebates` view function.
  *
