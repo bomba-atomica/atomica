@@ -5,6 +5,7 @@ import {
   AuctionBidder,
   AccountStatus,
   NetworkStatus,
+  AppSettings,
   WalletProvider,
   BalancesProvider,
   ContractStatusProvider,
@@ -49,6 +50,7 @@ function AppShell() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-8 mt-8">
+            <AppSettings />
             <Faucet />
             <SanityTest />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

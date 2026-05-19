@@ -21,7 +21,8 @@
     "@atomica/aptos-docker-testnet": "file:../docker-testnet/aptos-testnet",
     "@atomica/sdk": "../atomica-sdk",
     "@atomica/state-proof-verifier": "file:../state-proofs/typescript",
-    "@heroicons/react": "^2.2.0"
+    "@heroicons/react": "^2.2.0",
+    "chromium-bidi": "^16.0.1"
   },
   "peerDependencies": {
     "react": "^19.2.4"
