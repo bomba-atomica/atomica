@@ -5,8 +5,6 @@ import "forge-std/Test.sol";
 import "../../src/DepositBox.sol";
 import "../../src/Settlement.sol";
 import "../../src/BLSVerifier.sol";
-import "../../src/Governance.sol";
-import "../../src/AuctionRegistry.sol";
 import "../../src/libraries/DepositTypes.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -32,15 +30,11 @@ contract DeploymentVerificationTest is Test {
     address depositBoxAddr;
     address settlementAddr;
     address blsVerifierAddr;
-    address governanceAddr;
-    address auctionRegistryAddr;
     address usdcTokenAddr;
 
     DepositBox depositBox;
     Settlement settlement;
     BLSVerifier blsVerifier;
-    Governance governance;
-    AuctionRegistry auctionRegistry;
     IERC20 usdcToken;
 
     address deployer;
@@ -102,14 +96,12 @@ contract DeploymentVerificationTest is Test {
         depositBoxAddr = vm.parseJsonAddress(json, ".DepositBox");
         settlementAddr = vm.parseJsonAddress(json, ".Settlement");
         blsVerifierAddr = vm.parseJsonAddress(json, ".BLSVerifier");
-        governanceAddr = vm.parseJsonAddress(json, ".Governance");
         // Read actual deployer from deployment file
         deployer = vm.parseJsonAddress(json, ".Deployer");
 
         depositBox = DepositBox(payable(depositBoxAddr));
         settlement = Settlement(payable(settlementAddr));
         blsVerifier = BLSVerifier(payable(blsVerifierAddr));
-        governance = Governance(payable(governanceAddr));
     }
 
     /**
@@ -118,18 +110,8 @@ contract DeploymentVerificationTest is Test {
     function _deployContracts() internal {
         console.log("Deploying contracts to", ETH_RPC_URL);
 
-        // Deploy AuctionRegistry
-        auctionRegistry = new AuctionRegistry();
-        auctionRegistryAddr = address(auctionRegistry);
-        console.log("AuctionRegistry:", auctionRegistryAddr);
-
-        // Deploy Governance
-        governance = new Governance(usdcTokenAddr);
-        governanceAddr = address(governance);
-        console.log("Governance:", governanceAddr);
-
         // Deploy DepositBox
-        depositBox = new DepositBox(usdcTokenAddr, auctionRegistryAddr);
+        depositBox = new DepositBox(usdcTokenAddr);
         depositBoxAddr = address(depositBox);
         console.log("DepositBox:", depositBoxAddr);
 
@@ -152,26 +134,8 @@ contract DeploymentVerificationTest is Test {
         pubkeys[0] = _getTestValidatorPubkey();
         blsVerifier.initialize(pubkeys);
 
-        // Initialize system via governance
-        governance.genesis(depositBoxAddr, blsVerifierAddr, settlementAddr);
-
-        // Register a test auction for E2E verification
-        DepositTypes.AuctionConfig memory config = DepositTypes.AuctionConfig({
-            nonce: 0,
-            description: "e2e-test-auction",
-            deadlineMicro: uint64(block.timestamp + 86400) * 1_000_000,
-            minPrice: 0,
-            maxPrice: 0,
-            minEthAmount: 0,
-            minUsdcAmount: 0
-        });
-        auctionRegistry.registerAuction(config);
-
         // Set settlement contract in deposit box
         depositBox.setSettlementContract(settlementAddr);
-
-        // Transfer AuctionRegistry ownership to governance
-        auctionRegistry.transferOwnership(governanceAddr);
 
         // Save deployment info
         _saveDeployment();
@@ -194,8 +158,6 @@ contract DeploymentVerificationTest is Test {
         string memory json = string.concat(
             "{\n",
             '  "Deployer": "', vm.toString(deployer), '",\n',
-            '  "AuctionRegistry": "', vm.toString(auctionRegistryAddr), '",\n',
-            '  "Governance": "', vm.toString(governanceAddr), '",\n',
             '  "DepositBox": "', vm.toString(depositBoxAddr), '",\n',
             '  "BLSVerifier": "', vm.toString(blsVerifierAddr), '",\n',
             '  "Settlement": "', vm.toString(settlementAddr), '",\n',
@@ -226,14 +188,12 @@ contract DeploymentVerificationTest is Test {
         assertNotEq(depositBoxAddr, address(0));
         assertNotEq(settlementAddr, address(0));
         assertNotEq(blsVerifierAddr, address(0));
-        assertNotEq(governanceAddr, address(0));
         assertNotEq(usdcTokenAddr, address(0));
 
         console.log("Contract addresses verified:");
         console.log("  DepositBox:", uint256(uint160(depositBoxAddr)));
         console.log("  Settlement:", uint256(uint160(settlementAddr)));
         console.log("  BLSVerifier:", uint256(uint160(blsVerifierAddr)));
-        console.log("  Governance:", uint256(uint160(governanceAddr)));
         console.log("  USDC Token:", uint256(uint160(usdcTokenAddr)));
     }
 
@@ -249,76 +209,13 @@ contract DeploymentVerificationTest is Test {
     }
 
     /**
-     * @notice Verify governance is initialized and genesis state is correct
-     *
-     * Success Criteria:
-     *   - initialized flag is true
-     *   - genesisBlock is set (> 0)
-     *   - deployer is the deployment sender
-     *   - deploymentTime is set
-     *   - All contract links are correct
-     */
-    function testGovernanceGenesisState() public view {
-        (bool isInitialized, bool isBricked, address depositBoxAddr_, address blsVerifierAddr_, address settlementAddr_, uint256 genesisBlk, uint256 brickBlk) =
-            governance.getSystemState();
-
-        assertTrue(isInitialized, "Governance should be initialized");
-        assertFalse(isBricked, "System should not be bricked");
-        assertEq(depositBoxAddr_, depositBoxAddr, "DepositBox address mismatch");
-        assertEq(blsVerifierAddr_, blsVerifierAddr, "BLSVerifier address mismatch");
-        assertEq(settlementAddr_, settlementAddr, "Settlement address mismatch");
-        assertGe(genesisBlk, 0, "Genesis block should be set");
-
-        // Verify deployer is set
-        address deployerAddr = governance.deployer();
-        assertNotEq(deployerAddr, address(0), "Deployer should be set");
-        assertEq(deployerAddr, deployer, "Deployer should be deployment sender");
-
-        // Verify deployment time is set
-        uint256 deploymentTime = governance.deploymentTime();
-        assertGe(deploymentTime, 0, "Deployment time should be set");
-
-        console.log("Governance genesis state verified:");
-        console.log("  initialized:", isInitialized);
-        console.log("  genesisBlock:", genesisBlk);
-        console.log("  deployer:", uint256(uint160(deployerAddr)));
-        console.log("  deploymentTime:", deploymentTime);
-    }
-
-    /**
-     * @notice Verify deployer can only call genesis once
-     *
-     * Success Criteria:
-     *   - Double genesis() call reverts with "already initialized"
-     */
-    function testGenesisOnlyCallableOnce() public {
-        // This test only works when we have the private key
-        // Skip on deployed contracts where we don't have the key
-        if (usdcTokenAddr == deployer) {
-            console.log("Skipping - no private key for governance calls");
-            return;
-        }
-
-        // The second call would revert
-        // We can't easily test this without the private key
-        assertTrue(governance.initialized(), "Genesis should have been called");
-        console.log("[OK] Genesis was called (initialized = true)");
-    }
-
-    /**
      * @notice Verify all contract links are correct after deployment
      *
      * Success Criteria:
-     *   - Governance links to DepositBox, BLSVerifier, Settlement
      *   - DepositBox links to Settlement
      *   - Settlement links to BLSVerifier and DepositBox
      */
     function testContractLinksAreCorrect() public view {
-        // Governance links
-        assertEq(governance.depositBox(), address(depositBox), "Governance -> DepositBox link");
-        assertEq(governance.blsVerifier(), address(blsVerifier), "Governance -> BLSVerifier link");
-        assertEq(governance.settlement(), address(settlement), "Governance -> Settlement link");
-
         // DepositBox links
         assertEq(depositBox.settlementContract(), address(settlement), "DepositBox -> Settlement link");
 
@@ -335,20 +232,15 @@ contract DeploymentVerificationTest is Test {
      * Success Criteria:
      *   - All contracts deployed and linked
      *   - BLS verifier initialized
-     *   - Governance initialized
-     *   - System not bricked
+     *   - Settlement contract set in DepositBox
      */
     function testSystemReadyForOperation() public view {
-        assertTrue(governance.initialized(), "Governance must be initialized");
-        assertFalse(governance.bricked(), "System must not be bricked");
         assertGt(blsVerifier.getValidatorCount(), 0, "BLS verifier must have validators");
         assertNotEq(depositBox.settlementContract(), address(0), "Settlement must be set in DepositBox");
 
         console.log("System ready for operation:");
-        console.log("  Governance initialized:", governance.initialized());
         console.log("  BLS validators:", blsVerifier.getValidatorCount());
         console.log("  Settlement set in DepositBox:", depositBox.settlementContract() != address(0));
-        console.log("  System bricked:", governance.bricked());
     }
 
     /**
@@ -366,7 +258,6 @@ contract DeploymentVerificationTest is Test {
         assertGt(depositBoxAddr.code.length, 0, "DepositBox should have code");
         assertGt(settlementAddr.code.length, 0, "Settlement should have code");
         assertGt(blsVerifierAddr.code.length, 0, "BLSVerifier should have code");
-        assertGt(governanceAddr.code.length, 0, "Governance should have code");
 
         console.log("Contract code verified at all addresses");
     }

@@ -3,12 +3,10 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../../src/DepositBox.sol";
-import "../../src/AuctionRegistry.sol";
 import "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 
 contract DepositBoxTest is Test {
     DepositBox depositBox;
-    AuctionRegistry auctionRegistry;
     ERC20Mock usdcMock;
 
     address alice = makeAddr("alice");
@@ -17,25 +15,11 @@ contract DepositBoxTest is Test {
 
     function setUp() public {
         usdcMock = new ERC20Mock();
-        auctionRegistry = new AuctionRegistry();
-        depositBox = new DepositBox(address(usdcMock), address(auctionRegistry));
-
-        // Register a test auction
-        DepositTypes.AuctionConfig memory config = DepositTypes.AuctionConfig({
-            nonce: 0,
-            description: "test-auction",
-            deadlineMicro: uint64(block.timestamp + 3600) * 1_000_000,
-            minPrice: 0,
-            maxPrice: 0,
-            minEthAmount: 0,
-            minUsdcAmount: 0
-        });
-        auctionRegistry.registerAuction(config);
+        depositBox = new DepositBox(address(usdcMock));
     }
 
     function testConstructor() public view {
         assertEq(address(depositBox.usdcToken()), address(usdcMock));
-        assertEq(address(depositBox.auctionRegistry()), address(auctionRegistry));
         assertEq(depositBox.depositNonceCounter(), 1);
     }
 
@@ -55,14 +39,6 @@ contract DepositBoxTest is Test {
         vm.prank(alice);
         vm.expectRevert("DepositBox: zero deposit");
         depositBox.depositETH{value: 0}(1, 1);
-    }
-
-    function testDepositETHInvalidAuction() public {
-        vm.deal(alice, 10 ether);
-
-        vm.prank(alice);
-        vm.expectRevert("DepositBox: invalid auction");
-        depositBox.depositETH{value: 1 ether}(999, 1);
     }
 
     function testDepositUSDC() public {
