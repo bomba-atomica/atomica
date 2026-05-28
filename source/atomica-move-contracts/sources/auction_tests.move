@@ -1206,6 +1206,209 @@ module atomica::auction_tests {
         auction::test_submit_cleartext_with_dk(settler, WINDOW_ID, pair_bcs, cleartexts, dk_bytes);
     }
 
+    // ===================== submit_cleartext_and_clear: multi-bid and edge-case tests =====================
+    //
+    // Issue #130: grade B→A coverage for submit_cleartext_and_clear.
+    // Four new tests cover:
+    //   1. Partial batch failure: atomicity guarantee — any invalid cleartext
+    //      aborts the whole call and no revealed_prices are written.
+    //   2. Decryption key not yet revealed: timelock expired but DK not submitted
+    //      by validators → abort from ibe_config with E_DECRYPTION_KEY_NOT_REVEALED.
+    //   3. Auction not found: non-existent (window_id, pair) → E_AUCTION_NOT_FOUND.
+    //   4. Idempotency: calling submit_cleartext_and_clear twice on the same window
+    //      overwrites revealed_prices and returns successfully (not idempotent by
+    //      spec, but the second call does not corrupt state when cleartexts match).
+    //
+    // @see docs/architecture/v0-architecture.md §2.6
+
+    // Partial batch failure: a batch of N bids where cleartext[k] is wrong aborts
+    // with E_INVALID_CLEARTEXT (10) and no revealed_prices are stored.
+    //
+    // Uses the `timelock_basic` golden vectors ciphertext for both bids.
+    // Both bids encrypt the same plaintext; the test supplies the correct
+    // cleartext for bid 0 and a wrong cleartext for bid 1. The abort must happen
+    // before any state is written (Move VM atomicity: on abort, all writes in the
+    // current frame are reverted).
+    //
+    // After abort, no revealed_prices are stored because the VM discards all
+    // state mutations for the aborted call.
+    #[test(framework = @0x1, atomica = @atomica, settler = @0x9999)]
+    #[expected_failure(abort_code = 10, location = atomica::auction)] // E_INVALID_CLEARTEXT
+    fun test_submit_cleartext_partial_failure_aborts_atomically(
+        framework: &signer,
+        atomica:   &signer,
+        settler:   &signer,
+    ) {
+        // Enable BLS12-381 pairing native functions.
+        crypto_algebra::enable_cryptography_algebra_natives(framework);
+
+        let pair_bcs = default_pair_bcs();
+        auction::test_insert_window_with_timelock(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0, 0u64);
+
+        // Insert 2 bids using the same golden vector ciphertext.
+        // Both bids encrypt the same plaintext (b"Timelock test message").
+        let u_bytes    = fixtures::timelock_basic_ciphertext_u();
+        let ciphertext = fixtures::timelock_basic_ciphertext_v();
+
+        // Bid 0: valid golden vector ciphertext.
+        auction::test_insert_bid(
+            atomica, WINDOW_ID, pair_bcs, @0x1111,
+            u_bytes, ciphertext, b"collateral_lock_id_0",
+        );
+        // Bid 1: same ciphertext (same encrypted plaintext).
+        auction::test_insert_bid(
+            atomica, WINDOW_ID, pair_bcs, @0x2222,
+            u_bytes, ciphertext, b"collateral_lock_id_1",
+        );
+
+        let dk_bytes = fixtures::timelock_basic_reconstructed_dk();
+
+        // Supply correct cleartext for bid 0 but WRONG cleartext for bid 1.
+        // The loop in test_submit_cleartext_with_dk verifies in order: bid 0
+        // passes (correct price), bid 1 fails (wrong price) → E_INVALID_CLEARTEXT.
+        // Move VM reverts all state writes from this call on abort, so
+        // revealed_prices remains empty after the abort.
+        let cleartexts = vector[
+            CLEARTEXT_FROM_GOLDEN_PLAINTEXT,  // correct for bid 0
+            9999u64,                           // wrong for bid 1
+        ];
+        auction::test_submit_cleartext_with_dk(settler, WINDOW_ID, pair_bcs, cleartexts, dk_bytes);
+    }
+
+    // Decryption key not yet revealed: the timelock deadline has passed but
+    // validators have not submitted threshold shares. submit_cleartext_and_clear
+    // calls timelock::get_decryption_key which delegates to
+    // ibe_config::get_decryption_key. That function aborts with
+    // E_DECRYPTION_KEY_NOT_REVEALED (5) from aptos_framework::ibe_config when
+    // is_revealed == false.
+    //
+    // Note: this abort originates in ibe_config (code 5), not auction (code 8).
+    // auction::E_DECRYPTION_KEY_NOT_REVEALED (8) documents the intended error
+    // category; the actual abort comes from the framework module.
+    //
+    // The test verifies that no state (revealed_prices) is written before
+    // the DK is available — all writes are reverted on abort by the VM.
+    //
+    // Setup: ibe_config::initialize_for_testing sets up timestamp + registry.
+    // register_timelock creates a timelock with a near-future deadline.
+    // fast_forward_seconds advances past the deadline so is_expired == true.
+    // No DK shares are submitted, so is_revealed == false.
+    // submit_cleartext_and_clear must pass the E_WINDOW_NOT_CLOSED guard
+    // (timelock IS expired) and then abort inside get_decryption_key.
+    #[test(framework = @0x1, atomica = @atomica, settler = @0x9999)]
+    #[expected_failure(abort_code = 5, location = aptos_framework::ibe_config)] // E_DECRYPTION_KEY_NOT_REVEALED
+    fun test_submit_cleartext_aborts_when_decryption_key_not_revealed(
+        framework: &signer,
+        atomica:   &signer,
+        settler:   &signer,
+    ) {
+        // Initialize ibe_config and timestamp together.
+        ibe_config::initialize_for_testing(framework);
+
+        // Register a timelock with a deadline 1 second in the future.
+        // timestamp is in microseconds; deadline_us = 1_000_000 us = 1 s.
+        let deadline_us = 1_000_000u64;
+        ibe_config::register_timelock(framework, deadline_us);
+        let timelock_id = 0u64;
+
+        // Insert a window linked to the timelock.
+        let pair_bcs = default_pair_bcs();
+        auction::test_insert_window_with_timelock(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0, timelock_id);
+
+        // Insert one bid so count check passes (1 cleartext, 1 bid).
+        auction::test_insert_bid(
+            atomica, WINDOW_ID, pair_bcs, @0x1111,
+            b"u_bytes", b"ciphertext", b"lock_id",
+        );
+
+        // Advance time past the deadline: is_expired becomes true.
+        // timestamp::fast_forward_seconds works in seconds; advance 2 s.
+        timestamp::fast_forward_seconds(2);
+
+        // Call submit_cleartext_and_clear. The timelock IS expired
+        // (passes E_WINDOW_NOT_CLOSED guard), but DK was never submitted —
+        // get_decryption_key aborts with ibe_config::E_DECRYPTION_KEY_NOT_REVEALED (5).
+        let cleartexts = vector[1234u64];
+        auction::submit_cleartext_and_clear(settler, WINDOW_ID, pair_bcs, cleartexts);
+    }
+
+    // Auction not found: submit_cleartext_and_clear with a non-existent (window_id,
+    // pair) aborts with E_AUCTION_NOT_FOUND (1) before any state is written.
+    //
+    // No AuctionRegistry exists at @atomica in this test, so the first assert in
+    // submit_cleartext_and_clear fires immediately.
+    #[test(framework = @0x1, settler = @0x9999)]
+    #[expected_failure(abort_code = 1, location = atomica::auction)] // E_AUCTION_NOT_FOUND
+    fun test_submit_cleartext_aborts_when_auction_not_found(
+        framework: &signer,
+        settler:   &signer,
+    ) {
+        setup(framework);
+        // No AuctionRegistry at @atomica — first assert in submit_cleartext_and_clear
+        // aborts with E_AUCTION_NOT_FOUND (1).
+        let pair_bcs   = default_pair_bcs();
+        let cleartexts = vector::empty<u64>();
+        auction::submit_cleartext_and_clear(settler, WINDOW_ID, pair_bcs, cleartexts);
+    }
+
+    // Idempotency: calling submit_cleartext_and_clear twice on the same window.
+    //
+    // The current implementation does NOT guard against repeated calls on the
+    // same window (it only checks !settled). The second call overwrites
+    // revealed_prices with the same values, so the outcome is the same.
+    //
+    // Spec outcome: the second call succeeds and overwrites revealed_prices
+    // with identical values. The window is not corrupted. This is a valid
+    // operational behaviour — the settler can re-run the call with the same
+    // cleartexts if needed (e.g., after a dropped transaction). However,
+    // it also means a malicious settler could overwrite prices if not guarded
+    // at the application layer.
+    //
+    // This test documents the current behaviour as "second call succeeds and
+    // produces the same revealed_prices". A guard (`assert!(revealed_prices is
+    // empty)`) could be added in a future issue to prevent re-submission.
+    #[test(framework = @0x1, atomica = @atomica, settler = @0x9999)]
+    fun test_submit_cleartext_idempotency(
+        framework: &signer,
+        atomica:   &signer,
+        settler:   &signer,
+    ) {
+        // Enable BLS12-381 pairing native functions.
+        crypto_algebra::enable_cryptography_algebra_natives(framework);
+
+        let pair_bcs = default_pair_bcs();
+        auction::test_insert_window_with_timelock(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0, 0u64);
+
+        // Insert one bid using the golden vector ciphertext.
+        let u_bytes    = fixtures::timelock_basic_ciphertext_u();
+        let ciphertext = fixtures::timelock_basic_ciphertext_v();
+        auction::test_insert_bid(
+            atomica, WINDOW_ID, pair_bcs, @0x1111,
+            u_bytes, ciphertext, b"collateral_lock_id",
+        );
+
+        let dk_bytes  = fixtures::timelock_basic_reconstructed_dk();
+        let cleartext = CLEARTEXT_FROM_GOLDEN_PLAINTEXT;
+        let cleartexts = vector[cleartext];
+
+        // First call: stores revealed_prices[0] = cleartext.
+        auction::test_submit_cleartext_with_dk(settler, WINDOW_ID, pair_bcs, cleartexts, dk_bytes);
+
+        // Verify first call stored the price.
+        let revealed = auction::test_get_revealed_prices(WINDOW_ID, pair_bcs);
+        assert!(vector::length(&revealed) == 1, 1);
+        assert!(*vector::borrow(&revealed, 0) == cleartext, 2);
+
+        // Second call: overwrites revealed_prices with the same values.
+        // This must succeed (no guard against re-submission in the current impl).
+        auction::test_submit_cleartext_with_dk(settler, WINDOW_ID, pair_bcs, cleartexts, dk_bytes);
+
+        // Verify second call stored the same price — no corruption.
+        let revealed2 = auction::test_get_revealed_prices(WINDOW_ID, pair_bcs);
+        assert!(vector::length(&revealed2) == 1, 3);
+        assert!(*vector::borrow(&revealed2, 0) == cleartext, 4);
+    }
+
     // ===================== settle: end-to-end tests =====================
     //
     // Tests cover the full settle path from a cleared window:
