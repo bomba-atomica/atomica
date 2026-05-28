@@ -403,6 +403,279 @@ module atomica::auction_tests {
         auction::submit_bid(bidder, WINDOW_ID, pair_bcs, u_bytes, ciphertext, collateral_lock_id, quantity);
     }
 
+    // ===================== submit_bid edge cases (issue #129) =====================
+    //
+    // Six tests that verify boundary conditions of submit_bid not covered by the
+    // existing happy-path and uninitialized-registry tests.
+    //
+    // @see docs/architecture/v0-architecture.md §2.5
+
+    // Helper: initialize the FakeUSD registry and insert one active receipt.
+    fun insert_usd_receipt_single(
+        atomica:     &signer,
+        lock_id:     vector<u8>,
+        bidder_addr: address,
+        amount:      u256,
+    ) {
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(
+            lock_id,
+            bidder_addr,
+            amount,
+            1u64,
+        );
+    }
+
+    // test_submit_bid_aborts_after_window_settled:
+    //   A bid on a window whose `settled` flag is true must abort with
+    //   E_WINDOW_ALREADY_SETTLED (11).  The guard was added to submit_bid in
+    //   issue #129: bids after settlement would lose their collateral silently
+    //   because the supply has already been allocated and no clearing will run.
+    //
+    //   Abort code: E_WINDOW_ALREADY_SETTLED = 11 from atomica::auction.
+    #[test(framework = @0x1, atomica = @atomica, bidder = @0x1111)]
+    #[expected_failure(abort_code = 11, location = atomica::auction)]
+    fun test_submit_bid_aborts_after_window_settled(
+        framework: &signer,
+        atomica:   &signer,
+        bidder:    &signer,
+    ) {
+        setup(framework);
+        let pair_bcs           = default_pair_bcs();
+        let collateral_lock_id = b"fakeusd_lock_settled_window_32b_";
+        let bidder_addr        = @0x1111;
+
+        // Insert a FakeUSD receipt so the claim call in submit_bid succeeds
+        // before the settled-window guard fires.
+        insert_usd_receipt_single(atomica, collateral_lock_id, bidder_addr, 1_000_000u256);
+
+        // Insert the window with settled = true.
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, true, 2000);
+
+        // submit_bid must abort with E_WINDOW_ALREADY_SETTLED because the window
+        // is already settled and the collateral claim happens before the guard.
+        auction::submit_bid(
+            bidder,
+            WINDOW_ID,
+            pair_bcs,
+            b"u_bytes",
+            b"ciphertext",
+            collateral_lock_id,
+            1_000_000_000_000_000_000u256,
+        );
+    }
+
+    // test_submit_bid_aborts_on_mismatched_collateral_owner:
+    //   A bidder that is neither the receipt owner nor @atomica must not be able to
+    //   claim a LockReceipt belonging to another address.  `lock_receipt::claim`
+    //   enforces `receipt.user == claimer || claimer == @atomica`, aborting with
+    //   E_NOT_RECEIPT_OWNER (5) from atomica::lock_receipt.
+    //
+    //   Setup: receipt is owned by @0x2222 (other_owner), but the bidder signer is
+    //   @0x3333 (thief).  The thief's address is neither the owner nor @atomica.
+    //
+    //   Abort code: E_NOT_RECEIPT_OWNER = 5 from atomica::lock_receipt.
+    #[test(framework = @0x1, atomica = @atomica, thief = @0x3333)]
+    #[expected_failure(abort_code = 5, location = atomica::lock_receipt)]
+    fun test_submit_bid_aborts_on_mismatched_collateral_owner(
+        framework: &signer,
+        atomica:   &signer,
+        thief:     &signer,
+    ) {
+        setup(framework);
+        let pair_bcs           = default_pair_bcs();
+        let collateral_lock_id = b"fakeusd_lock_other_owner_32byte_";
+        let other_owner        = @0x2222; // receipt belongs to this address
+
+        // Insert receipt owned by other_owner (not the thief).
+        insert_usd_receipt_single(atomica, collateral_lock_id, other_owner, 500_000u256);
+
+        // Insert window so submit_bid reaches the claim call.
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0);
+
+        // thief (@0x3333) tries to claim a receipt owned by @0x2222.
+        // Must abort with E_NOT_RECEIPT_OWNER.
+        auction::submit_bid(
+            thief,
+            WINDOW_ID,
+            pair_bcs,
+            b"u_bytes",
+            b"ciphertext",
+            collateral_lock_id,
+            100u256,
+        );
+    }
+
+    // test_submit_bid_aborts_on_zero_quantity:
+    //   Spec documents: zero-quantity bids are ALLOWED.  A bid with quantity=0 is
+    //   stored in the window and bid count becomes 1.  After clearing the bid
+    //   receives fill_amount=0 because it contributes no supply pressure.
+    //
+    //   This test explicitly asserts the allowed behaviour so that any future
+    //   change that makes zero-quantity an abort will break here first.
+    //
+    //   @see auction.move submit_bid code comment on zero-quantity behaviour.
+    #[test(framework = @0x1, atomica = @atomica, bidder = @0x1111)]
+    fun test_submit_bid_aborts_on_zero_quantity(
+        framework: &signer,
+        atomica:   &signer,
+        bidder:    &signer,
+    ) {
+        setup(framework);
+        let pair_bcs           = default_pair_bcs();
+        let collateral_lock_id = b"fakeusd_lock_zero_qty_32bytes___";
+        let bidder_addr        = @0x1111;
+
+        insert_usd_receipt_single(atomica, collateral_lock_id, bidder_addr, 1_000_000u256);
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0);
+
+        // quantity = 0 — spec allows this, bid must be stored.
+        auction::submit_bid(
+            bidder,
+            WINDOW_ID,
+            pair_bcs,
+            b"u_bytes",
+            b"ciphertext",
+            collateral_lock_id,
+            0u256, // zero quantity
+        );
+
+        // Bid count must be 1: the zero-quantity bid is stored.
+        assert!(auction::get_bid_count(WINDOW_ID, pair_bcs) == 1, 1);
+    }
+
+    // test_submit_bid_quantity_exceeds_supply_boundary:
+    //   Spec documents: bids whose quantity exceeds total_supply are ALLOWED.
+    //   The clearing algorithm caps allocation at total_supply via partial fill;
+    //   an over-supply bid either receives a partial fill or loses entirely.
+    //
+    //   This test asserts the allowed behaviour: the bid is stored and bid count
+    //   becomes 1.  Any future guard that rejects over-supply bids must update
+    //   this test.
+    //
+    //   @see auction.move submit_bid code comment on over-supply behaviour.
+    #[test(framework = @0x1, atomica = @atomica, bidder = @0x1111)]
+    fun test_submit_bid_quantity_exceeds_supply_boundary(
+        framework: &signer,
+        atomica:   &signer,
+        bidder:    &signer,
+    ) {
+        setup(framework);
+        let pair_bcs           = default_pair_bcs();
+        let collateral_lock_id = b"fakeusd_lock_over_supply_32byte_";
+        let bidder_addr        = @0x1111;
+
+        insert_usd_receipt_single(atomica, collateral_lock_id, bidder_addr, 1_000_000u256);
+
+        let total_supply: u256 = 5u256; // small supply for clarity
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, total_supply, false, 0);
+
+        // quantity (100) >> total_supply (5) — spec allows this, bid must be stored.
+        auction::submit_bid(
+            bidder,
+            WINDOW_ID,
+            pair_bcs,
+            b"u_bytes",
+            b"ciphertext",
+            collateral_lock_id,
+            100u256, // quantity far exceeds total_supply
+        );
+
+        // Bid count must be 1: the over-supply bid is stored.
+        assert!(auction::get_bid_count(WINDOW_ID, pair_bcs) == 1, 1);
+    }
+
+    // test_submit_bid_same_bidder_twice_two_receipts:
+    //   A bidder may submit multiple bids using distinct LockReceipts.  Each call
+    //   consumes a separate collateral receipt, and each bid is independently stored.
+    //   After two submit_bid calls from the same bidder, bid count must be 2.
+    //
+    //   This models the legitimate multi-tranche bidding scenario.
+    #[test(framework = @0x1, atomica = @atomica, bidder = @0x1111)]
+    fun test_submit_bid_same_bidder_twice_two_receipts(
+        framework: &signer,
+        atomica:   &signer,
+        bidder:    &signer,
+    ) {
+        setup(framework);
+        let pair_bcs  = default_pair_bcs();
+        let bidder_addr = @0x1111;
+
+        // Two distinct FakeUSD receipts for the same bidder.
+        let lock_id_a = b"fakeusd_lock_bidder_tranche_a___";
+        let lock_id_b = b"fakeusd_lock_bidder_tranche_b___";
+
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(
+            lock_id_a, bidder_addr, 1_000_000u256, 1u64,
+        );
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(
+            lock_id_b, bidder_addr, 2_000_000u256, 2u64,
+        );
+
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0);
+
+        // First bid from the same bidder using receipt A.
+        auction::submit_bid(
+            bidder, WINDOW_ID, pair_bcs,
+            b"u_bytes_a", b"ciphertext_a", lock_id_a,
+            1_000_000_000_000_000_000u256,
+        );
+
+        // Second bid from the same bidder using receipt B.
+        auction::submit_bid(
+            bidder, WINDOW_ID, pair_bcs,
+            b"u_bytes_b", b"ciphertext_b", lock_id_b,
+            2_000_000_000_000_000_000u256,
+        );
+
+        // Bid count must be 2: both bids are stored independently.
+        assert!(auction::get_bid_count(WINDOW_ID, pair_bcs) == 2, 1);
+
+        // Both receipts must be claimed (STATUS_CLAIMED).
+        assert!(lock_receipt::is_lock_claimed<Ethereum, FakeUSD>(lock_id_a), 2);
+        assert!(lock_receipt::is_lock_claimed<Ethereum, FakeUSD>(lock_id_b), 3);
+    }
+
+    // test_submit_bid_double_spend_collateral:
+    //   A bidder that attempts to reuse the same collateral_lock_id in a second
+    //   submit_bid call must be rejected.  After the first submit_bid, the receipt
+    //   status is STATUS_CLAIMED.  The second call to `lock_receipt::claim` finds
+    //   status != STATUS_ACTIVE and aborts with E_RECEIPT_ALREADY_CLAIMED (4)
+    //   from atomica::lock_receipt.
+    //
+    //   Abort code: E_RECEIPT_ALREADY_CLAIMED = 4 from atomica::lock_receipt.
+    #[test(framework = @0x1, atomica = @atomica, bidder = @0x1111)]
+    #[expected_failure(abort_code = 4, location = atomica::lock_receipt)]
+    fun test_submit_bid_double_spend_collateral(
+        framework: &signer,
+        atomica:   &signer,
+        bidder:    &signer,
+    ) {
+        setup(framework);
+        let pair_bcs           = default_pair_bcs();
+        let collateral_lock_id = b"fakeusd_lock_double_spend_32byte";
+        let bidder_addr        = @0x1111;
+
+        insert_usd_receipt_single(atomica, collateral_lock_id, bidder_addr, 1_000_000u256);
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0);
+
+        // First bid: succeeds, receipt is consumed (STATUS_CLAIMED).
+        auction::submit_bid(
+            bidder, WINDOW_ID, pair_bcs,
+            b"u_bytes_first", b"ciphertext_first", collateral_lock_id,
+            1_000_000_000_000_000_000u256,
+        );
+
+        // Second bid with the same collateral_lock_id: must abort with
+        // E_RECEIPT_ALREADY_CLAIMED because the receipt is no longer STATUS_ACTIVE.
+        auction::submit_bid(
+            bidder, WINDOW_ID, pair_bcs,
+            b"u_bytes_second", b"ciphertext_second", collateral_lock_id,
+            500_000_000_000_000_000u256,
+        );
+    }
+
     // settle aborts with E_AUCTION_NOT_FOUND (1) when no registry exists.
     // This replaces the old E_NOT_IMPLEMENTED scaffold test now that settle is implemented.
     #[test(framework = @0x1, caller = @0x9999)]

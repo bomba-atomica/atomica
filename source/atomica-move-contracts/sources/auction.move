@@ -368,8 +368,22 @@ module atomica::auction {
         let key = make_window_key(window_id, pair_bcs);
         assert!(table::contains(&registry.windows, key), E_AUCTION_NOT_FOUND);
 
-        // 3. Store the sealed bid with quantity.
+        // 3. Guard against bids on already-settled windows.
+        //    Once a window is settled the supply has been allocated; further bids
+        //    would never be cleared or returned, resulting in lost collateral.
         let state = table::borrow_mut(&mut registry.windows, key);
+        assert!(!state.settled, E_WINDOW_ALREADY_SETTLED);
+
+        // 4. Store the sealed bid with quantity.
+        //
+        // Zero-quantity bids (quantity == 0): allowed by spec — the bid is stored
+        // and will receive fill_amount = 0 after clearing (zero-quantity bids
+        // contribute no supply pressure but still consume collateral).
+        //
+        // Over-supply bids (quantity > total_supply): allowed by spec — the
+        // clearing algorithm allocates at most total_supply across all bids via
+        // partial fill; an over-supply bid may receive a partial fill at the
+        // clearing price or lose entirely if lower-priced.
         vector::push_back(&mut state.bids, SealedBid {
             bidder: bidder_addr,
             u_bytes,
