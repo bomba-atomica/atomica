@@ -411,7 +411,9 @@ describe("releaseBidderCollateral", () => {
       }),
     };
     vi.mocked(getBLSVerifierTestnetContract).mockReturnValueOnce(
-      mockContract as unknown as ReturnType<typeof getBLSVerifierTestnetContract>,
+      mockContract as unknown as ReturnType<
+        typeof getBLSVerifierTestnetContract
+      >,
     );
 
     await releaseBidderCollateral(refund, TEST_CONFIG);
@@ -434,7 +436,8 @@ describe("releaseBidderCollateral", () => {
   });
 
   it("resolves with the Ethereum tx hash (releaseBidderCollateral_returns_tx_hash)", async () => {
-    const bidderAptosAddr = "0x" + "00".repeat(12) + "abcdef1234567890abcdef1234567890abcdef12";
+    const bidderAptosAddr =
+      "0x" + "00".repeat(12) + "abcdef1234567890abcdef1234567890abcdef12";
 
     const refund: BidderCollateralRefund = {
       collateralLockId: new Uint8Array([0xca, 0xfe]),
@@ -449,7 +452,9 @@ describe("releaseBidderCollateral", () => {
       }),
     };
     vi.mocked(getBLSVerifierTestnetContract).mockReturnValueOnce(
-      mockContract as unknown as ReturnType<typeof getBLSVerifierTestnetContract>,
+      mockContract as unknown as ReturnType<
+        typeof getBLSVerifierTestnetContract
+      >,
     );
 
     const txHash = await releaseBidderCollateral(refund, TEST_CONFIG);
