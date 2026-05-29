@@ -68,7 +68,9 @@ vi.mock("../src/ethereum/contracts.js", () => ({
 import {
   queryAuctionSettledEvents,
   submitSettlement,
+  releaseBidderCollateral,
   type AuctionSettledEvent,
+  type BidderCollateralRefund,
   type BridgeConfig,
   type Pair,
 } from "../src/settlement/bridge.js";
@@ -377,6 +379,87 @@ describe("pairHash determinism", () => {
     const hashA = calls[0][1];
     const hashB = calls[1][1];
     expect(hashA).not.toBe(hashB);
+  });
+});
+
+// ─── releaseBidderCollateral ───────────────────────────────────────────────
+
+describe("releaseBidderCollateral", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetch([]);
+  });
+
+  it("calls authorizeSettlement with correct args for a losing bidder (releaseBidderCollateral_calls_lockbox_withdraw)", async () => {
+    // Build a refund descriptor for a losing bidder whose Aptos address is the
+    // zero-padded form of a known Ethereum address.
+    const bidderEthAddr = "0x1234567890abcdef1234567890abcdef12345678";
+    const bidderAptosAddr = "0x" + "00".repeat(12) + bidderEthAddr.slice(2);
+
+    const pairBcs = new Uint8Array([0x01, 0x02, 0x03, 0x04]);
+
+    const refund: BidderCollateralRefund = {
+      collateralLockId: new Uint8Array([0xde, 0xad]),
+      bidderAddress: bidderAptosAddr,
+      windowId: 5n,
+      pairBcs,
+    };
+
+    const mockContract = {
+      authorizeSettlement: vi.fn().mockResolvedValue({
+        wait: vi.fn().mockResolvedValue({ hash: "0xcollateral" }),
+      }),
+    };
+    vi.mocked(getBLSVerifierTestnetContract).mockReturnValueOnce(
+      mockContract as unknown as ReturnType<
+        typeof getBLSVerifierTestnetContract
+      >,
+    );
+
+    await releaseBidderCollateral(refund, TEST_CONFIG);
+
+    expect(mockContract.authorizeSettlement).toHaveBeenCalledOnce();
+
+    const [windowId, pairHash, clearingPrice, winners, fills] =
+      mockContract.authorizeSettlement.mock.calls[0];
+
+    // windowId must match refund.windowId
+    expect(windowId).toBe(5n);
+    // pairHash is keccak256 of pairBcs
+    expect(pairHash).toMatch(/^0x[0-9a-f]{64}$/i);
+    // clearingPrice must be 0 for the collateral-release path
+    expect(clearingPrice).toBe(0n);
+    // winners array contains the converted Ethereum address
+    expect(winners).toEqual([bidderEthAddr]);
+    // fills array contains 0n (loser)
+    expect(fills).toEqual([0n]);
+  });
+
+  it("resolves with the Ethereum tx hash (releaseBidderCollateral_returns_tx_hash)", async () => {
+    const bidderAptosAddr =
+      "0x" + "00".repeat(12) + "abcdef1234567890abcdef1234567890abcdef12";
+
+    const refund: BidderCollateralRefund = {
+      collateralLockId: new Uint8Array([0xca, 0xfe]),
+      bidderAddress: bidderAptosAddr,
+      windowId: 9n,
+      pairBcs: new Uint8Array([0x05, 0x06]),
+    };
+
+    const mockContract = {
+      authorizeSettlement: vi.fn().mockResolvedValue({
+        wait: vi.fn().mockResolvedValue({ hash: "0xrelayertxhash" }),
+      }),
+    };
+    vi.mocked(getBLSVerifierTestnetContract).mockReturnValueOnce(
+      mockContract as unknown as ReturnType<
+        typeof getBLSVerifierTestnetContract
+      >,
+    );
+
+    const txHash = await releaseBidderCollateral(refund, TEST_CONFIG);
+
+    expect(txHash).toBe("0xrelayertxhash");
   });
 });
 
