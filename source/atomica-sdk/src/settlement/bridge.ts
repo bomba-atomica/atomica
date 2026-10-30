@@ -205,6 +205,22 @@ function parseAuctionSettledEvent(
 }
 
 // ============================================================
+// Errors
+// ============================================================
+
+/**
+ * Thrown when an aptos-node (>= 1.49) REST read returns 410 Gone because the
+ * data has been pruned. Terminal: callers must not retry the same read.
+ */
+export class AptosPrunedReadError extends Error {
+  readonly status = 410;
+  constructor(readonly url: string) {
+    super(`Aptos node returned 410 (data pruned) for ${url}`);
+    this.name = "AptosPrunedReadError";
+  }
+}
+
+// ============================================================
 // Functions
 // ============================================================
 
@@ -239,7 +255,10 @@ export async function queryAuctionSettledEvents(
     `${config.contractAddress}::auction::AuctionRegistry`,
   );
   const fieldName = "settled_events";
-  const url = `${config.aptosRpcUrl}/v1/accounts/${config.contractAddress}/events/${eventTypeStruct}/${fieldName}?limit=200`;
+  // `aptosRpcUrl` conventionally already ends in `/v1` (see settlement-relayer
+  // default), so strip it before appending the versioned path.
+  const baseUrl = config.aptosRpcUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+  const url = `${baseUrl}/v1/accounts/${config.contractAddress}/events/${eventTypeStruct}/${fieldName}?limit=200`;
 
   const response = await fetch(url);
 
@@ -248,6 +267,12 @@ export async function queryAuctionSettledEvents(
     // return an empty array gracefully so the relayer can retry on the next poll.
     if (response.status === 404 || response.status === 400) {
       return [];
+    }
+    // aptos-node 1.49 answers 410 Gone (error_code `version_pruned`) when the
+    // requested events fall below the pruner's retained window. Retrying the
+    // same read can never succeed, so surface a distinct, non-retryable error.
+    if (response.status === 410) {
+      throw new AptosPrunedReadError(url);
     }
     throw new Error(
       `queryAuctionSettledEvents: Aptos node returned ${response.status} for ${url}`,
