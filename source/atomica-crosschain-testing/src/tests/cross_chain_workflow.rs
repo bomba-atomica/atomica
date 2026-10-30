@@ -3,7 +3,7 @@ use aptos_sdk::types::LocalAccount;
 use std::convert::TryFrom;
 use std::time::Duration;
 use aptos_sdk::coin_client::CoinClient;
-use aptos_forge::Node;
+use aptos_forge::{Node, NodeExt, Swarm};
 
 #[tokio::test]
 async fn test_cross_chain_interaction() -> anyhow::Result<()> {
@@ -28,7 +28,7 @@ async fn test_cross_chain_interaction() -> anyhow::Result<()> {
     let coin_client = CoinClient::new(&aptos_client);
     
     let mut aptos_account = LocalAccount::generate(&mut rand::rngs::OsRng);
-    let root_account = env.aptos.root_account(); // Start with local swarm's root account
+    let root_account = env.aptos.chain_info().root_account(); // Start with local swarm's root account
     
     // Fund the new account
     // let faucet_port = portpicker::pick_unused_port().unwrap_or(8081); // Unused
