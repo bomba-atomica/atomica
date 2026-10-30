@@ -67,6 +67,7 @@ vi.mock("../src/ethereum/contracts.js", () => ({
 
 import {
   queryAuctionSettledEvents,
+  AptosPrunedReadError,
   submitSettlement,
   releaseBidderCollateral,
   type AuctionSettledEvent,
@@ -212,6 +213,37 @@ describe("queryAuctionSettledEvents", () => {
 
     const result = await queryAuctionSettledEvents(1n, TEST_PAIR, TEST_CONFIG);
     expect(result).toEqual([]);
+  });
+
+  it("throws a non-retryable AptosPrunedReadError on 410", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 410,
+        json: vi.fn().mockResolvedValue({ error_code: "version_pruned" }),
+      }),
+    );
+
+    await expect(
+      queryAuctionSettledEvents(1n, TEST_PAIR, TEST_CONFIG),
+    ).rejects.toBeInstanceOf(AptosPrunedReadError);
+  });
+
+  it.each([
+    "http://localhost:8080/v1",
+    "http://localhost:8080/v1/",
+    "http://localhost:8080",
+  ])("builds a single /v1 path for rpc url %s", async (rpc) => {
+    mockFetch([]);
+    await queryAuctionSettledEvents(1n, TEST_PAIR, {
+      ...TEST_CONFIG,
+      aptosRpcUrl: rpc,
+    });
+    const url = (fetch as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as string;
+    expect(url.startsWith("http://localhost:8080/v1/accounts/")).toBe(true);
+    expect(url).not.toContain("/v1/v1");
   });
 });
 
