@@ -16,7 +16,8 @@
 - **Conflicts concentrate in DKG.** 368 upstream commits touch the 62 files atomica edits. The hottest paths are `crates/aptos-dkg/src/` (51 commits), `types/src/dkg/` (30 commits), and `consensus/src/epoch_manager.rs` (28 commits).
 - **Upstream encryption is not a timelock.** Upstream decrypts encrypted transactions right after a block is ordered and before it executes. atomica needs bids sealed until an auction deadline, so the upstream pipeline cannot replace atomica's timelock. Some primitives may still be reusable.
 - **atomica's Move contracts depend on fork-only modules.** `source/atomica-move-contracts` imports `aptos_framework::ibe_config` and `ibe_golden_vector_fixtures`. These must be carried forward in any upgrade.
-- **Recommendation**: first strip the formatting churn from the fork. Then port the IBE and timelock code onto `aptos-node-v1.49.6` as a small patch set. Do not merge or rebase the branch as it stands.
+- **The crypto changes are larger than the change list suggests.** atomica and upstream build on the same threshold BLS and chunked ElGamal foundations. Upstream's FPTX encryption and chunky DKG are newer and hardened. atomica's timelock has unverified key shares, malleable ciphertexts, and no DKG range proofs. See [f)](#f-cryptography-comparison).
+- **Recommendation**: first strip the formatting churn from the fork. Then rebuild the timelock on `aptos-node-v1.49.6` using FPTX primitives inside atomica's own registry and natives (Option C in [g)](#g-timelock-upgrade-options)). Do not merge or rebase the branch as it stands.
 
 ---
 
@@ -203,18 +204,91 @@ Staying on 1.38.5 leaves these open:
 
 ---
 
+## f) Cryptography comparison
+
+This section compares atomica's timelock crypto in `dev-atomica` with upstream's chunky DKG and FPTX encryption at 1.49.6. It comes from reading both trees.
+
+### Shared foundations
+
+- **Same core primitive.** atomica's decryption key is `H(id)^s` in G1, which is a BLS signature on the identity. Upstream's per-batch key is a "shifted BLS signature" on a digest, `(digest + H(mpk))^msk`. Both are threshold BLS signatures used as IBE keys, on BLS12-381.
+- **Same DKG problem, same fix.** The DAS PVSS used for randomness hands out shares as G1 points. Encryption keys need scalar shares. atomica built `crates/aptos-dkg/src/pvss/scalar_elgamal`. Upstream finished `crates/aptos-dkg/src/pvss/chunky`. Both encrypt shares with chunked lifted ElGamal, in 16-bit chunks that each validator decrypts with a small discrete-log search.
+- **Shared starting code.** The 1.38.5 base already held chunky's building blocks (`chunked_elgamal`, `hkzg_chunked_elgamal`, `keys`, `public_parameters`) and the DeKART range proofs. It had no chunky transcript yet. atomica built its own scalar PVSS beside these instead of finishing chunky.
+
+### Side by side
+
+| | atomica fork | Upstream 1.49.6 |
+|---|---|---|
+| Encryption scheme | Boneh-Franklin BasicIdent. The message is XORed with a SHA3 keystream derived from the pairing. | FPTX batch threshold encryption. A batch-IBE ciphertext wrapped with a one-time Ed25519 signature and AES-128-GCM. `FPTXWeighted` is the production variant. |
+| Ciphertext tampering | Malleable. No integrity check. | Non-malleable. Validators must verify each ciphertext against its associated data. |
+| Identity | One per timelock, `SHA3(DST, timelock_id, deadline_us)` | One per ciphertext, hashed from the one-time verification key and associated data |
+| What a released key opens | Every ciphertext under that identity | Only ciphertexts in that batch. A KZG digest commits to the batch's IDs. Excluded ciphertexts stay sealed. |
+| Key share checks | None. Shares are length-checked only. `verify_decryption_key` is called only from test code. | Pairing check on every share against per-validator verification keys |
+| DKG secret | One secret serves both randomness and IBE ("dual output", ADR-001) | Chunky DKG runs its own secret for encryption |
+| PVSS proofs | DLEQ proofs, a low-degree test, and a signature of knowledge. No range proofs. | Sigma protocol plus DeKART range proofs |
+| Trusted setup | None | One-time powers-of-tau "digest key". It caps batch size and the number of rounds per epoch. |
+| Curve library | blstrs | arkworks, the same library as Move's `crypto_algebra` natives |
+
+### What is new upstream
+
+FPTX is the new construction. Validators publish one constant-size key share per batch, whatever the batch size. The combined key decrypts only the ciphertexts committed in the batch digest. atomica's scheme has no equivalent. Chunky DKG is not new as a design. It is a hardened version of what atomica built in `scalar_elgamal`.
+
+Placing these in the literature is my judgment, since the code cites no papers. atomica's IBE matches textbook Boneh-Franklin. Chunky matches the chunked-ElGamal non-interactive DKG family. FPTX matches published batched threshold encryption work.
+
+### Security gaps in atomica's timelock code
+
+These come from reading the code. No exploit was run.
+
+1. **One bad share breaks a reveal.** `aptos-move/aptos-vm/src/validator_txns/timelock.rs` only checks that a share is 48 bytes. `ibe_config::finalize_timelock_reveal` never checks the result against the master public key. One faulty or malicious validator can make it store a wrong key. `is_revealed` then becomes true, so the reveal cannot be retried, and that auction's bids stay sealed for good.
+2. **Bids can be forged from other bids.** `ibe_encrypt` XORs the bid with a keystream and adds no authentication. Anyone can flip bits in someone else's sealed bid and submit the copy. This is a known attack on sealed-bid auctions.
+3. **No range proofs in the DKG.** `scalar_elgamal` verification has no bound on chunk size. A dishonest dealer can encrypt chunks too large to decrypt and still pass verification. Honest validators then cannot recover their shares. Upstream's chunky PVSS adds DeKART range proofs for this reason.
+4. **One secret serves two protocols.** Randomness and IBE share the secret `a`. Safety depends on domain separation between the randomness hashing and the IBE hashing. This needs a crypto review. No break was found.
+
+The fork's `atomica/docs/technical/ibe-summary.md` says the master secret is rebuilt from scalar shares. The on-chain path actually combines G1 shares through `reconstruct_ibe_dk_from_g1_shares`, which never exposes the secret. The doc is stale.
+
+---
+
+## g) Timelock upgrade options
+
+| Option | What it is | Fixes gaps | Port cost |
+|---|---|---|---|
+| A. Harden Boneh-Franklin | Keep atomica's IBE. Add per-share pairing checks and a CCA wrapper built from upstream's AES-GCM and one-time signature pieces. | 1 and 2. Gaps 3 and 4 remain unless the secret moves to chunky DKG. | High. All fork-only crypto must be ported. |
+| B. FPTX inside consensus | Run upstream's encrypted mempool on a deadline schedule. Hold an auction's bids, then release one batch key at the deadline. | 1, 2, and 3 | High. Needs custom consensus policy in the decryption pipeline. |
+| **C. FPTX inside atomica's natives** | Keep atomica's deadline registry, validator transaction, and Move API. Replace the crypto underneath with FPTX primitives. | **1, 2, 3, and 4** if the secret comes from a separate chunky DKG output | **Lowest.** Retires `scalar_elgamal`, the dual-output DKG, and the Boneh-Franklin code. |
+
+### Option C flow
+
+`aptos-batch-encryption` is a standalone library crate. Its trait covers encryption with associated data, digests, share derivation, share verification, key reconstruction, and decryption. None of it is tied to consensus.
+
+1. **Encrypt bids** as FPTX ciphertexts. Bind the associated data to the auction ID and the bidder.
+2. **At the deadline, compute one digest** over that auction's bid IDs. It replaces the `(timelock_id, deadline)` identity.
+3. **Validators derive key shares** for the digest. They submit them through atomica's timelock validator transaction.
+4. **Verify every share** with `verify_decryption_key_share` before accepting it. Then verify the rebuilt key.
+5. **Decrypt each bid** with its evaluation proof. Anyone holding the public digest key can compute the proofs.
+
+### Option C constraints
+
+- **Round allocation.** The digest key holds a fixed number of rounds per epoch. The encrypted mempool already uses one round per key-producing block and marks transactions `TrustedSetupExhausted` when rounds run out (`consensus/src/pipeline/decryption_pipeline_builder.rs`). Each auction reveal needs its own round. Never issue two keys for the same round under the same secret. Either reserve rounds through consensus, or run a separate digest key with its own trusted setup.
+- **Key separation.** Reusing the mempool's secret for timelock reveals needs a cryptographer's sign-off. The safer default is a separate secret, or at least a separate offset domain.
+- **Batch size.** A digest holds at most `max_batch_size` IDs. That caps bids per auction. The production value is in the digest key file, which was not available. Size the setup for the largest auction.
+- **Epoch boundaries.** FPTX secrets are per epoch, as atomica's master public key already is. `register_timelock` records no epoch. A reveal after an epoch change would use the wrong validators' shares. This is an open risk in [Aptos Validator Timelock](../decisions/aptos-validator-timelock.md), and Option C does not fix it.
+- **Node-side code is still needed.** Validators hold their secret shares in the node, so node code must derive and submit shares. Share verification should run in Rust in the validator transaction handler. The weighted check runs one pairing per virtual player, which would be costly as metered Move natives.
+
+---
+
 ## Confidence
 
 - **High**: release tags and dates, commit and line counts, the fork breakdown (formatting-only, deleted, real edits, new files), the upstream commit counts on atomica's edit points, and the upstream decrypt-after-ordering design.
-- **Medium**: the subsystem classification, since it assigns each commit to one area by path majority.
-- **Low**: the effort range and the node database migration risk. Neither has been tested.
+- **Medium**: the subsystem classification, since it assigns each commit to one area by path majority. Also the four security gaps in [f)](#f-cryptography-comparison), which come from reading code without running an exploit.
+- **Low**: the effort range and the node database migration risk. Neither has been tested. Also the literature placement of the schemes.
 
 ## Open questions
 
-1. Can atomica's dual-output DKG stay on the randomness DKG path at 1.49.6, or must it move to chunky DKG?
-2. Can `aptos-batch-encryption` serve as the primitive under atomica's deadline-based timelock?
-3. Does `atomica-crosschain-testing` still build against the upstream forge crate?
-4. Can a node database created at 1.38 migrate to 1.49 without a resync? This matters only for long-lived networks.
+1. How should Option C allocate FPTX rounds: reserved from the mempool's counter, or a separate digest key?
+2. Should timelock reveals use a separate secret from the encrypted mempool? This needs a cryptographer.
+3. What batch size must the digest key support for the largest auction?
+4. How should auctions that cross an epoch boundary be handled?
+5. Does `atomica-crosschain-testing` still build against the upstream forge crate?
+6. Can a node database created at 1.38 migrate to 1.49 without a resync? This matters only for long-lived networks.
 
 ## Correction to the v1.38 analysis
 
@@ -222,7 +296,7 @@ Staying on 1.38.5 leaves these open:
 
 ## Next step
 
-Reformat the fork with upstream's nightly `rustfmt` settings, or revert the formatting-only files. Then cut a patch set of the 62 real edits and 33 new files, and apply it to `aptos-node-v1.49.6` in a worktree under `~/tmp/superfield-worktrees/atomica-aptos/`.
+Write a short design doc for Option C. Settle round allocation and key separation first, since both are security decisions. Then prototype Option C as a Rust test outside consensus: encrypt bids, compute a digest, derive and verify shares, and decrypt. Build it on `aptos-node-v1.49.6` in a worktree under `~/tmp/superfield-worktrees/atomica-aptos/`, after reverting the formatting-only files.
 
 ---
 
@@ -236,3 +310,5 @@ The first version of this report, committed as `b34e7cc`, had these errors:
 - It said all 310 shared files atomica touched also changed upstream. 250 of those edits are formatting-only and carry no port cost. The real surface is 62 edited files and 33 new code files.
 - It left the decryption timing unconfirmed. The upstream pipeline README confirms decryption right after ordering.
 - It left the Move contract exposure open. The contracts use no removed features, but they depend on the fork-only `ibe_config` module.
+
+A second revision added [f)](#f-cryptography-comparison) and [g)](#g-timelock-upgrade-options). It compares the DKG and encryption crypto in detail, lists security gaps in atomica's timelock, and recommends Option C.
