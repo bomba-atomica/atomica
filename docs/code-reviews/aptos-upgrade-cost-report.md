@@ -1,21 +1,22 @@
 # Aptos Upgrade Cost Report
 
-**Date**: October 30, 2026
+**Date**: October 30, 2026 (revised the same day, see [Revision note](#revision-note))
 **Status**: Analysis. No build or test run was done on the upstream target.
-**Current base**: `aptos-node-v1.38.5` (upstream commit `facb34a558`, dated 2025-12-08). The `dev-atomica` branch of `bomba-atomica/atomica-aptos` forks from this commit.
-**Targets evaluated**: `aptos-node-v1.49.6` (latest open-source mainnet release) and `aptos-node-v1.49.8-hotfix` (latest mainnet tag, private source).
-**Sources**: GitHub release notes for `aptos-labs/aptos-core`, the git history of `dev-atomica`, and a partial clone of upstream `aptos-core`.
+**Current base**: `aptos-node-v1.38.5` (upstream commit `facb34a558`, dated 2025-12-08). The `dev-atomica` branch of `bomba-atomica/atomica-aptos` forks from this commit. Its fork point on upstream `main` is `c6ae38ec41` (2025-11-07).
+**Target evaluated**: `aptos-node-v1.49.6` (upstream commit `b4359185dd`). Its fork point on upstream `main` is `074d7f0cb5` (2026-08-18).
+**Sources**: GitHub release notes for `aptos-labs/aptos-core`, the git history of `dev-atomica`, and a full-history partial clone of upstream `aptos-core`.
 **Related**: [Aptos v1.38 Integration Analysis](../decisions/aptos-v1-38-integration-analysis.md), [Aptos Encrypted Mempool Analysis](../decisions/aptos-encrypted-mempool-analysis.md), [Aptos Validator Timelock](../decisions/aptos-validator-timelock.md)
 
 ---
 
 ## Summary
 
-- Atomica is 11 minor releases behind upstream. That gap is 1,371 upstream commits and 11,731 changed files.
-- All 310 shared files that atomica touched also changed upstream. Each one is a merge conflict risk.
-- 57 files that atomica touched do not exist upstream at 1.49.8. These hold the IBE, timelock, and golden vector work, and each must be ported or dropped.
-- Upstream now ships an encrypted transaction pipeline and a batch threshold encryption crate. Neither exists at the 1.38.5 tag. These overlap with atomica's custom DKG and IBE work.
-- Recommendation: do not rebase `dev-atomica` onto a newer release yet. Run a short spike that builds `aptos-node-v1.49.6` and checks whether the upstream encrypted path meets the timelock spec.
+- **Upstream moved a lot.** From 1.38.5 to 1.49.6 upstream landed 1,371 squashed commits. These change about 1.2 million lines (+759,781 / −456,016) across 11,658 text files. That spans 11 minor releases and about 9 months of `main`.
+- **atomica's real footprint is small but sits in the hottest area.** The fork changes 498 files, but 250 of them are formatting-only and 98 are deleted CI files. The real port surface is 62 edited upstream files (+1,179 / −472 lines) and 33 new code files (8,780 lines of Rust, 1,792 lines of Move).
+- **Conflicts concentrate in DKG.** 368 upstream commits touch the 62 files atomica edits. The hottest paths are `crates/aptos-dkg/src/` (51 commits), `types/src/dkg/` (30 commits), and `consensus/src/epoch_manager.rs` (28 commits).
+- **Upstream encryption is not a timelock.** Upstream decrypts encrypted transactions right after a block is ordered and before it executes. atomica needs bids sealed until an auction deadline, so the upstream pipeline cannot replace atomica's timelock. Some primitives may still be reusable.
+- **atomica's Move contracts depend on fork-only modules.** `source/atomica-move-contracts` imports `aptos_framework::ibe_config` and `ibe_golden_vector_fixtures`. These must be carried forward in any upgrade.
+- **Recommendation**: first strip the formatting churn from the fork. Then port the IBE and timelock code onto `aptos-node-v1.49.6` as a small patch set. Do not merge or rebase the branch as it stands.
 
 ---
 
@@ -23,52 +24,77 @@
 
 | Track | Tag | Date | Source available | Notes |
 |---|---|---|---|---|
-| Mainnet, latest | `aptos-node-v1.49.8-hotfix` | 2026-10-29 | No | Private hotfix. Binaries and docker image only. |
-| Mainnet, latest open source | `aptos-node-v1.49.6` | 2026-10-16 | Yes | Last full release with public source and notes. |
+| Mainnet, latest | `aptos-node-v1.49.8-hotfix` | 2026-10-29 | No | Private hotfix. In the public repo this tag points at the same commit as `1.49.6`. |
+| Mainnet, latest open source | `aptos-node-v1.49.6` | 2026-10-16 | Yes | Last release with public source. |
 | Testnet release candidate | `aptos-node-v1.49.8-hotfix-rc` | 2026-10-28 | No | Not a stable release. |
 | Aptos CLI | `aptos-cli-v9.6.0` | 2026-09-22 | Yes | Latest CLI release. |
 
-Recommended stable target for planning: `aptos-node-v1.49.6`. The 1.49.8 hotfix adds fixes that cannot be read yet, so a port to it cannot be reviewed from source.
+The target for planning is `aptos-node-v1.49.6`. The 1.49.8 hotfix code cannot be read yet, so every figure in this report measures 1.49.6.
 
 ---
 
 ## b) Changelog since 1.38.5
 
-- Upstream commits in the range `facb34a558..aptos-node-v1.49.8-hotfix`: 1,371.
-- Public mainnet releases with notes since 1.38.5: 22. These run from `1.39.2` to `1.49.6`.
-- Private hotfix tags with no public notes: 16.
-- PR titles in public release notes: 1,393 raw. After removing cherry-picks, version bumps, and duplicates, 1,036 are unique.
+| Measure | Value |
+|---|---|
+| Upstream commits (`facb34a558..aptos-node-v1.49.6`) | 1,371 (squash merges, one per PR) |
+| Commits on `main` between the two fork points | 1,348 |
+| Text files changed | 11,658 |
+| Lines changed | +759,781 / −456,016 |
+| Public mainnet releases with notes | 22 (`1.39.2` to `1.49.6`) |
+| Private hotfix tags with no public notes | 16 |
 
-The notes do not cover every commit. The gap between 1,371 commits and 1,036 unique titles is a limit of this method. Treat the category counts below as approximate.
+Upstream `main` lands about 100 to 260 squashed commits a month. Each commit is a whole PR, so the commit count understates the size of the change. The line counts are the better measure.
+
+### Where the lines changed
+
+| Area | Lines changed | Files | Notes |
+|---|---|---|---|
+| `third_party/move` | ~484k | 6,595 | MonoMove VM, compiler v2, prover, test baselines |
+| `aptos-move/framework` | ~277k | 646 | Mostly deletions. Generated docs removed (80 files to 1). Natives moved to a new crate. |
+| `aptos-move/aptos-gas-calibration` | ~100k | 146 | Gas recalibration |
+| `ecosystem/indexer-grpc` | ~40k | 137 | Indexer gRPC v2 |
+| `consensus/src` | ~18k | 250 | Decryption pipeline, secret sharing, quorum store v2 |
+| `crates/aptos-dkg` | ~18k | 103 | Chunky DKG, PVSS trait redesign |
+| `storage/aptosdb` | ~17k | 186 | Hot state, legacy schema removal |
+| `crates/indexer` | ~17k | 117 | Deleted (legacy in-node indexer) |
+| `ecosystem/node-checker` | ~11k | 91 | Deleted |
+| `crates/aptos-batch-encryption` | ~6k | 37 | New crate |
+| `dkg/src` | ~4.5k | 21 | Chunky DKG manager |
 
 ---
 
 ## c) Major architecture changes versus minor fixes
 
-Counts are keyword-based estimates over the 1,036 unique titles.
+This table classifies all 1,371 commits by the paths each one touches. A commit whose title names encryption or DKG is counted there first.
 
-| Area | Approx. items | Classification | Key releases |
+| Area | Commits | File touches | Classification |
 |---|---|---|---|
-| Move VM, BlockSTM, MonoMove prototype | ~208 | Major | BlockSTM v2 default in 1.49.1. MonoMove prototype runs under replay benchmarks, not default. |
-| Move compiler, prover, linter, specs | ~153 | Mixed | Move 1 sunset and compiler v2 default in 1.44 to 1.49.1. Prover work is mostly not relevant to us. |
-| CLI, tooling, CI, docker, forge, release | ~131 | Minor for runtime | Move CLI extracted in 1.43.1. Move CLI removed from the node tree. |
-| Encrypted transactions, chunky DKG, batch threshold encryption | ~130 | Major | Chunky DKG and encrypted transaction types from 1.42. Encrypted transactions and chunky DKG v1 enabled at genesis in 1.48.2. |
-| Mempool, consensus, quorum store | ~102 | Major for consensus | Batch v2 and OptQS v2 on by default in 1.44 to 1.45. Round timeout cut from 1000 ms to 500 ms in 1.47.1. |
-| Storage and hot state | ~84 | Major | Hot state root on mainnet in 1.45.4. Legacy monolithic ledger DB removed in 1.44.7. Hot state DBs made non-optional in 1.48.2. |
-| Move framework and stdlib | ~49 | Mixed | Permissioned signers and resource access control removed in 1.49.1. Chunky DKG Move modules added in 1.42. |
-| API, indexer, SDK | ~34 | Moderate | Legacy in-node indexer deleted in 1.43.1. Encrypted payload added to the REST API in 1.44 to 1.45. |
-| Networking, faucet, other | ~33 | Mixed | Validator to PFN connections in 1.44 to 1.45. |
-| Uncategorized | ~112 | Mostly minor | Small fixes, typos, refactors, dependency changes. |
+| CI, docker, testsuite, tooling | 220 | 1,490 | Minor for runtime |
+| Move VM runtime, including MonoMove | 186 | 4,461 | Major |
+| Move compiler, prover, tools | 184 | 8,246 | Mixed. Large, but mostly outside the node runtime. |
+| Move framework, natives, gas | 156 | 3,246 | Major |
+| Encrypted transactions, batch encryption, secret sharing | 107 | 947 | Major |
+| Storage and state sync | 96 | 1,876 | Major |
+| Consensus and quorum store | 79 | 565 | Major |
+| Other | 76 | 549 | Mostly minor |
+| DKG (chunky, randomness, PVSS) | 72 | 990 | Major, and the highest atomica overlap |
+| Networking and node config | 68 | 232 | Mixed |
+| Types, API, indexer, SDK | 63 | 1,148 | Moderate |
+| Block executor and execution | 43 | 405 | Major |
+| Crypto outside DKG | 13 | 39 | Minor |
+| Mempool | 8 | 36 | Moderate |
 
 Major architectural changes, in order:
 
-1. Chunky DKG replaces the older randomness DKG path (1.42 to 1.49.4).
-2. Encrypted transactions use batch threshold encryption with a digest key, decrypted after ordering (1.42 to 1.48).
-3. BlockSTM v2 becomes the default executor (verified on validators in 1.46, default in 1.49.1).
-4. Hot state storage moves into the default path (1.45 to 1.48).
-5. Legacy indexer and monolithic ledger storage are removed (1.43 to 1.44).
-6. Move 1 is removed from the compiler, and compiler v2 becomes the default (1.44 to 1.49.1).
-7. The MonoMove VM is in development as a prototype, with no default switch in the notes.
+1. **Chunky DKG** joins the randomness DKG. It ran in shadow mode in 1.46 and was enabled at genesis in 1.48.2. Both `randomness_dkg.rs` and `chunky_dkg.rs` exist at 1.49.6.
+2. **Encrypted transactions** use batch threshold encryption with a digest key (1.42 to 1.48). Decryption runs as a pipeline stage after ordering.
+3. **BlockSTM v2** becomes the default executor (verified on validators in 1.46, default in 1.49.1).
+4. **Hot state storage** moves into the default path (1.45 to 1.48).
+5. **Legacy indexer and monolithic ledger storage** are removed (1.43 to 1.44).
+6. **Move natives** move out of `aptos-move/framework/src/natives/` into a new `aptos-move/framework/natives` crate (1.43.1).
+7. **Move 1 is removed** from the compiler. Compiler v2 with language version 2.4 and bytecode v10 becomes the default (1.44 to 1.49.1).
+8. **MonoMove** is in development as a new VM. It has an Aptos transaction executor and replay benchmarks, but it is not the default.
 
 De minimis changes: CI and docker work, dependency bumps, license headers, typo fixes, forge tuning, and Rust toolchain bumps.
 
@@ -76,30 +102,63 @@ De minimis changes: CI and docker work, dependency bumps, license headers, typo 
 
 ## d) Breaking incompatibilities
 
-Overall severity: **High**. The largest risk is the DKG and encrypted path, because atomica's code is built on the older DKG.
+### What atomica actually carries
 
-| Area | Upstream change (release) | Atomica exposure | Severity |
+The raw fork diff overstates the port surface. Most of it is noise.
+
+| Fork change type | Files | Port cost |
+|---|---|---|
+| Formatting-only edits of upstream files | 250 | None. Drop them. They come from adding stable `rustfmt` to `rust-toolchain.toml`, while upstream formats with nightly `rustfmt`. |
+| Deleted upstream files | 98 | Low. All are upstream CI files under `.github`. |
+| New CI and docker files (7 under `.github/workflows`, 22 under `atomica/docker`) | 29 | Low to medium. Rebuild against the new upstream workflows. |
+| New docs, golden vectors, and scripts under `atomica/` | 26 | None. Copy as is. |
+| **Real edits of upstream files** | **62** | **High.** +1,179 / −472 lines. 54 of these files changed upstream, and 8 were removed upstream. |
+| **New code files** (plus one git hook) | **33** | **High.** 8,780 lines of Rust and 1,792 lines of Move. They must be moved onto the new crate layout. |
+
+The rows add up to the full fork diff of 498 files.
+
+### Hotspots in the real edits
+
+| atomica edit point | Upstream commits touching it | Upstream change |
+|---|---|---|
+| `crates/aptos-dkg/src/` (PVSS traits, dealt key shares, IBE) | 51 | PVSS traits redesigned (1.42.1). Aggregated type added. Chunky PVSS added. |
+| `types/src/dkg/` | 30 | DKG types split into `randomness_dkg.rs` and `chunky_dkg.rs` (1.42.1). `mod.rs` lost 228 lines. |
+| `consensus/src/epoch_manager.rs` | 28 | Chunky DKG manager and secret sharing wired in. |
+| `aptos-move/framework/aptos-framework/sources/reconfiguration_with_dkg.move` | 11 | Chunky DKG reconfiguration added. |
+| Move natives (`algebra/mod.rs`, `natives/mod.rs`) | 9 old path, 7 new path | Moved to the new `aptos-move/framework/natives` crate. atomica's `ibe.rs` native must move with them. |
+| `aptos-move/aptos-vm/src/validator_txns/` | 8 | `chunky_dkg.rs` added beside `dkg.rs`. atomica's `timelock.rs` must fit the new validator transaction enum. |
+| `aptos-move/framework/aptos-framework/sources/block.move` | 7 | Block metadata extended for decryption keys (1.42.1). |
+
+### Other breaking changes
+
+| Area | Upstream change (release) | atomica exposure | Severity |
 |---|---|---|---|
-| Encrypted payload primitives | Ciphertext ID now hashes the verification key and associated data (1.44.7). HKDF changed to RFC-5869 (1.42.1). Hash-to-curve replaced with arkworks and noble-curves (1.42.1). Digest key file format changed (1.45.4). | Only matters if atomica adopts upstream `aptos-batch-encryption`. Atomica's own IBE golden vectors would then need regenerating. | High if adopted. None if not. |
-| DKG and validator transactions | Chunky DKG adds `ChunkyDKGResult` to the validator transaction enum (1.42.1). Config key `decryption_setup_blob_path` renamed to `digest_key_blob_path` (1.45.4). | `crates/aptos-dkg/src/ibe`, `dealt_secret_key_share`, and `aptos-move/aptos-vm/src/validator_txns/timelock.rs` are fork-only and depend on the older DKG output. | High |
-| Move language features | Permissioned signers removed (1.49.1). Resource access control removed (1.49.1). Aggregator V1 removed from execution (1.49.1). Move 1 and compiler v2 below language version 2.2 dropped (1.49.1). Publishing gated on a minimum bytecode version (1.48.6). | Depends on what `source/atomica-move-contracts` uses. Not yet checked. | Medium |
-| Gas schedule | 10x multiplier on gas costs and storage fees (1.41.9 and 1.42). Gas schedule version bumped through v49 (1.42 to 1.49.1). | Any gas expectation or fixture in tests and contracts must be recalibrated. | Medium |
-| Storage and node database | Legacy monolithic ledger DB and `StateValueSchema` removed (1.44.7). Hot state DBs made non-optional (1.48.2). | A node database created at 1.38 may need a resync or snapshot restore. Not tested. | High (operational) |
-| Indexer | In-node legacy indexer deleted (1.43.1). | Only matters if atomica reads the in-node indexer. Not yet checked. | Medium |
+| atomica Move contracts | Upstream has no `ibe_config` or `ibe_golden_vector_fixtures` module. | `source/atomica-move-contracts` imports both and pins `AptosFramework` to the `dev-atomica` branch. They break unless the modules are ported. | High |
+| Encrypted payload primitives | Ciphertext ID now hashes the verification key and associated data (1.44.7). HKDF changed to RFC-5869 (1.42.1). Hash-to-curve replaced (1.42.1). Digest key file format changed (1.45.4). Config key `decryption_setup_blob_path` renamed to `digest_key_blob_path` (1.45.4). | Only matters if atomica adopts upstream `aptos-batch-encryption`. | High if adopted. None if not. |
+| Move language features | Permissioned signers, resource access control, and aggregator V1 removed (1.49.1). Language versions below 2.2 dropped (1.49.1). Publishing gated on a minimum bytecode version (1.48.6). | Checked: `source/atomica-move-contracts` uses none of the removed features. | Low |
+| Generated framework docs | Generated `doc/*.md` files removed from the tree. | atomica's edits to those docs are moot. Regenerate locally if needed. | None |
+| Gas schedule | 10x multiplier on gas costs and storage fees (1.41.9 and 1.42). Gas schedule version bumped through v49. | Any gas expectation or fixture in tests and contracts must be recalibrated. | Medium |
+| Storage and node database | Legacy monolithic ledger DB and `StateValueSchema` removed (1.44.7). Hot state DBs made non-optional (1.48.2). | A node database created at 1.38 may need a resync. Not tested. For a testnet, starting from fresh genesis avoids this. | Medium |
+| Indexer | In-node legacy indexer deleted (1.43.1). | Only matters if atomica reads the in-node indexer. | Low to medium |
 | API and clients | Fat type (de)serialization removed (1.48.2). Pruned reads return 410 (1.49.1). | `source/atomica-sdk` and API clients need checks. | Low to medium |
-| Consensus wire format | Quorum store messages accept V2 entries only (1.46.2). Optimistic blocks rejected at ingress (1.49.1). | Matters only for mixed-version validator sets. | Medium (operational) |
-| Build toolchain | Rust minimum rises from 1.91 to 1.94. `move-cli`, `move-ir-compiler`, and `mvir` removed. CLI moved to `aptos-move-cli` (1.43.1). | Build scripts and CI need updates. | Low to medium |
-| Forge local swarm | Local swarm enhanced with NUMA affinity and Sapling support (1.44.7). | `atomica-crosschain-testing` uses `aptos-forge` from the fork. Its API may have changed. Not verified. | Medium |
+| Consensus wire format | Quorum store messages accept V2 entries only (1.46.2). Optimistic blocks rejected at ingress (1.49.1). | Matters only for mixed-version validator sets. | Low for a fresh network |
+| Build toolchain | Rust minimum rises to 1.94. `move-cli`, `move-ir-compiler`, and `mvir` removed. CLI moved to `aptos-move-cli` (1.43.1). | Build scripts, CI, and the docker testnet need updates. | Medium |
+| Forge local swarm | Local swarm changed for NUMA affinity and Sapling support (1.44.7). | `atomica-crosschain-testing` uses `aptos-forge` from the fork. Its API may have changed. | Medium |
 
 ### Effort estimate
 
-This estimate is a judgment call, not a measured figure. No build was run.
+This is a judgment call, not a measured figure. No build was run.
 
-- 343 files were touched by atomica commits. Of these, 286 exist at 1.49.8, 310 existed at 1.38.5, and all 310 changed upstream.
-- 57 files must be ported or dropped. These hold the IBE, timelock, and golden vector code.
-- The upgrade crosses 11 minor releases and a Rust toolchain change.
+| Work item | Estimate |
+|---|---|
+| Drop formatting churn and deleted-CI noise from the fork | 1 to 2 days |
+| Port the 33 new code files onto the new crate layout (natives crate, DKG type split) | 2 to 4 weeks |
+| Rework the 62 real edits against 368 upstream commits, mostly in DKG | 2 to 4 weeks |
+| Rebuild CI and the docker testnet image | about 1 week |
+| Recalibrate gas, regenerate golden vectors, run smoke and cross-chain tests | 1 to 2 weeks |
+| **Total** | **6 to 12 engineer-weeks** |
 
-Rough range: 8 to 16 engineer-weeks for one engineer who knows Move and `aptos-dkg`. Confidence is low. The biggest unknown is how much of the DKG and timelock code can be replaced by upstream.
+Confidence is low. The biggest unknown is whether atomica's dual-output DKG can stay on the randomness DKG path, which still exists at 1.49.6, or must move to chunky DKG.
 
 ---
 
@@ -107,12 +166,11 @@ Rough range: 8 to 16 engineer-weeks for one engineer who knows Move and `aptos-d
 
 ### Timelock encryption
 
-- **Batch threshold encryption crate** (`crates/aptos-batch-encryption`, 37 files at 1.49.8). It has IBE-style schemes, weighted and succinct variants, and digest key handling. It may replace atomica's custom IBE if the timing model fits.
-- **Timing model gap**: the release notes point to decryption in consensus after ordering, per block. I did not confirm this in source. Atomica needs decryption at a future deadline height. The fit must be checked against [Aptos Validator Timelock](../decisions/aptos-validator-timelock.md) before any adoption.
-- **Digest key posted on chain at epoch end** (1.42.1). This could replace part of atomica's DKG key release flow.
-- **Chunky DKG robustness** (1.45.4 to 1.49.4). Includes stall recovery, equivocation fixes, DoS hardening, and transcript fetch retries.
-- **Encrypted payload fields**: `claimed_entry_fun` (1.45.4) lets an encrypted transaction name the call it makes. This may suit auction bids.
-- **Sender binding** (1.45.4): encrypted payload verification is tied to sender auth keys.
+- **Upstream encryption does not replace the timelock.** The pipeline README at 1.49.6 places a Decrypt stage right after a block is ordered and before Prepare and Execute. The key arrives from validator secret sharing for that block. atomica needs bids sealed until a deadline height, which can be hours later. See [Aptos Validator Timelock](../decisions/aptos-validator-timelock.md).
+- **Batch threshold encryption crate** (`crates/aptos-batch-encryption`, 37 files, new). It has IBE-style schemes, weighted and succinct variants, and digest key handling. It may be reusable as a primitive under atomica's timelock. That needs a separate crypto review.
+- **Chunky DKG robustness** (1.45.4 to 1.49.4). Includes stall recovery, equivocation fixes, DoS hardening, transcript fetch retries, and restart recovery. This matters if atomica moves its DKG onto chunky DKG.
+- **Persisted secret shares for recovery** (1.49.1). A pattern atomica's key release could reuse.
+- **Encrypted payload fields**: `claimed_entry_fun` (1.45.4) lets an encrypted transaction name the call it makes. Sender binding to auth keys (1.45.4).
 
 ### Mempool and consensus
 
@@ -147,16 +205,16 @@ Staying on 1.38.5 leaves these open:
 
 ## Confidence
 
-- **High**: release tags and dates, the commit and file counts, and the finding that the 1.38.5 tag has no encrypted payload type or batch encryption crate.
-- **Medium**: category counts and classifications, since they come from keyword matching on release titles.
-- **Low**: the effort range, and the severity ratings for Move language features and the node database. Neither has been tested.
+- **High**: release tags and dates, commit and line counts, the fork breakdown (formatting-only, deleted, real edits, new files), the upstream commit counts on atomica's edit points, and the upstream decrypt-after-ordering design.
+- **Medium**: the subsystem classification, since it assigns each commit to one area by path majority.
+- **Low**: the effort range and the node database migration risk. Neither has been tested.
 
 ## Open questions
 
-1. Does `source/atomica-move-contracts` use permissioned signers, aggregator V1, or resource access control?
-2. Can a node database created at 1.38 migrate to 1.49 without a resync?
-3. Does the atomica IBE design need decryption at a future height, or can it use upstream's after-ordering decryption?
-4. Does `atomica-crosschain-testing` still build against the upstream forge crate?
+1. Can atomica's dual-output DKG stay on the randomness DKG path at 1.49.6, or must it move to chunky DKG?
+2. Can `aptos-batch-encryption` serve as the primitive under atomica's deadline-based timelock?
+3. Does `atomica-crosschain-testing` still build against the upstream forge crate?
+4. Can a node database created at 1.38 migrate to 1.49 without a resync? This matters only for long-lived networks.
 
 ## Correction to the v1.38 analysis
 
@@ -164,4 +222,17 @@ Staying on 1.38.5 leaves these open:
 
 ## Next step
 
-Build `aptos-node-v1.49.6` in a separate worktree under `~/tmp/superfield-worktrees/atomica-aptos/`. Then run the timelock smoke test against it. This shows how much of the atomica timelock code upstream already covers.
+Reformat the fork with upstream's nightly `rustfmt` settings, or revert the formatting-only files. Then cut a patch set of the 62 real edits and 33 new files, and apply it to `aptos-node-v1.49.6` in a worktree under `~/tmp/superfield-worktrees/atomica-aptos/`.
+
+---
+
+## Revision note
+
+The first version of this report, committed as `b34e7cc`, had these errors:
+
+- It called the target 1.49.8. The public 1.49.8 hotfix tag is the 1.49.6 commit, so all figures measure 1.49.6.
+- It sized upstream change by commit count alone. Each commit is a squashed PR. Line counts (about 1.2 million) show the true scale.
+- It classified only release-note titles, which miss about 335 commits. This version classifies all 1,371 commits by path.
+- It said all 310 shared files atomica touched also changed upstream. 250 of those edits are formatting-only and carry no port cost. The real surface is 62 edited files and 33 new code files.
+- It left the decryption timing unconfirmed. The upstream pipeline README confirms decryption right after ordering.
+- It left the Move contract exposure open. The contracts use no removed features, but they depend on the fork-only `ibe_config` module.
