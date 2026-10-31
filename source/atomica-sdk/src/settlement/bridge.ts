@@ -2,7 +2,7 @@
  * bridge.ts — v0 Beta Settlement Bridge
  *
  * Cross-chain settlement bridge between Aptos and Ethereum.
- * Implements queryAuctionSettledEvents, submitSettlement, and
+ * Implements scanAuctionSettledEvents, queryAuctionSettledEvents, submitSettlement, and
  * releaseBidderCollateral.
  *
  * @see docs/architecture/v0-architecture.md §3 — Cross-Chain Settlement
@@ -224,17 +224,119 @@ export class AptosPrunedReadError extends Error {
 // Functions
 // ============================================================
 
+/** A decoded AuctionSettled event with the ledger version that emitted it. */
+export interface VersionedAuctionSettledEvent {
+  event: AuctionSettledEvent;
+  /** Ledger version of the transaction that emitted the event. */
+  version: bigint;
+}
+
+/** Result of one transaction scan. */
+export interface AuctionSettledScan {
+  events: VersionedAuctionSettledEvent[];
+  /**
+   * Version to pass as `fromVersion` on the next scan. Every transaction
+   * below it has been inspected. Persist it as the relayer checkpoint.
+   */
+  nextVersion: bigint;
+}
+
+export interface ScanOptions {
+  /** First ledger version to inspect (default 0). */
+  fromVersion?: bigint;
+  /** Transactions per page (default 100, the node's default maximum). */
+  pageSize?: number;
+  /** Safety cap on pages per call (default 50). The next call resumes. */
+  maxPages?: number;
+}
+
+/** Lower-case a Move type tag and drop leading zeros of its address part. */
+function normalizeTypeTag(tag: string): string {
+  return tag.toLowerCase().replace(/^0x0*/, "0x");
+}
+
+function aptosBaseUrl(config: BridgeConfig): string {
+  // `aptosRpcUrl` conventionally already ends in `/v1` (see settlement-relayer
+  // default), so strip it before appending the versioned path.
+  return config.aptosRpcUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+}
+
 /**
- * Query Aptos node for `auction::AuctionSettled` events for a given window/pair.
+ * Scan committed transactions for `auction::AuctionSettled` module events.
  *
- * Uses the Aptos REST API endpoint:
- *   GET /v1/accounts/{contractAddress}/events/{eventHandleType}/{fieldName}
+ * `AuctionSettled` is a module event (`#[event]`), not a field of a resource,
+ * so aptos-node 1.49.6 REST cannot serve it by event handle. The events are
+ * embedded in each transaction's `events` array, so this walks
+ *   GET /v1/transactions?start={version}&limit={pageSize}
+ * from `fromVersion` toward the ledger head and keeps events whose type is
+ * `{contractAddress}::auction::AuctionSettled`. It stops at the head (a short
+ * page) or after `maxPages`. `nextVersion` is the resume checkpoint.
  *
- * where eventHandleType = "{contractAddress}::auction::AuctionRegistry"
- * and fieldName = "settled_events".
+ * A 410 (`version_pruned`) means `fromVersion` is below the node's retained
+ * window. It throws {@link AptosPrunedReadError}: retrying cannot succeed.
  *
- * Falls back to scanning all settlement view data if the event handle approach
- * is unavailable.  Events are filtered by windowId and pair after fetching.
+ * @see docs/decisions/sdk-auction-settled-event-source.md
+ */
+export async function scanAuctionSettledEvents(
+  config: BridgeConfig,
+  options: ScanOptions = {},
+): Promise<AuctionSettledScan> {
+  const pageSize = options.pageSize ?? 100;
+  const maxPages = options.maxPages ?? 50;
+  const wantedType = normalizeTypeTag(
+    `${config.contractAddress}::auction::AuctionSettled`,
+  );
+  const baseUrl = aptosBaseUrl(config);
+
+  const events: VersionedAuctionSettledEvent[] = [];
+  let next = options.fromVersion ?? 0n;
+
+  for (let page = 0; page < maxPages; page++) {
+    const url = `${baseUrl}/v1/transactions?start=${next}&limit=${pageSize}`;
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      // aptos-node 1.49 answers 410 Gone (error_code `version_pruned`) when
+      // the requested versions fall below the pruner's retained window.
+      if (response.status === 410) {
+        throw new AptosPrunedReadError(url);
+      }
+      // 404/400: node or module not ready yet. Return what we have so the
+      // relayer retries from the same checkpoint on the next poll.
+      if (response.status === 404 || response.status === 400) {
+        break;
+      }
+      throw new Error(
+        `scanAuctionSettledEvents: Aptos node returned ${response.status} for ${url}`,
+      );
+    }
+
+    const txns = (await response.json()) as Array<Record<string, unknown>>;
+    if (txns.length === 0) break;
+
+    for (const tx of txns) {
+      const version = BigInt(String(tx["version"]));
+      const txEvents = (tx["events"] as Array<Record<string, unknown>>) ?? [];
+      for (const raw of txEvents) {
+        if (normalizeTypeTag(String(raw["type"])) === wantedType) {
+          events.push({ event: parseAuctionSettledEvent(raw), version });
+        }
+      }
+      next = version + 1n;
+    }
+
+    if (txns.length < pageSize) break; // reached the ledger head
+  }
+
+  return { events, nextVersion: next };
+}
+
+/**
+ * Query for `auction::AuctionSettled` events for a given window/pair.
+ *
+ * Built on {@link scanAuctionSettledEvents} (transaction scan). Events are
+ * filtered by windowId and pair. Pass `options.fromVersion` to bound the scan
+ * (the default scans from genesis, which is only suitable for small chains).
  *
  * @param windowId  auction_window_id from docs/architecture §2.2
  * @param pair      trading pair descriptor
@@ -247,50 +349,21 @@ export async function queryAuctionSettledEvents(
   windowId: bigint,
   pair: Pair,
   config: BridgeConfig,
+  options: ScanOptions = {},
 ): Promise<AuctionSettledEvent[]> {
-  // Query the Aptos REST API for AuctionSettled events.
-  // Event handles are stored at the contract address under the AuctionRegistry resource.
-  // Endpoint: GET /v1/accounts/{addr}/events/{event_type_struct}/{field_name}
-  const eventTypeStruct = encodeURIComponent(
-    `${config.contractAddress}::auction::AuctionRegistry`,
-  );
-  const fieldName = "settled_events";
-  // `aptosRpcUrl` conventionally already ends in `/v1` (see settlement-relayer
-  // default), so strip it before appending the versioned path.
-  const baseUrl = config.aptosRpcUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
-  const url = `${baseUrl}/v1/accounts/${config.contractAddress}/events/${eventTypeStruct}/${fieldName}?limit=200`;
+  const { events } = await scanAuctionSettledEvents(config, options);
+  return events
+    .map((e) => e.event)
+    .filter((e) => e.windowId === windowId && samePair(e.pair, pair));
+}
 
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    // If the event handle endpoint is unavailable (e.g., module not yet deployed),
-    // return an empty array gracefully so the relayer can retry on the next poll.
-    if (response.status === 404 || response.status === 400) {
-      return [];
-    }
-    // aptos-node 1.49 answers 410 Gone (error_code `version_pruned`) when the
-    // requested events fall below the pruner's retained window. Retrying the
-    // same read can never succeed, so surface a distinct, non-retryable error.
-    if (response.status === 410) {
-      throw new AptosPrunedReadError(url);
-    }
-    throw new Error(
-      `queryAuctionSettledEvents: Aptos node returned ${response.status} for ${url}`,
-    );
-  }
-
-  const rawEvents = (await response.json()) as Array<Record<string, unknown>>;
-
-  const parsed = rawEvents.map(parseAuctionSettledEvent);
-
-  // Filter by windowId and pair fields.
-  return parsed.filter(
-    (e) =>
-      e.windowId === windowId &&
-      e.pair.baseChain === pair.baseChain &&
-      e.pair.baseToken === pair.baseToken &&
-      e.pair.quoteChain === pair.quoteChain &&
-      e.pair.quoteToken === pair.quoteToken,
+/** Field-wise Pair equality. */
+export function samePair(a: Pair, b: Pair): boolean {
+  return (
+    a.baseChain === b.baseChain &&
+    a.baseToken === b.baseToken &&
+    a.quoteChain === b.quoteChain &&
+    a.quoteToken === b.quoteToken
   );
 }
 
