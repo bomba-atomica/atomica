@@ -5,13 +5,12 @@
  *   1. The component renders the FakeUSD lock step (Step 1) by default.
  *   2. The step indicator shows the active step correctly.
  *   3. Navigating to Step 2 via "Skip" renders the bid submission form.
- *   4. The collateral_lock_id and deadline fields are present in Step 2.
+ *   4. The collateral_lock_id, ciphertext, commitment and quantity fields are present in Step 2.
  *
- * Phase 3e change: `generateSystemParameters` is gone — replaced by `getMpk`
- * (on-chain fetch) and `computeIdentity` (from `@atomica/sdk/ibe`).
+ * V2 bid wrapper: the component submits an operator-supplied V2 ciphertext and a
+ * 32-byte price commitment. There is no client-side encryption any more.
  *
- * Uses vi.mock to stub `@atomica/sdk/*` and `@atomica/state-proof-verifier/ibe`
- * so tests run without blockchain or cryptographic dependencies.
+ * Uses vi.mock to stub `@atomica/sdk/*` so tests run without a blockchain.
  *
  * @see docs/architecture/v0-architecture.md §2.5 — Bidder Collateral
  * @see #90 — Phase 3e IBE wiring closure
@@ -24,24 +23,11 @@ import { WalletContext } from "../../src/context/WalletContext";
 // Stub SDK modules so no blockchain calls are made.
 vi.mock("@atomica/sdk/aptos", () => ({
   submitBid: vi.fn().mockResolvedValue({ hash: "0xabc123" }),
-  getMpk: vi.fn().mockResolvedValue(new Uint8Array(48)),
 }));
 
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeUsd: vi.fn().mockResolvedValue({ hash: "0xapprove" }),
   lockFakeUsd: vi.fn().mockResolvedValue({ hash: "0xlock123" }),
-}));
-
-// Phase 3e: encrypt is imported directly (not via ibe.encrypt), computeIdentity via @atomica/sdk/ibe.
-vi.mock("@atomica/state-proof-verifier/ibe", () => ({
-  encrypt: vi.fn().mockResolvedValue({
-    u: new Uint8Array(48),
-    v: new Uint8Array(32),
-  }),
-}));
-
-vi.mock("@atomica/sdk/ibe", () => ({
-  computeIdentity: vi.fn().mockReturnValue(new Uint8Array(32)),
 }));
 
 vi.mock("../../src/storage/bidStorage", () => ({
@@ -97,10 +83,55 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     expect(screen.getByTestId("window-id-input")).toBeTruthy();
   });
 
-  it("shows the deadline-us input field in Step 2 (Phase 3e addition)", () => {
+  it("shows the V2 ciphertext, commitment and quantity inputs in Step 2", () => {
     renderBidder();
     fireEvent.click(screen.getByTestId("skip-to-bid-button"));
-    expect(screen.getByTestId("deadline-us-input")).toBeTruthy();
+    expect(screen.getByTestId("bid-ciphertext-input")).toBeTruthy();
+    expect(screen.getByTestId("bid-commitment-input")).toBeTruthy();
+    expect(screen.getByTestId("bid-quantity-input")).toBeTruthy();
+  });
+
+  it("rejects a commitment that is not 32 bytes without submitting", async () => {
+    const { submitBid } = await import("@atomica/sdk/aptos");
+    renderBidder();
+    fireEvent.click(screen.getByTestId("skip-to-bid-button"));
+    fireEvent.change(screen.getByTestId("bid-ciphertext-input"), {
+      target: { value: "0x2013" },
+    });
+    fireEvent.change(screen.getByTestId("bid-commitment-input"), {
+      target: { value: "0x00" },
+    });
+    fireEvent.click(screen.getByTestId("submit-bid-button"));
+    const status = await screen.findByTestId("bid-status");
+    expect(status.textContent).toContain("32 bytes");
+    expect(submitBid).not.toHaveBeenCalled();
+  });
+
+  it("submits ciphertext, commitment, lock id and quantity to submitBid", async () => {
+    const { submitBid } = await import("@atomica/sdk/aptos");
+    renderBidder();
+    fireEvent.click(screen.getByTestId("skip-to-bid-button"));
+    fireEvent.change(screen.getByTestId("bid-ciphertext-input"), {
+      target: { value: "0x2013ab" },
+    });
+    fireEvent.change(screen.getByTestId("bid-commitment-input"), {
+      target: { value: "0x" + "ab".repeat(32) },
+    });
+    fireEvent.change(screen.getByTestId("collateral-lock-id-input"), {
+      target: { value: "0x" + "cd".repeat(32) },
+    });
+    fireEvent.change(screen.getByTestId("bid-quantity-input"), {
+      target: { value: "7" },
+    });
+    fireEvent.click(screen.getByTestId("submit-bid-button"));
+    await screen.findByText(/Bid Submitted/);
+    expect(submitBid).toHaveBeenCalledTimes(1);
+    const args = vi.mocked(submitBid).mock.calls[0];
+    expect(args[0]).toBe(ACCOUNT);
+    expect(Array.from(args[3])).toEqual([0x20, 0x13, 0xab]);
+    expect(args[4]).toHaveLength(32);
+    expect(args[5]).toHaveLength(32);
+    expect(args[6]).toBe(7n);
   });
 
   it("shows Step 2 as active in step indicator after skipping to bid", () => {
