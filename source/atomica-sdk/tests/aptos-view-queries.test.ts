@@ -8,8 +8,8 @@
  * Functions under test:
  *   - isSettled      → auction::is_settled        → boolean
  *   - getSettlement  → auction::get_settlement     → { clearingPrice, totalFilled }
- *   - getMpk         → timelock_config::get_mpk    → Uint8Array
- *   - isRevealed     → timelock_config::is_revealed → boolean
+ *   - getMpk         → timelock::get_mpk    → Uint8Array
+ *   - isRevealed     → timelock::is_revealed → boolean
  *
  * @see source/atomica-sdk/src/aptos/payloads.ts
  * @see docs/architecture/v0-architecture.md §2 — sealed-bid reveal path
@@ -169,13 +169,13 @@ describe("getMpk", () => {
     expect(result[1]).toBe(0x02);
   });
 
-  it("calls view with timelock_config::get_mpk", async () => {
+  it("calls view with timelock::get_mpk", async () => {
     vi.mocked(config.aptos.view).mockResolvedValueOnce(["0x00"]);
     await getMpk();
     const { payload } = vi.mocked(config.aptos.view).mock.calls[0][0] as {
       payload: { function: string };
     };
-    expect(payload.function).toContain("::timelock_config::get_mpk");
+    expect(payload.function).toContain("::timelock::get_mpk");
   });
 });
 
@@ -210,7 +210,7 @@ describe("isRevealed", () => {
     const { payload } = vi.mocked(config.aptos.view).mock.calls[0][0] as {
       payload: { function: string; functionArguments: unknown[] };
     };
-    expect(payload.function).toContain("::timelock_config::is_revealed");
+    expect(payload.function).toContain("::timelock::is_revealed");
     expect(payload.functionArguments[0]).toBe(TIMELOCK_ID);
   });
 });
