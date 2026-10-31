@@ -11,3 +11,13 @@
  * @see source/state-proofs/typescript/src/ibe/index.ts — crypto primitives
  */
 export { computeIdentity } from "./identity.js";
+export {
+  BID_AD_TAG,
+  BID_COMMIT_TAG,
+  TIMELOCK_IDENTITY_TAG,
+  buildBidAd,
+  computeBidCommitment,
+  computeTimelockIdentityV2,
+  encodeBidPlaintext,
+} from "./bid.js";
+export type { BidAdFields } from "./bid.js";

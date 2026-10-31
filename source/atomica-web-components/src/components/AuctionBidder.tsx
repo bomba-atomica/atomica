@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { ethers } from "ethers";
-import { submitBid, getMpk } from "@atomica/sdk/aptos";
-import { computeIdentity } from "@atomica/sdk/ibe";
-import { encrypt } from "@atomica/state-proof-verifier/ibe";
+import { submitBid } from "@atomica/sdk/aptos";
 import { approveFakeUsd, lockFakeUsd } from "@atomica/sdk/ethereum";
 import { useWallet } from "../context/WalletContext";
 import { saveBidPrice } from "../storage/bidStorage";
@@ -10,11 +8,14 @@ import { saveBidPrice } from "../storage/bidStorage";
 /**
  * UI panel for submitting a sealed bid on an active auction (v0 Beta).
  *
- * Phase 3e wires the IBE identity and MPK plumbing:
- *   - Identity bytes derived via `computeIdentity(timelockId, deadlineUs)` from
- *     `@atomica/sdk/ibe`, matching `timelock_config::compute_identity` on-chain.
- *   - MPK fetched from `timelock_config::get_mpk()` via `@atomica/sdk/aptos`.
- *   - No local `generateSystemParameters()` — the on-chain MPK is authoritative.
+ * V2 bid wrapper: `auction::submit_bid` takes a V2 bid ciphertext
+ * `BCS(vk, U, nonce, C, sig)` and a 32-byte price commitment. The contract builds
+ * the associated data on chain and aborts unless `ibe::verify_bid_ct` accepts the
+ * ciphertext. The TypeScript client has no V2 encryptor yet (open item in
+ * `atomica/docs/decisions/auction-v2-bid-wrapper.md`). The operator pastes the
+ * ciphertext and the commitment produced by the V2 encryption tool.
+ * `computeBidCommitment`, `buildBidAd` and `encodeBidPlaintext` in
+ * `@atomica/sdk/ibe` compute the commitment inputs.
  *
  * Phase 3b adds a two-step flow that mirrors the seller's Step2Lock:
  *
@@ -31,15 +32,13 @@ import { saveBidPrice } from "../storage/bidStorage";
  *     lock ID field is pre-filled with a placeholder after a successful lock.
  *
  *   Step 2 — Submit Encrypted Bid:
- *     Encrypts the bid price with IBE (Boneh-Franklin) using the window ID as
- *     the timelock identity (via `computeIdentity`), then calls
- *     `auction::submit_bid` via the SIWE-authenticated Aptos transaction flow,
- *     passing the lock ID as collateral margin.  Persists the bid price to
+ *     Calls `auction::submit_bid` via the SIWE-authenticated Aptos transaction
+ *     flow with the V2 ciphertext, the price commitment, the lock ID as
+ *     collateral margin and the bid quantity.  Persists the bid price to
  *     localStorage so {@link useFeeRebate} can compute the post-settlement rebate.
  *
- * v0 Beta breaking change from Demo phase: `submit_bid` now takes
- * `(window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)` instead of
- * `(seller_addr, amount_usd)`.
+ * `submit_bid` takes
+ * `(window_id, pair_bcs, ciphertext, commitment, collateral_lock_id, quantity)`.
  *
  * Requires {@link WalletContext} to be mounted above this component.
  *
@@ -63,7 +62,9 @@ export function AuctionBidder() {
 
   // ── Step 2: Submit encrypted bid ──────────────────────────────────────────
   const [windowId, setWindowId] = useState("0");
-  const [deadlineUs, setDeadlineUs] = useState("0");
+  const [ciphertextHex, setCiphertextHex] = useState("");
+  const [commitmentHex, setCommitmentHex] = useState("");
+  const [quantity, setQuantity] = useState("1");
   const [pairBcsHex, setPairBcsHex] = useState("");
   const [collateralLockIdHex, setCollateralLockIdHex] = useState("");
   const [bidAmount, setBidAmount] = useState("110");
@@ -114,21 +115,26 @@ export function AuctionBidder() {
   const handleBid = async () => {
     if (!account) return;
     setLoading(true);
-    setStatus("Fetching MPK from chain...");
+    setStatus("Preparing bid...");
     try {
       const windowIdBn = BigInt(windowId);
-      const deadlineUsBn = BigInt(deadlineUs);
 
-      // 1. Derive IBE identity bytes via computeIdentity (matches Move on-chain)
-      const identityBytes = computeIdentity(Number(windowIdBn), deadlineUsBn);
+      const toBytes = (hex: string) =>
+        new Uint8Array(
+          (hex.replace(/^0x/, "").match(/.{1,2}/g) ?? []).map((b) =>
+            parseInt(b, 16),
+          ),
+        );
+      const ciphertext = toBytes(ciphertextHex);
+      const commitment = toBytes(commitmentHex);
+      if (ciphertext.length === 0) {
+        throw new Error("Enter the V2 bid ciphertext (hex).");
+      }
+      if (commitment.length !== 32) {
+        throw new Error("The commitment must be 32 bytes (64 hex characters).");
+      }
 
-      // 2. Fetch MPK from on-chain timelock_config::get_mpk()
-      setStatus("Encrypting Bid...");
-      const mpk = await getMpk();
-      const payload = new TextEncoder().encode(bidAmount);
-      const { u, v } = await encrypt(mpk, identityBytes, payload);
-
-      // 3. Prepare sealed-bid arguments
+      // Prepare sealed-bid arguments
       const pairBcs = pairBcsHex
         ? new Uint8Array(
             (pairBcsHex.replace(/^0x/, "").match(/.{1,2}/g) ?? []).map((b) =>
@@ -145,16 +151,17 @@ export function AuctionBidder() {
           )
         : new Uint8Array(32); // placeholder: 32 zero bytes
 
-      // 4. Submit
+      // Submit
       setStatus("Please sign the transaction...");
 
       const pendingTx = await submitBid(
         account,
         windowIdBn,
         pairBcs,
-        u,
-        v,
+        ciphertext,
+        commitment,
         collateralLockId,
+        BigInt(quantity),
       );
 
       // Persist bid price in localStorage for post-settlement rebate computation
@@ -272,13 +279,39 @@ export function AuctionBidder() {
           </div>
           <div>
             <label className="block text-zinc-500 text-sm mb-1">
-              Deadline (microseconds)
+              V2 bid ciphertext (0x hex)
             </label>
             <input
-              data-testid="deadline-us-input"
+              data-testid="bid-ciphertext-input"
+              type="text"
+              value={ciphertextHex}
+              onChange={(e) => setCiphertextHex(e.target.value)}
+              className="w-full bg-zinc-800 text-zinc-200 rounded p-2 text-xs font-mono border border-zinc-700 focus:outline-none focus:border-zinc-500"
+              placeholder="0x... BCS(vk, U, nonce, C, sig)"
+            />
+          </div>
+          <div>
+            <label className="block text-zinc-500 text-sm mb-1">
+              Price commitment (0x hex, 32 bytes)
+            </label>
+            <input
+              data-testid="bid-commitment-input"
+              type="text"
+              value={commitmentHex}
+              onChange={(e) => setCommitmentHex(e.target.value)}
+              className="w-full bg-zinc-800 text-zinc-200 rounded p-2 text-xs font-mono border border-zinc-700 focus:outline-none focus:border-zinc-500"
+              placeholder="0x..."
+            />
+          </div>
+          <div>
+            <label className="block text-zinc-500 text-sm mb-1">
+              Quantity (wei of FakeETH)
+            </label>
+            <input
+              data-testid="bid-quantity-input"
               type="number"
-              value={deadlineUs}
-              onChange={(e) => setDeadlineUs(e.target.value)}
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
               className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
             />
           </div>

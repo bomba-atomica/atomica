@@ -23,8 +23,10 @@ import {
 } from "@testing-library/react";
 import { WalletContext } from "../../src/context/WalletContext";
 
-const mockIsRevealed = vi.fn();
-const mockSubmitCleartextAndClear = vi.fn();
+const { mockIsRevealed, mockSubmitCleartextAndClear } = vi.hoisted(() => ({
+  mockIsRevealed: vi.fn(),
+  mockSubmitCleartextAndClear: vi.fn(),
+}));
 
 vi.mock("@atomica/sdk/aptos", () => ({
   isRevealed: mockIsRevealed,
@@ -50,7 +52,7 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
   });
 
   beforeEach(() => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
   afterEach(() => {
@@ -109,6 +111,10 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
     fireEvent.change(screen.getByTestId("cleartexts-input"), {
       target: { value: "110, 105, 95" },
     });
+    const salt = "0x" + "11".repeat(32);
+    fireEvent.change(screen.getByTestId("salts-input"), {
+      target: { value: `${salt}, ${salt}, ` },
+    });
 
     fireEvent.click(screen.getByTestId("submit-cleartexts-button"));
 
@@ -121,9 +127,36 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
       0n,
       new Uint8Array(0),
       [110n, 105n, 95n],
+      [
+        new Uint8Array(32).fill(0x11),
+        new Uint8Array(32).fill(0x11),
+        new Uint8Array(0),
+      ],
     );
 
     const count = screen.getByTestId("submitted-count");
     expect(count.textContent).toContain("3");
+  });
+
+  it("rejects a salt count that does not match the cleartexts", async () => {
+    mockIsRevealed.mockResolvedValue(true);
+    renderRevealer();
+    fireEvent.click(screen.getByTestId("start-polling-button"));
+    await waitFor(() => {
+      expect(screen.getByTestId("cleartext-submission-section")).toBeTruthy();
+    });
+    fireEvent.change(screen.getByTestId("cleartexts-input"), {
+      target: { value: "110, 105" },
+    });
+    fireEvent.change(screen.getByTestId("salts-input"), {
+      target: { value: "0x" + "11".repeat(32) },
+    });
+    fireEvent.click(screen.getByTestId("submit-cleartexts-button"));
+    await waitFor(() => {
+      expect(screen.getByTestId("submit-status").textContent).toContain(
+        "one salt per cleartext",
+      );
+    });
+    expect(mockSubmitCleartextAndClear).not.toHaveBeenCalled();
   });
 });

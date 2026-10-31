@@ -11,8 +11,9 @@ import { useWallet } from "../context/WalletContext";
  *      `POLL_INTERVAL_MS` milliseconds.
  *   2. On `true`: notifies the operator, who can trigger cleartext submission.
  *   3. Calls `auction::submit_cleartext_and_clear` with the decrypted bid
- *      prices (entered manually in this scaffold; full off-chain decryption via
- *      `@atomica/state-proof-verifier/ibe` is wired in a follow-up issue).
+ *      prices and salts (entered manually in this scaffold; V2 off-chain
+ *      decryption is an open item). The contract checks every opening against
+ *      the commitment made at submission.
  *   4. Displays reveal status and submitted cleartext count.
  *
  * Phase 3e scope note: this component wires the identity + MPK fetch plumbing
@@ -35,6 +36,7 @@ export function AuctionRevealer() {
   const [windowId, setWindowId] = useState("0");
   const [pairBcsHex, setPairBcsHex] = useState("");
   const [cleartextsRaw, setCleartextsRaw] = useState("");
+  const [saltsRaw, setSaltsRaw] = useState("");
 
   // ── Poll state ─────────────────────────────────────────────────────────────
   const [polling, setPolling] = useState(false);
@@ -121,8 +123,35 @@ export function AuctionRevealer() {
         return;
       }
 
+      // Parse comma-separated 32-byte salts (0x hex), index-aligned to the
+      // cleartexts. An empty entry skips that bid.
+      const salts: Uint8Array[] = saltsRaw.split(",").map((s) => {
+        const hex = s.trim().replace(/^0x/, "");
+        return new Uint8Array(
+          (hex.match(/.{1,2}/g) ?? []).map((b) => parseInt(b, 16)),
+        );
+      });
+      if (salts.length !== cleartexts.length) {
+        setSubmitStatus(
+          "Error: enter one salt per cleartext (leave an entry empty to skip a bid).",
+        );
+        return;
+      }
+      if (salts.some((salt) => salt.length !== 0 && salt.length !== 32)) {
+        setSubmitStatus(
+          "Error: every salt must be 32 bytes (64 hex characters).",
+        );
+        return;
+      }
+
       setSubmitStatus("Please sign the transaction...");
-      await submitCleartextAndClear(account, windowIdBn, pairBcs, cleartexts);
+      await submitCleartextAndClear(
+        account,
+        windowIdBn,
+        pairBcs,
+        cleartexts,
+        salts,
+      );
 
       setSubmittedCount(cleartexts.length);
       setSubmitStatus(
@@ -230,9 +259,11 @@ export function AuctionRevealer() {
             className="space-y-3 pt-2 border-t border-zinc-700"
           >
             <p className="text-xs text-zinc-500">
-              Enter the decrypted bid prices (comma-separated u64 values) in
-              bid-submission order, then submit to trigger uniform-price
-              clearing.
+              Decrypt the bids off chain with the revealed key. Each bid
+              plaintext is price (8 bytes, little-endian) then a 32-byte salt.
+              Enter the prices and salts in bid-submission order. The contract
+              checks each opening against the bid's commitment, so a wrong value
+              aborts the call.
             </p>
             <div>
               <label className="block text-zinc-500 text-sm mb-1">
@@ -245,6 +276,20 @@ export function AuctionRevealer() {
                 onChange={(e) => setCleartextsRaw(e.target.value)}
                 placeholder="e.g. 110, 105, 95"
                 className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500 font-mono text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-zinc-500 text-sm mb-1">
+                Salts (comma-separated 0x hex, 32 bytes each)
+              </label>
+              <input
+                data-testid="salts-input"
+                type="text"
+                value={saltsRaw}
+                onChange={(e) => setSaltsRaw(e.target.value)}
+                placeholder="0x..., 0x..."
+                className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500 font-mono text-xs"
               />
             </div>
 
