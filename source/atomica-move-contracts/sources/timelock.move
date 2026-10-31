@@ -41,9 +41,12 @@ module atomica::timelock {
     #[view]
     /// Returns `true` if the given timelock's deadline has passed.
     ///
+    /// Uses `ibe_config::is_deadline_passed`. `ibe_config::is_expired` now means
+    /// the `Expired` status (reveal failed or window elapsed), not "deadline passed".
+    ///
     /// `timelock_id` is the identifier returned by `ibe_config::register_timelock`.
     public fun is_timelock_expired(timelock_id: u64): bool {
-        ibe_config::is_expired(timelock_id)
+        ibe_config::is_deadline_passed(timelock_id)
     }
 
     #[view]
