@@ -18,7 +18,10 @@ module atomica::auction_tests {
     use aptos_framework::ibe_config;
     use aptos_framework::ibe_golden_vector_fixtures as fixtures;
     use aptos_framework::timestamp;
+    use aptos_std::bls12381_algebra::{G1, G2, Gt, Fr, FormatG2Compr, FormatGt, HashG1XmdSha256SswuRo};
     use aptos_std::crypto_algebra;
+    use aptos_std::ibe;
+    use std::hash::sha3_256;
     use atomica::auction::{Self};
     use atomica::lock_receipt::{Self, Ethereum, FakeETH, FakeUSD};
 
@@ -31,6 +34,59 @@ module atomica::auction_tests {
     // In tests we use a simple byte vector; real callers BCS-encode the Pair struct.
     fun default_pair_bcs(): vector<u8> {
         b"eth-fakeusd"
+    }
+
+
+    // ===================== IBE test helpers (V2 golden vectors) =====================
+
+    // 2h-plus epoch so deadlines used by the tests fit before `epoch_end - 15 min`.
+    const TEST_EPOCH_INTERVAL_US: u64 = 4_000_000_000_000;
+
+    // Price encrypted by `golden_bid`.
+    const GOLDEN_PRICE: u64 = 2010u64;
+
+    // Initializes ibe_config and installs the epoch 0 config (golden `mpk`,
+    // weights [2, 1, 2], threshold 3). `register_timelock` aborts E_IBE_NOT_READY
+    // without an epoch config, so every test that registers a timelock uses this.
+    fun init_ibe(framework: &signer) {
+        ibe_config::initialize_for_testing(framework);
+        ibe_config::set_epoch_config_for_testing(
+            framework, 0, fixtures::timelock_basic_mpk(), 3, vector[2, 1, 2], TEST_EPOCH_INTERVAL_US,
+        );
+    }
+
+    // Builds a (U, V) pair that the contract's pairing-based cleartext check opens
+    // with `fixtures::timelock_basic_reconstructed_dk()`.
+    //
+    // The V2 golden vectors only ship the AES-GCM bid wrapper, which Move cannot
+    // open. The contract still verifies cleartexts with the Boneh-Franklin XOR
+    // scheme, so the test encrypts a price itself under the golden identity and
+    // `mpk` with a fixed randomness `r`:
+    //   U = r * g2,  K = e(H1(identity), r * mpk) = e(dk, U),  V = price_le XOR KDF(K).
+    // Requires `crypto_algebra::enable_cryptography_algebra_natives` to have run.
+    fun golden_bid(price: u64, r: u64): (vector<u8>, vector<u8>) {
+        let r_fr = crypto_algebra::from_u64<Fr>(r);
+        let u = crypto_algebra::scalar_mul<G2, Fr>(&crypto_algebra::one<G2>(), &r_fr);
+        let mpk = std::option::destroy_some(
+            crypto_algebra::deserialize<G2, FormatG2Compr>(&fixtures::mpk())
+        );
+        let r_mpk = crypto_algebra::scalar_mul<G2, Fr>(&mpk, &r_fr);
+        let q = crypto_algebra::hash_to<G1, HashG1XmdSha256SswuRo>(
+            &b"ATOMICA_TIMELOCK_IBE_V2_H1", &fixtures::identity()
+        );
+        let k = crypto_algebra::pairing<G1, G2, Gt>(&q, &r_mpk);
+        let kdf_input = b"APTOS_IBE_KEY_DERIVATION_DST";
+        vector::append(&mut kdf_input, crypto_algebra::serialize<Gt, FormatGt>(&k));
+        vector::append(&mut kdf_input, vector[0u8, 0u8, 0u8, 0u8]); // counter 0, LE u32
+        let key_block = sha3_256(kdf_input);
+        let v = vector::empty<u8>();
+        let i = 0u64;
+        while (i < 8) {
+            let price_byte = ((price >> ((i * 8) as u8)) & 0xff) as u8;
+            vector::push_back(&mut v, price_byte ^ *vector::borrow(&key_block, i));
+            i = i + 1;
+        };
+        (crypto_algebra::serialize<G2, FormatG2Compr>(&u), v)
     }
 
     // ===================== Setup helper =====================
@@ -710,7 +766,7 @@ module atomica::auction_tests {
         atomica:   &signer,
         settler:   &signer,
     ) {
-        ibe_config::initialize_for_testing(framework);
+        init_ibe(framework);
         // Register a timelock with a deadline far in the future.
         // timestamp starts at 0 us; deadline is 2000000000000 us (far future).
         let deadline_us = 2000000000000u64;
@@ -1417,18 +1473,14 @@ module atomica::auction_tests {
 
     // ===================== submit_cleartext_and_clear: IBE pairing tests =====================
     //
-    // Uses the `timelock_basic` golden vectors from `ibe_golden_vector_fixtures`:
-    //   - 5 validators, threshold 3, equal weights
-    //   - timelock_id = 0, deadline = 1000000000000 us
-    //   - plaintext = b"Timelock test message" (21 bytes)
-    //   - U = 96-byte G2 ephemeral point (timelock_basic_ciphertext_u)
-    //   - V = 21-byte XOR-encrypted ciphertext (timelock_basic_ciphertext_v)
-    //   - DK = 48-byte G1 reconstructed key (timelock_basic_reconstructed_dk)
-    //
-    // The expected cleartext (u64) is the first 8 bytes of the plaintext
-    // b"Timelock" decoded as little-endian.
-    //   T=0x54 i=0x69 m=0x6d e=0x65 l=0x6c o=0x6f c=0x63 k=0x6b
-    //   LE u64: 0x6b636f6c656d6954 = 7738542499763048276
+    // Uses the V2 golden vectors from `ibe_golden_vector_fixtures`:
+    //   - identity, mpk and the reconstructed 48-byte G1 key (`timelock_basic_mpk`,
+    //     `timelock_basic_reconstructed_dk`) of the seeded chunky DKG dealing.
+    //   - The bid ciphertext is built in-test by `golden_bid` (see its comment):
+    //     the V2 fixture ciphertexts use an AES-GCM wrapper that Move cannot open,
+    //     while the contract's cleartext check still uses the Boneh-Franklin XOR
+    //     scheme. The key is the real golden key, so the pairing check is real.
+    //   - The expected cleartext is GOLDEN_PRICE (2010).
     //
     // Note: the production path uses `submit_cleartext_and_clear` which calls
     // `timelock::get_decryption_key` internally. The tests use the test-only
@@ -1439,10 +1491,24 @@ module atomica::auction_tests {
     //
     // @see docs/architecture/v0-architecture.md §2.6
 
-    // Expected little-endian u64 from first 8 bytes of b"Timelock test message".
-    // T=0x54 i=0x69 m=0x6d e=0x65 l=0x6c o=0x6f c=0x63 k=0x6b
-    // python3: int.from_bytes(b'Timelock', 'little') == 7738151096101464404
-    const CLEARTEXT_FROM_GOLDEN_PLAINTEXT: u64 = 7738151096101464404u64;
+    // The V2 bid wrapper fixture passes `ibe::verify_bid_ct` with the contract's
+    // associated data, and fails with the associated data of another bid.
+    // The contract does not call `verify_bid_ct` yet (see report); this pins the
+    // fixture and the native so the contract can adopt it.
+    #[test]
+    fun test_v2_bid_wrapper_fixture_verifies() {
+        let cts = fixtures::bid_case_cts();
+        let ads = fixtures::bid_case_ads();
+        let verifies = fixtures::bid_case_verifies();
+        assert!(*vector::borrow(&ads, 0) == fixtures::bid_ad(), 1);
+        assert!(ibe::verify_bid_ct(*vector::borrow(&cts, 0), fixtures::bid_ad()), 2);
+        assert!(*vector::borrow(&verifies, 0), 3);
+        // Case 8 is the same ciphertext under different associated data: rejected.
+        assert!(*vector::borrow(&cts, 8) == *vector::borrow(&cts, 0), 4);
+        assert!(*vector::borrow(&ads, 8) != fixtures::bid_ad(), 5);
+        assert!(!*vector::borrow(&verifies, 8), 6);
+        assert!(!ibe::verify_bid_ct(*vector::borrow(&cts, 8), *vector::borrow(&ads, 8)), 7);
+    }
 
     // Happy path: valid cleartext passes pairing-based IBE verification and is stored.
     //
@@ -1465,8 +1531,7 @@ module atomica::auction_tests {
         // Insert a sealed bid using the golden vector ciphertext.
         // u_bytes = U (96-byte G2 ephemeral point)
         // ciphertext = V (21-byte XOR-encrypted plaintext)
-        let u_bytes    = fixtures::timelock_basic_ciphertext_u();
-        let ciphertext = fixtures::timelock_basic_ciphertext_v();
+        let (u_bytes, ciphertext) = golden_bid(GOLDEN_PRICE, 7);
         auction::test_insert_bid(
             atomica, WINDOW_ID, pair_bcs, @0x1111,
             u_bytes, ciphertext, b"collateral_lock_id",
@@ -1474,7 +1539,7 @@ module atomica::auction_tests {
 
         // Supply the known DK from golden vectors and the expected cleartext.
         let dk_bytes  = fixtures::timelock_basic_reconstructed_dk();
-        let cleartext = CLEARTEXT_FROM_GOLDEN_PLAINTEXT;
+        let cleartext = GOLDEN_PRICE;
         let cleartexts = vector[cleartext];
         auction::test_submit_cleartext_with_dk(settler, WINDOW_ID, pair_bcs, cleartexts, dk_bytes);
 
@@ -1502,8 +1567,7 @@ module atomica::auction_tests {
         auction::test_insert_window_with_timelock(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0, 0u64);
 
         // Insert a sealed bid using the golden vector ciphertext.
-        let u_bytes    = fixtures::timelock_basic_ciphertext_u();
-        let ciphertext = fixtures::timelock_basic_ciphertext_v();
+        let (u_bytes, ciphertext) = golden_bid(GOLDEN_PRICE, 7);
         auction::test_insert_bid(
             atomica, WINDOW_ID, pair_bcs, @0x1111,
             u_bytes, ciphertext, b"collateral_lock_id",
@@ -1557,8 +1621,7 @@ module atomica::auction_tests {
 
         // Insert 2 bids using the same golden vector ciphertext.
         // Both bids encrypt the same plaintext (b"Timelock test message").
-        let u_bytes    = fixtures::timelock_basic_ciphertext_u();
-        let ciphertext = fixtures::timelock_basic_ciphertext_v();
+        let (u_bytes, ciphertext) = golden_bid(GOLDEN_PRICE, 7);
 
         // Bid 0: valid golden vector ciphertext.
         auction::test_insert_bid(
@@ -1579,7 +1642,7 @@ module atomica::auction_tests {
         // Move VM reverts all state writes from this call on abort, so
         // revealed_prices remains empty after the abort.
         let cleartexts = vector[
-            CLEARTEXT_FROM_GOLDEN_PLAINTEXT,  // correct for bid 0
+            GOLDEN_PRICE,  // correct for bid 0
             9999u64,                           // wrong for bid 1
         ];
         auction::test_submit_cleartext_with_dk(settler, WINDOW_ID, pair_bcs, cleartexts, dk_bytes);
@@ -1612,8 +1675,8 @@ module atomica::auction_tests {
         atomica:   &signer,
         settler:   &signer,
     ) {
-        // Initialize ibe_config and timestamp together.
-        ibe_config::initialize_for_testing(framework);
+        // Initialize ibe_config, the epoch config and timestamp together.
+        init_ibe(framework);
 
         // Register a timelock with a deadline 1 second in the future.
         // timestamp is in microseconds; deadline_us = 1_000_000 us = 1 s.
@@ -1690,15 +1753,14 @@ module atomica::auction_tests {
         auction::test_insert_window_with_timelock(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, false, 0, 0u64);
 
         // Insert one bid using the golden vector ciphertext.
-        let u_bytes    = fixtures::timelock_basic_ciphertext_u();
-        let ciphertext = fixtures::timelock_basic_ciphertext_v();
+        let (u_bytes, ciphertext) = golden_bid(GOLDEN_PRICE, 7);
         auction::test_insert_bid(
             atomica, WINDOW_ID, pair_bcs, @0x1111,
             u_bytes, ciphertext, b"collateral_lock_id",
         );
 
         let dk_bytes  = fixtures::timelock_basic_reconstructed_dk();
-        let cleartext = CLEARTEXT_FROM_GOLDEN_PLAINTEXT;
+        let cleartext = GOLDEN_PRICE;
         let cleartexts = vector[cleartext];
 
         // First call: stores revealed_prices[0] = cleartext.
