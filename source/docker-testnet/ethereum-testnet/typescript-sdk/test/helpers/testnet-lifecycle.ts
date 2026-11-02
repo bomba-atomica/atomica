@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { spawn } from "child_process";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
@@ -7,7 +8,29 @@ const CONFIG_DIR = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "../../../config",
 );
-import { EthereumDockerTestnet } from "../../src/index";
+import { EthereumDockerTestnet, resolveEthBackend } from "../../src/index";
+
+/** The backend these tests run on (ETH_BACKEND, default docker). */
+export const ETH_BACKEND = resolveEthBackend();
+
+/**
+ * A test that needs the beacon API or real validators. On anvil it shows up
+ * as skipped in the report (with "[docker only]" in its name) instead of
+ * silently passing.
+ */
+export function dockerOnlyTest(
+  name: string,
+  fn: () => unknown,
+  timeout?: number,
+): void {
+  test.skipIf(ETH_BACKEND !== "docker")(`${name} [docker only]`, fn, timeout);
+}
+
+if (ETH_BACKEND !== "docker") {
+  console.log(
+    `ETH_BACKEND=${ETH_BACKEND}: tests marked [docker only] are skipped.`,
+  );
+}
 
 let globalTestnet: EthereumDockerTestnet | undefined;
 let cleanupInProgress = false;
@@ -33,6 +56,9 @@ export async function performCleanup(reason: string): Promise<void> {
       console.error("✗ Failed to tear down testnet:", error);
       console.error("Run manually: cd config && docker compose down -v");
     }
+  } else if (ETH_BACKEND !== "docker") {
+    // anvil is a child process of this one and dies with it.
+    console.log("⚠ Testnet was never initialized, nothing to clean up.");
   } else {
     // Testnet never initialized, try manual cleanup
     console.log(
