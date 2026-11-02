@@ -14,6 +14,7 @@ import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
 import { DockerTestnet } from "./index.js";
 import { setTestnet } from "./localnet.js";
 import { ethers } from "ethers";
+import { waitForEthBlock } from "./eth-blocks.js";
 import { resolve as pathResolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
@@ -122,17 +123,14 @@ function readArtifact(contractName: string): {
     return JSON.parse(readFileSync(artifactPath, "utf-8"));
 }
 
+/**
+ * Wait for block 1. On geth this also means the transaction indexer is ready
+ * (eth_getTransactionReceipt returns -32000 "transaction indexing is in
+ * progress" for a short window after startup). On anvil it mines block 1.
+ */
 async function waitForFirstBlock(provider: ethers.JsonRpcProvider): Promise<void> {
-    console.log("[Dual-Chain] Waiting for first Ethereum block...");
-    for (let i = 0; i < 60; i++) {
-        const block = await provider.getBlockNumber();
-        if (block >= 1) {
-            console.log(`[Dual-Chain] ✓ Block ${block} reached`);
-            return;
-        }
-        await new Promise((r) => setTimeout(r, 1000));
-    }
-    throw new Error("Timed out waiting for first Ethereum block");
+    console.log("[Dual-Chain] Waiting for first block...");
+    await waitForEthBlock(provider, 1, 60, "Dual-Chain");
 }
 
 async function deployContract(

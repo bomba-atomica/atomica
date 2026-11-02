@@ -139,18 +139,28 @@ export class TestOrchestrator {
      * Start the Docker testnet
      */
     async startTestnet(): Promise<void> {
-        console.log("\n📦 Starting Docker testnet...");
+        // The CLI entry point and runAll() both call this. Start only once:
+        // a second start would restart the Docker chain or collide with anvil.
+        if (this.testnet) return;
+
+        console.log("\n📦 Starting Ethereum testnet (ETH_BACKEND, default docker)...");
 
         this.testnet = await EthereumDockerTestnet.start(4);
         await this.testnet.waitForHealthy(180);
 
-        console.log("Waiting 30 seconds for chain to stabilize...");
-        await new Promise((resolve) => setTimeout(resolve, 30000));
+        if (this.testnet.getBackend() === "docker") {
+            console.log("Waiting 30 seconds for chain to stabilize...");
+            await new Promise((resolve) => setTimeout(resolve, 30000));
+        }
 
-        console.log(`✓ Testnet started at ${this.testnet.getExecutionRpcUrl()}`);
-        console.log(`  - Geth RPC: ${this.testnet.getExecutionRpcUrl()}`);
-        console.log(`  - Geth WS: ${this.testnet.getExecutionWsUrl()}`);
-        console.log(`  - Beacon API: ${this.testnet.getBeaconApiUrl()}`);
+        console.log(
+            `✓ Testnet (${this.testnet.getBackend()}) started at ${this.testnet.getExecutionRpcUrl()}`,
+        );
+        console.log(`  - RPC: ${this.testnet.getExecutionRpcUrl()}`);
+        console.log(`  - WS: ${this.testnet.getExecutionWsUrl()}`);
+        if (this.testnet.hasBeaconApi()) {
+            console.log(`  - Beacon API: ${this.testnet.getBeaconApiUrl()}`);
+        }
     }
 
     /**
