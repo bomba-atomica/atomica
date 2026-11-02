@@ -63,7 +63,10 @@ services:
       - 6180
       - 6181
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/v1/-/healthy || exit 1"]
+      # The API answers 503 until the internal indexer has indexed a block, and the
+      # first block needs the next validator, which waits on this check. So "healthy"
+      # here means the API process answers at all; tests wait for blocks themselves.
+      test: ["CMD-SHELL", "code=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/v1/-/healthy); [ \"$$code\" = 200 ] || [ \"$$code\" = 503 ]"]
       interval: 10s
       timeout: 5s
       retries: 10
