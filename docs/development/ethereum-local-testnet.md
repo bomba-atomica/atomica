@@ -117,6 +117,38 @@ Lighthouse requires Geth to report as "fully synced" before it will accept its p
 
 ---
 
+## Test Tiers (`ETH_BACKEND`)
+
+The SDK class `EthereumDockerTestnet` (`source/docker-testnet/ethereum-testnet/typescript-sdk/src/index.ts`) can back the same tests with two chains. The env var `ETH_BACKEND` picks one.
+
+| | `anvil` (fast tier) | `docker` (full tier, default) |
+| :--- | :--- | :--- |
+| **Chain** | foundry `anvil`, in memory | Geth + Lighthouse beacon + 4 validators |
+| **Startup** | under 1 second | 2 to 4 minutes |
+| **Chain id, mnemonic, RPC port** | 32382, genesis mnemonic, 8545 | 32382, genesis mnemonic, 8545 |
+| **Blocks** | mined on demand, 12 s apart in time | one per 12 s slot |
+| **Beacon API (5052)** | none | yes |
+| **CI** | draft PRs | ready-for-review PRs and pushes to `main` |
+
+### Running each tier
+
+```bash
+cd source/docker-testnet/ethereum-testnet/typescript-sdk
+ETH_BACKEND=anvil bun test test/state-proofs.test.ts   # fast tier
+bun test test/state-proofs.test.ts                     # full tier (docker)
+```
+
+The anvil binary comes from `ANVIL_BIN`, else `~/.foundry/bin/anvil`, else `anvil` on `PATH`. Set `ETH_ANVIL_BLOCK_TIME=<seconds>` to make anvil also produce blocks on a timer.
+
+### Writing tests that work on both tiers
+
+- **Start the chain only through the SDK.** Call `EthereumDockerTestnet.start()`, never `docker compose` or `anvil` directly.
+- **Advance blocks with `mineBlocks(n)` or `waitForBlocks(n)`.** On anvil they mine the blocks. On docker they wait for the validators. A plain polling loop on `eth_blockNumber` stalls on anvil.
+- **Guard beacon code with `hasBeaconApi()`.** Beacon methods throw `BeaconUnavailableError` on anvil. Mark such tests docker-only (for bun tests, `dockerOnlyTest` in `test/helpers/testnet-lifecycle.ts`), so they show as skipped rather than passed.
+- **Do not lean on anvil's speed.** The docker tier still gates `main`, so wait for receipts and serialize nonces as the PoS chain requires.
+
+---
+
 ## Roadmap & Future Improvements
 
 - [ ] **Native Artifact Generation**: Replace the dependency on `ethpandaops/ethereum-genesis-generator` by implementing the `genesis.json` and `genesis.ssz` generation logic directly (likely using Geth's genesis utils and Lighthouse's `lcli` or a custom Go/Rust tool). This would allow for a 100% "from scratch" setup without external tool dependencies.
