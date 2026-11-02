@@ -111,6 +111,7 @@ import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testne
 import { setupDualChainTestnet, teardownDualChainTestnet } from "./dual-chain-testnet.js";
 import type { DualChainTestnetInfo } from "./dual-chain-testnet.js";
 import { ethers } from "ethers";
+import { waitForEthBlock } from "./eth-blocks.js";
 
 /**
  * Module augmentation to add our custom commands to Vitest's browser commands types.
@@ -413,13 +414,8 @@ export const generateEthLockProofCommand: BrowserCommand<
     const lockReceipt = await provider.waitForTransaction(lockTx.hash, 1);
     const lockBlockNumber = lockReceipt!.blockNumber;
 
-    // Wait for archive proof availability (12 blocks)
-    const targetBlock = lockBlockNumber + 12;
-    for (let i = 0; i < 180; i++) {
-        const current = await provider.getBlockNumber();
-        if (current >= targetBlock) break;
-        await new Promise((r) => setTimeout(r, 1000));
-    }
+    // Wait for archive proof availability (12 blocks). Mines them on anvil.
+    await waitForEthBlock(provider, lockBlockNumber + 12, 300, "Lock Proof");
 
     // Calculate storage key (single-level mapping: keccak256(abi.encode(compositeKey, slot=0)))
     const compositeKey = ethers.keccak256(

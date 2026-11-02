@@ -97,7 +97,11 @@ describe("Proof Fetching", () => {
     });
 
     test("should fetch storage proofs when storage keys provided", async () => {
-        const storageKeys = ["0x0", "0x1"];
+        // Full 32-byte slot keys: anvil rejects short keys like "0x0" that geth accepts.
+        const storageKeys = [
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000000000000000000000000001",
+        ];
         const proof = await fetchProof(testRpcUrl, testAddress, storageKeys, "latest");
 
         expect(proof.storageProof).toBeInstanceOf(Array);

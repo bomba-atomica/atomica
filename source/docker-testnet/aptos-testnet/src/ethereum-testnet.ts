@@ -8,6 +8,7 @@
 
 import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
 import { ethers } from "ethers";
+import { waitForEthBlock } from "./eth-blocks.js";
 import { resolve as pathResolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
@@ -71,22 +72,13 @@ function findEvmContractsDir(): string {
 }
 
 /**
- * Wait until geth's transaction indexer is ready by polling eth_blockNumber.
- * Geth returns -32000 "transaction indexing is in progress" on eth_getTransactionReceipt
- * for a short window after startup even though the health check has passed.
- * Waiting for block 1 ensures the indexer is fully caught up.
+ * Wait for block 1. On geth this also means the transaction indexer is ready
+ * (eth_getTransactionReceipt returns -32000 "transaction indexing is in
+ * progress" for a short window after startup). On anvil it mines block 1.
  */
 async function waitForFirstBlock(provider: ethers.JsonRpcProvider): Promise<void> {
     console.log("[Ethereum Testnet] Waiting for first block...");
-    for (let i = 0; i < 60; i++) {
-        const block = await provider.getBlockNumber();
-        if (block >= 1) {
-            console.log(`[Ethereum Testnet] ✓ Block ${block} reached`);
-            return;
-        }
-        await new Promise((r) => setTimeout(r, 1000));
-    }
-    throw new Error("Timed out waiting for first block");
+    await waitForEthBlock(provider, 1, 60, "Ethereum Testnet");
 }
 
 async function deployContract(
