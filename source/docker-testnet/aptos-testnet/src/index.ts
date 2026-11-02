@@ -726,10 +726,17 @@ export class DockerTestnet {
     }
 
     private static findComposeDir(): string {
+        // bun copies `file:` dependencies into node_modules, so __dirname may
+        // not sit inside the repo. Fall back to paths relative to the cwd of
+        // the usual callers (repo root, source/, or a sibling package such as
+        // source/atomica-web-components), or ATOMICA_DOCKER_COMPOSE_DIR.
+        const override = process.env.ATOMICA_DOCKER_COMPOSE_DIR?.trim();
         const candidates = [
+            ...(override ? [pathResolve(override)] : []),
             pathResolve(__dirname, "../../config"),
             pathResolve(process.cwd(), "source/docker-testnet/config"),
             pathResolve(process.cwd(), "docker-testnet/config"),
+            pathResolve(process.cwd(), "../docker-testnet/config"),
         ];
 
         for (const path of candidates) {

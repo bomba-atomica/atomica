@@ -37,6 +37,7 @@
 
 import { DockerTestnet } from "./index.js";
 import { resolve as pathResolve, dirname } from "path";
+import { existsSync } from "fs";
 import { fileURLToPath } from "url";
 
 /**
@@ -68,8 +69,21 @@ const DEPLOYER_PK = "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f2115682
  */
 const DEPLOYER_ADDR = "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 
-/** Path to atomica-move-contracts directory (relative to SOURCE_DIR) */
-const CONTRACTS_DIR = pathResolve(SOURCE_DIR, "atomica-move-contracts");
+/**
+ * Path to the atomica-move-contracts package.
+ *
+ * bun copies `file:` dependencies into node_modules, where SOURCE_DIR points
+ * at node_modules instead of source/. Try the caller's cwd first (as
+ * dual-chain-testnet.ts does), then fall back to SOURCE_DIR.
+ */
+const CONTRACTS_DIR =
+    [
+        pathResolve(process.cwd(), "../atomica-move-contracts"),
+        pathResolve(process.cwd(), "atomica-move-contracts"),
+        pathResolve(process.cwd(), "source/atomica-move-contracts"),
+        pathResolve(SOURCE_DIR, "atomica-move-contracts"),
+    ].find((dir) => existsSync(pathResolve(dir, "Move.toml"))) ??
+    pathResolve(SOURCE_DIR, "atomica-move-contracts");
 
 /**
  * Start Docker-based local testnet with a single validator.

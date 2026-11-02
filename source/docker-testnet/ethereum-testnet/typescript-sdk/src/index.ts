@@ -3,11 +3,35 @@ import { dirname, resolve } from "path";
 import { existsSync, readFileSync } from "fs";
 import { fileURLToPath } from "url";
 
-/** Config directory containing docker-compose.yaml and setup scripts */
-const CONFIG_DIR = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../config",
-);
+/**
+ * Config directory containing docker-compose.yaml and setup scripts.
+ *
+ * bun copies `file:` dependencies into node_modules, where the path relative
+ * to this file no longer reaches the repo (and `docker compose` then fails
+ * with "spawn docker ENOENT" because its cwd is missing). Try
+ * ETHEREUM_DOCKER_COMPOSE_DIR, then this file's location, then paths
+ * relative to the caller's cwd (repo root, source/, or a sibling package).
+ */
+const CONFIG_DIR = (() => {
+  const rel = "docker-testnet/ethereum-testnet/config";
+  const override = process.env.ETHEREUM_DOCKER_COMPOSE_DIR?.trim();
+  const besideThisFile = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../config",
+  );
+  const candidates = [
+    ...(override ? [resolve(override)] : []),
+    besideThisFile,
+    resolve(process.cwd(), "source", rel),
+    resolve(process.cwd(), rel),
+    resolve(process.cwd(), "..", rel),
+    resolve(process.cwd(), "../..", rel),
+  ];
+  return (
+    candidates.find((dir) => existsSync(resolve(dir, "docker-compose.yaml"))) ??
+    besideThisFile
+  );
+})();
 
 /**
  * Ethereum Docker Testnet - Multi-validator PoS setup
