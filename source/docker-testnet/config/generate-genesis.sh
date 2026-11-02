@@ -164,6 +164,7 @@ base:
 
 execution:
   genesis_file_location: "/opt/aptos/var/genesis/genesis.blob"
+  blockstm_v2_enabled: true
 
 consensus:
   safety_rules:
@@ -195,6 +196,20 @@ api:
 storage:
   rocksdb_configs:
     enable_storage_sharding: false
+  hot_state_config:
+    max_items_per_shard: 250000
+    refresh_interval_versions: 100000
+    delete_on_restart: true
+    compute_root_hash: true
+
+# aptos-node 1.49.6 serves account resource listing (and event/tx lookups)
+# only from the internal indexer DB, as the aptos localnet does
+# (crates/aptos/src/node/local_testnet/node.rs). Without it the API returns
+# "Indexer reader doesn't exist".
+indexer_db_config:
+  enable_transaction: true
+  enable_event: true
+  enable_statekeys: true
 EOF
 done
 
