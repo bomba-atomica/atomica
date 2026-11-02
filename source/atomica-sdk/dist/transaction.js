@@ -5,6 +5,22 @@ import { getDerivedAddress, calculateAbstractDigest, constructSIWEMessage, seria
 function sha3(bytes) {
     return sha3_256(bytes);
 }
+/**
+ * Build an Aptos transaction and authenticate it with a SIWE signature from MetaMask.
+ *
+ * Derives the Aptos address from `ethAddress`, builds the transaction payload,
+ * constructs the SIWE message for the user to sign, and returns a
+ * {@link PreparedTransaction} ready for {@link simulateNativeTransaction} or
+ * {@link submitPreparedTransaction}.
+ *
+ * Requires `window.ethereum` (MetaMask or compatible injected provider).
+ *
+ * @param aptos - Configured Aptos client instance
+ * @param ethAddress - Ethereum hex address of the signer (any case; lowercased internally)
+ * @param payload - Aptos entry function payload
+ * @returns Prepared transaction with SIWE authenticator
+ * @see docs/architecture/v0-architecture.md#§1-package-layout
+ */
 export async function prepareNativeTransaction(aptos, ethAddress, payload) {
     if (!window.ethereum)
         throw new Error("MetaMask not found");
@@ -105,6 +121,17 @@ export async function prepareNativeTransaction(aptos, ethAddress, payload) {
         payload,
     };
 }
+/**
+ * Pre-flight simulate a prepared transaction.
+ *
+ * Logs the simulation result and VM status. Does not throw on failed simulation
+ * unless the RPC call itself errors — the caller is responsible for checking
+ * `simulationResult.success`.
+ *
+ * @param aptos - Configured Aptos client instance
+ * @param preparedTx - Transaction prepared by {@link prepareNativeTransaction}
+ * @returns The first simulation result object from the Aptos node
+ */
 export async function simulateNativeTransaction(aptos, preparedTx) {
     try {
         const [simulationResult] = await aptos.transaction.simulate.simple({
@@ -124,6 +151,18 @@ export async function simulateNativeTransaction(aptos, preparedTx) {
         throw simError;
     }
 }
+/**
+ * Submit a prepared transaction and wait for on-chain execution.
+ *
+ * Throws if the transaction is rejected by the node or if `executedTx.success`
+ * is `false`. On failure, the error message includes the VM status and the
+ * full debug state from {@link PreparedTransaction.debugState}.
+ *
+ * @param aptos - Configured Aptos client instance
+ * @param preparedTx - Transaction prepared by {@link prepareNativeTransaction}
+ * @returns The pending transaction object (includes `hash`)
+ * @see docs/architecture/v0-architecture.md#§1-package-layout
+ */
 export async function submitPreparedTransaction(aptos, preparedTx) {
     const { transaction, auth, debugState } = preparedTx;
     try {
@@ -193,6 +232,22 @@ export async function submitPreparedTransaction(aptos, preparedTx) {
         throw new Error(`Transaction Submission verification failed: ${errorMessage}\nDebug State: ${JSON.stringify(debugState, null, 2)}`);
     }
 }
+/**
+ * All-in-one convenience: prepare → simulate → submit.
+ *
+ * If `payload` is already a {@link PreparedTransaction} (i.e. contains `auth`
+ * and `transaction`), skips preparation and delegates directly to
+ * {@link submitPreparedTransaction}.
+ *
+ * Simulation errors are logged but do not block submission (backward
+ * compatibility).
+ *
+ * @param aptos - Configured Aptos client instance
+ * @param ethAddress - Ethereum hex address of the signer
+ * @param payload - Entry function payload or an already-prepared transaction
+ * @returns The pending transaction object (includes `hash`)
+ * @see docs/architecture/v0-architecture.md#§1-package-layout
+ */
 export async function submitNativeTransaction(aptos, ethAddress, payload) {
     // Overload: Check if payload is actually a PreparedTransaction
     if ("auth" in payload && "transaction" in payload) {

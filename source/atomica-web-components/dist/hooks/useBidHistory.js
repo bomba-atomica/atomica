@@ -42,6 +42,16 @@ function saveEntries(walletAddress, entries) {
         // quota exceeded — ignore
     }
 }
+/**
+ * Persistent bid history hook keyed by wallet address.
+ *
+ * Loads entries from localStorage on mount and persists new entries via
+ * `recordSettlement`. Entries are sorted newest-first by `settledAt`.
+ *
+ * @param walletAddress - The connected wallet address (lowercase Ethereum hex). Pass `null` when disconnected.
+ * @returns `{ entries, recordSettlement }` — see {@link UseBidHistoryResult}
+ * @see docs/specifications/prd.md
+ */
 export function useBidHistory(walletAddress) {
     const [entries, setEntries] = useState(() => {
         if (!walletAddress)

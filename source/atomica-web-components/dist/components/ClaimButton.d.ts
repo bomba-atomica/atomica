@@ -32,6 +32,6 @@ interface Props {
  *
  * @see docs/architecture/v0-architecture.md#§2-auction-mechanism-v01-beta
  */
-export declare function ClaimButton({ windowId, pairBcs, sellerAddress }: Props): import("react/jsx-runtime").JSX.Element;
+export declare function ClaimButton({ windowId, pairBcs, sellerAddress }: Props): import("react").JSX.Element;
 export {};
 //# sourceMappingURL=ClaimButton.d.ts.map

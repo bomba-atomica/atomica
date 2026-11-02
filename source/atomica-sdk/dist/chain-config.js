@@ -13,6 +13,14 @@ export const DEFAULT_CHAIN_CONFIG = {
     },
 };
 const globalWithChainConfig = globalThis;
+/**
+ * Return the active chain configuration.
+ *
+ * Prefers `globalThis.__ATOMICA_CHAIN_CONFIG__` (set by test harnesses and
+ * server-side renderers) over {@link DEFAULT_CHAIN_CONFIG}.
+ *
+ * @returns The active {@link ChainConfig}
+ */
 export function getChainConfig() {
     return globalWithChainConfig.__ATOMICA_CHAIN_CONFIG__ ?? DEFAULT_CHAIN_CONFIG;
 }

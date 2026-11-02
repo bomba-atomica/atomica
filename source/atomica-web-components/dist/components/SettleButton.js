@@ -91,7 +91,8 @@ export function SettleButton({ windowId, pairBcs, auctionEndTime, onSettled, }) 
             else if (msg.includes("E_ALREADY_SETTLED") || msg.includes("abort 5")) {
                 setStatus("Error: Auction already settled");
             }
-            else if (msg.includes("E_NOT_IMPLEMENTED") || msg.includes("abort 99")) {
+            else if (msg.includes("E_NOT_IMPLEMENTED") ||
+                msg.includes("abort 99")) {
                 setStatus("Error: Settlement not yet implemented (Phase 3a scaffold)");
             }
             else {
@@ -105,10 +106,6 @@ export function SettleButton({ windowId, pairBcs, auctionEndTime, onSettled, }) 
     const disabled = loading || settled || !auctionEnded || !account;
     return (_jsxs("div", { className: "flex flex-col gap-2", children: [_jsx("button", { "data-testid": "settle-button", onClick: handleSettle, disabled: disabled, className: `w-full py-2 rounded font-semibold text-sm transition-colors ${disabled
                     ? "bg-zinc-800 cursor-not-allowed text-zinc-600 border border-zinc-700"
-                    : "bg-zinc-100 hover:bg-white text-zinc-900"}`, children: loading
-                    ? "Settling…"
-                    : settled
-                        ? "Already Settled"
-                        : "Settle Auction" }), status && (_jsx("div", { "data-testid": "settle-status", className: "text-xs font-mono text-zinc-400 break-all p-2 bg-zinc-950 rounded border border-zinc-800", children: status })), settled && clearingPrice !== null && (_jsxs("div", { "data-testid": "settle-result", className: "text-xs font-mono p-2 bg-zinc-950 rounded border border-zinc-800 flex flex-col gap-1", children: [_jsxs("div", { className: "flex justify-between", children: [_jsx("span", { className: "text-zinc-500", children: "Clearing price" }), _jsx("span", { "data-testid": "settle-clearing-price", className: "text-zinc-300", children: `$${(Number(clearingPrice) / 1e6).toFixed(2)}` })] }), totalFilled !== null && (_jsxs("div", { className: "flex justify-between", children: [_jsx("span", { className: "text-zinc-500", children: "Total filled" }), _jsx("span", { "data-testid": "settle-total-filled", className: "text-zinc-300", children: `${(Number(totalFilled) / 1e18).toFixed(4)} ETH` })] }))] }))] }));
+                    : "bg-zinc-100 hover:bg-white text-zinc-900"}`, children: loading ? "Settling…" : settled ? "Already Settled" : "Settle Auction" }), status && (_jsx("div", { "data-testid": "settle-status", className: "text-xs font-mono text-zinc-400 break-all p-2 bg-zinc-950 rounded border border-zinc-800", children: status })), settled && clearingPrice !== null && (_jsxs("div", { "data-testid": "settle-result", className: "text-xs font-mono p-2 bg-zinc-950 rounded border border-zinc-800 flex flex-col gap-1", children: [_jsxs("div", { className: "flex justify-between", children: [_jsx("span", { className: "text-zinc-500", children: "Clearing price" }), _jsx("span", { "data-testid": "settle-clearing-price", className: "text-zinc-300", children: `$${(Number(clearingPrice) / 1e6).toFixed(2)}` })] }), totalFilled !== null && (_jsxs("div", { className: "flex justify-between", children: [_jsx("span", { className: "text-zinc-500", children: "Total filled" }), _jsx("span", { "data-testid": "settle-total-filled", className: "text-zinc-300", children: `${(Number(totalFilled) / 1e18).toFixed(4)} ETH` })] }))] }))] }));
 }
 //# sourceMappingURL=SettleButton.js.map

@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
 import { dirname, resolve } from "path";
 import { existsSync, readFileSync } from "fs";
 import { fileURLToPath } from "url";
@@ -33,30 +33,100 @@ const CONFIG_DIR = (() => {
   );
 })();
 
+/** Chain id shared by the Docker genesis (docker-compose.yaml CHAIN_ID) and anvil. */
+export const TESTNET_CHAIN_ID = 32382;
+
+/** Mnemonic shared by the Docker genesis (EL_AND_CL_MNEMONIC) and anvil. */
+const DEFAULT_MNEMONIC =
+  "giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete";
+
 /**
- * Ethereum Docker Testnet - Multi-validator PoS setup
+ * Which Ethereum chain backs the testnet.
  *
- * Provides a mainnet-like Ethereum environment with:
+ * - `docker`: Geth + Lighthouse beacon + validators (the PoS chain). It is the
+ *   authority before code reaches main, and the only backend with a beacon API.
+ * - `anvil`: foundry's in-memory EVM. JSON-RPC only (eth_getProof included),
+ *   starts in about a second. Used for fast draft-PR feedback.
+ */
+export type EthBackend = "docker" | "anvil";
+
+/**
+ * Read the backend from `ETH_BACKEND`. Unset means `docker`, so existing
+ * callers keep today's behavior.
+ */
+export function resolveEthBackend(
+  value: string | undefined = process.env.ETH_BACKEND,
+): EthBackend {
+  const v = (value ?? "").trim().toLowerCase();
+  if (v === "" || v === "docker") return "docker";
+  if (v === "anvil") return "anvil";
+  throw new Error(
+    `Unknown ETH_BACKEND "${value}": expected "docker" or "anvil"`,
+  );
+}
+
+/**
+ * Thrown by beacon-chain methods when the backend has no consensus layer
+ * (anvil). Tests that need the beacon API should run on the docker backend.
+ */
+export class BeaconUnavailableError extends Error {
+  constructor(method: string) {
+    super(
+      `${method} needs the beacon API, which the anvil backend does not provide. ` +
+        `Run this test with ETH_BACKEND=docker.`,
+    );
+    this.name = "BeaconUnavailableError";
+  }
+}
+
+/** Seconds per slot on the Docker chain; anvil mined blocks advance time by this much. */
+const SLOT_SECONDS = 12;
+
+/**
+ * Ethereum local testnet with a selectable backend (see {@link EthBackend}).
+ *
+ * The docker backend provides a mainnet-like environment with:
  * - Geth execution layer
  * - Lighthouse beacon node
  * - Lighthouse validator client
  * - Full PoS consensus with sync committees
+ *
+ * The anvil backend provides the same chain id, mnemonic, funded accounts and
+ * JSON-RPC port, and no beacon API.
  */
 export class EthereumDockerTestnet {
   private configDir: string;
   private numValidators: number;
+  private backend: EthBackend;
+  private anvilProc: ChildProcess | null;
 
-  private constructor(configDir: string, numValidators: number) {
+  private constructor(
+    configDir: string,
+    numValidators: number,
+    backend: EthBackend = "docker",
+    anvilProc: ChildProcess | null = null,
+  ) {
     this.configDir = configDir;
     this.numValidators = numValidators;
+    this.backend = backend;
+    this.anvilProc = anvilProc;
   }
 
   /**
-   * Create and start a new Ethereum PoS testnet with N validators
+   * Create and start a new Ethereum testnet.
+   *
+   * The backend comes from `options.backend`, else `ETH_BACKEND`, else docker.
+   * `numValidators` applies to docker only.
    */
   static async start(
     numValidators: number = 4,
+    options: { backend?: EthBackend } = {},
   ): Promise<EthereumDockerTestnet> {
+    const backend = options.backend ?? resolveEthBackend();
+    if (backend === "anvil") {
+      return this.startAnvil(numValidators);
+    }
+
     const configDir = CONFIG_DIR;
 
     console.log(
@@ -107,10 +177,126 @@ export class EthereumDockerTestnet {
   }
 
   /**
+   * Start anvil on the same port, chain id, mnemonic and hardfork as the
+   * Docker chain, and fund the extra genesis accounts the Docker genesis
+   * preminted (accounts 1-3 of {@link getTestAccounts}).
+   */
+  private static async startAnvil(
+    numValidators: number,
+  ): Promise<EthereumDockerTestnet> {
+    const rpcUrl = "http://localhost:8545";
+    if (await this.rpcReachable(rpcUrl)) {
+      throw new Error(
+        `Something already answers JSON-RPC on ${rpcUrl}. Stop it (docker compose down, or a stale anvil) before starting the anvil backend.`,
+      );
+    }
+
+    const bin =
+      process.env.ANVIL_BIN?.trim() ||
+      (process.env.HOME && existsSync(`${process.env.HOME}/.foundry/bin/anvil`)
+        ? `${process.env.HOME}/.foundry/bin/anvil`
+        : "anvil");
+    const mnemonic =
+      process.env.ETHEREUM_DEPLOYER_MNEMONIC?.trim() || DEFAULT_MNEMONIC;
+    const args = [
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "8545",
+      "--chain-id",
+      String(TESTNET_CHAIN_ID),
+      "--mnemonic",
+      mnemonic,
+      "--accounts",
+      "10",
+      "--balance",
+      "1000",
+      // The Docker chain runs Deneb with Electra disabled, which is Cancun on the EL.
+      "--hardfork",
+      "cancun",
+    ];
+    const blockTime = process.env.ETH_ANVIL_BLOCK_TIME?.trim();
+    if (blockTime) args.push("--block-time", blockTime);
+
+    console.log(`Starting anvil Ethereum backend (${bin})...`);
+    const proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let output = "";
+    const keep = (d: Buffer) => {
+      output = (output + d.toString()).slice(-4000);
+    };
+    proc.stdout?.on("data", keep);
+    proc.stderr?.on("data", keep);
+    let exited: number | null = null;
+    let spawnError: Error | null = null;
+    proc.on("exit", (code) => {
+      exited = code ?? -1;
+    });
+    proc.on("error", (e) => {
+      spawnError = e;
+    });
+    // Never leave an orphan anvil holding port 8545 when the test process exits.
+    const kill = () => {
+      if (proc.exitCode === null) proc.kill("SIGKILL");
+    };
+    process.once("exit", kill);
+
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      if (spawnError) {
+        throw new Error(
+          `Could not start anvil (${bin}): ${(spawnError as Error).message}. Install foundry or set ANVIL_BIN.`,
+        );
+      }
+      if (exited !== null) {
+        throw new Error(`anvil exited with code ${exited}:\n${output}`);
+      }
+      if (await this.rpcReachable(rpcUrl)) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    if (!(await this.rpcReachable(rpcUrl))) {
+      kill();
+      throw new Error(`Timeout waiting for anvil on ${rpcUrl}:\n${output}`);
+    }
+
+    const net = new EthereumDockerTestnet(
+      CONFIG_DIR,
+      numValidators,
+      "anvil",
+      proc,
+    );
+    const thousandEth = "0x" + (10n ** 21n).toString(16);
+    for (const acct of net.getTestAccounts()) {
+      await net.rpcCall("anvil_setBalance", [acct.address, thousandEth]);
+    }
+    // Commit the funding in a block. Without it the "latest" state runs ahead
+    // of the latest block's stateRoot, and account proofs fail to verify.
+    await net.rpcCall("anvil_mine", ["0x1", `0x${SLOT_SECONDS.toString(16)}`]);
+    console.log("✓ anvil Ethereum backend is ready");
+    return net;
+  }
+
+  /**
    * Terminate the testnet and clean up
    */
   async teardown(): Promise<void> {
     console.log("Tearing down Ethereum testnet...");
+    if (this.backend === "anvil") {
+      const proc = this.anvilProc;
+      this.anvilProc = null;
+      if (proc && proc.exitCode === null) {
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            proc.kill("SIGKILL");
+          }, 5000);
+          proc.once("exit", () => {
+            clearTimeout(timer);
+            resolve();
+          });
+          proc.kill("SIGTERM");
+        });
+      }
+      return;
+    }
     await EthereumDockerTestnet.runCommand(
       "docker",
       ["compose", "down", "-v", "--remove-orphans"],
@@ -131,7 +317,10 @@ export class EthereumDockerTestnet {
    * Get the execution layer WebSocket URL (Geth)
    */
   getExecutionWsUrl(): string {
-    return "ws://localhost:8546";
+    // anvil serves WebSocket on the HTTP port.
+    return this.backend === "anvil"
+      ? "ws://localhost:8545"
+      : "ws://localhost:8546";
   }
 
   /**
@@ -146,6 +335,20 @@ export class EthereumDockerTestnet {
    */
   getNumValidators(): number {
     return this.numValidators;
+  }
+
+  /**
+   * Which backend this testnet runs on.
+   */
+  getBackend(): EthBackend {
+    return this.backend;
+  }
+
+  /**
+   * Whether the beacon API (Lighthouse) is available. False on anvil.
+   */
+  hasBeaconApi(): boolean {
+    return this.backend === "docker";
   }
 
   // ==================== Execution Layer APIs ====================
@@ -230,6 +433,7 @@ export class EthereumDockerTestnet {
    * Get the latest beacon block header
    */
   async getBeaconHeader(blockId: string = "head"): Promise<BeaconHeader> {
+    this.requireBeacon("getBeaconHeader");
     const response = await fetch(
       `${this.getBeaconApiUrl()}/eth/v1/beacon/headers/${blockId}`,
     );
@@ -243,6 +447,7 @@ export class EthereumDockerTestnet {
    * Get the sync committee for a given state
    */
   async getSyncCommittee(stateId: string = "head"): Promise<SyncCommittee> {
+    this.requireBeacon("getSyncCommittee");
     const response = await fetch(
       `${this.getBeaconApiUrl()}/eth/v1/beacon/states/${stateId}/sync_committees`,
     );
@@ -256,6 +461,7 @@ export class EthereumDockerTestnet {
    * Get the beacon genesis information
    */
   async getBeaconGenesis(): Promise<BeaconGenesis> {
+    this.requireBeacon("getBeaconGenesis");
     const response = await fetch(
       `${this.getBeaconApiUrl()}/eth/v1/beacon/genesis`,
     );
@@ -271,6 +477,7 @@ export class EthereumDockerTestnet {
   async getFinalityCheckpoints(
     stateId: string = "head",
   ): Promise<FinalityCheckpoints> {
+    this.requireBeacon("getFinalityCheckpoints");
     const response = await fetch(
       `${this.getBeaconApiUrl()}/eth/v1/beacon/states/${stateId}/finality_checkpoints`,
     );
@@ -286,6 +493,7 @@ export class EthereumDockerTestnet {
    * Get a beacon block with execution payload
    */
   async getBeaconBlock(blockId: string = "head"): Promise<any> {
+    this.requireBeacon("getBeaconBlock");
     const response = await fetch(
       `${this.getBeaconApiUrl()}/eth/v2/beacon/blocks/${blockId}`,
     );
@@ -299,6 +507,7 @@ export class EthereumDockerTestnet {
    * Get light client bootstrap data
    */
   async getLightClientBootstrap(blockRoot: string): Promise<any> {
+    this.requireBeacon("getLightClientBootstrap");
     const response = await fetch(
       `${this.getBeaconApiUrl()}/eth/v1/beacon/light_client/bootstrap/${blockRoot}`,
     );
@@ -317,6 +526,7 @@ export class EthereumDockerTestnet {
     startPeriod: number,
     count: number = 1,
   ): Promise<any[]> {
+    this.requireBeacon("getLightClientUpdates");
     const response = await fetch(
       `${this.getBeaconApiUrl()}/eth/v1/beacon/light_client/updates?start_period=${startPeriod}&count=${count}`,
     );
@@ -338,18 +548,30 @@ export class EthereumDockerTestnet {
 
     console.log("Waiting for Ethereum testnet to become healthy...");
 
-    // First wait for Geth
+    // First wait for the execution layer
+    let elReady = false;
     while (Date.now() < deadline) {
       try {
         const blockNum = await this.getBlockNumber();
         if (blockNum >= 0) {
-          console.log("✓ Geth execution layer is ready");
+          console.log(
+            this.backend === "anvil"
+              ? "✓ anvil execution layer is ready"
+              : "✓ Geth execution layer is ready",
+          );
+          elReady = true;
           break;
         }
       } catch (_e) {
         // Not ready yet
       }
-      await this.sleep(2000);
+      await this.sleep(this.backend === "anvil" ? 200 : 2000);
+    }
+
+    // anvil has no consensus layer to wait for.
+    if (this.backend === "anvil") {
+      if (elReady) return;
+      throw new Error("Timeout waiting for anvil health");
     }
 
     // Then wait for Beacon node
@@ -387,6 +609,14 @@ export class EthereumDockerTestnet {
       `Waiting for ${count} blocks (current: ${startBlock}, target: ${targetBlock})...`,
     );
 
+    // anvil automines only on transactions, so waiting would stall: mine them.
+    if (this.backend === "anvil") {
+      await this.mineBlocks(count);
+      const reached = await this.getBlockNumber();
+      console.log(`✓ Reached block ${reached}`);
+      return reached;
+    }
+
     while (Date.now() < deadline) {
       const currentBlock = await this.getBlockNumber();
       if (currentBlock >= targetBlock) {
@@ -400,11 +630,30 @@ export class EthereumDockerTestnet {
   }
 
   /**
+   * Advance the chain by `count` blocks.
+   *
+   * On anvil this mines them at once, each 12 s apart like Docker slots. On
+   * docker it waits for the validators to produce them.
+   */
+  async mineBlocks(count: number, timeoutSecs: number = 60): Promise<void> {
+    if (count <= 0) return;
+    if (this.backend === "anvil") {
+      await this.rpcCall("anvil_mine", [
+        `0x${count.toString(16)}`,
+        `0x${SLOT_SECONDS.toString(16)}`,
+      ]);
+      return;
+    }
+    await this.waitForBlocks(count, timeoutSecs);
+  }
+
+  /**
    * Wait for a slot to be finalized
    */
   async waitForFinality(
     timeoutSecs: number = 300,
   ): Promise<FinalityCheckpoints> {
+    this.requireBeacon("waitForFinality");
     const deadline = Date.now() + timeoutSecs * 1000;
 
     console.log("Waiting for finality...");
@@ -431,6 +680,7 @@ export class EthereumDockerTestnet {
    * Get validator public keys from the generated keystore
    */
   getValidatorPublicKeys(): string[] {
+    if (this.backend === "anvil") return [];
     const pubkeysPath = resolve(this.configDir, "validator_keys/pubkeys.json");
     if (existsSync(pubkeysPath)) {
       try {
@@ -484,13 +734,33 @@ export class EthereumDockerTestnet {
    * source/shared/test-constants.ts.
    */
   getMnemonic(): string {
-    return (
-      process.env.ETHEREUM_DEPLOYER_MNEMONIC?.trim() ||
-      "giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete"
-    );
+    return process.env.ETHEREUM_DEPLOYER_MNEMONIC?.trim() || DEFAULT_MNEMONIC;
   }
 
   // ==================== Internal Helpers ====================
+
+  private requireBeacon(method: string): void {
+    if (this.backend !== "docker") throw new BeaconUnavailableError(method);
+  }
+
+  private static async rpcReachable(url: string): Promise<boolean> {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "eth_chainId",
+          params: [],
+        }),
+        signal: AbortSignal.timeout(1000),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
 
   private async rpcCall(method: string, params: any[]): Promise<any> {
     const response = await fetch(this.getExecutionRpcUrl(), {

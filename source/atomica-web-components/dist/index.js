@@ -22,4 +22,7 @@ export { useNetworkConfig } from "./network/network-config-state";
 export { AppStateProvider, useAppState, useWalletState, useNetworkState, usePollingState, useTxState, useConfigSnapshot, } from "./state/app-state";
 export { loadConfig, saveConfig, resetConfig, DEFAULT_CONFIG, CONFIG_VERSION, } from "./state/app-config";
 export { AppSettings } from "./components/AppSettings";
+// ── Phase 3d — cross-chain settlement scaffold (#89) ─────────────────────────
+export { SettlementStatus } from "./components/SettlementStatus";
+export { WithdrawWinnings } from "./components/WithdrawWinnings";
 //# sourceMappingURL=index.js.map

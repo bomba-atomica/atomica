@@ -6,6 +6,7 @@ import {
   registerCleanupHandlers,
   setGlobalTestnet,
   waitForNetworkStabilization,
+  dockerOnlyTest,
 } from "./helpers/testnet-lifecycle";
 
 // Register cleanup handlers once at module load
@@ -106,7 +107,7 @@ describe("State Proofs (eth_getProof)", () => {
     expect(proof.accountProof.length).toBeGreaterThan(0);
   });
 
-  test("should include proof in beacon block context", async () => {
+  dockerOnlyTest("should include proof in beacon block context", async () => {
     // This test verifies the full chain: beacon block -> execution payload -> state root -> proof
     const accounts = testnet.getTestAccounts();
     const testAddress = accounts[0].address;

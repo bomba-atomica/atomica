@@ -7,6 +7,6 @@ interface AuctionCountdownProps {
  * Live countdown to a specific auction start time.
  * Ticks every second via setInterval.
  */
-export declare function AuctionCountdown({ startsAt, className, }: AuctionCountdownProps): import("react/jsx-runtime").JSX.Element;
+export declare function AuctionCountdown({ startsAt, className, }: AuctionCountdownProps): import("react").JSX.Element;
 export {};
 //# sourceMappingURL=AuctionCountdown.d.ts.map

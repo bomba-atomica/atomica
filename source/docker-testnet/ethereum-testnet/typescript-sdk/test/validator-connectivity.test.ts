@@ -5,6 +5,7 @@ import {
   performCleanup,
   registerCleanupHandlers,
   setGlobalTestnet,
+  dockerOnlyTest,
 } from "./helpers/testnet-lifecycle";
 
 // Register cleanup handlers once at module load
@@ -24,7 +25,7 @@ describe("Validator Connectivity", () => {
     setGlobalTestnet(undefined);
   }, 60000);
 
-  test("should have correct number of validators", () => {
+  dockerOnlyTest("should have correct number of validators", () => {
     expect(testnet).toBeDefined();
     expect(testnet.getNumValidators()).toBe(NUM_VALIDATORS);
   });
@@ -39,7 +40,7 @@ describe("Validator Connectivity", () => {
     expect(blockNumber).toBeGreaterThanOrEqual(0);
   });
 
-  test("should connect to beacon node (Lighthouse)", async () => {
+  dockerOnlyTest("should connect to beacon node (Lighthouse)", async () => {
     const genesis = await testnet.getBeaconGenesis();
     console.log(`Genesis time: ${genesis.genesis_time}`);
     console.log(`Genesis validators root: ${genesis.genesis_validators_root}`);
@@ -48,7 +49,7 @@ describe("Validator Connectivity", () => {
     expect(genesis.genesis_validators_root).toBeDefined();
   });
 
-  test("should retrieve beacon header", async () => {
+  dockerOnlyTest("should retrieve beacon header", async () => {
     const header = await testnet.getBeaconHeader("head");
     console.log(`Beacon slot: ${header.header.message.slot}`);
     console.log(`State root: ${header.header.message.state_root}`);
@@ -72,7 +73,7 @@ describe("Validator Connectivity", () => {
     }
   });
 
-  test("should retrieve validator public keys", () => {
+  dockerOnlyTest("should retrieve validator public keys", () => {
     const pubkeys = testnet.getValidatorPublicKeys();
     console.log(`Found ${pubkeys.length} validator public keys`);
 

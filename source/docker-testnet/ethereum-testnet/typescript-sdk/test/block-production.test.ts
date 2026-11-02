@@ -6,6 +6,7 @@ import {
   registerCleanupHandlers,
   setGlobalTestnet,
   waitForNetworkStabilization,
+  dockerOnlyTest,
 } from "./helpers/testnet-lifecycle";
 
 // Register cleanup handlers once at module load
@@ -57,51 +58,57 @@ describe("Block Production", () => {
     expect(block.stateRoot).toMatch(/^0x[a-fA-F0-9]{64}$/);
   });
 
-  test("should have beacon blocks with execution payloads", async () => {
-    const beaconBlock = await testnet.getBeaconBlock("head");
+  dockerOnlyTest(
+    "should have beacon blocks with execution payloads",
+    async () => {
+      const beaconBlock = await testnet.getBeaconBlock("head");
 
-    const slot = beaconBlock.message.slot;
-    const executionPayload = beaconBlock.message.body.execution_payload;
+      const slot = beaconBlock.message.slot;
+      const executionPayload = beaconBlock.message.body.execution_payload;
 
-    console.log(`Beacon slot: ${slot}`);
-    console.log(`Execution block number: ${executionPayload?.block_number}`);
-    console.log(`Execution state root: ${executionPayload?.state_root}`);
+      console.log(`Beacon slot: ${slot}`);
+      console.log(`Execution block number: ${executionPayload?.block_number}`);
+      console.log(`Execution state root: ${executionPayload?.state_root}`);
 
-    expect(slot).toBeDefined();
-    // Execution payload should exist after the merge
-    if (executionPayload) {
-      expect(executionPayload.state_root).toMatch(/^0x[a-fA-F0-9]{64}$/);
-    }
-  });
+      expect(slot).toBeDefined();
+      // Execution payload should exist after the merge
+      if (executionPayload) {
+        expect(executionPayload.state_root).toMatch(/^0x[a-fA-F0-9]{64}$/);
+      }
+    },
+  );
 
-  test("should have matching state roots between EL and CL", async () => {
-    // Get the latest beacon block
-    const beaconBlock = await testnet.getBeaconBlock("head");
-    const executionPayload = beaconBlock.message.body.execution_payload;
+  dockerOnlyTest(
+    "should have matching state roots between EL and CL",
+    async () => {
+      // Get the latest beacon block
+      const beaconBlock = await testnet.getBeaconBlock("head");
+      const executionPayload = beaconBlock.message.body.execution_payload;
 
-    if (!executionPayload) {
-      console.log("Skipping: No execution payload in beacon block");
-      return;
-    }
+      if (!executionPayload) {
+        console.log("Skipping: No execution payload in beacon block");
+        return;
+      }
 
-    // Get the corresponding EL block
-    const elBlockNumber = parseInt(executionPayload.block_number);
-    const elBlock = await testnet.getBlock(elBlockNumber);
+      // Get the corresponding EL block
+      const elBlockNumber = parseInt(executionPayload.block_number);
+      const elBlock = await testnet.getBlock(elBlockNumber);
 
-    console.log(`CL state root: ${executionPayload.state_root}`);
-    console.log(`EL state root: ${elBlock.stateRoot}`);
+      console.log(`CL state root: ${executionPayload.state_root}`);
+      console.log(`EL state root: ${elBlock.stateRoot}`);
 
-    // Guard against zero state root (indicating EL sync/startup issues)
-    if (
-      elBlock.stateRoot ===
-      "0x0000000000000000000000000000000000000000000000000000000000000000"
-    ) {
-      throw new Error(
-        "Execution layer is not producing valid stateRoots. Check Geth logs and EL/CL connectivity.",
-      );
-    }
+      // Guard against zero state root (indicating EL sync/startup issues)
+      if (
+        elBlock.stateRoot ===
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
+      ) {
+        throw new Error(
+          "Execution layer is not producing valid stateRoots. Check Geth logs and EL/CL connectivity.",
+        );
+      }
 
-    // State roots should match
-    expect(executionPayload.state_root).toBe(elBlock.stateRoot);
-  });
+      // State roots should match
+      expect(executionPayload.state_root).toBe(elBlock.stateRoot);
+    },
+  );
 });
