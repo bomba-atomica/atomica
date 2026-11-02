@@ -34,7 +34,7 @@ export async function setupEthereumMintMock(options: EthereumMintMockOptions): P
     // Import ethers dynamically so this module stays browser-compatible
     const { ethers } = await import("ethers");
 
-    const backingProvider = new ethers.JsonRpcProvider(rpcUrl);
+    const backingProvider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
     const wallet = new ethers.Wallet(privateKey, backingProvider);
     const address = wallet.address;
 

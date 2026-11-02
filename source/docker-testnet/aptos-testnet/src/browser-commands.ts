@@ -382,7 +382,7 @@ export const generateEthLockProofCommand: BrowserCommand<
     const lockAmount = BigInt(lockAmountWei);
     const mintAmount = BigInt(mintAmountWei);
 
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
     const seller = new ethers.Wallet(sellerPrivateKey, provider);
 
     const fakeETH = new ethers.Contract(fakeETHAddress, ERC20_MINT_ABI, seller);

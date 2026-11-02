@@ -103,7 +103,7 @@ export async function setupEthereumTestnet(): Promise<EthereumTestnetInfo> {
     const accounts = testnet.getTestAccounts();
     const signerPrivateKey = accounts[0].privateKey;
 
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
     const signer = new ethers.Wallet(signerPrivateKey, provider);
 
     console.log(`[Ethereum Testnet] ✓ RPC: ${rpcUrl}, chainId: ${chainId}`);

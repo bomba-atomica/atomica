@@ -2,14 +2,13 @@ name: Lint Web Packages
 
 on:
   pull_request:
-    
     paths:
       - 'source/atomica-sdk/**'
       - 'source/atomica-web-components/**'
       - 'source/atomica-demo/**'
       - '.github/workflows/lint-web.yaml'
   push:
-    
+    branches: [main]
     paths:
       - 'source/atomica-sdk/**'
       - 'source/atomica-web-components/**'
@@ -17,10 +16,14 @@ on:
       - '.github/workflows/lint-web.yaml'
   workflow_dispatch:
 
+env:
+  CI_CLASS: code-hygiene
+
 jobs:
   lint-sdk:
     name: Lint SDK
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -58,6 +61,7 @@ jobs:
   lint-web-ui:
     name: Lint Web UI
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -107,6 +111,7 @@ jobs:
   lint-web-demo:
     name: Lint Web Demo
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2

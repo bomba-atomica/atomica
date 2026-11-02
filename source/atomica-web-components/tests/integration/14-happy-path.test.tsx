@@ -157,7 +157,7 @@ function buildFundStub(
       return originalFetch(input, init);
     }
 
-    const provider = new ethers.JsonRpcProvider(ethInfo.rpcUrl);
+    const provider = new ethers.JsonRpcProvider(ethInfo.rpcUrl, undefined, { cacheTimeout: -1 });
     const deployer = new ethers.Wallet(ethInfo.signerPrivateKey, provider);
     const mintAbi = ["function mint(address to, uint256 amount)"];
 
@@ -279,7 +279,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         chainId: fixture.eth.chainId,
       });
 
-      const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl);
+      const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
       const fakeEthContract = new ethers.Contract(
         fixture.eth.contracts.fakeETH,
         ERC20_BALANCE_ABI,

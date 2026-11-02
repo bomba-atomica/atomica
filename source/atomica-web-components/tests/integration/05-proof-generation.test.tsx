@@ -180,7 +180,7 @@ describe.sequential("05 — proof generation", () => {
 
             // Verify storageValue matches on-chain locked balance
             const { ethers } = await import("ethers");
-            const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl);
+            const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
             const lockBoxAbi = [
                 "function getLockedBalance(address user, address token) external view returns (uint256)",
             ];
