@@ -152,7 +152,13 @@ export function getRegisterLockPayload(proof) {
 export function getBidPayload(windowId, pairBcs, uBytes, ciphertext, collateralLockId) {
     return {
         function: `${CONTRACT_ADDR}::auction::submit_bid`,
-        functionArguments: [windowId, pairBcs, uBytes, ciphertext, collateralLockId],
+        functionArguments: [
+            windowId,
+            pairBcs,
+            uBytes,
+            ciphertext,
+            collateralLockId,
+        ],
     };
 }
 export async function submitBid(ethAddress, windowId, pairBcs, uBytes, ciphertext, collateralLockId) {
@@ -213,6 +219,100 @@ export async function getSettlement(windowId, pairBcs) {
     };
 }
 /**
+ * Query `auction::get_bid_results` view function (issue #112).
+ *
+ * Returns the full list of bid results for a settled auction window.
+ * Used by the settlement relayer to derive per-winner Ethereum addresses
+ * and fill amounts for `BLSVerifierTestnet::authorizeSettlement`.
+ *
+ * The relayer must:
+ *   1. Filter results where `is_winner == true`.
+ *   2. Convert each winner's Aptos address to Ethereum via `aptosToEthereumAddress`.
+ *   3. Use `fill_amount` from each winning BidResult as the `fills` entry.
+ *
+ * NOTE: This function will return an empty array if called before settlement
+ * is finalized for the given window/pair combination.
+ *
+ * @param windowId - Auction window ID
+ * @param pairBcs  - BCS-encoded Pair struct
+ * @returns Array of {@link BidResult} entries (empty if not yet settled).
+ *
+ * @see docs/architecture/v0-architecture.md §2.9
+ * @see bridge.ts — submitSettlement join step
+ */
+export async function getBidResults(windowId, pairBcs) {
+    try {
+        const result = await aptos.view({
+            payload: {
+                function: `${CONTRACT_ADDR}::auction::get_bid_results`,
+                functionArguments: [windowId, pairBcs],
+            },
+        });
+        // The Move function returns vector<BidResult> serialised as an array of objects.
+        const raw = result[0];
+        return raw.map(({ bidder, fill_amount, is_winner }) => ({
+            bidder,
+            fillAmount: BigInt(fill_amount),
+            isWinner: is_winner,
+        }));
+    }
+    catch (e) {
+        // Return empty array for not-yet-settled windows to allow callers to handle gracefully.
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("E_NOT_IMPLEMENTED") ||
+            msg.includes("ABORTED") ||
+            msg.includes("abort_code")) {
+            return [];
+        }
+        throw e;
+    }
+}
+/**
+ * Query `auction::compute_rebates` view function (Phase 3c scaffold).
+ *
+ * Returns a `Rebate[]` for all bidders in the specified window based on their
+ * distance to the uniform clearing price.  Coefficient calibration is TBD in v0;
+ * the Move body aborts with E_NOT_IMPLEMENTED (99) until Phase 3c impl lands.
+ *
+ * Callers must handle the `E_NOT_IMPLEMENTED` abort gracefully — this function
+ * returns `null` when the on-chain function is not yet implemented, allowing
+ * the UI to show a "pending" state.
+ *
+ * @param windowId      - Auction window ID
+ * @param pairBcs       - BCS-encoded Pair struct
+ * @param clearingPrice - Uniform clearing price from `get_settlement`
+ * @returns Array of {@link Rebate} entries, or `null` if not yet implemented.
+ *
+ * @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
+ */
+export async function fetchRebates(windowId, pairBcs, clearingPrice) {
+    try {
+        const result = await aptos.view({
+            payload: {
+                function: `${CONTRACT_ADDR}::auction::compute_rebates`,
+                functionArguments: [windowId, pairBcs, clearingPrice],
+            },
+        });
+        // The Move function returns vector<Rebate> serialised as an array of objects.
+        const raw = result[0];
+        return raw.map(({ bidder, amount }) => ({
+            bidder,
+            amount: BigInt(amount),
+        }));
+    }
+    catch (e) {
+        // E_NOT_IMPLEMENTED (99) abort from scaffold — return null for "pending" state.
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("E_NOT_IMPLEMENTED") ||
+            msg.includes("ABORTED") ||
+            msg.includes('abort_code":99') ||
+            msg.includes("abort_code: 99")) {
+            return null;
+        }
+        throw e;
+    }
+}
+/**
  * Build payload for fake_eth::mint (Demo-phase winner payout).
  *
  * Entry function: mint(account: &signer, amount: u64)
@@ -244,4 +344,71 @@ export async function getFakeEthBalance(ownerAddr) {
         },
     });
     return BigInt(result[0]);
+}
+/**
+ * Query `timelock_config::get_mpk` view function.
+ *
+ * Returns the Master Public Key bytes (compressed G1, 48 bytes) stored
+ * on-chain by the timelock / IBE configuration module.
+ *
+ * Used by `AuctionCreator` and `AuctionBidder` to replace locally generated
+ * ephemeral MPKs with the authoritative on-chain value.
+ *
+ * @see docs/architecture/v0-architecture.md §2 — sealed-bid reveal path
+ */
+export async function getMpk() {
+    const result = await aptos.view({
+        payload: {
+            function: `${CONTRACT_ADDR}::timelock_config::get_mpk`,
+            functionArguments: [],
+        },
+    });
+    const hex = result[0];
+    const clean = hex.replace(/^0x/, "");
+    const bytes = new Uint8Array(clean.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+    }
+    return bytes;
+}
+/**
+ * Query `timelock_config::is_revealed` view function.
+ *
+ * Returns true once the DKG committee has published the decryption key for
+ * the given timelock ID, enabling off-chain bid decryption.
+ *
+ * @param timelockId - Window / timelock identifier
+ * @see docs/architecture/v0-architecture.md §2 — sealed-bid reveal path
+ */
+export async function isRevealed(timelockId) {
+    const result = await aptos.view({
+        payload: {
+            function: `${CONTRACT_ADDR}::timelock_config::is_revealed`,
+            functionArguments: [timelockId],
+        },
+    });
+    return result[0];
+}
+/**
+ * Build payload for `auction::submit_cleartext_and_clear`.
+ *
+ * Called by `AuctionRevealer` after the DKG key is published and bids have
+ * been decrypted off-chain.
+ *
+ * Parameters:
+ *   settler    — signer (derived from the caller's Ethereum address)
+ *   window_id  — auction window identifier
+ *   pair_bcs   — BCS-encoded Pair struct
+ *   cleartexts — plaintext bid prices (u64[]) in bid-submission order
+ *
+ * @see docs/architecture/v0-architecture.md §2.6
+ */
+export function getSubmitCleartextPayload(windowId, pairBcs, cleartexts) {
+    return {
+        function: `${CONTRACT_ADDR}::auction::submit_cleartext_and_clear`,
+        functionArguments: [windowId, pairBcs, cleartexts],
+    };
+}
+export async function submitCleartextAndClear(ethAddress, windowId, pairBcs, cleartexts) {
+    return await submitNativeTransaction(aptos, ethAddress, getSubmitCleartextPayload(windowId, pairBcs, cleartexts));
 }

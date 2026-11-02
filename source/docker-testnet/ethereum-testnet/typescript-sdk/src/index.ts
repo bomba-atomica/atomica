@@ -268,6 +268,9 @@ export class EthereumDockerTestnet {
     for (const acct of net.getTestAccounts()) {
       await net.rpcCall("anvil_setBalance", [acct.address, thousandEth]);
     }
+    // Commit the funding in a block. Without it the "latest" state runs ahead
+    // of the latest block's stateRoot, and account proofs fail to verify.
+    await net.rpcCall("anvil_mine", ["0x1", `0x${SLOT_SECONDS.toString(16)}`]);
     console.log("✓ anvil Ethereum backend is ready");
     return net;
   }

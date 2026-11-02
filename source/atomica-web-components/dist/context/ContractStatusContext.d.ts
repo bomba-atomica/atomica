@@ -7,7 +7,7 @@ interface ContractStatusContextValue {
 }
 export declare function ContractStatusProvider({ children, }: {
     children: React.ReactNode;
-}): import("react/jsx-runtime").JSX.Element;
+}): import("react").JSX.Element;
 export declare const useContractStatus: () => ContractStatusContextValue;
 export {};
 //# sourceMappingURL=ContractStatusContext.d.ts.map

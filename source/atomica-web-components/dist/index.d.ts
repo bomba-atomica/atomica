@@ -26,4 +26,8 @@ export type { AppState, AppAction, WalletState, NetworkState, PollingState, TxSt
 export { loadConfig, saveConfig, resetConfig, DEFAULT_CONFIG, CONFIG_VERSION, } from "./state/app-config";
 export type { AppConfig } from "./state/app-config";
 export { AppSettings } from "./components/AppSettings";
+export { SettlementStatus } from "./components/SettlementStatus";
+export type { SettlementStatusProps } from "./components/SettlementStatus";
+export { WithdrawWinnings } from "./components/WithdrawWinnings";
+export type { WithdrawWinningsProps } from "./components/WithdrawWinnings";
 //# sourceMappingURL=index.d.ts.map

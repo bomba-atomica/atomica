@@ -14,5 +14,5 @@
  * All changes are dispatched to `AppStateProvider` which persists them via
  * `saveConfig` automatically. No local state is maintained here.
  */
-export declare function AppSettings(): import("react/jsx-runtime").JSX.Element;
+export declare function AppSettings(): import("react").JSX.Element;
 //# sourceMappingURL=AppSettings.d.ts.map

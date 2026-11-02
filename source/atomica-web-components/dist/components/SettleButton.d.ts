@@ -23,6 +23,6 @@ interface Props {
  *
  * @see docs/architecture/v0-architecture.md#§2-auction-mechanism-v01-beta
  */
-export declare function SettleButton({ windowId, pairBcs, auctionEndTime, onSettled, }: Props): import("react/jsx-runtime").JSX.Element;
+export declare function SettleButton({ windowId, pairBcs, auctionEndTime, onSettled, }: Props): import("react").JSX.Element;
 export {};
 //# sourceMappingURL=SettleButton.d.ts.map

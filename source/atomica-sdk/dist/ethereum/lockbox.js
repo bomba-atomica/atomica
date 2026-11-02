@@ -6,7 +6,7 @@
  */
 import { ethers } from "ethers";
 import { getChainConfig } from "../chain-config.js";
-import { FAKE_ETH_ABI } from "./abis.js";
+import { FAKE_ETH_ABI, FAKE_USD_ABI } from "./abis.js";
 // ── ABI ──────────────────────────────────────────────────────────────────────
 const LOCKBOX_ABI = [
     "function lock(address token, uint256 amount) external",
@@ -24,6 +24,9 @@ function getLockBoxAddress() {
 function getFakeEthAddress() {
     return getChainConfig().ethereum.fakeETH;
 }
+function getFakeUsdAddress() {
+    return getChainConfig().ethereum.fakeUSD;
+}
 /**
  * Get a LockBox contract instance with a MetaMask signer attached.
  */
@@ -39,6 +42,17 @@ async function getFakeEthWithSigner(provider) {
     const signer = await provider.getSigner();
     const address = getFakeEthAddress();
     return new ethers.Contract(address, FAKE_ETH_ABI, signer);
+}
+/**
+ * Get a FakeUSD ERC-20 contract instance with a MetaMask signer attached.
+ *
+ * Used for the bidder collateral lock step (Phase 3b #87).
+ * @see docs/architecture/v0-architecture.md §2.5
+ */
+async function getFakeUsdWithSigner(provider) {
+    const signer = await provider.getSigner();
+    const address = getFakeUsdAddress();
+    return new ethers.Contract(address, FAKE_USD_ABI, signer);
 }
 // ── Public API ────────────────────────────────────────────────────────────────
 /**
@@ -138,4 +152,41 @@ export async function getTotalLockedEth(provider) {
         total += amount;
     }
     return total;
+}
+// ── FakeUSD bidder-collateral lock helpers (Phase 3b #87) ──────────────────────
+/**
+ * Approve LockBox to spend `amount` of FakeUSD on the bidder's behalf.
+ *
+ * Must be called before `lockFakeUsd` if the current FakeUSD allowance is
+ * insufficient.  Mirrors `approveFakeEth` for the bidder collateral path.
+ *
+ * @see docs/architecture/v0-architecture.md §2.5 — Bidder Collateral
+ */
+export async function approveFakeUsd(provider, amount) {
+    const fakeUsd = await getFakeUsdWithSigner(provider);
+    const lockBoxAddress = getLockBoxAddress();
+    const tx = await fakeUsd.approve(lockBoxAddress, amount);
+    const receipt = await tx.wait();
+    if (!receipt)
+        throw new Error("FakeUSD approve() tx receipt is null");
+    return receipt;
+}
+/**
+ * Lock `amount` of FakeUSD in LockBox as bidder collateral margin.
+ *
+ * The caller must have approved LockBox for at least `amount` first (via
+ * `approveFakeUsd`).  Returns the transaction receipt; the `TokensLocked`
+ * event on the receipt is used off-chain to derive the `collateral_lock_id`
+ * for `auction::submit_bid`.
+ *
+ * @see docs/architecture/v0-architecture.md §2.5 — Bidder Collateral
+ */
+export async function lockFakeUsd(provider, amount) {
+    const lockBox = await getLockBoxWithSigner(provider);
+    const tokenAddress = getFakeUsdAddress();
+    const tx = await lockBox.lock(tokenAddress, amount);
+    const receipt = await tx.wait();
+    if (!receipt)
+        throw new Error("FakeUSD lock() tx receipt is null");
+    return receipt;
 }

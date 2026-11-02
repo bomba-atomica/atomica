@@ -13,6 +13,6 @@ interface Props {
     loading: boolean;
     error?: string;
 }
-export declare function Step8Monitor({ amount, minPrice, auctionEndTime, unlockTime, sellerAddress, windowId, pairBcs, onCancelAndUnlock, loading, error, }: Props): import("react/jsx-runtime").JSX.Element;
+export declare function Step8Monitor({ amount, minPrice, auctionEndTime, unlockTime, sellerAddress, windowId, pairBcs, onCancelAndUnlock, loading, error, }: Props): import("react").JSX.Element;
 export {};
 //# sourceMappingURL=Step8Monitor.d.ts.map
