@@ -272,7 +272,7 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
             code: 4001,
           });
         }
-        const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl);
+        const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
         return provider.send(method, []);
       },
     };

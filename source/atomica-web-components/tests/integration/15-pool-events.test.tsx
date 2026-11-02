@@ -73,7 +73,7 @@ describe.sequential("15 — pool events (usePoolEvents)", () => {
       await new Promise((r) => setTimeout(r, 500));
 
       // Lock FakeETH to trigger a TokensLocked event
-      const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl);
+      const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
       const wallet = new ethers.Wallet(fixture.eth.seller.privateKey, provider);
       const lockBoxAddress = fixture.eth.contracts.lockBox;
       const fakeEthAddress = fixture.eth.contracts.fakeETH;
@@ -113,7 +113,7 @@ describe.sequential("15 — pool events (usePoolEvents)", () => {
     unmount();
 
     // Lock another FakeETH
-    const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl);
+    const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
     const wallet = new ethers.Wallet(fixture.eth.seller.privateKey, provider);
     const lockBoxAddress = fixture.eth.contracts.lockBox;
     const fakeEthAddress = fixture.eth.contracts.fakeETH;

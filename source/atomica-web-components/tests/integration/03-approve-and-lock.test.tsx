@@ -116,7 +116,7 @@ describe.sequential("03 — approve and lock", () => {
         // verifies the button is enabled when rendered with an amount within the
         // fakeEthBalance prop.
         const { ethers } = await import("ethers");
-        const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl);
+        const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
         const abi = ["function balanceOf(address) view returns (uint256)"];
         const fakeETH = new ethers.Contract(fixture.eth.contracts.fakeETH, abi, provider);
         const balance: bigint = await fakeETH.balanceOf(fixture.eth.seller.address);
@@ -143,7 +143,7 @@ describe.sequential("03 — approve and lock", () => {
         });
 
         const { ethers } = await import("ethers");
-        const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl);
+        const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
         const abi = ["function balanceOf(address) view returns (uint256)"];
         const fakeETH = new ethers.Contract(fixture.eth.contracts.fakeETH, abi, provider);
         const balance: bigint = await fakeETH.balanceOf(fixture.eth.seller.address);

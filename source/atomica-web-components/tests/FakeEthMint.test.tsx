@@ -70,7 +70,7 @@ function MintFakeEthButton({ contractAddress, rpcUrl }: MintButtonProps) {
       setTxHash(tx.hash);
 
       // Wait for confirmation using the backing provider (faster than BrowserProvider.waitForTransaction)
-      const backingProvider = new ethers.JsonRpcProvider(rpcUrl);
+      const backingProvider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
       await backingProvider.waitForTransaction(tx.hash, 1);
 
       setStatus("success");
@@ -124,7 +124,7 @@ function MintFakeUsdButton({ contractAddress, rpcUrl }: MintButtonProps) {
       const tx = await contract.mint(address, amount);
       setTxHash(tx.hash);
 
-      const backingProvider = new ethers.JsonRpcProvider(rpcUrl);
+      const backingProvider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
       await backingProvider.waitForTransaction(tx.hash, 1);
 
       setStatus("success");
@@ -186,7 +186,7 @@ describe.sequential("FakeEthMint UI", () => {
 
   it("should mint 10 FakeETH and reflect success in the UI", async () => {
     const { ethers } = await import("ethers");
-    const provider = new ethers.JsonRpcProvider(info.rpcUrl);
+    const provider = new ethers.JsonRpcProvider(info.rpcUrl, undefined, { cacheTimeout: -1 });
 
     // Read balance before mint
     const contract = new ethers.Contract(info.fakeETH, FAKE_ETH_ABI, provider);
@@ -237,7 +237,7 @@ describe.sequential("FakeEthMint UI", () => {
 
   it("should mint 10k FakeUSD and reflect success in the UI", async () => {
     const { ethers } = await import("ethers");
-    const provider = new ethers.JsonRpcProvider(info.rpcUrl);
+    const provider = new ethers.JsonRpcProvider(info.rpcUrl, undefined, { cacheTimeout: -1 });
 
     const contract = new ethers.Contract(info.fakeUSD, FAKE_USD_ABI, provider);
     const balanceBefore: bigint = await contract.balanceOf(signerAddress);

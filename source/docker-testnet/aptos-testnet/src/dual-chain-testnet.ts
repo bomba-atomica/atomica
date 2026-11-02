@@ -183,7 +183,9 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
     const bidderPrivateKey = accounts[1].privateKey;
     const bidderAddress = accounts[1].address;
 
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    // ethers caches eth_getTransactionCount for 250 ms by default. Anvil mines
+    // instantly, so back-to-back deploys would reuse a stale nonce.
+    const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
     const deployer = new ethers.Wallet(deployerPrivateKey, provider);
 
     console.log(`[Dual-Chain] ETH RPC: ${rpcUrl}, chainId: ${chainId}`);

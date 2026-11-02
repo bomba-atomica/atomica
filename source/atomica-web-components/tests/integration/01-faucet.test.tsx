@@ -146,7 +146,7 @@ function buildFundStub(
     callCount.count += 1;
 
     const { ethers } = await import("ethers");
-    const provider = new ethers.JsonRpcProvider(info.rpcUrl);
+    const provider = new ethers.JsonRpcProvider(info.rpcUrl, undefined, { cacheTimeout: -1 });
     const deployer = new ethers.Wallet(info.signerPrivateKey, provider);
     const mintAbi = ["function mint(address to, uint256 amount)"];
 
@@ -279,7 +279,7 @@ describe.sequential("01-faucet integration", () => {
 
     // Read FakeETH balance before minting
     const { ethers } = await import("ethers");
-    const provider = new ethers.JsonRpcProvider(info.rpcUrl);
+    const provider = new ethers.JsonRpcProvider(info.rpcUrl, undefined, { cacheTimeout: -1 });
     const fakeEthContract = new ethers.Contract(
       info.fakeETH,
       ERC20_BALANCE_ABI,

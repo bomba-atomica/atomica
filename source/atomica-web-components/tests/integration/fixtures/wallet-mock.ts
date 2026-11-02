@@ -92,7 +92,7 @@ export async function setupWalletMock(options: WalletMockOptions): Promise<strin
     // Import ethers dynamically so this module stays browser-compatible
     const { ethers } = await import("ethers");
 
-    const backingProvider = rpcUrl ? new ethers.JsonRpcProvider(rpcUrl) : null;
+    const backingProvider = rpcUrl ? new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 }) : null;
     const wallet = backingProvider
         ? new ethers.Wallet(privateKey, backingProvider)
         : new ethers.Wallet(privateKey);
