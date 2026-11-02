@@ -100,7 +100,16 @@ export default defineConfig(async () => {
       maxConcurrency: 1,
 
       include: ["tests/**/*.test.tsx", "tests/**/*.test.ts"],
-      exclude: ["**/node_modules/**", "**/dist/**", "**/*.skip"],
+      // tests/browser-extension holds Node-side Playwright tests run by
+      // `bun run test:metamask`. If they stay in the browser suite, Vite's
+      // dependency scan bundles playwright-core for the browser and fails on
+      // its chromium-bidi requires, which breaks every browser test file.
+      exclude: [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/*.skip",
+        "tests/browser-extension/**",
+      ],
     },
   };
 });
