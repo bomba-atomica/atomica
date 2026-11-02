@@ -3,7 +3,10 @@ import { sha3_256 } from "@noble/hashes/sha3";
 /**
  * Compute the IBE identity bytes for a timelock window.
  *
- * Matches `timelock_config::compute_identity` in Move exactly:
+ * LEGACY (pre-V2) identity layout. The registry now uses
+ * `computeTimelockIdentityV2` (chain id and epoch bound). Kept for old callers.
+ *
+ * Matched the legacy `timelock_config::compute_identity` in Move:
  *   SHA3-256( BCS(timelock_id: u64) || BCS(deadline_us: u64) )
  *
  * BCS encoding of a u64 is 8 bytes little-endian.

@@ -67,6 +67,8 @@ vi.mock("../src/ethereum/contracts.js", () => ({
 
 import {
   queryAuctionSettledEvents,
+  scanAuctionSettledEvents,
+  AptosPrunedReadError,
   submitSettlement,
   releaseBidderCollateral,
   type AuctionSettledEvent,
@@ -122,7 +124,7 @@ function makeRawAptosEvent(
   };
 }
 
-/** Helper: mock global fetch for Aptos event queries. */
+/** Helper: mock global fetch with an empty transaction page. */
 function mockFetch(events: unknown[]): void {
   vi.stubGlobal(
     "fetch",
@@ -133,24 +135,58 @@ function mockFetch(events: unknown[]): void {
   );
 }
 
-// ─── queryAuctionSettledEvents ─────────────────────────────────────────────
+/** Wraps raw events into a committed-transaction record. */
+function makeTx(version: number, events: unknown[] = []): unknown {
+  return { type: "user_transaction", version: String(version), events };
+}
+
+/** Other module event emitted by the same package. */
+const OTHER_EVENT = {
+  type: `${TEST_CONFIG.contractAddress}::auction::BidPlaced`,
+  data: {},
+};
+
+/** Helper: mock fetch to serve consecutive pages of transactions. */
+function mockPages(...pages: unknown[][]): ReturnType<typeof vi.fn> {
+  const fn = vi.fn();
+  for (const page of pages) {
+    fn.mockResolvedValueOnce({
+      ok: true,
+      json: vi.fn().mockResolvedValue(page),
+    });
+  }
+  fn.mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue([]) });
+  vi.stubGlobal("fetch", fn);
+  return fn;
+}
+
+function mockStatus(status: number): void {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: false,
+      status,
+      json: vi.fn().mockResolvedValue({ error_code: "version_pruned" }),
+    }),
+  );
+}
+
+// ─── queryAuctionSettledEvents / scanAuctionSettledEvents ─────────────────
 
 describe("queryAuctionSettledEvents", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("returns empty array when no events are emitted", async () => {
-    mockFetch([]);
-
+  it("returns empty array when no transactions exist", async () => {
+    mockPages([]);
     const result = await queryAuctionSettledEvents(1n, TEST_PAIR, TEST_CONFIG);
-
     expect(result).toEqual([]);
   });
 
-  it("parses a single AuctionSettled event from raw Aptos JSON", async () => {
+  it("finds an AuctionSettled module event inside a transaction", async () => {
     const rawEvent = makeRawAptosEvent(42, TEST_PAIR, 1500, 7500, 3);
-    mockFetch([rawEvent]);
+    mockPages([makeTx(10, [OTHER_EVENT, rawEvent])]);
 
     const result = await queryAuctionSettledEvents(42n, TEST_PAIR, TEST_CONFIG);
 
@@ -164,54 +200,163 @@ describe("queryAuctionSettledEvents", () => {
   });
 
   it("parses lock_ids as Uint8Array", async () => {
-    const rawEvent = makeRawAptosEvent(1, TEST_PAIR);
-    mockFetch([rawEvent]);
-
+    mockPages([makeTx(1, [makeRawAptosEvent(1, TEST_PAIR)])]);
     const result = await queryAuctionSettledEvents(1n, TEST_PAIR, TEST_CONFIG);
-
     expect(result[0].lockIds).toHaveLength(2);
-    expect(result[0].lockIds[0]).toBeInstanceOf(Uint8Array);
-    // 0xdeadbeef → 4 bytes
     expect(result[0].lockIds[0]).toEqual(
       new Uint8Array([0xde, 0xad, 0xbe, 0xef]),
     );
   });
 
   it("filters out events from other windows", async () => {
-    const rawWindow1 = makeRawAptosEvent(1, TEST_PAIR);
-    const rawWindow2 = makeRawAptosEvent(2, TEST_PAIR);
-    mockFetch([rawWindow1, rawWindow2]);
-
+    mockPages([
+      makeTx(1, [makeRawAptosEvent(1, TEST_PAIR)]),
+      makeTx(2, [makeRawAptosEvent(2, TEST_PAIR)]),
+    ]);
     const result = await queryAuctionSettledEvents(1n, TEST_PAIR, TEST_CONFIG);
-
     expect(result).toHaveLength(1);
     expect(result[0].windowId).toBe(1n);
   });
 
   it("filters out events for different trading pairs", async () => {
     const otherPair: Pair = { ...TEST_PAIR, baseToken: "WBTC" };
-    const rawOtherPair = makeRawAptosEvent(1, otherPair);
-    const rawMyPair = makeRawAptosEvent(1, TEST_PAIR);
-    mockFetch([rawOtherPair, rawMyPair]);
-
+    mockPages([
+      makeTx(1, [
+        makeRawAptosEvent(1, otherPair),
+        makeRawAptosEvent(1, TEST_PAIR),
+      ]),
+    ]);
     const result = await queryAuctionSettledEvents(1n, TEST_PAIR, TEST_CONFIG);
-
     expect(result).toHaveLength(1);
     expect(result[0].pair.baseToken).toBe("FakeETH");
   });
 
   it("returns empty array when fetch returns 404", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 404,
-        json: vi.fn().mockResolvedValue(null),
-      }),
-    );
-
+    mockStatus(404);
     const result = await queryAuctionSettledEvents(1n, TEST_PAIR, TEST_CONFIG);
     expect(result).toEqual([]);
+  });
+
+  it("throws a non-retryable AptosPrunedReadError on 410", async () => {
+    mockStatus(410);
+    await expect(
+      queryAuctionSettledEvents(1n, TEST_PAIR, TEST_CONFIG),
+    ).rejects.toBeInstanceOf(AptosPrunedReadError);
+  });
+
+  it("throws a plain error on other failures", async () => {
+    mockStatus(500);
+    await expect(
+      queryAuctionSettledEvents(1n, TEST_PAIR, TEST_CONFIG),
+    ).rejects.toThrow(/500/);
+  });
+
+  it.each([
+    "http://localhost:8080/v1",
+    "http://localhost:8080/v1/",
+    "http://localhost:8080",
+  ])("builds a single /v1 path for rpc url %s", async (rpc) => {
+    const fn = mockPages([]);
+    await queryAuctionSettledEvents(1n, TEST_PAIR, {
+      ...TEST_CONFIG,
+      aptosRpcUrl: rpc,
+    });
+    const url = fn.mock.calls[0][0] as string;
+    expect(url.startsWith("http://localhost:8080/v1/transactions?")).toBe(true);
+    expect(url).not.toContain("/v1/v1");
+  });
+});
+
+describe("scanAuctionSettledEvents", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("ignores same-named events from a different package address", async () => {
+    mockPages([
+      makeTx(1, [
+        {
+          ...makeRawAptosEvent(1, TEST_PAIR),
+          type: "0x1::auction::AuctionSettled",
+        },
+      ]),
+    ]);
+    const scan = await scanAuctionSettledEvents(TEST_CONFIG);
+    expect(scan.events).toEqual([]);
+    expect(scan.nextVersion).toBe(2n);
+  });
+
+  it("matches the type when the node strips leading zeros of the address", async () => {
+    const cfg = { ...TEST_CONFIG, contractAddress: "0x00ab" };
+    mockPages([
+      makeTx(5, [
+        {
+          ...makeRawAptosEvent(1, TEST_PAIR),
+          type: "0xab::auction::AuctionSettled",
+        },
+      ]),
+    ]);
+    const scan = await scanAuctionSettledEvents(cfg);
+    expect(scan.events).toHaveLength(1);
+    expect(scan.events[0].version).toBe(5n);
+  });
+
+  it("pages until a short page and reports the next version", async () => {
+    const fn = mockPages(
+      [makeTx(0), makeTx(1, [makeRawAptosEvent(1, TEST_PAIR)])],
+      [makeTx(2), makeTx(3, [makeRawAptosEvent(2, TEST_PAIR)])],
+      [makeTx(4)], // short page: head reached
+    );
+    const scan = await scanAuctionSettledEvents(TEST_CONFIG, { pageSize: 2 });
+
+    expect(scan.events.map((e) => e.event.windowId)).toEqual([1n, 2n]);
+    expect(scan.events.map((e) => e.version)).toEqual([1n, 3n]);
+    expect(scan.nextVersion).toBe(5n);
+    const urls = fn.mock.calls.map((c) => c[0] as string);
+    expect(urls).toHaveLength(3);
+    expect(urls[0]).toContain("start=0&limit=2");
+    expect(urls[1]).toContain("start=2&limit=2");
+    expect(urls[2]).toContain("start=4&limit=2");
+  });
+
+  it("stops at maxPages and the checkpoint resumes there", async () => {
+    mockPages([makeTx(0), makeTx(1)], [makeTx(2), makeTx(3)]);
+    const scan = await scanAuctionSettledEvents(TEST_CONFIG, {
+      pageSize: 2,
+      maxPages: 2,
+    });
+    expect(scan.nextVersion).toBe(4n);
+    expect(
+      (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls,
+    ).toHaveLength(2);
+  });
+
+  it("resumes from the fromVersion checkpoint", async () => {
+    const fn = mockPages([makeTx(100, [makeRawAptosEvent(7, TEST_PAIR)])]);
+    const scan = await scanAuctionSettledEvents(TEST_CONFIG, {
+      fromVersion: 100n,
+    });
+    expect(fn.mock.calls[0][0]).toContain("start=100&");
+    expect(scan.events[0].version).toBe(100n);
+    expect(scan.nextVersion).toBe(101n);
+  });
+
+  it("keeps the checkpoint unchanged when the ledger has nothing new", async () => {
+    mockPages([]);
+    const scan = await scanAuctionSettledEvents(TEST_CONFIG, {
+      fromVersion: 55n,
+    });
+    expect(scan.nextVersion).toBe(55n);
+    expect(scan.events).toEqual([]);
+  });
+
+  it("throws AptosPrunedReadError on a 410 page and names the url", async () => {
+    mockStatus(410);
+    const err = await scanAuctionSettledEvents(TEST_CONFIG, {
+      fromVersion: 3n,
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AptosPrunedReadError);
+    expect((err as AptosPrunedReadError).url).toContain("start=3");
   });
 });
 

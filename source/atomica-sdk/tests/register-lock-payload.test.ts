@@ -16,24 +16,24 @@ import { describe, it, expect, vi } from "vitest";
 import type { InputEntryFunctionData } from "@aptos-labs/ts-sdk";
 
 // Mock the Aptos config to avoid SDK initialization side effects.
-vi.mock("../../src/lib/aptos/config", () => ({
+vi.mock("../src/aptos/config", () => ({
   CONTRACT_ADDR: "0xtest",
   aptos: { getAccountModules: vi.fn() },
 }));
 
 // Mock siwe and transaction so payloads.ts can be imported cleanly.
-vi.mock("../../src/lib/aptos/siwe", () => ({
+vi.mock("../src/siwe", () => ({
   getDerivedAddress: vi.fn(),
 }));
-vi.mock("../../src/lib/aptos/transaction", () => ({
+vi.mock("../src/transaction", () => ({
   submitNativeTransaction: vi.fn(),
 }));
 
 import {
   getRegisterLockPayload,
   getCreateAuctionPayload,
-} from "../../src/lib/aptos/payloads";
-import type { LockedBalanceProof } from "../../src/lib/ethereum/proofs/generator";
+} from "../src/aptos/payloads";
+import type { LockedBalanceProof } from "../src/ethereum/proofs/generator";
 
 // ── Fixture ──────────────────────────────────────────────────────────────────
 

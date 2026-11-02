@@ -4,7 +4,7 @@ import {
   calculateLockedBalanceStorageKey,
   calculateUnlockTimeStorageKey,
   calculateBatchStorageKeys,
-} from "../../../src/lib/ethereum/proofs/storage-key.js";
+} from "../../src/ethereum/proofs/storage-key.js";
 
 /**
  * Unit tests for storage key calculation

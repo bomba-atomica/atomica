@@ -1,71 +1,107 @@
 /// Atomica Timelock view-function facade.
 ///
-/// Provides four view functions that expose the Atomica-relevant subset of
-/// `aptos_framework::ibe_config` state to off-chain clients and other on-chain
-/// modules.
+/// Exposes the Atomica-relevant subset of `aptos_framework::ibe_config` to
+/// off-chain clients and to `atomica::auction`. The registry is epoch bound and
+/// has a one-way status: `Pending`, then `Revealed` or `Expired(reason)`.
 ///
 /// ## Why a separate module?
 ///
 /// `aptos_framework::ibe_config` lives inside the framework git dependency
-/// (`dev-atomica` branch). Exposing stable, Atomica-namespaced view functions
-/// here decouples client code from the framework module path and makes it
-/// easier to swap the underlying implementation in Phase 1.
+/// (`dev-atomica` branch). Atomica-namespaced view functions decouple client
+/// code from the framework module path.
 ///
-/// ## Phase 0 scope
+/// ## Status and expiry
 ///
-/// These four functions are stubs backed by `aptos_framework::ibe_config`.
-/// Cryptographic correctness is deferred to Phase 1.
+/// - `is_deadline_passed` is true once `deadline_us` has passed. It says nothing
+///   about the reveal.
+/// - `is_timelock_expired` is true only for the `Expired` status, for any reason.
+/// - `get_status` returns 0 pending, 1 revealed, 2 expired.
+/// - `get_expiry_reason` returns 1 epoch-ended, 2 reveal-window-elapsed,
+///   3 key-check-failed, and 0 when the timelock is not expired.
 ///
-/// ## Seam notes (Phase 1)
-///
-/// - `get_timelock_identity` must produce byte-identical output to the
-///   `identity` field used by `aptos_dkg::ibe::extract`. See scout findings
-///   § 3b (docs/development/timelock-scout-findings.md).
-/// - `get_decryption_key` returns a 48-byte compressed G1 point once
-///   threshold shares are submitted and `finalize_timelock_reveal` is called.
+/// Design: `atomica/docs/decisions/aptos-upgrade-ibe-chunky-spec.md` sections 7 and 8.
 module atomica::timelock {
     use aptos_framework::ibe_config;
 
-    // ---------------------------------------------------------------------------
-    // View functions (4 required by Phase 0 acceptance criteria)
-    // ---------------------------------------------------------------------------
+    /// `get_status` value of a timelock that has not revealed or expired.
+    const STATUS_PENDING: u8 = 0;
+    /// `get_status` value of a timelock whose verified key is on chain.
+    const STATUS_REVEALED: u8 = 1;
+    /// `get_status` value of a timelock that expired. See `get_expiry_reason`.
+    const STATUS_EXPIRED: u8 = 2;
+
+    public fun status_pending(): u8 { STATUS_PENDING }
+    public fun status_revealed(): u8 { STATUS_REVEALED }
+    public fun status_expired(): u8 { STATUS_EXPIRED }
 
     #[view]
-    /// Returns `true` if the IBE Master Public Key has been set by DKG.
-    ///
-    /// Clients should check this before submitting encrypted bids.
+    /// True if the epoch's IBE master public key is set by the timelock DKG.
+    /// Clients check this before they encrypt a bid.
     public fun is_ibe_ready(): bool {
         ibe_config::is_ready()
     }
 
     #[view]
-    /// Returns `true` if the given timelock's deadline has passed.
-    ///
-    /// `timelock_id` is the identifier returned by `ibe_config::register_timelock`.
+    /// The master public key of the current epoch (96-byte compressed G2).
+    public fun get_mpk(): vector<u8> {
+        ibe_config::get_mpk()
+    }
+
+    #[view]
+    /// True once the timelock deadline has passed. This is not the `Expired` status.
+    public fun is_deadline_passed(timelock_id: u64): bool {
+        ibe_config::is_deadline_passed(timelock_id)
+    }
+
+    #[view]
+    /// True only when the timelock status is `Expired`, for any reason.
     public fun is_timelock_expired(timelock_id: u64): bool {
         ibe_config::is_expired(timelock_id)
     }
 
     #[view]
-    /// Returns the 32-byte IBE identity for a registered timelock.
-    ///
-    /// Clients use this identity to encrypt bids:
-    /// `ciphertext = IBE.Encrypt(mpk, identity, plaintext)`
-    ///
-    /// `timelock_id` is the identifier returned by `ibe_config::register_timelock`.
+    /// True once the verified decryption key is on chain.
+    public fun is_revealed(timelock_id: u64): bool {
+        ibe_config::is_revealed(timelock_id)
+    }
+
+    #[view]
+    /// `0` pending, `1` revealed, `2` expired. Aborts for an unknown timelock.
+    public fun get_status(timelock_id: u64): u8 {
+        ibe_config::get_status(timelock_id)
+    }
+
+    #[view]
+    /// `1` epoch-ended, `2` reveal-window-elapsed, `3` key-check-failed, `0` when not expired.
+    public fun get_expiry_reason(timelock_id: u64): u8 {
+        ibe_config::get_expiry_reason(timelock_id)
+    }
+
+    #[view]
+    /// The epoch the timelock was registered in. Bids are encrypted to this epoch's key.
+    public fun get_timelock_epoch(timelock_id: u64): u64 {
+        ibe_config::get_timelock_epoch(timelock_id)
+    }
+
+    #[view]
+    public fun get_deadline(timelock_id: u64): u64 {
+        ibe_config::get_deadline(timelock_id)
+    }
+
+    #[view]
+    /// `min(deadline + 10 minutes, epoch end)`: the last moment a reveal can complete.
+    public fun get_reveal_expiry(timelock_id: u64): u64 {
+        ibe_config::get_reveal_expiry(timelock_id)
+    }
+
+    #[view]
+    /// The 32-byte IBE identity of a registered timelock.
     public fun get_timelock_identity(timelock_id: u64): vector<u8> {
         ibe_config::get_identity(timelock_id)
     }
 
     #[view]
-    /// Returns the decryption key for a revealed timelock.
-    ///
-    /// Aborts if the timelock has not yet been revealed (i.e. the threshold
-    /// of DK shares has not been submitted).
-    ///
-    /// Returns a 48-byte compressed G1 point.
-    ///
-    /// `timelock_id` is the identifier returned by `ibe_config::register_timelock`.
+    /// The verified 48-byte compressed G1 decryption key. Aborts unless the status is `Revealed`.
     public fun get_decryption_key(timelock_id: u64): vector<u8> {
         ibe_config::get_decryption_key(timelock_id)
     }
