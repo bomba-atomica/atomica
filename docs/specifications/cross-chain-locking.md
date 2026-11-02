@@ -593,10 +593,14 @@ To make these tests pass, we need real Ethereum proofs generated from the testne
 **Deliverable:** Full cross-chain auction flow
 **Status:** In progress (2026-02-03)
 
-**CRITICAL REQUIREMENT:** 
-- **ALWAYS use Ethereum Docker SDK** (`@atomica/ethereum-docker-testnet`)
-- **NEVER use Anvil, Hardhat, or Forge's built-in testnets**
-- The Ethereum Docker testnet provides a production-like environment with Geth + Lighthouse
+**CRITICAL REQUIREMENT (two test tiers, owner decision 2026-11-02):**
+- **ALWAYS start the chain through the Ethereum Docker SDK** (`@atomica/ethereum-docker-testnet`). Never start Anvil, Hardhat, or Forge's built-in testnets by hand in a test.
+- **The SDK has two backends, chosen by `ETH_BACKEND`:**
+  - `anvil` is the fast tier. It is an in-memory EVM with the same chain id (32382), mnemonic, funded accounts and RPC port as the Docker chain. Draft PR CI uses it for quick feedback.
+  - `docker` (the default) is the full tier. It runs Geth + Lighthouse with real PoS block production. Ready-for-review PRs and every push to `main` must pass on it.
+- **The Docker PoS chain stays the authority before code reaches `main`.** Anvil mines instantly and has looser mempool rules, so it can hide nonce, replacement and block-timing bugs that the PoS chain caught in the past.
+- **Tests that need the beacon API, sync committees or real validators are docker-only.** They show as skipped on anvil, never as passed.
+- See `docs/development/ethereum-local-testnet.md` (Test tiers) for how to run each tier.
 
 **Tasks:**
 - [x] Create DeployLockBox.s.sol deployment script
