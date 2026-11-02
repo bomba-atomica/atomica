@@ -1,0 +1,31 @@
+name: Docs Rules
+
+# Doc-correctness: runs on every PR, including docs-only PRs, so they still get a check.
+# It enforces the docs rules in scripts/check-docs.js (location and kebab-case names).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CI_CLASS: doc-correctness
+
+jobs:
+  check-docs:
+    name: Check docs rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Check docs rules
+        run: bun scripts/check-docs.js

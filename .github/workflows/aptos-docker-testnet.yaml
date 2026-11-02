@@ -2,22 +2,27 @@ name: Aptos Docker Testnet Tests
 
 on:
   push:
-    branches:
-      - main
-      - aptos-docker
+    branches: [main]
     paths:
       - "source/docker-testnet/typescript-sdk/**"
       - "source/docker-testnet/aptos-testnet/**"
       - ".github/workflows/aptos-docker-testnet.yaml"
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "source/docker-testnet/typescript-sdk/**"
       - "source/docker-testnet/aptos-testnet/**"
       - ".github/workflows/aptos-docker-testnet.yaml"
+  workflow_dispatch:
+
+# Integration tests against the Aptos Docker testnet: ready-for-review onward.
+env:
+  CI_CLASS: system-correctness
 
 jobs:
   test:
     name: Aptos Docker Testnet Tests
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
