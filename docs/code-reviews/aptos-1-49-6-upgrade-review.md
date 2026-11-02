@@ -1,0 +1,430 @@
+# Aptos 1.49.6 Upgrade Review
+
+**Date**: November 2, 2026
+**Status**: Review. No fix was merged. No heavy suite ran on the review host.
+**Reviewed**:
+- `bomba-atomica/atomica-aptos` at `e41b69f662` (`origin/dev-atomica`, the merge of the upgrade pr (17)). Its parents are `125d36b957` and `f7e4ead6f9`.
+- `bomba-atomica/atomica` at `40d4a1b` (`origin/main`). This covers the alignment pr (146) through the CI split pr (151).
+
+**Related**: [Aptos Upgrade Cost Report](aptos-upgrade-cost-report.md), [Aptos Validator Timelock](../decisions/aptos-validator-timelock.md), [PRD](../specifications/prd.md)
+
+**Labels**:
+- **local** means a code read, a git query, or a light test run on the review host. Light tests are Move unit tests, Vitest unit suites, and one small debug `cargo test`.
+- **CI** means a GitHub Actions run log or registry metadata.
+
+No commit message, PR body, or doc written by the upgrade agent was taken as evidence.
+
+---
+
+## Go / no-go
+
+**No-go.** A real sealed-bid auction with encrypted bids, settlement, and refunds does not work on this chain today.
+
+Five things block it, and each one stops the flow by itself:
+
+1. The chain never publishes a timelock key (finding 1).
+2. No validator submits a reveal share (finding 2).
+3. The reveal would fail even with shares (finding 3).
+4. The SDK cannot create an auction (finding 4).
+5. No client can encrypt a bid (finding 5).
+
+Green CI hides all five. The browser suites assert that create, bid, and settle fail (finding 4).
+
+**Riskiest unknown**: no test has ever revealed a timelock key on a live multi-validator network. Fixes for findings 2 and 3, and a swarm smoke test, exist only as unpushed local commits on the review host's `dev-atomica` (finding 9). Nobody knows whether the timelock DKG, share service, and reveal work together on 4 or more validators.
+
+---
+
+## Findings, most severe first
+
+| # | Finding | Verdict | Label |
+|---|---|---|---|
+| 1 | Timelock DKG is off at genesis, so no timelock key exists | broken | local |
+| 2 | No node code submits `TimelockShare` transactions | broken | local |
+| 3 | Reveal rebuilds the key with the wrong weights list | broken | local |
+| 4 | `create_auction` payload has 5 arguments, not 6, and the browser tests swallow the failure | broken | local + CI |
+| 5 | No bid encryptor and no off-chain decryptor in the product | broken (absent, not faked) | local + CI |
+| 6 | Anyone can settle an empty auction, and an unregistered timelock is accepted | broken | local (Move tests) |
+| 7 | Refunds and claims move no assets on Ethereum | broken | local |
+| 8 | `TimelockDKGResult` execution reads a node-local file | broken (latent on chain id 4) | local |
+| 9 | Release cut from `origin/dev-atomica` while 72 fix commits sat unpushed | suspect | local + CI |
+| 10 | SDK and most web-component unit tests run in no CI job | broken (coverage) | local + CI |
+| 11 | State proof has no trusted root, and one lock can be registered twice | suspect | local |
+| 12 | 2-hour epoch cannot hold the 4-hour bid window | suspect | local |
+| 13 | Release node is built with `--features testing` | suspect | local + CI |
+| 14 | Timelock parameters exist only as a test fallback on chain id 4 | suspect | local |
+| 15 | Every live timelock test was dropped. The Move test bypass rests on a false premise | weakened | local |
+| 16 | Required checks are narrow and misnamed, with a skip race | suspect | CI |
+| 17 | Move contracts depend on the moving `dev-atomica` branch | suspect | local + CI |
+| 18 | 10x gas loosening is real, but the default `maxGasAmount` did not grow | weakened-but-justified | local + CI |
+| 19 | Healthcheck that accepts 503 only means "port open" | weakened-but-justified | local + CI |
+| 20 | `validator-sync.test.ts` passes a halted or forked chain | suspect | CI |
+| 21 | Committed `dist/` folders carry the old bid ABI | suspect | local |
+| 22 | Pre-release image also tagged `latest`. A fallback uses `latest` | suspect (low) | CI |
+| 23 | Golden vectors use test PVSS parameters | weakened-but-justified | local + CI |
+| 24 | Items verified as correct | verified | local + CI |
+
+---
+
+### 1. The timelock DKG is off at genesis. The chain never publishes a timelock key.
+
+- **Claim checked**: the chain publishes a per-epoch timelock master public key (MPK) that bidders encrypt to.
+- **Verdict**: **broken**. This is a regression. The old fork published an MPK every epoch through the randomness DKG (`aptos-vm/src/validator_txns/dkg.rs` at `125d36b957`).
+- **Evidence (local)**:
+  - `aptos-move/framework/aptos-framework/sources/timelock_dkg.move:82-96` at `e41b69f662` creates the state with `enabled: false`. The module says it is "off until governance calls `enable`".
+  - `genesis.move` only calls `timelock_dkg::initialize`.
+  - `git grep -n "timelock_dkg::enable" e41b69f662` finds only `tests/timelock_dkg_tests.move`. Neither repo's genesis script or SDK enables it (`source/docker-testnet/config/generate-genesis.sh:73-89`).
+  - The chain of effects:
+    1. No `TimelockDKGStartEvent` is emitted.
+    2. So `ibe_config::is_ready()` stays false (`ibe_config.move:381-388`).
+    3. So `register_timelock` aborts with `E_IBE_NOT_READY` (`ibe_config.move:447`), and `get_mpk` returns empty bytes.
+- **Failure scenario**: an operator starts the Docker testnet or a real network from this genesis. Every auction that registers a timelock aborts. No bid can be sealed.
+- **Fix**:
+  - Enable the timelock DKG at genesis for Atomica networks, through a layout flag wired into vm-genesis.
+  - Add a CI swarm test with 4 validators and a short epoch. It must wait for the second epoch and assert `is_ready()` and a 96-byte `get_mpk()`.
+
+### 2. No validator ever submits a timelock key share.
+
+- **Claim checked**: cost report A+ flow step 3, "validators … submit them through atomica's timelock validator transaction".
+- **Verdict**: **broken**. The old fork had the same gap.
+- **Evidence (local)**:
+  - `git grep -n "TimelockShare" e41b69f662 -- '*.rs'` finds the type, the API conversion, the VM handler (`validator_txns/mod.rs:49`), the consensus gate (`consensus/src/util/mod.rs:27`), and tests. It finds no code in `dkg/`, `consensus/`, or `aptos-node/` that builds one or puts one in the validator-transaction pool.
+  - `dkg/src/epoch_manager.rs:55-57` derives the shares into `TimelockServiceHandle`. Its comment says "A later share-submitting service reads it". `timelock_service_handle()` (`:142`) has no caller.
+- **Failure scenario**: every timelock stays `Pending`. It is marked `Expired(reveal-window-elapsed)` 10 minutes after its deadline. No auction ever reveals.
+- **Fix**: push the share service (local commit `351b0bbfb9`, see finding 9). Prove it in CI with a 4-validator swarm test that asserts status `Revealed` and `verify_decryption_key(dk, id, mpk)`.
+
+### 3. Key reconstruction gets the wrong weights list. Every reveal below full weight fails for good.
+
+- **Claim checked**: the final key check accepts the keys honest validators make.
+- **Verdict**: **broken**, merged badly. Two reviewers found it on their own.
+- **Evidence (local)**:
+  - `ibe_config.move:587-603` at `e41b69f662`: `get_reconstruction_inputs` returns `info.validator_weights`. That list holds only the submitters' weights, in submission order (filled at `:530`).
+  - `aptos-vm/src/validator_txns/timelock.rs:478-499` rebuilds as soon as `share_count >= reveal_threshold`. It passes that list to `crates/aptos-dkg/src/ibe/mod.rs:467` `reconstruct_ibe_dk_from_g1_shares`.
+  - That function expects the full per-validator list. It fails with `WeightSumMismatch` unless the weights sum to the total weight.
+  - Every Rust and Move test passes the full list (`ibe/tests.rs:69-72`, `ibe_golden_vector_tests.move:167-168`). The only reveal test in `e2e-move-tests/src/tests/timelock_share.rs` uses one validator, where both lists are equal.
+- **Failure scenario**: 4 validators of weight 1, threshold 3. The third share triggers a rebuild with weights `[1,1,1]`. The sum 3 is not 4, so the rebuild fails. The timelock becomes `Expired(key-check-failed)` with its shares dropped (`ibe_config.move:640-666`). There is no retry.
+- **Fix**: return `TimelockEpochConfig.weights`. The local commit `0cb29e2fcf` does this and is not on any remote branch. Add a VM test with 3 of 4 validators submitting out of index order. Run it in CI.
+
+### 4. The SDK cannot create an auction, and the browser tests assert that it fails.
+
+- **Claim checked**: the green `happy-path`, `bid-settle`, and `claim-reclaim-fees` browser jobs prove the auction flow on live chains.
+- **Verdict**: **broken**. The arity bug predates the upgrade. PR 146 broke the bid helper and the swallow hid it.
+- **Evidence**:
+  - **local**: `source/atomica-move-contracts/sources/auction.move:338-346` `create_auction` takes 6 arguments after the signer, and `timelock_id` among them. It has done so since `c21f31f` (2026-05-18).
+  - **local**: `source/atomica-sdk/src/aptos/payloads.ts:149` sends 5 arguments: `[windowId, pairBcs, lockId, minPrice, mpkBytes]`. The UI uses it (`AuctionCreator.tsx:55`, `useSellFlow.ts:367-394`). PR 146 edited this file and left the bug in place.
+  - **local**: the test helper `tests/integration/helpers/auction-setup.ts:233-263` has the same 5-argument call. Its `submit_bid` helper (`:282-306`) still uses the shape that PR 146 replaced.
+  - **local**: each call is wrapped in `.catch(() => {})`. Examples are `14-happy-path.test.tsx:362`, `10-settle.test.tsx:156`, and `11-claim-and-reclaim.test.tsx:155`. The comments blame `E_NOT_IMPLEMENTED`, which `auction.move:72` declares and no entry function throws.
+  - **CI**: Browser Tests run [41422391934](https://github.com/bomba-atomica/atomica/actions/runs/41422391934), job `(happy-path, docker)`, logs `Enter the V2 bid ciphertext (hex)` and `Move abort … auction: E_AUCTION_NOT_FOUND(0x1)`. The passing tests are named "shows error … (Phase 3a scaffold)".
+- **Failure scenario**: a seller clicks Create Auction. The chain rejects the payload and no window exists. CI stays green.
+- **Fix**:
+  1. Add `timelockId` to `getCreateAuctionPayload`, the UI, and the helpers.
+  2. Update the `submit_bid` helper to the current ABI.
+  3. Remove every `.catch(() => {})` around chain calls.
+  4. Rewrite tests 09 to 14 to assert `get_window_status`, `get_bid_count`, `is_settled`, and receipt statuses.
+
+### 5. The product has no bid encryptor and no decryptor.
+
+- **Claim checked**: bids are encrypted under the chain's timelock key and opened with the key the validators reveal. Also checked: whether encryption is faked.
+- **Verdict**: **broken** because it is absent. It is not faked. No stub, test key, plaintext switch, or hard-coded secret exists in `atomica-sdk/src`, `atomica-web-components/src`, or `docker-testnet/aptos-testnet/src` (local grep).
+- **Evidence (local)**:
+  - `AuctionBidder.tsx:11-17,128-132` says "The TypeScript client has no V2 encryptor yet". The user pastes ciphertext hex.
+  - PR 146 (`0db1b90`) removed the old client `encrypt()`. That path used a 48-byte G1 MPK that the chain no longer uses.
+  - `AuctionRevealer.tsx:12-21` takes cleartexts and salts typed in by hand. Move stores the revealed key and checks a price commitment (`auction.move:26-34`). Nothing decrypts off chain.
+  - The required check `Web Tests (integration)` runs only `state-proofs/typescript/tests/ibe.test.ts`. It tests the retired G1 scheme against its own master secret.
+  - The only real V2 ciphertext is the golden fixture in Move unit tests (`auction_bid_wrapper_tests.move:173`).
+  - Side note: `aptos_framework::ibe_golden_vector_fixtures` is not `#[test_only]`. It ships a fixture MPK and decryption key in the production framework. No production code reads it.
+- **Failure scenario**: a bidder has no way to make a valid ciphertext. A relayer has no code to decrypt bids after the reveal.
+- **Fix**: port the V2 wrapper (KEM, HKDF, AES-GCM, Ed25519) to TypeScript or WASM. Read `timelock::get_mpk` and `get_timelock_identity` from chain. Add a decrypt step that uses `get_decryption_key`. Replace the legacy `ibe.test.ts` with V2 golden-vector encrypt and decrypt tests.
+
+### 6. Anyone can settle an empty auction before its deadline. An unregistered timelock is also accepted.
+
+- **Claim checked**: settlement and refund are safe on chain.
+- **Verdict**: **broken**. Proven with Move unit tests.
+- **Evidence (local)**:
+  - `auction.move:914-930` `settle` has no caller, deadline, or timelock check. With 0 bids the count check passes.
+  - Afterward `submit_bid` aborts with `E_WINDOW_ALREADY_SETTLED` (`:493`). `refund_expired_window` aborts on `!settled` (`:699`). `settle` never releases the seller's receipt (`:945-990`).
+  - `create_auction` (`:338-400`) does not check that `timelock_id` is registered.
+  - Five temporary Move tests showed both bugs. Command: `aptos-e41b69f662 move test --filter review_ --skip-fetch-latest-git-deps`. Result: `Total tests: 5; passed: 5; failed: 0`. The CLI is the release asset of `binary-e41b69f662`. The tests were not committed.
+- **Failure scenario**: an attacker watches for `create_auction` and calls `settle` in the next block. The window takes no bids. The seller's lock receipt stays consumed with no refund.
+- **Fix**:
+  - `settle` must require a final reveal or an expired timelock, and a passed deadline.
+  - `settle` must release the seller's unsold supply.
+  - `create_auction` must assert that the timelock is registered, `Pending`, in the current epoch, and has a future deadline.
+  - Commit the five tests as regression tests.
+
+### 7. Refunds and claims move no assets on Ethereum.
+
+- **Claim checked**: the refund path works. The brief said it was unverified live.
+- **Verdict**: **broken**, not just unverified.
+- **Evidence (local)**:
+  - On Aptos, `refund_expired_window` (`auction.move:688-720`) and the loser release in `settle` only flip `LockReceipt` status. Only Move unit tests cover them (`auction_bid_wrapper_tests.move:690-770`).
+  - No SDK or relayer code consumes `AuctionRefunded` or `BidUnopened`.
+  - `evm-contracts/src/escrow/LockBox.sol:102-158` lets the locker `withdraw` after `MIN_LOCK_DURATION = 1 hours`, whatever the auction outcome.
+  - `BLSVerifierTestnet.sol:135-150` `authorizeSettlement` only emits an event. `atomica-sdk/src/settlement/bridge.ts:502-537` `releaseBidderCollateral` calls it, so no funds move.
+  - `withdrawWinnings`, described in `docs/architecture/v0-architecture.md` §3.5, does not exist.
+  - `DepositBox` and `Settlement` have real transfers and pass their forge tests. The dual-chain fixture does not deploy them. The Aptos proofs target LockBox.
+- **Failure scenario**: an auction settles with a winner. After 1 hour the seller calls `LockBox.withdraw` and keeps the ETH. The winner gets nothing. A winning bidder can withdraw their collateral the same way.
+- **Fix**: make LockBox releases depend on a verified Aptos settlement or refund, or point the Aptos proofs at `DepositBox`. Add a live dual-chain test with three cases, refund, winner payout, and seller payout, and assert ERC-20 balances.
+
+### 8. The `TimelockDKGResult` handler reads a node-local file during block execution.
+
+- **Claim checked**: validator-transaction execution depends only on chain state. The fork states this rule at `timelock.rs:115-118`.
+- **Verdict**: **broken** on any chain id other than 4. Latent on chain id 4, where every node uses the same test fallback.
+- **Evidence (local)**: `aptos-vm/src/validator_txns/timelock_dkg.rs` at `e41b69f662` passes `TIMELOCK_PUBLIC_PARAMETERS.as_ref().map(|p| p.blob_hash)` to `check_timelock_dkg_result`. That value is loaded from the per-node config `timelock_public_parameters_blob_path`. `types/src/dkg/timelock_dkg.rs:648-652` rejects on a mismatch and skips the check when the node has no blob.
+- **Failure scenario**: validators with different blob files compute different results for the same block. If more than a third of voting power differs, the chain halts at the epoch change.
+- **Fix**: remove the local-hash comparison from execution. If the hash must be enforced, store the expected hash on chain.
+
+### 9. The release was cut from `origin/dev-atomica` while 72 fix commits sat unpushed.
+
+- **Claim checked**: the validator image runs the latest timelock work.
+- **Verdict**: **suspect** as a process risk. The provenance itself is correct (finding 24).
+- **Evidence (local)**:
+  - The review host's local `dev-atomica` (`391873952b`) is 72 commits ahead of `origin/dev-atomica`. The diff is 37 files with +1,970 / −143 lines.
+  - `git branch -r --contains 0cb29e2fcf` is empty.
+  - The commits are dated 2026-10-31. That is the day of the suspected host crash.
+  - They include three relevant commits:
+    - `0cb29e2fcf` fixes the weights (finding 3).
+    - `351b0bbfb9` adds a timelock share service (finding 2).
+    - `d7a315e7d6` adds a swarm smoke test, `testsuite/smoke-test/src/timelock_e2e.rs`. It enables the DKG by governance (`:266`), not at genesis, so finding 1 still holds for a fresh network.
+  - This review did not read or test those commits in depth.
+- **Failure scenario**: the work is lost if the host fails. Or it is pushed later and silently changes what the product's Move CI compiles against (finding 17), while validators still run `e41b69f662`.
+- **Fix**: push the local branch to a feature branch now. Open a draft dev-atomica PR. Run the timelock smoke test in CI. Then cut a new release and image, and bump all atomica pins in one PR.
+
+### 10. The SDK and most web-component unit tests run in no CI job.
+
+- **Claim checked**: unit tests for the code that PR 146 changed run in CI.
+- **Verdict**: **broken** as coverage. The tests pass when run.
+- **Evidence**:
+  - **local**: no workflow runs `vitest` in `source/atomica-sdk`. That leaves 11 test files untested in CI, including `ibe-bid.test.ts`, `settlement-bridge.test.ts`, and `aptos-payloads.test.ts`.
+  - **local**: CI names only 12 of the 47 test files in `atomica-web-components`. Nothing runs `test:unit`. PR 146 moved `AuctionBidder.test.tsx` and `AuctionRevealer.test.tsx` into the unrun `tests/unit/`.
+  - **local**: before PR 150, `storage-key.test.ts` imported a path that does not exist. That proves the SDK tests had not run.
+  - **local** runs: `bunx vitest run` in `atomica-sdk` gives `Tests 129 passed (129)`. `bunx vitest run --config vitest.unit.config.ts` in `atomica-web-components` gives `80 passed | 7 skipped (87)`.
+- **Failure scenario**: a regression in the bid payload or settlement mapping merges with every required check green.
+- **Fix**: add a required job that runs both suites on every PR. Add a guard that fails when a test file is in no job.
+
+### 11. The state proof has no trusted root, and one lock can be registered twice.
+
+- **Claim checked**: step 2 verifies the lock against a beacon or light-client root.
+- **Verdict**: **suspect**. This matches the Demo trust model, where the operator is fully trusted.
+- **Evidence (local)**:
+  - `eth_proof.move:81-125` checks proofs against a `state_root` that the caller supplies. Nothing ties it to a block hash or a beacon header.
+  - `storage_key` is not derived on chain. The LockBox address and token are not pinned.
+  - `lock_id` hashes `block_hash` (`lock_receipt.move:265-295`). The same lock proven at two blocks gives two receipts.
+  - The only guard is the signer rule (`lock_receipt.move:205-210`).
+  - The TypeScript beacon tests never reach Aptos. The light-client test soft-passes on a 404 (`beacon/integration.test.ts:52`).
+- **Failure scenario**: an operator registers one 10 FakeETH lock at blocks N and N+1. 20 FakeETH of supply is then auctioned against 10 locked.
+- **Fix**: store trusted headers on Aptos and require `state_root` to match. Derive `storage_key` on chain. Pin the LockBox and token mapping. Derive `lock_id` from a LockBox nonce.
+
+### 12. The 2-hour epoch cannot hold the PRD's 4-hour bid window.
+
+- **Claim checked**: genesis values fit Atomica's auction schedule.
+- **Verdict**: **suspect**. The value is the upstream default.
+- **Evidence (local)**:
+  - `generate-genesis.sh:79` sets `epoch_duration_secs: 7200`.
+  - The PRD (`docs/specifications/prd.md:65-72`) sets a bid window of 12:15 to 16:15 UTC.
+  - `ibe_config.move:452-460` requires a deadline at least 15 minutes before the end of the registering epoch.
+  - Any epoch change expires every pending timelock of the old epoch (`ibe_config.move:722-729`).
+- **Failure scenario**: the 12:15 auction registers a 16:15 deadline. `register_timelock` aborts with `E_DEADLINE_AFTER_EPOCH_END`.
+- **Fix**: choose the epoch policy with the auction schedule, or support timelocks that span epochs. Record the choice in the validator timelock decision doc, which already lists the risk.
+
+### 13. The release node is built with `--features testing`.
+
+- **Claim checked**: production node safety guards survived the upgrade.
+- **Verdict**: **suspect**. This carried over from the old fork.
+- **Evidence**:
+  - **CI**: the release run [41383834558](https://github.com/bomba-atomica/atomica-aptos/actions/runs/41383834558) builds with `--features testing`. The workflow is `build-aptos-binary.yml:122`.
+  - **local**: `aptos-node/src/lib.rs:7-9` and `main.rs:13-18` remove the upstream `compile_error!` and `assert_no_test_natives` guards.
+  - **local**: with the `smoke-test` feature, each randomness-DKG dealer seeds its RNG from its public address (`dkg/src/dkg_manager/mod.rs:320-324`). Randomness is on at genesis. The timelock dealer uses `thread_rng` (`dkg/src/chunky/dkg_manager/mod.rs:481`), so the timelock secret is not affected.
+- **Failure scenario**: anyone can predict `aptos_framework::randomness` output. Atomica contracts do not use randomness today, so the impact is latent.
+- **Fix**: build the release and image without `testing`. Ship a separate testing artifact for swarms. Restore the upstream guards.
+
+### 14. Timelock parameters exist only as a test fallback on chain id 4.
+
+- **Verdict**: **suspect**.
+- **Evidence (local)**:
+  - `types/src/dkg/timelock_dkg.rs:334-368` uses `TestKeyFallback`, seeded with the public constant `StdRng::seed_from_u64(300)`, on chain id 4. Every other chain id gets `NotAvailable`.
+  - No node template sets `timelock_public_parameters_blob_path`.
+  - This review did not check whether the test parameters carry a recoverable setup secret.
+- **Failure scenario**: moving to a real chain id disables the timelock session with no error.
+- **Fix**: generate real parameters, ship them as a blob, set the path, pin the hash on chain, and fail at startup on a non-test chain without the blob.
+
+### 15. Every live timelock test was dropped. The Move test bypass rests on a false premise.
+
+- **Verdict**: **weakened**. Not justified for the reveal path.
+- **Evidence (local)**:
+  - The old fork had smoke tests under `testsuite/smoke-test/src/{ibe,timelock}` and `randomness/ibe_mpk_on_chain.rs`. `git grep -il "timelock\|ibe_config" e41b69f662 -- testsuite/` is empty.
+  - `ibe_config.move:917-923` `finalize_for_testing` skips the pairing check. Its stated reason is that the native is unavailable in Move tests. That is false, because `tests/ibe_native_test.move:54` calls it.
+  - Product tests use this bypass (`auction_bid_wrapper_tests.move:123-125`).
+- **Failure scenario**: findings 1, 2, and 3 all pass the current suites.
+- **Fix**: restore one CI swarm test that covers DKG, epoch config, registration, shares, reveal, and key check on 4 or more validators. Make `finalize_for_testing` run the real pairing check.
+
+### 16. The required checks are narrow and misnamed. A skipped run can race the real one.
+
+- **Claim checked**: the three required checks gate the protocol.
+- **Verdict**: **suspect** (CI).
+- **Evidence (CI)**: ruleset `11921934` requires `Web Tests (unit)`, `Web Tests (integration)`, and `Web Tests (meta)`, with `strict: false`. Run [41422391992](https://github.com/bomba-atomica/atomica/actions/runs/41422391992) at `40d4a1b`:
+
+| Check | What it actually runs | Result |
+|---|---|---|
+| Web Tests (unit) | The Aptos Docker testnet SDK suite, which is a system test. Skipped on drafts. | 23 passed |
+| Web Tests (integration) | Only `state-proofs/typescript/tests/ibe.test.ts`, the retired G1 scheme | 9 passed |
+| Web Tests (meta) | 6 demo smoke files | 6 passed |
+
+  - The browser, Move, EVM, Ethereum, and verifier workflows are not required. Browser Tests failed on main at `4fee0bf`, `0db1b90`, and `87a30f2` (runs 40989631975, 41397732675, 41398848063). Nothing blocked them.
+  - Skipping `Web Tests (unit)` on drafts is acceptable by itself, because GitHub does not merge drafts.
+  - On the CI split pr (151), SHA `f936881` had a skipped run (125184456449) and a real run (125184449722) of `Web Tests (unit)` for about 4 minutes.
+- **Failure scenario**: a PR merges in that window, or merges with a red browser or Move job.
+- **Fix**: gate on one aggregator job that always runs. Add the Move, SDK unit, and browser anvil jobs to it. Rename `Web Tests (unit)` to what it runs.
+
+### 17. The Move contracts depend on the moving `dev-atomica` branch.
+
+- **Claim checked**: the contracts pass against `dev-atomica` HEAD and against the validator commit.
+- **Verdict**: verified for today, **suspect** going forward.
+- **Evidence**:
+  - **local**: the CLI was the release asset `aptos-e41b69f662` (aptos 9.5.0), run with a fresh `MOVE_HOME`.
+  - **local**: with `rev = "dev-atomica"`, `aptos move compile --fail-on-warning` gave 0 warnings, and `aptos move test` gave `Total tests: 133; passed: 133`.
+  - **local**: with `rev = "e41b69f662cde4c40953b9576088f997bb31a126"`, the results were the same, with the same test list. `git diff --stat e41b69f662 origin/dev-atomica -- aptos-move/framework` is empty.
+  - **CI**: Move run [41422392158](https://github.com/bomba-atomica/atomica/actions/runs/41422392158) gives 133/133.
+  - There is no `Move.lock`. Pushing finding 9's commits changes `ibe_config.move` under the contracts at once.
+- **Fix**: pin `rev` to the full SHA of the deployed binary. Bump it in the same PR as the binary pin and image digest. Add a CI check that the two match.
+
+### 18. The 10x gas loosening is real, but the default gas cap did not grow.
+
+- **Claim checked**: the 10x looser bounds in `transfer.test.ts` and `deploy-contract.test.ts` reflect a real cost change.
+- **Verdict**: **weakened-but-justified**, with a new risk.
+- **Evidence**:
+  - **local**: upstream `4cb1077a64` "[gas] Apply 10x multiplier to gas costs and storage fees" is in the range. For example, `min_transaction_gas_units` went from 2,760,000 to 27,600,000, and `storage_fee_per_state_slot` from 40,000 to 400,000. Atomica has no gas override.
+  - The test comments say "gas schedule v49". The gas feature version is actually 53.
+  - **CI**: measured gas use rose by the same factor:
+
+| Operation | Before (`4fee0bf`, run 40989631899) | After (`40d4a1b`, run 41422391992) | Ratio |
+|---|---|---|---|
+| noop publish | 1,684 units | 17,242 units | 10.2x |
+| atomica package publish | 26,153 units | 282,257 units | 10.8x (package grew 10%) |
+
+  - **local**: Move fees are token-based, and `REBATE_COEFFICIENT = 0` (`auction.move:126`). No protocol fee is off by 10x.
+  - **local**: `atomica-sdk/src/transaction.ts:85-91` sets no `maxGasAmount`. ts-sdk therefore uses its default of 200,000 units. The package publish already exceeds that.
+  - **local**: the last assertion in `transfer.test.ts:94` is a tautology.
+- **Failure scenario**: a large `settle` or `finalize_reveal` near `MAX_BIDS_PER_WINDOW = 100` aborts with OUT_OF_GAS. It would have fit under the old schedule.
+- **Fix**: simulate before submit and set `maxGasAmount` from the result plus a margin. Add a live 100-bid settle test that logs `gas_used`.
+
+### 19. The healthcheck that accepts 503 now only means "port open".
+
+- **Verdict**: **weakened-but-justified** for tests. **Suspect** for operators.
+- **Evidence (local)**:
+  - `/v1/-/healthy` (`api/src/basic.rs:163-201`) checks staleness only when `duration_secs` is given. The compose check gives none.
+  - A 503 means "DB is bootstrapping", or any indexer or storage read error (`api/src/context.rs:277-381`).
+  - The test harness `waitForHealthy` (`aptos-testnet/src/index.ts:856-895`) still requires HTTP 200. Nothing asserts that blocks advance.
+- **Failure scenario**: `docker compose up --wait` reports a healthy validator whose database is permanently broken.
+- **Fix**: use `depends_on: service_started` for the peer start order. Check `/v1/-/healthy?duration_secs=60` with a `start_period`. Require the block height to rise across two samples in the harness.
+
+### 20. The rewritten `validator-sync.test.ts` passes a halted or forked chain.
+
+- **Verdict**: **suspect** (CI).
+- **Evidence**:
+  - The new test (`aptos-testnet/test/validator-sync.test.ts:37-54`) waits for every validator to reach the starting max height. That is stricter for a lagging node.
+  - It never asserts progress or compares block hashes. CI printed `Block heights: 175, 175, 175, 175 (diff: 0)`. The epoch check only asserts equal epochs.
+  - The required Aptos Docker workflow runs a different file (`typescript-sdk/test/validator-sync.test.ts`).
+- **Failure scenario**: a halted chain passes. So does a validator on a fork at the same height.
+- **Fix**: require `maxHeight + 3` on every validator. Compare `block_hash` at a common height.
+
+### 21. The committed `dist/` folders carry the old bid ABI.
+
+- **Verdict**: **suspect**. CI rebuilds before use, so CI is not affected today.
+- **Evidence (local)**:
+  - `atomica-sdk/dist`, `atomica-web-components/dist`, and `docker-testnet/aptos-testnet/dist` are tracked, even though `.gitignore:38` lists `**/dist/`.
+  - A fresh SDK build changes `payloads.js` by 140 lines. The committed `dist/components/AuctionBidder.js:83` still calls the old `submitBid(…, u, v, …)`.
+  - CI builds in dependency order first (`test-web.yaml:44-72`, `test-browser.yaml:77-152`).
+- **Failure scenario**: a consumer that installs without building gets the pre-146 bid payload, and the chain rejects it.
+- **Fix**: `git rm -r --cached` the three trees. Add a CI guard against tracked `dist/` files.
+
+### 22. The pre-release image is also tagged `latest`, and one fallback uses `latest`.
+
+- **Verdict**: **suspect** (low).
+- **Evidence (CI)**:
+  - Image run [41392444083](https://github.com/bomba-atomica/atomica-aptos/actions/runs/41392444083) pushed `latest` for a pre-release.
+  - The `revision` label is the workflow's own commit, not the binary's.
+  - The release body says "Built: 2026-02-01". The run was on 2026-11-02.
+  - `source/docker-testnet/aptos-testnet/src/genesis.ts:120` falls back to `validator:latest`.
+- **Fix**: tag `latest` only for full releases. Label the image with the binary SHA. Replace the fallback with the pinned digest.
+
+### 23. The golden vectors use test PVSS parameters.
+
+- **Claim checked**: the vectors match what the upgraded code makes.
+- **Verdict**: **weakened-but-justified**.
+- **Evidence**:
+  - **local**: the 1.38.5 vectors moved unchanged to `atomica/golden_vectors/legacy-v1/`. The new `ibe_v2_golden_vectors.json` came from `crates/aptos-dkg/src/ibe/golden_vectors.rs`.
+  - **local**: regenerating with `cargo test -j 4 -p aptos-dkg --lib ibe::golden_vectors::write_golden_vectors -- --ignored` left the JSON and `ibe_golden_vector_fixtures.move` byte-identical (`git status --porcelain` was empty).
+  - **CI**: Crypto Crates Tests run [41383834699](https://github.com/bomba-atomica/atomica-aptos/actions/runs/41383834699) passes the same checks.
+  - **local**: the generator uses `ell = 16` and a stand-in session id. Production uses `ell = 32` and `TimelockDKGSessionId` (`timelock_dkg.rs:356-361`). No SDK test encrypts or decrypts a vector bid.
+  - **local**: the SIWE vectors in `source/golden-vectors` still match, because the Move module did not change. The generator writes to a dead `atomica-web` path.
+- **Fix**: add one vector made with the deployment `ell` and session id. Add an SDK decrypt test against the vector bids. Point the SIWE generator at `atomica-sdk/tests/fixtures`.
+
+### 24. Items verified as correct
+
+- **Survived the merge (local)**:
+  - No conflict markers.
+  - No new `todo!()`.
+  - No unwraps added on network input.
+  - `scalar_elgamal` and the dual-output DKG were retired as the cost report planned.
+  - `crypto_algebra` `new_element` and `get_handle` were dropped, which removes a handle-forging path.
+- **A+ hardening exists (local, static read)**:
+  - A per-share pairing check against on-chain verification keys (`timelock.rs:123-134`).
+  - A final key check in Rust and again in Move (`ibe_config.move:611-617`).
+  - A submission-time ciphertext check with a G2 subgroup test and a strict Ed25519 signature over associated data bound to the bidder and auction (`auction.move:408-505`).
+- **Provenance (CI)**:
+  - Release `binary-e41b69f662` was built by run 41383834558 at `e41b69f662`. Its `head.mrb` equals the committed one.
+  - Image `sha256:d2c49b0f…b93a` has `org.opencontainers.image.revision=e41b69f662cde4c4…`.
+  - `e2f417d6` is the first 8 hex digits of the Dockerfile's sha256, not a commit.
+  - All 8 binary pins and 11 image refs on atomica `main` match.
+- **Beacon tests on Docker (CI)**:
+  - All 7 `[docker only]` tests pass on the Docker tier at the ready-for-review run of pr (151) ([41417745591](https://github.com/bomba-atomica/atomica/actions/runs/41417745591)) and on main at `40d4a1b` (run 41422391981).
+  - `should retrieve validator public keys` has zero assertions.
+- **`cacheTimeout: -1` on test providers only (local read of ethers 6.17.0)**:
+  - Users sign through `BrowserProvider`, and the wallet assigns the nonce.
+  - The app's `JsonRpcProvider` instances are read-only. A stale read lasts at most 250 ms.
+  - The demo scripts that use `Wallet` should use `NonceManager`.
+- **Anvil tier (CI + local)**:
+  - It runs the same files as the Docker tier. It is only faster.
+  - The storage-key padding in pr (150) is test-only. Product keys come from `keccak256`.
+  - The Ethereum Docker workflow is path-filtered, and it did not run on main at `d24434c`.
+- **Browser extension suite (CI)**: CI never ran it, before or after pr (149). The exclusion dropped nothing that ran. Real MetaMask compatibility has no CI coverage.
+- **`atomica-crosschain-testing` (local)**:
+  - Its `ethereum-testnet/rust-sdk` path never existed in any ref, so the crate has never built.
+  - It held only a connectivity check and an `#[ignore]` stub.
+  - Little coverage was lost. The claim in pr (146) that it "compiles" was never checked.
+- **Skip inventory (local + CI)**:
+  - No `.only`, `xit`, `todo`, or `passWithNoTests`.
+  - No CI job on main reports 0 tests.
+  - Pr (146) added 7 empty `it.skip` tests (`tests/unit/hooks/sell-flow-state.test.tsx:171-191`). They cite a closed issue.
+- **CI taxonomy scan (local)**:
+  - `~/.agents/scripts/auto/ci-taxonomy-scan.sh` on a clean clone at `40d4a1b` reports `ok=true total=10 errors=0 warnings=21`. All 21 warnings are `sweep-missing-nightly`.
+  - The script resolves the repo from `--git-common-dir`. Run from a worktree, it scans the main checkout instead.
+  - It grades triggers only, so it cannot see the unrun tests in finding 10.
+
+---
+
+## Agreement with the cost report
+
+- **Agrees**:
+  - The 10x gas multiplier (finding 18).
+  - The retirement of `scalar_elgamal` and the dual-output DKG.
+  - The A+ hardening items exist in code (finding 24).
+  - The epoch-boundary risk is real (finding 12).
+  - The `ibe_config` dependency of the Move contracts (finding 17).
+- **Contradicts**:
+  - A+ flow step 3 says validators submit shares. No code does (finding 2).
+  - Gap 1 is closed for bad shares. The reveal now fails for honest shares instead (finding 3).
+  - The report assumed the timelock secret comes from chunky DKG at every epoch. That DKG is off at genesis (finding 1).
+  - Open question 5 is marked answered, saying the forge-facing code of `atomica-crosschain-testing` is compatible. The crate has never built (finding 24).
+- **New risks the report did not list**: findings 4 to 8, 13, and 14.
+
+## Recommended order of work
+
+1. Push the local `dev-atomica` commits to a feature branch, and open a draft fork PR (finding 9).
+2. Enable the timelock DKG at genesis, and run a 4-validator timelock swarm test in fork CI (findings 1, 2, 3, 15).
+3. Fix the `TimelockDKGResult` determinism bug, and build the release without `testing` (findings 8, 13).
+4. Cut a new release and image. Pin the binary, image, and Move `rev` in one atomica PR (findings 17, 22).
+5. Fix `create_auction` arity and the settle and timelock guards. Remove the swallowed errors (findings 4, 6).
+6. Ship a V2 client encryptor and decryptor (finding 5).
+7. Make SDK and unit tests required in CI (findings 10, 16).
+8. Wire Ethereum releases to Aptos outcomes (finding 7).
