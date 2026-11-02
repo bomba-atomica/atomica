@@ -97,7 +97,7 @@ jobs:
 
   aptos-testnet-sdk:
     # Starts the Aptos Docker testnet, so it waits for ready-for-review.
-    name: Web Tests (aptos-testnet-sdk)
+    name: Web Tests (unit)  # required check name in the main ruleset; runs the Aptos testnet SDK suite
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
