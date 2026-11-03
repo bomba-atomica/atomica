@@ -1,0 +1,67 @@
+# Test files that no CI job runs yet.
+#
+# scripts/check-test-coverage.js fails when a test file under source/ is run
+# by no workflow job. Each file below is a known gap with a reason. The guard
+# also fails when a listed file is gone or a job starts running it, so this
+# list can only shrink. Do not add a new file here to get a green check: add
+# it to a workflow step instead.
+
+exemptions:
+  - reason: >-
+      Browser-mode component tests (vitest.config.ts, real Chromium, Aptos and
+      Ethereum testnet browser commands). No CI job runs the browser suite
+      beyond the happy-path file yet.
+    files:
+      - source/atomica-web-components/tests/AccountStatus.test.tsx
+      - source/atomica-web-components/tests/FakeEthMint.test.tsx
+      - source/atomica-web-components/tests/SettlementStatus.test.tsx
+      - source/atomica-web-components/tests/TxButton.skip-submit.test.tsx
+      - source/atomica-web-components/tests/WithdrawWinnings.test.tsx
+      - source/atomica-web-components/tests/app-config.test.ts
+      - source/atomica-web-components/tests/app-state.test.tsx
+      - source/atomica-web-components/tests/useBidHistory.test.tsx
+      - source/atomica-web-components/tests/useFeeRebate.test.tsx
+      - source/atomica-web-components/tests/usePoolEvents.test.tsx
+
+  - reason: >-
+      Live-chain browser integration steps (Docker Aptos testnet plus anvil or
+      the Docker PoS chain). CI runs only 14-happy-path.test.tsx today.
+    files:
+      - source/atomica-web-components/tests/integration/01-faucet.test.tsx
+      - source/atomica-web-components/tests/integration/02-wallet-connect.test.tsx
+      - source/atomica-web-components/tests/integration/03-approve-and-lock.test.tsx
+      - source/atomica-web-components/tests/integration/04-lock-confirmation.test.tsx
+      - source/atomica-web-components/tests/integration/05-proof-generation.test.tsx
+      - source/atomica-web-components/tests/integration/06-proof-submission.test.tsx
+      - source/atomica-web-components/tests/integration/07-create-auction.test.tsx
+      - source/atomica-web-components/tests/integration/08-auction-monitor.test.tsx
+      - source/atomica-web-components/tests/integration/09-submit-bid.test.tsx
+      - source/atomica-web-components/tests/integration/10-settle.test.tsx
+      - source/atomica-web-components/tests/integration/11-claim-and-reclaim.test.tsx
+      - source/atomica-web-components/tests/integration/12a-bid-storage.test.tsx
+      - source/atomica-web-components/tests/integration/12b-fee-rebate-computation.test.tsx
+      - source/atomica-web-components/tests/integration/12-fee-rebate.test.tsx
+      - source/atomica-web-components/tests/integration/13-bid-history.test.tsx
+      - source/atomica-web-components/tests/integration/15-pool-events.test.tsx
+      - source/atomica-web-components/tests/integration/selectors.test.tsx
+      - source/atomica-web-components/tests/integration/wallet-mock-smoke.test.tsx
+
+  - reason: >-
+      Node-side Playwright test with the real MetaMask extension. Run by hand
+      with bun run test:metamask; it needs a downloaded extension build.
+    files:
+      - source/atomica-web-components/tests/browser-extension/metamask-compat.test.ts
+
+  - reason: >-
+      atomica-demo integration tests that need a live Aptos localnet. The
+      demo CI job runs only its no-chain unit files.
+    files:
+      - source/atomica-demo/tests/integration/fake-minting/FakeEthEd25519.integration.test.ts
+      - source/atomica-demo/tests/integration/fake-minting/FakeEthSIWE.integration.test.ts
+      - source/atomica-demo/tests/integration/wallet/SimpleTransfer.test.ts
+
+  - reason: >-
+      atomica-demo browser-mode wallet-mock check. It needs no chain, but the
+      demo CI job names its files one by one and does not list this one yet.
+    files:
+      - source/atomica-demo/tests/integration/wallet/WalletAdapter.test.ts
