@@ -1,17 +1,58 @@
 name: Test Web (TypeScript/Vitest)
 
 on:
+  # No paths-ignore on pull_request: the three "Web Tests" jobs are required
+  # checks in the main ruleset, and a workflow filtered out by paths never
+  # reports them, which left docs-only PRs unmergeable. The `changes` job
+  # below skips the work instead, so the checks still report.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths-ignore: ["**.md", "**.txt"]
   push:
     branches: [main]
     paths-ignore: ["**.md", "**.txt"]
   workflow_dispatch:
 
 jobs:
+  changes:
+    # Decides whether a pull request touches anything but .md/.txt files (the
+    # old paths-ignore rule). Fails open: if this job fails, its output is
+    # empty, which is not "false", so every test still runs.
+    name: Detect docs-only change
+    runs-on: ubuntu-latest
+    env:
+      CI_CLASS: ignore
+    permissions:
+      pull-requests: read
+    outputs:
+      code: ${{ steps.scope.outputs.code }}
+    steps:
+      - name: Classify changed files
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
+          echo "$files"
+          if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -qvE '\.(md|txt)$'; then
+            echo "Docs-only change: Web Tests report without running."
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+
   test-web:
     name: Web Tests (${{ matrix.type }})
+    # Gate at step level, not job level: a matrix job skipped by a job-level
+    # `if` reports an unexpanded name, which never matches the required check.
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -26,11 +67,13 @@ jobs:
         type: [integration, meta]
     steps:
       - name: Checkout repository
+        if: needs.changes.outputs.code != 'false'
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Login to GitHub Container Registry
+        if: needs.changes.outputs.code != 'false'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -38,36 +81,41 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Bun
+        if: needs.changes.outputs.code != 'false'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
       - name: Build Ethereum Testnet SDK
+        if: needs.changes.outputs.code != 'false'
         working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
         run: |
           bun install
           bun run build
 
       - name: Build State Proofs
+        if: needs.changes.outputs.code != 'false'
         working-directory: source/state-proofs/typescript
         run: |
           bun install
           bun run build
 
       - name: Build Atomica SDK
+        if: needs.changes.outputs.code != 'false'
         working-directory: source/atomica-sdk
         run: |
           bun install
           bun run build
 
       - name: Build Aptos Testnet SDK
+        if: needs.changes.outputs.code != 'false'
         working-directory: source/docker-testnet/aptos-testnet
         run: |
           bun install
           bun run build
 
       - name: Build Atomica Web UI
-        if: matrix.type == 'meta'
+        if: needs.changes.outputs.code != 'false' && matrix.type == 'meta'
         working-directory: source/atomica-web-components
         run: |
           bun install
@@ -75,30 +123,31 @@ jobs:
 
       # ── integration: State Proofs Tests ────────────────────────────────────
       - name: Run IBE / State Proofs tests
-        if: matrix.type == 'integration'
+        if: needs.changes.outputs.code != 'false' && matrix.type == 'integration'
         working-directory: source/state-proofs/typescript
         run: bun test tests/ibe.test.ts
 
       # ── meta: Web Demo unit tests ───────────────────────────────────────────
       - name: Install demo dependencies
-        if: matrix.type == 'meta'
+        if: needs.changes.outputs.code != 'false' && matrix.type == 'meta'
         working-directory: source/atomica-demo
         run: bun install
 
       - name: Install Playwright browsers (demo)
-        if: matrix.type == 'meta'
+        if: needs.changes.outputs.code != 'false' && matrix.type == 'meta'
         working-directory: source/atomica-demo
         run: bunx playwright install --with-deps chromium
 
       - name: Run Web Demo unit tests
-        if: matrix.type == 'meta'
+        if: needs.changes.outputs.code != 'false' && matrix.type == 'meta'
         working-directory: source/atomica-demo
         run: bunx vitest run tests/simple.test.ts tests/sdk-import.test.ts tests/aptos-sdk.test.ts tests/mock-wallet.test.ts tests/app-import.test.ts tests/app-component.test.tsx
 
   aptos-testnet-sdk:
     # Starts the Aptos Docker testnet, so it waits for ready-for-review.
     name: Web Tests (unit)  # required check name in the main ruleset; runs the Aptos testnet SDK suite
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
