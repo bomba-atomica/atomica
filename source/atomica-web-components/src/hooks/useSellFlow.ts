@@ -119,12 +119,14 @@ function clearState(address: string): void {
  *   keccak256(blockHash || contractAddress || userAddress || tokenAddress || storageKey)
  */
 function computeLockId(proof: LockedBalanceProof): string {
-  const data = Buffer.concat([
-    Buffer.from(proof.blockHash.slice(2), "hex"),
-    Buffer.from(proof.contractAddress.slice(2), "hex"),
-    Buffer.from(proof.userAddress.slice(2), "hex"),
-    Buffer.from(proof.tokenAddress.slice(2), "hex"),
-    Buffer.from(proof.storageKey.slice(2), "hex"),
+  // ethers.concat keeps this browser-native: Node's Buffer is not a global in
+  // browsers, and a Buffer from another realm fails ethers' BytesLike check.
+  const data = ethers.concat([
+    proof.blockHash,
+    proof.contractAddress,
+    proof.userAddress,
+    proof.tokenAddress,
+    proof.storageKey,
   ]);
   return ethers.keccak256(data);
 }

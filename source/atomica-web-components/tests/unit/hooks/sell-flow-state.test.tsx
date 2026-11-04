@@ -2,13 +2,16 @@
  * Unit tests for useSellFlow state machine.
  *
  * Tests state transitions, localStorage persistence, and resume behavior
- * without triggering any blockchain calls. Blockchain-dependent transitions
- * (lockEth, generateProof, submitProof, createAuction) are covered by
- * meta/e2e tests once infrastructure is available.
+ * without triggering any blockchain calls. The blockchain actions (lockEth,
+ * generateProof, submitProof, createAuction, cancelAndUnlock) run against
+ * mocked SDK functions, so these tests check the hook's own transitions and
+ * the arguments it hands to the SDK. Live-chain coverage of the same flow is
+ * in tests/integration/14-happy-path.test.tsx.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
+import { ethers } from "ethers";
 
 // Prevent the confirming-step polling effect from making real RPC calls.
 vi.mock("@atomica/sdk/chain-config", () => ({
@@ -35,15 +38,75 @@ vi.mock("@atomica/sdk/ethereum/proofs", () => ({
 vi.mock("@atomica/sdk/aptos", () => ({
   getRegisterLockPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
+  aptos: { mock: "aptos-client" },
 }));
 vi.mock("@atomica/sdk", () => ({
   submitNativeTransaction: vi.fn(),
 }));
 
 import { useSellFlow } from "../../../src/hooks/useSellFlow";
+import {
+  approveFakeEth,
+  lockFakeEth,
+  getUnlockTime,
+  withdrawFakeEth,
+} from "@atomica/sdk/ethereum";
+import { generateLockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
+import type { LockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
+import {
+  aptos,
+  getRegisterLockPayload,
+  getCreateAuctionPayload,
+} from "@atomica/sdk/aptos";
+import { submitNativeTransaction } from "@atomica/sdk";
 
 const ACCOUNT = "0x1234567890123456789012345678901234567890";
 const STORAGE_KEY = `sell-flow-${ACCOUNT.toLowerCase()}`;
+const LOCK_BOX = "0x" + "11".repeat(20);
+const FAKE_ETH = "0x" + "22".repeat(20);
+
+const PROOF = {
+  blockNumber: 100,
+  blockHash: "0x" + "aa".repeat(32),
+  stateRoot: "0x" + "bb".repeat(32),
+  contractAddress: LOCK_BOX,
+  userAddress: ACCOUNT,
+  tokenAddress: FAKE_ETH,
+  storageKey: "0x" + "cc".repeat(32),
+  storageValue: 10n ** 18n,
+  accountProof: ["0x01"],
+  storageProof: ["0x02"],
+} as unknown as LockedBalanceProof;
+
+/** lock_id as lock_receipt.move computes it for PROOF. */
+const EXPECTED_LOCK_ID = ethers.keccak256(
+  ethers.concat([
+    PROOF.blockHash,
+    PROOF.contractAddress,
+    PROOF.userAddress,
+    PROOF.tokenAddress,
+    PROOF.storageKey,
+  ]),
+);
+
+type WindowWithEthereum = { ethereum?: unknown };
+
+function installWalletProvider() {
+  (window as unknown as WindowWithEthereum).ethereum = {
+    request: vi.fn(),
+  };
+}
+
+function persist(state: Record<string, unknown>) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function stored(): Record<string, unknown> {
+  return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") as Record<
+    string,
+    unknown
+  >;
+}
 
 describe("useSellFlow state machine", () => {
   beforeEach(() => {
@@ -166,27 +229,246 @@ describe("useSellFlow state machine", () => {
     }
   });
 
-  // ── Blockchain-dependent transitions (stubbed, pending infra) ────────────
+  // ── Blockchain-dependent transitions (SDK mocked) ───────────────────────
 
-  it.skip(
-    "lockEth: transitions connect → lock → confirming after approve + lock tx — tracked in #89",
-  );
-  it.skip(
-    "generateProof: transitions confirming → generating-proof → submitting-proof — tracked in #89",
-  );
-  it.skip(
-    "submitProof: transitions submitting-proof → creating-auction after Aptos tx — tracked in #89",
-  );
-  it.skip(
-    "createAuction: transitions creating-auction → monitoring after Aptos tx — tracked in #89",
-  );
-  it.skip(
-    "cancelAndUnlock: calls withdrawFakeEth and resets flow — tracked in #89",
-  );
-  it.skip(
-    "lockEth error: sets error message and stays at current step — tracked in #89",
-  );
-  it.skip(
-    "submitProof error: sets error message and stays at submitting-proof — tracked in #89",
-  );
+  describe("blockchain actions", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      installWalletProvider();
+    });
+
+    afterEach(() => {
+      delete (window as unknown as WindowWithEthereum).ethereum;
+      vi.restoreAllMocks();
+    });
+
+    it("lockEth: approves then locks, and moves lock → confirming with the receipt", async () => {
+      // The confirming step polls the chain; report zero confirmations so it stays put.
+      vi.spyOn(
+        ethers.JsonRpcProvider.prototype,
+        "getBlockNumber",
+      ).mockResolvedValue(77);
+      vi.mocked(approveFakeEth).mockResolvedValue(undefined as never);
+      vi.mocked(lockFakeEth).mockResolvedValue({
+        hash: "0xlocktx",
+        blockNumber: 77,
+      } as never);
+      vi.mocked(getUnlockTime).mockResolvedValue(1_700_000_000 as never);
+
+      const { result, unmount } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      expect(result.current.step).toBe("lock");
+
+      await act(async () => {
+        await result.current.lockEth(10n ** 18n, 2_000_000_000n);
+      });
+
+      expect(approveFakeEth).toHaveBeenCalledWith(
+        expect.anything(),
+        10n ** 18n,
+      );
+      expect(lockFakeEth).toHaveBeenCalledWith(expect.anything(), 10n ** 18n);
+      expect(
+        vi.mocked(approveFakeEth).mock.invocationCallOrder[0],
+      ).toBeLessThan(vi.mocked(lockFakeEth).mock.invocationCallOrder[0]);
+      expect(getUnlockTime).toHaveBeenCalledWith(expect.anything(), ACCOUNT);
+      expect(result.current.step).toBe("confirming");
+      expect(result.current.txHash).toBe("0xlocktx");
+      expect(result.current.lockBlock).toBe(77);
+      expect(result.current.amount).toBe(10n ** 18n);
+      expect(result.current.minPrice).toBe(2_000_000_000n);
+      expect(result.current.unlockTime).toBe(1_700_000_000);
+      expect(result.current.loading).toBe(false);
+      expect(result.current.error).toBeUndefined();
+      expect(stored()).toMatchObject({
+        step: "confirming",
+        txHash: "0xlocktx",
+        lockBlock: 77,
+        amount: "1000000000000000000",
+        minPrice: "2000000000",
+      });
+      unmount();
+    });
+
+    it("confirming: moves to generating-proof once the lock block has 1 confirmation", async () => {
+      vi.spyOn(
+        ethers.JsonRpcProvider.prototype,
+        "getBlockNumber",
+      ).mockResolvedValue(101);
+      persist({ step: "confirming", txHash: "0xlocktx", lockBlock: 100 });
+
+      const { result, unmount } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      await vi.waitFor(() => {
+        expect(result.current.step).toBe("generating-proof");
+      });
+      expect(result.current.blockConfirmed).toBe(true);
+      unmount();
+    });
+
+    it("generateProof: proves the lock block and moves to submitting-proof", async () => {
+      vi.mocked(generateLockedBalanceProof).mockResolvedValue(PROOF);
+      persist({ step: "generating-proof", lockBlock: 100 });
+
+      const { result } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      await act(async () => {
+        await result.current.generateProof();
+      });
+
+      expect(generateLockedBalanceProof).toHaveBeenCalledWith(
+        expect.anything(),
+        LOCK_BOX,
+        ACCOUNT,
+        FAKE_ETH,
+        100,
+      );
+      expect(result.current.step).toBe("submitting-proof");
+      expect(result.current.proof).toBe(PROOF);
+      expect(result.current.loading).toBe(false);
+      // The proof is too large to persist; only the step is stored.
+      expect(stored().step).toBe("submitting-proof");
+      expect(localStorage.getItem(STORAGE_KEY)).not.toContain("accountProof");
+    });
+
+    it("submitProof: registers the lock on Aptos and moves to creating-auction with the lock_id", async () => {
+      vi.mocked(generateLockedBalanceProof).mockResolvedValue(PROOF);
+      vi.mocked(getRegisterLockPayload).mockReturnValue({
+        fn: "register_lock",
+      } as never);
+      vi.mocked(submitNativeTransaction).mockResolvedValue(undefined as never);
+      persist({ step: "generating-proof", lockBlock: 100 });
+
+      const { result } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      await act(async () => {
+        await result.current.generateProof();
+      });
+      await act(async () => {
+        await result.current.submitProof();
+      });
+
+      expect(getRegisterLockPayload).toHaveBeenCalledWith(PROOF);
+      expect(submitNativeTransaction).toHaveBeenCalledWith(aptos, ACCOUNT, {
+        fn: "register_lock",
+      });
+      expect(result.current.error).toBeUndefined();
+      expect(result.current.step).toBe("creating-auction");
+      expect(result.current.lockId).toBe(EXPECTED_LOCK_ID);
+      expect(stored()).toMatchObject({
+        step: "creating-auction",
+        lockId: EXPECTED_LOCK_ID,
+      });
+    });
+
+    it("createAuction: submits create_auction for the lock and moves to monitoring", async () => {
+      vi.mocked(getCreateAuctionPayload).mockReturnValue({
+        fn: "create_auction",
+      } as never);
+      vi.mocked(submitNativeTransaction).mockResolvedValue(undefined as never);
+      persist({
+        step: "creating-auction",
+        lockId: EXPECTED_LOCK_ID,
+        minPrice: "2000000000",
+        amount: "1000000000000000000",
+      });
+
+      const { result } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      const before = Math.floor(Date.now() / 1000);
+      await act(async () => {
+        await result.current.createAuction();
+      });
+      const after = Math.floor(Date.now() / 1000);
+
+      expect(getCreateAuctionPayload).toHaveBeenCalledTimes(1);
+      const [windowId, pairBcs, lockIdBytes, minPrice, mpk] = vi.mocked(
+        getCreateAuctionPayload,
+      ).mock.calls[0];
+      expect(typeof windowId).toBe("bigint");
+      expect(pairBcs).toEqual(new Uint8Array(0));
+      expect(lockIdBytes).toEqual(ethers.getBytes(EXPECTED_LOCK_ID));
+      expect(minPrice).toBe(2_000_000_000n);
+      expect(mpk).toEqual(new Uint8Array(0));
+      expect(submitNativeTransaction).toHaveBeenCalledWith(aptos, ACCOUNT, {
+        fn: "create_auction",
+      });
+      expect(result.current.step).toBe("monitoring");
+      expect(result.current.auctionEndTime).toBeGreaterThanOrEqual(
+        before + 3600,
+      );
+      expect(result.current.auctionEndTime).toBeLessThanOrEqual(after + 3600);
+      expect(stored().step).toBe("monitoring");
+    });
+
+    it("cancelAndUnlock: withdraws the locked amount and resets the flow to lock", async () => {
+      vi.mocked(withdrawFakeEth).mockResolvedValue(undefined as never);
+      persist({
+        step: "creating-auction",
+        lockId: EXPECTED_LOCK_ID,
+        amount: "1000000000000000000",
+        unlockTime: 1,
+      });
+
+      const { result } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      await act(async () => {
+        await result.current.cancelAndUnlock();
+      });
+
+      expect(withdrawFakeEth).toHaveBeenCalledWith(
+        expect.anything(),
+        10n ** 18n,
+      );
+      expect(result.current.step).toBe("lock");
+      expect(result.current.lockId).toBeUndefined();
+      expect(result.current.amount).toBeUndefined();
+      expect(stored()).toEqual({ step: "lock" });
+    });
+
+    it("lockEth error: sets the error message and stays at lock", async () => {
+      vi.mocked(approveFakeEth).mockResolvedValue(undefined as never);
+      vi.mocked(lockFakeEth).mockRejectedValue(new Error("user rejected lock"));
+
+      const { result } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      await act(async () => {
+        await result.current.lockEth(10n ** 18n, 2_000_000_000n);
+      });
+
+      expect(result.current.step).toBe("lock");
+      expect(result.current.error).toBe("user rejected lock");
+      expect(result.current.loading).toBe(false);
+      expect(result.current.txHash).toBeUndefined();
+      expect(getUnlockTime).not.toHaveBeenCalled();
+      expect(stored().step).toBe("lock");
+    });
+
+    it("submitProof error: sets the error message and stays at submitting-proof", async () => {
+      vi.mocked(generateLockedBalanceProof).mockResolvedValue(PROOF);
+      vi.mocked(getRegisterLockPayload).mockReturnValue({
+        fn: "register_lock",
+      } as never);
+      vi.mocked(submitNativeTransaction).mockRejectedValue(
+        new Error("SIWE signature rejected"),
+      );
+      persist({ step: "generating-proof", lockBlock: 100 });
+
+      const { result } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      await act(async () => {
+        await result.current.generateProof();
+      });
+      await act(async () => {
+        await result.current.submitProof();
+      });
+
+      expect(result.current.step).toBe("submitting-proof");
+      expect(result.current.error).toBe("SIWE signature rejected");
+      expect(result.current.loading).toBe(false);
+      expect(result.current.lockId).toBeUndefined();
+      // The proof survives the failure so the user can retry.
+      expect(result.current.proof).toBe(PROOF);
+    });
+  });
 });

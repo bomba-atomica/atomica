@@ -31,8 +31,9 @@ vi.mock("../../src/hooks/useAptosBalances", () => ({
   }),
 }));
 
-// Mock useSellFlow so we can control the displayed step.
-vi.mock("../../src/hooks/useSellFlow");
+// Mock useSellFlow so we can control the displayed step. The factory keeps
+// vitest from loading the real hook and its SDK imports.
+vi.mock("../../src/hooks/useSellFlow", () => ({ useSellFlow: vi.fn() }));
 
 import { useSellFlow } from "../../src/hooks/useSellFlow";
 import { SellFlow } from "../../src/components/SellFlow/SellFlow";

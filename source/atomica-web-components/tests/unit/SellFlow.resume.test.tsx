@@ -9,7 +9,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  act,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
+import { ethers } from "ethers";
 import { WalletContext } from "../../src/context/WalletContext";
 
 // Prevent real network calls from blockchain dependencies.
@@ -35,6 +43,7 @@ vi.mock("@atomica/sdk/ethereum/proofs", () => ({
 vi.mock("@atomica/sdk/aptos", () => ({
   getRegisterLockPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
+  aptos: { mock: "aptos-client" },
 }));
 vi.mock("@atomica/sdk", () => ({
   submitNativeTransaction: vi.fn(),
@@ -62,6 +71,10 @@ vi.mock("../../src/hooks/useAptosBalances", () => ({
 
 import { SellFlow } from "../../src/components/SellFlow/SellFlow";
 import { BalancesProvider } from "../../src/context/BalancesContext";
+import { approveFakeEth, lockFakeEth } from "@atomica/sdk/ethereum";
+import { generateLockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
+import type { LockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
+import { submitNativeTransaction } from "@atomica/sdk";
 
 const ACCOUNT = "0xaaaa567890123456789012345678901234567890";
 const STORAGE_KEY = `sell-flow-${ACCOUNT.toLowerCase()}`;
@@ -79,10 +92,13 @@ function renderSellFlow() {
 describe("SellFlow localStorage resume", () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
+    delete (window as unknown as { ethereum?: unknown }).ethereum;
   });
 
   it("shows Step2Lock by default when no state is persisted", async () => {
@@ -171,15 +187,116 @@ describe("SellFlow localStorage resume", () => {
     expect(localStorage.getItem(STORAGE_KEY)).toContain('"step":"lock"');
   });
 
-  // ── Pending: requires live blockchain infrastructure ──────────────────────
+  // ── Auto-progression (SDK mocked) ─────────────────────────────────────────
 
-  it.skip(
-    "auto-progresses from confirming to generating-proof after 1 block confirmation — tracked in #89",
-  );
-  it.skip(
-    "auto-progresses steps 5→6→7 on successful Aptos transactions — tracked in #89",
-  );
-  it.skip(
-    "shows correct resume state after browser tab closes mid-lock — tracked in #89",
-  );
+  it("auto-progresses from confirming to generating-proof after 1 block confirmation", async () => {
+    vi.spyOn(
+      ethers.JsonRpcProvider.prototype,
+      "getBlockNumber",
+    ).mockResolvedValue(101);
+    // Hold the proof so the flow stops at the proof step.
+    vi.mocked(generateLockedBalanceProof).mockReturnValue(
+      new Promise(() => {}),
+    );
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        step: "confirming",
+        txHash: "0xdeadbeef",
+        lockBlock: 100,
+      }),
+    );
+    await act(async () => {
+      renderSellFlow();
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Generating Ethereum storage proof/i),
+      ).toBeTruthy();
+    });
+    // Step4Proof starts proof generation on mount, for the confirmed lock block.
+    expect(generateLockedBalanceProof).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      ACCOUNT,
+      expect.any(String),
+      100,
+    );
+  });
+
+  it("auto-progresses proof → submit proof → create auction → monitor on successful Aptos transactions", async () => {
+    const proof = {
+      blockNumber: 100,
+      blockHash: "0x" + "aa".repeat(32),
+      stateRoot: "0x" + "bb".repeat(32),
+      contractAddress: "0x" + "11".repeat(20),
+      userAddress: ACCOUNT,
+      tokenAddress: "0x" + "22".repeat(20),
+      storageKey: "0x" + "cc".repeat(32),
+      storageValue: 10n ** 18n,
+      accountProof: ["0x01"],
+      storageProof: ["0x02"],
+    } as unknown as LockedBalanceProof;
+    vi.mocked(generateLockedBalanceProof).mockResolvedValue(proof);
+    vi.mocked(submitNativeTransaction).mockResolvedValue(undefined as never);
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        step: "generating-proof",
+        lockBlock: 100,
+        amount: "1000000000000000000",
+        minPrice: "2000000000",
+      }),
+    );
+    await act(async () => {
+      renderSellFlow();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Locked amount/i)).toBeTruthy();
+    });
+    // One Aptos tx registers the lock, the second creates the auction.
+    expect(submitNativeTransaction).toHaveBeenCalledTimes(2);
+    const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") as {
+      step: string;
+      lockId?: string;
+    };
+    expect(persisted.step).toBe("monitoring");
+    expect(persisted.lockId).toMatch(/^0x[0-9a-f]{64}$/);
+  });
+
+  it("resumes at the lock step after the tab closes mid-lock", async () => {
+    (window as unknown as { ethereum?: unknown }).ethereum = {
+      request: vi.fn(),
+    };
+    vi.mocked(approveFakeEth).mockResolvedValue(undefined as never);
+    // The lock tx never confirms before the tab closes.
+    vi.mocked(lockFakeEth).mockReturnValue(new Promise(() => {}));
+
+    let view!: ReturnType<typeof renderSellFlow>;
+    await act(async () => {
+      view = renderSellFlow();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("approve-lock-button"));
+    });
+    expect(lockFakeEth).toHaveBeenCalled();
+    expect(screen.getByText(/Waiting for MetaMask/i)).toBeTruthy();
+
+    // Tab closes, then the user reopens the page.
+    view.unmount();
+    await act(async () => {
+      renderSellFlow();
+    });
+
+    // No receipt was saved, so the flow resumes at Step2Lock, not confirming.
+    expect(screen.getByText(/Approve & Lock/i)).toBeTruthy();
+    const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") as {
+      step: string;
+      txHash?: string;
+    };
+    expect(persisted.step).toBe("lock");
+    expect(persisted.txHash).toBeUndefined();
+  });
 });

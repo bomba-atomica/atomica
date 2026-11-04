@@ -10,6 +10,100 @@ on:
   workflow_dispatch:
 
 jobs:
+  test-coverage-guard:
+    # Fails when a test file under source/ is run by no CI job.
+    name: Test Coverage Guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CI_CLASS: feature-correctness
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Check every test file is run by a CI job
+        run: bun scripts/check-test-coverage.js --verbose
+
+      - name: Prove the guard fails on an unnamed test file
+        run: |
+          # No config glob or workflow step names this probe file.
+          probe=source/atomica-sdk/guard-probe-unnamed.test.ts
+          echo 'export {};' > "$probe"
+          if bun scripts/check-test-coverage.js; then
+            echo "FAIL: the guard passed with an unnamed test file present"
+            exit 1
+          fi
+          rm "$probe"
+          echo "OK: the guard failed on the unnamed test file"
+
+  unit-tests:
+    # No chain, no Docker: runs on every PR, drafts included.
+    name: Unit Tests (atomica-sdk, atomica-web-components)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI_CLASS: feature-correctness
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build Ethereum Testnet SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: |
+          bun install
+          bun run build
+
+      - name: Build State Proofs
+        working-directory: source/state-proofs/typescript
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Atomica SDK
+        working-directory: source/atomica-sdk
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Aptos Testnet SDK
+        working-directory: source/docker-testnet/aptos-testnet
+        run: |
+          bun install
+          bun run build
+
+      - name: Install Web UI dependencies
+        working-directory: source/atomica-web-components
+        run: bun install
+
+      # The SDK suite runs in headless Chromium (vitest browser mode).
+      - name: Install Playwright browsers (SDK)
+        working-directory: source/atomica-sdk
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run atomica-sdk tests
+        working-directory: source/atomica-sdk
+        run: bun run test
+
+      - name: Run atomica-web-components unit tests
+        working-directory: source/atomica-web-components
+        run: bun run test:unit
+
   test-web:
     name: Web Tests (${{ matrix.type }})
     runs-on: ubuntu-latest
