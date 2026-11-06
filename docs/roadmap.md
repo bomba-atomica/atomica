@@ -48,7 +48,7 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 | **Dual-chain testnet orchestrator** | `docker-testnet/`, `atomica-web/scripts/dual-testnet-orchestrator.ts` | `live` |
 | **Browser integration test suite** | `atomica-web/tests/`, `atomica-web-ui/tests/` | `live` |
 | **Move unit + integration tests** | `atomica-move-contracts/sources/*_tests.move` | `live` |
-| **Ethereum state-proof SDK** | `state-proofs/`, `atomica-crosschain-testing/` | `live` |
+| **Ethereum state-proof SDK** | `state-proofs/` | `live` |
 | **ZK auction verification (`atomica-zkp`)** | `atomica-zkp/src/` | `missing` — `lib.rs` is 2 lines |
 
 See [`docs/architecture/v0-architecture.md`](architecture/v0-architecture.md) (authored in #83) for the component interaction diagram.

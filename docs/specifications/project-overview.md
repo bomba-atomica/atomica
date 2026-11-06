@@ -17,7 +17,6 @@ source/
 ├── atomica-zkp/              # ZKP-related artifacts and Solidity integration
 ├── docker-testnet/           # Local Aptos/Ethereum testnet infrastructure
 ├── atomica-move-contracts/   # Move contract workspace
-├── atomica-crosschain-testing/
 ├── test-utils/
 └── web/
 ```

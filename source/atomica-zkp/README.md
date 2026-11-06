@@ -21,7 +21,6 @@ None yet. The planned public surface (v1.0) will include:
 None currently. Future dependents:
 
 - `source/evm-contracts` — on-chain ZK verifier will consume proofs from this crate
-- `source/atomica-crosschain-testing` — end-to-end tests will include ZK proof generation
 
 ## See also
 
