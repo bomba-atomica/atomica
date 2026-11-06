@@ -65,7 +65,6 @@ Network host resolution helpers.
 
 - `source/atomica-web-components` — imports SIWE and transaction utilities via root export
 - `source/atomica-demo` — imports via sub-path exports for Aptos and Ethereum interactions
-- `source/atomica-crosschain-testing` — imports Ethereum helpers for cross-chain test setup
 
 ## See also
 

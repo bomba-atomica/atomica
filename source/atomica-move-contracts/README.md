@@ -49,7 +49,6 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 
 - `source/atomica-sdk` (via `@atomica/aptos-docker-testnet`) — submits transactions to these contracts
 - `source/atomica-web-components` — calls view functions via the SDK
-- `source/atomica-crosschain-testing` — Rust integration tests that exercise the full cross-chain flow
 
 ## See also
 

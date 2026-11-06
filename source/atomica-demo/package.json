@@ -8,7 +8,7 @@
     "build": "bun run prepare:deps && tsc -b && vite build",
     "test": "bun run prepare:deps && vitest run",
     "test:ui": "bun run prepare:deps && vitest run tests/ui-component",
-    "test:integration": "bun run prepare:deps && vitest run --config ../atomica-crosschain-testing/vitest.integration.config.ts",
+    "test:integration": "bun run prepare:deps && vitest run tests/integration",
     "prepare:deps": "cd ../docker-testnet/ethereum-testnet/typescript-sdk && bun install && bun run build && cd ../../aptos-testnet && bun install && bun run build && cd ../../state-proofs/typescript && bun install && bun run build && cd ../../atomica-web-components && bun install && bun run build",
     "demo": "bun run prepare:deps && bun scripts/orchestrator.ts",
     "lint": "eslint .",

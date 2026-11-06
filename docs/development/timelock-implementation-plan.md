@@ -292,7 +292,12 @@ Before issue #28 (`implement-timelock-phase-0`) begins, the following question
 
 **Decided: 2026-03-29**
 
-`source/atomica-crosschain-testing/Cargo.toml` already pulls all Rust crates
+> **Note (issue 176):** the `source/atomica-crosschain-testing` crate named
+> below was removed because it never built. The timelock round-trip end-to-end
+> test now lives in the fork smoke-test suite at
+> `atomica-aptos/testsuite/smoke-test/src/timelock_e2e.rs` (issue 159).
+
+`source/atomica-crosschain-testing/Cargo.toml` already pulled all Rust crates
 from `bomba-atomica/atomica-aptos` via git dependency on the `dev-atomica`
 branch. Inspection of that branch confirms it already contains all Phase 0
 artifacts:

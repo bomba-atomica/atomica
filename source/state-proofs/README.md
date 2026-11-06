@@ -59,7 +59,6 @@ Re-exported from `./beacon` — Ethereum beacon chain state helpers.
 ## Dependents
 
 - `source/atomica-sdk` — imports IBE primitives via `@atomica/state-proof-verifier/ibe`
-- `source/atomica-crosschain-testing` — uses proof fetching and verification in Rust integration tests (via the TypeScript SDK bridge)
 - `source/atomica-demo` — imports IBE for client-side bid encryption
 
 ## See also

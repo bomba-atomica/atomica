@@ -10,7 +10,6 @@ This directory contains Atomica's implementation workspaces.
 - `atomica-zkp/`: ZKP-related Solidity/data artifacts.
 - `docker-testnet/`: Local testnet infra and SDK for development/testing.
 - `atomica-move-contracts/`: Move contract workspace.
-- `atomica-crosschain-testing/`: Cross-chain testing workspace.
 - `test-utils/`: Shared testing helpers.
 - `web/`: Additional web-facing module(s).
 
