@@ -10,7 +10,7 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
-tracked="$(git ls-files | grep -E '(^|/)dist/' || true)"
+tracked="$(git ls-files -z | grep -zE '(^|/)dist/' | tr '\0' '\n' || true)"
 
 if [ -n "$tracked" ]; then
   echo "FAIL: build output under dist/ is tracked by git:"
