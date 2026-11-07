@@ -46,6 +46,6 @@ contract DeployLockBox is Script {
         console.log("\nAdd to .env:");
         console.log("VITE_FAKE_ETH_ADDRESS=", vm.toString(address(fakeETH)));
         console.log("VITE_FAKE_USD_ADDRESS=", vm.toString(address(fakeUSD)));
-        console.log("VITE_LOCKBOX_ADDRESS=", vm.toString(address(lockBox)));
+        console.log("VITE_LOCK_BOX_ADDRESS=", vm.toString(address(lockBox)));
     }
 }

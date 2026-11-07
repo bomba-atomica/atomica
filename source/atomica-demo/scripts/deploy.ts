@@ -30,8 +30,11 @@ import {
 } from "../tests/meta/ethereum/solidity-compiler.js";
 
 const ETH_RPC_URL = process.env.ETH_RPC_URL || "http://localhost:8545";
-// LockBox settlementAuthority. Defaults to the deployer.
-const RELAYER_ADDRESS = process.env.RELAYER_ADDRESS;
+// LockBox settlementAuthority (immutable). Empty or unset: the deployer.
+const RELAYER_ADDRESS = process.env.RELAYER_ADDRESS?.trim() || undefined;
+if (RELAYER_ADDRESS !== undefined && !ethers.isAddress(RELAYER_ADDRESS)) {
+  throw new Error(`RELAYER_ADDRESS is not an address: ${RELAYER_ADDRESS}`);
+}
 const APTOS_URL = process.env.APTOS_URL || "http://localhost:8080";
 
 function requireEnv(key: string): string {
@@ -131,6 +134,8 @@ async function deployEthereumContracts() {
   const fakeUSDAddress = await fakeUSDContract.getAddress();
   console.log(`  ✓ FakeUSD deployed at: ${fakeUSDAddress}`);
 
+  const settlementAuthority = RELAYER_ADDRESS ?? deployerAddress;
+  console.log(`  LockBox settlementAuthority: ${settlementAuthority}`);
   console.log("  Deploying LockBox...");
   const lockBoxContract = await deployWithRetry(
     new ethers.ContractFactory(
@@ -140,7 +145,7 @@ async function deployEthereumContracts() {
     ),
     ethSigner,
     // settlementAuthority: the relayer key that releases locks on Aptos outcomes.
-    [fakeETHAddress, fakeUSDAddress, RELAYER_ADDRESS ?? deployerAddress],
+    [fakeETHAddress, fakeUSDAddress, settlementAuthority],
   );
   const lockBoxAddress = await lockBoxContract.getAddress();
   console.log(`  ✓ LockBox deployed at: ${lockBoxAddress}`);

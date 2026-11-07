@@ -266,7 +266,7 @@ it. The relayer consumes three module events:
 | Aptos event | LockBox calls |
 | --- | --- |
 | `AuctionSettled` (§2.9) | One `settleFill` per (seller lock, winner) chunk, at `fill × clearing_price`. Then `refund` of a winner's unused collateral, each seller's unsold supply, and each losing bid's collateral whose receipt Aptos released. |
-| `AuctionRefunded` | `refund` of every seller and collateral lock of the window whose receipt Aptos released. |
+| `AuctionRefunded` | `refund` of every seller and collateral lock of the window whose receipt Aptos released. The event carries the window's `pair_bcs`; the relayer skips windows whose `pair_bcs` it does not serve. |
 | `BidUnopened` | `refund` of the unopened bid's collateral. No penalty in v0.1: the griefing-deposit destination is still undecided. |
 
 Payouts go to the Ethereum owner of each lock receipt (the address the
@@ -274,6 +274,29 @@ storage proof names), not to the bidder's Aptos signer address. Every release
 carries an outcome id derived from the lock id. LockBox rejects a reused id,
 so a relayer retry never pays twice. The relayer signs through an ethers
 `NonceManager`.
+
+Windows are keyed by `(window_id, pair_bcs)`, where `pair_bcs` is the opaque
+byte string the creator passed (the sell flow passes empty bytes). The relayer
+serves one `pair_bcs` (`PAIR_BCS`, default empty). An `E_AUCTION_NOT_FOUND`
+abort while reading a window means the window belongs to another pair, and
+the relayer skips it.
+
+The relayer handles each outcome on its own. A permanent failure (a LockBox
+revert such as `InsufficientLocked`, a Move abort, or an outcome that does
+not fit the locks) becomes a dead letter: it is written to
+`SETTLEMENT_DEAD_LETTER_FILE` with an alert, the other releases of the same
+outcome still go out, and the cursor moves on. Only transient errors (RPC
+down, transaction wait timeout) keep the cursor at that outcome for a retry.
+A dead letter needs an operator. Receipt amounts are the owner's total
+locked balance at the proof block, so two receipts of one owner can
+over-count; LockBox caps every release at the real locked balance, and the
+over-counting release becomes a dead letter. Issue 171 fixes receipt amounts.
+
+**Abandoned locks are frozen.** A lock that never reaches an auction has no
+Aptos outcome, so nothing releases it. The sell flow no longer offers a
+pre-auction "Cancel & Unlock" button. The recovery path (a relayer refund of
+a lock id never claimed on Aptos, or an outcome-gated timeout) is an open
+owner decision recorded on issue 170.
 
 In v0.1 the `settlementAuthority` is the trusted relayer EOA. That address is
 the verification seam: §3.3 and §3.4 replace it with a verifier contract.

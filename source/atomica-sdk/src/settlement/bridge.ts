@@ -90,6 +90,11 @@ export interface BridgeConfig {
   lockBoxAddress: string;
   /** Relayer private key (hex, 0x-prefixed). Must be the LockBox settlementAuthority. */
   relayerPrivateKey: string;
+  /**
+   * Window key pair bytes (`pair_bcs` of `create_auction`) this relayer
+   * serves, 0x hex. Default "0x": the empty bytes the sell flow uses.
+   */
+  pairBcs?: string;
 }
 
 // ============================================================
@@ -143,6 +148,16 @@ export function bcsEncodePair(pair: Pair): Uint8Array {
  * Aptos event data fields use snake_case; this function maps them to
  * the camelCase TypeScript interface.
  */
+/**
+ * Decode a Move `vector<u8>` string field. Aptos REST renders it as 0x hex;
+ * plain strings pass through.
+ */
+function moveString(v: unknown): string {
+  const str = String(v);
+  if (!/^0x([0-9a-f]{2})*$/i.test(str)) return str;
+  return ethers.toUtf8String(str);
+}
+
 function parseAuctionSettledEvent(
   raw: Record<string, unknown>,
 ): AuctionSettledEvent {
@@ -151,10 +166,10 @@ function parseAuctionSettledEvent(
   // Parse pair sub-struct
   const rawPair = data["pair"] as Record<string, unknown>;
   const pair: Pair = {
-    baseChain: String(rawPair["base_chain"]),
-    baseToken: String(rawPair["base_token"]),
-    quoteChain: String(rawPair["quote_chain"]),
-    quoteToken: String(rawPair["quote_token"]),
+    baseChain: moveString(rawPair["base_chain"]),
+    baseToken: moveString(rawPair["base_token"]),
+    quoteChain: moveString(rawPair["quote_chain"]),
+    quoteToken: moveString(rawPair["quote_token"]),
   };
 
   // lock_ids is vector<vector<u8>> — each inner element is a hex string on Aptos
@@ -185,11 +200,12 @@ function hexToBytes(hexStr: string): Uint8Array {
 
 /**
  * Mirrors the on-chain `auction::AuctionRefunded` event. The window was
- * refunded because its timelock expired. The event carries no pair, so the
- * relayer uses the pair it is configured for.
+ * refunded because its timelock expired.
  */
 export interface AuctionRefundedEvent {
   windowId: bigint;
+  /** The window key's pair bytes (`pair_bcs` passed to `create_auction`). */
+  pairBcs: Uint8Array;
   timelockId: bigint;
   /** 1 epoch-ended, 2 reveal-window-elapsed, 3 key-check-failed. */
   reason: number;
@@ -213,6 +229,7 @@ function parseAuctionRefundedEvent(
   const data = raw["data"] as Record<string, unknown>;
   return {
     windowId: BigInt(String(data["window_id"])),
+    pairBcs: hexToBytes(String(data["pair_bcs"] ?? "0x")),
     timelockId: BigInt(String(data["timelock_id"])),
     reason: Number(data["reason"]),
     bidCount: BigInt(String(data["bid_count"])),
@@ -671,12 +688,58 @@ export function getRelayerSigner(config: BridgeConfig): ethers.NonceManager {
   return signer;
 }
 
+/** How long the relayer waits for one LockBox transaction to be mined. */
+export const TX_WAIT_TIMEOUT_MS = 120_000;
+
+/** A release LockBox rejected for good (a revert), with the reason. */
+export interface FailedRelease {
+  release: LockBoxRelease;
+  error: string;
+}
+
+/**
+ * Some releases of an outcome reverted. The others were sent. Retrying the
+ * outcome cannot help: the relayer records it as a dead letter.
+ */
+export class PermanentRelayError extends Error {
+  constructor(
+    message: string,
+    readonly failed: FailedRelease[] = [],
+    readonly sent: TxHash[] = [],
+  ) {
+    super(message);
+    this.name = "PermanentRelayError";
+  }
+}
+
+/**
+ * True when retrying cannot succeed: an EVM revert, a Move abort, or an
+ * outcome that does not fit the locks. RPC, network and timeout errors are
+ * transient and return false.
+ */
+export function isPermanentRelayError(e: unknown): boolean {
+  if (e instanceof PermanentRelayError) return true;
+  if ((e as { code?: unknown })?.code === "CALL_EXCEPTION") return true;
+  const msg = e instanceof Error ? e.message : String(e);
+  return (
+    /Move abort|ABORTED|abort_code/i.test(msg) ||
+    /^(planSettlementReleases|relayAuctionSettled):/.test(msg)
+  );
+}
+
+function errorText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 /**
  * Send `releases` to LockBox in order and wait for each receipt.
  *
  * A release whose outcome id LockBox already processed is skipped, so a
- * retry after a crash resumes where it stopped. On a failed send the nonce
- * manager is reset so the next attempt reads the chain nonce.
+ * retry after a crash resumes where it stopped. A release that reverts is
+ * set aside and the rest of the batch still goes out; the call then throws
+ * {@link PermanentRelayError} listing the reverted releases. A transient
+ * error (RPC down, wait timeout) throws at once so the caller retries later.
+ * After any failed send the nonce manager is reset to the chain nonce.
  *
  * @returns Transaction hashes of the releases sent now.
  */
@@ -697,6 +760,7 @@ export async function executeLockBoxReleases(
   };
 
   const hashes: TxHash[] = [];
+  const failed: FailedRelease[] = [];
   for (const r of releases) {
     if ((await lockBox.processedOutcomes(r.outcomeId)) as boolean) continue;
     try {
@@ -710,15 +774,24 @@ export async function executeLockBoxReleases(
               r.baseAmount,
               r.quoteAmount,
             );
-      const receipt = await tx.wait();
-      if (!receipt || receipt.status !== 1) {
-        throw new Error(`LockBox ${r.kind} ${r.outcomeId} failed`);
+      const receipt = await tx.wait(1, TX_WAIT_TIMEOUT_MS);
+      if (!receipt) {
+        throw new Error(`LockBox ${r.kind} ${r.outcomeId}: no receipt`);
       }
       hashes.push(receipt.hash as TxHash);
     } catch (e) {
       signer.reset();
-      throw e;
+      if (!isPermanentRelayError(e)) throw e;
+      failed.push({ release: r, error: errorText(e) });
     }
+  }
+  if (failed.length > 0) {
+    throw new PermanentRelayError(
+      `${failed.length} of ${releases.length} LockBox releases reverted: ` +
+        failed.map((f) => `${f.release.outcomeId} (${f.error})`).join("; "),
+      failed,
+      hashes,
+    );
   }
   return hashes;
 }
@@ -769,23 +842,47 @@ export async function getLockReceipt(
   };
 }
 
-/** `auction::get_window_lock_ids`: seller lock ids and bid collateral lock ids. */
+/** True for the `E_AUCTION_NOT_FOUND` abort of the auction module (code 1). */
+function isAuctionNotFound(e: unknown): boolean {
+  const msg = errorText(e);
+  // aptos-node: "Move abort in 0x..::auction: E_AUCTION_NOT_FOUND(0x1): ..."
+  // or, without an error map, "Move abort in 0x..::auction: 0x1".
+  return /E_AUCTION_NOT_FOUND|::auction: 0x1\b/.test(msg);
+}
+
+/**
+ * `auction::get_window_lock_ids`: seller lock ids and bid collateral lock ids.
+ * Returns null when no window has this (window id, pair bytes) key, which
+ * means the window belongs to a pair this relayer does not serve.
+ */
 async function getWindowLockIds(
   aptosClient: Aptos,
   contractAddress: string,
   windowId: bigint,
   pairBcs: Uint8Array,
-): Promise<{ sellers: string[]; collateral: string[] }> {
-  const [sellers, collateral] = await aptosClient.view({
-    payload: {
-      function: `${contractAddress}::auction::get_window_lock_ids`,
-      functionArguments: [windowId, pairBcs],
-    },
-  });
+): Promise<{ sellers: string[]; collateral: string[] } | null> {
+  let result: unknown[];
+  try {
+    result = await aptosClient.view({
+      payload: {
+        function: `${contractAddress}::auction::get_window_lock_ids`,
+        functionArguments: [windowId, pairBcs],
+      },
+    });
+  } catch (e) {
+    if (isAuctionNotFound(e)) return null;
+    throw e;
+  }
+  const [sellers, collateral] = result;
   return {
     sellers: (sellers as string[]).map(String),
     collateral: (collateral as string[]).map(String),
   };
+}
+
+/** Pair bytes of the windows this relayer serves (default: empty, as the sell flow uses). */
+export function servedPairBcs(config: BridgeConfig): Uint8Array {
+  return ethers.getBytes(config.pairBcs ?? "0x");
 }
 
 // ============================================================
@@ -796,6 +893,10 @@ async function getWindowLockIds(
  * Relay an `AuctionSettled` outcome to LockBox: winner payouts, seller
  * payouts, excess collateral, unsold supply and losing-bid refunds.
  *
+ * The event has no window key bytes, so the window is read with the
+ * relayer's {@link servedPairBcs}. No such window means another pair's
+ * window settled: nothing to relay.
+ *
  * @returns Ethereum transaction hashes of the releases sent.
  * @see docs/architecture/v0-architecture.md §3.5
  */
@@ -804,15 +905,16 @@ export async function relayAuctionSettled(
   config: BridgeConfig,
 ): Promise<TxHash[]> {
   const aptosClient = aptosClientFor(config);
-  const pairBcs = bcsEncodePair(event.pair);
+  const pairBcs = servedPairBcs(config);
 
-  const bidResults = await getBidResultsWithClient(
+  const ids = await getWindowLockIds(
     aptosClient,
     config.contractAddress,
     event.windowId,
     pairBcs,
   );
-  const ids = await getWindowLockIds(
+  if (!ids) return [];
+  const bidResults = await getBidResultsWithClient(
     aptosClient,
     config.contractAddress,
     event.windowId,
@@ -852,21 +954,24 @@ export async function relayAuctionSettled(
 
 /**
  * Relay an `AuctionRefunded` outcome: refund every seller and collateral
- * lock of the window that Aptos released. `pair` is the relayer's pair,
- * since the event does not carry one.
+ * lock of the window that Aptos released. A window of another pair (its
+ * `pairBcs` differs from {@link servedPairBcs}, or no such window exists)
+ * is skipped.
  */
 export async function relayAuctionRefunded(
   event: AuctionRefundedEvent,
-  pair: Pair,
   config: BridgeConfig,
 ): Promise<TxHash[]> {
+  const pairBcs = servedPairBcs(config);
+  if (ethers.hexlify(event.pairBcs) !== ethers.hexlify(pairBcs)) return [];
   const aptosClient = aptosClientFor(config);
   const ids = await getWindowLockIds(
     aptosClient,
     config.contractAddress,
     event.windowId,
-    bcsEncodePair(pair),
+    pairBcs,
   );
+  if (!ids) return [];
   const [sellers, collateral] = await Promise.all([
     Promise.all(
       ids.sellers.map((id) =>
@@ -914,6 +1019,86 @@ export async function relayBidUnopened(
     ],
     config,
   );
+}
+
+// ============================================================
+// Relayer loop
+// ============================================================
+
+/** An outcome the relayer gave up on: retrying cannot succeed. */
+export interface DeadLetter {
+  kind: AuctionOutcomeEvent["kind"];
+  windowId: bigint;
+  version: bigint;
+  error: string;
+  /** Releases of the outcome that did go out. */
+  sent: TxHash[];
+}
+
+/** Result of relaying one scan. */
+export interface RelayScanResult {
+  /** Checkpoint for the next scan. */
+  nextVersion: bigint;
+  /** Outcomes relayed now, with their transaction hashes. */
+  relayed: Array<{ outcome: AuctionOutcomeEvent; txHashes: TxHash[] }>;
+  deadLetters: DeadLetter[];
+  /** Set when a transient error stopped the scan; `nextVersion` retries it. */
+  transientError?: string;
+}
+
+/**
+ * Relay every outcome of a scan, one at a time, in ledger order.
+ *
+ * - An `AuctionSettled` of another pair or a window below `minWindowId` is skipped.
+ * - A permanent failure (revert, Move abort, outcome that does not fit the
+ *   locks) becomes a dead letter and the scan moves on, so one bad outcome
+ *   never blocks the others.
+ * - A transient failure stops the scan. `nextVersion` is that outcome's
+ *   version, so the next poll retries it. Outcomes already relayed in the
+ *   same transaction are skipped by their LockBox outcome ids.
+ */
+export async function relayOutcomeScan(
+  scan: AuctionOutcomeScan,
+  config: BridgeConfig,
+  options: { pair: Pair; minWindowId?: bigint },
+): Promise<RelayScanResult> {
+  const result: RelayScanResult = {
+    nextVersion: scan.nextVersion,
+    relayed: [],
+    deadLetters: [],
+  };
+  for (const outcome of scan.events) {
+    if (outcome.event.windowId < (options.minWindowId ?? 0n)) continue;
+    if (
+      outcome.kind === "AuctionSettled" &&
+      !samePair(outcome.event.pair, options.pair)
+    ) {
+      continue;
+    }
+    try {
+      const txHashes =
+        outcome.kind === "AuctionSettled"
+          ? await relayAuctionSettled(outcome.event, config)
+          : outcome.kind === "AuctionRefunded"
+            ? await relayAuctionRefunded(outcome.event, config)
+            : await relayBidUnopened(outcome.event, config);
+      result.relayed.push({ outcome, txHashes });
+    } catch (e) {
+      if (!isPermanentRelayError(e)) {
+        result.nextVersion = outcome.version;
+        result.transientError = errorText(e);
+        return result;
+      }
+      result.deadLetters.push({
+        kind: outcome.kind,
+        windowId: outcome.event.windowId,
+        version: outcome.version,
+        error: errorText(e),
+        sent: e instanceof PermanentRelayError ? e.sent : [],
+      });
+    }
+  }
+  return result;
 }
 
 // ============================================================

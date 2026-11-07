@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   /** LockBox calls recorded by the Contract mock. */
   calls: [] as Array<{ method: string; args: unknown[] }>,
   processed: new Set<string>(),
+  /** Outcome ids whose LockBox call reverts. */
+  revert: new Set<string>(),
   nonceManagers: 0,
 }));
 
@@ -44,6 +46,14 @@ vi.mock("ethers", async (importOriginal) => {
     fakeUSD = vi.fn().mockResolvedValue("0x" + "aa".repeat(20));
     processedOutcomes = vi.fn(async (id: string) => mocks.processed.has(id));
     refund = vi.fn(async (...args: unknown[]) => {
+      if (mocks.revert.has(args[0] as string)) {
+        throw Object.assign(
+          new Error("execution reverted: InsufficientLocked"),
+          {
+            code: "CALL_EXCEPTION",
+          },
+        );
+      }
       mocks.calls.push({ method: "refund", args });
       return { wait: async () => ({ hash: "0xrefund", status: 1 }) };
     });
@@ -110,7 +120,11 @@ import {
   relayAuctionSettled,
   relayAuctionRefunded,
   relayBidUnopened,
+  relayOutcomeScan,
+  executeLockBoxReleases,
+  PermanentRelayError,
   RECEIPT_STATUS_REVOKED,
+  type AuctionOutcomeScan,
   type AuctionSettledEvent,
   type BridgeConfig,
   type LockReceiptInfo,
@@ -410,6 +424,7 @@ describe("scanAuctionOutcomeEvents", () => {
           type: `${TEST_CONFIG.contractAddress}::auction::AuctionRefunded`,
           data: {
             window_id: "5",
+            pair_bcs: "0x0102",
             timelock_id: "9",
             reason: 2,
             bid_count: "3",
@@ -435,6 +450,7 @@ describe("scanAuctionOutcomeEvents", () => {
     if (refunded.kind !== "AuctionRefunded") throw new Error("kind");
     expect(refunded.event).toEqual({
       windowId: 5n,
+      pairBcs: ethers.getBytes("0x0102"),
       timelockId: 9n,
       reason: 2,
       bidCount: 3n,
@@ -663,6 +679,7 @@ describe("relay handlers", () => {
     mocks.views.clear();
     mocks.calls.length = 0;
     mocks.processed.clear();
+    mocks.revert.clear();
   });
 
   it("relayAuctionSettled sends settleFill and refunds through a NonceManager", async () => {
@@ -736,12 +753,12 @@ describe("relay handlers", () => {
     const hashes = await relayAuctionRefunded(
       {
         windowId: 5n,
+        pairBcs: new Uint8Array(0),
         timelockId: 9n,
         reason: 1,
         bidCount: 0n,
         sellerLockCount: 1n,
       },
-      TEST_PAIR,
       TEST_CONFIG,
     );
 
@@ -759,12 +776,12 @@ describe("relay handlers", () => {
     await relayAuctionRefunded(
       {
         windowId: 5n,
+        pairBcs: new Uint8Array(0),
         timelockId: 9n,
         reason: 1,
         bidCount: 1n,
         sellerLockCount: 1n,
       },
-      TEST_PAIR,
       TEST_CONFIG,
     );
 
@@ -797,6 +814,224 @@ describe("relay handlers", () => {
         ],
       },
     ]);
+  });
+});
+
+// ─── Poison-pill resistance ────────────────────────────────────────────────
+
+const MOVE_ABORT =
+  "Move abort in 0xab::lock_receipt: E_RECEIPT_NOT_FOUND(0x3): receipt not found";
+
+function unopened(
+  lockId: string,
+  version: bigint,
+): AuctionOutcomeScan["events"][number] {
+  return {
+    kind: "BidUnopened",
+    version,
+    event: {
+      windowId: 4n,
+      bidder: "0x" + "11".repeat(32),
+      collateralLockId: ethers.getBytes(lockId),
+    },
+  };
+}
+
+describe("relayOutcomeScan", () => {
+  beforeEach(() => {
+    mocks.views.clear();
+    mocks.calls.length = 0;
+    mocks.processed.clear();
+    mocks.revert.clear();
+  });
+
+  it("dead-letters a permanently failing outcome and still relays the next one", async () => {
+    mocks.views.set("lock_receipt::get_receipt", (args) => {
+      const id = ethers.hexlify(args[0] as Uint8Array);
+      if (id === "0xdead") throw new Error(MOVE_ABORT);
+      return [aptosAddr(LOSER), String(700n * USD), "1", 1];
+    });
+
+    const result = await relayOutcomeScan(
+      {
+        events: [unopened("0xdead", 10n), unopened("0xabcd", 11n)],
+        nextVersion: 12n,
+      },
+      TEST_CONFIG,
+      { pair: TEST_PAIR },
+    );
+
+    expect(result.nextVersion).toBe(12n);
+    expect(result.transientError).toBeUndefined();
+    expect(result.deadLetters).toEqual([
+      expect.objectContaining({ kind: "BidUnopened", version: 10n }),
+    ]);
+    expect(result.relayed).toHaveLength(1);
+    expect(mocks.calls).toEqual([
+      expect.objectContaining({ method: "refund" }),
+    ]);
+    expect(mocks.calls[0].args[0]).toBe(refundOutcomeId("0xabcd"));
+  });
+
+  it("dead-letters a reverting LockBox release and still relays the next outcome", async () => {
+    stubReceipts({
+      "0x0bad": [LOSER, 700n * USD, 1],
+      "0xabcd": [LOSER, 700n * USD, 1],
+    });
+    mocks.revert.add(refundOutcomeId("0x0bad"));
+
+    const result = await relayOutcomeScan(
+      {
+        events: [unopened("0x0bad", 10n), unopened("0xabcd", 11n)],
+        nextVersion: 12n,
+      },
+      TEST_CONFIG,
+      { pair: TEST_PAIR },
+    );
+
+    expect(result.nextVersion).toBe(12n);
+    expect(result.deadLetters.map((d) => d.version)).toEqual([10n]);
+    expect(result.deadLetters[0].error).toMatch(/InsufficientLocked/);
+    expect(mocks.calls.map((c) => c.args[0])).toEqual([
+      refundOutcomeId("0xabcd"),
+    ]);
+  });
+
+  it("stops at a transient error and retries that outcome next poll", async () => {
+    mocks.views.set("lock_receipt::get_receipt", () => {
+      throw new Error("fetch failed: ECONNREFUSED");
+    });
+
+    const result = await relayOutcomeScan(
+      {
+        events: [unopened("0xabcd", 10n), unopened("0xbeef", 11n)],
+        nextVersion: 12n,
+      },
+      TEST_CONFIG,
+      { pair: TEST_PAIR },
+    );
+
+    expect(result.nextVersion).toBe(10n);
+    expect(result.transientError).toMatch(/ECONNREFUSED/);
+    expect(result.deadLetters).toEqual([]);
+  });
+});
+
+describe("executeLockBoxReleases", () => {
+  beforeEach(() => {
+    mocks.calls.length = 0;
+    mocks.processed.clear();
+    mocks.revert.clear();
+  });
+
+  it("sends the rest of the batch after a revert, then reports it", async () => {
+    mocks.revert.add(refundOutcomeId("0x01"));
+    const refund = (lockId: string) => ({
+      kind: "refund" as const,
+      outcomeId: refundOutcomeId(lockId),
+      user: SELLER,
+      asset: "FakeETH" as const,
+      amount: 1n,
+    });
+
+    const err = await executeLockBoxReleases(
+      [refund("0x01"), refund("0x02")],
+      TEST_CONFIG,
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(PermanentRelayError);
+    expect(
+      (err as PermanentRelayError).failed.map((f) => f.release.outcomeId),
+    ).toEqual([refundOutcomeId("0x01")]);
+    expect((err as PermanentRelayError).sent).toEqual(["0xrefund"]);
+    expect(mocks.calls.map((c) => c.args[0])).toEqual([
+      refundOutcomeId("0x02"),
+    ]);
+  });
+});
+
+describe("AuctionRefunded pair filtering", () => {
+  beforeEach(() => {
+    mocks.views.clear();
+    mocks.calls.length = 0;
+  });
+
+  const refunded = (pairBcs: string) => ({
+    windowId: 5n,
+    pairBcs: ethers.getBytes(pairBcs),
+    timelockId: 9n,
+    reason: 1,
+    bidCount: 0n,
+    sellerLockCount: 1n,
+  });
+
+  it("skips a window of another pair without reading Aptos", async () => {
+    const hashes = await relayAuctionRefunded(refunded("0x0102"), TEST_CONFIG);
+    expect(hashes).toEqual([]);
+    expect(mocks.calls).toEqual([]);
+  });
+
+  it("treats E_AUCTION_NOT_FOUND as not this relayer's window", async () => {
+    mocks.views.set("auction::get_window_lock_ids", () => {
+      throw new Error(
+        "Move abort in 0xab::auction: E_AUCTION_NOT_FOUND(0x1): no such window",
+      );
+    });
+    const hashes = await relayAuctionRefunded(refunded("0x"), TEST_CONFIG);
+    expect(hashes).toEqual([]);
+  });
+
+  it("a foreign-pair refund does not block the relayer loop", async () => {
+    mocks.views.set("auction::get_window_lock_ids", () => {
+      throw new Error("Move abort in 0xab::auction: 0x1");
+    });
+    stubReceipts({ "0xabcd": [LOSER, 700n * USD, 1] });
+
+    const result = await relayOutcomeScan(
+      {
+        events: [
+          { kind: "AuctionRefunded", version: 10n, event: refunded("0x") },
+          unopened("0xabcd", 11n),
+        ],
+        nextVersion: 12n,
+      },
+      TEST_CONFIG,
+      { pair: TEST_PAIR },
+    );
+
+    expect(result.deadLetters).toEqual([]);
+    expect(result.nextVersion).toBe(12n);
+    expect(mocks.calls.map((c) => c.args[0])).toEqual([
+      refundOutcomeId("0xabcd"),
+    ]);
+  });
+});
+
+describe("AuctionSettled pair decoding", () => {
+  it("decodes vector<u8> pair fields that Aptos REST renders as hex", async () => {
+    const hex = (t: string) => ethers.hexlify(ethers.toUtf8Bytes(t));
+    mockPages([
+      makeTx(3, [
+        {
+          type: `${TEST_CONFIG.contractAddress}::auction::AuctionSettled`,
+          data: {
+            window_id: "1",
+            pair: {
+              base_chain: hex("ethereum"),
+              base_token: hex("FakeETH"),
+              quote_chain: hex("aptos"),
+              quote_token: hex("FakeUSD"),
+            },
+            clearing_price: "1",
+            total_filled: "0",
+            winner_count: "0",
+            lock_ids: [],
+          },
+        },
+      ]),
+    ]);
+    const scan = await scanAuctionSettledEvents(TEST_CONFIG);
+    expect(scan.events[0].event.pair).toEqual(TEST_PAIR);
   });
 });
 

@@ -290,6 +290,8 @@ module atomica::auction {
     #[event]
     struct AuctionRefunded has drop, store {
         window_id:        u64,
+        // The window key's pair bytes, so a relayer skips windows it does not serve.
+        pair_bcs:         vector<u8>,
         timelock_id:      u64,
         reason:           u8,
         bid_count:        u64,
@@ -764,7 +766,7 @@ module atomica::auction {
         };
 
         state.refunded = true;
-        event::emit(AuctionRefunded { window_id, timelock_id, reason, bid_count, seller_lock_count });
+        event::emit(AuctionRefunded { window_id, pair_bcs, timelock_id, reason, bid_count, seller_lock_count });
     }
 
     /// Sort sealed bids descending by revealed price and compute the marginal

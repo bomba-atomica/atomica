@@ -24,6 +24,10 @@
  *   START_WINDOW_ID        — First window ID to relay (default: 0)
  *   START_VERSION          — Aptos ledger version to start scanning at (default: 0)
  *   SETTLEMENT_CURSOR_FILE — Optional file holding the scan checkpoint (next version)
+ *   SETTLEMENT_DEAD_LETTER_FILE — JSONL file of outcomes that failed for good
+ *                            (default: settlement-dead-letters.jsonl)
+ *   PAIR_BCS               — Window key pair bytes served, 0x hex (default "0x",
+ *                            as the sell flow creates windows)
  *
  * Event source: the outcome events are module events, so the relayer scans
  * /v1/transactions from a version cursor (see docs/decisions/sdk-auction-settled-event-source.md).
@@ -37,18 +41,20 @@
  * @see source/evm-contracts/src/escrow/LockBox.sol
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { ethers } from "ethers";
 import {
   AptosPrunedReadError,
-  relayAuctionRefunded,
-  relayAuctionSettled,
-  relayBidUnopened,
-  samePair,
+  getRelayerSigner,
+  relayOutcomeScan,
   scanAuctionOutcomeEvents,
-  type AuctionOutcomeEvent,
   type BridgeConfig,
   type Pair,
-  type TxHash,
 } from "@atomica/sdk/settlement/bridge";
 
 // ── Configuration from environment ───────────────────────────────────────────
@@ -68,6 +74,9 @@ const PAIR_QUOTE_TOKEN = env.PAIR_QUOTE_TOKEN ?? "FakeUSD";
 const START_WINDOW_ID = BigInt(env.START_WINDOW_ID ?? "0");
 const START_VERSION = BigInt(env.START_VERSION ?? "0");
 const CURSOR_FILE = env.SETTLEMENT_CURSOR_FILE ?? "";
+const DEAD_LETTER_FILE =
+  env.SETTLEMENT_DEAD_LETTER_FILE ?? "settlement-dead-letters.jsonl";
+const PAIR_BCS = env.PAIR_BCS ?? "0x";
 
 // ── Validation ────────────────────────────────────────────────────────────────
 
@@ -107,31 +116,21 @@ function saveCursor(version: bigint): void {
 // ── Main polling loop ─────────────────────────────────────────────────────────
 
 /**
- * Relay one outcome event to LockBox. Windows below START_WINDOW_ID and
- * settlements of other pairs are skipped. LockBox outcome ids make a replay
- * of an already relayed event a no-op.
+ * Record an outcome the relayer gave up on. Each line is one JSON dead
+ * letter. An operator must resolve it by hand: the cursor has moved past it.
  */
-async function relayOutcome(
-  outcome: AuctionOutcomeEvent,
-  config: BridgeConfig,
-  pair: Pair,
-): Promise<TxHash[] | null> {
-  if (outcome.event.windowId < START_WINDOW_ID) return null;
-  switch (outcome.kind) {
-    case "AuctionSettled":
-      if (!samePair(outcome.event.pair, pair)) return null;
-      return relayAuctionSettled(outcome.event, config);
-    case "AuctionRefunded":
-      return relayAuctionRefunded(outcome.event, pair, config);
-    case "BidUnopened":
-      return relayBidUnopened(outcome.event, config);
-  }
+function saveDeadLetter(letter: object): void {
+  const line = JSON.stringify(letter, (_k, v) =>
+    typeof v === "bigint" ? v.toString() : v,
+  );
+  appendFileSync(DEAD_LETTER_FILE, `${line}\n`);
+  console.error(`[relayer] ALERT dead letter -> ${DEAD_LETTER_FILE}: ${line}`);
 }
 
 /**
- * One poll: scan from `cursor`, relay each outcome event in ledger order,
- * and return the new cursor. The cursor only moves past events that were
- * relayed, so a failed release is retried on the next poll.
+ * One poll: scan from `cursor` and relay each outcome on its own. A
+ * permanent failure becomes a dead letter and the scan moves on. A transient
+ * failure keeps the cursor at that outcome so the next poll retries it.
  * A pruned read (410) is terminal and rethrown: the relayer must not retry it.
  */
 async function pollAndRelay(
@@ -143,26 +142,49 @@ async function pollAndRelay(
     const scan = await scanAuctionOutcomeEvents(config, {
       fromVersion: cursor,
     });
-    for (const outcome of scan.events) {
-      const txHashes = await relayOutcome(outcome, config, pair);
-      if (txHashes) {
-        console.log(
-          `[relayer] ${outcome.kind} window=${outcome.event.windowId} ` +
-            `version=${outcome.version} releases=${txHashes.length} ` +
-            `txs=${txHashes.join(",") || "none (already relayed)"}`,
-        );
-      }
+    const result = await relayOutcomeScan(scan, config, {
+      pair,
+      minWindowId: START_WINDOW_ID,
+    });
+    for (const { outcome, txHashes } of result.relayed) {
+      console.log(
+        `[relayer] ${outcome.kind} window=${outcome.event.windowId} ` +
+          `version=${outcome.version} releases=${txHashes.length} ` +
+          `txs=${txHashes.join(",") || "none (already relayed or other pair)"}`,
+      );
     }
-
-    // Every event below scan.nextVersion is relayed (a failed release threw).
-    saveCursor(scan.nextVersion);
-    return scan.nextVersion;
+    for (const letter of result.deadLetters) saveDeadLetter(letter);
+    if (result.transientError) {
+      console.error(
+        `[relayer] Transient error at version ${result.nextVersion}, retrying next poll: ${result.transientError}`,
+      );
+    }
+    saveCursor(result.nextVersion);
+    return result.nextVersion;
   } catch (err: unknown) {
     if (err instanceof AptosPrunedReadError) throw err;
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[relayer] Error polling from version ${cursor}: ${msg}`);
-    // Do not advance on error — retry on next poll.
+    // Scan failed (Aptos unreachable): retry on next poll.
     return cursor;
+  }
+}
+
+/** Exit unless the relayer key is the LockBox settlementAuthority. */
+async function preflight(config: BridgeConfig): Promise<void> {
+  const signer = getRelayerSigner(config);
+  const lockBox = new ethers.Contract(
+    config.lockBoxAddress,
+    ["function settlementAuthority() view returns (address)"],
+    signer,
+  );
+  const authority = (await lockBox.settlementAuthority()) as string;
+  const relayer = await signer.getAddress();
+  if (authority.toLowerCase() !== relayer.toLowerCase()) {
+    console.error(
+      `[relayer] ERROR: relayer ${relayer} is not the LockBox settlementAuthority ${authority}`,
+    );
+    process.exit(1);
   }
 }
 
@@ -175,6 +197,7 @@ async function main(): Promise<void> {
     ethRpcUrl: ETH_RPC_URL,
     lockBoxAddress: LOCKBOX_ADDRESS,
     relayerPrivateKey: RELAYER_PRIVATE_KEY,
+    pairBcs: PAIR_BCS,
   };
 
   const pair: Pair = {
@@ -192,9 +215,12 @@ async function main(): Promise<void> {
   console.log(`  ETH RPC:           ${ETH_RPC_URL}`);
   console.log(`  LockBox:           ${LOCKBOX_ADDRESS}`);
   console.log(`  Pair:              ${pair.baseToken}/${pair.quoteToken}`);
+  console.log(`  Pair bytes:        ${PAIR_BCS}`);
+  console.log(`  Dead letters:      ${DEAD_LETTER_FILE}`);
   console.log(`  Poll interval:     ${POLL_INTERVAL_MS}ms`);
   console.log(`  Starting version:  ${loadCursor()}`);
   console.log("═".repeat(60));
+  await preflight(config);
   console.log("[relayer] Starting polling loop...");
 
   let cursor = loadCursor();
