@@ -2,7 +2,8 @@
 set -e
 
 # Validator entrypoint with inline genesis generation
-# Each validator generates the same deterministic genesis blob
+# Only validator-0 generates genesis and publishes it to the shared volume.
+# Other validators wait for the published waypoint before starting.
 
 VALIDATOR_INDEX="${VALIDATOR_INDEX:-0}"
 NUM_VALIDATORS="${NUM_VALIDATORS:-4}"
@@ -23,6 +24,21 @@ fi
 # Check if genesis already exists
 if [ -f "$GENESIS_DIR/genesis.blob" ] && [ -f "$GENESIS_DIR/waypoint.txt" ]; then
     echo "[Validator $VALIDATOR_INDEX] Genesis artifacts already exist, skipping generation"
+elif [ "$VALIDATOR_INDEX" != "0" ]; then
+    # Peers start on service_started, so wait for validator-0 to publish.
+    # waypoint.txt is moved into place last, so its presence means both files are complete.
+    WAIT_SECS="${GENESIS_WAIT_TIMEOUT_SECS:-300}"
+    echo "[Validator $VALIDATOR_INDEX] Waiting up to ${WAIT_SECS}s for validator-0 to publish genesis..."
+    waited=0
+    until [ -f "$GENESIS_DIR/waypoint.txt" ] && [ -f "$GENESIS_DIR/genesis.blob" ]; do
+        if [ "$waited" -ge "$WAIT_SECS" ]; then
+            echo "[Validator $VALIDATOR_INDEX] ERROR: timed out after ${WAIT_SECS}s waiting for $GENESIS_DIR/waypoint.txt from validator-0"
+            exit 1
+        fi
+        sleep 2
+        waited=$((waited + 2))
+    done
+    echo "[Validator $VALIDATOR_INDEX] Using shared genesis. Waypoint: $(cat "$GENESIS_DIR/waypoint.txt")"
 else
     echo "[Validator $VALIDATOR_INDEX] Generating genesis artifacts..."
 
@@ -96,10 +112,13 @@ EOF
         --local-repository-dir . \
         --output-dir .
 
-    # Copy genesis artifacts to shared location
+    # Publish atomically: copy to temp files in the shared dir, then rename.
+    # waypoint.txt goes last because peers treat it as the ready signal.
     mkdir -p "$GENESIS_DIR"
-    cp genesis.blob "$GENESIS_DIR/"
-    cp waypoint.txt "$GENESIS_DIR/"
+    cp genesis.blob "$GENESIS_DIR/.genesis.blob.tmp"
+    cp waypoint.txt "$GENESIS_DIR/.waypoint.txt.tmp"
+    mv -f "$GENESIS_DIR/.genesis.blob.tmp" "$GENESIS_DIR/genesis.blob"
+    mv -f "$GENESIS_DIR/.waypoint.txt.tmp" "$GENESIS_DIR/waypoint.txt"
 
     # Cleanup
     cd /
