@@ -297,20 +297,16 @@ export async function registerTimelockDirect(
 }
 
 /**
- * Build a native-account transaction with the SDK's simulated
- * `maxGasAmount` (the ts-sdk default when the simulation fails).
+ * Build a native-account transaction with `maxGasAmount` (the ts-sdk default
+ * when undefined) and an optional explicit sequence number.
  */
 async function buildDirect(
   aptosClient: Aptos,
   sender: Account,
   data: InputGenerateTransactionPayloadData,
+  maxGasAmount: number | undefined,
   accountSequenceNumber?: bigint,
 ) {
-  const maxGasAmount = await simulateMaxGasAmount(
-    aptosClient,
-    sender.accountAddress,
-    data,
-  );
   return aptosClient.transaction.build.simple({
     sender: sender.accountAddress,
     data,
@@ -327,7 +323,12 @@ export async function submitDirect(
   sender: Account,
   data: InputGenerateTransactionPayloadData,
 ): Promise<string> {
-  const txn = await buildDirect(aptosClient, sender, data);
+  const maxGasAmount = await simulateMaxGasAmount(
+    aptosClient,
+    sender.accountAddress,
+    data,
+  );
+  const txn = await buildDirect(aptosClient, sender, data, maxGasAmount);
   const submitted = await aptosClient.signAndSubmitTransaction({
     signer: sender,
     transaction: txn,
@@ -341,7 +342,8 @@ export async function submitDirect(
 
 /**
  * Submit many payloads from one native account, `batchSize` at a time with
- * consecutive sequence numbers, and wait for each batch. Throws if any
+ * consecutive sequence numbers and the SDK's simulated `maxGasAmount`, and
+ * wait for each batch. Throws if any
  * transaction aborts. Returns the hashes in payload order.
  */
 export async function submitManyDirect(
@@ -352,13 +354,28 @@ export async function submitManyDirect(
 ): Promise<string[]> {
   const hashes: string[] = [];
   for (let start = 0; start < payloads.length; start += batchSize) {
+    const batchPayloads = payloads.slice(start, start + batchSize);
+    // Simulate the whole batch before sending it: a simulation built while
+    // earlier batch transactions commit races the sequence number.
+    const maxGas: (number | undefined)[] = [];
+    for (const data of batchPayloads) {
+      maxGas.push(
+        await simulateMaxGasAmount(aptosClient, sender.accountAddress, data),
+      );
+    }
     const { sequence_number } = await aptosClient.getAccountInfo({
       accountAddress: sender.accountAddress,
     });
     let sequence = BigInt(sequence_number);
     const batch: string[] = [];
-    for (const data of payloads.slice(start, start + batchSize)) {
-      const txn = await buildDirect(aptosClient, sender, data, sequence++);
+    for (const [i, data] of batchPayloads.entries()) {
+      const txn = await buildDirect(
+        aptosClient,
+        sender,
+        data,
+        maxGas[i],
+        sequence++,
+      );
       const submitted = await aptosClient.signAndSubmitTransaction({
         signer: sender,
         transaction: txn,

@@ -66,7 +66,7 @@ const REVEAL_TIMEOUT_SECS = 300;
 /** The ts-sdk default maxGasAmount, used when nothing sets one. */
 const TS_SDK_DEFAULT_MAX_GAS = 200_000;
 
-/** Read a committed transaction and log its gas. */
+/** Read the committed `step` transaction, check its entry function, and log its gas. */
 async function logGas(
   aptosClient: Aptos,
   step: string,
@@ -75,6 +75,9 @@ async function logGas(
   const tx = (await aptosClient.getTransactionByHash({
     transactionHash: hash,
   })) as UserTransactionResponse;
+  expect((tx.payload as { function: string }).function).toMatch(
+    new RegExp(`::auction::${step}$`),
+  );
   console.log(
     `[gas] ${step} (${BID_COUNT} bids): gas_used=${tx.gas_used} max_gas_amount=${tx.max_gas_amount} success=${tx.success}`,
   );
