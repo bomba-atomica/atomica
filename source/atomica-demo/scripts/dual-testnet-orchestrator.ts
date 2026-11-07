@@ -59,7 +59,7 @@ async function main() {
     console.log("\n📦 Deploying contracts...");
 
     const ethAddresses = await deployEthereumContracts(ethTestnet);
-    await deployAptosContracts(aptosTestnet);
+    await deployAptosContracts(aptosTestnet, ethAddresses);
 
     process.env.VITE_ETH_RPC_URL = ethAddresses.rpcUrl;
     process.env.VITE_FAKE_ETH_ADDRESS = ethAddresses.fakeETH;
@@ -143,7 +143,10 @@ async function deployEthereumContracts(testnet: EthereumDockerTestnet) {
   };
 }
 
-async function deployAptosContracts(testnet: DockerTestnet) {
+async function deployAptosContracts(
+  testnet: DockerTestnet,
+  eth: { lockBox: string; fakeETH: string; fakeUSD: string },
+) {
   const contractsDir = process.cwd() + "/../atomica-move-contracts";
 
   await testnet.deployContracts({
@@ -160,6 +163,13 @@ async function deployAptosContracts(testnet: DockerTestnet) {
       },
       { functionId: `${DEPLOYER_ADDR}::fake_eth::initialize`, args: [] },
       { functionId: `${DEPLOYER_ADDR}::fake_usd::initialize`, args: [] },
+      // Pin the LockBox and the token behind each asset (issue 171).
+      {
+        functionId: `${DEPLOYER_ADDR}::eth_proof::initialize`,
+        args: [eth.lockBox, eth.fakeETH, eth.fakeUSD].map(
+          (addr) => `hex:${addr.slice(2)}`,
+        ),
+      },
     ],
     fundAmount: 10_000_000_000n,
   });

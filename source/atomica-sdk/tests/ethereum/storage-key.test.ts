@@ -4,6 +4,8 @@ import {
   calculateLockedBalanceStorageKey,
   calculateUnlockTimeStorageKey,
   calculateBatchStorageKeys,
+  calculateLockStorageKey,
+  getLockId,
 } from "../../src/ethereum/proofs/storage-key.js";
 
 /**
@@ -193,6 +195,29 @@ describe("Storage Key Calculation", () => {
       );
 
       expect(key).toBe(expected);
+    });
+  });
+
+  describe("Per-lock id and storage key (issue 171)", () => {
+    // Read from LockBox.getLockId / calculateLockStorageKey on anvil, and
+    // pinned by eth_proof_tests.move, so the SDK, Solidity and Move agree.
+    const USER = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+    const TOKEN = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+
+    it("getLockId matches LockBox.getLockId", () => {
+      expect(getLockId(USER, TOKEN, 0n)).toBe(
+        "0x971e89c2b26f64aa4fc94b73baad52f35b2beb721f37991b5771e8328a10586a",
+      );
+    });
+
+    it("calculateLockStorageKey matches LockBox.calculateLockStorageKey", () => {
+      expect(calculateLockStorageKey(USER, TOKEN, 0n)).toBe(
+        "0xa64f5e3f73fd5de7a6385dddf214ac430a21cc86902db5bd6560d9babea4ec89",
+      );
+    });
+
+    it("each nonce names its own lock", () => {
+      expect(getLockId(USER, TOKEN, 0n)).not.toBe(getLockId(USER, TOKEN, 1n));
     });
   });
 });

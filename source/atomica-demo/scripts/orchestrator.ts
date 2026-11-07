@@ -188,6 +188,9 @@ async function main() {
       `atomica=${DEPLOYER_ADDR}`,
       "--profile",
       "default",
+      // Bytecode only: "sparse" metadata exceeds the 60000-byte publish limit.
+      "--included-artifacts",
+      "none",
       "--assume-yes",
     ],
     CONTRACTS_DIR,

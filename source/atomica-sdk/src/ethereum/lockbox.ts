@@ -22,7 +22,7 @@ const LOCKBOX_ABI = [
   "function getLockedBalance(address user, address token) external view returns (uint256)",
   "function getUnlockTime(address user, address token) external view returns (uint256)",
   "function isUnlocked(address user, address token) external view returns (bool)",
-  "event TokensLocked(address indexed user, address indexed token, uint256 amount, uint256 unlockTime)",
+  "event TokensLocked(address indexed user, address indexed token, uint256 amount, uint256 unlockTime, uint256 nonce)",
   "event WithdrawWinnings(address indexed winner, address indexed token, uint256 amount)",
 ] as const;
 
@@ -107,6 +107,20 @@ export async function lockFakeEth(
   const receipt = await tx.wait();
   if (!receipt) throw new Error("lock() tx receipt is null");
   return receipt;
+}
+
+/**
+ * Nonce of the lock made by a `lock()` transaction, read from its
+ * `TokensLocked` event. The nonce names the lock: its Aptos receipt id is
+ * `getLockId(user, token, nonce)` (see ethereum/proofs).
+ */
+export function lockNonceFromReceipt(receipt: TransactionReceipt): bigint {
+  const iface = new ethers.Interface(LOCKBOX_ABI);
+  for (const log of receipt.logs) {
+    const parsed = iface.parseLog(log);
+    if (parsed?.name === "TokensLocked") return parsed.args.nonce as bigint;
+  }
+  throw new Error(`No TokensLocked event in transaction ${receipt.hash}`);
 }
 
 /**

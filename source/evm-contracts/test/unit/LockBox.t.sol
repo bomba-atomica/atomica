@@ -170,7 +170,7 @@ contract LockBoxTest is Test {
         uint256 expectedUnlockTime = block.timestamp + 1 hours;
 
         vm.expectEmit(true, true, false, true);
-        emit LockBox.TokensLocked(alice, address(fakeETH), 10 ether, expectedUnlockTime);
+        emit LockBox.TokensLocked(alice, address(fakeETH), 10 ether, expectedUnlockTime, 0);
 
         lockBox.lock(address(fakeETH), 10 ether);
 
@@ -390,5 +390,50 @@ contract LockBoxTest is Test {
         bytes32 expectedKey = keccak256(abi.encode(compositeKey, uint256(0)));
 
         assertEq(key1, expectedKey);
+    }
+
+    function testEachLockTakesAFreshNonceAndOwnRecord() public {
+        vm.startPrank(alice);
+        fakeETH.approve(address(lockBox), 15 ether);
+        lockBox.lock(address(fakeETH), 10 ether);
+        lockBox.lock(address(fakeETH), 5 ether);
+        vm.stopPrank();
+
+        assertEq(lockBox.nextLockNonce(), 2);
+        assertEq(lockBox.lockAmounts(lockBox.getLockId(alice, address(fakeETH), 0)), 10 ether);
+        assertEq(lockBox.lockAmounts(lockBox.getLockId(alice, address(fakeETH), 1)), 5 ether);
+        // The aggregate balance still backs releases.
+        assertEq(lockBox.getLockedBalance(alice, address(fakeETH)), 15 ether);
+    }
+
+    function testLockRecordSurvivesRelease() public {
+        vm.startPrank(alice);
+        fakeETH.approve(address(lockBox), 10 ether);
+        lockBox.lock(address(fakeETH), 10 ether);
+        vm.stopPrank();
+
+        vm.prank(relayer);
+        lockBox.refund(keccak256("outcome"), alice, address(fakeETH), 10 ether);
+
+        // The per-lock record states what was locked, not what is left.
+        assertEq(lockBox.lockAmounts(lockBox.getLockId(alice, address(fakeETH), 0)), 10 ether);
+        assertEq(lockBox.getLockedBalance(alice, address(fakeETH)), 0);
+    }
+
+    function testLockStorageKeyIsTheRealSlot() public {
+        vm.startPrank(alice);
+        fakeUSD.approve(address(lockBox), 100 * 10**6);
+        lockBox.lock(address(fakeUSD), 100 * 10**6);
+        vm.stopPrank();
+
+        bytes32 lockId = keccak256(abi.encodePacked(alice, address(fakeUSD), uint256(0)));
+        assertEq(lockBox.getLockId(alice, address(fakeUSD), 0), lockId);
+
+        bytes32 slot = lockBox.calculateLockStorageKey(alice, address(fakeUSD), 0);
+        assertEq(slot, keccak256(abi.encode(lockId, uint256(4))));
+        // The slot eth_getProof reads (and Aptos derives) holds the lock amount.
+        assertEq(uint256(vm.load(address(lockBox), slot)), 100 * 10**6);
+        // Slot 5 holds the nonce counter.
+        assertEq(uint256(vm.load(address(lockBox), bytes32(uint256(5)))), 1);
     }
 }

@@ -513,9 +513,8 @@ export interface LockReceiptInfo {
   /** Ethereum address that locked the tokens in LockBox. */
   user: string;
   /**
-   * Amount the relayer may release for this receipt. `getLockReceipt` returns
-   * the proven storage value; `capToLocksInBlock` lowers it to the tokens
-   * locked in the proof block (see that function).
+   * Amount of the one LockBox lock this receipt proves (`lockAmounts` of its
+   * lock id). Aptos registers each lock once, so receipts never overlap.
    */
   amount: bigint;
   /** Ethereum block the lock was proven at. */
@@ -914,57 +913,6 @@ export async function getLockReceipt(
   };
 }
 
-const TOKENS_LOCKED = new ethers.Interface([
-  "event TokensLocked(address indexed user, address indexed token, uint256 amount, uint256 unlockTime)",
-]);
-
-/**
- * Cap each receipt at the tokens its owner locked in the proof block.
- *
- * A receipt proves the owner's total `lockedBalances` at its block, not one
- * lock, so two receipts of one owner can count the same tokens twice. The
- * relayer releases at most the `TokensLocked` amounts of that owner and
- * token in that block. Locks are proven at their own block (the sell flow
- * and the test harness do), so a real lock is never cut, and no two
- * receipts can release the same tokens. Issue 171 makes receipt amounts
- * per lock on Aptos.
- */
-export async function capToLocksInBlock(
-  receipts: LockReceiptInfo[],
-  asset: LockAsset,
-  config: BridgeConfig,
-): Promise<LockReceiptInfo[]> {
-  if (receipts.length === 0) return receipts;
-  const provider = getEthProvider(config);
-  const lockBox = new ethers.Contract(
-    config.lockBoxAddress,
-    LOCKBOX_RELAY_ABI,
-    provider,
-  );
-  const token = (await (asset === "FakeETH"
-    ? lockBox.fakeETH()
-    : lockBox.fakeUSD())) as string;
-  return Promise.all(
-    receipts.map(async (r) => {
-      const logs = await provider.getLogs({
-        address: config.lockBoxAddress,
-        fromBlock: r.blockNumber,
-        toBlock: r.blockNumber,
-        topics: [
-          TOKENS_LOCKED.getEvent("TokensLocked")!.topicHash,
-          ethers.zeroPadValue(r.user, 32),
-          ethers.zeroPadValue(token, 32),
-        ],
-      });
-      let locked = 0n;
-      for (const log of logs) {
-        locked += TOKENS_LOCKED.parseLog(log)!.args.amount as bigint;
-      }
-      return { ...r, amount: r.amount < locked ? r.amount : locked };
-    }),
-  );
-}
-
 /** `auction::get_window_lock_ids`: seller lock ids and bid collateral lock ids. */
 async function getWindowLockIds(
   aptosClient: Aptos,
@@ -1022,8 +970,7 @@ function requireServedPair(
  * Relay an `AuctionSettled` outcome to LockBox: winner payouts, seller
  * payouts, excess collateral, unsold supply and losing-bid refunds.
  *
- * Only a settled window of the served `pair_bcs` is relayed. Receipt amounts
- * are capped with {@link capToLocksInBlock}.
+ * Only a settled window of the served `pair_bcs` is relayed.
  *
  * @returns Ethereum transaction hashes of the releases sent.
  * @see docs/architecture/v0-architecture.md §3.5
@@ -1070,23 +1017,15 @@ export async function relayAuctionSettled(
     );
   }
 
-  const sellers = await capToLocksInBlock(
-    await Promise.all(
-      ids.sellers.map((id) =>
-        getLockReceipt(aptosClient, config.contractAddress, "FakeETH", id),
-      ),
+  const sellers = await Promise.all(
+    ids.sellers.map((id) =>
+      getLockReceipt(aptosClient, config.contractAddress, "FakeETH", id),
     ),
-    "FakeETH",
-    config,
   );
-  const collateral = await capToLocksInBlock(
-    await Promise.all(
-      ids.collateral.map((id) =>
-        getLockReceipt(aptosClient, config.contractAddress, "FakeUSD", id),
-      ),
+  const collateral = await Promise.all(
+    ids.collateral.map((id) =>
+      getLockReceipt(aptosClient, config.contractAddress, "FakeUSD", id),
     ),
-    "FakeUSD",
-    config,
   );
   const bids = bidResults.map((b, i) => ({
     isWinner: b.isWinner,
@@ -1129,12 +1068,12 @@ export async function relayAuctionRefunded(
       ids.sellers.map((id) =>
         getLockReceipt(aptosClient, config.contractAddress, "FakeETH", id),
       ),
-    ).then((r) => capToLocksInBlock(r, "FakeETH", config)),
+    ),
     Promise.all(
       ids.collateral.map((id) =>
         getLockReceipt(aptosClient, config.contractAddress, "FakeUSD", id),
       ),
-    ).then((r) => capToLocksInBlock(r, "FakeUSD", config)),
+    ),
   ]);
   return executeLockBoxReleases(
     planRefundReleases({ sellers, collateral }),
@@ -1153,17 +1092,11 @@ export async function relayBidUnopened(
   event: BidUnopenedEvent,
   config: BridgeConfig,
 ): Promise<TxHash[]> {
-  const [receipt] = await capToLocksInBlock(
-    [
-      await getLockReceipt(
-        aptosClientFor(config),
-        config.contractAddress,
-        "FakeUSD",
-        event.collateralLockId,
-      ),
-    ],
+  const receipt = await getLockReceipt(
+    aptosClientFor(config),
+    config.contractAddress,
     "FakeUSD",
-    config,
+    event.collateralLockId,
   );
   if (receipt.amount === 0n) return [];
   return executeLockBoxReleases(

@@ -21,13 +21,12 @@ module atomica::lock_receipt {
     use aptos_std::from_bcs;
     use aptos_framework::event;
     use aptos_framework::timestamp;
-    use aptos_std::aptos_hash::keccak256;
-    use atomica::eth_proof::{Self, StateProof};
+    use aptos_std::type_info;
+    use atomica::eth_proof;
 
     // ===================== Error Codes =====================
 
     const E_ALREADY_CLAIMED: u64 = 1;
-    const E_AMOUNT_MISMATCH: u64 = 2;
     const E_RECEIPT_NOT_FOUND: u64 = 3;
     const E_RECEIPT_ALREADY_CLAIMED: u64 = 4;
     const E_NOT_RECEIPT_OWNER: u64 = 5;
@@ -35,6 +34,8 @@ module atomica::lock_receipt {
     const E_INVALID_STATUS: u64 = 7;
     const E_INVALID_ADDRESS_LENGTH: u64 = 8;
     const E_UNAUTHORIZED_SIGNER: u64 = 9;
+    /// Asset has no pinned Ethereum token
+    const E_UNSUPPORTED_ASSET: u64 = 10;
 
     // Receipt status constants
     const STATUS_ACTIVE: u8 = 0;
@@ -68,7 +69,7 @@ module atomica::lock_receipt {
         /// User who locked the assets on the remote chain
         user: address,
 
-        /// Amount of assets locked (in the asset's base units)
+        /// Amount of this one LockBox lock (in the asset's base units)
         amount: u256,
 
         /// Block number where the lock occurred
@@ -152,52 +153,44 @@ module atomica::lock_receipt {
         from_bcs::to_address(aptos_addr_bytes)
     }
 
+    /// Ethereum token address pinned for `Asset` in eth_proof's config.
+    fun token_for<Asset>(): vector<u8> {
+        let asset = type_info::type_of<Asset>();
+        if (asset == type_info::type_of<FakeETH>()) {
+            eth_proof::fake_eth_token()
+        } else {
+            assert!(asset == type_info::type_of<FakeUSD>(), E_UNSUPPORTED_ASSET);
+            eth_proof::fake_usd_token()
+        }
+    }
+
     /// Register a lock from Ethereum
     ///
     /// This function:
-    /// 1. Creates an Ethereum state proof from parameters
-    /// 2. Verifies the proof cryptographically using MPT verification
-    /// 3. Checks for replay attacks
-    /// 4. Creates and stores a LockReceipt
+    /// 1. Resolves the token of `Asset` from the pinned config
+    /// 2. Verifies the lock's MPT proof against the trusted state root of
+    ///    `block_number` (eth_proof::verify_lock derives the storage key)
+    /// 3. Derives the lock id from the LockBox lock nonce and rejects a lock
+    ///    already registered, so one lock gives exactly one receipt
+    /// 4. Creates and stores a LockReceipt for the amount of that one lock
     /// 5. Emits a LockRegistered event
     ///
-    /// Type parameter Asset determines which asset is being locked (FakeETH, FakeUSD, etc.)
+    /// Type parameter Asset determines which asset is being locked (FakeETH, FakeUSD).
     public entry fun register_ethereum_lock<Asset>(
         account: &signer,
-        // Ethereum proof parameters
         block_number: u64,
-        block_hash: vector<u8>,
-        state_root: vector<u8>,
-        contract_address: vector<u8>,
         user_address: vector<u8>,
-        token_address: vector<u8>,
-        storage_key: vector<u8>,
-        storage_value: u256,
+        lock_nonce: u64,
         account_proof: vector<vector<u8>>,
         storage_proof: vector<vector<u8>>,
     ) acquires ReceiptRegistry {
-        // 1. Create Ethereum state proof
-        let proof = eth_proof::create_proof(
-            block_number,
-            block_hash,
-            state_root,
-            contract_address,
-            user_address,
-            token_address,
-            storage_key,
-            storage_value,
-            account_proof,
-            storage_proof,
-        );
+        let token = token_for<Asset>();
 
-        // 2. Verify proof and get unique lock ID
-        let lock_id = verify_ethereum_lock<Asset>(&proof, storage_value);
-
-        // 3. Extract the verified user address from the proof
-        // This prevents frontrunning attacks where someone could steal the receipt
+        // 1. The user named in the proof owns the receipt. This prevents
+        // frontrunning attacks where someone could steal the receipt.
         let user = address_from_bytes(user_address);
-        
-        // 4. Verify the signer is authorized.
+
+        // 2. Verify the signer is authorized.
         //
         // Demo: The @atomica admin (fee-payer) signs on behalf of the user.
         // The user-derived Aptos address (SHA3-256 of SIWE pubkey + domain) does
@@ -209,91 +202,42 @@ module atomica::lock_receipt {
             E_UNAUTHORIZED_SIGNER
         );
 
-        // 5. Check for replay attack
+        // 3. One lock, one receipt: the id names the LockBox lock, not the block.
+        let lock_id = eth_proof::lock_id(user_address, token, lock_nonce);
         assert!(
             !is_lock_claimed<Ethereum, Asset>(lock_id),
             E_ALREADY_CLAIMED
         );
 
-        // 6. Create receipt
+        // 4. Verify the lock against the trusted header and read its amount.
+        let amount = eth_proof::verify_lock(
+            block_number,
+            user_address,
+            token,
+            lock_nonce,
+            account_proof,
+            storage_proof,
+        );
+
+        // 5. Create and store the receipt
         let receipt = LockReceipt<Ethereum, Asset> {
             lock_id,
             user,
-            amount: storage_value,
+            amount,
             block_number,
             timestamp: timestamp::now_seconds(),
             status: STATUS_ACTIVE,
         };
-
-        // 7. Store receipt
         store_receipt<Ethereum, Asset>(receipt, lock_id);
 
-        // 8. Emit event
+        // 6. Emit event
         event::emit(LockRegistered<Ethereum, Asset> {
             lock_id,
             user,
-            amount: storage_value,
+            amount,
             block_number,
             timestamp: timestamp::now_seconds(),
         });
-    }
-
-    // ===================== Verification Functions =====================
-
-    /// Verify an Ethereum lock proof and return unique lock ID
-    ///
-    /// This function:
-    /// 1. Calls eth_proof::verify_and_extract() for cryptographic MPT verification
-    /// 2. Validates the verified amount matches the claimed amount
-    /// 3. Generates a unique lock ID to prevent replays
-    fun verify_ethereum_lock<Asset>(
-        proof: &StateProof,
-        expected_amount: u256,
-    ): vector<u8> {
-        // Verify MPT proof cryptographically
-        let verified_amount = eth_proof::verify_and_extract(proof);
-
-        // Ensure amount matches
-        assert!(verified_amount == expected_amount, E_AMOUNT_MISMATCH);
-
-        // Generate unique lock ID from proof components
-        generate_lock_id(proof)
-    }
-
-    /// Generate a unique lock ID from proof
-    ///
-    /// The lock ID is a hash of:
-    /// - block_hash (ensures uniqueness per block)
-    /// - contract_address (LockBox contract)
-    /// - user_address (who locked)
-    /// - token_address (which token)
-    /// - storage_key (specific storage slot)
-    ///
-    /// This prevents the same lock from being registered twice
-    fun generate_lock_id(proof: &StateProof): vector<u8> {
-        let (
-            _block_num,
-            block_hash,
-            _state_root,
-            contract_addr,
-            user_addr,
-            token_addr,
-            storage_key,
-            _storage_value,
-            _account_proof,
-            _storage_proof
-        ) = eth_proof::destructure_proof(proof);
-
-        // Concatenate all components
-        let data = vector::empty<u8>();
-        vector::append(&mut data, block_hash);
-        vector::append(&mut data, contract_addr);
-        vector::append(&mut data, user_addr);
-        vector::append(&mut data, token_addr);
-        vector::append(&mut data, storage_key);
-
-        // Hash to create unique ID
-        keccak256(data)
     }
 
     // ===================== Storage Functions =====================

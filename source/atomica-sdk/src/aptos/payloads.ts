@@ -238,12 +238,12 @@ export async function registerTimelock(
  * Build payload for lock_receipt::register_ethereum_lock<FakeETH>.
  *
  * Serialises directly from LockedBalanceProof, matching the Move entry function:
- *   register_ethereum_lock<Asset>(account, block_number, block_hash, state_root,
- *     contract_address, user_address, token_address, storage_key, storage_value,
- *     account_proof, storage_proof)
+ *   register_ethereum_lock<Asset>(account, block_number, user_address,
+ *     lock_nonce, account_proof, storage_proof)
  *
- * Do NOT use serializeProofForAptos() — it is missing block_number, user_address,
- * token_address and returns wrong types.
+ * Aptos derives the state root (a trusted header, see
+ * getSubmitEthereumHeaderPayload), the LockBox address, the token and the
+ * storage key itself, so the proof's own root and key are not sent.
  */
 export function getRegisterLockPayload(
   proof: LockedBalanceProof,
@@ -253,16 +253,29 @@ export function getRegisterLockPayload(
     typeArguments: [`${CONTRACT_ADDR}::lock_receipt::FakeETH`],
     functionArguments: [
       proof.blockNumber,
-      ethers.getBytes(proof.blockHash),
-      ethers.getBytes(proof.stateRoot),
-      ethers.getBytes(proof.contractAddress),
       ethers.getBytes(proof.userAddress),
-      ethers.getBytes(proof.tokenAddress),
-      ethers.getBytes(proof.storageKey),
-      proof.storageValue.toString(), // u256 as decimal string
+      proof.lockNonce.toString(), // u64 as decimal string
       proof.accountProof.map((node) => ethers.getBytes(node)),
       proof.storageProof.map((node) => ethers.getBytes(node)),
     ],
+  };
+}
+
+/**
+ * Build payload for eth_proof::submit_header (the @atomica admin only).
+ *
+ *   submit_header(admin, block_number, state_root)
+ *
+ * Stores the trusted state root a lock proof of `blockNumber` is checked
+ * against. v0.1: the trusted relayer (the Aptos deployer) posts it.
+ */
+export function getSubmitEthereumHeaderPayload(
+  blockNumber: number,
+  stateRoot: string,
+): InputGenerateTransactionPayloadData {
+  return {
+    function: `${CONTRACT_ADDR}::eth_proof::submit_header`,
+    functionArguments: [blockNumber, ethers.getBytes(stateRoot)],
   };
 }
 

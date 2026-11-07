@@ -159,7 +159,11 @@ async function deployEthereumContracts() {
   };
 }
 
-async function deployAptosContracts() {
+async function deployAptosContracts(eth: {
+  lockBox: string;
+  fakeETH: string;
+  fakeUSD: string;
+}) {
   console.log("\n📦 Deploying Move contracts to Aptos...");
   console.log(`  API: ${APTOS_URL}`);
 
@@ -179,6 +183,9 @@ async function deployAptosContracts() {
     "--url",
     APTOS_URL,
     "--skip-fetch-latest-git-deps",
+    // Bytecode only: "sparse" metadata exceeds the 60000-byte publish limit.
+    "--included-artifacts",
+    "none",
     "--assume-yes",
   ];
 
@@ -195,6 +202,13 @@ async function deployAptosContracts() {
     },
     { functionId: `${APTOS_DEPLOYER_ADDRESS}::fake_eth::initialize`, args: [] },
     { functionId: `${APTOS_DEPLOYER_ADDRESS}::fake_usd::initialize`, args: [] },
+    // Pin the LockBox and the token behind each asset (issue 171).
+    {
+      functionId: `${APTOS_DEPLOYER_ADDRESS}::eth_proof::initialize`,
+      args: [eth.lockBox, eth.fakeETH, eth.fakeUSD].map(
+        (addr) => `hex:${addr.slice(2)}`,
+      ),
+    },
   ];
 
   for (const initFunc of initFunctions) {
@@ -236,7 +250,7 @@ async function main() {
 
   const ethAddresses = await deployEthereumContracts();
 
-  await deployAptosContracts();
+  await deployAptosContracts(ethAddresses);
 
   console.log("\n" + "═".repeat(60));
   console.log("  ✅ Deployment Complete!");

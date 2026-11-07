@@ -29,6 +29,7 @@ vi.mock("@atomica/sdk/chain-config", () => ({
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeEth: vi.fn(),
   lockFakeEth: vi.fn(),
+  lockNonceFromReceipt: vi.fn(() => 3n),
   getUnlockTime: vi.fn(),
   withdrawFakeEth: vi.fn(),
 }));
@@ -74,22 +75,16 @@ const PROOF = {
   contractAddress: LOCK_BOX,
   userAddress: ACCOUNT,
   tokenAddress: FAKE_ETH,
+  lockNonce: 3n,
+  lockId: "0x" + "dd".repeat(32),
   storageKey: "0x" + "cc".repeat(32),
   storageValue: 10n ** 18n,
   accountProof: ["0x01"],
   storageProof: ["0x02"],
 } as unknown as LockedBalanceProof;
 
-/** lock_id as lock_receipt.move computes it for PROOF. */
-const EXPECTED_LOCK_ID = ethers.keccak256(
-  ethers.concat([
-    PROOF.blockHash,
-    PROOF.contractAddress,
-    PROOF.userAddress,
-    PROOF.tokenAddress,
-    PROOF.storageKey,
-  ]),
-);
+/** The receipt id is the proof's LockBox lock id (issue 171). */
+const EXPECTED_LOCK_ID = PROOF.lockId;
 
 type WindowWithEthereum = { ethereum?: unknown };
 
@@ -277,6 +272,7 @@ describe("useSellFlow state machine", () => {
       expect(result.current.step).toBe("confirming");
       expect(result.current.txHash).toBe("0xlocktx");
       expect(result.current.lockBlock).toBe(77);
+      expect(result.current.lockNonce).toBe(3n);
       expect(result.current.amount).toBe(10n ** 18n);
       expect(result.current.minPrice).toBe(2_000_000_000n);
       expect(result.current.unlockTime).toBe(1_700_000_000);
@@ -286,6 +282,7 @@ describe("useSellFlow state machine", () => {
         step: "confirming",
         txHash: "0xlocktx",
         lockBlock: 77,
+        lockNonce: "3",
         amount: "1000000000000000000",
         minPrice: "2000000000",
       });
@@ -310,7 +307,7 @@ describe("useSellFlow state machine", () => {
 
     it("generateProof: proves the lock block and moves to submitting-proof", async () => {
       vi.mocked(generateLockedBalanceProof).mockResolvedValue(PROOF);
-      persist({ step: "generating-proof", lockBlock: 100 });
+      persist({ step: "generating-proof", lockBlock: 100, lockNonce: "3" });
 
       const { result } = renderHook(() => useSellFlow(ACCOUNT));
       await act(async () => {});
@@ -323,6 +320,7 @@ describe("useSellFlow state machine", () => {
         LOCK_BOX,
         ACCOUNT,
         FAKE_ETH,
+        3n,
         100,
       );
       expect(result.current.step).toBe("submitting-proof");
@@ -339,7 +337,7 @@ describe("useSellFlow state machine", () => {
         fn: "register_lock",
       } as never);
       vi.mocked(submitNativeTransaction).mockResolvedValue(undefined as never);
-      persist({ step: "generating-proof", lockBlock: 100 });
+      persist({ step: "generating-proof", lockBlock: 100, lockNonce: "3" });
 
       const { result } = renderHook(() => useSellFlow(ACCOUNT));
       await act(async () => {});
@@ -494,7 +492,7 @@ describe("useSellFlow state machine", () => {
       vi.mocked(submitNativeTransaction).mockRejectedValue(
         new Error("SIWE signature rejected"),
       );
-      persist({ step: "generating-proof", lockBlock: 100 });
+      persist({ step: "generating-proof", lockBlock: 100, lockNonce: "3" });
 
       const { result } = renderHook(() => useSellFlow(ACCOUNT));
       await act(async () => {});

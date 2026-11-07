@@ -19,7 +19,7 @@ import { getChainConfig } from "@atomica/sdk/chain-config";
 
 // Minimal ABI — only the event we need to subscribe to.
 const LOCKBOX_EVENT_ABI = [
-  "event TokensLocked(address indexed user, address indexed token, uint256 amount, uint256 unlockTime)",
+  "event TokensLocked(address indexed user, address indexed token, uint256 amount, uint256 unlockTime, uint256 nonce)",
 ] as const;
 
 /** Zero address used as the default when no contract is deployed. */

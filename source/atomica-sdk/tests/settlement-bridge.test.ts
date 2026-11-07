@@ -27,8 +27,6 @@ const mocks = vi.hoisted(() => ({
   revert: new Set<string>(),
   /** Outcome ids whose LockBox call fails with a given ethers error. */
   errors: new Map<string, object>(),
-  /** TokensLocked amount per `${user}|${block}` (lower-case user). Unset: no cap. */
-  locked: new Map<string, bigint>(),
   nonceManagers: 0,
 }));
 
@@ -37,26 +35,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("ethers", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ethers")>();
-  const lockedIface = new actual.ethers.Interface([
-    "event TokensLocked(address indexed user, address indexed token, uint256 amount, uint256 unlockTime)",
-  ]);
-  class MockJsonRpcProvider {
-    getLogs = vi.fn(async (filter: { fromBlock: bigint; topics: string[] }) => {
-      const user = actual.ethers.getAddress("0x" + filter.topics[1].slice(26));
-      const key = `${user.toLowerCase()}|${filter.fromBlock}`;
-      const amount = mocks.locked.has(key)
-        ? mocks.locked.get(key)!
-        : 10n ** 30n;
-      return [
-        lockedIface.encodeEventLog("TokensLocked", [
-          user,
-          actual.ethers.getAddress("0x" + filter.topics[2].slice(26)),
-          amount,
-          0n,
-        ]),
-      ];
-    });
-  }
+  class MockJsonRpcProvider {}
   class MockWallet {}
   class MockNonceManager {
     reset = vi.fn();
@@ -149,7 +128,6 @@ import {
   relayOutcomeScan,
   executeLockBoxReleases,
   PermanentRelayError,
-  capToLocksInBlock,
   isPermanentRelayError,
   parseBidResults,
   RECEIPT_STATUS_REVOKED,
@@ -1053,34 +1031,17 @@ describe("pair filtering", () => {
   });
 });
 
-// ─── Receipt caps, error classes, view shapes ──────────────────────────────
+// ─── Per-lock receipts, error classes, view shapes ─────────────────────────
 
-describe("capToLocksInBlock", () => {
+describe("per-lock receipt amounts", () => {
   beforeEach(() => {
-    mocks.locked.clear();
     mocks.calls.length = 0;
     mocks.processed.clear();
   });
 
-  it("caps each receipt at the tokens its owner locked in the proof block", async () => {
-    // One owner locked 10 at block 1 and 5 at block 2. The receipts prove the
-    // running totals 10 and 15.
-    mocks.locked.set(`${SELLER.toLowerCase()}|1`, 10n * ETH);
-    mocks.locked.set(`${SELLER.toLowerCase()}|2`, 5n * ETH);
-    const capped = await capToLocksInBlock(
-      [
-        { ...receipt("0x01", SELLER, 10n * ETH, 2), blockNumber: 1n },
-        { ...receipt("0x02", SELLER, 15n * ETH, 2), blockNumber: 2n },
-      ],
-      "FakeETH",
-      TEST_CONFIG,
-    );
-    expect(capped.map((r) => r.amount)).toEqual([10n * ETH, 5n * ETH]);
-  });
-
-  it("a refund of an over-counted receipt cannot drain another receipt's lock", async () => {
-    // The second receipt proves 15 but only 5 were locked in its block.
-    mocks.locked.set(`${SELLER.toLowerCase()}|2`, 5n * ETH);
+  it("refunds exactly the amount of the one lock a receipt proves", async () => {
+    // Issue 171: a receipt is one LockBox lock (lockAmounts of its lock id),
+    // so the relayer releases its amount as is.
     mocks.views.set("auction::get_window_lock_ids", () => [["0x02"], []]);
     mocks.views.set("lock_receipt::get_receipt", () => [
       aptosAddr(SELLER),
@@ -1101,22 +1062,7 @@ describe("capToLocksInBlock", () => {
       TEST_CONFIG,
     );
 
-    expect(mocks.calls.map((c) => c.args[3])).toEqual([5n * ETH]);
-  });
-
-  it("a receipt proven at a block without a lock releases nothing", async () => {
-    mocks.locked.set(`${LOSER.toLowerCase()}|1`, 0n);
-    stubReceipts({ "0xabcd": [LOSER, 700n * USD, 1] });
-    const hashes = await relayBidUnopened(
-      {
-        windowId: 4n,
-        bidder: "0x" + "11".repeat(32),
-        collateralLockId: ethers.getBytes("0xabcd"),
-      },
-      TEST_CONFIG,
-    );
-    expect(hashes).toEqual([]);
-    expect(mocks.calls).toEqual([]);
+    expect(mocks.calls.map((c) => c.args[3])).toEqual([15n * ETH]);
   });
 });
 
@@ -1158,7 +1104,6 @@ describe("executeLockBoxReleases error handling", () => {
     mocks.processed.clear();
     mocks.revert.clear();
     mocks.errors.clear();
-    mocks.locked.clear();
   });
 
   const refund = (lockId: string) => ({

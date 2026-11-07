@@ -34,6 +34,7 @@ vi.mock("@atomica/sdk/chain-config", () => ({
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeEth: vi.fn(),
   lockFakeEth: vi.fn(),
+  lockNonceFromReceipt: vi.fn(() => 0n),
   getUnlockTime: vi.fn(),
   withdrawFakeEth: vi.fn(),
 }));
@@ -205,6 +206,7 @@ describe("SellFlow localStorage resume", () => {
         step: "confirming",
         txHash: "0xdeadbeef",
         lockBlock: 100,
+        lockNonce: "5",
       }),
     );
     await act(async () => {
@@ -222,6 +224,7 @@ describe("SellFlow localStorage resume", () => {
       expect.any(String),
       ACCOUNT,
       expect.any(String),
+      5n,
       100,
     );
   });
@@ -234,6 +237,8 @@ describe("SellFlow localStorage resume", () => {
       contractAddress: "0x" + "11".repeat(20),
       userAddress: ACCOUNT,
       tokenAddress: "0x" + "22".repeat(20),
+      lockNonce: 5n,
+      lockId: "0x" + "dd".repeat(32),
       storageKey: "0x" + "cc".repeat(32),
       storageValue: 10n ** 18n,
       accountProof: ["0x01"],
@@ -246,6 +251,7 @@ describe("SellFlow localStorage resume", () => {
       JSON.stringify({
         step: "generating-proof",
         lockBlock: 100,
+        lockNonce: "5",
         amount: "1000000000000000000",
         minPrice: "2000000000",
       }),
@@ -264,7 +270,7 @@ describe("SellFlow localStorage resume", () => {
       lockId?: string;
     };
     expect(persisted.step).toBe("monitoring");
-    expect(persisted.lockId).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(persisted.lockId).toBe("0x" + "dd".repeat(32));
   });
 
   it("resumes at the lock step after the tab closes mid-lock", async () => {

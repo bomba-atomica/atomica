@@ -7,6 +7,9 @@
 
 export {
   getLockKey,
+  getLockId,
+  calculateLockStorageKey,
+  LOCK_AMOUNTS_SLOT,
   calculateLockedBalanceStorageKey,
   calculateUnlockTimeStorageKey,
   verifyStorageKeyCalculation,
@@ -15,9 +18,7 @@ export {
 
 export {
   generateLockedBalanceProof,
-  generateBatchProofs,
   isProofFinalized,
-  serializeProofForAptos,
   validateProof,
   formatProof,
   type StorageProof,
