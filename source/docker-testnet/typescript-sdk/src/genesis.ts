@@ -116,7 +116,7 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
             process.env.IMAGE_NAME ||
             composeImage ||
             process.env.VALIDATOR_IMAGE_REPO ||
-            "ghcr.io/bomba-atomica/atomica-aptos/validator:latest";
+            "ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:33e4aeda3ea9dff33f9f70244ee3444ad80b3eb2a825f00ba869f663c07ac126";
 
         const validatorImage = genesisImage;
 
