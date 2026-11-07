@@ -29,10 +29,18 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
  * - Slot 1: unlockTimes mapping(bytes32 => uint256)
  * - Slot 2: withdrawable mapping(bytes32 => uint256)
  * - Slot 3: processedOutcomes mapping(bytes32 => bool)
+ * - Slot 4: lockAmounts mapping(bytes32 => uint256)
+ * - Slot 5: nextLockNonce uint256
  *
  * To calculate storage key for lockedBalances[getLockKey(user, token)]:
  * compositeKey = keccak256(abi.encodePacked(user, token))
  * storageKey = keccak256(abi.encode(compositeKey, uint256(0)))
+ *
+ * PER-LOCK PROOFS: every `lock` call takes a fresh nonce and records its own
+ * amount in `lockAmounts[getLockId(user, token, nonce)]`. Aptos proves that
+ * slot (`calculateLockStorageKey`) and uses the lock id as its receipt id, so
+ * one lock gives exactly one receipt however many blocks it is proven at.
+ * The record is never cleared: it states what was locked, not what is left.
  *
  * TODO: Future enhancement - implement event-based proofs as alternative
  * Events are more reliable for cross-chain verification and don't have storage layout constraints.
@@ -72,14 +80,24 @@ contract LockBox {
     /// @dev Slot 3
     mapping(bytes32 => bool) public processedOutcomes;
 
+    /// @notice Amount of each single lock: getLockId(user, token, nonce) => amount
+    /// @dev Slot 4. Written once by `lock`, never changed. Aptos proves this slot.
+    mapping(bytes32 => uint256) public lockAmounts;
+
+    /// @notice Nonce the next `lock` call takes
+    /// @dev Slot 5
+    uint256 public nextLockNonce;
+
     // ==================== Events ====================
 
     /// @notice Emitted when tokens are locked
+    /// @param nonce The lock's nonce: its Aptos lock id is getLockId(user, token, nonce)
     event TokensLocked(
         address indexed user,
         address indexed token,
         uint256 amount,
-        uint256 unlockTime
+        uint256 unlockTime,
+        uint256 nonce
     );
 
     /// @notice Emitted when an Aptos refund returns a lock to its owner
@@ -149,6 +167,15 @@ contract LockBox {
         return keccak256(abi.encodePacked(user, token));
     }
 
+    /**
+     * @notice Id of one lock, also its Aptos receipt id
+     * @dev keccak256(abi.encodePacked(user, token, nonce)). Mirrored by
+     *      eth_proof::lock_id in source/atomica-move-contracts.
+     */
+    function getLockId(address user, address token, uint256 nonce) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(user, token, nonce));
+    }
+
     /// @dev Mark an outcome processed. Reverts if it was relayed before.
     function _useOutcome(bytes32 outcomeId) private {
         if (processedOutcomes[outcomeId]) revert OutcomeAlreadyProcessed(outcomeId);
@@ -189,6 +216,10 @@ contract LockBox {
         // Update locked balance
         lockedBalances[key] += amount;
 
+        // Record this lock on its own, under a fresh nonce
+        uint256 nonce = nextLockNonce++;
+        lockAmounts[getLockId(msg.sender, token, nonce)] = amount;
+
         // Set/extend unlock time
         uint256 newUnlockTime = block.timestamp + MIN_LOCK_DURATION;
         if (newUnlockTime > unlockTimes[key]) {
@@ -199,7 +230,8 @@ contract LockBox {
             msg.sender,
             token,
             amount,
-            unlockTimes[key]
+            unlockTimes[key],
+            nonce
         );
     }
 
@@ -330,6 +362,19 @@ contract LockBox {
         bytes32 compositeKey = getLockKey(user, token);
         bytes32 storageKey = keccak256(abi.encode(compositeKey, uint256(0)));
         return storageKey;
+    }
+
+    /**
+     * @notice Calculate storage key for lockAmounts[getLockId(user, token, nonce)]
+     * @dev The slot Aptos proves (eth_proof::lock_storage_key):
+     *      keccak256(abi.encode(getLockId(user, token, nonce), uint256(4)))
+     */
+    function calculateLockStorageKey(
+        address user,
+        address token,
+        uint256 nonce
+    ) external pure returns (bytes32) {
+        return keccak256(abi.encode(getLockId(user, token, nonce), uint256(4)));
     }
 
     /**
