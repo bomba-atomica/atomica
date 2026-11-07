@@ -57,6 +57,8 @@ const MIN_PRICE = 1_000_000n;
 const PRICE_STEP = 10_000n;
 const SUPPLY = ethers.parseEther("5");
 const BID_QUANTITY = ethers.parseEther("0.1");
+/** FakeUSD per bid. 100 locks must fit one 10,000 FakeUSD MAX_MINT_AMOUNT. */
+const COLLATERAL = 50n * 10n ** 6n;
 const PAIR_BCS = new TextEncoder().encode("16-settle-100-bids");
 const DEADLINE_AHEAD_US = 300_000_000n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
@@ -120,6 +122,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
       aptosClient,
       operator,
       BID_COUNT,
+      COLLATERAL,
     );
     expect(new Set(collateral).size).toBe(BID_COUNT);
 
