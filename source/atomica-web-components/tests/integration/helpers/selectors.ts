@@ -76,6 +76,18 @@ export const SELECTORS = {
     bidStatus: "bid-status",
   },
 
+  // AuctionRevealer
+  auctionRevealer: {
+    windowIdInput: "revealer-window-id-input",
+    startPollingButton: "start-polling-button",
+    revealStatus: "reveal-status",
+    decryptBidsButton: "decrypt-bids-button",
+    decryptedBid: "decrypted-bid",
+    decryptError: "decrypt-error",
+    cleartextsInput: "cleartexts-input",
+    saltsInput: "salts-input",
+  },
+
   // SettleButton
   settleButton: {
     settleButton: "settle-button",
@@ -118,6 +130,7 @@ export const {
   step7Auction,
   step8Monitor,
   auctionBidder,
+  auctionRevealer,
   settleButton,
   claimButton,
   feeRebateDisplay,

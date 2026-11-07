@@ -24,7 +24,12 @@ import {
   Network,
   Account,
   Ed25519PrivateKey,
+  type InputGenerateTransactionPayloadData,
 } from "@aptos-labs/ts-sdk";
+import {
+  getRegisterTimelockPayload,
+  timelockIdFromEvents,
+} from "@atomica/sdk/aptos";
 import { commands } from "vitest/browser";
 import type { EthLockProofResult as CommandEthLockProofResult } from "@atomica/aptos-docker-testnet/browser-commands";
 import type { IntegrationFixture } from "../fixtures/dual-chain";
@@ -80,20 +85,22 @@ export interface AuctionSetupResult extends EthLockProofResult {
  * (browser can't access @ethereumjs/util EventEmitter).
  *
  * @param fixture    - Dual-chain integration fixture
- * @param lockAmount - Amount of FakeETH to lock (wei, default: 10 ETH)
- * @param mintAmount - Amount of FakeETH to mint (wei, default: 1000 ETH)
+ * @param lockAmount - Amount of the token to lock (base units, default: 10 ETH)
+ * @param mintAmount - Amount of the token to mint (base units, default: 1000 ETH)
+ * @param token      - ERC-20 to mint and lock (default: FakeETH)
  */
 export async function generateEthLockProof(
   fixture: IntegrationFixture,
   lockAmount: bigint = ethers.parseEther("10"),
   mintAmount: bigint = ethers.parseEther("1000"),
+  token: string = fixture.eth.contracts.fakeETH,
 ): Promise<EthLockProofResult> {
   const { eth } = fixture;
 
   const result: CommandEthLockProofResult = await commands.generateEthLockProof(
     eth.rpcUrl,
     eth.seller.privateKey,
-    eth.contracts.fakeETH,
+    token,
     eth.contracts.lockBox,
     lockAmount.toString(),
     mintAmount.toString(),
@@ -120,18 +127,20 @@ export async function generateEthLockProof(
  * @param sender      - Account to sign the register transaction
  * @param moduleAddr  - Atomica module address
  * @param proof       - Storage proof returned by generateEthLockProof
+ * @param asset       - Receipt asset type (default: FakeETH)
  */
 export async function registerLockOnAptos(
   aptosClient: Aptos,
   sender: Account,
   moduleAddr: string,
   proof: LockedBalanceProof,
+  asset: "FakeETH" | "FakeUSD" = "FakeETH",
 ): Promise<void> {
   const registerTxn = await aptosClient.transaction.build.simple({
     sender: sender.accountAddress,
     data: {
       function: `${moduleAddr}::lock_receipt::register_ethereum_lock`,
-      typeArguments: [`${moduleAddr}::lock_receipt::FakeETH`],
+      typeArguments: [`${moduleAddr}::lock_receipt::${asset}`],
       functionArguments: [
         proof.blockNumber,
         ethers.getBytes(proof.blockHash),
@@ -235,6 +244,97 @@ export async function currentWindowId(aptosClient: Aptos): Promise<bigint> {
   const nowSec = BigInt(ledger_timestamp) / 1_000_000n;
   const epoch = nowSec / 43200n;
   return epoch * 2n + (nowSec % 43200n >= 28500n ? 1n : 0n);
+}
+
+/** Poll `probe` every 2 s until it returns a value, or throw after `timeoutSecs`. */
+export async function pollUntil<T>(
+  what: string,
+  timeoutSecs: number,
+  probe: () => Promise<T | undefined>,
+): Promise<T> {
+  const deadline = Date.now() + timeoutSecs * 1000;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      const value = await probe();
+      if (value !== undefined) return value;
+    } catch (e) {
+      lastError = e;
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error(
+    `Timed out after ${timeoutSecs}s waiting for ${what}: ${String(lastError)}`,
+  );
+}
+
+/**
+ * Wait until the epoch's timelock key exists (`0x1::ibe_config::is_ready`).
+ *
+ * The docker testnet runs the timelock DKG at the first reconfiguration, so
+ * the key exists only from epoch 2. The fixture returns before that.
+ */
+export async function waitForTimelockKey(
+  aptosClient: Aptos,
+  timeoutSecs = 600,
+): Promise<void> {
+  await pollUntil("ibe_config::is_ready", timeoutSecs, async () => {
+    const [ready] = await aptosClient.view({
+      payload: { function: "0x1::ibe_config::is_ready", functionArguments: [] },
+    });
+    return ready === true ? true : undefined;
+  });
+}
+
+/** The chain clock in microseconds (`ledger_timestamp`). */
+export async function chainNowUs(aptosClient: Aptos): Promise<bigint> {
+  const { ledger_timestamp } = await aptosClient.getLedgerInfo();
+  return BigInt(ledger_timestamp);
+}
+
+/**
+ * Register a timelock for `deadlineUs` with `0x1::ibe_config::register_timelock`
+ * and return its id from the `TimelockRegistrationEvent`.
+ */
+export async function registerTimelockDirect(
+  aptosClient: Aptos,
+  sender: Account,
+  deadlineUs: bigint,
+): Promise<bigint> {
+  const txn = await aptosClient.transaction.build.simple({
+    sender: sender.accountAddress,
+    data: getRegisterTimelockPayload(deadlineUs),
+  });
+  const submitted = await aptosClient.signAndSubmitTransaction({
+    signer: sender,
+    transaction: txn,
+  });
+  const done = await aptosClient.waitForTransaction({
+    transactionHash: submitted.hash,
+    options: { checkSuccess: true },
+  });
+  return timelockIdFromEvents("events" in done ? done.events : []);
+}
+
+/** Sign and submit an entry-function payload with a native account; throws on abort. */
+export async function submitDirect(
+  aptosClient: Aptos,
+  sender: Account,
+  data: InputGenerateTransactionPayloadData,
+): Promise<string> {
+  const txn = await aptosClient.transaction.build.simple({
+    sender: sender.accountAddress,
+    data,
+  });
+  const submitted = await aptosClient.signAndSubmitTransaction({
+    signer: sender,
+    transaction: txn,
+  });
+  await aptosClient.waitForTransaction({
+    transactionHash: submitted.hash,
+    options: { checkSuccess: true },
+  });
+  return submitted.hash;
 }
 
 /**
