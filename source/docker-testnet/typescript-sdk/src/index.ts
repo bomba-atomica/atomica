@@ -697,6 +697,10 @@ export class DockerTestnet {
             "--url",
             `http://127.0.0.1:${BASE_API_PORT}`,
             "--skip-fetch-latest-git-deps", // Skip downloading git dependencies
+            // Bytecode only: the default "sparse" metadata embeds compressed
+            // sources and pushes the package past the 60000-byte publish limit.
+            "--included-artifacts",
+            "none",
             "--assume-yes",
         ];
 
@@ -771,7 +775,7 @@ export class DockerTestnet {
                 } else {
                     reject(
                         new Error(
-                            `Command failed (exit ${code}): ${bin} ${args.join(" ")}\n${stderr}`,
+                            `Command failed (exit ${code}): ${bin} ${args.join(" ")}\n${stderr}\n${stdout}`,
                         ),
                     );
                 }

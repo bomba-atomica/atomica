@@ -183,6 +183,9 @@ async function deployAptosContracts(eth: {
     "--url",
     APTOS_URL,
     "--skip-fetch-latest-git-deps",
+    // Bytecode only: "sparse" metadata exceeds the 60000-byte publish limit.
+    "--included-artifacts",
+    "none",
     "--assume-yes",
   ];
 
