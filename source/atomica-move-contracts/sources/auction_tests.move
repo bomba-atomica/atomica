@@ -17,12 +17,15 @@ module atomica::auction_tests {
     use std::vector;
     use aptos_framework::timestamp;
     use atomica::auction::{Self};
+    use atomica::auction_bid_wrapper_tests;
     use atomica::lock_receipt::{Self, Ethereum, FakeETH, FakeUSD};
 
     // ===================== Constants =====================
 
     const WINDOW_ID: u64 = 100;
     const TOTAL_SUPPLY: u256 = 10_000_000_000_000_000_000u256; // 10 ETH in wei
+    // The registered timelock of `auction_bid_wrapper_tests::setup`.
+    const TIMELOCK_ID: u64 = 11;
 
     // Canonical pair BCS encoding: matches Pair { b"ethereum", b"FakeETH", b"aptos", b"FakeUSD" }
     // In tests we use a simple byte vector; real callers BCS-encode the Pair struct.
@@ -35,6 +38,16 @@ module atomica::auction_tests {
 
     fun setup(framework: &signer) {
         timestamp::set_time_has_started_for_testing(framework);
+    }
+
+    // A window bound to timelock 11, whose key is revealed after its deadline. `settle`
+    // needs this state: deadline passed and status `Revealed`.
+    fun revealed_window(atomica: &signer, total_supply: u256) {
+        auction_bid_wrapper_tests::setup();
+        auction_bid_wrapper_tests::reveal_timelock();
+        auction::test_insert_window_with_timelock(
+            atomica, WINDOW_ID, default_pair_bcs(), total_supply, false, 0, TIMELOCK_ID,
+        );
     }
 
     // ===================== Window ID math =====================
@@ -208,9 +221,9 @@ module atomica::auction_tests {
     }
 
     // Happy path: create_auction registers the window, get_auction returns fields.
-    #[test(framework = @0x1, atomica = @atomica)]
-    fun test_create_auction_happy_path(framework: &signer, atomica: &signer) {
-        setup(framework);
+    #[test(atomica = @atomica)]
+    fun test_create_auction_happy_path(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
         let pair_bcs    = default_pair_bcs();
         let lock_id     = b"eth_lock_receipt_id_32bytes_pad__";
         let seller_addr = @atomica; // @0xcafe in dev
@@ -219,10 +232,10 @@ module atomica::auction_tests {
         // Set up FakeETH receipt for the seller.
         insert_eth_receipt(atomica, lock_id, seller_addr, lock_amount);
 
-        // current_window_id() == 0 at t=0; use window 0 (current).
+        // The setup clock sits in window 5; use the current window.
         let window_id = auction::current_window_id();
         let mpk_bytes = vector::empty<u8>();
-        let timelock_id = 0u64; // test timelock_id
+        let timelock_id = TIMELOCK_ID;
         auction::create_auction(atomica, window_id, pair_bcs, lock_id, 2000u64, timelock_id, mpk_bytes);
 
         // get_auction must return the registered window.
@@ -236,9 +249,9 @@ module atomica::auction_tests {
     }
 
     // Next-window registration: create_auction accepts window_id == current + 1.
-    #[test(framework = @0x1, atomica = @atomica)]
-    fun test_create_auction_next_window_accepted(framework: &signer, atomica: &signer) {
-        setup(framework);
+    #[test(atomica = @atomica)]
+    fun test_create_auction_next_window_accepted(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
         let pair_bcs    = default_pair_bcs();
         let lock_id     = b"eth_lock_receipt_next_window_pad_";
         let seller_addr = @atomica;
@@ -249,7 +262,7 @@ module atomica::auction_tests {
         // window_id = current + 1 must be accepted.
         let window_id = auction::current_window_id() + 1;
         let mpk_bytes = vector::empty<u8>();
-        let timelock_id = 0u64;
+        let timelock_id = TIMELOCK_ID;
         auction::create_auction(atomica, window_id, pair_bcs, lock_id, 1900u64, timelock_id, mpk_bytes);
 
         let (wid, supply, _, _, _) = auction::get_auction(window_id, pair_bcs);
@@ -286,9 +299,9 @@ module atomica::auction_tests {
     }
 
     // Duplicate create_auction for same (window_id, pair) accumulates total_supply.
-    #[test(framework = @0x1, atomica = @atomica)]
-    fun test_create_auction_duplicate_accumulates_supply(framework: &signer, atomica: &signer) {
-        setup(framework);
+    #[test(atomica = @atomica)]
+    fun test_create_auction_duplicate_accumulates_supply(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
         let pair_bcs     = default_pair_bcs();
         let lock_id_a    = b"eth_lock_receipt_seller_a_32byte_";
         let lock_id_b    = b"eth_lock_receipt_seller_b_32byte_";
@@ -308,7 +321,7 @@ module atomica::auction_tests {
 
         let window_id   = auction::current_window_id();
         let mpk_bytes   = vector::empty<u8>();
-        let timelock_id = 0u64;
+        let timelock_id = TIMELOCK_ID;
 
         // First seller creates the window.
         auction::create_auction(atomica, window_id, pair_bcs, lock_id_a, 2000u64, timelock_id, mpk_bytes);
@@ -657,16 +670,14 @@ module atomica::auction_tests {
     //
     // Setup: 1 seller (5 ETH supply), 1 winning bid (price=2100, qty=5).
     // Expected total_filled = 5, clearing_price = 2100.
-    #[test(framework = @0x1, atomica = @atomica, caller = @0x9999)]
+    #[test(atomica = @atomica, caller = @0x9999)]
     fun test_settle_distributes_proceeds_to_seller(
-        framework: &signer,
         atomica:   &signer,
         caller:    &signer,
     ) {
-        setup(framework);
         let pair_bcs = default_pair_bcs();
         let supply: u256 = 5u256;
-        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, supply, false, 0);
+        revealed_window(atomica, supply);
 
         // Insert FakeUSD receipt for winning bidder (simulating submit_bid claim).
         let alice_lock = b"settle_proceeds_alice_lock_32pad";
@@ -711,16 +722,14 @@ module atomica::auction_tests {
     //
     // Setup: 2 bids — Alice wins (price=2100, qty=5 fills supply=5),
     //        Bob loses (price=2000, qty=3).
-    #[test(framework = @0x1, atomica = @atomica, caller = @0x9999)]
+    #[test(atomica = @atomica, caller = @0x9999)]
     fun test_settle_releases_losing_collateral(
-        framework: &signer,
         atomica:   &signer,
         caller:    &signer,
     ) {
-        setup(framework);
         let pair_bcs = default_pair_bcs();
         let supply: u256 = 5u256;
-        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, supply, false, 0);
+        revealed_window(atomica, supply);
 
         let alice_lock = b"losing_collat_alice_lock_32bytes";
         let bob_lock   = b"losing_collat_bob___lock_32bytes";
@@ -769,16 +778,14 @@ module atomica::auction_tests {
     //
     // Setup: 3 bids — Alice wins (price=2100), Bob wins (price=2050),
     //        Carol loses (price=1900). Supply=7.
-    #[test(framework = @0x1, atomica = @atomica, caller = @0x9999)]
+    #[test(atomica = @atomica, caller = @0x9999)]
     fun test_settle_applies_fee_rebates(
-        framework: &signer,
         atomica:   &signer,
         caller:    &signer,
     ) {
-        setup(framework);
         let pair_bcs = default_pair_bcs();
         let supply: u256 = 7u256;
-        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, supply, false, 0);
+        revealed_window(atomica, supply);
 
         let alice_lock = b"fee_rebate_alice_lock_32bytes_pa";
         let bob_lock   = b"fee_rebate_bob___lock_32bytes_pa";
@@ -833,16 +840,14 @@ module atomica::auction_tests {
     // Setup: 2 bids, supply=5, Alice wins (price=2100, qty=5), Bob loses.
     // Expected AuctionSettled: { window_id=WINDOW_ID, clearing_price=2100,
     //   total_filled=5, winner_count=1 }
-    #[test(framework = @0x1, atomica = @atomica, caller = @0x9999)]
+    #[test(atomica = @atomica, caller = @0x9999)]
     fun test_settle_emits_auction_settled_event(
-        framework: &signer,
         atomica:   &signer,
         caller:    &signer,
     ) {
-        setup(framework);
         let pair_bcs = default_pair_bcs();
         let supply: u256 = 5u256;
-        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, supply, false, 0);
+        revealed_window(atomica, supply);
 
         let alice_lock = b"event_emit_alice_lock_32bytes_pa";
         let bob_lock   = b"event_emit_bob___lock_32bytes_pa";
@@ -889,16 +894,14 @@ module atomica::auction_tests {
     //
     // Calling settle() before clear_uniform_price() has run aborts with
     // E_AUCTION_NOT_ENDED (3) — bid_results.length (0) != bids.length (N).
-    #[test(framework = @0x1, atomica = @atomica, caller = @0x9999)]
+    #[test(atomica = @atomica, caller = @0x9999)]
     #[expected_failure(abort_code = 3, location = atomica::auction)] // E_AUCTION_NOT_ENDED
     fun test_settle_aborts_if_not_cleared(
-        framework: &signer,
         atomica:   &signer,
         caller:    &signer,
     ) {
-        setup(framework);
         let pair_bcs = default_pair_bcs();
-        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, 5u256, false, 0);
+        revealed_window(atomica, 5u256);
 
         // Insert one bid but do NOT call clear_uniform_price.
         auction::test_insert_bid_with_qty(
@@ -915,17 +918,15 @@ module atomica::auction_tests {
     //
     // Calling settle() twice on the same cleared window aborts with
     // E_WINDOW_ALREADY_SETTLED (11) on the second call.
-    #[test(framework = @0x1, atomica = @atomica, caller = @0x9999)]
+    #[test(atomica = @atomica, caller = @0x9999)]
     #[expected_failure(abort_code = 11, location = atomica::auction)] // E_WINDOW_ALREADY_SETTLED
     fun test_settle_aborts_if_already_settled(
-        framework: &signer,
         atomica:   &signer,
         caller:    &signer,
     ) {
-        setup(framework);
         let pair_bcs = default_pair_bcs();
         // Insert an already-cleared zero-bid window and run clearing.
-        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, 10u256, false, 0);
+        revealed_window(atomica, 10u256);
         auction::clear_uniform_price(WINDOW_ID, pair_bcs);
 
         // First settle succeeds.
@@ -1045,17 +1046,15 @@ module atomica::auction_tests {
     // After settle: is_settled returns true; losing bidder's receipt is revoked.
     //
     // @see docs/architecture/v0-architecture.md §2.7, §2.8, §2.9
-    #[test(framework = @0x1, atomica = @atomica, caller = @0x9999)]
+    #[test(atomica = @atomica, caller = @0x9999)]
     fun test_settle_end_to_end_marks_window_settled(
-        framework: &signer,
         atomica:   &signer,
         caller:    &signer,
     ) {
-        setup(framework);
         let pair_bcs = default_pair_bcs();
         let supply: u256 = 5u256;
         // Insert window with 5-unit supply.
-        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, supply, false, 0);
+        revealed_window(atomica, supply);
 
         // Two bids: Alice wins (price=2100, qty=5 fills supply exactly), Bob loses.
         let alice_lock = b"fakeusd_lock_alice_32bytes_pad__";
@@ -1108,15 +1107,13 @@ module atomica::auction_tests {
     }
 
     // settle with zero bids: window settles with total_filled=0, winner_count=0.
-    #[test(framework = @0x1, atomica = @atomica, caller = @0x9999)]
+    #[test(atomica = @atomica, caller = @0x9999)]
     fun test_settle_zero_bids_succeeds(
-        framework: &signer,
         atomica:   &signer,
         caller:    &signer,
     ) {
-        setup(framework);
         let pair_bcs = default_pair_bcs();
-        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, 10u256, false, 0);
+        revealed_window(atomica, 10u256);
 
         // No bids — run clearing (handles zero-bid case) then settle.
         auction::clear_uniform_price(WINDOW_ID, pair_bcs);
@@ -1128,16 +1125,14 @@ module atomica::auction_tests {
 
     // settle aborts E_AUCTION_NOT_ENDED when bid_results not yet populated.
     // (i.e., clear_uniform_price has not been called but there are bids)
-    #[test(framework = @0x1, atomica = @atomica, caller = @0x9999)]
+    #[test(atomica = @atomica, caller = @0x9999)]
     #[expected_failure(abort_code = 3, location = atomica::auction)] // E_AUCTION_NOT_ENDED
     fun test_settle_aborts_when_clearing_not_run(
-        framework: &signer,
         atomica:   &signer,
         caller:    &signer,
     ) {
-        setup(framework);
         let pair_bcs = default_pair_bcs();
-        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, 5u256, false, 0);
+        revealed_window(atomica, 5u256);
 
         // Insert one bid but do NOT call clear_uniform_price.
         auction::test_insert_bid_with_qty(

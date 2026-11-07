@@ -42,6 +42,8 @@ module atomica::auction {
     use aptos_std::bcs;
     use aptos_framework::chain_id;
     use aptos_std::ibe;
+    use aptos_framework::ibe_config;
+    use aptos_framework::reconfiguration;
     use atomica::lock_receipt::{Self, Ethereum, FakeETH, FakeUSD};
     use atomica::timelock;
 
@@ -103,6 +105,14 @@ module atomica::auction {
     const E_INVALID_COMMITMENT: u64 = 26;
     /// The timelock is `Expired`: the key will never be released, so openings are impossible.
     const E_TIMELOCK_EXPIRED: u64 = 27;
+    /// `create_auction` got a `timelock_id` that `ibe_config::register_timelock` never issued.
+    const E_TIMELOCK_NOT_REGISTERED: u64 = 28;
+    /// `create_auction` got a timelock registered in an earlier epoch.
+    const E_TIMELOCK_WRONG_EPOCH: u64 = 29;
+    /// `create_auction` got a timelock whose deadline has passed, so the window could take no bids.
+    const E_TIMELOCK_DEADLINE_PASSED: u64 = 30;
+    /// `settle` ran before the timelock deadline.
+    const E_DEADLINE_NOT_PASSED: u64 = 31;
 
     // ===================== Bid Constants =====================
 
@@ -261,6 +271,19 @@ module atomica::auction {
         collateral_lock_id: vector<u8>,
     }
 
+    // Emitted by `settle` for the seller supply. `unsold_supply` is `total_supply` minus the
+    // filled amount. When nothing filled, every seller lock receipt is released
+    // (`released` is true) so the relayer can return the locked FakeETH on Ethereum. When
+    // some supply filled, the receipts stay claimed and the relayer returns `unsold_supply`.
+    #[event]
+    struct SellerSupplySettled has drop, store {
+        window_id:     u64,
+        lock_ids:      vector<vector<u8>>,
+        total_supply:  u256,
+        unsold_supply: u256,
+        released:      bool,
+    }
+
     // Emitted when a window is refunded after its timelock expired.
     // `reason` is the registry expiry reason: 1 epoch-ended, 2 reveal-window-elapsed,
     // 3 key-check-failed.
@@ -303,6 +326,24 @@ module atomica::auction {
         key
     }
 
+    /// Aborts unless `timelock_id` can still take bids.
+    ///
+    /// Timelock ids are issued sequentially from 0 and never removed, so an id below
+    /// `get_next_timelock_id` is registered. A `Pending` timelock of an earlier epoch already
+    /// reads as `Expired`; the explicit epoch check gives that case its own abort code.
+    fun assert_timelock_open(timelock_id: u64) {
+        assert!(
+            ibe_config::is_initialized() && timelock_id < ibe_config::get_next_timelock_id(),
+            E_TIMELOCK_NOT_REGISTERED
+        );
+        assert!(
+            timelock::get_timelock_epoch(timelock_id) == reconfiguration::current_epoch(),
+            E_TIMELOCK_WRONG_EPOCH
+        );
+        assert!(timelock::get_status(timelock_id) == timelock::status_pending(), E_TIMELOCK_NOT_PENDING);
+        assert!(timestamp::now_microseconds() < timelock::get_deadline(timelock_id), E_TIMELOCK_DEADLINE_PASSED);
+    }
+
     // ===================== Entry Functions =====================
 
     /// Create (or join) a global-registry auction for `(window_id, pair)`.
@@ -328,7 +369,9 @@ module atomica::auction {
     ///
     /// `timelock_id` is the on-chain timelock registered via
     /// `ibe_config::register_timelock` that controls IBE key release for this
-    /// window. It must be registered before calling `create_auction`.
+    /// window. It must be registered (E_TIMELOCK_NOT_REGISTERED), in the current
+    /// epoch (E_TIMELOCK_WRONG_EPOCH), `Pending` (E_TIMELOCK_NOT_PENDING), and its
+    /// deadline must be in the future (E_TIMELOCK_DEADLINE_PASSED).
     ///
     /// Call-site break from Demo phase:
     ///   payloads.ts::getCreateAuctionPayload(lockId, minPrice, duration, mpk)
@@ -348,6 +391,11 @@ module atomica::auction {
         let current = current_window_id();
         assert!(window_id >= current, E_STALE_WINDOW_ID);
         assert!(window_id <= current + 1, E_STALE_WINDOW_ID);
+
+        // 1b. The timelock must be able to take bids: registered, current epoch, `Pending`,
+        //     deadline in the future. Otherwise the seller lock would back a window that can
+        //     never clear.
+        assert_timelock_open(timelock_id);
 
         // 2. Claim the seller's FakeETH LockReceipt to prove on-chain escrow.
         //    `claim` marks the receipt STATUS_CLAIMED and returns the locked amount.
@@ -896,7 +944,12 @@ module atomica::auction {
     /// E_AUCTION_NOT_ENDED to signal that clearing has not yet occurred.
     ///
     /// Steps (§2.8, §2.9):
-    ///   1. Validate window exists and has not already been settled.
+    ///   1. Validate window exists and has not already been settled or refunded.
+    ///   1b. Timelock guards: the deadline has passed (E_DEADLINE_NOT_PASSED), the
+    ///       timelock is not `Expired` (E_TIMELOCK_EXPIRED: use `refund_expired_window`)
+    ///       and it is `Revealed` (E_TIMELOCK_NOT_REVEALED). A window with bids also needs
+    ///       `reveal_final` (E_REVEAL_NOT_FINAL). Empty-auction rule: a window with no bids
+    ///       settles once the key is revealed after the deadline, since no bid can arrive.
     ///   2. Verify clearing has run (bid_results length == bids length).
     ///   3. Release opened losing bidders' FakeUSD collateral receipts so the off-chain
     ///      relayer can return those assets to bidders on Ethereum. Unopened bids are
@@ -904,7 +957,9 @@ module atomica::auction {
     ///   4. Compute fee/rebate amounts for winning bidders.
     ///   5. Emit `AuctionSettled` with window_id, pair, clearing_price,
     ///      total_filled, winner_count, and seller lock_ids.
-    ///   6. Mark the window settled.
+    ///   6. Account for the seller supply: emit `SellerSupplySettled` with the unsold amount.
+    ///      With no fill at all, release every seller FakeETH lock receipt.
+    ///   7. Mark the window settled.
     ///
     /// FakeUSD proceeds to the seller and fee/rebate transfers happen on Ethereum
     /// after the relayer reads `AuctionSettled`; this function records and signals
@@ -928,8 +983,17 @@ module atomica::auction {
         assert!(!state.settled, E_WINDOW_ALREADY_SETTLED);
         assert!(!state.refunded, E_WINDOW_REFUNDED);
 
+        // 1b. Timelock guards. Before the deadline the window still takes bids, so nobody
+        //     may close it. An expired timelock goes through `refund_expired_window`.
+        let timelock_id = state.timelock_id;
+        assert!(timestamp::now_microseconds() >= timelock::get_deadline(timelock_id), E_DEADLINE_NOT_PASSED);
+        let status = timelock::get_status(timelock_id);
+        assert!(status != timelock::status_expired(), E_TIMELOCK_EXPIRED);
+        assert!(status == timelock::status_revealed(), E_TIMELOCK_NOT_REVEALED);
+
         let bid_count    = vector::length(&state.bids);
         let result_count = vector::length(&state.bid_results);
+        assert!(bid_count == 0 || state.reveal_final, E_REVEAL_NOT_FINAL);
 
         // 2. Verify clearing has been run.
         //    If there are bids but bid_results is not yet populated, the caller
@@ -988,7 +1052,27 @@ module atomica::auction {
             lock_ids:       lock_ids_copy,
         });
 
-        // 6. Mark window settled.
+        // 6. Seller supply. A lock receipt cannot be split, so it is released only when
+        //    nothing filled. Otherwise the event carries the unsold amount for the relayer.
+        let total_supply = state.total_supply;
+        let released = total_filled == 0;
+        if (released) {
+            let j = 0u64;
+            let n = vector::length(&state.lock_ids);
+            while (j < n) {
+                lock_receipt::release<Ethereum, FakeETH>(*vector::borrow(&state.lock_ids, j));
+                j = j + 1;
+            };
+        };
+        event::emit(SellerSupplySettled {
+            window_id,
+            lock_ids:      state.lock_ids,
+            total_supply,
+            unsold_supply: total_supply - total_filled,
+            released,
+        });
+
+        // 7. Mark window settled.
         state.settled = true;
     }
 
