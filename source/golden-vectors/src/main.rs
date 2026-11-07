@@ -1,9 +1,15 @@
+//! Generates the SIWE BCS golden vectors that the atomica-sdk tests read.
+//!
+//! Run with `cargo run` from any directory. It overwrites
+//! `source/atomica-sdk/tests/fixtures/golden_vectors.json`. A clean tree after
+//! the run proves the fixture matches this generator (CI checks this).
 
 use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::Write;
-use bcs;
+use std::path::Path;
 
+/// Mirrors `SIWEAbstractPublicKey` in the Aptos framework module
+/// `ethereum_derivable_account.move`. Both fields are utf8 bytes: the address
+/// is the 0x-prefixed hex string, not the 20 raw address bytes.
 #[derive(Serialize, Deserialize)]
 struct SIWEAbstractPublicKey {
     ethereum_address: Vec<u8>,
@@ -44,11 +50,9 @@ fn main() {
 
     // 1. SIWEAbstractPublicKey
     // Case A: Standard
-    let eth_addr = hex::decode("1234567890123456789012345678901234567890").unwrap();
-    let domain = "example.com".as_bytes().to_vec();
     let pk = SIWEAbstractPublicKey {
-        ethereum_address: eth_addr.clone(),
-        domain: domain.clone(),
+        ethereum_address: b"0x1234567890123456789012345678901234567890".to_vec(),
+        domain: b"example.com".to_vec(),
     };
     vectors.abstract_public_key.push(TestCase {
         name: "Standard Public Key".to_string(),
@@ -93,10 +97,10 @@ fn main() {
         bcs_hex: hex::encode(bcs::to_bytes(&sig_v1).unwrap()),
     });
 
-    // Write to file
-    let json = serde_json::to_string_pretty(&vectors).unwrap();
-    let mut file = File::create("../atomica-web/tests/fixtures/golden_vectors.json").unwrap();
-    file.write_all(json.as_bytes()).unwrap();
+    let out = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../atomica-sdk/tests/fixtures/golden_vectors.json");
+    let json = serde_json::to_string_pretty(&vectors).unwrap() + "\n";
+    std::fs::write(&out, json).unwrap();
 
-    println!("Golden vectors generated!");
+    println!("Golden vectors written to {}", out.display());
 }
