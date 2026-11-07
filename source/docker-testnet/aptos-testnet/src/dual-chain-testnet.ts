@@ -183,10 +183,12 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
 
     const deployerPrivateKey = accounts[0].privateKey;
     const deployerAddress = accounts[0].address;
+    // The listed addresses of accounts 1-3 do not match their keys, so derive
+    // each address from its key. The deployer funds them with ETH below.
     const bidderPrivateKey = accounts[1].privateKey;
-    const bidderAddress = accounts[1].address;
+    const bidderAddress = new ethers.Wallet(bidderPrivateKey).address;
     const relayerPrivateKey = accounts[2].privateKey;
-    const relayerAddress = accounts[2].address;
+    const relayerAddress = new ethers.Wallet(relayerPrivateKey).address;
 
     // ethers caches eth_getTransactionCount for 250 ms by default. Anvil mines
     // instantly, so back-to-back deploys would reuse a stale nonce.
@@ -200,6 +202,13 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
 
     await waitForFirstBlock(provider);
     ensureCompiled();
+
+    // Gas for the bidder and the relayer (they sign their own transactions).
+    for (const to of [bidderAddress, relayerAddress]) {
+        const tx = await deployer.sendTransaction({ to, value: ethers.parseEther("10") });
+        await provider.waitForTransaction(tx.hash, 1);
+    }
+    console.log(`[Dual-Chain] ✓ Funded bidder and relayer with ETH`);
 
     // FakeETH and FakeUSD share the same deployer signer, so they must be
     // deployed sequentially to avoid nonce collisions.
