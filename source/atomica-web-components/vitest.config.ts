@@ -28,6 +28,7 @@ export default defineConfig(async () => {
     setupDualChainTestnetCommand,
     teardownDualChainTestnetCommand,
     generateEthLockProofCommand,
+    generateEthLockProofsCommand,
   } = await import("@atomica/aptos-docker-testnet/browser-commands");
 
   return {
@@ -84,6 +85,7 @@ export default defineConfig(async () => {
           setupDualChainTestnet: setupDualChainTestnetCommand,
           teardownDualChainTestnet: teardownDualChainTestnetCommand,
           generateEthLockProof: generateEthLockProofCommand,
+          generateEthLockProofs: generateEthLockProofsCommand,
         },
       },
 

@@ -177,6 +177,14 @@ declare module "vitest/browser" {
             lockAmountWei?: string,
             mintAmountWei?: string,
         ): Promise<EthLockProofResult>;
+        generateEthLockProofs(
+            rpcUrl: string,
+            sellerPrivateKey: string,
+            tokenAddress: string,
+            lockBoxAddress: string,
+            lockAmountWei: string,
+            count: number,
+        ): Promise<EthLockProofResult[]>;
     }
 }
 
@@ -351,21 +359,141 @@ const LOCKBOX_LOCK_ABI = [
 ];
 
 /**
+ * Lock `count` times and return the storage proof of each lock.
+ *
+ * Steps:
+ *   1. Mint the token to the signer
+ *   2. Approve LockBox for count * lockAmount
+ *   3. Send `count` LockBox.lock() calls with consecutive nonces
+ *   4. Read each lock nonce from its TokensLocked event
+ *   5. Wait 12 blocks past the last lock for archive proof availability
+ *   6. Fetch one eth_getProof of every lockAmounts[lockId] at the last lock
+ *      block, where lockId = keccak256(abi.encodePacked(user, token,
+ *      uint256(nonce))) (LockBox.getLockId, eth_proof::lock_id)
+ *
+ * All proofs share one block, so Aptos needs one trusted header for them.
+ */
+async function lockAndProve(
+    rpcUrl: string,
+    sellerPrivateKey: string,
+    tokenAddress: string,
+    lockBoxAddress: string,
+    lockAmount: bigint,
+    mintAmount: bigint,
+    count: number,
+): Promise<EthLockProofResult[]> {
+    const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
+    const seller = new ethers.Wallet(sellerPrivateKey, provider);
+
+    const token = new ethers.Contract(tokenAddress, ERC20_MINT_ABI, seller);
+    const lockBox = new ethers.Contract(lockBoxAddress, LOCKBOX_LOCK_ABI, seller);
+
+    // Mint tokens
+    const mintTx = await (
+        token.mint as (to: string, amount: bigint) => Promise<ethers.ContractTransactionResponse>
+    )(seller.address, mintAmount);
+    await provider.waitForTransaction(mintTx.hash, 1);
+
+    let nonce = await seller.getNonce();
+    const approveTx = await (
+        token.approve as (
+            spender: string,
+            amount: bigint,
+            opts: { nonce: number },
+        ) => Promise<ethers.ContractTransactionResponse>
+    )(lockBoxAddress, lockAmount * BigInt(count), { nonce: nonce++ });
+    await provider.waitForTransaction(approveTx.hash, 1);
+
+    const lockHashes: string[] = [];
+    for (let i = 0; i < count; i++) {
+        const lockTx = await (
+            lockBox.lock as (
+                token: string,
+                amount: bigint,
+                opts: { nonce: number },
+            ) => Promise<ethers.ContractTransactionResponse>
+        )(tokenAddress, lockAmount, { nonce: nonce++ });
+        lockHashes.push(lockTx.hash);
+    }
+
+    const lockIface = new ethers.Interface(LOCKBOX_LOCK_ABI);
+    const lockNonces: bigint[] = [];
+    let proofBlockNumber = 0;
+    for (const hash of lockHashes) {
+        const receipt = await provider.waitForTransaction(hash, 1);
+        if (!receipt || receipt.status !== 1) throw new Error(`Lock ${hash} failed`);
+        const lockLog = receipt.logs
+            .map((log) => lockIface.parseLog(log))
+            .find((parsed) => parsed?.name === "TokensLocked");
+        if (!lockLog) throw new Error(`No TokensLocked event in ${hash}`);
+        lockNonces.push(lockLog.args.nonce as bigint);
+        proofBlockNumber = Math.max(proofBlockNumber, receipt.blockNumber);
+    }
+
+    // Wait for archive proof availability (12 blocks). Mines them on anvil.
+    await waitForEthBlock(provider, proofBlockNumber + 12, 300, "Lock Proof");
+
+    // Storage key of lockAmounts[lockId] (LockBox slot 4), as Aptos derives it.
+    const lockIds = lockNonces.map((lockNonce) =>
+        ethers.keccak256(
+            ethers.solidityPacked(
+                ["address", "address", "uint256"],
+                [ethers.getAddress(seller.address), ethers.getAddress(tokenAddress), lockNonce],
+            ),
+        ),
+    );
+    const storageKeys = lockIds.map((lockId) =>
+        ethers.keccak256(
+            ethers.AbiCoder.defaultAbiCoder().encode(["bytes32", "uint256"], [lockId, 4]),
+        ),
+    );
+
+    // Fetch block to get blockHash and stateRoot
+    const block = await provider.getBlock(proofBlockNumber);
+    if (!block) {
+        throw new Error(`Block ${proofBlockNumber} not found`);
+    }
+    if (!block.hash || !block.stateRoot) {
+        throw new Error(`Block ${proofBlockNumber} missing hash or stateRoot`);
+    }
+
+    // Fetch storage proofs via eth_getProof directly (avoids @ethereumjs dependency)
+    const ethProof = await provider.send("eth_getProof", [
+        lockBoxAddress,
+        storageKeys,
+        `0x${proofBlockNumber.toString(16)}`,
+    ]);
+
+    return lockIds.map((lockId, i) => ({
+        lockId,
+        proof: {
+            blockNumber: proofBlockNumber,
+            blockHash: block.hash!,
+            stateRoot: block.stateRoot!,
+            contractAddress: ethers.getAddress(lockBoxAddress),
+            userAddress: ethers.getAddress(seller.address),
+            tokenAddress: ethers.getAddress(tokenAddress),
+            lockNonce: lockNonces[i].toString(),
+            lockId,
+            storageKey: storageKeys[i],
+            storageValue: BigInt(ethProof.storageProof[i].value).toString(),
+            accountProof: ethProof.accountProof as string[],
+            storageProof: ethProof.storageProof[i].proof as string[],
+            timestamp: block.timestamp,
+            generatedAt: Date.now(),
+        },
+    }));
+}
+
+/**
  * Generate the Ethereum storage proof of one LockBox lock.
  *
  * This command runs on the Node.js side because @ethereumjs/util (used
  * transitively by @atomica/state-proof-verifier) accesses Node's EventEmitter
  * which is not available in browser context.
  *
- * Steps:
- *   1. Mint FakeETH to seller
- *   2. Approve LockBox for lockAmount
- *   3. Call LockBox.lock()
- *   4. Wait 12 blocks for archive proof availability
- *   5. Read the lock nonce from its TokensLocked event
- *   6. Fetch the eth_getProof storage proof of lockAmounts[lockId], where
- *      lockId = keccak256(abi.encodePacked(user, token, uint256(nonce)))
- *      (LockBox.getLockId, eth_proof::lock_id)
+ * Mints, approves, locks once, waits 12 blocks, and proves the lock at its
+ * block (see lockAndProve).
  *
  * Returns a JSON-serialisable result (storageValue as decimal string).
  *
@@ -389,94 +517,53 @@ export const generateEthLockProofCommand: BrowserCommand<
     lockAmountWei: string = ethers.parseEther("10").toString(),
     mintAmountWei: string = ethers.parseEther("1000").toString(),
 ): Promise<EthLockProofResult> => {
-    const lockAmount = BigInt(lockAmountWei);
-    const mintAmount = BigInt(mintAmountWei);
-
-    const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
-    const seller = new ethers.Wallet(sellerPrivateKey, provider);
-
-    const fakeETH = new ethers.Contract(fakeETHAddress, ERC20_MINT_ABI, seller);
-    const lockBox = new ethers.Contract(lockBoxAddress, LOCKBOX_LOCK_ABI, seller);
-
-    // Mint tokens
-    const mintTx = await (
-        fakeETH.mint as (to: string, amount: bigint) => Promise<ethers.ContractTransactionResponse>
-    )(seller.address, mintAmount);
-    await provider.waitForTransaction(mintTx.hash, 1);
-
-    let nonce = await seller.getNonce();
-    const approveTx = await (
-        fakeETH.approve as (
-            spender: string,
-            amount: bigint,
-            opts: { nonce: number },
-        ) => Promise<ethers.ContractTransactionResponse>
-    )(lockBoxAddress, lockAmount, { nonce: nonce++ });
-    await provider.waitForTransaction(approveTx.hash, 1);
-
-    const lockTx = await (
-        lockBox.lock as (
-            token: string,
-            amount: bigint,
-            opts: { nonce: number },
-        ) => Promise<ethers.ContractTransactionResponse>
-    )(fakeETHAddress, lockAmount, { nonce: nonce++ });
-    const lockReceipt = await provider.waitForTransaction(lockTx.hash, 1);
-    const lockBlockNumber = lockReceipt!.blockNumber;
-    const lockIface = new ethers.Interface(LOCKBOX_LOCK_ABI);
-    const lockLog = lockReceipt!.logs
-        .map((log) => lockIface.parseLog(log))
-        .find((parsed) => parsed?.name === "TokensLocked");
-    if (!lockLog) throw new Error(`No TokensLocked event in ${lockTx.hash}`);
-    const lockNonce = lockLog.args.nonce as bigint;
-
-    // Wait for archive proof availability (12 blocks). Mines them on anvil.
-    await waitForEthBlock(provider, lockBlockNumber + 12, 300, "Lock Proof");
-
-    // Storage key of lockAmounts[lockId] (LockBox slot 4), as Aptos derives it.
-    const lockId = ethers.keccak256(
-        ethers.solidityPacked(
-            ["address", "address", "uint256"],
-            [ethers.getAddress(seller.address), ethers.getAddress(fakeETHAddress), lockNonce],
-        ),
-    );
-    const storageKey = ethers.keccak256(
-        ethers.AbiCoder.defaultAbiCoder().encode(["bytes32", "uint256"], [lockId, 4]),
-    );
-
-    // Fetch block to get blockHash and stateRoot
-    const block = await provider.getBlock(lockBlockNumber);
-    if (!block) {
-        throw new Error(`Block ${lockBlockNumber} not found`);
-    }
-    if (!block.hash || !block.stateRoot) {
-        throw new Error(`Block ${lockBlockNumber} missing hash or stateRoot`);
-    }
-
-    // Fetch storage proof via eth_getProof directly (avoids @ethereumjs dependency)
-    const ethProof = await provider.send("eth_getProof", [
+    const [result] = await lockAndProve(
+        rpcUrl,
+        sellerPrivateKey,
+        fakeETHAddress,
         lockBoxAddress,
-        [storageKey],
-        `0x${lockBlockNumber.toString(16)}`,
-    ]);
+        BigInt(lockAmountWei),
+        BigInt(mintAmountWei),
+        1,
+    );
+    return result;
+};
 
-    return {
-        lockId,
-        proof: {
-            blockNumber: lockBlockNumber,
-            blockHash: block.hash,
-            stateRoot: block.stateRoot,
-            contractAddress: ethers.getAddress(lockBoxAddress),
-            userAddress: ethers.getAddress(seller.address),
-            tokenAddress: ethers.getAddress(fakeETHAddress),
-            lockNonce: lockNonce.toString(),
-            lockId,
-            storageKey,
-            storageValue: BigInt(ethProof.storageProof[0].value).toString(),
-            accountProof: ethProof.accountProof as string[],
-            storageProof: ethProof.storageProof[0].proof as string[],
-            timestamp: block.timestamp,
-            generatedAt: Date.now(),
-        },
-    };
+/**
+ * Lock `count` times in a few blocks and prove every lock at one block.
+ *
+ * A 100-bid window needs 100 collateral locks. One lock at a time takes about
+ * 15 slots each on the Docker chain; this takes about 15 slots in total.
+ * Mints exactly `count * lockAmount`.
+ *
+ * EXECUTION: Node.js (browser can't use @ethereumjs/* via EventEmitter)
+ */
+export const generateEthLockProofsCommand: BrowserCommand<
+    [
+        rpcUrl: string,
+        sellerPrivateKey: string,
+        tokenAddress: string,
+        lockBoxAddress: string,
+        lockAmountWei: string,
+        count: number,
+    ]
+> = async (
+    _ctx,
+    rpcUrl: string,
+    sellerPrivateKey: string,
+    tokenAddress: string,
+    lockBoxAddress: string,
+    lockAmountWei: string,
+    count: number,
+): Promise<EthLockProofResult[]> => {
+    const lockAmount = BigInt(lockAmountWei);
+    return lockAndProve(
+        rpcUrl,
+        sellerPrivateKey,
+        tokenAddress,
+        lockBoxAddress,
+        lockAmount,
+        lockAmount * BigInt(count),
+        count,
+    );
 };
