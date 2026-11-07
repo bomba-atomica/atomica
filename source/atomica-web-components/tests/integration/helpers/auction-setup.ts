@@ -1,33 +1,46 @@
 /**
- * Shared setup helpers for auction browser integration tests (07–10).
+ * Shared helpers for the live auction browser integration tests (07–14).
  *
- * Provides reusable functions for the test setup chain:
+ * Every helper here talks to the live dual-chain testnet and throws when a
+ * chain call fails. Tests must not swallow those errors: a test that expects
+ * a rejection asserts the abort code with `rejects.toThrow`.
  *
  *   generateEthLockProof()  — Mint → Approve → Lock on Ethereum, generate storage proof
  *                             (runs via vitest browser command on Node.js side to avoid
  *                             @ethereumjs/util EventEmitter incompatibility in browser)
  *   registerLockOnAptos()   — Trust the proof block's state root and register
  *                             the lock on Aptos as the `@atomica` deployer
- *   setupAuctionState()     — Combined convenience: both steps above using the
- *                             fixture deployer as the Aptos signer
+ *   createLiveWindow()      — Seller lock + timelock + `create_auction` for the
+ *                             current window, read back with `get_window_status`
+ *   lockBidCollateral()     — FakeUSD collateral receipt for one bid
+ *   submitBidDirect()       — `sealBid` + the current `submit_bid` ABI
+ *   waitForReveal(), openWindowBidsDirect(), clearWindowDirect(),
+ *   settleAuctionDirect()   — the reveal → open → clear → settle sequence
+ *   getAuctionState(), getWindowStatus(), getReceiptStatus() — chain reads
  *
- * All Aptos calls here use Account.fromPrivateKey + signAndSubmitTransaction
- * (no SIWE / MetaMask).  The UI callbacks in actual test cases DO go through
- * SIWE so the wallet mock must be set up before those calls.
+ * Aptos calls here use a native Ed25519 account (no SIWE / MetaMask). In the
+ * Demo phase only the `@atomica` operator can claim another address's lock
+ * receipt, so the operator creates windows and places bids. UI components in
+ * the tests still go through SIWE, so the wallet mock must be set up first.
  */
 
 import { ethers } from "ethers";
 import {
   Aptos,
-  AptosConfig,
-  Network,
   Account,
-  Ed25519PrivateKey,
   type InputGenerateTransactionPayloadData,
 } from "@aptos-labs/ts-sdk";
 import {
+  decryptWindowBids,
+  getBidPayload,
+  getCreateAuctionPayload,
   getRegisterTimelockPayload,
+  getSettlePayload,
+  getSubmitCleartextPayload,
+  isRevealed,
+  sealBid,
   timelockIdFromEvents,
+  type OpenedBid,
 } from "@atomica/sdk/aptos";
 import { commands } from "vitest/browser";
 import type { EthLockProofResult as CommandEthLockProofResult } from "@atomica/aptos-docker-testnet/browser-commands";
@@ -66,13 +79,6 @@ export interface EthLockProofResult {
   lockId: string;
   /** Raw storage proof data */
   proof: LockedBalanceProof;
-}
-
-export interface AuctionSetupResult extends EthLockProofResult {
-  /** Aptos client pointed at the testnet Aptos node */
-  aptosClient: Aptos;
-  /** Deployer Account for direct Aptos signing (no SIWE) */
-  deployerAccount: Account;
 }
 
 // ---------------------------------------------------------------------------
@@ -172,71 +178,16 @@ export async function registerLockOnAptos(
   });
 }
 
-/**
- * Execute the full Ethereum lock → Aptos proof registration flow using the
- * deployer's Ed25519 account as the Aptos sender.
- *
- * @param fixture    - Dual-chain integration fixture
- * @param lockAmount - Amount of FakeETH to lock (wei, default: 10 ETH)
- * @param mintAmount - Amount of FakeETH to mint (wei, default: 1000 ETH)
- */
-export async function setupAuctionState(
-  fixture: IntegrationFixture,
-  lockAmount: bigint = ethers.parseEther("10"),
-  mintAmount: bigint = ethers.parseEther("1000"),
-): Promise<AuctionSetupResult> {
-  const { aptos: aptosInfo } = fixture;
-
-  // Step 1: Ethereum lock + proof (no Aptos registration yet)
-  const { lockId, proof } = await generateEthLockProof(
-    fixture,
-    lockAmount,
-    mintAmount,
-  );
-
-  // Step 2: Aptos client + deployer account
-  const aptosConfig = new AptosConfig({
-    network: Network.LOCAL,
-    fullnode: aptosInfo.nodeUrl,
-  });
-  const aptosClient = new Aptos(aptosConfig);
-
-  const deployerAccount = Account.fromPrivateKey({
-    privateKey: new Ed25519PrivateKey(aptosInfo.deployerPrivateKey),
-  });
-
-  // Step 3: Register the lock under the deployer account
-  await registerLockOnAptos(
-    aptosClient,
-    deployerAccount,
-    aptosInfo.moduleAddress,
-    proof,
-  );
-
-  return { lockId, proof, aptosClient, deployerAccount };
-}
-
-/**
- * Default pair BCS bytes used by test helpers.
- *
- * Phase 3a scaffold: all entry functions abort with E_NOT_IMPLEMENTED (99),
- * so the actual pair value does not matter for tests. An empty byte array
- * is accepted by the Move ABI parser.
- */
+/** Default pair BCS bytes. Tests that need several windows pass distinct bytes. */
 export const TEST_PAIR_BCS = new Uint8Array(0);
 
-/**
- * Default window ID used by test helpers.
- *
- * Window 0 is long stale, so `create_auction` aborts with E_STALE_WINDOW_ID
- * for it. Tests that need a real window pass {@link currentWindowId}.
- */
-export const TEST_WINDOW_ID = 0n;
+/** Default FakeUSD collateral locked for one bid (6 decimals). */
+export const DEFAULT_COLLATERAL = 500n * 10n ** 6n;
 
-/**
- * Default timelock ID passed to `create_auction` by test helpers.
- */
-export const TEST_TIMELOCK_ID = 0n;
+/** `lock_receipt` status codes (`status_active`, `status_claimed`, `status_revoked`). */
+export const RECEIPT_ACTIVE = 0;
+export const RECEIPT_CLAIMED = 1;
+export const RECEIPT_REVOKED = 2;
 
 /**
  * The window `create_auction` accepts right now, from the chain clock.
@@ -297,6 +248,17 @@ export async function chainNowUs(aptosClient: Aptos): Promise<bigint> {
   return BigInt(ledger_timestamp);
 }
 
+/** Wait until the chain clock is at or past `deadlineUs`. */
+export async function waitForChainTime(
+  aptosClient: Aptos,
+  deadlineUs: bigint,
+  timeoutSecs = 600,
+): Promise<void> {
+  await pollUntil(`chain time ${deadlineUs} us`, timeoutSecs, async () =>
+    (await chainNowUs(aptosClient)) >= deadlineUs ? true : undefined,
+  );
+}
+
 /**
  * Register a timelock for `deadlineUs` with `0x1::ibe_config::register_timelock`
  * and return its id from the `TimelockRegistrationEvent`.
@@ -343,7 +305,7 @@ export async function submitDirect(
 }
 
 /**
- * Create an auction directly (no SIWE) using the deployer's native account.
+ * Create an auction directly (no SIWE) with a native account.
  *
  * Same 6-argument call as the SDK's `getCreateAuctionPayload`:
  *   create_auction(seller, window_id, pair_bcs, lock_id, min_price,
@@ -353,43 +315,265 @@ export async function submitDirect(
  */
 export async function createAuctionDirect(
   aptosClient: Aptos,
-  deployer: Account,
-  moduleAddr: string,
+  seller: Account,
   lockId: string,
   minPrice: bigint,
-  _duration: bigint,
-  windowId: bigint = TEST_WINDOW_ID,
-  pairBcs: Uint8Array = TEST_PAIR_BCS,
-  timelockId: bigint = TEST_TIMELOCK_ID,
+  windowId: bigint,
+  pairBcs: Uint8Array,
+  timelockId: bigint,
 ): Promise<string> {
-  const createTxn = await aptosClient.transaction.build.simple({
-    sender: deployer.accountAddress,
-    data: {
-      function: `${moduleAddr}::auction::create_auction`,
-      typeArguments: [],
-      functionArguments: [
-        windowId,
-        pairBcs,
-        ethers.getBytes(lockId),
-        minPrice,
-        timelockId,
-        new Uint8Array(0), // mpk_bytes
-      ],
-    },
-  });
+  return submitDirect(
+    aptosClient,
+    seller,
+    getCreateAuctionPayload(
+      windowId,
+      pairBcs,
+      ethers.getBytes(lockId),
+      minPrice,
+      timelockId,
+      new Uint8Array(0), // mpk_bytes, reserved
+    ),
+  );
+}
 
-  const submitted = await aptosClient.signAndSubmitTransaction({
-    signer: deployer,
-    transaction: createTxn,
-  });
+/** A window created on chain with its own timelock. */
+export interface LiveWindow {
+  windowId: bigint;
+  pairBcs: Uint8Array;
+  timelockId: bigint;
+  /** Timelock deadline in chain microseconds: bids close here. */
+  deadlineUs: bigint;
+  /** The seller's FakeETH lock id claimed by `create_auction`. */
+  sellerLockId: string;
+}
 
-  // checkSuccess: true causes waitForTransaction to throw on abort.
-  await aptosClient.waitForTransaction({
-    transactionHash: submitted.hash,
-    options: { checkSuccess: true },
-  });
+/**
+ * Lock FakeETH on Ethereum, register the receipt on Aptos, register a
+ * timelock that closes `deadlineAheadUs` after the chain clock, and create the
+ * current window for `pairBcs` bound to it. The operator signs everything:
+ * in the Demo phase only it, or the receipt's own address, can claim a
+ * receipt.
+ *
+ * Throws unless `get_window_status` reads back the new timelock with
+ * `reveal_final` and `refunded` both false.
+ */
+export async function createLiveWindow(
+  fixture: IntegrationFixture,
+  aptosClient: Aptos,
+  operator: Account,
+  options: {
+    pairBcs: Uint8Array;
+    minPrice: bigint;
+    deadlineAheadUs: bigint;
+    lockAmount?: bigint;
+  },
+): Promise<LiveWindow> {
+  const moduleAddr = fixture.aptos.moduleAddress;
+  const { lockId, proof } = await generateEthLockProof(
+    fixture,
+    options.lockAmount,
+  );
+  await registerLockOnAptos(aptosClient, operator, moduleAddr, proof);
 
-  return submitted.hash;
+  await waitForTimelockKey(aptosClient);
+  const deadlineUs = (await chainNowUs(aptosClient)) + options.deadlineAheadUs;
+  const timelockId = await registerTimelockDirect(
+    aptosClient,
+    operator,
+    deadlineUs,
+  );
+
+  const windowId = await currentWindowId(aptosClient);
+  await createAuctionDirect(
+    aptosClient,
+    operator,
+    lockId,
+    options.minPrice,
+    windowId,
+    options.pairBcs,
+    timelockId,
+  );
+
+  const status = await getWindowStatus(
+    aptosClient,
+    moduleAddr,
+    windowId,
+    options.pairBcs,
+  );
+  if (
+    status.timelockId !== timelockId ||
+    status.revealFinal ||
+    status.refunded
+  ) {
+    throw new Error(
+      `window ${windowId} reads back ${JSON.stringify({
+        timelockId: status.timelockId.toString(),
+        revealFinal: status.revealFinal,
+        refunded: status.refunded,
+      })}, expected timelock ${timelockId}`,
+    );
+  }
+
+  return {
+    windowId,
+    pairBcs: options.pairBcs,
+    timelockId,
+    deadlineUs,
+    sellerLockId: lockId,
+  };
+}
+
+/**
+ * Lock FakeUSD collateral on Ethereum and register its receipt on Aptos under
+ * the operator. Returns the lock id that `submit_bid` claims.
+ */
+export async function lockBidCollateral(
+  fixture: IntegrationFixture,
+  aptosClient: Aptos,
+  operator: Account,
+  amount: bigint = DEFAULT_COLLATERAL,
+): Promise<string> {
+  const { lockId, proof } = await generateEthLockProof(
+    fixture,
+    amount,
+    amount * 20n,
+    fixture.eth.contracts.fakeUSD,
+  );
+  await registerLockOnAptos(
+    aptosClient,
+    operator,
+    fixture.aptos.moduleAddress,
+    proof,
+    "FakeUSD",
+  );
+  return lockId;
+}
+
+/** A bid submitted on chain. Keep `salt`: it opens the bid. */
+export interface SubmittedBid {
+  hash: string;
+  price: bigint;
+  salt: Uint8Array;
+  ciphertext: Uint8Array;
+  commitment: Uint8Array;
+}
+
+/**
+ * Seal a bid with the SDK's `sealBid` (the AuctionBidder code path) and send
+ * it with the current `submit_bid` ABI from `getBidPayload`:
+ *
+ *   submit_bid(bidder, window_id, pair_bcs, ciphertext, commitment,
+ *              collateral_lock_id, quantity)
+ *
+ * The SDK's Aptos instance must point at the testnet (`setAptosInstance`).
+ * Throws if the transaction aborts.
+ */
+export async function submitBidDirect(
+  aptosClient: Aptos,
+  bidder: Account,
+  window: { windowId: bigint; pairBcs: Uint8Array },
+  price: bigint,
+  collateralLockId: string,
+  quantity: bigint,
+): Promise<SubmittedBid> {
+  const sealed = await sealBid(
+    window.windowId,
+    window.pairBcs,
+    bidder.accountAddress.toString(),
+    price,
+  );
+  const hash = await submitDirect(
+    aptosClient,
+    bidder,
+    getBidPayload(
+      window.windowId,
+      window.pairBcs,
+      sealed.ciphertext,
+      sealed.commitment,
+      ethers.getBytes(collateralLockId),
+      quantity,
+    ),
+  );
+  return {
+    hash,
+    price,
+    salt: sealed.salt,
+    ciphertext: sealed.ciphertext,
+    commitment: sealed.commitment,
+  };
+}
+
+/** Wait until the validators reveal the timelock key (`timelock::is_revealed`). */
+export async function waitForReveal(
+  timelockId: bigint,
+  timeoutSecs: number,
+): Promise<void> {
+  await pollUntil(`timelock ${timelockId} reveal`, timeoutSecs, async () =>
+    (await isRevealed(timelockId)) ? true : undefined,
+  );
+}
+
+/**
+ * Decrypt every bid of a window with the revealed key (`decryptWindowBids`)
+ * and open them all in one `submit_cleartext_and_clear`. Throws unless every
+ * bid decrypts to an opening that matches its commitment.
+ */
+export async function openWindowBidsDirect(
+  aptosClient: Aptos,
+  sender: Account,
+  window: { windowId: bigint; pairBcs: Uint8Array },
+): Promise<OpenedBid[]> {
+  const opened = await decryptWindowBids(window.windowId, window.pairBcs);
+  const bad = opened.filter((b) => !b.matchesCommitment);
+  if (bad.length > 0) {
+    throw new Error(
+      `bids ${bad.map((b) => b.index).join(", ")} did not decrypt to their commitment: ` +
+        bad.map((b) => b.error ?? "commitment mismatch").join("; "),
+    );
+  }
+  await submitDirect(
+    aptosClient,
+    sender,
+    getSubmitCleartextPayload(
+      window.windowId,
+      window.pairBcs,
+      opened.map((b) => b.price!),
+      opened.map((b) => b.salt!),
+    ),
+  );
+  return opened;
+}
+
+/**
+ * Run `auction::clear_uniform_price(window_id, pair_bcs)`. `settle` needs it:
+ * it aborts with E_AUCTION_NOT_ENDED until the bid results exist.
+ */
+export async function clearWindowDirect(
+  aptosClient: Aptos,
+  sender: Account,
+  moduleAddr: string,
+  window: { windowId: bigint; pairBcs: Uint8Array },
+): Promise<string> {
+  return submitDirect(aptosClient, sender, {
+    function: `${moduleAddr}::auction::clear_uniform_price`,
+    functionArguments: [window.windowId, window.pairBcs],
+  });
+}
+
+/**
+ * Settle a window directly (no SIWE): `settle(caller, window_id, pair_bcs)`.
+ * Throws if the transaction aborts.
+ */
+export async function settleAuctionDirect(
+  aptosClient: Aptos,
+  settler: Account,
+  window: { windowId: bigint; pairBcs: Uint8Array },
+): Promise<string> {
+  return submitDirect(
+    aptosClient,
+    settler,
+    getSettlePayload(window.windowId, window.pairBcs),
+  );
 }
 
 /**
@@ -416,105 +600,54 @@ export async function getWindowStatus(
 }
 
 /**
- * Submit a bid directly (no SIWE) using the given bidder Account.
- *
- * v0 Beta signature: submit_bid(bidder, window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)
- *
- * Phase 3a: the body aborts with E_NOT_IMPLEMENTED (99). This helper uses
- * Throws if the transaction aborts (including Phase 3a E_NOT_IMPLEMENTED).
+ * Read `auction::get_auction(window_id, pair_bcs)`: supply, bid count, the
+ * settled flag and the clearing price. Throws when the window does not exist.
  */
-export async function submitBidDirect(
+export async function getAuctionState(
   aptosClient: Aptos,
-  bidder: Account,
   moduleAddr: string,
-  _sellerAddress: string,
-  _price: bigint,
-  windowId: bigint = TEST_WINDOW_ID,
-  pairBcs: Uint8Array = TEST_PAIR_BCS,
-): Promise<string> {
-  const bidTxn = await aptosClient.transaction.build.simple({
-    sender: bidder.accountAddress,
-    data: {
-      function: `${moduleAddr}::auction::submit_bid`,
-      typeArguments: [],
-      functionArguments: [
-        windowId,
-        pairBcs,
-        new Uint8Array(0), // u_bytes (IBE ephemeral point)
-        new Uint8Array(0), // ciphertext
-        new Uint8Array(0), // collateral_lock_id
+  window: { windowId: bigint; pairBcs: Uint8Array },
+): Promise<{
+  totalSupply: bigint;
+  bidCount: bigint;
+  settled: boolean;
+  clearingPrice: bigint;
+}> {
+  const [, totalSupply, bidCount, settled, clearingPrice] =
+    await aptosClient.view({
+      payload: {
+        function: `${moduleAddr}::auction::get_auction`,
+        functionArguments: [window.windowId, window.pairBcs],
+      },
+    });
+  return {
+    totalSupply: BigInt(totalSupply as string),
+    bidCount: BigInt(bidCount as string),
+    settled: settled as boolean,
+    clearingPrice: BigInt(clearingPrice as string),
+  };
+}
+
+/**
+ * Read the status of a lock receipt
+ * (`lock_receipt::get_receipt<Ethereum, Asset>`): one of
+ * {@link RECEIPT_ACTIVE}, {@link RECEIPT_CLAIMED}, {@link RECEIPT_REVOKED}.
+ */
+export async function getReceiptStatus(
+  aptosClient: Aptos,
+  moduleAddr: string,
+  asset: "FakeETH" | "FakeUSD",
+  lockId: string,
+): Promise<number> {
+  const [, , , status] = await aptosClient.view({
+    payload: {
+      function: `${moduleAddr}::lock_receipt::get_receipt`,
+      typeArguments: [
+        `${moduleAddr}::lock_receipt::Ethereum`,
+        `${moduleAddr}::lock_receipt::${asset}`,
       ],
+      functionArguments: [ethers.getBytes(lockId)],
     },
   });
-
-  const submitted = await aptosClient.signAndSubmitTransaction({
-    signer: bidder,
-    transaction: bidTxn,
-  });
-
-  // Phase 3a: the scaffold body aborts with E_NOT_IMPLEMENTED (99).
-  // checkSuccess: true causes waitForTransaction to throw on abort.
-  await aptosClient.waitForTransaction({
-    transactionHash: submitted.hash,
-    options: { checkSuccess: true },
-  });
-
-  return submitted.hash;
-}
-
-/**
- * Settle an auction directly (no SIWE) using the given settler Account.
- *
- * v0 Beta signature: settle(caller, window_id, pair_bcs)
- *
- * Phase 3a: the body aborts with E_NOT_IMPLEMENTED (99). This helper uses
- * Throws if the transaction aborts (including Phase 3a E_NOT_IMPLEMENTED).
- */
-export async function settleAuctionDirect(
-  aptosClient: Aptos,
-  settler: Account,
-  moduleAddr: string,
-  _sellerAddress: string,
-  windowId: bigint = TEST_WINDOW_ID,
-  pairBcs: Uint8Array = TEST_PAIR_BCS,
-): Promise<string> {
-  const settleTxn = await aptosClient.transaction.build.simple({
-    sender: settler.accountAddress,
-    data: {
-      function: `${moduleAddr}::auction::settle`,
-      typeArguments: [],
-      functionArguments: [windowId, pairBcs],
-    },
-  });
-
-  const submitted = await aptosClient.signAndSubmitTransaction({
-    signer: settler,
-    transaction: settleTxn,
-  });
-
-  // Phase 3a: the scaffold body aborts with E_NOT_IMPLEMENTED (99).
-  // checkSuccess: true causes waitForTransaction to throw on abort.
-  await aptosClient.waitForTransaction({
-    transactionHash: submitted.hash,
-    options: { checkSuccess: true },
-  });
-
-  return submitted.hash;
-}
-
-/**
- * Call an Aptos view function and return the raw result array.
- */
-export async function viewFunction(
-  aptosClient: Aptos,
-  functionName: string,
-  typeArguments: string[],
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  functionArguments: any[],
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<any[]> {
-  const result = await aptosClient.view({
-    payload: { function: functionName, typeArguments, functionArguments },
-  });
-  return result;
+  return Number(status);
 }

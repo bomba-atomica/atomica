@@ -32,10 +32,11 @@
  *        recovers the same price and salt. Opening the bid with them passes the
  *        on-chain commitment check.
  *   Settlement:
- *     9. Wait for auction expiry
- *    10. SettleButton — click real component (no injected callback)
- *    11. ClaimButton — click real component, verify balance change
- *    12. BidHistory — verify row populated from real useBidHistory data
+ *   9-10. clear_uniform_price writes the bid results, then the real
+ *        SettleButton settles the window. is_settled, the clearing price and
+ *        the collateral and seller receipt statuses are asserted on chain
+ *    11. ClaimButton — click real component, verify the FakeETH balance change
+ *    12. BidHistory — Step8Monitor records the settled window and its price
  *
  * Two wallet mocks are used (seller and bidder) — swapped between phases.
  * All on-chain ops use the dual-chain Docker testnet via setupIntegrationFixture().
@@ -111,11 +112,15 @@ import {
   createAuctionDirect,
   currentWindowId,
   getWindowStatus,
+  getAuctionState,
+  getReceiptStatus,
   waitForTimelockKey,
   chainNowUs,
   registerTimelockDirect,
   submitDirect,
+  clearWindowDirect,
   pollUntil,
+  RECEIPT_CLAIMED,
   TEST_PAIR_BCS,
 } from "./helpers/auction-setup";
 import { Faucet } from "../../src/components/Faucet";
@@ -146,6 +151,9 @@ import {
   getBidCount,
   getSubmitCleartextPayload,
   isRevealed,
+  isSettled,
+  getBidResults,
+  getFakeEthBalance,
 } from "@atomica/sdk/aptos";
 import {
   setAptosInstance as setDockerAptosInstance,
@@ -156,10 +164,13 @@ import { ethers } from "ethers";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const MIN_PRICE = 100n;
+const MIN_PRICE = 1_000_000n;
 const LOCK_AMOUNT = ethers.parseEther("10");
 const MINT_AMOUNT = ethers.parseEther("1000");
-const BID_PRICE = 200n;
+/** Bid price in FakeUSD micro-units: 2.00 USD. */
+const BID_PRICE = 2_000_000n;
+/** How SettleButton and BidHistory display {@link BID_PRICE}. */
+const BID_PRICE_USD = "$2.00";
 /** Bid quantity in wei of FakeETH. */
 const BID_QUANTITY = ethers.parseEther("1");
 /** FakeUSD collateral locked for the bid (6 decimals). */
@@ -431,10 +442,8 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       await createAuctionDirect(
         aptosClient,
         deployerAccount,
-        moduleAddr,
         lockId,
         MIN_PRICE,
-        BigInt(AUCTION_DURATION_BID),
         windowId,
         TEST_PAIR_BCS,
         timelockId,
@@ -605,43 +614,42 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
     (Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS + 120) * 1000,
   );
 
-  // ── Step 9-10: Wait for expiry -> settle via real SettleButton ──────────
+  // ── Step 9-10: clear + settle via the real SettleButton ─────────────────
   //
-  // Instead of using settleAuctionDirect, we render the real SettleButton
-  // component and click it. The component calls submitSettle (SIWE-based)
-  // and queries on-chain state for the settlement result.
+  // The window has one opened bid. clear_uniform_price (no UI calls it yet)
+  // writes the bid results; then the real SettleButton sends `settle` through
+  // SIWE and reads the settlement back.
 
   it(
-    "step 9-10 — wait for expiry + settle: SettleButton shows 'Settled', winner is bidder",
+    "step 9-10 — clear + settle: SettleButton settles the window at the bid price",
     async () => {
-      console.log("[14-happy-path] Steps 9-10: Wait for expiry + settle via real SettleButton");
+      console.log("[14-happy-path] Steps 9-10: clear_uniform_price, then settle via real SettleButton");
 
-      // Wait for the remaining auction window to expire (+ 3 s buffer)
-      const remainingMs = (auctionEndTime + 3) * 1000 - Date.now();
-      if (remainingMs > 0) {
-        console.log(`[14-happy-path] Waiting ${remainingMs} ms for auction to close...`);
-        await new Promise((r) => setTimeout(r, remainingMs));
-      }
+      await clearWindowDirect(aptosClient, deployerAccount, moduleAddr, {
+        windowId,
+        pairBcs: TEST_PAIR_BCS,
+      });
+      const results = await getBidResults(windowId, TEST_PAIR_BCS);
+      expect(results.map((r) => [r.isWinner, r.fillAmount])).toEqual([[true, BID_QUANTITY]]);
 
-      // Switch to seller wallet for settlement (or any funded account)
+      // The real SettleButton signs with SIWE as the seller.
       sellerEthAddress = await setupWalletMock({
         privateKey: fixture.eth.seller.privateKey,
         rpcUrl: fixture.eth.rpcUrl,
         chainId: fixture.eth.chainId,
       });
 
-      // Phase 3a: SettleButton uses new v0 Beta interface (windowId + pairBcs)
       render(
         <WalletContext.Provider value={{ account: sellerEthAddress, connect: async () => {} }}>
           <SettleButton
-            windowId={0n}
-            pairBcs={new Uint8Array(0)}
+            windowId={windowId}
+            pairBcs={TEST_PAIR_BCS}
             auctionEndTime={auctionEndTime}
           />
         </WalletContext.Provider>,
       );
 
-      // Button should be enabled (auction ended, not yet settled)
+      // Enabled: the window ended and is not settled yet.
       const btn = await waitFor(
         () => {
           const b = screen.getByTestId(settleButton.settleButton);
@@ -650,118 +658,133 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         },
         { timeout: 10_000 },
       );
-
-      // Click the real SettleButton — Phase 3a: settle aborts with E_NOT_IMPLEMENTED
       fireEvent.click(btn);
 
-      // Phase 3a: settle aborts — error status shown
       await waitFor(
         () => {
-          const statusEl = screen.getByTestId(settleButton.settleStatus);
-          expect(statusEl.textContent).toMatch(/Error/);
+          expect(screen.getByTestId(settleButton.settleStatus).textContent).toBe("Settled");
         },
         { timeout: 60_000 },
       );
+      expect(screen.getByTestId(settleButton.settleClearingPrice).textContent).toBe(
+        BID_PRICE_USD,
+      );
 
-      console.log("[14-happy-path] Settle surfaced error (Phase 3a scaffold expected)");
+      expect(await isSettled(windowId, TEST_PAIR_BCS)).toBe(true);
+      const state = await getAuctionState(aptosClient, moduleAddr, {
+        windowId,
+        pairBcs: TEST_PAIR_BCS,
+      });
+      expect(state.settled).toBe(true);
+      expect(state.clearingPrice).toBe(BID_PRICE);
+      expect(state.bidCount).toBe(1n);
+
+      // The winning collateral and the filled seller lock stay claimed.
+      expect(
+        await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", collateralLockId),
+      ).toBe(RECEIPT_CLAIMED);
+      expect(await getReceiptStatus(aptosClient, moduleAddr, "FakeETH", lockId)).toBe(
+        RECEIPT_CLAIMED,
+      );
+
+      console.log(`[14-happy-path] Window ${windowId} settled at clearing price ${state.clearingPrice}`);
     },
     120_000,
   );
 
-  // ── Step 11: Bidder claim — Phase 3a scaffold ────────────────────────────
+  // ── Step 11: Claim via the real ClaimButton ──────────────────────────────
   //
-  // Phase 3a: ClaimButton uses new v0 Beta interface (windowId + pairBcs).
-  // Since settle() aborts with E_NOT_IMPLEMENTED, is_settled returns false,
-  // and ClaimButton shows "Auction not yet settled" with buttons disabled.
-  // Full winner claim flow (balance increase, "Claimed" status) is deferred
-  // to Phase 3b (#86b) when settle() is implemented.
+  // ClaimButton reads the settlement and, in the Demo phase, the claim mints
+  // the clearing price in FakeETH to the wallet's derived Aptos address.
 
   it(
-    "step 11 — bidder claim: ClaimButton shows 'not yet settled' (Phase 3a scaffold)",
+    "step 11 — claim: ClaimButton mints the clearing price to the bidder wallet",
     async () => {
-      console.log("[14-happy-path] Step 11: Bidder claim via real ClaimButton (Phase 3a scaffold)");
+      console.log("[14-happy-path] Step 11: claim via real ClaimButton");
 
-      // Restore bidder wallet mock
       bidderEthAddress = await setupWalletMock({
         privateKey: fixture.eth.bidder.privateKey,
         rpcUrl: fixture.eth.rpcUrl,
         chainId: fixture.eth.chainId,
       });
+      const derived = (await getDerivedAddress(bidderEthAddress.toLowerCase())).toString();
+      const balanceBefore = await getFakeEthBalance(derived);
 
-      // Phase 3a: ClaimButton uses new v0 Beta interface (windowId + pairBcs)
-      // is_settled returns false → both buttons disabled, status "not yet settled"
       withProviders(
         bidderEthAddress,
-        <ClaimButton windowId={0n} pairBcs={new Uint8Array(0)} />,
+        <ClaimButton windowId={windowId} pairBcs={TEST_PAIR_BCS} />,
       );
 
-      // Phase 3a: is_settled returns false → "Auction not yet settled"
-      await waitFor(
+      const claimBtn = await waitFor(
         () => {
-          const statusEl = screen.getByTestId(claimButton.claimStatus);
-          expect(statusEl.textContent).toContain("Auction not yet settled");
+          expect(screen.getByTestId(claimButton.claimStatus).textContent).toMatch(/^Settled/);
+          const b = screen.getByTestId(claimButton.claimButton) as HTMLButtonElement;
+          expect(b.disabled).toBe(false);
+          return b;
         },
         { timeout: 30_000 },
       );
+      fireEvent.click(claimBtn);
 
-      // Both buttons must be disabled in Phase 3a
-      const claimBtn = screen.getByTestId(claimButton.claimButton);
-      const reclaimBtn = screen.getByTestId(claimButton.reclaimButton);
-      expect((claimBtn as HTMLButtonElement).disabled).toBe(true);
-      expect((reclaimBtn as HTMLButtonElement).disabled).toBe(true);
+      await waitFor(
+        () => {
+          expect(screen.getByTestId(claimButton.claimStatus).textContent).toBe("Claimed");
+        },
+        { timeout: 60_000 },
+      );
+      const balanceAfter = await getFakeEthBalance(derived);
+      expect(balanceAfter - balanceBefore).toBe(BID_PRICE);
 
-      console.log("[14-happy-path] ClaimButton shows 'not yet settled' (Phase 3a scaffold expected)");
+      console.log(`[14-happy-path] Claimed ${balanceAfter - balanceBefore} FakeETH units`);
     },
     120_000,
   );
 
-  // ── Step 12: Step8Monitor renders with new v0 Beta interface ─────────────
-  //
-  // Phase 3a: Step8Monitor uses new v0 Beta interface (windowId + pairBcs).
-  // Since settle() aborts, the auction is never settled on-chain:
-  //   - SettleButton renders (auction ended) and shows error on click
-  //   - BidHistory has no rows (no on-chain bid data)
-  //   - Status badge shows "Settled" (time-based label for ended auction)
-  // Full BidHistory population from real on-chain data is deferred to Phase 3b.
+  // ── Step 12: Step8Monitor shows the settled window and its history ───────
 
   it(
-    "step 12 — bid history: Step8Monitor renders with v0 Beta interface (Phase 3a scaffold)",
+    "step 12 — bid history: Step8Monitor records the settled window and its clearing price",
     async () => {
-      console.log("[14-happy-path] Step 12: Step8Monitor with v0 Beta windowId + pairBcs (Phase 3a scaffold)");
+      console.log("[14-happy-path] Step 12: Step8Monitor settlement history");
 
-      // Clear any stale localStorage bid history
       localStorage.clear();
 
-      // Phase 3a: Step8Monitor uses new v0 Beta interface (windowId + pairBcs).
-      // SettleButton renders only when windowId + pairBcs are provided.
       withProviders(
         sellerEthAddress,
         <Step8Monitor
           auctionEndTime={auctionEndTime}
-          windowId={0n}
-          pairBcs={new Uint8Array(0)}
+          windowId={windowId}
+          pairBcs={TEST_PAIR_BCS}
           sellerAddress={sellerAptosAddress}
           onCancelAndUnlock={async () => {}}
           loading={false}
         />,
       );
 
-      // Status badge should show "Settled" (time-based — auction window expired)
       const badgeEl = await waitFor(
         () => screen.getByTestId(step8Monitor.auctionStatusBadge),
         { timeout: 10_000 },
       );
       expect(badgeEl.textContent).toBe("Settled");
 
-      // SettleButton should be rendered (auction ended + windowId/pairBcs provided)
-      const settleBtn = screen.getByTestId(settleButton.settleButton);
-      expect(settleBtn).toBeTruthy();
+      // SettleButton reads is_settled and records the settlement in the history.
+      await waitFor(
+        () => {
+          expect(screen.getByTestId(settleButton.settleStatus).textContent).toBe(
+            "Already Settled",
+          );
+          const rows = screen.getAllByTestId(bidHistory.bidHistoryRow);
+          expect(rows).toHaveLength(1);
+          expect(rows[0].textContent).toContain(windowId.toString());
+          expect(rows[0].textContent).toContain(BID_PRICE_USD);
+        },
+        { timeout: 30_000 },
+      );
+      expect((screen.getByTestId(settleButton.settleButton) as HTMLButtonElement).disabled).toBe(
+        true,
+      );
 
-      // Phase 3a: BidHistory has no rows (no on-chain bid data, settle never happened)
-      const rows = screen.queryAllByTestId(bidHistory.bidHistoryRow);
-      expect(rows).toHaveLength(0);
-
-      console.log("[14-happy-path] Step8Monitor renders correctly with v0 Beta interface (Phase 3a scaffold)");
+      console.log("[14-happy-path] Step8Monitor shows the settled window in its history");
     },
     60_000,
   );

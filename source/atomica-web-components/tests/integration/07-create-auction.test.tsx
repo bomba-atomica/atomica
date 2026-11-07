@@ -5,14 +5,16 @@
  * auto-creates an auction from a LockReceipt on mount.
  *
  * Scenarios:
- *   1. Happy path: spinner shown; no error after successful create
+ *   1. Happy path: create_auction succeeds, the tx hash is shown, and
+ *      get_window_status and the claimed seller receipt read back on chain
  *   2. Amount and min price displayed in description text
- *   3. Receipt already claimed: Move abort error shown via error prop
+ *   3. Receipt already claimed: E_RECEIPT_ALREADY_CLAIMED shown via error prop
  *   4. SIWE signature rejected: error shown via error prop
  *
  * Setup:
  *   - Dual-chain testnet started in beforeAll
  *   - Ethereum lock → Aptos proof registration via deployer account (no SIWE)
+ *   - A real timelock registered for the window (the epoch key must exist)
  *   - Seller wallet mock injected for SIWE signing in UI callbacks
  */
 
@@ -30,6 +32,14 @@ import {
   generateEthLockProof,
   registerLockOnAptos,
   createAuctionDirect,
+  currentWindowId,
+  waitForTimelockKey,
+  chainNowUs,
+  registerTimelockDirect,
+  getWindowStatus,
+  getReceiptStatus,
+  RECEIPT_ACTIVE,
+  RECEIPT_CLAIMED,
   type EthLockProofResult,
 } from "./helpers/auction-setup";
 import { Step7Auction } from "../../src/components/SellFlow/steps/Step7Auction";
@@ -40,7 +50,9 @@ import { getCreateAuctionPayload } from "@atomica/sdk/aptos";
 import { submitNativeTransaction } from "@atomica/sdk";
 
 const MIN_PRICE = 100n;
-const AUCTION_DURATION = 3600n;
+const PAIR_BCS = new TextEncoder().encode("07-create-auction");
+/** The timelock deadline is far enough out that the window stays open. */
+const DEADLINE_AHEAD_US = 600_000_000n;
 
 // ---------------------------------------------------------------------------
 // Stateful wrapper so we can observe the result of onCreateAuction
@@ -97,6 +109,8 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
   let ethProof: EthLockProofResult;
   let sellerAddress: string;
   let deployerAccount: Account;
+  let windowId: bigint;
+  let timelockId: bigint;
 
   beforeAll(async () => {
     fixture = await setupIntegrationFixture();
@@ -136,7 +150,16 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
       fixture.aptos.moduleAddress,
       ethProof.proof,
     );
-  }, 600_000);
+
+    // create_auction needs a Pending timelock in the current epoch.
+    await waitForTimelockKey(aptosGlobal);
+    timelockId = await registerTimelockDirect(
+      aptosGlobal,
+      deployerAccount,
+      (await chainNowUs(aptosGlobal)) + DEADLINE_AHEAD_US,
+    );
+    windowId = await currentWindowId(aptosGlobal);
+  }, 1_200_000);
 
   afterAll(async () => {
     await teardownIntegrationFixture();
@@ -152,23 +175,23 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     });
   });
 
-  // ── Test 1: scaffold abort (Phase 3a) ─────────────────────────────────────
-  //
-  // Phase 3a: create_auction aborts with E_NOT_IMPLEMENTED (99). The UI
-  // component surfaces this as a red error element. A successful tx hash
-  // is not expected until Phase 3b (#86b) implements the full body.
+  // ── Test 1: create_auction succeeds ───────────────────────────────────────
 
-  it("shows spinner on mount then error when create_auction aborts (Phase 3a scaffold)", async () => {
+  it("shows the tx hash after create_auction succeeds and the window exists on chain", async () => {
+    const moduleAddr = fixture.aptos.moduleAddress;
+    expect(
+      await getReceiptStatus(aptosGlobal, moduleAddr, "FakeETH", ethProof.lockId),
+    ).toBe(RECEIPT_ACTIVE);
+
     const onCreateAuction = async () => {
-      // createAuctionDirect now uses checkSuccess: false; the helper throws
-      // because the underlying waitForTransaction sees a failed tx.
       const txHash = await createAuctionDirect(
         aptosGlobal,
         deployerAccount,
-        fixture.aptos.moduleAddress,
         ethProof.lockId,
         MIN_PRICE,
-        AUCTION_DURATION,
+        windowId,
+        PAIR_BCS,
+        timelockId,
       );
       return { txHash };
     };
@@ -184,14 +207,22 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     // spinner shown on mount while auto-creating
     expect(screen.getByTestId(step7Auction.auctionSpinner)).toBeTruthy();
 
-    // Phase 3a: create_auction aborts with E_NOT_IMPLEMENTED — error element shown
     await waitFor(
       () => {
-        const errorEl = document.querySelector(".text-red-400");
-        expect(errorEl).toBeTruthy();
+        expect(screen.getByTestId(step7Auction.auctionTxHash).textContent).toMatch(
+          /^Tx: 0x[0-9a-f]{64}$/,
+        );
       },
       { timeout: 60_000 },
     );
+    expect(document.querySelector(".text-red-400")).toBeNull();
+
+    expect(
+      await getWindowStatus(aptosGlobal, moduleAddr, windowId, PAIR_BCS),
+    ).toEqual({ timelockId, revealFinal: false, refunded: false });
+    expect(
+      await getReceiptStatus(aptosGlobal, moduleAddr, "FakeETH", ethProof.lockId),
+    ).toBe(RECEIPT_CLAIMED);
   }, 90_000);
 
   // ── Test 2: amount and min price displayed ─────────────────────────────────
@@ -212,22 +243,18 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     expect(text).toContain("$0.00");
   });
 
-  // ── Test 3: scaffold abort (Phase 3a) — error surfaced ───────────────────
-  //
-  // Phase 3a: any call to create_auction aborts with E_NOT_IMPLEMENTED (99).
-  // The UI must surface an error element (red text). This test doubles as
-  // a regression guard: once Phase 3b lands and the scaffold is replaced, this
-  // test should be updated to check for E_RECEIPT_ALREADY_CLAIMED on re-use.
+  // ── Test 3: the claimed receipt cannot back a second auction ─────────────
 
-  it("shows Move abort error element when create_auction aborts (Phase 3a scaffold repeat)", async () => {
+  it("shows E_RECEIPT_ALREADY_CLAIMED when the seller receipt is reused", async () => {
     const onCreateAuction = async () => {
       const txHash = await createAuctionDirect(
         aptosGlobal,
         deployerAccount,
-        fixture.aptos.moduleAddress,
         ethProof.lockId,
         MIN_PRICE,
-        AUCTION_DURATION,
+        windowId,
+        PAIR_BCS,
+        timelockId,
       );
       return { txHash };
     };
@@ -240,14 +267,14 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
       />,
     );
 
-    // Wait for the create attempt to finish and surface an error
     await waitFor(
       () => {
         const errorEl = document.querySelector(".text-red-400");
-        expect(errorEl).toBeTruthy();
+        expect(errorEl?.textContent).toMatch(/E_RECEIPT_ALREADY_CLAIMED/);
       },
       { timeout: 60_000 },
     );
+    expect(screen.queryByTestId(step7Auction.auctionTxHash)).toBeNull();
   }, 90_000);
 
   // ── Test 4: SIWE signature rejected ───────────────────────────────────────
