@@ -13,6 +13,7 @@ contract LockBoxTest is Test {
 
     address public alice = address(0x1);
     address public bob = address(0x2);
+    address public relayer = address(0xBEEF);
 
     function setUp() public {
         // Deploy tokens
@@ -20,7 +21,7 @@ contract LockBoxTest is Test {
         fakeUSD = new FakeUSD();
 
         // Deploy LockBox
-        lockBox = new LockBox(address(fakeETH), address(fakeUSD));
+        lockBox = new LockBox(address(fakeETH), address(fakeUSD), relayer);
 
         // Mint tokens to test users (within max mint limits)
         fakeETH.mint(alice, 1000 ether);
@@ -32,7 +33,13 @@ contract LockBoxTest is Test {
     function testConstructor() public view {
         assertEq(address(lockBox.fakeETH()), address(fakeETH));
         assertEq(address(lockBox.fakeUSD()), address(fakeUSD));
+        assertEq(lockBox.settlementAuthority(), relayer);
         assertEq(lockBox.MIN_LOCK_DURATION(), 1 hours);
+    }
+
+    function testConstructorRejectsZeroAuthority() public {
+        vm.expectRevert("Invalid settlement authority");
+        new LockBox(address(fakeETH), address(fakeUSD), address(0));
     }
 
     function testLockFakeETH() public {
@@ -155,75 +162,6 @@ contract LockBoxTest is Test {
         vm.stopPrank();
     }
 
-    function testCannotWithdrawBeforeUnlockTime() public {
-        vm.startPrank(alice);
-
-        fakeETH.approve(address(lockBox), 10 ether);
-        lockBox.lock(address(fakeETH), 10 ether);
-
-        // Try to withdraw immediately
-        vm.expectRevert("Tokens still locked");
-        lockBox.withdraw(address(fakeETH), 10 ether);
-
-        vm.stopPrank();
-    }
-
-    function testCanWithdrawAfterUnlockTime() public {
-        vm.startPrank(alice);
-
-        fakeETH.approve(address(lockBox), 10 ether);
-        lockBox.lock(address(fakeETH), 10 ether);
-
-        // Fast forward time by 1 hour + 1 second
-        vm.warp(block.timestamp + 1 hours + 1);
-
-        // Should be unlocked now
-        assertTrue(lockBox.isUnlocked(alice, address(fakeETH)));
-
-        // Withdraw tokens
-        lockBox.withdraw(address(fakeETH), 10 ether);
-
-        // Verify balance
-        assertEq(lockBox.getLockedBalance(alice, address(fakeETH)), 0);
-        assertEq(fakeETH.balanceOf(alice), 1000 ether); // Back to original
-
-        vm.stopPrank();
-    }
-
-    function testCanWithdrawPartialAmount() public {
-        vm.startPrank(alice);
-
-        fakeETH.approve(address(lockBox), 10 ether);
-        lockBox.lock(address(fakeETH), 10 ether);
-
-        // Fast forward time
-        vm.warp(block.timestamp + 1 hours + 1);
-
-        // Withdraw only 6 ETH
-        lockBox.withdraw(address(fakeETH), 6 ether);
-
-        assertEq(lockBox.getLockedBalance(alice, address(fakeETH)), 4 ether);
-        assertEq(fakeETH.balanceOf(alice), 996 ether);
-
-        vm.stopPrank();
-    }
-
-    function testCannotWithdrawMoreThanLocked() public {
-        vm.startPrank(alice);
-
-        fakeETH.approve(address(lockBox), 10 ether);
-        lockBox.lock(address(fakeETH), 10 ether);
-
-        // Fast forward time
-        vm.warp(block.timestamp + 1 hours + 1);
-
-        // Try to withdraw more than locked
-        vm.expectRevert("Insufficient balance");
-        lockBox.withdraw(address(fakeETH), 11 ether);
-
-        vm.stopPrank();
-    }
-
     function testEmitsTokensLockedEvent() public {
         vm.startPrank(alice);
 
@@ -239,20 +177,190 @@ contract LockBoxTest is Test {
         vm.stopPrank();
     }
 
-    function testEmitsTokensWithdrawnEvent() public {
-        vm.startPrank(alice);
+    // ==================== Release conditions ====================
 
-        fakeETH.approve(address(lockBox), 10 ether);
-        lockBox.lock(address(fakeETH), 10 ether);
-
-        vm.warp(block.timestamp + 1 hours + 1);
-
-        vm.expectEmit(true, true, false, true);
-        emit LockBox.TokensWithdrawn(alice, address(fakeETH), 10 ether);
-
-        lockBox.withdraw(address(fakeETH), 10 ether);
-
+    function _lock(address user, address token, uint256 amount) internal {
+        vm.startPrank(user);
+        IERC20(token).approve(address(lockBox), amount);
+        lockBox.lock(token, amount);
         vm.stopPrank();
+    }
+
+    /// The review's failure scenario: time alone must never release a lock.
+    function testTimeAloneNeverReleasesLock() public {
+        _lock(alice, address(fakeETH), 10 ether);
+        vm.warp(block.timestamp + 365 days);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(LockBox.NothingToWithdraw.selector, alice, address(fakeETH)));
+        lockBox.withdrawWinnings(address(fakeETH));
+
+        assertEq(lockBox.getLockedBalance(alice, address(fakeETH)), 10 ether);
+        assertEq(fakeETH.balanceOf(alice), 990 ether);
+    }
+
+    function testRefundReturnsLockToOwner() public {
+        _lock(alice, address(fakeETH), 10 ether);
+
+        vm.prank(relayer);
+        lockBox.refund(keccak256("refund-1"), alice, address(fakeETH), 10 ether);
+
+        assertEq(lockBox.getLockedBalance(alice, address(fakeETH)), 0);
+        assertEq(lockBox.getWithdrawable(alice, address(fakeETH)), 10 ether);
+
+        vm.prank(alice);
+        lockBox.withdrawWinnings(address(fakeETH));
+
+        assertEq(fakeETH.balanceOf(alice), 1000 ether);
+        assertEq(fakeETH.balanceOf(address(lockBox)), 0);
+        assertEq(lockBox.getWithdrawable(alice, address(fakeETH)), 0);
+    }
+
+    function testPartialRefundLeavesRestLocked() public {
+        _lock(alice, address(fakeUSD), 1_000 * 10**6);
+
+        vm.prank(relayer);
+        lockBox.refund(keccak256("excess"), alice, address(fakeUSD), 400 * 10**6);
+
+        assertEq(lockBox.getLockedBalance(alice, address(fakeUSD)), 600 * 10**6);
+        vm.prank(alice);
+        lockBox.withdrawWinnings(address(fakeUSD));
+        assertEq(fakeUSD.balanceOf(alice), 9_400 * 10**6);
+    }
+
+    function testOnlyAuthorityCanRefund() public {
+        _lock(alice, address(fakeETH), 10 ether);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(LockBox.NotSettlementAuthority.selector, alice));
+        lockBox.refund(keccak256("r"), alice, address(fakeETH), 10 ether);
+    }
+
+    function testOnlyAuthorityCanSettle() public {
+        _lock(alice, address(fakeETH), 10 ether);
+        _lock(bob, address(fakeUSD), 5_000 * 10**6);
+
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(LockBox.NotSettlementAuthority.selector, bob));
+        lockBox.settleFill(keccak256("f"), alice, bob, 10 ether, 5_000 * 10**6);
+    }
+
+    function testOutcomeCannotBeRelayedTwice() public {
+        _lock(alice, address(fakeETH), 10 ether);
+        bytes32 id = keccak256("refund-once");
+
+        vm.startPrank(relayer);
+        lockBox.refund(id, alice, address(fakeETH), 4 ether);
+        vm.expectRevert(abi.encodeWithSelector(LockBox.OutcomeAlreadyProcessed.selector, id));
+        lockBox.refund(id, alice, address(fakeETH), 4 ether);
+        vm.stopPrank();
+
+        assertTrue(lockBox.processedOutcomes(id));
+        assertEq(lockBox.getLockedBalance(alice, address(fakeETH)), 6 ether);
+    }
+
+    function testRefundCannotExceedLock() public {
+        _lock(alice, address(fakeETH), 10 ether);
+
+        vm.prank(relayer);
+        vm.expectRevert(
+            abi.encodeWithSelector(LockBox.InsufficientLocked.selector, alice, address(fakeETH), 10 ether, 11 ether)
+        );
+        lockBox.refund(keccak256("r"), alice, address(fakeETH), 11 ether);
+    }
+
+    /// Winner payout and seller payout: a fill swaps both legs.
+    function testSettleFillPaysWinnerAndSeller() public {
+        // alice sells 10 FakeETH. bob locks 5 000 FakeUSD and wins 4 FakeETH at 1 000 USD.
+        _lock(alice, address(fakeETH), 10 ether);
+        _lock(bob, address(fakeUSD), 5_000 * 10**6);
+
+        vm.startPrank(relayer);
+        lockBox.settleFill(keccak256("fill"), alice, bob, 4 ether, 4_000 * 10**6);
+        // Unsold supply and excess collateral go back to their owners.
+        lockBox.refund(keccak256("unsold"), alice, address(fakeETH), 6 ether);
+        lockBox.refund(keccak256("excess"), bob, address(fakeUSD), 1_000 * 10**6);
+        vm.stopPrank();
+
+        assertEq(lockBox.getLockedBalance(alice, address(fakeETH)), 0);
+        assertEq(lockBox.getLockedBalance(bob, address(fakeUSD)), 0);
+
+        vm.startPrank(bob);
+        lockBox.withdrawWinnings(address(fakeETH));
+        lockBox.withdrawWinnings(address(fakeUSD));
+        vm.stopPrank();
+        vm.startPrank(alice);
+        lockBox.withdrawWinnings(address(fakeETH));
+        lockBox.withdrawWinnings(address(fakeUSD));
+        vm.stopPrank();
+
+        // Winner payout: +4 FakeETH, paid 4 000 FakeUSD.
+        assertEq(fakeETH.balanceOf(bob), 1004 ether);
+        assertEq(fakeUSD.balanceOf(bob), 6_000 * 10**6);
+        // Seller payout: -4 FakeETH, +4 000 FakeUSD.
+        assertEq(fakeETH.balanceOf(alice), 996 ether);
+        assertEq(fakeUSD.balanceOf(alice), 14_000 * 10**6);
+        // Escrow is empty.
+        assertEq(fakeETH.balanceOf(address(lockBox)), 0);
+        assertEq(fakeUSD.balanceOf(address(lockBox)), 0);
+    }
+
+    /// After a settlement the seller cannot take back the sold FakeETH.
+    function testSellerCannotWithdrawSoldSupply() public {
+        _lock(alice, address(fakeETH), 10 ether);
+        _lock(bob, address(fakeUSD), 10_000 * 10**6);
+
+        vm.prank(relayer);
+        lockBox.settleFill(keccak256("fill"), alice, bob, 10 ether, 10_000 * 10**6);
+
+        vm.warp(block.timestamp + 365 days);
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(LockBox.NothingToWithdraw.selector, alice, address(fakeETH)));
+        lockBox.withdrawWinnings(address(fakeETH));
+
+        vm.prank(relayer);
+        vm.expectRevert(
+            abi.encodeWithSelector(LockBox.InsufficientLocked.selector, alice, address(fakeETH), 0, 1 ether)
+        );
+        lockBox.refund(keccak256("late-refund"), alice, address(fakeETH), 1 ether);
+    }
+
+    /// A fill is atomic: a short collateral leg reverts the FakeETH leg too.
+    function testSettleFillIsAtomic() public {
+        _lock(alice, address(fakeETH), 10 ether);
+        _lock(bob, address(fakeUSD), 100 * 10**6);
+
+        vm.prank(relayer);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LockBox.InsufficientLocked.selector, bob, address(fakeUSD), 100 * 10**6, 4_000 * 10**6
+            )
+        );
+        lockBox.settleFill(keccak256("fill"), alice, bob, 4 ether, 4_000 * 10**6);
+
+        assertEq(lockBox.getLockedBalance(alice, address(fakeETH)), 10 ether);
+        assertEq(lockBox.getWithdrawable(bob, address(fakeETH)), 0);
+        assertFalse(lockBox.processedOutcomes(keccak256("fill")));
+    }
+
+    function testEmitsReleaseEvents() public {
+        _lock(alice, address(fakeETH), 10 ether);
+        _lock(bob, address(fakeUSD), 5_000 * 10**6);
+
+        vm.startPrank(relayer);
+        vm.expectEmit(true, true, true, true);
+        emit LockBox.FillSettled(keccak256("fill"), alice, bob, 4 ether, 4_000 * 10**6);
+        lockBox.settleFill(keccak256("fill"), alice, bob, 4 ether, 4_000 * 10**6);
+
+        vm.expectEmit(true, true, true, true);
+        emit LockBox.LockRefunded(keccak256("unsold"), alice, address(fakeETH), 6 ether);
+        lockBox.refund(keccak256("unsold"), alice, address(fakeETH), 6 ether);
+        vm.stopPrank();
+
+        vm.prank(bob);
+        vm.expectEmit(true, true, false, true);
+        emit LockBox.WithdrawWinnings(bob, address(fakeETH), 4 ether);
+        lockBox.withdrawWinnings(address(fakeETH));
     }
 
     function testStorageSlotCalculation() public {

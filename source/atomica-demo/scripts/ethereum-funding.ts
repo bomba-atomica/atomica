@@ -76,7 +76,10 @@ export async function fundEthereumAccount(
   const provider = new ethers.JsonRpcProvider(
     host.includes("://") ? host : `http://${host}`,
   );
-  const funder = new ethers.Wallet(ETHEREUM_DEPLOYER_PRIVATE_KEY, provider);
+  // NonceManager: the two mints are sent back to back.
+  const funder = new ethers.NonceManager(
+    new ethers.Wallet(ETHEREUM_DEPLOYER_PRIVATE_KEY, provider),
+  );
 
   console.log(
     `[eth-fund] Funder: ${ETHEREUM_DEPLOYER_ADDRESS}, Recipient: ${recipientAddress}`,

@@ -15,12 +15,6 @@ export function SellFlow() {
   const { ethBalances } = useBalances();
   const flow = useSellFlow(account);
 
-  const showCancelButton =
-    flow.unlockTime !== undefined &&
-    flow.unlockTime > 0 &&
-    flow.step !== "connect" &&
-    flow.step !== "monitoring";
-
   return (
     <div className="bg-zinc-900 p-5 rounded-lg border border-zinc-800 flex flex-col gap-4">
       {/* Header */}
@@ -90,18 +84,9 @@ export function SellFlow() {
         />
       )}
 
-      {/* Cancel & Unlock button — shown at steps 2-7 when unlockTime is set */}
-      {showCancelButton && flow.step !== "monitoring" && (
-        <div className="border-t border-zinc-800 pt-3">
-          <button
-            onClick={flow.cancelAndUnlock}
-            disabled={flow.loading}
-            className="w-full py-1.5 rounded text-xs font-semibold border border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300 transition-colors"
-          >
-            Cancel & Unlock Tokens
-          </button>
-        </div>
-      )}
+      {/* No pre-auction cancel: LockBox releases a lock only on an Aptos
+          auction outcome, so a lock that never reached an auction stays
+          frozen until a recovery path is decided (architecture §3.1). */}
     </div>
   );
 }

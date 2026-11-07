@@ -224,6 +224,7 @@ This is the canonical definition. §3 references it; §3 does not redefine it.
 struct AuctionSettled has drop, store {
     window_id:      u64,
     pair:           Pair,
+    pair_bcs:       vector<u8>, // window key pair bytes passed to create_auction
     clearing_price: u64,        // USD per base token, no decimal shift
     total_filled:   u256,       // wei of base token transferred to winners
     winner_count:   u64,
@@ -238,32 +239,76 @@ struct AuctionSettled has drop, store {
 ### 3.1 End-to-end flow
 
 ```
-Aptos chain                          Off-chain bridge             Ethereum chain
-──────────────                       ─────────────                ──────────────
-AuctionSettled event emitted
+Aptos chain                          Off-chain relayer             Ethereum chain
+──────────────                       ─────────────────             ──────────────
+AuctionSettled / AuctionRefunded /
+BidUnopened event emitted
         │
         ▼
-Event indexed by relayer service ───► relayer reads event fields
-                                      signs with trusted EOA key
+Event scanned by relayer ──────────► relayer reads lock ids
+                                     (auction::get_window_lock_ids)
+                                     and lock receipts
+                                     (lock_receipt::get_receipt)
                                              │
                                              ▼
-                                     BLSVerifierTestnet.sol
-                                     (trusted-relayer call)
-                                             │
-                                             │ emit SettlementAuthorized(windowId, pair,
-                                             │        clearingPrice, totalFilled, winners[])
-                                             ▼
-                                     Settlement.sol
-                                     transferFrom(winner, amount × clearingPrice, FakeUSD)
-                                     transfer(winner, their_fill, FakeETH)
+                                     LockBox.sol (settlementAuthority call)
+                                     settleFill(seller → winner FakeETH,
+                                                winner → seller FakeUSD)
+                                     refund(owner, token, amount)
                                              │
                                              ▼
-                                     WithdrawWinnings emitted
+                                     LockBox.withdrawWinnings(token)
+                                     (each user pulls credited tokens)
 ```
 
-`AuctionSettled` (defined in §2.9) is the sole on-chain signal read by the
-relayer. The relayer reconstructs winner addresses from the Aptos event data
-and posts them to Ethereum.
+LockBox releases a lock only on an Aptos outcome. Time alone never releases
+it. The relayer consumes three module events:
+
+| Aptos event | LockBox calls |
+| --- | --- |
+| `AuctionSettled` (§2.9) | Only for a window of the served `pair_bcs` that `auction::is_settled` confirms. One `settleFill` per (seller lock, winner) chunk, at `fill × clearing_price`. Then `refund` of a winner's unused collateral, each seller's unsold supply, and each losing bid's collateral whose receipt Aptos released. |
+| `AuctionRefunded` | `refund` of every seller and collateral lock of the window whose receipt Aptos released. Only for a window of the served `pair_bcs`. |
+| `BidUnopened` | `refund` of the unopened bid's collateral. No penalty in v0.1: the griefing-deposit destination is still undecided. |
+
+Payouts go to the Ethereum owner of each lock receipt (the address the
+storage proof names), not to the bidder's Aptos signer address. Every release
+carries an outcome id derived from the lock id. LockBox rejects a reused id,
+so a relayer retry never pays twice. The relayer signs through an ethers
+`NonceManager`.
+
+Windows are keyed by `(window_id, pair_bcs)`, where `pair_bcs` is the opaque
+byte string the creator passed (the sell flow passes empty bytes). The relayer
+serves one `pair_bcs` (`PAIR_BCS`, default empty). `AuctionSettled` and
+`AuctionRefunded` carry the window's `pair_bcs`, so the relayer checks it
+before it reads any window.
+
+The relayer handles each outcome on its own. A permanent failure (a LockBox
+revert such as `InsufficientLocked`, a Move abort, or an outcome that does
+not fit the locks) becomes a dead letter: it is written to
+`SETTLEMENT_DEAD_LETTER_FILE` with an alert, the other releases of the same
+outcome still go out, and the cursor moves on. Only transient errors (RPC
+down, transaction wait timeout) keep the cursor at that outcome for a retry.
+A dead letter needs an operator; the relayer script header gives the replay
+steps. A window whose `pair_bcs` the relayer does not serve is a dead letter
+too, not a silent skip, because only this relayer can release its locks.
+
+Receipt amounts are the owner's total `lockedBalances` at the proof block,
+not one lock, so two receipts of one owner can count the same tokens twice.
+The relayer therefore caps each receipt at the `TokensLocked` amounts of
+that owner and token in the proof block (locks are proven at their own
+block). No two receipts can then release the same tokens, so a refund of
+one receipt cannot drain the balance that backs another receipt's fill.
+LockBox still caps every release at the real locked balance. Issue 171
+makes receipt amounts per lock on Aptos.
+
+**Abandoned locks are frozen.** A lock that never reaches an auction has no
+Aptos outcome, so nothing releases it. The sell flow no longer offers a
+pre-auction "Cancel & Unlock" button. The recovery path (a relayer refund of
+a lock id never claimed on Aptos, or an outcome-gated timeout) is an open
+owner decision recorded on issue 170.
+
+In v0.1 the `settlementAuthority` is the trusted relayer EOA. That address is
+the verification seam: §3.3 and §3.4 replace it with a verifier contract.
 
 ### 3.2 BLSVerifierTestnet.sol trusted-relayer interface
 
@@ -340,11 +385,13 @@ Everything downstream of `SettlementAuthorized` remains identical.
 
 ### 3.5 WithdrawWinnings flow
 
-Winners do not receive assets automatically. After `Settlement.sol` processes
-an authorized settlement, it records entitlements. Winners call:
+Users do not receive assets automatically. When the relayer posts an Aptos
+outcome, `LockBox.sol` (`source/evm-contracts/src/escrow/LockBox.sol`) moves
+the locked amounts into withdrawable balances. Winners, sellers and refunded
+users then call:
 
 ```solidity
-/// Withdraw previously credited winnings.
+/// Withdraw every credited balance of `token`.
 /// @param token  ERC-20 token address (FakeETH or FakeUSD)
 function withdrawWinnings(address token) external;
 
@@ -353,6 +400,14 @@ event WithdrawWinnings(
     address indexed token,
     uint256 amount
 );
+```
+
+The relayer-only calls that credit those balances:
+
+```solidity
+function refund(bytes32 outcomeId, address user, address token, uint256 amount) external;
+function settleFill(bytes32 outcomeId, address seller, address winner,
+                    uint256 baseAmount, uint256 quoteAmount) external;
 ```
 
 This pull pattern prevents gas issues from pushing to many addresses in one

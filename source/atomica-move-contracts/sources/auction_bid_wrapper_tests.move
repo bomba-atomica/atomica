@@ -687,6 +687,17 @@ module atomica::auction_bid_wrapper_tests {
         assert!(lock_receipt::get_receipt_status<Ethereum, FakeETH>(b"eth_lock_seller_32bytes________") == revoked, 5);
     }
 
+    // The relayer reads the seller and collateral lock ids of a refunded window.
+    #[test(atomica = @atomica)]
+    fun window_lock_ids_name_seller_and_collateral_locks(atomica: &signer) {
+        setup_funded_window(atomica);
+        expire_epoch_ended();
+        assert_refunded(1);
+        let (seller_ids, collateral_ids) = auction::get_window_lock_ids(AUCTION_ID, pair());
+        assert!(seller_ids == vector[b"eth_lock_seller_32bytes________"], 10);
+        assert!(collateral_ids == vector[b"usd_lock_golden_bidder_32bytes___"], 11);
+    }
+
     #[test(atomica = @atomica)]
     fun refund_after_epoch_ended(atomica: &signer) {
         setup_funded_window(atomica);

@@ -26,7 +26,7 @@ import type {
 } from "../src/lib/ethereum/types.js";
 
 async function deployContract<T>(
-  signer: ethers.Wallet,
+  signer: ethers.Signer,
   contractName: string,
   abi: ethers.InterfaceAbi,
   bytecode: string,
@@ -73,7 +73,10 @@ async function main() {
     );
 
     const provider = new ethers.JsonRpcProvider(testnet.getExecutionRpcUrl());
-    const deployer = new ethers.Wallet(deployerAccount.privateKey, provider);
+    // NonceManager: back-to-back deploys and mints must not reuse a nonce.
+    const deployer = new ethers.NonceManager(
+      new ethers.Wallet(deployerAccount.privateKey, provider),
+    );
 
     const balance = await provider.getBalance(deployerAccount.address);
     console.log(`   Balance: ${ethers.formatEther(balance)} ETH`);
@@ -121,7 +124,8 @@ async function main() {
       "LockBox",
       lockBoxArtifact.abi,
       lockBoxArtifact.bytecode.object,
-      [fakeETHAddress, fakeUSDAddress],
+      // settlementAuthority: the deployer relays Aptos outcomes here.
+      [fakeETHAddress, fakeUSDAddress, deployerAccount.address],
     );
 
     const lockBoxAddress = await lockBox.getAddress();

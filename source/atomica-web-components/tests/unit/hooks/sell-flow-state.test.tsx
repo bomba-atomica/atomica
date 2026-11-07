@@ -446,7 +446,7 @@ describe("useSellFlow state machine", () => {
       expect(result.current.error).toBe("E_IBE_NOT_READY");
     });
 
-    it("cancelAndUnlock: withdraws the locked amount and resets the flow to lock", async () => {
+    it("cancelAndUnlock: withdraws the credited FakeETH and resets the flow to lock", async () => {
       vi.mocked(withdrawFakeEth).mockResolvedValue(undefined as never);
       persist({
         step: "creating-auction",
@@ -461,10 +461,7 @@ describe("useSellFlow state machine", () => {
         await result.current.cancelAndUnlock();
       });
 
-      expect(withdrawFakeEth).toHaveBeenCalledWith(
-        expect.anything(),
-        10n ** 18n,
-      );
+      expect(withdrawFakeEth).toHaveBeenCalledWith(expect.anything());
       expect(result.current.step).toBe("lock");
       expect(result.current.lockId).toBeUndefined();
       expect(result.current.amount).toBeUndefined();

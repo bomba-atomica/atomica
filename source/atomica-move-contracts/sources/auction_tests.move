@@ -432,6 +432,11 @@ module atomica::auction_tests {
         let results = auction::test_get_bid_results(WINDOW_ID, pair_bcs);
         assert!(vector::length(&results) == 4, 2);
 
+        // The relayer reads the same results and their collateral lock ids through views.
+        assert!(auction::get_bid_results(WINDOW_ID, pair_bcs) == results, 50);
+        let (_, collateral) = auction::get_window_lock_ids(WINDOW_ID, pair_bcs);
+        assert!(collateral == vector[b"lock_dave", b"lock_carol", b"lock_alice", b"lock_bob"], 51);
+
         // Index 0 = Dave: loser
         let (dave_win, dave_fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 0));
         assert!(!dave_win, 3);
