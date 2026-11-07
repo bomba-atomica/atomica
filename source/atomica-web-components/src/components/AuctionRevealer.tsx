@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { isRevealed, submitCleartextAndClear } from "@atomica/sdk/aptos";
+import {
+  decryptWindowBids,
+  getWindowTimelockId,
+  isRevealed,
+  submitCleartextAndClear,
+  type OpenedBid,
+} from "@atomica/sdk/aptos";
 import { useWallet } from "../context/WalletContext";
 
 /**
@@ -7,19 +13,17 @@ import { useWallet } from "../context/WalletContext";
  * cleartext submission for a sealed-bid auction window (v0 Beta, Phase 3e).
  *
  * Flow:
- *   1. Polls `timelock_config::is_revealed(timelockId)` on-chain every
- *      `POLL_INTERVAL_MS` milliseconds.
- *   2. On `true`: notifies the operator, who can trigger cleartext submission.
- *   3. Calls `auction::submit_cleartext_and_clear` with the decrypted bid
- *      prices and salts (entered manually in this scaffold; V2 off-chain
- *      decryption is an open item). The contract checks every opening against
- *      the commitment made at submission.
+ *   1. Reads the window's timelock id (`auction::get_window_status`) and polls
+ *      `timelock::is_revealed(timelockId)` every `POLL_INTERVAL_MS` milliseconds.
+ *   2. On `true`: "Decrypt Bids" reads the revealed key with
+ *      `timelock::get_decryption_key`, decrypts every bid ciphertext off chain
+ *      with the V2 decryptor (`decryptWindowBids`) and fills in the prices and
+ *      salts. A bid that does not decrypt, or whose plaintext does not match its
+ *      commitment, is skipped (empty salt): only its bidder can open it.
+ *   3. Calls `auction::submit_cleartext_and_clear` with the prices and salts.
+ *      The contract checks every opening against the commitment made at
+ *      submission.
  *   4. Displays reveal status and submitted cleartext count.
- *
- * Phase 3e scope note: this component wires the identity + MPK fetch plumbing
- * and the `submit_cleartext_and_clear` call site. Full off-chain IBE decryption
- * (fetching the DK, calling `decrypt()`) is deferred to v1 (out of scope for
- * this issue per the issue body's "Out" section).
  *
  * Requires {@link WalletContext} to be mounted above this component.
  *
@@ -28,6 +32,18 @@ import { useWallet } from "../context/WalletContext";
  */
 
 const POLL_INTERVAL_MS = 5_000;
+
+function parsePairBcs(hex: string): Uint8Array {
+  return new Uint8Array(
+    (hex.replace(/^0x/, "").match(/.{1,2}/g) ?? []).map((b) => parseInt(b, 16)),
+  );
+}
+
+function toHex(bytes: Uint8Array): string {
+  return (
+    "0x" + Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")
+  );
+}
 
 export function AuctionRevealer() {
   const { account } = useWallet();
@@ -43,6 +59,11 @@ export function AuctionRevealer() {
   const [revealed, setRevealed] = useState<boolean | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
 
+  // ── Decrypt state ──────────────────────────────────────────────────────────
+  const [decrypting, setDecrypting] = useState(false);
+  const [decrypted, setDecrypted] = useState<OpenedBid[] | null>(null);
+  const [decryptError, setDecryptError] = useState<string | null>(null);
+
   // ── Submit state ───────────────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<string | null>(null);
@@ -53,14 +74,17 @@ export function AuctionRevealer() {
   // ── Poll logic ─────────────────────────────────────────────────────────────
   const checkRevealed = useCallback(async () => {
     try {
-      const timelockId = BigInt(windowId);
+      const timelockId = await getWindowTimelockId(
+        BigInt(windowId),
+        parsePairBcs(pairBcsHex),
+      );
       const result = await isRevealed(timelockId);
       setRevealed(result);
       setPollError(null);
     } catch (err) {
       setPollError(err instanceof Error ? err.message : "Poll failed");
     }
-  }, [windowId]);
+  }, [windowId, pairBcsHex]);
 
   const startPolling = useCallback(() => {
     if (polling) return;
@@ -96,6 +120,33 @@ export function AuctionRevealer() {
     };
   }, []);
 
+  // ── Decrypt handler ────────────────────────────────────────────────────────
+  const handleDecrypt = async () => {
+    setDecrypting(true);
+    setDecryptError(null);
+    try {
+      const bids = await decryptWindowBids(
+        BigInt(windowId),
+        parsePairBcs(pairBcsHex),
+      );
+      setDecrypted(bids);
+      // Index-aligned openings. Skip (empty salt) a bid already opened or one
+      // whose decryption does not match its commitment.
+      const usable = (b: OpenedBid) =>
+        b.matchesCommitment && !b.alreadyOpened && b.salt !== undefined;
+      setCleartextsRaw(
+        bids.map((b) => (usable(b) ? b.price!.toString() : "0")).join(", "),
+      );
+      setSaltsRaw(
+        bids.map((b) => (usable(b) ? toHex(b.salt!) : "")).join(", "),
+      );
+    } catch (err) {
+      setDecryptError(err instanceof Error ? err.message : "Decrypt failed");
+    } finally {
+      setDecrypting(false);
+    }
+  };
+
   // ── Submit handler ─────────────────────────────────────────────────────────
   const handleSubmitCleartexts = async () => {
     if (!account) return;
@@ -103,13 +154,7 @@ export function AuctionRevealer() {
     setSubmitStatus("Submitting cleartexts...");
     try {
       const windowIdBn = BigInt(windowId);
-      const pairBcs = pairBcsHex
-        ? new Uint8Array(
-            (pairBcsHex.replace(/^0x/, "").match(/.{1,2}/g) ?? []).map((b) =>
-              parseInt(b, 16),
-            ),
-          )
-        : new Uint8Array(0);
+      const pairBcs = parsePairBcs(pairBcsHex);
 
       // Parse comma-separated cleartext bid prices (u64 values)
       const cleartexts: bigint[] = cleartextsRaw
@@ -261,10 +306,52 @@ export function AuctionRevealer() {
             <p className="text-xs text-zinc-500">
               Decrypt the bids off chain with the revealed key. Each bid
               plaintext is price (8 bytes, little-endian) then a 32-byte salt.
-              Enter the prices and salts in bid-submission order. The contract
-              checks each opening against the bid's commitment, so a wrong value
-              aborts the call.
+              The prices and salts below are in bid-submission order. The
+              contract checks each opening against the bid's commitment, so a
+              wrong value aborts the call.
             </p>
+
+            <button
+              data-testid="decrypt-bids-button"
+              onClick={handleDecrypt}
+              disabled={decrypting}
+              className={`w-full py-2 rounded font-bold transition-colors text-sm ${
+                decrypting
+                  ? "bg-zinc-800 cursor-not-allowed text-zinc-600 border border-zinc-700"
+                  : "bg-zinc-700 hover:bg-zinc-600 text-zinc-200"
+              }`}
+            >
+              {decrypting ? "Decrypting..." : "Decrypt Bids with Revealed Key"}
+            </button>
+
+            {decryptError && (
+              <div
+                data-testid="decrypt-error"
+                className="text-sm font-mono text-red-400 p-2 bg-zinc-950 rounded border border-red-900"
+              >
+                Decrypt error: {decryptError}
+              </div>
+            )}
+
+            {decrypted && (
+              <ul
+                data-testid="decrypted-bids"
+                className="text-xs font-mono text-zinc-400 space-y-1"
+              >
+                {decrypted.length === 0 && <li>No bids in this window.</li>}
+                {decrypted.map((b) => (
+                  <li key={b.index} data-testid="decrypted-bid">
+                    #{b.index} {b.bidder.slice(0, 10)}…{" "}
+                    {b.price !== undefined ? `price ${b.price}` : "unreadable"}
+                    {b.alreadyOpened
+                      ? " (already opened)"
+                      : b.matchesCommitment
+                        ? " (matches commitment)"
+                        : ` (cannot open: ${b.error ?? "commitment mismatch"})`}
+                  </li>
+                ))}
+              </ul>
+            )}
             <div>
               <label className="block text-zinc-500 text-sm mb-1">
                 Cleartext Bid Prices (comma-separated)

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { ethers } from "ethers";
-import { submitBid } from "@atomica/sdk/aptos";
+import { sealBid, submitBid } from "@atomica/sdk/aptos";
 import { approveFakeUsd, lockFakeUsd } from "@atomica/sdk/ethereum";
+import { getDerivedAddress } from "@atomica/sdk";
 import { useWallet } from "../context/WalletContext";
 import { saveBidPrice } from "../storage/bidStorage";
 
@@ -11,11 +12,11 @@ import { saveBidPrice } from "../storage/bidStorage";
  * V2 bid wrapper: `auction::submit_bid` takes a V2 bid ciphertext
  * `BCS(vk, U, nonce, C, sig)` and a 32-byte price commitment. The contract builds
  * the associated data on chain and aborts unless `ibe::verify_bid_ct` accepts the
- * ciphertext. The TypeScript client has no V2 encryptor yet (open item in
- * `atomica/docs/decisions/auction-v2-bid-wrapper.md`). The operator pastes the
- * ciphertext and the commitment produced by the V2 encryption tool.
- * `computeBidCommitment`, `buildBidAd` and `encodeBidPlaintext` in
- * `@atomica/sdk/ibe` compute the commitment inputs.
+ * ciphertext. The client encrypts the bid itself with `sealBid` from
+ * `@atomica/sdk/aptos`: it reads `timelock::get_mpk`, the window's
+ * `timelock::get_timelock_identity` and `auction::bid_associated_data` for the
+ * sender's derived Aptos address, encrypts `price_le8 || salt32` and commits to
+ * the price.
  *
  * Phase 3b adds a two-step flow that mirrors the seller's Step2Lock:
  *
@@ -62,8 +63,6 @@ export function AuctionBidder() {
 
   // ── Step 2: Submit encrypted bid ──────────────────────────────────────────
   const [windowId, setWindowId] = useState("0");
-  const [ciphertextHex, setCiphertextHex] = useState("");
-  const [commitmentHex, setCommitmentHex] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [pairBcsHex, setPairBcsHex] = useState("");
   const [collateralLockIdHex, setCollateralLockIdHex] = useState("");
@@ -119,19 +118,9 @@ export function AuctionBidder() {
     try {
       const windowIdBn = BigInt(windowId);
 
-      const toBytes = (hex: string) =>
-        new Uint8Array(
-          (hex.replace(/^0x/, "").match(/.{1,2}/g) ?? []).map((b) =>
-            parseInt(b, 16),
-          ),
-        );
-      const ciphertext = toBytes(ciphertextHex);
-      const commitment = toBytes(commitmentHex);
-      if (ciphertext.length === 0) {
-        throw new Error("Enter the V2 bid ciphertext (hex).");
-      }
-      if (commitment.length !== 32) {
-        throw new Error("The commitment must be 32 bytes (64 hex characters).");
+      const price = BigInt(bidAmount);
+      if (price <= 0n) {
+        throw new Error("The bid price must be a positive whole number.");
       }
 
       // Prepare sealed-bid arguments
@@ -151,6 +140,12 @@ export function AuctionBidder() {
           )
         : new Uint8Array(32); // placeholder: 32 zero bytes
 
+      // Encrypt the bid to the window's timelock. The ciphertext is bound to
+      // the sender, so seal it for this wallet's derived Aptos address.
+      setStatus("Encrypting bid to the timelock key...");
+      const bidder = (await getDerivedAddress(account)).toString();
+      const sealed = await sealBid(windowIdBn, pairBcs, bidder, price);
+
       // Submit
       setStatus("Please sign the transaction...");
 
@@ -158,15 +153,15 @@ export function AuctionBidder() {
         account,
         windowIdBn,
         pairBcs,
-        ciphertext,
-        commitment,
+        sealed.ciphertext,
+        sealed.commitment,
         collateralLockId,
         BigInt(quantity),
       );
 
       // Persist bid price in localStorage for post-settlement rebate computation
       // Key: windowId (string) used as auction identifier in this v0 shape
-      saveBidPrice(windowId, account, BigInt(bidAmount));
+      saveBidPrice(windowId, account, price);
 
       const hash = (pendingTx as { hash?: string }).hash || "submitted";
       setStatus(`Bid Submitted! Tx: ${hash}`);
@@ -279,32 +274,6 @@ export function AuctionBidder() {
           </div>
           <div>
             <label className="block text-zinc-500 text-sm mb-1">
-              V2 bid ciphertext (0x hex)
-            </label>
-            <input
-              data-testid="bid-ciphertext-input"
-              type="text"
-              value={ciphertextHex}
-              onChange={(e) => setCiphertextHex(e.target.value)}
-              className="w-full bg-zinc-800 text-zinc-200 rounded p-2 text-xs font-mono border border-zinc-700 focus:outline-none focus:border-zinc-500"
-              placeholder="0x... BCS(vk, U, nonce, C, sig)"
-            />
-          </div>
-          <div>
-            <label className="block text-zinc-500 text-sm mb-1">
-              Price commitment (0x hex, 32 bytes)
-            </label>
-            <input
-              data-testid="bid-commitment-input"
-              type="text"
-              value={commitmentHex}
-              onChange={(e) => setCommitmentHex(e.target.value)}
-              className="w-full bg-zinc-800 text-zinc-200 rounded p-2 text-xs font-mono border border-zinc-700 focus:outline-none focus:border-zinc-500"
-              placeholder="0x..."
-            />
-          </div>
-          <div>
-            <label className="block text-zinc-500 text-sm mb-1">
               Quantity (wei of FakeETH)
             </label>
             <input
@@ -342,7 +311,7 @@ export function AuctionBidder() {
           </div>
           <div>
             <label className="block text-zinc-500 text-sm mb-1">
-              Bid Amount (USD)
+              Bid Price (USD, encrypted until the reveal)
             </label>
             <input
               data-testid="bid-amount-input"
