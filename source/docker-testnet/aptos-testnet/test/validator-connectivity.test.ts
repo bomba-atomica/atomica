@@ -20,6 +20,22 @@ describe.sequential("Validator Connectivity", () => {
         expect(testnet.getNumValidators()).toBe(numValidators);
     });
 
+    test("should have one consensus public key per validator in the on-chain set", async () => {
+        const testnet = getTestnet();
+        // Every validator reads the same committed set, so each must report the
+        // full count. A genesis that left a validator out of the set fails here.
+        for (let i = 0; i < numValidators; i++) {
+            const keys = await testnet.getActiveValidatorPublicKeys(i);
+            console.log(`Validator ${i} sees ${keys.length} active consensus keys`);
+            expect(keys).toHaveLength(numValidators);
+            expect(new Set(keys).size).toBe(numValidators);
+            for (const key of keys) {
+                // BLS12-381 consensus keys are 48 bytes.
+                expect(key).toMatch(/^0x[0-9a-f]{96}$/);
+            }
+        }
+    });
+
     test("should check validator connectivity and LedgerInfo", async () => {
         const testnet = getTestnet();
         expect(testnet).toBeDefined();

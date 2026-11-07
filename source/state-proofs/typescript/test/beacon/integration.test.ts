@@ -13,12 +13,14 @@ describe("Light Client Integration", () => {
     // Local beacon API endpoint
     const BEACON_API_URL = "http://localhost:5052";
 
-    // Setup testnet if possible
     beforeAll(async () => {
         try {
             await startTestnet();
-        } catch (_e) {
-            console.log("Could not start testnet, tests may skip if node is not running");
+        } catch (e) {
+            // Only the docker-only test below needs the chain. On docker a failed
+            // start must fail the suite, never turn into a silent pass.
+            if (!ON_ANVIL) throw e;
+            console.log("Could not start anvil testnet; the beacon test is skipped on anvil");
         }
     }, 120000); // Increased timeout for testnet startup (2 minutes)
 
@@ -44,77 +46,57 @@ describe("Light Client Integration", () => {
         test.skipIf(ON_ANVIL)(
             "should fetch and process updates from local beacon node [docker only]",
             async () => {
-                // Check if node is reachable
+                // The node must answer. An unreachable node fails the test.
+                const health = await fetch(`${BEACON_API_URL}/eth/v1/node/health`);
+                expect(health.status).toBeLessThan(500);
+
+                console.log("Waiting for block production (2 blocks)...");
+                await waitForBlocks(2);
+
+                // A fresh chain answers 404 until the light client server has a sync
+                // aggregate. Retry 404s until the deadline, then fail.
+                console.log(`Fetching optimistic update from ${BEACON_API_URL}...`);
+                const deadline = Date.now() + 120_000;
+                let optimisticUpdate;
+                for (;;) {
+                    try {
+                        optimisticUpdate = await fetchLightClientOptimisticUpdate(BEACON_API_URL);
+                        break;
+                    } catch (error) {
+                        const is404 = error instanceof Error && error.message.includes("404");
+                        if (!is404 || Date.now() >= deadline) throw error;
+                        await new Promise((r) => setTimeout(r, 2000));
+                    }
+                }
+                expect(optimisticUpdate).toBeDefined();
+                expect(optimisticUpdate.signatureSlot).toBeGreaterThan(0);
+
+                // Finality needs two justified epochs, which a fresh testnet may not
+                // have yet. This is the one fetch allowed to be unavailable.
                 try {
-                    await fetch(`${BEACON_API_URL}/eth/v1/node/health`);
+                    const finalityUpdate = await fetchLightClientFinalityUpdate(BEACON_API_URL);
+                    expect(finalityUpdate).toBeDefined();
                 } catch (_e) {
                     console.log(
-                        `Skipping Beacon API test: Beacon node not reachable at ${BEACON_API_URL}`,
+                        "Finality update not available yet (expected for fresh local testnet)",
                     );
-                    return;
                 }
 
-                // Wait for some blocks to be produced so light client data is available
-                try {
-                    console.log("Waiting for block production (2 blocks)...");
-                    await waitForBlocks(2);
-                } catch (_e) {
-                    console.log("Warning: Waiting for blocks timed out or failed");
+                const currentPeriod = Math.floor(
+                    optimisticUpdate.attestedHeader.beacon.slot / (32 * 256),
+                );
+                const targetPeriod = currentPeriod > 0 ? currentPeriod - 1 : currentPeriod;
+                const updates = await fetchLightClientUpdates(BEACON_API_URL, targetPeriod, 1);
+                expect(Array.isArray(updates)).toBe(true);
+                if (updates.length > 0) {
+                    const update = updates[0];
+                    expect(update.attestedHeader).toBeDefined();
+                    expect(update.syncAggregate).toBeDefined();
                 }
 
-                try {
-                    // 1. Fetch Optimistic Update
-                    console.log(`Fetching optimistic update from ${BEACON_API_URL}...`);
-                    const optimisticUpdate = await fetchLightClientOptimisticUpdate(BEACON_API_URL);
-                    expect(optimisticUpdate).toBeDefined();
-                    expect(optimisticUpdate.signatureSlot).toBeGreaterThan(0);
-
-                    // 2. Fetch Finality Update (might fail on fresh testnet, so we wrap it)
-                    try {
-                        const finalityUpdate = await fetchLightClientFinalityUpdate(BEACON_API_URL);
-                        expect(finalityUpdate).toBeDefined();
-                    } catch (_e) {
-                        console.log(
-                            "Finality update not available yet (expected for fresh local testnet)",
-                        );
-                    }
-
-                    // 3. Test Fetch Updates
-                    const currentPeriod = Math.floor(
-                        optimisticUpdate.attestedHeader.beacon.slot / (32 * 256),
-                    );
-
-                    const targetPeriod = currentPeriod > 0 ? currentPeriod - 1 : currentPeriod;
-
-                    const updates = await fetchLightClientUpdates(BEACON_API_URL, targetPeriod, 1);
-
-                    expect(Array.isArray(updates)).toBe(true);
-
-                    if (updates.length > 0) {
-                        const update = updates[0];
-                        expect(update.attestedHeader).toBeDefined();
-                        expect(update.syncAggregate).toBeDefined();
-                    }
-
-                    console.log("Local Beacon API tests passed (connectivity and format check)");
-                } catch (error) {
-                    // Handle 404 specifically for fresh testnets
-                    if (error instanceof Error && error.message.includes("404")) {
-                        console.log(
-                            "Light client data not available yet (404). This is normal for a freshly started local testnet.",
-                        );
-                        return;
-                    }
-
-                    // If we reach here, something actually broke in the fetch logic despite the node being up
-                    console.error(
-                        "Beacon API test failed:",
-                        error instanceof Error ? error.message : error,
-                    );
-                    throw error; // Fail the test
-                }
+                console.log("Local Beacon API tests passed (connectivity and format check)");
             },
-            60000,
-        ); // Increased timeout for fetch operations
+            240000,
+        ); // Covers block wait plus the light client retry window
     });
 });

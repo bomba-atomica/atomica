@@ -63,14 +63,14 @@ services:
       - 6180
       - 6181
     healthcheck:
-      # The API answers 503 until the internal indexer has indexed a block, and the
-      # first block needs the next validator, which waits on this check. So "healthy"
-      # here means the API process answers at all; tests wait for blocks themselves.
-      test: ["CMD-SHELL", "code=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/v1/-/healthy); [ \"$$code\" = 200 ] || [ \"$$code\" = 503 ]"]
+      # Healthy means the node committed a block in the last 60 seconds. The
+      # first block needs a quorum of peers, so peers start on service_started
+      # (not service_healthy) and start_period covers genesis and first blocks.
+      test: ["CMD-SHELL", "curl -sf 'http://localhost:8080/v1/-/healthy?duration_secs=60' >/dev/null"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 6
+      start_period: 180s
     environment:
       - VALIDATOR_INDEX=0
       - NUM_VALIDATORS=${NUM_VALIDATORS:-2}
@@ -86,7 +86,7 @@ services:
     user: root
     depends_on:
       validator-0:
-        condition: service_healthy
+        condition: service_started
     networks:
       atomica-testnet:
         ipv4_address: 172.19.0.11
@@ -137,7 +137,7 @@ services:
     user: root
     depends_on:
       validator-0:
-        condition: service_healthy
+        condition: service_started
     networks:
       atomica-testnet:
         ipv4_address: 172.19.0.12
@@ -188,7 +188,7 @@ services:
     user: root
     depends_on:
       validator-0:
-        condition: service_healthy
+        condition: service_started
     networks:
       atomica-testnet:
         ipv4_address: 172.19.0.13

@@ -172,7 +172,7 @@ export class DockerTestnet {
             throw error;
         }
 
-        await waitForHealthy(numValidators, 120);
+        await waitForHealthy(numValidators, 180);
 
         const validatorUrls: string[] = [];
         for (let i = 0; i < numValidators; i++) {
@@ -517,6 +517,30 @@ export class DockerTestnet {
         return (await response.json()) as LedgerInfo;
     }
 
+    /** Block hash that validator `validatorIndex` reports at `height`. */
+    async getBlockHash(validatorIndex: number, height: number): Promise<string> {
+        const url = `${this.validatorApiUrl(validatorIndex)}/v1/blocks/by_height/${height}`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to get block ${height}: ${response.status}`);
+        }
+        const block = (await response.json()) as { block_hash: string };
+        return block.block_hash;
+    }
+
+    /** Consensus public keys of the on-chain active validator set (0x1::stake::ValidatorSet). */
+    async getActiveValidatorPublicKeys(validatorIndex: number = 0): Promise<string[]> {
+        const url = `${this.validatorApiUrl(validatorIndex)}/v1/accounts/0x1/resource/0x1::stake::ValidatorSet`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to get validator set: ${response.status}`);
+        }
+        const resource = (await response.json()) as {
+            data: { active_validators: { config: { consensus_pubkey: string } }[] };
+        };
+        return resource.data.active_validators.map((v) => v.config.consensus_pubkey);
+    }
+
     async getBlockHeight(validatorIndex: number = 0): Promise<number> {
         const info = await this.getLedgerInfo(validatorIndex);
         return parseInt(info.block_height, 10);
@@ -853,47 +877,57 @@ export class DockerTestnet {
     }
 }
 
+/**
+ * Wait until every validator answers its REST API and its block height rises
+ * between two consecutive samples. An answering API alone does not prove the
+ * node commits blocks: a halted or permanently bootstrapping node still answers.
+ */
 async function waitForHealthy(numValidators: number, timeoutSecs: number): Promise<void> {
     const deadline = Date.now() + timeoutSecs * 1000;
-    console.log(`  Waiting for ${numValidators} validators to become healthy...`);
+    console.log(`  Waiting for ${numValidators} validators to commit blocks...`);
+    const previous: (number | undefined)[] = new Array(numValidators).fill(undefined);
+    let statuses: string[] = [];
 
     while (Date.now() < deadline) {
-        let healthyCount = 0;
-        const statuses: string[] = [];
+        let advancing = 0;
+        statuses = [];
 
         for (let i = 0; i < numValidators; i++) {
             const url = `http://127.0.0.1:${BASE_API_PORT + i}/v1`;
             try {
                 const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
                 if (response.ok) {
-                    healthyCount++;
                     const data = (await response.json()) as LedgerInfo;
-                    statuses.push(`V${i}:epoch${data.epoch},blk${data.block_height}`);
-                    debug(`Validator ${i} healthy`, {
-                        epoch: data.epoch,
-                        block_height: data.block_height,
-                    });
+                    const height = parseInt(data.block_height, 10);
+                    const prev = previous[i];
+                    if (prev !== undefined && height > prev) advancing++;
+                    previous[i] = height;
+                    statuses.push(`V${i}:epoch${data.epoch},blk${prev ?? "?"}->${height}`);
                 } else {
+                    previous[i] = undefined;
                     statuses.push(`V${i}:HTTP${response.status}`);
                 }
             } catch {
+                previous[i] = undefined;
                 statuses.push(`V${i}:ERR`);
             }
         }
 
-        if (healthyCount === numValidators) {
-            console.log(`  ✓ All ${numValidators} validators healthy [${statuses.join(", ")}]`);
-            return;
-        } else {
-            debug(
-                `Health check: ${healthyCount}/${numValidators} healthy [${statuses.join(", ")}]`,
+        if (advancing === numValidators) {
+            console.log(
+                `  ✓ All ${numValidators} validators committing blocks [${statuses.join(", ")}]`,
             );
+            return;
         }
+        debug(`Health check: ${advancing}/${numValidators} advancing [${statuses.join(", ")}]`);
 
         await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
-    throw new Error("Timeout waiting for validators. Check 'docker compose logs' for details.");
+    throw new Error(
+        `Timeout waiting for validators to commit blocks [${statuses.join(", ")}]. ` +
+            "Check 'docker compose logs' for details.",
+    );
 }
 
 export interface ProbeResult {

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { setupLocalnet, getTestnet, teardownLocalnet } from "../src/localnet";
+import { checkValidatorSync } from "../src/sync-check";
 
 describe.sequential("Validator Synchronization", () => {
     let numValidators: number;
@@ -22,37 +23,26 @@ describe.sequential("Validator Synchronization", () => {
         const ledgerInfos = await Promise.all(
             Array.from({ length: numValidators }, (_, i) => testnet.getLedgerInfo(i)),
         );
-
         const epochs = ledgerInfos.map((info) => info.epoch);
-        const uniqueEpochs = new Set(epochs);
         console.log(`Epochs: ${epochs.join(", ")}`);
-        expect(uniqueEpochs.size).toBe(1);
+        expect(new Set(epochs).size).toBe(1);
 
-        const blockHeights = ledgerInfos.map((info) => parseInt(info.block_height));
-        const minHeight = Math.min(...blockHeights);
-        const maxHeight = Math.max(...blockHeights);
-        const heightDiff = maxHeight - minHeight;
+        // Every validator must commit 3 blocks past the highest height seen, and
+        // all must agree on the block hash at that height. A halted validator or a
+        // fork at equal height fails here.
+        const result = await checkValidatorSync(
+            {
+                numValidators,
+                getHeight: (i) => testnet.getBlockHeight(i),
+                getBlockHash: (i, h) => testnet.getBlockHash(i, h),
+            },
+            { margin: 3, timeoutMs: 60_000 },
+        );
 
-        console.log(`Block heights: ${blockHeights.join(", ")} (diff: ${heightDiff})`);
-
-        // Validators are sampled one by one while blocks land several times a
-        // second, so a snapshot gap alone is noisy. Sync means every validator
-        // reaches the highest height seen within a short window.
-        const deadline = Date.now() + 30_000;
-        let laggards: number[] = [];
-        do {
-            const now = await Promise.all(
-                Array.from({ length: numValidators }, (_, i) => testnet.getLedgerInfo(i)),
-            );
-            laggards = now
-                .map((info, i) => (parseInt(info.block_height) >= maxHeight ? -1 : i))
-                .filter((i) => i >= 0);
-            if (laggards.length === 0) break;
-            await new Promise((r) => setTimeout(r, 500));
-        } while (Date.now() < deadline);
-
-        expect(laggards, `validators behind height ${maxHeight}`).toEqual([]);
-
+        console.log(
+            `Start max height ${result.maxHeight} (hash ${result.blockHash}); ` +
+                `final heights: ${result.finalHeights.join(", ")}`,
+        );
         console.log("✓ All validators are synchronized");
-    });
+    }, 120000);
 });
