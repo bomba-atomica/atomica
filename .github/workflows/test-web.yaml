@@ -11,7 +11,8 @@ on:
 
 jobs:
   test-coverage-guard:
-    # Fails when a test file under source/ is run by no CI job.
+    # Fails when a test file under source/ is run by no CI job,
+    # or when git tracks build output under a dist/ directory.
     name: Test Coverage Guard
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -42,6 +43,23 @@ jobs:
           fi
           rm "$probe"
           echo "OK: the guard failed on the unnamed test file"
+
+      - name: Check no dist/ build output is tracked
+        run: bash scripts/check-no-tracked-dist.sh
+
+      - name: Prove the dist guard fails on a tracked dist file
+        run: |
+          probe=source/atomica-sdk/dist/guard-probe.js
+          mkdir -p "$(dirname "$probe")"
+          echo 'export {};' > "$probe"
+          git add -f "$probe"
+          if bash scripts/check-no-tracked-dist.sh; then
+            echo "FAIL: the dist guard passed with a tracked dist file"
+            exit 1
+          fi
+          git rm -q --cached "$probe"
+          rm "$probe"
+          echo "OK: the dist guard failed on the tracked dist file"
 
   unit-tests:
     # No chain, no Docker: runs on every PR, drafts included.
