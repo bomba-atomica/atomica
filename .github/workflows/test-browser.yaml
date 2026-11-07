@@ -110,7 +110,7 @@ jobs:
       - name: Install Aptos CLI
         if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path'
         run: |
-          APTOS_VERSION="binary-e41b69f662"
+          APTOS_VERSION="binary-2c32b09d95"
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
           APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
@@ -251,7 +251,7 @@ jobs:
       - name: Install Aptos CLI
         if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path'
         run: |
-          APTOS_VERSION="binary-e41b69f662"
+          APTOS_VERSION="binary-2c32b09d95"
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
           APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"

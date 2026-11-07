@@ -9,7 +9,38 @@ on:
     paths-ignore: ["**.md", "**.txt"]
   workflow_dispatch:
 
+env:
+  # The atomica-aptos binary release that CI installs. Its commit must equal the
+  # AptosFramework rev in source/atomica-move-contracts/Move.toml (checked below).
+  APTOS_VERSION: binary-2c32b09d95
+
 jobs:
+  framework-pin:
+    name: Check Framework Pin
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CI_CLASS: code-hygiene
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Move.toml rev must be the full SHA of APTOS_VERSION
+        run: |
+          MOVE_TOML=source/atomica-move-contracts/Move.toml
+          REV=$(sed -n 's/^AptosFramework = .*rev = "\([^"]*\)".*/\1/p' "$MOVE_TOML")
+          APTOS_HASH="${APTOS_VERSION#binary-}"
+          echo "Move.toml rev: ${REV:-<none>}"
+          echo "APTOS_VERSION: ${APTOS_VERSION}"
+          if ! [[ "$REV" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error file=${MOVE_TOML}::AptosFramework rev '${REV}' is not a full 40-character commit SHA"
+            exit 1
+          fi
+          if [[ "$REV" != "$APTOS_HASH"* ]]; then
+            echo "::error file=${MOVE_TOML}::AptosFramework rev ${REV} does not match ${APTOS_VERSION}"
+            exit 1
+          fi
+          echo "Move.toml rev matches ${APTOS_VERSION}"
+
   test:
     name: Run Unit Tests
     runs-on: ubuntu-latest
@@ -23,8 +54,7 @@ jobs:
 
       - name: Install Aptos CLI
         run: |
-          # Download aptos binary from atomica-aptos releases
-          APTOS_VERSION="binary-e41b69f662"
+          # Download aptos binary from atomica-aptos releases (APTOS_VERSION is set at workflow level)
           # Extract hash from version tag (format: binary-HASH)
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
@@ -58,8 +88,7 @@ jobs:
 
       - name: Install Aptos CLI
         run: |
-          # Download aptos binary from atomica-aptos releases
-          APTOS_VERSION="binary-e41b69f662"
+          # Download aptos binary from atomica-aptos releases (APTOS_VERSION is set at workflow level)
           # Extract hash from version tag (format: binary-HASH)
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
