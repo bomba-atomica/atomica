@@ -26,6 +26,8 @@ exemptions:
   - reason: >-
       Live-chain browser integration steps (Docker Aptos testnet plus anvil or
       the Docker PoS chain). CI runs only 14-happy-path.test.tsx today.
+      test-browser.yaml runs 01, 02, 07-14 and 16 through its matrix
+      test_files, which scripts/check-test-coverage.js does not expand.
     files:
       - source/atomica-web-components/tests/integration/01-faucet.test.tsx
       - source/atomica-web-components/tests/integration/02-wallet-connect.test.tsx
@@ -43,6 +45,7 @@ exemptions:
       - source/atomica-web-components/tests/integration/12-fee-rebate.test.tsx
       - source/atomica-web-components/tests/integration/13-bid-history.test.tsx
       - source/atomica-web-components/tests/integration/15-pool-events.test.tsx
+      - source/atomica-web-components/tests/integration/16-settle-100-bids.test.tsx
       - source/atomica-web-components/tests/integration/selectors.test.tsx
       - source/atomica-web-components/tests/integration/wallet-mock-smoke.test.tsx
 

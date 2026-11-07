@@ -64,8 +64,10 @@ describe.sequential("TxButton Skip & Submit Mode", () => {
       await getDerivedAddress(TEST_ACCOUNT.toLowerCase())
     ).toString();
 
-    // Fund with 500_000_000 octas (5 APT) to cover max gas reservation
-    // (DEFAULT_MAX_GAS_AMOUNT=2_000_000 * gas_price=100 = 200_000_000 required minimum)
+    // Fund with 500_000_000 octas (5 APT) to cover the max gas reservation
+    // (maxGasAmount * gas_price=100). The SDK sets maxGasAmount from a simulation
+    // plus a margin; the ts-sdk default is 200_000 units. Gas feature version 53
+    // charges 10x the gas of the old schedule.
     await commands.fundAccount(derivedAddr, 500_000_000);
 
     // Wait for funding to be indexed

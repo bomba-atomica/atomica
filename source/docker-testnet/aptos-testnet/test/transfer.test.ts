@@ -84,11 +84,11 @@ describe.sequential("Simple APT Transfer", () => {
         // Alice should have less than initial (due to transfer + gas fees)
         // Gas fees include account creation cost since Bob didn't exist
         // Typical gas for account creation transfer: ~1,000,000 octas on aptos-node
-        // 1.49.6 (gas schedule v49 applies a 10x multiplier to gas and storage fees)
+        // 1.49.6 (gas feature version 53 applies a 10x multiplier to gas and storage fees)
         const gasPaid = 1_000_000_000 - aliceFinalBalance - 100;
 
         expect(aliceFinalBalance).toBeLessThan(1_000_000_000);
-        expect(aliceFinalBalance).toBeGreaterThan(998_000_000); // Allow for gas fees + account creation (v49 schedule)
+        expect(aliceFinalBalance).toBeGreaterThan(998_000_000); // Allow for gas fees + account creation (gas feature version 53)
 
         // Verify the math: initial - transfer - gas = final
         expect(aliceFinalBalance).toBe(1_000_000_000 - 100 - gasPaid);

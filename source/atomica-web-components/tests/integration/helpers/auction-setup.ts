@@ -13,12 +13,14 @@
  *   createLiveWindow()      — Seller lock + timelock + `create_auction` for the
  *                             current window, read back with `get_window_status`
  *   lockBidCollateral()     — FakeUSD collateral receipt for one bid
+ *   lockBidCollaterals()    — many FakeUSD receipts proven at one Ethereum block
  *   submitBidDirect()       — `sealBid` + the current `submit_bid` ABI
  *   waitForReveal(), openWindowBidsDirect(), clearWindowDirect(),
  *   settleAuctionDirect()   — the reveal → open → clear → settle sequence
  *   getAuctionState(), getWindowStatus(), getReceiptStatus() — chain reads
  *
- * Aptos calls here use a native Ed25519 account (no SIWE / MetaMask). In the
+ * Aptos calls here use a native Ed25519 account (no SIWE / MetaMask). Each
+ * call simulates first and signs with the SDK's simulated `maxGasAmount`. In the
  * Demo phase only the `@atomica` operator can claim another address's lock
  * receipt, so the operator creates windows and places bids. UI components in
  * the tests still go through SIWE, so the wallet mock must be set up first.
@@ -42,6 +44,7 @@ import {
   timelockIdFromEvents,
   type OpenedBid,
 } from "@atomica/sdk/aptos";
+import { simulateMaxGasAmount } from "@atomica/sdk";
 import { commands } from "vitest/browser";
 import type { EthLockProofResult as CommandEthLockProofResult } from "@atomica/aptos-docker-testnet/browser-commands";
 import type { IntegrationFixture } from "../fixtures/dual-chain";
@@ -146,26 +149,36 @@ export async function registerLockOnAptos(
   proof: LockedBalanceProof,
   asset: "FakeETH" | "FakeUSD" = "FakeETH",
 ): Promise<void> {
-  const submit = async (data: InputGenerateTransactionPayloadData) => {
-    const txn = await aptosClient.transaction.build.simple({
-      sender: sender.accountAddress,
-      data,
-    });
-    const submitted = await aptosClient.signAndSubmitTransaction({
-      signer: sender,
-      transaction: txn,
-    });
-    await aptosClient.waitForTransaction({
-      transactionHash: submitted.hash,
-      options: { checkSuccess: true },
-    });
-  };
+  await submitDirect(
+    aptosClient,
+    sender,
+    submitHeaderPayload(moduleAddr, proof),
+  );
+  await submitDirect(
+    aptosClient,
+    sender,
+    registerLockPayload(moduleAddr, proof, asset),
+  );
+}
 
-  await submit({
+/** `eth_proof::submit_header` for the block of `proof`. */
+function submitHeaderPayload(
+  moduleAddr: string,
+  proof: LockedBalanceProof,
+): InputGenerateTransactionPayloadData {
+  return {
     function: `${moduleAddr}::eth_proof::submit_header`,
     functionArguments: [proof.blockNumber, ethers.getBytes(proof.stateRoot)],
-  });
-  await submit({
+  };
+}
+
+/** `lock_receipt::register_ethereum_lock<asset>` for `proof`. */
+function registerLockPayload(
+  moduleAddr: string,
+  proof: LockedBalanceProof,
+  asset: "FakeETH" | "FakeUSD",
+): InputGenerateTransactionPayloadData {
+  return {
     function: `${moduleAddr}::lock_receipt::register_ethereum_lock`,
     typeArguments: [`${moduleAddr}::lock_receipt::${asset}`],
     functionArguments: [
@@ -175,7 +188,7 @@ export async function registerLockOnAptos(
       proof.accountProof.map((p: string) => ethers.getBytes(p)),
       proof.storageProof.map((p: string) => ethers.getBytes(p)),
     ],
-  });
+  };
 }
 
 /** Default pair BCS bytes. Tests that need several windows pass distinct bytes. */
@@ -283,16 +296,39 @@ export async function registerTimelockDirect(
   return timelockIdFromEvents("events" in done ? done.events : []);
 }
 
+/**
+ * Build a native-account transaction with `maxGasAmount` (the ts-sdk default
+ * when undefined) and an optional explicit sequence number.
+ */
+async function buildDirect(
+  aptosClient: Aptos,
+  sender: Account,
+  data: InputGenerateTransactionPayloadData,
+  maxGasAmount: number | undefined,
+  accountSequenceNumber?: bigint,
+) {
+  return aptosClient.transaction.build.simple({
+    sender: sender.accountAddress,
+    data,
+    options: {
+      ...(maxGasAmount !== undefined && { maxGasAmount }),
+      ...(accountSequenceNumber !== undefined && { accountSequenceNumber }),
+    },
+  });
+}
+
 /** Sign and submit an entry-function payload with a native account; throws on abort. */
 export async function submitDirect(
   aptosClient: Aptos,
   sender: Account,
   data: InputGenerateTransactionPayloadData,
 ): Promise<string> {
-  const txn = await aptosClient.transaction.build.simple({
-    sender: sender.accountAddress,
+  const maxGasAmount = await simulateMaxGasAmount(
+    aptosClient,
+    sender.accountAddress,
     data,
-  });
+  );
+  const txn = await buildDirect(aptosClient, sender, data, maxGasAmount);
   const submitted = await aptosClient.signAndSubmitTransaction({
     signer: sender,
     transaction: txn,
@@ -302,6 +338,59 @@ export async function submitDirect(
     options: { checkSuccess: true },
   });
   return submitted.hash;
+}
+
+/**
+ * Submit many payloads from one native account, `batchSize` at a time with
+ * consecutive sequence numbers and the SDK's simulated `maxGasAmount`, and
+ * wait for each batch. Throws if any
+ * transaction aborts. Returns the hashes in payload order.
+ */
+export async function submitManyDirect(
+  aptosClient: Aptos,
+  sender: Account,
+  payloads: InputGenerateTransactionPayloadData[],
+  batchSize = 20,
+): Promise<string[]> {
+  const hashes: string[] = [];
+  for (let start = 0; start < payloads.length; start += batchSize) {
+    const batchPayloads = payloads.slice(start, start + batchSize);
+    // Simulate the whole batch before sending it: a simulation built while
+    // earlier batch transactions commit races the sequence number.
+    const maxGas: (number | undefined)[] = [];
+    for (const data of batchPayloads) {
+      maxGas.push(
+        await simulateMaxGasAmount(aptosClient, sender.accountAddress, data),
+      );
+    }
+    const { sequence_number } = await aptosClient.getAccountInfo({
+      accountAddress: sender.accountAddress,
+    });
+    let sequence = BigInt(sequence_number);
+    const batch: string[] = [];
+    for (const [i, data] of batchPayloads.entries()) {
+      const txn = await buildDirect(
+        aptosClient,
+        sender,
+        data,
+        maxGas[i],
+        sequence++,
+      );
+      const submitted = await aptosClient.signAndSubmitTransaction({
+        signer: sender,
+        transaction: txn,
+      });
+      batch.push(submitted.hash);
+    }
+    for (const hash of batch) {
+      await aptosClient.waitForTransaction({
+        transactionHash: hash,
+        options: { checkSuccess: true },
+      });
+    }
+    hashes.push(...batch);
+  }
+  return hashes;
 }
 
 /**
@@ -447,6 +536,45 @@ export async function lockBidCollateral(
     "FakeUSD",
   );
   return lockId;
+}
+
+/**
+ * Lock FakeUSD collateral `count` times in a few Ethereum blocks, trust the
+ * one block that proves them all, and register every receipt under the
+ * operator. Returns the lock ids in lock order.
+ */
+export async function lockBidCollaterals(
+  fixture: IntegrationFixture,
+  aptosClient: Aptos,
+  operator: Account,
+  count: number,
+  amount: bigint = DEFAULT_COLLATERAL,
+): Promise<string[]> {
+  const moduleAddr = fixture.aptos.moduleAddress;
+  const results: CommandEthLockProofResult[] =
+    await commands.generateEthLockProofs(
+      fixture.eth.rpcUrl,
+      fixture.eth.seller.privateKey,
+      fixture.eth.contracts.fakeUSD,
+      fixture.eth.contracts.lockBox,
+      amount.toString(),
+      count,
+    );
+  const proofs: LockedBalanceProof[] = results.map((r) => ({
+    ...r.proof,
+    storageValue: BigInt(r.proof.storageValue),
+  }));
+  await submitDirect(
+    aptosClient,
+    operator,
+    submitHeaderPayload(moduleAddr, proofs[0]),
+  );
+  await submitManyDirect(
+    aptosClient,
+    operator,
+    proofs.map((p) => registerLockPayload(moduleAddr, p, "FakeUSD")),
+  );
+  return results.map((r) => r.lockId);
 }
 
 /** A bid submitted on chain. Keep `salt`: it opens the bid. */

@@ -3,6 +3,7 @@ import {
   AccountAuthenticator,
   AccountAddress,
   Aptos,
+  type AccountAddressInput,
 } from "@aptos-labs/ts-sdk";
 export type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
 import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
@@ -19,6 +20,102 @@ import {
 
 function sha3(bytes: Uint8Array): Uint8Array {
   return sha3_256(bytes);
+}
+
+/**
+ * Safety factor on simulated gas. The simulation skips authentication and
+ * uses a smaller authenticator, and chain state can move before execution.
+ */
+export const GAS_MARGIN = 1.5;
+
+/** The gas schedule limits that bound `maxGasAmount`, in gas units. */
+export interface GasLimits {
+  /** `txn.maximum_number_of_gas_units`: the most gas one transaction may use. */
+  maxGasAmount: number;
+  /** `txn.max_aa_gas`: the most gas an account-abstraction authenticator may use. */
+  maxAaGas: number;
+}
+
+/**
+ * Read the gas limits from the on-chain gas schedule (`0x1::gas_schedule::GasScheduleV2`).
+ *
+ * @param aptos - Configured Aptos client instance
+ * @returns The chain's maximum gas per transaction and maximum authentication gas
+ */
+export async function getGasLimits(aptos: Aptos): Promise<GasLimits> {
+  const schedule = await aptos.getAccountResource<{
+    entries: { key: string; val: string }[];
+  }>({
+    accountAddress: "0x1",
+    resourceType: "0x1::gas_schedule::GasScheduleV2",
+  });
+  const entry = (key: string): number => {
+    const found = schedule.entries.find((e) => e.key === key);
+    if (!found) throw new Error(`Gas schedule has no ${key}`);
+    return Number(found.val);
+  };
+  return {
+    maxGasAmount: entry("txn.maximum_number_of_gas_units"),
+    maxAaGas: entry("txn.max_aa_gas"),
+  };
+}
+
+/**
+ * The `maxGasAmount` for a transaction whose simulation used `gasUsed` units:
+ * the simulated gas times {@link GAS_MARGIN}, plus the authentication gas the
+ * simulation skipped, capped at the chain maximum.
+ */
+export function maxGasFromSimulation(
+  gasUsed: number,
+  limits: GasLimits,
+): number {
+  return Math.min(
+    limits.maxGasAmount,
+    Math.ceil(gasUsed * GAS_MARGIN) + limits.maxAaGas,
+  );
+}
+
+/**
+ * Simulate `payload` from `sender` and return the `maxGasAmount` to sign with.
+ *
+ * The simulation runs before signing, without an authenticator, and lets the
+ * node raise its gas limit as far as the sender's balance and the chain
+ * maximum allow. The ts-sdk default of 200,000 units is too low for large
+ * calls since gas schedule feature version 53 (10x gas costs).
+ *
+ * @param aptos - Configured Aptos client instance
+ * @param sender - Address that will send the transaction
+ * @param payload - Entry function payload
+ * @returns The gas limit, or `undefined` when the simulation fails or errors
+ *   (the caller keeps the ts-sdk default and the submission reports the error)
+ */
+export async function simulateMaxGasAmount(
+  aptos: Aptos,
+  sender: AccountAddressInput,
+  payload: InputGenerateTransactionPayloadData,
+): Promise<number | undefined> {
+  try {
+    const limits = await getGasLimits(aptos);
+    const draft = await aptos.transaction.build.simple({
+      sender,
+      data: payload,
+    });
+    const [simulation] = await aptos.transaction.simulate.simple({
+      transaction: draft,
+      options: { estimateMaxGasAmount: true },
+    });
+    if (!simulation.success) {
+      console.error("Gas simulation failed. VM Status:", simulation.vm_status);
+      return undefined;
+    }
+    return maxGasFromSimulation(Number(simulation.gas_used), limits);
+  } catch (e: unknown) {
+    console.error(
+      "Gas simulation error:",
+      e instanceof Error ? e.message : String(e),
+    );
+    return undefined;
+  }
 }
 
 /**
@@ -43,7 +140,8 @@ export interface PreparedTransaction {
 /**
  * Build an Aptos transaction and authenticate it with a SIWE signature from MetaMask.
  *
- * Derives the Aptos address from `ethAddress`, builds the transaction payload,
+ * Derives the Aptos address from `ethAddress`, simulates the payload to set
+ * `maxGasAmount` ({@link simulateMaxGasAmount}), builds the transaction,
  * constructs the SIWE message for the user to sign, and returns a
  * {@link PreparedTransaction} ready for {@link simulateNativeTransaction} or
  * {@link submitPreparedTransaction}.
@@ -79,6 +177,12 @@ export async function prepareNativeTransaction(
   }
 
   // 1. Build Transaction
+  // Simulate first: the signature covers maxGasAmount, so it is set before signing.
+  const maxGasAmount = await simulateMaxGasAmount(
+    aptos,
+    senderAddress,
+    payload,
+  );
   // Set expiration to 5 minutes from now (300 seconds)
   const expirationTimestamp = Math.floor(Date.now() / 1000) + 300;
 
@@ -87,6 +191,7 @@ export async function prepareNativeTransaction(
     data: payload,
     options: {
       expireTimestamp: expirationTimestamp,
+      ...(maxGasAmount !== undefined && { maxGasAmount }),
     },
   });
 
@@ -339,14 +444,15 @@ export async function submitPreparedTransaction(
 }
 
 /**
- * All-in-one convenience: prepare → simulate → submit.
+ * All-in-one convenience: simulate → prepare → submit.
  *
  * If `payload` is already a {@link PreparedTransaction} (i.e. contains `auth`
  * and `transaction`), skips preparation and delegates directly to
  * {@link submitPreparedTransaction}.
  *
- * Simulation errors are logged but do not block submission (backward
- * compatibility).
+ * {@link prepareNativeTransaction} simulates the payload first and signs with
+ * `maxGasAmount` set from the simulated gas plus a margin, capped at the
+ * chain maximum. A failed simulation is logged and does not block submission.
  *
  * @param aptos - Configured Aptos client instance
  * @param ethAddress - Ethereum hex address of the signer
@@ -364,21 +470,12 @@ export async function submitNativeTransaction(
     return submitPreparedTransaction(aptos, payload as PreparedTransaction);
   }
 
-  // Default flow: Prepare -> Simulate -> Submit
+  // Default flow: Simulate (inside prepare) -> Sign -> Submit
   const prepared = await prepareNativeTransaction(
     aptos,
     ethAddress,
     payload as InputGenerateTransactionPayloadData,
   );
-
-  // Backward compatibility: Simulate and log, but don't block unless error throws
-  try {
-    await simulateNativeTransaction(aptos, prepared);
-  } catch {
-    console.error(
-      "Simulation error caught in wrapper, proceeding to submit...",
-    );
-  }
 
   return await submitPreparedTransaction(aptos, prepared);
 }
