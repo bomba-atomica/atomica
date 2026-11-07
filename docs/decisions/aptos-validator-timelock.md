@@ -505,6 +505,23 @@ This falls under the same security threshold as a consensus takeover. If >2/3 va
 - Or: Maintain multi-epoch key material
 - Governance parameter: max auction duration
 
+### Docker Testnet Epoch Policy
+
+**Status:** proposed
+
+**Choice:** the Docker testnet genesis (`source/docker-testnet/config/generate-genesis.sh`) uses `epoch_duration_secs: 86400` (24 hours) and sets the layout flag `timelock_dkg_enabled: true`. It replaces the upstream default of 7200 seconds.
+
+**Why:**
+- A timelock lives inside one epoch. `ibe_config::register_timelock` needs `deadline <= epoch_end - 15 minutes`, and an epoch change expires every pending timelock of the old epoch.
+- The PRD bid window runs 4 hours (12:15 to 16:15 UTC). A 2-hour epoch can never hold it. A 24-hour epoch holds it for any auction that starts in the first 19 hours 45 minutes of the epoch.
+- Genesis time is 0, so the first epoch ends at the first block. Its reconfiguration runs the timelock DKG, and epoch 2 has the key within minutes of start-up. No test waits a full epoch.
+- A test session never crosses an epoch boundary after epoch 2. So no test timelock expires with the reason `epoch-ended` by accident.
+- The timelock DKG needs 4 validators. The dual-chain browser fixture (`source/docker-testnet/aptos-testnet/src/dual-chain-testnet.ts`) runs 4.
+
+**Proof in CI:** `aptos-docker-testnet.yaml` runs `typescript-sdk/test/timelock-genesis.test.ts`. It starts 4 validators, waits for epoch 2, and asserts that `ibe_config::is_ready()` is true and `ibe_config::get_mpk()` is 96 bytes.
+
+**Not decided here:** the epoch policy of a production network. It must still line up epochs with the fixed auction times, or let timelocks span epochs (upgrade review finding 12).
+
 ---
 
 ## Implementation Plan
