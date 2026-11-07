@@ -116,31 +116,6 @@ export async function requestTestTokens(_ethAddress: string) {
     return { hash: "noop" };
 }
 
-export function getCreateAuctionPayload(
-    amountEth: bigint,
-    minPrice: bigint,
-    duration: bigint,
-    mpk: Uint8Array,
-): InputGenerateTransactionPayloadData {
-    return {
-        function: `${CONTRACT_ADDR}::auction::create_auction`,
-        functionArguments: [amountEth, minPrice, duration, mpk],
-    };
-}
-
-export async function submitCreateAuction(
-    ethAddress: string,
-    amountEth: bigint,
-    minPrice: bigint,
-    duration: bigint,
-    mpk: Uint8Array,
-): Promise<SubmitResult> {
-    return await submitNativeTransaction(
-        ethAddress,
-        getCreateAuctionPayload(amountEth, minPrice, duration, mpk),
-    );
-}
-
 export function getBidPayload(
     sellerAddr: string,
     amountUsd: bigint,

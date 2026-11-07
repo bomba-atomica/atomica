@@ -43,6 +43,7 @@ vi.mock("@atomica/sdk/ethereum/proofs", () => ({
 vi.mock("@atomica/sdk/aptos", () => ({
   getRegisterLockPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
+  registerTimelock: vi.fn(),
   aptos: { mock: "aptos-client" },
 }));
 vi.mock("@atomica/sdk", () => ({

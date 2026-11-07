@@ -15,7 +15,8 @@
  *     2. SellFlow step 2 — Approve & Lock FakeETH (UI-driven)
  *     3-5. SellFlow steps 3-5 — auto-confirmation, proof generation, proof submission
  *     6. Auction creation — via direct helper (duration hardcoded to 1h in
- *        useSellFlow makes UI-driven auction creation impractical for CI)
+ *        useSellFlow makes UI-driven auction creation impractical for CI).
+ *        Creates a real window and reads it back with get_window_status.
  *     7. Step8Monitor — verifies seller address, countdown, auction details
  *   Bidder context:
  *     8. AuctionBidder — fill seller address + bid amount, submit bid
@@ -97,6 +98,9 @@ import {
   generateEthLockProof,
   registerLockOnAptos,
   createAuctionDirect,
+  currentWindowId,
+  getWindowStatus,
+  TEST_PAIR_BCS,
 } from "./helpers/auction-setup";
 import { Faucet } from "../../src/components/Faucet";
 import { AuctionBidder } from "../../src/components/AuctionBidder";
@@ -131,6 +135,13 @@ const MIN_PRICE = 100n;
 const LOCK_AMOUNT = ethers.parseEther("10");
 const MINT_AMOUNT = ethers.parseEther("1000");
 const BID_PRICE = 200n;
+/**
+ * Timelock id recorded on the happy-path window. The docker testnet does not
+ * run the timelock DKG yet (issue 164), so `ibe_config::register_timelock`
+ * aborts there and this id is not registered. Today's `create_auction` stores
+ * it unchecked. Register a real timelock here once the testnet DKG lands.
+ */
+const HAPPY_PATH_TIMELOCK_ID = 7n;
 
 const ERC20_BALANCE_ABI = ["function balanceOf(address) view returns (uint256)"];
 
@@ -349,9 +360,10 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       // Register lock on Aptos (deployer is authorized in Demo phase)
       await registerLockOnAptos(aptosClient, deployerAccount, moduleAddr, proofResult.proof);
 
-      // Phase 3a: create_auction aborts with E_NOT_IMPLEMENTED — catch and continue.
-      // auctionEndTime is set from local clock; the UI timer does not need on-chain state.
+      // Create a real window: the current window by the chain clock. This
+      // must succeed, so no catch.
       const auctionCreatedAt = Math.floor(Date.now() / 1000);
+      const windowId = await currentWindowId(aptosClient);
       await createAuctionDirect(
         aptosClient,
         deployerAccount,
@@ -359,8 +371,27 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         lockId,
         MIN_PRICE,
         BigInt(AUCTION_DURATION_BID),
-      ).catch(() => {
-        // Expected: scaffold body aborts with E_NOT_IMPLEMENTED
+        windowId,
+        TEST_PAIR_BCS,
+        HAPPY_PATH_TIMELOCK_ID,
+      );
+
+      // The window exists on chain with the timelock create_auction recorded.
+      const windowStatus = await getWindowStatus(
+        aptosClient,
+        moduleAddr,
+        windowId,
+        TEST_PAIR_BCS,
+      );
+      console.log(
+        `[14-happy-path] get_window_status(${windowId}): ` +
+          `timelock_id=${windowStatus.timelockId} ` +
+          `reveal_final=${windowStatus.revealFinal} refunded=${windowStatus.refunded}`,
+      );
+      expect(windowStatus).toEqual({
+        timelockId: HAPPY_PATH_TIMELOCK_ID,
+        revealFinal: false,
+        refunded: false,
       });
 
       auctionEndTime = auctionCreatedAt + AUCTION_DURATION_BID;
