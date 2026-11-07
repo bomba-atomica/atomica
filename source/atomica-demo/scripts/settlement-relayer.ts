@@ -1,9 +1,11 @@
 /**
  * settlement-relayer.ts — Atomica v0 Beta Settlement Relayer
  *
- * Off-chain relayer that polls Aptos for `auction::AuctionSettled` events
- * and submits settlements to `BLSVerifierTestnet.sol::authorizeSettlement`
- * on Ethereum.
+ * Off-chain relayer that polls Aptos for the auction outcome events
+ * (`AuctionSettled`, `AuctionRefunded`, `BidUnopened`) and releases the
+ * matching locks in the Ethereum LockBox. Its key must be the LockBox
+ * `settlementAuthority`. Users then pull released tokens with
+ * `LockBox.withdrawWinnings`.
  *
  * Entry point:
  *   bun run source/atomica-demo/scripts/settlement-relayer.ts
@@ -12,8 +14,8 @@
  *   APTOS_RPC_URL          — Aptos fullnode RPC (default: http://localhost:8080/v1)
  *   CONTRACT_ADDRESS       — Deployed Atomica Move package address on Aptos
  *   ETH_RPC_URL            — Ethereum JSON-RPC endpoint (default: http://localhost:8545)
- *   BLS_VERIFIER_ADDRESS   — Deployed BLSVerifierTestnet.sol address
- *   RELAYER_PRIVATE_KEY    — Relayer EOA private key (hex, 0x-prefixed)
+ *   LOCKBOX_ADDRESS        — Deployed LockBox.sol address
+ *   RELAYER_PRIVATE_KEY    — Relayer EOA private key (hex, 0x-prefixed); the LockBox settlementAuthority
  *   POLL_INTERVAL_MS       — Polling interval in ms (default: 5000)
  *   PAIR_BASE_CHAIN        — Trading pair base chain (default: "ethereum")
  *   PAIR_BASE_TOKEN        — Trading pair base token (default: "FakeETH")
@@ -23,7 +25,7 @@
  *   START_VERSION          — Aptos ledger version to start scanning at (default: 0)
  *   SETTLEMENT_CURSOR_FILE — Optional file holding the scan checkpoint (next version)
  *
- * Event source: AuctionSettled is a module event, so the relayer scans
+ * Event source: the outcome events are module events, so the relayer scans
  * /v1/transactions from a version cursor (see docs/decisions/sdk-auction-settled-event-source.md).
  * A 410 (pruned) read is fatal: set START_VERSION above the pruned range.
  *
@@ -32,17 +34,21 @@
  *   See docs/architecture/v0-architecture.md §3.2 — BLS Relayer Flow
  *
  * @see source/atomica-sdk/src/settlement/bridge.ts
- * @see source/evm-contracts/src/settlement/BLSVerifierTestnet.sol
+ * @see source/evm-contracts/src/escrow/LockBox.sol
  */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import {
   AptosPrunedReadError,
+  relayAuctionRefunded,
+  relayAuctionSettled,
+  relayBidUnopened,
   samePair,
-  scanAuctionSettledEvents,
-  submitSettlement,
+  scanAuctionOutcomeEvents,
+  type AuctionOutcomeEvent,
   type BridgeConfig,
   type Pair,
+  type TxHash,
 } from "@atomica/sdk/settlement/bridge";
 
 // ── Configuration from environment ───────────────────────────────────────────
@@ -52,7 +58,7 @@ const env = process.env;
 const APTOS_RPC_URL = env.APTOS_RPC_URL ?? "http://localhost:8080/v1";
 const CONTRACT_ADDRESS = env.CONTRACT_ADDRESS ?? "";
 const ETH_RPC_URL = env.ETH_RPC_URL ?? "http://localhost:8545";
-const BLS_VERIFIER_ADDRESS = env.BLS_VERIFIER_ADDRESS ?? "";
+const LOCKBOX_ADDRESS = env.LOCKBOX_ADDRESS ?? "";
 const RELAYER_PRIVATE_KEY = env.RELAYER_PRIVATE_KEY ?? "";
 const POLL_INTERVAL_MS = parseInt(env.POLL_INTERVAL_MS ?? "5000", 10);
 const PAIR_BASE_CHAIN = env.PAIR_BASE_CHAIN ?? "ethereum";
@@ -68,7 +74,7 @@ const CURSOR_FILE = env.SETTLEMENT_CURSOR_FILE ?? "";
 function validateConfig(): void {
   const missing: string[] = [];
   if (!CONTRACT_ADDRESS) missing.push("CONTRACT_ADDRESS");
-  if (!BLS_VERIFIER_ADDRESS) missing.push("BLS_VERIFIER_ADDRESS");
+  if (!LOCKBOX_ADDRESS) missing.push("LOCKBOX_ADDRESS");
   if (!RELAYER_PRIVATE_KEY) missing.push("RELAYER_PRIVATE_KEY");
 
   if (missing.length > 0) {
@@ -81,9 +87,6 @@ function validateConfig(): void {
 }
 
 // ── Relayer state ─────────────────────────────────────────────────────────────
-
-/** Track which window IDs have already been relayed to avoid duplicates. */
-const relayedWindows = new Set<string>();
 
 /**
  * Checkpoint: next Aptos ledger version to scan. Persisted to
@@ -104,9 +107,31 @@ function saveCursor(version: bigint): void {
 // ── Main polling loop ─────────────────────────────────────────────────────────
 
 /**
- * One poll: scan from `cursor`, relay each AuctionSettled event for `pair`,
+ * Relay one outcome event to LockBox. Windows below START_WINDOW_ID and
+ * settlements of other pairs are skipped. LockBox outcome ids make a replay
+ * of an already relayed event a no-op.
+ */
+async function relayOutcome(
+  outcome: AuctionOutcomeEvent,
+  config: BridgeConfig,
+  pair: Pair,
+): Promise<TxHash[] | null> {
+  if (outcome.event.windowId < START_WINDOW_ID) return null;
+  switch (outcome.kind) {
+    case "AuctionSettled":
+      if (!samePair(outcome.event.pair, pair)) return null;
+      return relayAuctionSettled(outcome.event, config);
+    case "AuctionRefunded":
+      return relayAuctionRefunded(outcome.event, pair, config);
+    case "BidUnopened":
+      return relayBidUnopened(outcome.event, config);
+  }
+}
+
+/**
+ * One poll: scan from `cursor`, relay each outcome event in ledger order,
  * and return the new cursor. The cursor only moves past events that were
- * relayed, so a failed submission is retried on the next poll.
+ * relayed, so a failed release is retried on the next poll.
  * A pruned read (410) is terminal and rethrown: the relayer must not retry it.
  */
 async function pollAndRelay(
@@ -115,30 +140,21 @@ async function pollAndRelay(
   cursor: bigint,
 ): Promise<bigint> {
   try {
-    const scan = await scanAuctionSettledEvents(config, {
+    const scan = await scanAuctionOutcomeEvents(config, {
       fromVersion: cursor,
     });
-    for (const { event, version } of scan.events) {
-      if (samePair(event.pair, pair) && event.windowId >= START_WINDOW_ID) {
-        const windowKey = `${event.windowId}:${pair.baseToken}/${pair.quoteToken}`;
-        if (!relayedWindows.has(windowKey)) {
-          console.log(
-            `[relayer] Found AuctionSettled event — window=${event.windowId} ` +
-              `pair=${pair.baseToken}/${pair.quoteToken} version=${version} ` +
-              `clearingPrice=${event.clearingPrice} ` +
-              `totalFilled=${event.totalFilled} ` +
-              `winnerCount=${event.winnerCount}`,
-          );
-          const txHash = await submitSettlement([event], config);
-          relayedWindows.add(windowKey);
-          console.log(
-            `[relayer] Settlement authorized. tx=${txHash} window=${event.windowId}`,
-          );
-        }
+    for (const outcome of scan.events) {
+      const txHashes = await relayOutcome(outcome, config, pair);
+      if (txHashes) {
+        console.log(
+          `[relayer] ${outcome.kind} window=${outcome.event.windowId} ` +
+            `version=${outcome.version} releases=${txHashes.length} ` +
+            `txs=${txHashes.join(",") || "none (already relayed)"}`,
+        );
       }
     }
 
-    // Every event below scan.nextVersion is relayed (a failed submission threw).
+    // Every event below scan.nextVersion is relayed (a failed release threw).
     saveCursor(scan.nextVersion);
     return scan.nextVersion;
   } catch (err: unknown) {
@@ -157,7 +173,7 @@ async function main(): Promise<void> {
     aptosRpcUrl: APTOS_RPC_URL,
     contractAddress: CONTRACT_ADDRESS,
     ethRpcUrl: ETH_RPC_URL,
-    blsVerifierAddress: BLS_VERIFIER_ADDRESS,
+    lockBoxAddress: LOCKBOX_ADDRESS,
     relayerPrivateKey: RELAYER_PRIVATE_KEY,
   };
 
@@ -174,7 +190,7 @@ async function main(): Promise<void> {
   console.log(`  Aptos RPC:         ${APTOS_RPC_URL}`);
   console.log(`  Contract address:  ${CONTRACT_ADDRESS}`);
   console.log(`  ETH RPC:           ${ETH_RPC_URL}`);
-  console.log(`  BLS verifier:      ${BLS_VERIFIER_ADDRESS}`);
+  console.log(`  LockBox:           ${LOCKBOX_ADDRESS}`);
   console.log(`  Pair:              ${pair.baseToken}/${pair.quoteToken}`);
   console.log(`  Poll interval:     ${POLL_INTERVAL_MS}ms`);
   console.log(`  Starting version:  ${loadCursor()}`);

@@ -30,6 +30,8 @@ import {
 } from "../tests/meta/ethereum/solidity-compiler.js";
 
 const ETH_RPC_URL = process.env.ETH_RPC_URL || "http://localhost:8545";
+// LockBox settlementAuthority. Defaults to the deployer.
+const RELAYER_ADDRESS = process.env.RELAYER_ADDRESS;
 const APTOS_URL = process.env.APTOS_URL || "http://localhost:8080";
 
 function requireEnv(key: string): string {
@@ -86,7 +88,10 @@ async function deployEthereumContracts() {
 
   const provider = new ethers.JsonRpcProvider(ETH_RPC_URL);
 
-  const ethSigner = new ethers.Wallet(ETHEREUM_DEPLOYER_PRIVATE_KEY, provider);
+  // NonceManager: back-to-back deploys must not reuse a nonce.
+  const ethSigner = new ethers.NonceManager(
+    new ethers.Wallet(ETHEREUM_DEPLOYER_PRIVATE_KEY, provider),
+  );
 
   const deployerAddress = await ethSigner.getAddress();
   console.log(`  Deployer: ${deployerAddress}`);
@@ -134,7 +139,8 @@ async function deployEthereumContracts() {
       ethSigner,
     ),
     ethSigner,
-    [fakeETHAddress, fakeUSDAddress],
+    // settlementAuthority: the relayer key that releases locks on Aptos outcomes.
+    [fakeETHAddress, fakeUSDAddress, RELAYER_ADDRESS ?? deployerAddress],
   );
   const lockBoxAddress = await lockBoxContract.getAddress();
   console.log(`  ✓ LockBox deployed at: ${lockBoxAddress}`);

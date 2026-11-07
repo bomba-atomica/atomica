@@ -15,10 +15,13 @@ import {FakeUSD} from "../src/tokens/FakeUSD.sol";
  *     --rpc-url http://localhost:8545 \
  *     --broadcast \
  *     --private-key <key>
+ *   SETTLEMENT_AUTHORITY sets the relayer allowed to release locks
+ *   (default: the deployer).
  */
 contract DeployLockBox is Script {
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address settlementAuthority = vm.envOr("SETTLEMENT_AUTHORITY", vm.addr(deployerPrivateKey));
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy tokens
@@ -29,7 +32,7 @@ contract DeployLockBox is Script {
         console.log("FakeUSD deployed at:", address(fakeUSD));
 
         // Deploy LockBox
-        LockBox lockBox = new LockBox(address(fakeETH), address(fakeUSD));
+        LockBox lockBox = new LockBox(address(fakeETH), address(fakeUSD), settlementAuthority);
         console.log("LockBox deployed at:", address(lockBox));
 
         vm.stopBroadcast();
@@ -39,6 +42,7 @@ contract DeployLockBox is Script {
         console.log("FakeETH:  ", address(fakeETH));
         console.log("FakeUSD:  ", address(fakeUSD));
         console.log("LockBox:  ", address(lockBox));
+        console.log("Authority:", settlementAuthority);
         console.log("\nAdd to .env:");
         console.log("VITE_FAKE_ETH_ADDRESS=", vm.toString(address(fakeETH)));
         console.log("VITE_FAKE_USD_ADDRESS=", vm.toString(address(fakeUSD)));

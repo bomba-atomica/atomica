@@ -90,7 +90,10 @@ async function deployEthereumContracts(testnet: EthereumDockerTestnet) {
   const rpcUrl = testnet.getExecutionRpcUrl();
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const testAccounts = testnet.getTestAccounts();
-  const signer = new ethers.Wallet(testAccounts[0].privateKey, provider);
+  // NonceManager: back-to-back deploys must not reuse a nonce.
+  const signer = new ethers.NonceManager(
+    new ethers.Wallet(testAccounts[0].privateKey, provider),
+  );
 
   console.log(`  Ethereum RPC: ${rpcUrl}`);
   console.log(`  Deployer: ${await signer.getAddress()}`);
@@ -126,7 +129,8 @@ async function deployEthereumContracts(testnet: EthereumDockerTestnet) {
       signer,
     ),
     signer,
-    [fakeETHAddress, fakeUSDAddress],
+    // settlementAuthority: the deployer relays Aptos outcomes in the demo.
+    [fakeETHAddress, fakeUSDAddress, await signer.getAddress()],
   );
   const lockBoxAddress = await lockBox.getAddress();
   console.log(`  ✓ LockBox: ${lockBoxAddress}`);

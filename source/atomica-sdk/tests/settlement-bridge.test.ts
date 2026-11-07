@@ -1,18 +1,30 @@
 /**
- * Unit tests for settlement/bridge.ts — BLS relayer bridge functions.
+ * Unit tests for settlement/bridge.ts — the Aptos outcome → LockBox relayer.
  *
  * Tests cover:
- *   - queryAuctionSettledEvents: Aptos event JSON parsing and filtering
- *   - submitSettlement: field mapping to authorizeSettlement arguments
- *   - aptosToEthereumAddress integration
+ *   - scanAuctionOutcomeEvents / queryAuctionSettledEvents: Aptos event parsing
+ *   - planSettlementReleases / planRefundReleases: outcome → LockBox releases
+ *   - relayAuctionSettled / relayAuctionRefunded / relayBidUnopened: Aptos
+ *     reads joined to LockBox calls, signed through an ethers NonceManager
  *
  * All Aptos and Ethereum I/O is mocked; no network calls are made.
  *
  * @see source/atomica-sdk/src/settlement/bridge.ts
- * @see docs/architecture/v0-architecture.md §3.2 — BLS Relayer Flow
+ * @see docs/architecture/v0-architecture.md §3.5
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// ─── Shared mock state ─────────────────────────────────────────────────────
+
+const mocks = vi.hoisted(() => ({
+  /** Aptos view responses keyed by function name suffix. */
+  views: new Map<string, (args: unknown[], typeArgs: string[]) => unknown[]>(),
+  /** LockBox calls recorded by the Contract mock. */
+  calls: [] as Array<{ method: string; args: unknown[] }>,
+  processed: new Set<string>(),
+  nonceManagers: 0,
+}));
 
 // ─── Mock ethers ───────────────────────────────────────────────────────────
 // vi.mock factories are hoisted — must use class syntax for constructors.
@@ -21,9 +33,23 @@ vi.mock("ethers", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ethers")>();
   class MockJsonRpcProvider {}
   class MockWallet {}
+  class MockNonceManager {
+    reset = vi.fn();
+    constructor() {
+      mocks.nonceManagers++;
+    }
+  }
   class MockContract {
-    authorizeSettlement = vi.fn().mockResolvedValue({
-      wait: vi.fn().mockResolvedValue({ hash: "0xdeadbeef" }),
+    fakeETH = vi.fn().mockResolvedValue("0x" + "e1".repeat(20));
+    fakeUSD = vi.fn().mockResolvedValue("0x" + "aa".repeat(20));
+    processedOutcomes = vi.fn(async (id: string) => mocks.processed.has(id));
+    refund = vi.fn(async (...args: unknown[]) => {
+      mocks.calls.push({ method: "refund", args });
+      return { wait: async () => ({ hash: "0xrefund", status: 1 }) };
+    });
+    settleFill = vi.fn(async (...args: unknown[]) => {
+      mocks.calls.push({ method: "settleFill", args });
+      return { wait: async () => ({ hash: "0xfill", status: 1 }) };
     });
   }
   return {
@@ -32,8 +58,8 @@ vi.mock("ethers", async (importOriginal) => {
       ...actual.ethers,
       JsonRpcProvider: MockJsonRpcProvider,
       Wallet: MockWallet,
+      NonceManager: MockNonceManager,
       Contract: MockContract,
-      keccak256: actual.ethers.keccak256,
     },
   };
 });
@@ -43,7 +69,22 @@ vi.mock("ethers", async (importOriginal) => {
 vi.mock("@aptos-labs/ts-sdk", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@aptos-labs/ts-sdk")>();
   class MockAptos {
-    view = vi.fn().mockResolvedValue([[]]);
+    view = vi.fn(
+      async ({
+        payload,
+      }: {
+        payload: {
+          function: string;
+          typeArguments?: string[];
+          functionArguments: unknown[];
+        };
+      }) => {
+        const name = payload.function.split("::").slice(-2).join("::");
+        const fn = mocks.views.get(name);
+        if (!fn) throw new Error(`unexpected view ${name}`);
+        return fn(payload.functionArguments, payload.typeArguments ?? []);
+      },
+    );
   }
   return {
     ...actual,
@@ -53,33 +94,28 @@ vi.mock("@aptos-labs/ts-sdk", async (importOriginal) => {
   };
 });
 
-// ─── Mock contracts helper ─────────────────────────────────────────────────
-
-vi.mock("../src/ethereum/contracts.js", () => ({
-  getBLSVerifierTestnetContract: vi.fn().mockReturnValue({
-    authorizeSettlement: vi.fn().mockResolvedValue({
-      wait: vi.fn().mockResolvedValue({ hash: "0xdeadbeef" }),
-    }),
-  }),
-}));
-
 // ─── Import after mocks ────────────────────────────────────────────────────
 
+import { ethers } from "ethers";
 import {
   queryAuctionSettledEvents,
   scanAuctionSettledEvents,
+  scanAuctionOutcomeEvents,
   AptosPrunedReadError,
-  submitSettlement,
-  releaseBidderCollateral,
+  planSettlementReleases,
+  planRefundReleases,
+  quoteForFill,
+  refundOutcomeId,
+  fillOutcomeId,
+  relayAuctionSettled,
+  relayAuctionRefunded,
+  relayBidUnopened,
+  RECEIPT_STATUS_REVOKED,
   type AuctionSettledEvent,
-  type BidderCollateralRefund,
   type BridgeConfig,
+  type LockReceiptInfo,
   type Pair,
 } from "../src/settlement/bridge.js";
-
-import { getBLSVerifierTestnetContract } from "../src/ethereum/contracts.js";
-// Needed for vi.mocked() calls below
-import type {} from "vitest";
 
 // ─── Test fixtures ─────────────────────────────────────────────────────────
 
@@ -94,7 +130,7 @@ const TEST_CONFIG: BridgeConfig = {
   aptosRpcUrl: "http://localhost:8080/v1",
   contractAddress: "0x" + "ab".repeat(32),
   ethRpcUrl: "http://localhost:8545",
-  blsVerifierAddress: "0x" + "cd".repeat(20),
+  lockBoxAddress: "0x" + "cd".repeat(20),
   relayerPrivateKey: "0x" + "ef".repeat(32),
 };
 
@@ -122,17 +158,6 @@ function makeRawAptosEvent(
       lock_ids: ["0xdeadbeef", "0xcafebabe"],
     },
   };
-}
-
-/** Helper: mock global fetch with an empty transaction page. */
-function mockFetch(events: unknown[]): void {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue(events),
-    }),
-  );
 }
 
 /** Wraps raw events into a committed-transaction record. */
@@ -360,251 +385,418 @@ describe("scanAuctionSettledEvents", () => {
   });
 });
 
-// ─── submitSettlement ──────────────────────────────────────────────────────
+// ─── scanAuctionOutcomeEvents ──────────────────────────────────────────────
 
-describe("submitSettlement", () => {
+describe("scanAuctionOutcomeEvents", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Re-set fetch mock for each test
-    mockFetch([]);
   });
 
-  it("throws when passed an empty events array", async () => {
-    await expect(submitSettlement([], TEST_CONFIG)).rejects.toThrow(
-      "no AuctionSettled events provided",
-    );
+  it("decodes AuctionSettled, AuctionRefunded and BidUnopened in ledger order", async () => {
+    mockPages([
+      makeTx(10, [
+        {
+          type: `${TEST_CONFIG.contractAddress}::auction::BidUnopened`,
+          data: {
+            window_id: "4",
+            bidder: "0x" + "11".repeat(32),
+            collateral_lock_id: "0xabcd",
+          },
+        },
+        makeRawAptosEvent(4, TEST_PAIR),
+      ]),
+      makeTx(11, [
+        {
+          type: `${TEST_CONFIG.contractAddress}::auction::AuctionRefunded`,
+          data: {
+            window_id: "5",
+            timelock_id: "9",
+            reason: 2,
+            bid_count: "3",
+            seller_lock_count: "1",
+          },
+        },
+        OTHER_EVENT,
+      ]),
+    ]);
+
+    const scan = await scanAuctionOutcomeEvents(TEST_CONFIG, { pageSize: 2 });
+
+    expect(scan.events.map((e) => e.kind)).toEqual([
+      "BidUnopened",
+      "AuctionSettled",
+      "AuctionRefunded",
+    ]);
+    const unopened = scan.events[0];
+    if (unopened.kind !== "BidUnopened") throw new Error("kind");
+    expect(unopened.event.windowId).toBe(4n);
+    expect(ethers.hexlify(unopened.event.collateralLockId)).toBe("0xabcd");
+    const refunded = scan.events[2];
+    if (refunded.kind !== "AuctionRefunded") throw new Error("kind");
+    expect(refunded.event).toEqual({
+      windowId: 5n,
+      timelockId: 9n,
+      reason: 2,
+      bidCount: 3n,
+      sellerLockCount: 1n,
+    });
+    expect(refunded.version).toBe(11n);
+  });
+});
+
+// ─── Release planning ──────────────────────────────────────────────────────
+
+const SELLER = "0x00000000000000000000000000000000000000a1";
+const SELLER_2 = "0x00000000000000000000000000000000000000a2";
+const WINNER = "0x00000000000000000000000000000000000000b1";
+const LOSER = "0x00000000000000000000000000000000000000b2";
+const ETH = 10n ** 18n;
+const USD = 10n ** 6n;
+
+function receipt(
+  lockId: string,
+  user: string,
+  amount: bigint,
+  status: number,
+): LockReceiptInfo {
+  return { lockId, user, amount, status };
+}
+
+describe("planSettlementReleases", () => {
+  it("pays the winner FakeETH and the seller FakeUSD at the clearing price", () => {
+    const releases = planSettlementReleases({
+      clearingPrice: 2000n,
+      sellers: [receipt("0x01", SELLER, 10n * ETH, 1)],
+      bids: [
+        {
+          isWinner: true,
+          fillAmount: 4n * ETH,
+          collateral: receipt("0x02", WINNER, 10_000n * USD, 1),
+        },
+      ],
+    });
+
+    expect(releases).toEqual([
+      {
+        kind: "fill",
+        outcomeId: fillOutcomeId("0x01", "0x02"),
+        seller: SELLER,
+        winner: WINNER,
+        baseAmount: 4n * ETH,
+        quoteAmount: 8_000n * USD,
+      },
+      // Excess collateral back to the winner.
+      {
+        kind: "refund",
+        outcomeId: refundOutcomeId("0x02"),
+        user: WINNER,
+        asset: "FakeUSD",
+        amount: 2_000n * USD,
+      },
+      // Unsold supply back to the seller.
+      {
+        kind: "refund",
+        outcomeId: refundOutcomeId("0x01"),
+        user: SELLER,
+        asset: "FakeETH",
+        amount: 6n * ETH,
+      },
+    ]);
   });
 
-  it("calls authorizeSettlement with correct arguments when no winners", async () => {
+  it("splits a fill across seller locks in lock_ids order", () => {
+    const releases = planSettlementReleases({
+      clearingPrice: 1000n,
+      sellers: [
+        receipt("0x01", SELLER, 3n * ETH, 1),
+        receipt("0x03", SELLER_2, 5n * ETH, 1),
+      ],
+      bids: [
+        {
+          isWinner: true,
+          fillAmount: 8n * ETH,
+          collateral: receipt("0x02", WINNER, 8_000n * USD, 1),
+        },
+      ],
+    });
+    expect(releases.filter((r) => r.kind === "fill")).toEqual([
+      expect.objectContaining({
+        seller: SELLER,
+        baseAmount: 3n * ETH,
+        quoteAmount: 3_000n * USD,
+      }),
+      expect.objectContaining({
+        seller: SELLER_2,
+        baseAmount: 5n * ETH,
+        quoteAmount: 5_000n * USD,
+      }),
+    ]);
+    expect(releases.filter((r) => r.kind === "refund")).toEqual([]);
+  });
+
+  it("refunds a losing bid's collateral only when Aptos released it", () => {
+    const releases = planSettlementReleases({
+      clearingPrice: 1000n,
+      sellers: [receipt("0x01", SELLER, 1n * ETH, RECEIPT_STATUS_REVOKED)],
+      bids: [
+        {
+          isWinner: false,
+          fillAmount: 0n,
+          collateral: receipt(
+            "0x04",
+            LOSER,
+            500n * USD,
+            RECEIPT_STATUS_REVOKED,
+          ),
+        },
+        // Unopened: still claimed on Aptos, handled by relayBidUnopened.
+        {
+          isWinner: false,
+          fillAmount: 0n,
+          collateral: receipt("0x05", LOSER, 700n * USD, 1),
+        },
+      ],
+    });
+    expect(releases).toEqual([
+      {
+        kind: "refund",
+        outcomeId: refundOutcomeId("0x04"),
+        user: LOSER,
+        asset: "FakeUSD",
+        amount: 500n * USD,
+      },
+      {
+        kind: "refund",
+        outcomeId: refundOutcomeId("0x01"),
+        user: SELLER,
+        asset: "FakeETH",
+        amount: 1n * ETH,
+      },
+    ]);
+  });
+
+  it("rejects a fill above the locked supply", () => {
+    expect(() =>
+      planSettlementReleases({
+        clearingPrice: 1n,
+        sellers: [receipt("0x01", SELLER, 1n * ETH, 1)],
+        bids: [
+          {
+            isWinner: true,
+            fillAmount: 2n * ETH,
+            collateral: receipt("0x02", WINNER, 10n * USD, 1),
+          },
+        ],
+      }),
+    ).toThrow(/exceeds the locked supply/);
+  });
+
+  it("rejects a payment above the winner's collateral", () => {
+    expect(() =>
+      planSettlementReleases({
+        clearingPrice: 2000n,
+        sellers: [receipt("0x01", SELLER, 1n * ETH, 1)],
+        bids: [
+          {
+            isWinner: true,
+            fillAmount: 1n * ETH,
+            collateral: receipt("0x02", WINNER, 1_999n * USD, 1),
+          },
+        ],
+      }),
+    ).toThrow(/owes/);
+  });
+
+  it("prices FakeUSD with 6 decimals against 18-decimal FakeETH", () => {
+    expect(quoteForFill(ETH / 2n, 2010n)).toBe(1_005n * USD);
+  });
+});
+
+describe("planRefundReleases", () => {
+  it("refunds every released seller and collateral lock", () => {
+    const releases = planRefundReleases({
+      sellers: [
+        receipt("0x01", SELLER, 2n * ETH, RECEIPT_STATUS_REVOKED),
+        receipt("0x03", SELLER_2, 2n * ETH, 1),
+      ],
+      collateral: [receipt("0x02", WINNER, 9n * USD, RECEIPT_STATUS_REVOKED)],
+    });
+    expect(releases).toEqual([
+      {
+        kind: "refund",
+        outcomeId: refundOutcomeId("0x01"),
+        user: SELLER,
+        asset: "FakeETH",
+        amount: 2n * ETH,
+      },
+      {
+        kind: "refund",
+        outcomeId: refundOutcomeId("0x02"),
+        user: WINNER,
+        asset: "FakeUSD",
+        amount: 9n * USD,
+      },
+    ]);
+  });
+});
+
+// ─── Relays (Aptos reads → LockBox calls) ──────────────────────────────────
+
+/** Zero-padded Aptos form of an Ethereum address, short-form as REST may return it. */
+function aptosAddr(eth: string): string {
+  return "0x" + eth.slice(2).replace(/^0+/, "");
+}
+
+function stubReceipts(
+  receipts: Record<string, [string, bigint, number]>,
+): void {
+  mocks.views.set("lock_receipt::get_receipt", (args) => {
+    const id = ethers.hexlify(args[0] as Uint8Array);
+    const r = receipts[id];
+    if (!r) throw new Error(`no receipt ${id}`);
+    return [aptosAddr(r[0]), String(r[1]), "1", r[2]];
+  });
+}
+
+describe("relay handlers", () => {
+  beforeEach(() => {
+    mocks.views.clear();
+    mocks.calls.length = 0;
+    mocks.processed.clear();
+  });
+
+  it("relayAuctionSettled sends settleFill and refunds through a NonceManager", async () => {
+    mocks.views.set("auction::get_bid_results", () => [
+      [
+        {
+          bidder: "0x" + "77".repeat(32),
+          fill_amount: String(4n * ETH),
+          is_winner: true,
+        },
+        { bidder: "0x" + "88".repeat(32), fill_amount: "0", is_winner: false },
+      ],
+    ]);
+    mocks.views.set("auction::get_window_lock_ids", () => [
+      ["0x01"],
+      ["0x02", "0x04"],
+    ]);
+    stubReceipts({
+      "0x01": [SELLER, 10n * ETH, 1],
+      "0x02": [WINNER, 8_000n * USD, 1],
+      "0x04": [LOSER, 500n * USD, RECEIPT_STATUS_REVOKED],
+    });
+    const before = mocks.nonceManagers;
     const event: AuctionSettledEvent = {
       windowId: 7n,
       pair: TEST_PAIR,
       clearingPrice: 2000n,
-      totalFilled: 0n,
-      winnerCount: 0n,
+      totalFilled: 4n * ETH,
+      winnerCount: 1n,
       lockIds: [],
     };
 
-    const mockContract = {
-      authorizeSettlement: vi.fn().mockResolvedValue({
-        wait: vi.fn().mockResolvedValue({ hash: "0xdeadbeef" }),
-      }),
-    };
-    vi.mocked(getBLSVerifierTestnetContract).mockReturnValueOnce(
-      mockContract as unknown as ReturnType<
-        typeof getBLSVerifierTestnetContract
-      >,
-    );
-
-    const txHash = await submitSettlement([event], TEST_CONFIG);
-
-    expect(txHash).toBe("0xdeadbeef");
-    expect(mockContract.authorizeSettlement).toHaveBeenCalledOnce();
-
-    const [windowId, pairHash, clearingPrice, winners, fills] =
-      mockContract.authorizeSettlement.mock.calls[0];
-
-    expect(windowId).toBe(7n);
-    // pairHash should be a 32-byte hex string
-    expect(pairHash).toMatch(/^0x[0-9a-f]{64}$/i);
-    expect(clearingPrice).toBe(2000n);
-    expect(winners).toEqual([]);
-    expect(fills).toEqual([]);
-  });
-
-  it("maps winner Aptos addresses to Ethereum addresses using aptosToEthereumAddress", async () => {
-    // This test verifies the conversion logic directly (since mocking Aptos constructor
-    // per-test in browser mode is complex). The address conversion is tested in the
-    // dedicated "Aptos to Ethereum address conversion" suite below.
-    const { aptosToEthereumAddress } =
-      await import("../src/ethereum/address-converter.js");
-    const winnerAptosAddr =
-      "0x" + "00".repeat(12) + "1234567890abcdef1234567890abcdef12345678";
-    const winnerEthAddr = "0x1234567890abcdef1234567890abcdef12345678";
-    expect(aptosToEthereumAddress(winnerAptosAddr)).toBe(winnerEthAddr);
-  });
-});
-
-// ─── pairHash determinism ──────────────────────────────────────────────────
-
-describe("pairHash determinism", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockFetch([]);
-  });
-
-  it("produces the same hash for the same pair across two calls", async () => {
-    const event: AuctionSettledEvent = {
-      windowId: 1n,
-      pair: TEST_PAIR,
-      clearingPrice: 100n,
-      totalFilled: 0n,
-      winnerCount: 0n,
-      lockIds: [],
-    };
-
-    const calls: unknown[][] = [];
-    const makeContract = () => ({
-      authorizeSettlement: vi.fn().mockImplementation((...args: unknown[]) => {
-        calls.push(args);
-        return Promise.resolve({
-          wait: vi.fn().mockResolvedValue({ hash: "0xabc" }),
-        });
-      }),
+    const hashes = await relayAuctionSettled(event, {
+      ...TEST_CONFIG,
+      relayerPrivateKey: "0x" + "01".repeat(32),
     });
 
-    vi.mocked(getBLSVerifierTestnetContract)
-      .mockReturnValueOnce(
-        makeContract() as unknown as ReturnType<
-          typeof getBLSVerifierTestnetContract
-        >,
-      )
-      .mockReturnValueOnce(
-        makeContract() as unknown as ReturnType<
-          typeof getBLSVerifierTestnetContract
-        >,
-      );
-
-    await submitSettlement([event], TEST_CONFIG);
-    await submitSettlement([event], TEST_CONFIG);
-
-    expect(calls).toHaveLength(2);
-    const hash1 = calls[0][1];
-    const hash2 = calls[1][1];
-    expect(hash1).toBe(hash2);
-    expect(String(hash1)).toMatch(/^0x[0-9a-f]{64}$/i);
+    expect(mocks.nonceManagers).toBe(before + 1);
+    expect(hashes).toEqual(["0xfill", "0xrefund", "0xrefund"]);
+    expect(mocks.calls.map((c) => c.method)).toEqual([
+      "settleFill",
+      "refund",
+      "refund",
+    ]);
+    expect(mocks.calls[0].args).toEqual([
+      fillOutcomeId("0x01", "0x02"),
+      ethers.getAddress(SELLER),
+      ethers.getAddress(WINNER),
+      4n * ETH,
+      8_000n * USD,
+    ]);
+    // Losing bid refunded to the Ethereum owner of its collateral receipt.
+    expect(mocks.calls[1].args.slice(1)).toEqual([
+      ethers.getAddress(LOSER),
+      "0x" + "aa".repeat(20),
+      500n * USD,
+    ]);
+    // Unsold supply back to the seller in FakeETH.
+    expect(mocks.calls[2].args.slice(1)).toEqual([
+      ethers.getAddress(SELLER),
+      "0x" + "e1".repeat(20),
+      6n * ETH,
+    ]);
   });
 
-  it("produces different hashes for different pairs", async () => {
-    const pairA: Pair = { ...TEST_PAIR, baseToken: "FakeETH" };
-    const pairB: Pair = { ...TEST_PAIR, baseToken: "WBTC" };
+  it("skips outcomes LockBox already processed", async () => {
+    mocks.views.set("auction::get_window_lock_ids", () => [["0x01"], []]);
+    stubReceipts({ "0x01": [SELLER, 3n * ETH, RECEIPT_STATUS_REVOKED] });
+    mocks.processed.add(refundOutcomeId("0x01"));
 
-    const eventA: AuctionSettledEvent = {
-      windowId: 1n,
-      pair: pairA,
-      clearingPrice: 100n,
-      totalFilled: 0n,
-      winnerCount: 0n,
-      lockIds: [],
-    };
-    const eventB: AuctionSettledEvent = {
-      windowId: 1n,
-      pair: pairB,
-      clearingPrice: 100n,
-      totalFilled: 0n,
-      winnerCount: 0n,
-      lockIds: [],
-    };
+    const hashes = await relayAuctionRefunded(
+      {
+        windowId: 5n,
+        timelockId: 9n,
+        reason: 1,
+        bidCount: 0n,
+        sellerLockCount: 1n,
+      },
+      TEST_PAIR,
+      TEST_CONFIG,
+    );
 
-    const calls: unknown[][] = [];
-    const makeContract = () => ({
-      authorizeSettlement: vi.fn().mockImplementation((...args: unknown[]) => {
-        calls.push(args);
-        return Promise.resolve({
-          wait: vi.fn().mockResolvedValue({ hash: "0xabc" }),
-        });
-      }),
+    expect(hashes).toEqual([]);
+    expect(mocks.calls).toEqual([]);
+  });
+
+  it("relayAuctionRefunded refunds every released lock of the window", async () => {
+    mocks.views.set("auction::get_window_lock_ids", () => [["0x01"], ["0x02"]]);
+    stubReceipts({
+      "0x01": [SELLER, 3n * ETH, RECEIPT_STATUS_REVOKED],
+      "0x02": [WINNER, 9n * USD, RECEIPT_STATUS_REVOKED],
     });
 
-    vi.mocked(getBLSVerifierTestnetContract)
-      .mockReturnValueOnce(
-        makeContract() as unknown as ReturnType<
-          typeof getBLSVerifierTestnetContract
-        >,
-      )
-      .mockReturnValueOnce(
-        makeContract() as unknown as ReturnType<
-          typeof getBLSVerifierTestnetContract
-        >,
-      );
-
-    await submitSettlement([eventA], TEST_CONFIG);
-    await submitSettlement([eventB], TEST_CONFIG);
-
-    const hashA = calls[0][1];
-    const hashB = calls[1][1];
-    expect(hashA).not.toBe(hashB);
-  });
-});
-
-// ─── releaseBidderCollateral ───────────────────────────────────────────────
-
-describe("releaseBidderCollateral", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockFetch([]);
-  });
-
-  it("calls authorizeSettlement with correct args for a losing bidder (releaseBidderCollateral_calls_lockbox_withdraw)", async () => {
-    // Build a refund descriptor for a losing bidder whose Aptos address is the
-    // zero-padded form of a known Ethereum address.
-    const bidderEthAddr = "0x1234567890abcdef1234567890abcdef12345678";
-    const bidderAptosAddr = "0x" + "00".repeat(12) + bidderEthAddr.slice(2);
-
-    const pairBcs = new Uint8Array([0x01, 0x02, 0x03, 0x04]);
-
-    const refund: BidderCollateralRefund = {
-      collateralLockId: new Uint8Array([0xde, 0xad]),
-      bidderAddress: bidderAptosAddr,
-      windowId: 5n,
-      pairBcs,
-    };
-
-    const mockContract = {
-      authorizeSettlement: vi.fn().mockResolvedValue({
-        wait: vi.fn().mockResolvedValue({ hash: "0xcollateral" }),
-      }),
-    };
-    vi.mocked(getBLSVerifierTestnetContract).mockReturnValueOnce(
-      mockContract as unknown as ReturnType<
-        typeof getBLSVerifierTestnetContract
-      >,
+    await relayAuctionRefunded(
+      {
+        windowId: 5n,
+        timelockId: 9n,
+        reason: 1,
+        bidCount: 1n,
+        sellerLockCount: 1n,
+      },
+      TEST_PAIR,
+      TEST_CONFIG,
     );
 
-    await releaseBidderCollateral(refund, TEST_CONFIG);
-
-    expect(mockContract.authorizeSettlement).toHaveBeenCalledOnce();
-
-    const [windowId, pairHash, clearingPrice, winners, fills] =
-      mockContract.authorizeSettlement.mock.calls[0];
-
-    // windowId must match refund.windowId
-    expect(windowId).toBe(5n);
-    // pairHash is keccak256 of pairBcs
-    expect(pairHash).toMatch(/^0x[0-9a-f]{64}$/i);
-    // clearingPrice must be 0 for the collateral-release path
-    expect(clearingPrice).toBe(0n);
-    // winners array contains the converted Ethereum address
-    expect(winners).toEqual([bidderEthAddr]);
-    // fills array contains 0n (loser)
-    expect(fills).toEqual([0n]);
+    expect(mocks.calls.map((c) => [c.method, c.args[1], c.args[3]])).toEqual([
+      ["refund", ethers.getAddress(SELLER), 3n * ETH],
+      ["refund", ethers.getAddress(WINNER), 9n * USD],
+    ]);
   });
 
-  it("resolves with the Ethereum tx hash (releaseBidderCollateral_returns_tx_hash)", async () => {
-    const bidderAptosAddr =
-      "0x" + "00".repeat(12) + "abcdef1234567890abcdef1234567890abcdef12";
+  it("relayBidUnopened refunds the unopened bid's collateral", async () => {
+    stubReceipts({ "0xabcd": [LOSER, 700n * USD, 1] });
 
-    const refund: BidderCollateralRefund = {
-      collateralLockId: new Uint8Array([0xca, 0xfe]),
-      bidderAddress: bidderAptosAddr,
-      windowId: 9n,
-      pairBcs: new Uint8Array([0x05, 0x06]),
-    };
-
-    const mockContract = {
-      authorizeSettlement: vi.fn().mockResolvedValue({
-        wait: vi.fn().mockResolvedValue({ hash: "0xrelayertxhash" }),
-      }),
-    };
-    vi.mocked(getBLSVerifierTestnetContract).mockReturnValueOnce(
-      mockContract as unknown as ReturnType<
-        typeof getBLSVerifierTestnetContract
-      >,
+    await relayBidUnopened(
+      {
+        windowId: 4n,
+        bidder: "0x" + "11".repeat(32),
+        collateralLockId: ethers.getBytes("0xabcd"),
+      },
+      TEST_CONFIG,
     );
 
-    const txHash = await releaseBidderCollateral(refund, TEST_CONFIG);
-
-    expect(txHash).toBe("0xrelayertxhash");
+    expect(mocks.calls).toEqual([
+      {
+        method: "refund",
+        args: [
+          refundOutcomeId("0xabcd"),
+          ethers.getAddress(LOSER),
+          "0x" + "aa".repeat(20),
+          700n * USD,
+        ],
+      },
+    ]);
   });
 });
 

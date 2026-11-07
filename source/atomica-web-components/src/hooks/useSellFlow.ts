@@ -74,7 +74,7 @@ export interface SellFlowActions {
   submitProof: () => Promise<void>;
   /** Step 6: register the window timelock, then create the auction (consumes the LockReceipt) */
   createAuction: () => Promise<void>;
-  /** Cancel & unlock — only callable when unlockTime has passed */
+  /** Withdraw FakeETH that an Aptos refund credited (LockBox.withdrawWinnings) */
   cancelAndUnlock: () => Promise<void>;
   /** Hard reset — clears localStorage and returns to connect step */
   reset: () => void;
@@ -424,7 +424,7 @@ export function useSellFlow(
 
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
-      await withdrawFakeEth(provider, state.amount);
+      await withdrawFakeEth(provider);
 
       if (account) clearState(account);
       setState({ step: "lock", blockConfirmed: false, loading: false });

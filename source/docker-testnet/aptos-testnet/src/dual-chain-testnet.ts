@@ -63,6 +63,9 @@ export interface DualChainTestnetInfo {
         /** Bidder account (testnet account 1) */
         bidderPrivateKey: string;
         bidderAddress: string;
+        /** Relayer account (testnet account 2): the LockBox settlementAuthority */
+        relayerPrivateKey: string;
+        relayerAddress: string;
     };
     aptos: {
         nodeUrl: string;
@@ -134,7 +137,7 @@ async function waitForFirstBlock(provider: ethers.JsonRpcProvider): Promise<void
 }
 
 async function deployContract(
-    signer: ethers.Wallet,
+    signer: ethers.Signer,
     artifact: { abi: object[]; bytecode: { object: string } },
     constructorArgs: unknown[] = [],
 ): Promise<string> {
@@ -148,7 +151,7 @@ async function mintFakeETH(
     provider: ethers.JsonRpcProvider,
     tokenAddress: string,
     abi: object[],
-    fromSigner: ethers.Wallet,
+    fromSigner: ethers.Signer,
     toAddress: string,
     amount: bigint,
 ): Promise<void> {
@@ -182,11 +185,14 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
     const deployerAddress = accounts[0].address;
     const bidderPrivateKey = accounts[1].privateKey;
     const bidderAddress = accounts[1].address;
+    const relayerPrivateKey = accounts[2].privateKey;
+    const relayerAddress = accounts[2].address;
 
     // ethers caches eth_getTransactionCount for 250 ms by default. Anvil mines
     // instantly, so back-to-back deploys would reuse a stale nonce.
     const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
-    const deployer = new ethers.Wallet(deployerPrivateKey, provider);
+    // NonceManager: deploys and mints from one signer go back to back.
+    const deployer = new ethers.NonceManager(new ethers.Wallet(deployerPrivateKey, provider));
 
     console.log(`[Dual-Chain] ETH RPC: ${rpcUrl}, chainId: ${chainId}`);
     console.log(`[Dual-Chain] Deployer: ${deployerAddress}`);
@@ -203,7 +209,12 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
     const fakeUSD = await deployContract(deployer, readArtifact("FakeUSD"));
     console.log(`[Dual-Chain] ✓ FakeUSD: ${fakeUSD}`);
 
-    const lockBox = await deployContract(deployer, readArtifact("LockBox"), [fakeETH, fakeUSD]);
+    // Only the relayer can release locks, and only on an Aptos outcome.
+    const lockBox = await deployContract(deployer, readArtifact("LockBox"), [
+        fakeETH,
+        fakeUSD,
+        relayerAddress,
+    ]);
     console.log(`[Dual-Chain] ✓ LockBox: ${lockBox}`);
 
     // Fund seller and bidder with FakeETH so tests can lock tokens immediately.
@@ -287,6 +298,8 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
             deployerAddress,
             bidderPrivateKey,
             bidderAddress,
+            relayerPrivateKey,
+            relayerAddress,
         },
         aptos: {
             nodeUrl,

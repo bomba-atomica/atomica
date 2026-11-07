@@ -2,7 +2,11 @@
  * LockBox Contract Helpers
  *
  * Ethereum-side interactions for locking FakeETH/FakeUSD in LockBox.sol.
- * Covers approve → lock → query → withdraw lifecycle.
+ * Covers approve → lock → query → withdrawWinnings lifecycle.
+ *
+ * Locked tokens are released only by an Aptos auction outcome that the
+ * relayer posts to LockBox (see settlement/bridge.ts). The user then pulls
+ * the credited tokens with `withdrawWinnings`.
  */
 
 import { ethers, type TransactionReceipt } from "ethers";
@@ -13,12 +17,13 @@ import { FAKE_ETH_ABI, FAKE_USD_ABI } from "./abis.js";
 
 const LOCKBOX_ABI = [
   "function lock(address token, uint256 amount) external",
-  "function withdraw(address token, uint256 amount) external",
+  "function withdrawWinnings(address token) external",
+  "function getWithdrawable(address user, address token) external view returns (uint256)",
   "function getLockedBalance(address user, address token) external view returns (uint256)",
   "function getUnlockTime(address user, address token) external view returns (uint256)",
   "function isUnlocked(address user, address token) external view returns (bool)",
   "event TokensLocked(address indexed user, address indexed token, uint256 amount, uint256 unlockTime)",
-  "event TokensWithdrawn(address indexed user, address indexed token, uint256 amount)",
+  "event WithdrawWinnings(address indexed winner, address indexed token, uint256 amount)",
 ] as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -121,8 +126,9 @@ export async function getLockedBalance(
 }
 
 /**
- * Get the Unix timestamp (seconds) after which the user can withdraw.
- * Returns 0 if no tokens are locked.
+ * Get the Unix timestamp (seconds) when the lock passes its minimum age.
+ * Informational only: time does not release a lock. Returns 0 if no tokens
+ * are locked.
  */
 export async function getUnlockTime(
   provider: ethers.Provider,
@@ -136,7 +142,7 @@ export async function getUnlockTime(
 }
 
 /**
- * Check whether the user's tokens are past their lock period.
+ * Check whether the user's lock is past its minimum age. Informational only.
  */
 export async function isUnlocked(
   provider: ethers.Provider,
@@ -149,19 +155,18 @@ export async function isUnlocked(
 }
 
 /**
- * Withdraw `amount` of previously locked FakeETH.
- * Will revert on-chain if the unlock time has not passed.
+ * Withdraw all FakeETH that an Aptos outcome credited to the user (a refund
+ * or a winning fill). Reverts on-chain when nothing is credited.
  */
 export async function withdrawFakeEth(
   provider: ethers.BrowserProvider,
-  amount: bigint,
 ): Promise<TransactionReceipt> {
   const lockBox = await getLockBoxWithSigner(provider);
   const tokenAddress = getFakeEthAddress();
 
-  const tx = await lockBox.withdraw(tokenAddress, amount);
+  const tx = await lockBox.withdrawWinnings(tokenAddress);
   const receipt = await tx.wait();
-  if (!receipt) throw new Error("withdraw() tx receipt is null");
+  if (!receipt) throw new Error("withdrawWinnings() tx receipt is null");
   return receipt;
 }
 

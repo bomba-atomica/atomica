@@ -276,6 +276,15 @@ jobs:
             --named-addresses noop=0x1 \
             --skip-fetch-latest-git-deps
 
+      # test/lockbox-release.test.ts deploys LockBox from forge output and runs
+      # the live dual-chain refund / winner payout / seller payout cases.
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Build EVM contracts
+        working-directory: source/evm-contracts
+        run: forge build
+
       # ── Aptos Testnet SDK Tests ────────────────────────────────────────────
       - name: Run Aptos Testnet SDK tests
         working-directory: source/docker-testnet/aptos-testnet

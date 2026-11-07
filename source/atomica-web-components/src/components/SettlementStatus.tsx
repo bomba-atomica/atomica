@@ -33,11 +33,10 @@ const DEFAULT_UI_BRIDGE_CONFIG: BridgeConfig = {
     _env.VITE_CONTRACT_ADDRESS ??
     "0x0000000000000000000000000000000000000000000000000000000000000000",
   ethRpcUrl: _env.VITE_ETH_RPC_URL ?? "http://localhost:8545",
-  blsVerifierAddress:
-    _env.VITE_BLS_VERIFIER_ADDRESS ??
-    "0x0000000000000000000000000000000000000000",
+  lockBoxAddress:
+    _env.VITE_LOCKBOX_ADDRESS ?? "0x0000000000000000000000000000000000000000",
   // The UI does not have a relayer private key — settlement is relayer-driven.
-  // Any call to submitSettlement from the UI will fail with NotTrustedRelayer.
+  // Only the relayer key (the LockBox settlementAuthority) can release locks.
   relayerPrivateKey: "",
 };
 
