@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { ethers } from "ethers";
 import {
   SIWEAccountAuthenticator,
+  serializeSIWEAbstractPublicKey,
   serializeSIWEAbstractSignature,
 } from "../src/siwe";
 import { Serializer } from "@aptos-labs/ts-sdk";
@@ -9,6 +10,20 @@ import goldenVectors from "./fixtures/golden_vectors.json";
 
 describe("Authenticator Serialization", () => {
   describe("Golden Vector Correctness", () => {
+    it("should match rust-generated BCS for SIWEAbstractPublicKey", () => {
+      // ethereum_derivable_account.move reads the address as the utf8 bytes
+      // of the 0x-prefixed hex string, which is what getDerivedAddress passes.
+      expect(goldenVectors.abstract_public_key.length).toBeGreaterThan(0);
+      for (const testCase of goldenVectors.abstract_public_key) {
+        const { ethereum_address, domain } = testCase.input;
+        const bytes = serializeSIWEAbstractPublicKey(
+          new TextEncoder().encode(ethereum_address),
+          domain,
+        );
+        expect(ethers.hexlify(bytes).substring(2)).toBe(testCase.bcs_hex);
+      }
+    });
+
     it("should match rust-generated BCS for SIWEAbstractSignature", () => {
       for (const testCase of goldenVectors.abstract_signature) {
         if (testCase.name === "MessageV2 Standard") {
