@@ -69,6 +69,12 @@ for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
 done
 
 # Step 2: Create layout.yaml
+# epoch_duration_secs: 86400 (24 hours) is the Docker testnet epoch policy
+# recorded in docs/decisions/aptos-validator-timelock.md. The first epoch ends
+# at the first block (genesis time is 0), so epoch 2 holds the timelock key.
+# timelock_dkg_enabled: true turns the timelock DKG on at genesis (atomica-aptos
+# layout flag, issue 155). Its default chunky DKG config and validator
+# transactions are already on for CLI genesis.
 echo "Step 2/6: Creating layout.yaml..."
 cat > layout.yaml <<EOF
 ---
@@ -76,7 +82,7 @@ root_key: "${APTOS_ROOT_ACCOUNT_PUBLIC_KEY}"
 users: [${USERNAMES}]
 chain_id: ${CHAIN_ID}
 allow_new_validators: false
-epoch_duration_secs: 7200
+epoch_duration_secs: 86400
 is_test: true
 min_stake: 100000000000000
 min_voting_threshold: 100000000000000
@@ -86,6 +92,7 @@ required_proposer_stake: 100000000000000
 rewards_apy_percentage: 10
 voting_duration_secs: 43200
 voting_power_increase_limit: 20
+timelock_dkg_enabled: true
 EOF
 
 # Step 3: Set validator configurations

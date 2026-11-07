@@ -226,7 +226,8 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
     console.log(`[Dual-Chain] ✓ Minted FakeETH to bidder`);
 
     // ── Aptos ─────────────────────────────────────────────────────────────────
-    aptosTestnet = await DockerTestnet.new(2);
+    // The timelock DKG needs 4 validators (see localnet.ts setupLocalnet).
+    aptosTestnet = await DockerTestnet.new(4);
     setTestnet(aptosTestnet);
     const nodeUrl = `${aptosTestnet.validatorApiUrl(0)}/v1`;
 
