@@ -60,8 +60,9 @@ module atomica::auction_bid_wrapper_tests {
     }
 
     // Chain state of the golden bid: chain id 7, epoch 3, timelock id 11 pending with the
-    // golden deadline, clock inside auction window 5.
-    fun setup(): signer {
+    // golden deadline, clock inside auction window 5. Public so `auction_tests` can bind
+    // windows to a real registered timelock.
+    public fun setup(): signer {
         let framework = account::create_signer_for_test(@0x1);
         account::create_account_for_test(@aptos_framework);
         timestamp::set_time_has_started_for_testing(&framework);
@@ -118,7 +119,7 @@ module atomica::auction_bid_wrapper_tests {
     }
 
     // Deadline passes, validators reach the threshold, the key checks out: status Revealed.
-    fun reveal_timelock() {
+    public fun reveal_timelock() {
         timestamp::update_global_time_for_test(DEADLINE_US);
         ibe_config::submit_dk_shares_for_testing(TIMELOCK_ID, shares(2), 0, @0xB0, 3);
         ibe_config::submit_dk_shares_for_testing(TIMELOCK_ID, shares(1), 1, @0xB1, 3);
@@ -770,6 +771,168 @@ module atomica::auction_bid_wrapper_tests {
             commitment_for(2010, 7, golden_bidder()),
             b"usd_lock_late_32bytes__________", 5u256,
         );
+    }
+
+    // ===================== settle and create_auction guards =====================
+    //
+    // Regression tests for review finding 6 (`docs/code-reviews/aptos-1-49-6-upgrade-review.md`,
+    // task T2.4): `settle` had no timelock or deadline check and passed with 0 bids, and
+    // `create_auction` accepted an unregistered timelock. The `review_` tests replay those
+    // attacks and pin the abort code that now stops each one.
+
+    const SELLER_LOCK: vector<u8> = b"eth_lock_seller_32bytes________";
+
+    // Lock registries plus one FakeETH seller receipt of 5 at @atomica.
+    fun setup_seller_receipt(atomica: &signer) {
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        lock_receipt::insert_test_receipt<Ethereum, FakeETH>(SELLER_LOCK, @atomica, 5u256, 1);
+    }
+
+    fun create_with_timelock(atomica: &signer, timelock_id: u64) {
+        auction::create_auction(
+            atomica, auction::current_window_id(), pair(), SELLER_LOCK, 2000, timelock_id, vector::empty<u8>(),
+        );
+    }
+
+    // A window with one seller lock and no bids, created through the entry point.
+    fun setup_empty_window(atomica: &signer) {
+        setup();
+        setup_seller_receipt(atomica);
+        create_with_timelock(atomica, TIMELOCK_ID);
+    }
+
+    fun seller_lock_status(): u8 {
+        lock_receipt::get_receipt_status<Ethereum, FakeETH>(SELLER_LOCK)
+    }
+
+    // Attack: settle an empty window in the block after create_auction. It would block all
+    // bids and strand the seller lock.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 31, location = atomica::auction)] // E_DEADLINE_NOT_PASSED
+    fun review_settle_empty_window_before_deadline_aborts(atomica: &signer) {
+        setup_empty_window(atomica);
+        let attacker = account::create_signer_for_test(@0xBAD);
+        auction::settle(&attacker, AUCTION_ID, pair());
+    }
+
+    // Past the deadline the key is not out yet: settle waits for the reveal.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 16, location = atomica::auction)] // E_TIMELOCK_NOT_REVEALED
+    fun review_settle_pending_timelock_after_deadline_aborts(atomica: &signer) {
+        setup_empty_window(atomica);
+        timestamp::update_global_time_for_test(DEADLINE_US);
+        let attacker = account::create_signer_for_test(@0xBAD);
+        auction::settle(&attacker, AUCTION_ID, pair());
+    }
+
+    // An expired timelock goes through refund_expired_window, never settle.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 27, location = atomica::auction)] // E_TIMELOCK_EXPIRED
+    fun review_settle_expired_timelock_aborts(atomica: &signer) {
+        setup_funded_window(atomica);
+        expire_reveal_window();
+        let attacker = account::create_signer_for_test(@0xBAD);
+        auction::settle(&attacker, AUCTION_ID, pair());
+    }
+
+    // With bids, settle needs closed openings even after the reveal.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 21, location = atomica::auction)] // E_REVEAL_NOT_FINAL
+    fun review_settle_bids_before_reveal_final_aborts(atomica: &signer) {
+        setup_funded_window(atomica);
+        reveal_timelock();
+        let attacker = account::create_signer_for_test(@0xBAD);
+        auction::settle(&attacker, AUCTION_ID, pair());
+    }
+
+    // Attack: bind a window to a timelock id the registry never issued (setup issues 0 to 12).
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 28, location = atomica::auction)] // E_TIMELOCK_NOT_REGISTERED
+    fun review_create_auction_unregistered_timelock_aborts(atomica: &signer) {
+        setup();
+        setup_seller_receipt(atomica);
+        create_with_timelock(atomica, 13);
+    }
+
+    // Empty-auction rule: after the reveal an empty window settles and the seller lock is
+    // released, so the relayer returns the locked FakeETH.
+    #[test(atomica = @atomica)]
+    fun settle_empty_window_releases_the_seller_lock(atomica: &signer) {
+        setup_empty_window(atomica);
+        assert!(seller_lock_status() == lock_receipt::status_claimed(), 1);
+        reveal_timelock();
+        let caller = account::create_signer_for_test(@0x9999);
+        auction::clear_uniform_price(AUCTION_ID, pair());
+        auction::settle(&caller, AUCTION_ID, pair());
+        assert!(auction::is_settled(AUCTION_ID, pair()), 2);
+        assert!(seller_lock_status() == lock_receipt::status_revoked(), 3);
+    }
+
+    // No valid bid fills: the seller lock is released even though bids exist.
+    #[test(atomica = @atomica)]
+    fun settle_without_fill_releases_the_seller_lock(atomica: &signer) {
+        setup_funded_window(atomica);
+        reveal_timelock();
+        timestamp::update_global_time_for_test(DEADLINE_US + 20 * MIN);
+        let caller = account::create_signer_for_test(@0x9999);
+        auction::finalize_reveal(&caller, AUCTION_ID, pair());
+        auction::clear_uniform_price(AUCTION_ID, pair());
+        auction::settle(&caller, AUCTION_ID, pair());
+        assert!(seller_lock_status() == lock_receipt::status_revoked(), 1);
+    }
+
+    // A filled window keeps the seller lock claimed: the supply went to the winner.
+    #[test(atomica = @atomica)]
+    fun settle_with_fill_keeps_the_seller_lock_claimed(atomica: &signer) {
+        setup_funded_window(atomica);
+        reveal_timelock();
+        let bidder = account::create_signer_for_test(golden_bidder());
+        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
+        auction::clear_uniform_price(AUCTION_ID, pair());
+        auction::settle(&bidder, AUCTION_ID, pair());
+        assert!(auction::is_settled(AUCTION_ID, pair()), 1);
+        assert!(seller_lock_status() == lock_receipt::status_claimed(), 2);
+    }
+
+    // create_auction: the timelock was registered in an earlier epoch.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 29, location = atomica::auction)] // E_TIMELOCK_WRONG_EPOCH
+    fun create_auction_rejects_a_timelock_of_an_earlier_epoch(atomica: &signer) {
+        setup();
+        setup_seller_receipt(atomica);
+        expire_epoch_ended();
+        create_with_timelock(atomica, TIMELOCK_ID);
+    }
+
+    // create_auction: the timelock is no longer Pending.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 14, location = atomica::auction)] // E_TIMELOCK_NOT_PENDING
+    fun create_auction_rejects_a_revealed_timelock(atomica: &signer) {
+        setup();
+        setup_seller_receipt(atomica);
+        reveal_timelock();
+        create_with_timelock(atomica, TIMELOCK_ID);
+    }
+
+    // create_auction: the deadline has passed, so the window could take no bids.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 30, location = atomica::auction)] // E_TIMELOCK_DEADLINE_PASSED
+    fun create_auction_rejects_a_passed_deadline(atomica: &signer) {
+        setup();
+        setup_seller_receipt(atomica);
+        timestamp::update_global_time_for_test(DEADLINE_US);
+        create_with_timelock(atomica, TIMELOCK_ID);
+    }
+
+    // create_auction: no timelock registry at all.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 28, location = atomica::auction)] // E_TIMELOCK_NOT_REGISTERED
+    fun create_auction_rejects_a_missing_registry(atomica: &signer) {
+        let framework = account::create_signer_for_test(@0x1);
+        timestamp::set_time_has_started_for_testing(&framework);
+        setup_seller_receipt(atomica);
+        create_with_timelock(atomica, 0);
     }
 
     // ===================== timelock facade =====================
