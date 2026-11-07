@@ -16,6 +16,7 @@ import type { LockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
 import {
   approveFakeEth,
   lockFakeEth,
+  lockNonceFromReceipt,
   getUnlockTime,
   withdrawFakeEth,
 } from "@atomica/sdk/ethereum";
@@ -43,6 +44,7 @@ interface PersistedState {
   step: SellFlowStep;
   txHash?: string;
   lockBlock?: number;
+  lockNonce?: string; // bigint as string
   lockId?: string; // hex string
   auctionEndTime?: number;
   minPrice?: string; // bigint as string
@@ -56,6 +58,8 @@ export interface SellFlowState {
   lockBlock?: number;
   blockConfirmed: boolean;
   proof?: LockedBalanceProof; // not persisted
+  /** LockBox nonce of the lock: names the lock and its Aptos receipt */
+  lockNonce?: bigint;
   lockId?: string;
   auctionEndTime?: number;
   minPrice?: bigint;
@@ -112,26 +116,6 @@ function clearState(address: string): void {
   localStorage.removeItem(storageKey(address));
 }
 
-// ── Lock ID helpers ───────────────────────────────────────────────────────────
-
-/**
- * Compute lock_id from a submitted proof.
- * Matches generate_lock_id() in lock_receipt.move:
- *   keccak256(blockHash || contractAddress || userAddress || tokenAddress || storageKey)
- */
-function computeLockId(proof: LockedBalanceProof): string {
-  // ethers.concat keeps this browser-native: Node's Buffer is not a global in
-  // browsers, and a Buffer from another realm fails ethers' BytesLike check.
-  const data = ethers.concat([
-    proof.blockHash,
-    proof.contractAddress,
-    proof.userAddress,
-    proof.tokenAddress,
-    proof.storageKey,
-  ]);
-  return ethers.keccak256(data);
-}
-
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useSellFlow(
@@ -149,6 +133,7 @@ export function useSellFlow(
       step: persisted.step,
       txHash: persisted.txHash,
       lockBlock: persisted.lockBlock,
+      lockNonce: persisted.lockNonce ? BigInt(persisted.lockNonce) : undefined,
       blockConfirmed: false, // will be re-checked on mount
       lockId: persisted.lockId,
       auctionEndTime: persisted.auctionEndTime,
@@ -180,6 +165,9 @@ export function useSellFlow(
         step: persisted.step,
         txHash: persisted.txHash,
         lockBlock: persisted.lockBlock,
+        lockNonce: persisted.lockNonce
+          ? BigInt(persisted.lockNonce)
+          : undefined,
         blockConfirmed: false,
         lockId: persisted.lockId,
         auctionEndTime: persisted.auctionEndTime,
@@ -202,6 +190,7 @@ export function useSellFlow(
       step: state.step,
       txHash: state.txHash,
       lockBlock: state.lockBlock,
+      lockNonce: state.lockNonce?.toString(),
       lockId: state.lockId,
       auctionEndTime: state.auctionEndTime,
       minPrice: state.minPrice?.toString(),
@@ -214,6 +203,7 @@ export function useSellFlow(
     state.step,
     state.txHash,
     state.lockBlock,
+    state.lockNonce,
     state.lockId,
     state.auctionEndTime,
     state.minPrice,
@@ -281,6 +271,7 @@ export function useSellFlow(
 
         // Step 2: Lock
         const receipt = await lockFakeEth(provider, amount);
+        const lockNonce = lockNonceFromReceipt(receipt);
 
         const unlockTime = await getUnlockTime(
           new ethers.JsonRpcProvider(getChainConfig().ethereum.rpcUrl),
@@ -292,6 +283,7 @@ export function useSellFlow(
           step: "confirming",
           txHash: receipt.hash,
           lockBlock: receipt.blockNumber ?? undefined,
+          lockNonce,
           amount,
           minPrice,
           unlockTime,
@@ -305,7 +297,7 @@ export function useSellFlow(
   );
 
   const generateProof = useCallback(async () => {
-    if (!account || !state.lockBlock) return;
+    if (!account || !state.lockBlock || state.lockNonce === undefined) return;
     setState((s) => ({
       ...s,
       step: "generating-proof",
@@ -322,6 +314,7 @@ export function useSellFlow(
         config.ethereum.lockBox,
         account,
         config.ethereum.fakeETH,
+        state.lockNonce,
         state.lockBlock,
       );
 
@@ -336,7 +329,7 @@ export function useSellFlow(
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [account, state.lockBlock, setError]);
+  }, [account, state.lockBlock, state.lockNonce, setError]);
 
   const submitProof = useCallback(async () => {
     if (!account || !proofRef.current) return;
@@ -352,7 +345,8 @@ export function useSellFlow(
       const payload = getRegisterLockPayload(proof);
       await submitNativeTransaction(aptos, account, payload);
 
-      const lockId = computeLockId(proof);
+      // The receipt id is the LockBox lock id (issue 171), not the block.
+      const lockId = proof.lockId;
 
       // Go directly to creating-auction — no mint step needed.
       // auction::create_auction consumes the LockReceipt directly.

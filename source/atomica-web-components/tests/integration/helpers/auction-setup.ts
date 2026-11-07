@@ -6,9 +6,8 @@
  *   generateEthLockProof()  — Mint → Approve → Lock on Ethereum, generate storage proof
  *                             (runs via vitest browser command on Node.js side to avoid
  *                             @ethereumjs/util EventEmitter incompatibility in browser)
- *   registerLockOnAptos()   — Register the proof on Aptos using an authorized
- *                             Demo-phase signer (`@atomica` deployer or the
- *                             zero-padded Ethereum address from the proof)
+ *   registerLockOnAptos()   — Trust the proof block's state root and register
+ *                             the lock on Aptos as the `@atomica` deployer
  *   setupAuctionState()     — Combined convenience: both steps above using the
  *                             fixture deployer as the Aptos signer
  *
@@ -50,6 +49,10 @@ export interface LockedBalanceProof {
   contractAddress: string;
   userAddress: string;
   tokenAddress: string;
+  /** LockBox nonce of the lock (decimal string) */
+  lockNonce: string;
+  /** LockBox.getLockId(user, token, nonce): the Aptos receipt id */
+  lockId: string;
   storageKey: string;
   storageValue: bigint;
   accountProof: string[];
@@ -117,11 +120,12 @@ export async function generateEthLockProof(
 }
 
 /**
- * Register a lock proof on Aptos under the given sender account.
+ * Trust the proof block's state root, then register the lock on Aptos.
  *
- * Demo-phase authorization is stricter than the generic signature suggests:
- * `lock_receipt::register_ethereum_lock` only accepts the zero-padded Ethereum
- * address embedded in the proof or the `@atomica` deployer/admin account.
+ * `eth_proof::submit_header` and the Demo-phase `register_ethereum_lock` rule
+ * both accept the `@atomica` deployer, so `sender` must be that account.
+ * Aptos checks the proof against the trusted root only and derives the
+ * storage key and lock id from the user, the token and the lock nonce.
  *
  * @param aptosClient - Aptos client
  * @param sender      - Account to sign the register transaction
@@ -136,34 +140,35 @@ export async function registerLockOnAptos(
   proof: LockedBalanceProof,
   asset: "FakeETH" | "FakeUSD" = "FakeETH",
 ): Promise<void> {
-  const registerTxn = await aptosClient.transaction.build.simple({
-    sender: sender.accountAddress,
-    data: {
-      function: `${moduleAddr}::lock_receipt::register_ethereum_lock`,
-      typeArguments: [`${moduleAddr}::lock_receipt::${asset}`],
-      functionArguments: [
-        proof.blockNumber,
-        ethers.getBytes(proof.blockHash),
-        ethers.getBytes(proof.stateRoot),
-        ethers.getBytes(proof.contractAddress),
-        ethers.getBytes(proof.userAddress),
-        ethers.getBytes(proof.tokenAddress),
-        ethers.getBytes(proof.storageKey),
-        proof.storageValue.toString(),
-        proof.accountProof.map((p: string) => ethers.getBytes(p)),
-        proof.storageProof.map((p: string) => ethers.getBytes(p)),
-      ],
-    },
-  });
+  const submit = async (data: InputGenerateTransactionPayloadData) => {
+    const txn = await aptosClient.transaction.build.simple({
+      sender: sender.accountAddress,
+      data,
+    });
+    const submitted = await aptosClient.signAndSubmitTransaction({
+      signer: sender,
+      transaction: txn,
+    });
+    await aptosClient.waitForTransaction({
+      transactionHash: submitted.hash,
+      options: { checkSuccess: true },
+    });
+  };
 
-  const submitted = await aptosClient.signAndSubmitTransaction({
-    signer: sender,
-    transaction: registerTxn,
+  await submit({
+    function: `${moduleAddr}::eth_proof::submit_header`,
+    functionArguments: [proof.blockNumber, ethers.getBytes(proof.stateRoot)],
   });
-
-  await aptosClient.waitForTransaction({
-    transactionHash: submitted.hash,
-    options: { checkSuccess: true },
+  await submit({
+    function: `${moduleAddr}::lock_receipt::register_ethereum_lock`,
+    typeArguments: [`${moduleAddr}::lock_receipt::${asset}`],
+    functionArguments: [
+      proof.blockNumber,
+      ethers.getBytes(proof.userAddress),
+      proof.lockNonce,
+      proof.accountProof.map((p: string) => ethers.getBytes(p)),
+      proof.storageProof.map((p: string) => ethers.getBytes(p)),
+    ],
   });
 }
 

@@ -3,10 +3,10 @@
  *
  * Verifies parameter order and types match the Move entry function signatures:
  *   lock_receipt::register_ethereum_lock<FakeETH>(
- *     account, block_number, block_hash, state_root,
- *     contract_address, user_address, token_address, storage_key,
- *     storage_value, account_proof, storage_proof
+ *     account, block_number, user_address, lock_nonce,
+ *     account_proof, storage_proof
  *   )
+ *   eth_proof::submit_header(admin, block_number, state_root)
  *   auction::create_auction(seller, window_id, pair_bcs, lock_id, min_price,
  *     timelock_id, mpk_bytes)
  *   ibe_config::register_timelock(account, deadline_us)
@@ -16,6 +16,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import type { InputEntryFunctionData } from "@aptos-labs/ts-sdk";
+import { ethers } from "ethers";
 
 // Mock the Aptos config to avoid SDK initialization side effects.
 vi.mock("../src/aptos/config", () => ({
@@ -33,6 +34,7 @@ vi.mock("../src/transaction", () => ({
 
 import {
   getRegisterLockPayload,
+  getSubmitEthereumHeaderPayload,
   getCreateAuctionPayload,
   getRegisterTimelockPayload,
   timelockIdFromEvents,
@@ -50,6 +52,8 @@ function makeMockProof(): LockedBalanceProof {
     contractAddress: "0x" + "11".repeat(20),
     userAddress: "0x" + "22".repeat(20),
     tokenAddress: "0x" + "33".repeat(20),
+    lockNonce: 7n,
+    lockId: "0x" + "77".repeat(32),
     storageKey: "0x" + "44".repeat(32),
     storageValue: 1_000_000_000_000_000_000n, // 1 FETH in wei
     accountProof: ["0x" + "55".repeat(20)],
@@ -79,20 +83,16 @@ describe("getRegisterLockPayload", () => {
     expect(payload.typeArguments![0]).toContain("::lock_receipt::FakeETH");
   });
 
-  it("has exactly 10 function arguments matching the Move signature", () => {
+  it("has exactly 5 function arguments matching the Move signature", () => {
     // Move entry function args (excluding implicit `account: &signer`):
-    //   0: block_number (u64)
-    //   1: block_hash   (vector<u8>)
-    //   2: state_root   (vector<u8>)
-    //   3: contract_address (vector<u8>)
-    //   4: user_address     (vector<u8>)
-    //   5: token_address    (vector<u8>)
-    //   6: storage_key      (vector<u8>)
-    //   7: storage_value    (u256 as decimal string)
-    //   8: account_proof    (vector<vector<u8>>)
-    //   9: storage_proof    (vector<vector<u8>>)
+    //   0: block_number  (u64)
+    //   1: user_address  (vector<u8>)
+    //   2: lock_nonce    (u64 as decimal string)
+    //   3: account_proof (vector<vector<u8>>)
+    //   4: storage_proof (vector<vector<u8>>)
+    // The state root, LockBox, token and storage key are derived on chain.
     const payload = getRegisterLockPayload(makeMockProof());
-    expect(payload.functionArguments!.length).toBe(10);
+    expect(payload.functionArguments!.length).toBe(5);
   });
 
   it("places block_number (number) at index 0", () => {
@@ -100,65 +100,36 @@ describe("getRegisterLockPayload", () => {
     expect(payload.functionArguments![0]).toBe(42);
   });
 
-  it("serializes block_hash as 32-byte Uint8Array at index 1", () => {
+  it("serializes user_address as 20-byte Uint8Array at index 1", () => {
     const payload = getRegisterLockPayload(makeMockProof());
-    const blockHashBytes = payload.functionArguments![1] as Uint8Array;
-    expect(blockHashBytes).toBeInstanceOf(Uint8Array);
-    expect(blockHashBytes.length).toBe(32);
-  });
-
-  it("serializes state_root as 32-byte Uint8Array at index 2", () => {
-    const payload = getRegisterLockPayload(makeMockProof());
-    const stateRootBytes = payload.functionArguments![2] as Uint8Array;
-    expect(stateRootBytes).toBeInstanceOf(Uint8Array);
-    expect(stateRootBytes.length).toBe(32);
-  });
-
-  it("serializes contract_address as 20-byte Uint8Array at index 3", () => {
-    const payload = getRegisterLockPayload(makeMockProof());
-    const bytes = payload.functionArguments![3] as Uint8Array;
+    const bytes = payload.functionArguments![1] as Uint8Array;
     expect(bytes).toBeInstanceOf(Uint8Array);
     expect(bytes.length).toBe(20);
   });
 
-  it("serializes user_address as 20-byte Uint8Array at index 4", () => {
+  it("serializes lock_nonce as decimal string at index 2", () => {
     const payload = getRegisterLockPayload(makeMockProof());
-    const bytes = payload.functionArguments![4] as Uint8Array;
-    expect(bytes).toBeInstanceOf(Uint8Array);
-    expect(bytes.length).toBe(20);
+    expect(payload.functionArguments![2]).toBe("7");
   });
 
-  it("serializes token_address as 20-byte Uint8Array at index 5", () => {
+  it("never sends a caller-supplied state root", () => {
     const payload = getRegisterLockPayload(makeMockProof());
-    const bytes = payload.functionArguments![5] as Uint8Array;
-    expect(bytes).toBeInstanceOf(Uint8Array);
-    expect(bytes.length).toBe(20);
+    const root = ethers.getBytes(makeMockProof().stateRoot);
+    for (const arg of payload.functionArguments!) {
+      expect(arg).not.toEqual(root);
+    }
   });
 
-  it("serializes storage_key as 32-byte Uint8Array at index 6", () => {
+  it("serializes account_proof as Uint8Array[] at index 3", () => {
     const payload = getRegisterLockPayload(makeMockProof());
-    const bytes = payload.functionArguments![6] as Uint8Array;
-    expect(bytes).toBeInstanceOf(Uint8Array);
-    expect(bytes.length).toBe(32);
-  });
-
-  it("serializes storage_value as decimal string (u256) at index 7", () => {
-    const payload = getRegisterLockPayload(makeMockProof());
-    const storageValue = payload.functionArguments![7];
-    expect(typeof storageValue).toBe("string");
-    expect(storageValue).toBe("1000000000000000000");
-  });
-
-  it("serializes account_proof as Uint8Array[] at index 8", () => {
-    const payload = getRegisterLockPayload(makeMockProof());
-    const proof = payload.functionArguments![8] as Uint8Array[];
+    const proof = payload.functionArguments![3] as Uint8Array[];
     expect(Array.isArray(proof)).toBe(true);
     expect(proof[0]).toBeInstanceOf(Uint8Array);
   });
 
-  it("serializes storage_proof as Uint8Array[] at index 9", () => {
+  it("serializes storage_proof as Uint8Array[] at index 4", () => {
     const payload = getRegisterLockPayload(makeMockProof());
-    const proof = payload.functionArguments![9] as Uint8Array[];
+    const proof = payload.functionArguments![4] as Uint8Array[];
     expect(Array.isArray(proof)).toBe(true);
     expect(proof[0]).toBeInstanceOf(Uint8Array);
   });
@@ -169,6 +140,22 @@ describe("getRegisterLockPayload", () => {
     const p2 = getRegisterLockPayload(proof) as InputEntryFunctionData;
     expect(p1.function).toBe(p2.function);
     expect(p1.functionArguments![0]).toBe(p2.functionArguments![0]);
+  });
+});
+
+// ── getSubmitEthereumHeaderPayload ────────────────────────────────────────────
+
+describe("getSubmitEthereumHeaderPayload", () => {
+  it("targets eth_proof::submit_header with block number and 32-byte root", () => {
+    const payload = getSubmitEthereumHeaderPayload(
+      42,
+      "0x" + "cd".repeat(32),
+    ) as InputEntryFunctionData;
+    expect(payload.function).toBe("0xtest::eth_proof::submit_header");
+    expect(payload.functionArguments![0]).toBe(42);
+    const root = payload.functionArguments![1] as Uint8Array;
+    expect(root).toBeInstanceOf(Uint8Array);
+    expect(root.length).toBe(32);
   });
 });
 

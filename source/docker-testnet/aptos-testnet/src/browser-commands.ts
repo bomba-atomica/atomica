@@ -131,14 +131,19 @@ export interface EthereumTestnetInfo {
  * (bigint cannot be transferred as-is).
  */
 export interface EthLockProofResult {
+    /** LockBox.getLockId(user, token, nonce): the Aptos receipt id */
     lockId: string;
     proof: {
         blockNumber: number;
         blockHash: string;
+        /** Must be trusted on Aptos (eth_proof::submit_header) before registering */
         stateRoot: string;
         contractAddress: string;
         userAddress: string;
         tokenAddress: string;
+        /** decimal string of the lock's LockBox nonce */
+        lockNonce: string;
+        lockId: string;
         storageKey: string;
         /** decimal string representation of the bigint storageValue */
         storageValue: string;
@@ -340,10 +345,13 @@ const ERC20_MINT_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
 ];
 
-const LOCKBOX_LOCK_ABI = ["function lock(address token, uint256 amount) external"];
+const LOCKBOX_LOCK_ABI = [
+    "function lock(address token, uint256 amount) external",
+    "event TokensLocked(address indexed user, address indexed token, uint256 amount, uint256 unlockTime, uint256 nonce)",
+];
 
 /**
- * Generate an Ethereum storage proof for a locked balance.
+ * Generate the Ethereum storage proof of one LockBox lock.
  *
  * This command runs on the Node.js side because @ethereumjs/util (used
  * transitively by @atomica/state-proof-verifier) accesses Node's EventEmitter
@@ -354,8 +362,10 @@ const LOCKBOX_LOCK_ABI = ["function lock(address token, uint256 amount) external
  *   2. Approve LockBox for lockAmount
  *   3. Call LockBox.lock()
  *   4. Wait 12 blocks for archive proof availability
- *   5. Fetch eth_getProof storage proof
- *   6. Compute lockId = keccak256(blockHash || contractAddress || userAddress || tokenAddress || storageKey)
+ *   5. Read the lock nonce from its TokensLocked event
+ *   6. Fetch the eth_getProof storage proof of lockAmounts[lockId], where
+ *      lockId = keccak256(abi.encodePacked(user, token, uint256(nonce)))
+ *      (LockBox.getLockId, eth_proof::lock_id)
  *
  * Returns a JSON-serialisable result (storageValue as decimal string).
  *
@@ -413,19 +423,25 @@ export const generateEthLockProofCommand: BrowserCommand<
     )(fakeETHAddress, lockAmount, { nonce: nonce++ });
     const lockReceipt = await provider.waitForTransaction(lockTx.hash, 1);
     const lockBlockNumber = lockReceipt!.blockNumber;
+    const lockIface = new ethers.Interface(LOCKBOX_LOCK_ABI);
+    const lockLog = lockReceipt!.logs
+        .map((log) => lockIface.parseLog(log))
+        .find((parsed) => parsed?.name === "TokensLocked");
+    if (!lockLog) throw new Error(`No TokensLocked event in ${lockTx.hash}`);
+    const lockNonce = lockLog.args.nonce as bigint;
 
     // Wait for archive proof availability (12 blocks). Mines them on anvil.
     await waitForEthBlock(provider, lockBlockNumber + 12, 300, "Lock Proof");
 
-    // Calculate storage key (single-level mapping: keccak256(abi.encode(compositeKey, slot=0)))
-    const compositeKey = ethers.keccak256(
+    // Storage key of lockAmounts[lockId] (LockBox slot 4), as Aptos derives it.
+    const lockId = ethers.keccak256(
         ethers.solidityPacked(
-            ["address", "address"],
-            [ethers.getAddress(seller.address), ethers.getAddress(fakeETHAddress)],
+            ["address", "address", "uint256"],
+            [ethers.getAddress(seller.address), ethers.getAddress(fakeETHAddress), lockNonce],
         ),
     );
     const storageKey = ethers.keccak256(
-        ethers.AbiCoder.defaultAbiCoder().encode(["bytes32", "uint256"], [compositeKey, 0]),
+        ethers.AbiCoder.defaultAbiCoder().encode(["bytes32", "uint256"], [lockId, 4]),
     );
 
     // Fetch block to get blockHash and stateRoot
@@ -444,16 +460,6 @@ export const generateEthLockProofCommand: BrowserCommand<
         `0x${lockBlockNumber.toString(16)}`,
     ]);
 
-    // Compute lockId
-    const lockIdData = Buffer.concat([
-        Buffer.from(block.hash.slice(2), "hex"),
-        Buffer.from(ethers.getAddress(lockBoxAddress).slice(2), "hex"),
-        Buffer.from(ethers.getAddress(seller.address).slice(2), "hex"),
-        Buffer.from(ethers.getAddress(fakeETHAddress).slice(2), "hex"),
-        Buffer.from(storageKey.slice(2), "hex"),
-    ]);
-    const lockId = ethers.keccak256(lockIdData);
-
     return {
         lockId,
         proof: {
@@ -463,6 +469,8 @@ export const generateEthLockProofCommand: BrowserCommand<
             contractAddress: ethers.getAddress(lockBoxAddress),
             userAddress: ethers.getAddress(seller.address),
             tokenAddress: ethers.getAddress(fakeETHAddress),
+            lockNonce: lockNonce.toString(),
+            lockId,
             storageKey,
             storageValue: BigInt(ethProof.storageProof[0].value).toString(),
             accountProof: ethProof.accountProof as string[],

@@ -1,7 +1,10 @@
 /**
  * LockBox-Specific Proof Generation
  *
- * Generates state proofs for LockBox contract locked balances.
+ * Generates the state proof of one LockBox lock: the
+ * `lockAmounts[getLockId(user, token, nonce)]` slot. Aptos derives the same
+ * storage key on chain and checks the proof against a trusted state root
+ * (`eth_proof::submit_header`), so the proof carries no root of its own.
  * Uses @atomica/state-proof-verifier for core proof fetching and verification.
  */
 
@@ -11,13 +14,19 @@ import {
   type EthereumProof,
   type StorageProof,
 } from "@atomica/state-proof-verifier";
-import { calculateLockedBalanceStorageKey } from "./storage-key.js";
+import {
+  calculateLockedBalanceStorageKey,
+  calculateLockStorageKey,
+  getLockId,
+} from "./storage-key.js";
 
 /**
- * Complete state proof for locked balance in LockBox contract
+ * State proof of one lock in the LockBox contract
  *
  * This is a domain-specific wrapper around EthereumProof that includes
- * LockBox contract context (user, token addresses) and timestamps.
+ * LockBox contract context (user, token, lock nonce) and timestamps.
+ * `stateRoot` is informational: the Aptos admin must store it with
+ * `eth_proof::submit_header` before the proof registers.
  */
 export interface LockedBalanceProof {
   // Block information
@@ -28,12 +37,17 @@ export interface LockedBalanceProof {
   // Contract information
   contractAddress: string;
 
-  // User and token (LockBox-specific)
+  // User, token and lock (LockBox-specific)
   userAddress: string;
   tokenAddress: string;
+  /** Nonce of the lock (from its `TokensLocked` event) */
+  lockNonce: bigint;
+  /** LockBox.getLockId(user, token, nonce): the Aptos receipt id */
+  lockId: string;
 
-  // Storage proof
+  // Storage proof of lockAmounts[lockId]
   storageKey: string;
+  /** Amount of this one lock */
   storageValue: bigint;
 
   // MPT proofs
@@ -49,12 +63,13 @@ export interface LockedBalanceProof {
 export type { StorageProof };
 
 /**
- * Generate state proof for a locked balance in LockBox contract
+ * Generate the state proof of one lock in the LockBox contract
  *
  * @param provider - Ethereum provider
  * @param lockBoxAddress - Address of LockBox contract
  * @param userAddress - Address of user who locked tokens
  * @param tokenAddress - Address of token (FakeETH or FakeUSD)
+ * @param lockNonce - Nonce of the lock (see `lockNonceFromReceipt`)
  * @param blockNumber - Block number to generate proof at (default: latest)
  * @returns Complete state proof with LockBox context
  */
@@ -63,6 +78,7 @@ export async function generateLockedBalanceProof(
   lockBoxAddress: string,
   userAddress: string,
   tokenAddress: string,
+  lockNonce: bigint,
   blockNumber?: number,
 ): Promise<LockedBalanceProof> {
   // Normalize addresses
@@ -75,8 +91,8 @@ export async function generateLockedBalanceProof(
     blockNumber = await provider.getBlockNumber();
   }
 
-  // Calculate LockBox storage key for lockedBalances[user][token]
-  const storageKey = calculateLockedBalanceStorageKey(userAddr, tokenAddr);
+  // Storage key of lockAmounts[getLockId(user, token, nonce)]
+  const storageKey = calculateLockStorageKey(userAddr, tokenAddr, lockNonce);
 
   // Get RPC URL from provider
   // For JsonRpcProvider, we can access the URL via _getConnection()
@@ -114,6 +130,8 @@ export async function generateLockedBalanceProof(
     contractAddress: contractAddr,
     userAddress: userAddr,
     tokenAddress: tokenAddr,
+    lockNonce,
+    lockId: getLockId(userAddr, tokenAddr, lockNonce),
     storageKey,
     storageValue,
     accountProof: ethereumProof.accountProof,
@@ -121,41 +139,6 @@ export async function generateLockedBalanceProof(
     timestamp: block.timestamp,
     generatedAt: Date.now(),
   };
-}
-
-/**
- * Generate proofs for multiple users/tokens in batch
- *
- * @param provider - Ethereum provider
- * @param lockBoxAddress - LockBox contract address
- * @param users - Array of user addresses
- * @param tokens - Array of token addresses
- * @param blockNumber - Block number (default: latest)
- * @returns Array of proofs
- */
-export async function generateBatchProofs(
-  provider: ethers.Provider,
-  lockBoxAddress: string,
-  users: string[],
-  tokens: string[],
-  blockNumber?: number,
-): Promise<LockedBalanceProof[]> {
-  const proofs: LockedBalanceProof[] = [];
-
-  for (const user of users) {
-    for (const token of tokens) {
-      const proof = await generateLockedBalanceProof(
-        provider,
-        lockBoxAddress,
-        user,
-        token,
-        blockNumber,
-      );
-      proofs.push(proof);
-    }
-  }
-
-  return proofs;
 }
 
 /**
@@ -175,34 +158,6 @@ export async function isProofFinalized(
   const confirmations = latestBlock - proof.blockNumber;
 
   return confirmations >= minConfirmations;
-}
-
-/**
- * Serialize proof for transmission to Aptos
- *
- * Converts proof to a format suitable for Move structs
- *
- * @param proof - State proof
- * @returns Serialized proof data for Aptos
- */
-export function serializeProofForAptos(proof: LockedBalanceProof): {
-  block_hash: string;
-  state_root: string;
-  contract_address: string;
-  storage_key: string;
-  storage_value: string;
-  account_proof: string[];
-  storage_proof: string[];
-} {
-  return {
-    block_hash: proof.blockHash,
-    state_root: proof.stateRoot,
-    contract_address: proof.contractAddress,
-    storage_key: proof.storageKey,
-    storage_value: ethers.toBeHex(proof.storageValue),
-    account_proof: proof.accountProof,
-    storage_proof: proof.storageProof,
-  };
 }
 
 /**
@@ -258,6 +213,7 @@ LockBox Proof:
   Contract: ${proof.contractAddress}
   User: ${proof.userAddress}
   Token: ${proof.tokenAddress}
+  Lock: nonce ${proof.lockNonce} (${proof.lockId.slice(0, 10)}...)
   Storage Key: ${proof.storageKey.slice(0, 10)}...
   Storage Value: ${proof.storageValue.toString()} wei
   Account Proof Nodes: ${proof.accountProof.length}

@@ -1,8 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { ethers } from "ethers";
-import { Account, Aptos, AptosConfig, Ed25519PrivateKey, Network } from "@aptos-labs/ts-sdk";
 import {
-    capToLocksInBlock,
+    Account,
+    Aptos,
+    AptosConfig,
+    Ed25519PrivateKey,
+    Network,
+    type InputGenerateTransactionPayloadData,
+} from "@aptos-labs/ts-sdk";
+import {
     executeLockBoxReleases,
     getLockReceipt,
     planRefundReleases,
@@ -18,7 +24,7 @@ import {
     teardownDualChainTestnet,
     type DualChainTestnetInfo,
 } from "../src/dual-chain-testnet";
-import { generateEthLockProofCommand } from "../src/browser-commands";
+import { generateEthLockProofCommand, type EthLockProofResult } from "../src/browser-commands";
 
 /**
  * Live dual-chain test: Ethereum LockBox releases follow Aptos outcomes.
@@ -30,7 +36,8 @@ import { generateEthLockProofCommand } from "../src/browser-commands";
  * relayer's NonceManager (`executeLockBoxReleases`), pulls them with
  * `withdrawWinnings`, and asserts ERC-20 balances.
  *
- * Cases: refund, winner payout, seller payout.
+ * Cases: refund, winner payout, seller payout, and one lock giving one
+ * receipt (the same lock proven at a later trusted block is rejected).
  *
  * The auction outcome itself (AuctionRefunded / AuctionSettled) is applied to
  * the live receipts here. A live auction cannot settle until real V2 bids
@@ -73,45 +80,11 @@ async function withdrawWinnings(privateKey: string, asset: LockAsset): Promise<v
     expect(receipt?.status).toBe(1);
 }
 
-/**
- * Lock `amount` of `asset` in LockBox for the holder of `privateKey`, prove the
- * lock on Aptos, and return the receipt the relayer reads back from Aptos.
- */
-async function lockAndRegister(
-    privateKey: string,
-    asset: LockAsset,
-    amount: bigint,
-    mintAmount: bigint,
-): Promise<LockReceiptInfo> {
-    const { lockId, proof } = await generateEthLockProofCommand(
-        {} as never,
-        info.eth.rpcUrl,
-        privateKey,
-        token(asset),
-        info.eth.contracts.lockBox,
-        amount.toString(),
-        mintAmount.toString(),
-    );
-
-    const moduleAddr = info.aptos.moduleAddress;
+/** Submit one Aptos entry function as the deployer (the @atomica admin). */
+async function submitAsDeployer(data: InputGenerateTransactionPayloadData): Promise<void> {
     const txn = await aptos.transaction.build.simple({
         sender: aptosDeployer.accountAddress,
-        data: {
-            function: `${moduleAddr}::lock_receipt::register_ethereum_lock`,
-            typeArguments: [`${moduleAddr}::lock_receipt::${asset}`],
-            functionArguments: [
-                proof.blockNumber,
-                ethers.getBytes(proof.blockHash),
-                ethers.getBytes(proof.stateRoot),
-                ethers.getBytes(proof.contractAddress),
-                ethers.getBytes(proof.userAddress),
-                ethers.getBytes(proof.tokenAddress),
-                ethers.getBytes(proof.storageKey),
-                proof.storageValue,
-                proof.accountProof.map((p: string) => ethers.getBytes(p)),
-                proof.storageProof.map((p: string) => ethers.getBytes(p)),
-            ],
-        },
+        data,
     });
     const submitted = await aptos.signAndSubmitTransaction({
         signer: aptosDeployer,
@@ -121,15 +94,68 @@ async function lockAndRegister(
         transactionHash: submitted.hash,
         options: { checkSuccess: true },
     });
+}
 
-    const receipt = await getLockReceipt(aptos, moduleAddr, asset, lockId);
+/**
+ * Trust the state root of `blockNumber`, then register the lock proven there.
+ * Aptos derives the storage key and checks the proof against that root only.
+ */
+async function trustAndRegister(
+    asset: LockAsset,
+    proof: {
+        blockNumber: number;
+        stateRoot: string;
+        userAddress: string;
+        lockNonce: string;
+        accountProof: string[];
+        storageProof: string[];
+    },
+): Promise<void> {
+    const moduleAddr = info.aptos.moduleAddress;
+    await submitAsDeployer({
+        function: `${moduleAddr}::eth_proof::submit_header`,
+        functionArguments: [proof.blockNumber, ethers.getBytes(proof.stateRoot)],
+    });
+    await submitAsDeployer({
+        function: `${moduleAddr}::lock_receipt::register_ethereum_lock`,
+        typeArguments: [`${moduleAddr}::lock_receipt::${asset}`],
+        functionArguments: [
+            proof.blockNumber,
+            ethers.getBytes(proof.userAddress),
+            proof.lockNonce,
+            proof.accountProof.map((p: string) => ethers.getBytes(p)),
+            proof.storageProof.map((p: string) => ethers.getBytes(p)),
+        ],
+    });
+}
+
+/**
+ * Lock `amount` of `asset` in LockBox for the holder of `privateKey`, prove the
+ * lock on Aptos, and return the receipt the relayer reads back from Aptos.
+ */
+async function lockAndRegister(
+    privateKey: string,
+    asset: LockAsset,
+    amount: bigint,
+    mintAmount: bigint,
+): Promise<LockReceiptInfo & { proof: EthLockProofResult["proof"] }> {
+    const { lockId, proof } = await generateEthLockProofCommand(
+        {} as never,
+        info.eth.rpcUrl,
+        privateKey,
+        token(asset),
+        info.eth.contracts.lockBox,
+        amount.toString(),
+        mintAmount.toString(),
+    );
+    await trustAndRegister(asset, proof);
+
+    const receipt = await getLockReceipt(aptos, info.aptos.moduleAddress, asset, lockId);
     const owner = new ethers.Wallet(privateKey).address;
     expect(receipt.user).toBe(owner);
+    // The receipt holds exactly this lock (issue 171).
     expect(receipt.amount).toBe(amount);
-    // The relayer's per-lock cap reads the real TokensLocked log of the proof block.
-    const [capped] = await capToLocksInBlock([receipt], asset, bridge);
-    expect(capped.amount).toBe(amount);
-    return capped;
+    return { ...receipt, proof };
 }
 
 describe.sequential("LockBox releases follow Aptos outcomes (live dual-chain)", () => {
@@ -238,5 +264,33 @@ describe.sequential("LockBox releases follow Aptos outcomes (live dual-chain)", 
         const lockBox = new ethers.Contract(info.eth.contracts.lockBox, LOCKBOX_ABI, provider);
         expect(await lockBox.getLockedBalance(seller, token("FakeETH"))).toBe(0n);
         expect(await lockBox.getLockedBalance(winner, token("FakeUSD"))).toBe(0n);
+    }, 900_000);
+
+    it("one lock gives one receipt: the same lock proven at a later trusted block is rejected", async () => {
+        const first = await lockAndRegister(
+            info.eth.bidderPrivateKey,
+            "FakeETH",
+            1n * ETH,
+            10n * ETH,
+        );
+        // Prove the same lock slot one block later, under a new state root.
+        const later = first.proof.blockNumber + 1;
+        const block = await provider.getBlock(later);
+        expect(block?.stateRoot).toBeTruthy();
+        expect(block!.stateRoot).not.toBe(first.proof.stateRoot);
+        const ethProof = await provider.send("eth_getProof", [
+            info.eth.contracts.lockBox,
+            [first.proof.storageKey],
+            `0x${later.toString(16)}`,
+        ]);
+        await expect(
+            trustAndRegister("FakeETH", {
+                ...first.proof,
+                blockNumber: later,
+                stateRoot: block!.stateRoot!,
+                accountProof: ethProof.accountProof as string[],
+                storageProof: ethProof.storageProof[0].proof as string[],
+            }),
+        ).rejects.toThrow(/E_ALREADY_CLAIMED/);
     }, 900_000);
 });

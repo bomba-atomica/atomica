@@ -82,6 +82,51 @@ export function calculateUnlockTimeStorageKey(
   return calculateLockedBalanceStorageKey(userAddress, tokenAddress, 1);
 }
 
+/** Storage slot of `LockBox.lockAmounts` (the per-lock record Aptos proves). */
+export const LOCK_AMOUNTS_SLOT = 4;
+
+/**
+ * Id of one LockBox lock, also its Aptos receipt id.
+ *
+ * Matches `LockBox.getLockId` and `eth_proof::lock_id`:
+ * keccak256(abi.encodePacked(user, token, uint256(nonce)))
+ *
+ * @param userAddress - Address that locked the tokens
+ * @param tokenAddress - Locked token (FakeETH or FakeUSD)
+ * @param nonce - The lock's nonce from its `TokensLocked` event
+ */
+export function getLockId(
+  userAddress: string,
+  tokenAddress: string,
+  nonce: bigint,
+): string {
+  return ethers.keccak256(
+    ethers.solidityPacked(
+      ["address", "address", "uint256"],
+      [ethers.getAddress(userAddress), ethers.getAddress(tokenAddress), nonce],
+    ),
+  );
+}
+
+/**
+ * Storage key of `LockBox.lockAmounts[getLockId(user, token, nonce)]`.
+ *
+ * Matches `LockBox.calculateLockStorageKey` and `eth_proof::lock_storage_key`,
+ * which Aptos derives on chain: keccak256(abi.encode(lockId, uint256(4))).
+ */
+export function calculateLockStorageKey(
+  userAddress: string,
+  tokenAddress: string,
+  nonce: bigint,
+): string {
+  return ethers.keccak256(
+    ethers.AbiCoder.defaultAbiCoder().encode(
+      ["bytes32", "uint256"],
+      [getLockId(userAddress, tokenAddress, nonce), LOCK_AMOUNTS_SLOT],
+    ),
+  );
+}
+
 /**
  * Verify storage key calculation matches on-chain contract
  *

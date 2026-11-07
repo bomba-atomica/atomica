@@ -292,14 +292,23 @@ A dead letter needs an operator; the relayer script header gives the replay
 steps. A window whose `pair_bcs` the relayer does not serve is a dead letter
 too, not a silent skip, because only this relayer can release its locks.
 
-Receipt amounts are the owner's total `lockedBalances` at the proof block,
-not one lock, so two receipts of one owner can count the same tokens twice.
-The relayer therefore caps each receipt at the `TokensLocked` amounts of
-that owner and token in the proof block (locks are proven at their own
-block). No two receipts can then release the same tokens, so a refund of
-one receipt cannot drain the balance that backs another receipt's fill.
-LockBox still caps every release at the real locked balance. Issue 171
-makes receipt amounts per lock on Aptos.
+Each receipt is one LockBox lock. `lock` takes a fresh nonce and records
+the lock's amount in `lockAmounts[getLockId(user, token, nonce)]` (slot 4).
+`lock_receipt::register_ethereum_lock` proves that slot, and the receipt's
+`lock_id` is that LockBox lock id, so one lock gives exactly one receipt
+however many blocks it is proven at. The relayer releases each receipt's
+amount as is. LockBox still caps every release at the real locked balance.
+
+A lock proof is checked on chain against trusted inputs only (issue 171):
+
+- The state root comes from `eth_proof::submit_header`, which only the
+  `@atomica` admin (the v0.1 trusted relayer) can call. A stored root never
+  changes. The caller names a block number, never a root.
+- `eth_proof::initialize` pins the LockBox address and the FakeETH and
+  FakeUSD token addresses once at deploy. The receipt's asset type picks
+  the token.
+- `eth_proof` derives the storage key from the user, the token and the
+  lock nonce.
 
 **Abandoned locks are frozen.** A lock that never reaches an auction has no
 Aptos outcome, so nothing releases it. The sell flow no longer offers a

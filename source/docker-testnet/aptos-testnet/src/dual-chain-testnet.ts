@@ -275,6 +275,11 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
             },
             { functionId: `${aptosModuleAddress}::fake_eth::initialize`, args: [] },
             { functionId: `${aptosModuleAddress}::fake_usd::initialize`, args: [] },
+            // Pin the LockBox and the token behind each asset (issue 171).
+            {
+                functionId: `${aptosModuleAddress}::eth_proof::initialize`,
+                args: [lockBox, fakeETH, fakeUSD].map((addr) => `hex:${addr.slice(2)}`),
+            },
             {
                 functionId: `${aptosModuleAddress}::lock_receipt::initialize`,
                 typeArgs: [
