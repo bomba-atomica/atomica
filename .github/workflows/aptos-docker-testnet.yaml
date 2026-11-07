@@ -49,7 +49,7 @@ jobs:
       - name: Install Aptos CLI
         run: |
           # Download aptos binary from atomica-aptos releases
-          APTOS_VERSION="binary-e41b69f662"
+          APTOS_VERSION="binary-2c32b09d95"
           # Extract hash from version tag (format: binary-HASH)
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"

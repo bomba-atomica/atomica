@@ -3,7 +3,7 @@ name = "AtomicaAuction"
 version = "0.0.0"
 
 [dependencies]
-AptosFramework = { git = "https://github.com/bomba-atomica/atomica-aptos.git", subdir = "aptos-move/framework/aptos-framework", rev = "dev-atomica" }
+AptosFramework = { git = "https://github.com/bomba-atomica/atomica-aptos.git", subdir = "aptos-move/framework/aptos-framework", rev = "2c32b09d95e9dffdb73c7636b7cea9c5286358d3" }
 
 [addresses]
 atomica = "_"

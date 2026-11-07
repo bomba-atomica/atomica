@@ -122,7 +122,7 @@ module atomica::auction_bid_wrapper_tests {
         timestamp::update_global_time_for_test(DEADLINE_US);
         ibe_config::submit_dk_shares_for_testing(TIMELOCK_ID, shares(2), 0, @0xB0, 3);
         ibe_config::submit_dk_shares_for_testing(TIMELOCK_ID, shares(1), 1, @0xB1, 3);
-        assert!(ibe_config::finalize_for_testing(TIMELOCK_ID, fixtures::timelock_basic_reconstructed_dk(), true), 900);
+        assert!(ibe_config::finalize_for_testing(TIMELOCK_ID, fixtures::timelock_basic_reconstructed_dk()), 900);
     }
 
     // The key check fails: status Expired(key-check-failed).
@@ -130,7 +130,7 @@ module atomica::auction_bid_wrapper_tests {
         timestamp::update_global_time_for_test(DEADLINE_US);
         ibe_config::submit_dk_shares_for_testing(TIMELOCK_ID, shares(2), 0, @0xB0, 3);
         ibe_config::submit_dk_shares_for_testing(TIMELOCK_ID, shares(1), 1, @0xB1, 3);
-        assert!(!ibe_config::finalize_for_testing(TIMELOCK_ID, fixtures::timelock_basic_reconstructed_dk(), false), 901);
+        assert!(!ibe_config::finalize_for_testing(TIMELOCK_ID, x"00"), 901);
     }
 
     // No key by the end of the reveal window: Expired(reveal-window-elapsed).
@@ -491,7 +491,7 @@ module atomica::auction_bid_wrapper_tests {
         expire_reveal_window();
         assert!(timelock::get_status(TIMELOCK_ID) == timelock::status_revealed(), 2);
         assert!(timelock::get_expiry_reason(TIMELOCK_ID) == 0, 3);
-        ibe_config::finalize_for_testing(TIMELOCK_ID, fixtures::timelock_basic_reconstructed_dk(), true);
+        ibe_config::finalize_for_testing(TIMELOCK_ID, fixtures::timelock_basic_reconstructed_dk());
     }
 
     // ---- batch entry ----
