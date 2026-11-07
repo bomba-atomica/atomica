@@ -23,6 +23,7 @@ import { getChainConfig } from "@atomica/sdk/chain-config";
 import {
   getRegisterLockPayload,
   getCreateAuctionPayload,
+  registerTimelock,
 } from "@atomica/sdk/aptos";
 import { submitNativeTransaction } from "@atomica/sdk";
 import { aptos } from "@atomica/sdk/aptos";
@@ -71,7 +72,7 @@ export interface SellFlowActions {
   generateProof: () => Promise<void>;
   /** Step 5: submit proof to Aptos → creates LockReceipt */
   submitProof: () => Promise<void>;
-  /** Step 6: create auction on Aptos — consumes the LockReceipt */
+  /** Step 6: register the window timelock, then create the auction (consumes the LockReceipt) */
   createAuction: () => Promise<void>;
   /** Cancel & unlock — only callable when unlockTime has passed */
   cancelAndUnlock: () => Promise<void>;
@@ -383,21 +384,28 @@ export function useSellFlow(
       const epoch = nowSec / 43200n;
       const tmod = nowSec % 43200n;
       const windowId = epoch * 2n + (tmod >= 28500n ? 1n : 0n);
-      // pairBcs: empty bytes for scaffold (create_auction body aborts E_NOT_IMPLEMENTED)
+      // pairBcs: empty bytes for scaffold
       const pairBcs = new Uint8Array(0);
-      // MPK: empty bytes for scaffold (timelock encryption deferred to Production)
+      // MPK: empty bytes for scaffold (create_auction does not read it yet)
       const mpk = new Uint8Array(0);
+
+      // create_auction records the timelock that opens the window's bids, so
+      // register it first. Its deadline is the auction end.
+      const auctionEndTime = Math.floor(Date.now() / 1000) + 3600;
+      const timelockId = await registerTimelock(
+        account,
+        BigInt(auctionEndTime) * 1_000_000n,
+      );
 
       const payload = getCreateAuctionPayload(
         windowId,
         pairBcs,
         lockIdBytes,
         state.minPrice,
+        timelockId,
         mpk,
       );
       await submitNativeTransaction(aptos, account, payload);
-
-      const auctionEndTime = Math.floor(Date.now() / 1000) + 3600;
 
       setState((s) => ({
         ...s,

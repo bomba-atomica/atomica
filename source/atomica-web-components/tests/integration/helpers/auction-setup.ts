@@ -212,23 +212,39 @@ export async function setupAuctionState(
 export const TEST_PAIR_BCS = new Uint8Array(0);
 
 /**
- * Default window ID used by test helpers (Phase 3a scaffold).
+ * Default window ID used by test helpers.
  *
- * The value 0 is passed to the new v0 Beta function signatures. Since all
- * entry functions abort with E_NOT_IMPLEMENTED, the window ID is never
- * validated on-chain in this phase.
+ * Window 0 is long stale, so `create_auction` aborts with E_STALE_WINDOW_ID
+ * for it. Tests that need a real window pass {@link currentWindowId}.
  */
 export const TEST_WINDOW_ID = 0n;
 
 /**
+ * Default timelock ID passed to `create_auction` by test helpers.
+ */
+export const TEST_TIMELOCK_ID = 0n;
+
+/**
+ * The window `create_auction` accepts right now, from the chain clock.
+ *
+ * Mirrors `auction::current_window_id` (not a view function): two windows per
+ * 43 200 s epoch, the second starting at offset 28 500 s.
+ */
+export async function currentWindowId(aptosClient: Aptos): Promise<bigint> {
+  const { ledger_timestamp } = await aptosClient.getLedgerInfo();
+  const nowSec = BigInt(ledger_timestamp) / 1_000_000n;
+  const epoch = nowSec / 43200n;
+  return epoch * 2n + (nowSec % 43200n >= 28500n ? 1n : 0n);
+}
+
+/**
  * Create an auction directly (no SIWE) using the deployer's native account.
  *
- * v0 Beta signature: create_auction(seller, window_id, pair_bcs, lock_id, min_price, mpk_bytes)
+ * Same 6-argument call as the SDK's `getCreateAuctionPayload`:
+ *   create_auction(seller, window_id, pair_bcs, lock_id, min_price,
+ *                  timelock_id, mpk_bytes)
  *
- * Phase 3a: the body aborts with E_NOT_IMPLEMENTED (99). This helper uses
- * Throws if the transaction aborts (including Phase 3a E_NOT_IMPLEMENTED).
- *
- * Returns the Aptos transaction hash.
+ * Throws if the transaction aborts. Returns the Aptos transaction hash.
  */
 export async function createAuctionDirect(
   aptosClient: Aptos,
@@ -239,6 +255,7 @@ export async function createAuctionDirect(
   _duration: bigint,
   windowId: bigint = TEST_WINDOW_ID,
   pairBcs: Uint8Array = TEST_PAIR_BCS,
+  timelockId: bigint = TEST_TIMELOCK_ID,
 ): Promise<string> {
   const createTxn = await aptosClient.transaction.build.simple({
     sender: deployer.accountAddress,
@@ -250,6 +267,7 @@ export async function createAuctionDirect(
         pairBcs,
         ethers.getBytes(lockId),
         minPrice,
+        timelockId,
         new Uint8Array(0), // mpk_bytes
       ],
     },
@@ -260,15 +278,36 @@ export async function createAuctionDirect(
     transaction: createTxn,
   });
 
-  // Phase 3a: the scaffold body aborts with E_NOT_IMPLEMENTED (99).
   // checkSuccess: true causes waitForTransaction to throw on abort.
-  // Tests that rely on successful setup must catch this error.
   await aptosClient.waitForTransaction({
     transactionHash: submitted.hash,
     options: { checkSuccess: true },
   });
 
   return submitted.hash;
+}
+
+/**
+ * Read `auction::get_window_status(window_id, pair_bcs)`.
+ * Aborts (throws) with E_AUCTION_NOT_FOUND when the window does not exist.
+ */
+export async function getWindowStatus(
+  aptosClient: Aptos,
+  moduleAddr: string,
+  windowId: bigint,
+  pairBcs: Uint8Array = TEST_PAIR_BCS,
+): Promise<{ timelockId: bigint; revealFinal: boolean; refunded: boolean }> {
+  const [timelockId, revealFinal, refunded] = await aptosClient.view({
+    payload: {
+      function: `${moduleAddr}::auction::get_window_status`,
+      functionArguments: [windowId, pairBcs],
+    },
+  });
+  return {
+    timelockId: BigInt(timelockId as string),
+    revealFinal: revealFinal as boolean,
+    refunded: refunded as boolean,
+  };
 }
 
 /**

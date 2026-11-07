@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { ethers } from "ethers";
-import { submitCreateAuction, getMpk } from "@atomica/sdk/aptos";
+import {
+  submitCreateAuction,
+  getMpk,
+  registerTimelock,
+} from "@atomica/sdk/aptos";
 import { useWallet } from "../context/WalletContext";
 
 /**
@@ -8,16 +12,16 @@ import { useWallet } from "../context/WalletContext";
  *
  * Fetches the IBE Master Public Key from `timelock_config::get_mpk()` on-chain
  * (Phase 3e), collects the LockBox `lock_id`, window ID, pair BCS bytes, and
- * minimum price from the seller, then calls `auction::create_auction` via the
- * SIWE-authenticated Aptos transaction flow.
+ * minimum price from the seller, registers the window timelock with
+ * `ibe_config::register_timelock`, then calls `auction::create_auction` via
+ * the SIWE-authenticated Aptos transaction flow.
  *
  * Phase 3e change: no local `generateSystemParameters()` — MPK is fetched from
  * the on-chain timelock_config module so all auction participants share the same
  * authoritative key.
  *
- * v0 Beta breaking change from Demo phase: `create_auction` now takes
- * `(window_id, pair_bcs, lock_id, min_price, mpk_bytes)` instead of
- * `(lock_id, min_price, duration, mpk_bytes)`.
+ * `create_auction` takes
+ * `(window_id, pair_bcs, lock_id, min_price, timelock_id, mpk_bytes)`.
  *
  * Requires {@link WalletContext} to be mounted above this component.
  *
@@ -40,7 +44,14 @@ export function AuctionCreator() {
       // 1. Fetch Master Public Key from on-chain timelock_config::get_mpk()
       const mpk = await getMpk();
 
-      // 2. Submit Transaction
+      // 2. Register the timelock that opens the window's bids. Its deadline
+      //    is one hour out, the sell flow's auction length.
+      setStatus("Please sign the timelock registration in MetaMask...");
+      const deadlineUs =
+        BigInt(Math.floor(Date.now() / 1000) + 3600) * 1_000_000n;
+      const timelockId = await registerTimelock(account, deadlineUs);
+
+      // 3. Submit Transaction
       setStatus("Please sign the transaction in MetaMask...");
 
       // Convert inputs
@@ -58,6 +69,7 @@ export function AuctionCreator() {
         pairBcs,
         lockId,
         minPriceBn,
+        timelockId,
         mpk,
       );
 

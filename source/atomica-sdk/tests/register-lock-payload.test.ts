@@ -7,7 +7,9 @@
  *     contract_address, user_address, token_address, storage_key,
  *     storage_value, account_proof, storage_proof
  *   )
- *   auction::create_auction(lock_id, min_price, duration, mpk)
+ *   auction::create_auction(seller, window_id, pair_bcs, lock_id, min_price,
+ *     timelock_id, mpk_bytes)
+ *   ibe_config::register_timelock(account, deadline_us)
  *
  * Note: Aptos-side fake token mint payload removed — fake tokens mint on Ethereum.
  */
@@ -32,6 +34,9 @@ vi.mock("../src/transaction", () => ({
 import {
   getRegisterLockPayload,
   getCreateAuctionPayload,
+  getRegisterTimelockPayload,
+  timelockIdFromEvents,
+  TIMELOCK_REGISTRATION_EVENT,
 } from "../src/aptos/payloads";
 import type { LockedBalanceProof } from "../src/ethereum/proofs/generator";
 
@@ -170,67 +175,68 @@ describe("getRegisterLockPayload", () => {
 // ── getCreateAuctionPayload ───────────────────────────────────────────────────
 
 describe("getCreateAuctionPayload", () => {
-  it("targets auction::create_auction", () => {
-    const lockId = new Uint8Array(32).fill(0xcd);
-    const payload = getCreateAuctionPayload(
-      lockId,
-      1000n,
-      3600n,
-      new Uint8Array(0),
+  const WINDOW_ID = 41n;
+  const PAIR_BCS = new Uint8Array([1, 2, 3]);
+  const LOCK_ID = new Uint8Array(32).fill(0xcd);
+  const MIN_PRICE = 500_000n;
+  const TIMELOCK_ID = 9n;
+  const MPK = new Uint8Array(96).fill(0xee);
+
+  const build = () =>
+    getCreateAuctionPayload(
+      WINDOW_ID,
+      PAIR_BCS,
+      LOCK_ID,
+      MIN_PRICE,
+      TIMELOCK_ID,
+      MPK,
     ) as InputEntryFunctionData;
-    expect(payload.function).toContain("::auction::create_auction");
+
+  it("targets auction::create_auction", () => {
+    expect(build().function).toBe("0xtest::auction::create_auction");
   });
 
-  it("passes lock_id as the first argument (Uint8Array)", () => {
-    const lockId = new Uint8Array(32).fill(0xcd);
-    const payload = getCreateAuctionPayload(
-      lockId,
-      1000n,
-      3600n,
-      new Uint8Array(0),
-    );
-    expect(payload.functionArguments![0]).toBe(lockId);
-  });
-
-  it("passes min_price as the second argument", () => {
-    const lockId = new Uint8Array(32).fill(0xcd);
-    const minPrice = 500000n;
-    const payload = getCreateAuctionPayload(
-      lockId,
-      minPrice,
-      3600n,
-      new Uint8Array(0),
-    );
-    expect(payload.functionArguments![1]).toBe(minPrice);
-  });
-
-  it("passes duration as the third argument", () => {
-    const lockId = new Uint8Array(32).fill(0xcd);
-    const duration = 7200n;
-    const payload = getCreateAuctionPayload(
-      lockId,
-      1000n,
-      duration,
-      new Uint8Array(0),
-    );
-    expect(payload.functionArguments![2]).toBe(duration);
-  });
-
-  it("passes mpk as the fourth argument", () => {
-    const lockId = new Uint8Array(32).fill(0xcd);
-    const mpk = new Uint8Array(0);
-    const payload = getCreateAuctionPayload(lockId, 1000n, 3600n, mpk);
-    expect(payload.functionArguments![3]).toBe(mpk);
+  it("sends 6 arguments in the Move order, timelock_id before mpk_bytes", () => {
+    // create_auction(seller, window_id, pair_bcs, lock_id, min_price, timelock_id, mpk_bytes)
+    expect(build().functionArguments).toEqual([
+      WINDOW_ID,
+      PAIR_BCS,
+      LOCK_ID,
+      MIN_PRICE,
+      TIMELOCK_ID,
+      MPK,
+    ]);
   });
 
   it("does not add type arguments", () => {
-    const lockId = new Uint8Array(32).fill(0xcd);
-    const payload = getCreateAuctionPayload(
-      lockId,
-      1000n,
-      3600n,
-      new Uint8Array(0),
+    expect(build().typeArguments).toBeUndefined();
+  });
+});
+
+// ── register_timelock ─────────────────────────────────────────────────────────
+
+describe("getRegisterTimelockPayload", () => {
+  it("targets the framework register_timelock with the deadline in microseconds", () => {
+    const payload = getRegisterTimelockPayload(
+      1_700_000_000_000_000n,
+    ) as InputEntryFunctionData;
+    expect(payload.function).toBe("0x1::ibe_config::register_timelock");
+    expect(payload.functionArguments).toEqual([1_700_000_000_000_000n]);
+  });
+});
+
+describe("timelockIdFromEvents", () => {
+  it("reads timelock_id from the TimelockRegistrationEvent", () => {
+    const id = timelockIdFromEvents([
+      { type: "0x1::coin::Other", data: {} },
+      { type: TIMELOCK_REGISTRATION_EVENT, data: { timelock_id: "12" } },
+    ]);
+    expect(id).toBe(12n);
+  });
+
+  it("throws when the transaction emitted no registration event", () => {
+    expect(() => timelockIdFromEvents([])).toThrow(
+      /no TimelockRegistrationEvent/,
     );
-    expect(payload.typeArguments).toBeUndefined();
   });
 });

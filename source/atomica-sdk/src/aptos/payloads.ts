@@ -129,11 +129,13 @@ export async function areCoreContractsDeployed(): Promise<boolean> {
 /**
  * Build payload for auction::create_auction (v0 Beta global-registry).
  *
- * Parameters match the Phase 3a rewrite from issue #86:
- *   create_auction(seller, window_id, pair_bcs, lock_id, min_price, mpk_bytes)
+ *   create_auction(seller, window_id, pair_bcs, lock_id, min_price,
+ *                  timelock_id, mpk_bytes)
  *
  * `pairBcs` is the BCS-encoded Pair struct; callers can compute it with
  * `bcs.serialize` or pass a pre-encoded byte array.
+ * `timelockId` is the id that `ibe_config::register_timelock` returned for the
+ * window's deadline. Register it first with {@link registerTimelock}.
  *
  * @see docs/architecture/v0-architecture.md §2.3
  */
@@ -142,11 +144,19 @@ export function getCreateAuctionPayload(
   pairBcs: Uint8Array,
   lockId: Uint8Array,
   minPrice: bigint,
+  timelockId: bigint,
   mpkBytes: Uint8Array,
 ): InputGenerateTransactionPayloadData {
   return {
     function: `${CONTRACT_ADDR}::auction::create_auction`,
-    functionArguments: [windowId, pairBcs, lockId, minPrice, mpkBytes],
+    functionArguments: [
+      windowId,
+      pairBcs,
+      lockId,
+      minPrice,
+      timelockId,
+      mpkBytes,
+    ],
   };
 }
 
@@ -156,13 +166,72 @@ export async function submitCreateAuction(
   pairBcs: Uint8Array,
   lockId: Uint8Array,
   minPrice: bigint,
+  timelockId: bigint,
   mpkBytes: Uint8Array,
 ) {
   return await submitNativeTransaction(
     aptos,
     ethAddress,
-    getCreateAuctionPayload(windowId, pairBcs, lockId, minPrice, mpkBytes),
+    getCreateAuctionPayload(
+      windowId,
+      pairBcs,
+      lockId,
+      minPrice,
+      timelockId,
+      mpkBytes,
+    ),
   );
+}
+
+/**
+ * Build payload for the framework entry
+ * `0x1::ibe_config::register_timelock(account, deadline_us)`.
+ *
+ * The chain aborts unless the epoch's IBE key is ready, `deadlineUs` is in the
+ * future, and `deadlineUs` is at least 15 minutes before the epoch ends.
+ */
+export function getRegisterTimelockPayload(
+  deadlineUs: bigint,
+): InputGenerateTransactionPayloadData {
+  return {
+    function: "0x1::ibe_config::register_timelock",
+    functionArguments: [deadlineUs],
+  };
+}
+
+/** Event type that `ibe_config::register_timelock` emits. */
+export const TIMELOCK_REGISTRATION_EVENT =
+  "0x1::ibe_config::TimelockRegistrationEvent";
+
+/**
+ * Read the timelock id from the events of a `register_timelock` transaction.
+ * Throws when the transaction emitted no `TimelockRegistrationEvent`.
+ */
+export function timelockIdFromEvents(
+  events: ReadonlyArray<{ type: string; data: unknown }>,
+): bigint {
+  const event = events.find((e) => e.type === TIMELOCK_REGISTRATION_EVENT);
+  if (!event) {
+    throw new Error("register_timelock emitted no TimelockRegistrationEvent");
+  }
+  return BigInt((event.data as { timelock_id: string }).timelock_id);
+}
+
+/**
+ * Register a timelock for `deadlineUs` and return its id. Call this before
+ * `create_auction`, which records the id on the window.
+ */
+export async function registerTimelock(
+  ethAddress: string,
+  deadlineUs: bigint,
+): Promise<bigint> {
+  const { hash } = await submitNativeTransaction(
+    aptos,
+    ethAddress,
+    getRegisterTimelockPayload(deadlineUs),
+  );
+  const tx = await aptos.waitForTransaction({ transactionHash: hash });
+  return timelockIdFromEvents("events" in tx ? tx.events : []);
 }
 
 /**

@@ -283,12 +283,13 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     const mpk = new Uint8Array(0);
 
     const onCreateAuction = async () => {
-      // v0 Beta: getCreateAuctionPayload(windowId, pairBcs, lockId, minPrice, mpkBytes)
+      // getCreateAuctionPayload(windowId, pairBcs, lockId, minPrice, timelockId, mpkBytes)
       const payload = getCreateAuctionPayload(
         0n,                // windowId
-        new Uint8Array(0), // pairBcs (empty — scaffold body aborts regardless)
+        new Uint8Array(0), // pairBcs (empty — the wallet rejects before submission)
         lockIdBytes,
         MIN_PRICE,
+        0n,                // timelockId
         mpk,
       );
       const result = await submitNativeTransaction(aptosGlobal, sellerAddress, payload);
