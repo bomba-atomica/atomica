@@ -80,7 +80,7 @@ describe.sequential("Move Contract Deployment", () => {
 
         expect(finalBalance).toBeLessThan(1_000_000_000);
         expect(gasUsed).toBeGreaterThan(0);
-        // Gas schedule v49 (aptos-node 1.49.6) applies a 10x multiplier: a noop
+        // Gas feature version 53 (aptos-node 1.49.6) applies a 10x multiplier: a noop
         // publish costs ~1.7M octas.
         expect(gasUsed).toBeLessThan(10_000_000);
     }, 180000);

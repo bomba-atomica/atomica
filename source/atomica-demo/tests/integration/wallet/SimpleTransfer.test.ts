@@ -108,7 +108,9 @@ describe.sequential(
 
       // STEP 2: Fund the derived Aptos account
       // The derived account needs APT (Aptos native coin) to pay for gas fees.
-      // DEFAULT_MAX_GAS_AMOUNT=2_000_000 * gas_price=100 = 200_000_000 octas minimum.
+      // The sender must hold maxGasAmount * gas_price=100. The SDK sets
+      // maxGasAmount from a simulation plus a margin (the ts-sdk default is
+      // 200_000 units). Gas feature version 53 charges 10x the old gas.
       // Use 500_000_000 (5 APT) to give ample headroom for gas.
       await commands.fundAccount(derivedAddrStr, 500_000_000); // 5 APT
       // Wait for funding transaction to be indexed by the blockchain
