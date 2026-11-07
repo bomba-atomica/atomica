@@ -47,22 +47,19 @@ Identity → Hash → Point on curve → Pair with MPK → Encryption key
 
 ## Key Functions
 
-### IBE
+### IBE (V2 timelock bids)
 ```typescript
-import * as ibe from "@atomica/state-proof-verifier/ibe";
+import { encryptBid, decryptBid } from "@atomica/state-proof-verifier/ibe";
 
-// Setup
-const { mpk, msk } = await ibe.generateSystemParameters();
+// Bidder: mpk = timelock::get_mpk, identity = timelock::get_timelock_identity,
+// ad = auction::bid_associated_data(timelock_id, window_id, bidder).
+const ct = encryptBid(mpk, identity, ad, plaintext);
 
-// Encrypt to identity
-const identity = new TextEncoder().encode("user@example.com");
-const message = new TextEncoder().encode("secret bid: 100");
-const { u, v } = await ibe.encrypt(mpk, identity, message);
-
-// Decrypt (requires MSK to derive private key)
-const privateKey = await ibe.extract(msk, identity);
-const decrypted = await ibe.decrypt(privateKey, u, v);
+// After the reveal: dk = timelock::get_decryption_key(timelock_id).
+const opened = decryptBid(dk, identity, ad, ct);
 ```
+
+`tests/ibe.test.ts` checks the port byte for byte against the fork's golden vectors.
 
 ### State Verification
 ```typescript
@@ -108,7 +105,8 @@ bun test
 
 ## Dependencies
 
-- `@noble/bls12-381`: BLS12-381 curve implementation
+- `@noble/curves`: BLS12-381 pairing and Ed25519
+- `@noble/ciphers`: AES-128-GCM
 - `@noble/hashes`: Cryptographic hash functions
 - `@ethereumjs/trie`: Ethereum trie data structures
 - `@ethereumjs/util`: Ethereum utilities

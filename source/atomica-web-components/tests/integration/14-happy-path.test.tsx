@@ -16,10 +16,21 @@
  *     3-5. SellFlow steps 3-5 — auto-confirmation, proof generation, proof submission
  *     6. Auction creation — via direct helper (duration hardcoded to 1h in
  *        useSellFlow makes UI-driven auction creation impractical for CI).
- *        Creates a real window and reads it back with get_window_status.
+ *        Waits for the epoch timelock key (ibe_config::is_ready), registers a
+ *        real timelock (ibe_config::register_timelock), creates a window bound
+ *        to it and reads it back with get_window_status.
  *     7. Step8Monitor — verifies seller address, countdown, auction details
  *   Bidder context:
- *     8. AuctionBidder — fill seller address + bid amount, submit bid
+ *     8. Sealed bid — the client encrypts the bid with sealBid (the code path
+ *        of AuctionBidder: timelock::get_mpk, get_timelock_identity,
+ *        bid_associated_data) and submits ciphertext, commitment and quantity.
+ *        The @atomica operator account bids: in the Demo phase only it can
+ *        claim the FakeUSD collateral receipt (lock_receipt::claim).
+ *   Reveal:
+ *    8b. The validators reveal the timelock key after the deadline.
+ *        AuctionRevealer decrypts the bid with timelock::get_decryption_key and
+ *        recovers the same price and salt. Opening the bid with them passes the
+ *        on-chain commitment check.
  *   Settlement:
  *     9. Wait for auction expiry
  *    10. SettleButton — click real component (no injected callback)
@@ -89,7 +100,7 @@ import { setupWalletMock } from "./fixtures/wallet-mock";
 import {
   faucet,
   step8Monitor,
-  auctionBidder,
+  auctionRevealer,
   settleButton,
   claimButton,
   bidHistory,
@@ -100,10 +111,15 @@ import {
   createAuctionDirect,
   currentWindowId,
   getWindowStatus,
+  waitForTimelockKey,
+  chainNowUs,
+  registerTimelockDirect,
+  submitDirect,
+  pollUntil,
   TEST_PAIR_BCS,
 } from "./helpers/auction-setup";
 import { Faucet } from "../../src/components/Faucet";
-import { AuctionBidder } from "../../src/components/AuctionBidder";
+import { AuctionRevealer } from "../../src/components/AuctionRevealer";
 import { SettleButton } from "../../src/components/SettleButton";
 import { ClaimButton } from "../../src/components/ClaimButton";
 import { Step8Monitor } from "../../src/components/SellFlow/steps/Step8Monitor";
@@ -121,7 +137,16 @@ import {
   Account,
   Ed25519PrivateKey,
 } from "@aptos-labs/ts-sdk";
-import { setAptosInstance } from "@atomica/sdk/aptos";
+import {
+  setAptosInstance,
+  CONTRACT_ADDR,
+  sealBid,
+  getBidPayload,
+  getBidInfo,
+  getBidCount,
+  getSubmitCleartextPayload,
+  isRevealed,
+} from "@atomica/sdk/aptos";
 import {
   setAptosInstance as setDockerAptosInstance,
   getDerivedAddress,
@@ -135,13 +160,20 @@ const MIN_PRICE = 100n;
 const LOCK_AMOUNT = ethers.parseEther("10");
 const MINT_AMOUNT = ethers.parseEther("1000");
 const BID_PRICE = 200n;
+/** Bid quantity in wei of FakeETH. */
+const BID_QUANTITY = ethers.parseEther("1");
+/** FakeUSD collateral locked for the bid (6 decimals). */
+const COLLATERAL_AMOUNT = 500n * 10n ** 6n;
+const COLLATERAL_MINT = 10_000n * 10n ** 6n;
 /**
- * Timelock id recorded on the happy-path window. The docker testnet does not
- * run the timelock DKG yet (issue 164), so `ibe_config::register_timelock`
- * aborts there and this id is not registered. Today's `create_auction` stores
- * it unchecked. Register a real timelock here once the testnet DKG lands.
+ * How far ahead of the chain clock the timelock deadline is set. The bid must
+ * land before it: create_auction, the Step8Monitor check and the sealed bid
+ * take a few seconds. Registration needs deadline <= epoch end - 15 minutes,
+ * and the docker testnet epoch is 24 hours.
  */
-const HAPPY_PATH_TIMELOCK_ID = 7n;
+const DEADLINE_AHEAD_US = 120_000_000n;
+/** Seconds to wait after the deadline for the validators to reveal the key. */
+const REVEAL_TIMEOUT_SECS = 300;
 
 const ERC20_BALANCE_ABI = ["function balanceOf(address) view returns (uint256)"];
 
@@ -224,7 +256,12 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
   let sellerEthAddress: string;
   let sellerAptosAddress: string;
   let lockId: string;
+  let collateralLockId: string;
   let auctionEndTime: number;
+  let windowId: bigint;
+  let timelockId: bigint;
+  let deadlineUs: bigint;
+  let bidSalt: Uint8Array;
 
   // Bidder state
   let bidderEthAddress: string;
@@ -244,6 +281,8 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
     setDockerAptosInstance(aptosClient);
 
     moduleAddr = fixture.aptos.moduleAddress;
+    // The SDK view and payload helpers target CONTRACT_ADDR (VITE_CONTRACT_ADDRESS).
+    expect(CONTRACT_ADDR.toLowerCase()).toBe(moduleAddr.toLowerCase());
 
     deployerAccount = Account.fromPrivateKey({
       privateKey: new Ed25519PrivateKey(fixture.aptos.deployerPrivateKey),
@@ -360,10 +399,35 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       // Register lock on Aptos (deployer is authorized in Demo phase)
       await registerLockOnAptos(aptosClient, deployerAccount, moduleAddr, proofResult.proof);
 
+      // FakeUSD collateral for the sealed bid in step 8. The @atomica operator
+      // registers it and claims it at submit_bid (Demo-phase claim rule).
+      const collateral = await generateEthLockProof(
+        fixture,
+        COLLATERAL_AMOUNT,
+        COLLATERAL_MINT,
+        fixture.eth.contracts.fakeUSD,
+      );
+      collateralLockId = collateral.lockId;
+      await registerLockOnAptos(
+        aptosClient,
+        deployerAccount,
+        moduleAddr,
+        collateral.proof,
+        "FakeUSD",
+      );
+
+      // The timelock key exists only from epoch 2. Then register a real
+      // timelock whose deadline closes the bidding.
+      console.log("[14-happy-path] Waiting for the epoch timelock key (ibe_config::is_ready)...");
+      await waitForTimelockKey(aptosClient);
+      deadlineUs = (await chainNowUs(aptosClient)) + DEADLINE_AHEAD_US;
+      timelockId = await registerTimelockDirect(aptosClient, deployerAccount, deadlineUs);
+      console.log(`[14-happy-path] Registered timelock ${timelockId}, deadline ${deadlineUs} us`);
+
       // Create a real window: the current window by the chain clock. This
       // must succeed, so no catch.
       const auctionCreatedAt = Math.floor(Date.now() / 1000);
-      const windowId = await currentWindowId(aptosClient);
+      windowId = await currentWindowId(aptosClient);
       await createAuctionDirect(
         aptosClient,
         deployerAccount,
@@ -373,7 +437,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         BigInt(AUCTION_DURATION_BID),
         windowId,
         TEST_PAIR_BCS,
-        HAPPY_PATH_TIMELOCK_ID,
+        timelockId,
       );
 
       // The window exists on chain with the timelock create_auction recorded.
@@ -389,7 +453,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
           `reveal_final=${windowStatus.revealFinal} refunded=${windowStatus.refunded}`,
       );
       expect(windowStatus).toEqual({
-        timelockId: HAPPY_PATH_TIMELOCK_ID,
+        timelockId,
         revealFinal: false,
         refunded: false,
       });
@@ -431,58 +495,114 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
 
       console.log("[14-happy-path] Step8Monitor renders correctly with live data");
     },
-    600_000,
+    1_200_000,
   );
 
   // ── Step 8: Bidder — connect wallet and submit bid ────────────────────────
 
   it(
-    "step 8 — bidder connect + bid: bid submitted above min_price",
+    "step 8 — sealed bid: the client encrypts the bid to the live timelock key and submits it",
     async () => {
-      console.log("[14-happy-path] Step 8: Bidder connect + bid (real hooks)");
+      console.log("[14-happy-path] Step 8: client-encrypted bid (sealBid, the AuctionBidder path)");
+      const bidder = deployerAccount.accountAddress.toString();
 
-      // Switch wallet mock to bidder
-      bidderEthAddress = await setupWalletMock({
-        privateKey: fixture.eth.bidder.privateKey,
-        rpcUrl: fixture.eth.rpcUrl,
-        chainId: fixture.eth.chainId,
-      });
+      // sealBid reads timelock::get_mpk, timelock::get_timelock_identity and
+      // auction::bid_associated_data from chain and encrypts price || salt.
+      const sealed = await sealBid(windowId, TEST_PAIR_BCS, bidder, BID_PRICE);
+      expect(sealed.timelockId).toBe(timelockId);
+      bidSalt = sealed.salt;
 
-      // Render AuctionBidder with real providers
-      withProviders(
-        bidderEthAddress,
-        <AuctionBidder />,
+      await submitDirect(
+        aptosClient,
+        deployerAccount,
+        getBidPayload(
+          windowId,
+          TEST_PAIR_BCS,
+          sealed.ciphertext,
+          sealed.commitment,
+          ethers.getBytes(collateralLockId),
+          BID_QUANTITY,
+        ),
       );
+      expect(await chainNowUs(aptosClient)).toBeLessThan(deadlineUs);
 
-      // Phase 3b: AuctionBidder starts in the "lock-collateral" step.
-      // Skip to the bid submission step (no real on-chain lock needed in CI).
-      const skipBtn = screen.getByTestId(auctionBidder.skipToBidButton);
-      fireEvent.click(skipBtn);
+      // submit_bid ran ibe::verify_bid_ct on the client ciphertext and stored it.
+      expect(await getBidCount(windowId, TEST_PAIR_BCS)).toBe(1n);
+      const stored = await getBidInfo(windowId, TEST_PAIR_BCS, 0n);
+      expect(stored.bidder.replace(/^0x0*/, "")).toBe(bidder.replace(/^0x0*/, ""));
+      expect(stored.ciphertext).toEqual(sealed.ciphertext);
+      expect(stored.commitment).toEqual(sealed.commitment);
+      expect(stored.opened).toBe(false);
+      console.log(
+        `[14-happy-path] Sealed bid stored (${sealed.ciphertext.length}-byte ciphertext)`,
+      );
+    },
+    120_000,
+  );
 
-      // v0 Beta: AuctionBidder uses windowId input (not seller address)
-      // Phase 3a: submit_bid aborts with E_NOT_IMPLEMENTED — expect error
-      const windowInput = screen.getByTestId(auctionBidder.windowIdInput);
-      fireEvent.change(windowInput, { target: { value: "0" } });
+  // ── Step 8b: Reveal — decrypt the bid with the revealed key ──────────────
 
-      // Set bid amount above min_price
-      const bidInput = screen.getByTestId(auctionBidder.bidAmountInput);
-      fireEvent.change(bidInput, { target: { value: BID_PRICE.toString() } });
+  it(
+    "step 8b — reveal: AuctionRevealer decrypts the same bid with get_decryption_key and it opens on chain",
+    async () => {
+      console.log("[14-happy-path] Step 8b: wait for the timelock reveal, then decrypt");
+      await pollUntil("timelock reveal", Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS, async () =>
+        (await isRevealed(timelockId)) ? true : undefined,
+      );
+      console.log(`[14-happy-path] Timelock ${timelockId} revealed`);
 
-      // Submit bid — Phase 3a: aborts with E_NOT_IMPLEMENTED
-      fireEvent.click(screen.getByTestId(auctionBidder.submitBidButton));
-
+      withProviders(sellerEthAddress, <AuctionRevealer />);
+      fireEvent.change(screen.getByTestId(auctionRevealer.windowIdInput), {
+        target: { value: windowId.toString() },
+      });
+      fireEvent.click(screen.getByTestId(auctionRevealer.startPollingButton));
       await waitFor(
         () => {
-          const statusEl = screen.getByTestId(auctionBidder.bidStatus);
-          // Phase 3a: submit_bid aborts — error status shown
-          expect(statusEl.textContent).toMatch(/Error/);
+          expect(screen.getByTestId(auctionRevealer.revealStatus).textContent).toContain(
+            "REVEALED",
+          );
         },
-        { timeout: 60_000 },
+        { timeout: 30_000 },
       );
 
-      console.log("[14-happy-path] Bid submission surfaced error (Phase 3a scaffold expected)");
+      fireEvent.click(screen.getByTestId(auctionRevealer.decryptBidsButton));
+      await waitFor(
+        () => {
+          expect(screen.getAllByTestId(auctionRevealer.decryptedBid)).toHaveLength(1);
+        },
+        { timeout: 30_000 },
+      );
+      expect(screen.queryByTestId(auctionRevealer.decryptError)).toBeNull();
+      const row = screen.getByTestId(auctionRevealer.decryptedBid);
+      expect(row.textContent).toContain(`price ${BID_PRICE}`);
+      expect(row.textContent).toContain("matches commitment");
+
+      // The revealer recovered the bidder's price and salt.
+      const cleartexts = (
+        screen.getByTestId(auctionRevealer.cleartextsInput) as HTMLInputElement
+      ).value;
+      const salts = (screen.getByTestId(auctionRevealer.saltsInput) as HTMLInputElement)
+        .value;
+      expect(cleartexts).toBe(BID_PRICE.toString());
+      expect(salts).toBe(ethers.hexlify(bidSalt));
+
+      // Relay the decrypted opening. The contract checks it against the
+      // commitment made at submission, so only the true price and salt pass.
+      await submitDirect(
+        aptosClient,
+        deployerAccount,
+        getSubmitCleartextPayload(windowId, TEST_PAIR_BCS, [BigInt(cleartexts)], [
+          ethers.getBytes(salts),
+        ]),
+      );
+      const opened = await getBidInfo(windowId, TEST_PAIR_BCS, 0n);
+      expect(opened.opened).toBe(true);
+      expect(opened.price).toBe(BID_PRICE);
+      const status = await getWindowStatus(aptosClient, moduleAddr, windowId, TEST_PAIR_BCS);
+      expect(status.revealFinal).toBe(true);
+      console.log(`[14-happy-path] Bid decrypted off chain and opened on chain at ${opened.price}`);
     },
-    90_000,
+    (Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS + 120) * 1000,
   );
 
   // ── Step 9-10: Wait for expiry -> settle via real SettleButton ──────────
