@@ -224,6 +224,7 @@ This is the canonical definition. §3 references it; §3 does not redefine it.
 struct AuctionSettled has drop, store {
     window_id:      u64,
     pair:           Pair,
+    pair_bcs:       vector<u8>, // window key pair bytes passed to create_auction
     clearing_price: u64,        // USD per base token, no decimal shift
     total_filled:   u256,       // wei of base token transferred to winners
     winner_count:   u64,
@@ -265,8 +266,8 @@ it. The relayer consumes three module events:
 
 | Aptos event | LockBox calls |
 | --- | --- |
-| `AuctionSettled` (§2.9) | One `settleFill` per (seller lock, winner) chunk, at `fill × clearing_price`. Then `refund` of a winner's unused collateral, each seller's unsold supply, and each losing bid's collateral whose receipt Aptos released. |
-| `AuctionRefunded` | `refund` of every seller and collateral lock of the window whose receipt Aptos released. The event carries the window's `pair_bcs`; the relayer skips windows whose `pair_bcs` it does not serve. |
+| `AuctionSettled` (§2.9) | Only for a window of the served `pair_bcs` that `auction::is_settled` confirms. One `settleFill` per (seller lock, winner) chunk, at `fill × clearing_price`. Then `refund` of a winner's unused collateral, each seller's unsold supply, and each losing bid's collateral whose receipt Aptos released. |
+| `AuctionRefunded` | `refund` of every seller and collateral lock of the window whose receipt Aptos released. Only for a window of the served `pair_bcs`. |
 | `BidUnopened` | `refund` of the unopened bid's collateral. No penalty in v0.1: the griefing-deposit destination is still undecided. |
 
 Payouts go to the Ethereum owner of each lock receipt (the address the
@@ -277,9 +278,9 @@ so a relayer retry never pays twice. The relayer signs through an ethers
 
 Windows are keyed by `(window_id, pair_bcs)`, where `pair_bcs` is the opaque
 byte string the creator passed (the sell flow passes empty bytes). The relayer
-serves one `pair_bcs` (`PAIR_BCS`, default empty). An `E_AUCTION_NOT_FOUND`
-abort while reading a window means the window belongs to another pair, and
-the relayer skips it.
+serves one `pair_bcs` (`PAIR_BCS`, default empty). `AuctionSettled` and
+`AuctionRefunded` carry the window's `pair_bcs`, so the relayer checks it
+before it reads any window.
 
 The relayer handles each outcome on its own. A permanent failure (a LockBox
 revert such as `InsufficientLocked`, a Move abort, or an outcome that does
@@ -287,10 +288,18 @@ not fit the locks) becomes a dead letter: it is written to
 `SETTLEMENT_DEAD_LETTER_FILE` with an alert, the other releases of the same
 outcome still go out, and the cursor moves on. Only transient errors (RPC
 down, transaction wait timeout) keep the cursor at that outcome for a retry.
-A dead letter needs an operator. Receipt amounts are the owner's total
-locked balance at the proof block, so two receipts of one owner can
-over-count; LockBox caps every release at the real locked balance, and the
-over-counting release becomes a dead letter. Issue 171 fixes receipt amounts.
+A dead letter needs an operator; the relayer script header gives the replay
+steps. A window whose `pair_bcs` the relayer does not serve is a dead letter
+too, not a silent skip, because only this relayer can release its locks.
+
+Receipt amounts are the owner's total `lockedBalances` at the proof block,
+not one lock, so two receipts of one owner can count the same tokens twice.
+The relayer therefore caps each receipt at the `TokensLocked` amounts of
+that owner and token in the proof block (locks are proven at their own
+block). No two receipts can then release the same tokens, so a refund of
+one receipt cannot drain the balance that backs another receipt's fill.
+LockBox still caps every release at the real locked balance. Issue 171
+makes receipt amounts per lock on Aptos.
 
 **Abandoned locks are frozen.** A lock that never reaches an auction has no
 Aptos outcome, so nothing releases it. The sell flow no longer offers a

@@ -239,6 +239,7 @@ module atomica::auction {
     struct AuctionSettled has drop, store {
         window_id:      u64,
         pair:           Pair,
+        pair_bcs:       vector<u8>,         // window key pair bytes (see AuctionRefunded)
         clearing_price: u64,
         total_filled:   u256,               // wei of base token allocated to winners
         winner_count:   u64,
@@ -1048,6 +1049,7 @@ module atomica::auction {
         event::emit(AuctionSettled {
             window_id,
             pair:           pair_copy,
+            pair_bcs,
             clearing_price,
             total_filled,
             winner_count,
@@ -1114,6 +1116,20 @@ module atomica::auction {
         assert!(bid_index < vector::length(&w.bids), E_BID_INDEX_OUT_OF_RANGE);
         let b = vector::borrow(&w.bids, bid_index);
         (b.bidder, b.ciphertext, b.commitment, b.opened, b.price)
+    }
+
+    // Return the per-bid fill results of a window, index-aligned to bids. Empty until
+    // clearing ran. The relayer joins them with `get_window_lock_ids` after `AuctionSettled`.
+    #[view]
+    public fun get_bid_results(
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+    ): vector<BidResult> acquires AuctionRegistry {
+        assert!(exists<AuctionRegistry>(@atomica), E_AUCTION_NOT_FOUND);
+        let registry = borrow_global<AuctionRegistry>(@atomica);
+        let key = make_window_key(window_id, pair_bcs);
+        assert!(table::contains(&registry.windows, key), E_AUCTION_NOT_FOUND);
+        table::borrow(&registry.windows, key).bid_results
     }
 
     // Return (seller lock ids, bid collateral lock ids) of a window. Collateral ids are

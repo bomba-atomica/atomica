@@ -29,6 +29,14 @@
  *   PAIR_BCS               — Window key pair bytes served, 0x hex (default "0x",
  *                            as the sell flow creates windows)
  *
+ * Dead letters: an outcome that failed for good (a LockBox revert, a Move
+ * abort, a window of another pair_bcs) is appended to the dead-letter file
+ * with the failed releases' user, token and amount, and the cursor moves on.
+ * To replay one after fixing its cause, run a second relayer with
+ * START_VERSION set to the dead letter's version and a fresh
+ * SETTLEMENT_CURSOR_FILE. Outcome ids make the replay skip every release
+ * that already went out.
+ *
  * Event source: the outcome events are module events, so the relayer scans
  * /v1/transactions from a version cursor (see docs/decisions/sdk-auction-settled-event-source.md).
  * A 410 (pruned) read is fatal: set START_VERSION above the pruned range.
@@ -133,6 +141,10 @@ function saveDeadLetter(letter: object): void {
  * failure keeps the cursor at that outcome so the next poll retries it.
  * A pruned read (410) is terminal and rethrown: the relayer must not retry it.
  */
+/** Consecutive polls that ended on a transient error. */
+let transientStreak = 0;
+const TRANSIENT_ALERT_AFTER = 10;
+
 async function pollAndRelay(
   config: BridgeConfig,
   pair: Pair,
@@ -155,9 +167,15 @@ async function pollAndRelay(
     }
     for (const letter of result.deadLetters) saveDeadLetter(letter);
     if (result.transientError) {
+      transientStreak++;
+      const prefix =
+        transientStreak >= TRANSIENT_ALERT_AFTER ? "ALERT stalled: " : "";
       console.error(
-        `[relayer] Transient error at version ${result.nextVersion}, retrying next poll: ${result.transientError}`,
+        `[relayer] ${prefix}Transient error at version ${result.nextVersion} ` +
+          `(${transientStreak} in a row), retrying next poll: ${result.transientError}`,
       );
+    } else {
+      transientStreak = 0;
     }
     saveCursor(result.nextVersion);
     return result.nextVersion;
@@ -184,6 +202,11 @@ async function preflight(config: BridgeConfig): Promise<void> {
     console.error(
       `[relayer] ERROR: relayer ${relayer} is not the LockBox settlementAuthority ${authority}`,
     );
+    process.exit(1);
+  }
+  const balance = await signer.provider!.getBalance(relayer);
+  if (balance === 0n) {
+    console.error(`[relayer] ERROR: relayer ${relayer} has no ETH for gas`);
     process.exit(1);
   }
 }

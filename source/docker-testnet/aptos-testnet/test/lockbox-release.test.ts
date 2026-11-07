@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { ethers } from "ethers";
 import { Account, Aptos, AptosConfig, Ed25519PrivateKey, Network } from "@aptos-labs/ts-sdk";
 import {
+    capToLocksInBlock,
     executeLockBoxReleases,
     getLockReceipt,
     planRefundReleases,
@@ -125,7 +126,10 @@ async function lockAndRegister(
     const owner = new ethers.Wallet(privateKey).address;
     expect(receipt.user).toBe(owner);
     expect(receipt.amount).toBe(amount);
-    return receipt;
+    // The relayer's per-lock cap reads the real TokensLocked log of the proof block.
+    const [capped] = await capToLocksInBlock([receipt], asset, bridge);
+    expect(capped.amount).toBe(amount);
+    return capped;
 }
 
 describe.sequential("LockBox releases follow Aptos outcomes (live dual-chain)", () => {

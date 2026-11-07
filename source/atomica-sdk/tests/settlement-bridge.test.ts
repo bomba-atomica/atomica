@@ -25,6 +25,10 @@ const mocks = vi.hoisted(() => ({
   processed: new Set<string>(),
   /** Outcome ids whose LockBox call reverts. */
   revert: new Set<string>(),
+  /** Outcome ids whose LockBox call fails with a given ethers error. */
+  errors: new Map<string, object>(),
+  /** TokensLocked amount per `${user}|${block}` (lower-case user). Unset: no cap. */
+  locked: new Map<string, bigint>(),
   nonceManagers: 0,
 }));
 
@@ -33,7 +37,26 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("ethers", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ethers")>();
-  class MockJsonRpcProvider {}
+  const lockedIface = new actual.ethers.Interface([
+    "event TokensLocked(address indexed user, address indexed token, uint256 amount, uint256 unlockTime)",
+  ]);
+  class MockJsonRpcProvider {
+    getLogs = vi.fn(async (filter: { fromBlock: bigint; topics: string[] }) => {
+      const user = actual.ethers.getAddress("0x" + filter.topics[1].slice(26));
+      const key = `${user.toLowerCase()}|${filter.fromBlock}`;
+      const amount = mocks.locked.has(key)
+        ? mocks.locked.get(key)!
+        : 10n ** 30n;
+      return [
+        lockedIface.encodeEventLog("TokensLocked", [
+          user,
+          actual.ethers.getAddress("0x" + filter.topics[2].slice(26)),
+          amount,
+          0n,
+        ]),
+      ];
+    });
+  }
   class MockWallet {}
   class MockNonceManager {
     reset = vi.fn();
@@ -51,9 +74,12 @@ vi.mock("ethers", async (importOriginal) => {
           new Error("execution reverted: InsufficientLocked"),
           {
             code: "CALL_EXCEPTION",
+            data: "0x8a6a1e5c" + "00".repeat(32),
           },
         );
       }
+      const err = mocks.errors.get(args[0] as string);
+      if (err) throw err;
       mocks.calls.push({ method: "refund", args });
       return { wait: async () => ({ hash: "0xrefund", status: 1 }) };
     });
@@ -123,6 +149,9 @@ import {
   relayOutcomeScan,
   executeLockBoxReleases,
   PermanentRelayError,
+  capToLocksInBlock,
+  isPermanentRelayError,
+  parseBidResults,
   RECEIPT_STATUS_REVOKED,
   type AuctionOutcomeScan,
   type AuctionSettledEvent,
@@ -475,7 +504,7 @@ function receipt(
   amount: bigint,
   status: number,
 ): LockReceiptInfo {
-  return { lockId, user, amount, status };
+  return { lockId, user, amount, blockNumber: 1n, status };
 }
 
 describe("planSettlementReleases", () => {
@@ -697,6 +726,7 @@ describe("relay handlers", () => {
       ["0x01"],
       ["0x02", "0x04"],
     ]);
+    mocks.views.set("auction::is_settled", () => [true]);
     stubReceipts({
       "0x01": [SELLER, 10n * ETH, 1],
       "0x02": [WINNER, 8_000n * USD, 1],
@@ -710,6 +740,7 @@ describe("relay handlers", () => {
       totalFilled: 4n * ETH,
       winnerCount: 1n,
       lockIds: [],
+      pairBcs: new Uint8Array(0),
     };
 
     const hashes = await relayAuctionSettled(event, {
@@ -950,7 +981,7 @@ describe("executeLockBoxReleases", () => {
   });
 });
 
-describe("AuctionRefunded pair filtering", () => {
+describe("pair filtering", () => {
   beforeEach(() => {
     mocks.views.clear();
     mocks.calls.length = 0;
@@ -965,32 +996,20 @@ describe("AuctionRefunded pair filtering", () => {
     sellerLockCount: 1n,
   });
 
-  it("skips a window of another pair without reading Aptos", async () => {
-    const hashes = await relayAuctionRefunded(refunded("0x0102"), TEST_CONFIG);
-    expect(hashes).toEqual([]);
+  it("dead-letters a refunded window of another pair without reading Aptos", async () => {
+    await expect(
+      relayAuctionRefunded(refunded("0x0102"), TEST_CONFIG),
+    ).rejects.toBeInstanceOf(PermanentRelayError);
     expect(mocks.calls).toEqual([]);
   });
 
-  it("treats E_AUCTION_NOT_FOUND as not this relayer's window", async () => {
-    mocks.views.set("auction::get_window_lock_ids", () => {
-      throw new Error(
-        "Move abort in 0xab::auction: E_AUCTION_NOT_FOUND(0x1): no such window",
-      );
-    });
-    const hashes = await relayAuctionRefunded(refunded("0x"), TEST_CONFIG);
-    expect(hashes).toEqual([]);
-  });
-
   it("a foreign-pair refund does not block the relayer loop", async () => {
-    mocks.views.set("auction::get_window_lock_ids", () => {
-      throw new Error("Move abort in 0xab::auction: 0x1");
-    });
     stubReceipts({ "0xabcd": [LOSER, 700n * USD, 1] });
 
     const result = await relayOutcomeScan(
       {
         events: [
-          { kind: "AuctionRefunded", version: 10n, event: refunded("0x") },
+          { kind: "AuctionRefunded", version: 10n, event: refunded("0x0102") },
           unopened("0xabcd", 11n),
         ],
         nextVersion: 12n,
@@ -999,11 +1018,234 @@ describe("AuctionRefunded pair filtering", () => {
       { pair: TEST_PAIR },
     );
 
-    expect(result.deadLetters).toEqual([]);
+    expect(result.deadLetters.map((d) => d.version)).toEqual([10n]);
+    expect(result.deadLetters[0].error).toMatch(/pair_bcs 0x0102/);
     expect(result.nextVersion).toBe(12n);
     expect(mocks.calls.map((c) => c.args[0])).toEqual([
       refundOutcomeId("0xabcd"),
     ]);
+  });
+
+  const settled = (pairBcs?: string): AuctionSettledEvent => ({
+    windowId: 7n,
+    pair: TEST_PAIR,
+    clearingPrice: 1n,
+    totalFilled: 0n,
+    winnerCount: 0n,
+    lockIds: [],
+    ...(pairBcs === undefined ? {} : { pairBcs: ethers.getBytes(pairBcs) }),
+  });
+
+  it("dead-letters an AuctionSettled of another pair before any read", async () => {
+    await expect(
+      relayAuctionSettled(settled("0x0102"), TEST_CONFIG),
+    ).rejects.toThrow(/serves 0x$/);
+    await expect(relayAuctionSettled(settled(), TEST_CONFIG)).rejects.toThrow(
+      /no pair_bcs/,
+    );
+  });
+
+  it("dead-letters an AuctionSettled whose served window is not settled", async () => {
+    mocks.views.set("auction::is_settled", () => [false]);
+    await expect(
+      relayAuctionSettled(settled("0x"), TEST_CONFIG),
+    ).rejects.toBeInstanceOf(PermanentRelayError);
+  });
+});
+
+// ─── Receipt caps, error classes, view shapes ──────────────────────────────
+
+describe("capToLocksInBlock", () => {
+  beforeEach(() => {
+    mocks.locked.clear();
+    mocks.calls.length = 0;
+    mocks.processed.clear();
+  });
+
+  it("caps each receipt at the tokens its owner locked in the proof block", async () => {
+    // One owner locked 10 at block 1 and 5 at block 2. The receipts prove the
+    // running totals 10 and 15.
+    mocks.locked.set(`${SELLER.toLowerCase()}|1`, 10n * ETH);
+    mocks.locked.set(`${SELLER.toLowerCase()}|2`, 5n * ETH);
+    const capped = await capToLocksInBlock(
+      [
+        { ...receipt("0x01", SELLER, 10n * ETH, 2), blockNumber: 1n },
+        { ...receipt("0x02", SELLER, 15n * ETH, 2), blockNumber: 2n },
+      ],
+      "FakeETH",
+      TEST_CONFIG,
+    );
+    expect(capped.map((r) => r.amount)).toEqual([10n * ETH, 5n * ETH]);
+  });
+
+  it("a refund of an over-counted receipt cannot drain another receipt's lock", async () => {
+    // The second receipt proves 15 but only 5 were locked in its block.
+    mocks.locked.set(`${SELLER.toLowerCase()}|2`, 5n * ETH);
+    mocks.views.set("auction::get_window_lock_ids", () => [["0x02"], []]);
+    mocks.views.set("lock_receipt::get_receipt", () => [
+      aptosAddr(SELLER),
+      String(15n * ETH),
+      "2",
+      RECEIPT_STATUS_REVOKED,
+    ]);
+
+    await relayAuctionRefunded(
+      {
+        windowId: 5n,
+        pairBcs: new Uint8Array(0),
+        timelockId: 9n,
+        reason: 1,
+        bidCount: 0n,
+        sellerLockCount: 1n,
+      },
+      TEST_CONFIG,
+    );
+
+    expect(mocks.calls.map((c) => c.args[3])).toEqual([5n * ETH]);
+  });
+
+  it("a receipt proven at a block without a lock releases nothing", async () => {
+    mocks.locked.set(`${LOSER.toLowerCase()}|1`, 0n);
+    stubReceipts({ "0xabcd": [LOSER, 700n * USD, 1] });
+    const hashes = await relayBidUnopened(
+      {
+        windowId: 4n,
+        bidder: "0x" + "11".repeat(32),
+        collateralLockId: ethers.getBytes("0xabcd"),
+      },
+      TEST_CONFIG,
+    );
+    expect(hashes).toEqual([]);
+    expect(mocks.calls).toEqual([]);
+  });
+});
+
+describe("isPermanentRelayError", () => {
+  it("counts a CALL_EXCEPTION as permanent only with revert evidence", () => {
+    expect(
+      isPermanentRelayError({ code: "CALL_EXCEPTION", data: "0x1234abcd" }),
+    ).toBe(true);
+    expect(
+      isPermanentRelayError({ code: "CALL_EXCEPTION", receipt: { status: 0 } }),
+    ).toBe(true);
+    expect(isPermanentRelayError({ code: "CALL_EXCEPTION", data: null })).toBe(
+      false,
+    );
+    expect(isPermanentRelayError({ code: "CALL_EXCEPTION", data: "0x" })).toBe(
+      false,
+    );
+  });
+
+  it("counts deterministic Aptos 4xx as permanent, 429 and 5xx as transient", () => {
+    expect(
+      isPermanentRelayError({ status: 400, message: "invalid_input" }),
+    ).toBe(true);
+    expect(
+      isPermanentRelayError({ status: 404, message: "function_not_found" }),
+    ).toBe(true);
+    expect(
+      isPermanentRelayError({ status: 429, message: "rate limited" }),
+    ).toBe(false);
+    expect(isPermanentRelayError({ status: 503, message: "unavailable" })).toBe(
+      false,
+    );
+  });
+});
+
+describe("executeLockBoxReleases error handling", () => {
+  beforeEach(() => {
+    mocks.calls.length = 0;
+    mocks.processed.clear();
+    mocks.revert.clear();
+    mocks.errors.clear();
+    mocks.locked.clear();
+  });
+
+  const refund = (lockId: string) => ({
+    kind: "refund" as const,
+    outcomeId: refundOutcomeId(lockId),
+    user: SELLER,
+    asset: "FakeETH" as const,
+    amount: 1n,
+  });
+
+  it("treats an OutcomeAlreadyProcessed revert as done", async () => {
+    mocks.errors.set(refundOutcomeId("0x01"), {
+      code: "CALL_EXCEPTION",
+      data:
+        ethers.id("OutcomeAlreadyProcessed(bytes32)").slice(0, 10) +
+        refundOutcomeId("0x01").slice(2),
+    });
+    const hashes = await executeLockBoxReleases(
+      [refund("0x01"), refund("0x02")],
+      TEST_CONFIG,
+    );
+    expect(hashes).toEqual(["0xrefund"]);
+  });
+
+  it("rethrows a JSON-RPC CALL_EXCEPTION without revert data as transient", async () => {
+    const rpc = Object.assign(new Error("could not coalesce error"), {
+      code: "CALL_EXCEPTION",
+      data: null,
+    });
+    mocks.errors.set(refundOutcomeId("0x01"), rpc);
+    const err = await executeLockBoxReleases(
+      [refund("0x01")],
+      TEST_CONFIG,
+    ).catch((e: unknown) => e);
+    expect(err).toBe(rpc);
+    expect(isPermanentRelayError(err)).toBe(false);
+  });
+
+  it("dead letters carry the failed release's user, token and amount", async () => {
+    mocks.revert.add(refundOutcomeId("0x0bad"));
+    stubReceipts({ "0x0bad": [LOSER, 700n * USD, 1] });
+    const result = await relayOutcomeScan(
+      { events: [unopened("0x0bad", 10n)], nextVersion: 11n },
+      TEST_CONFIG,
+      { pair: TEST_PAIR },
+    );
+    expect(result.transientError).toBeUndefined();
+    expect(result.deadLetters[0].failed).toEqual([
+      {
+        release: {
+          kind: "refund",
+          outcomeId: refundOutcomeId("0x0bad"),
+          user: ethers.getAddress(LOSER),
+          asset: "FakeUSD",
+          amount: 700n * USD,
+        },
+        error: expect.stringMatching(/InsufficientLocked/),
+      },
+    ]);
+  });
+});
+
+describe("parseBidResults", () => {
+  it("decodes the REST JSON of vector<auction::BidResult>", () => {
+    // Shape aptos-node returns for a #[view] returning vector<BidResult>:
+    // u256 fields as decimal strings, address as hex, bool as JSON bool.
+    const rest = [
+      [
+        {
+          bidder: "0x" + "77".repeat(32),
+          is_winner: true,
+          fill_amount: "4000000000000000000",
+          clearing_price: "2000",
+        },
+        {
+          bidder: "0x" + "88".repeat(32),
+          is_winner: false,
+          fill_amount: "0",
+          clearing_price: "2000",
+        },
+      ],
+    ];
+    expect(parseBidResults(rest[0])).toEqual([
+      { bidder: "0x" + "77".repeat(32), fillAmount: 4n * ETH, isWinner: true },
+      { bidder: "0x" + "88".repeat(32), fillAmount: 0n, isWinner: false },
+    ]);
+    expect(() => parseBidResults(undefined)).toThrow(/did not return a vector/);
   });
 });
 
