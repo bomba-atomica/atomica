@@ -8,11 +8,11 @@
  *   1. Active countdown displayed when endTime is in the future
  *   2. Status badge reads "Active" while auction is open
  *   3. Status badge transitions to "Settled" (i.e. "Ended") after expiry
- *      when a short-duration auction created with AUCTION_DURATION_SHORT is used
+ *   4. A live window created on chain reads back from get_window_status and
+ *      Step8Monitor counts down to it
  *
  * Setup:
  *   - Dual-chain testnet started in beforeAll
- *   - Auction created with AUCTION_DURATION_SHORT (2 s) for timer tests
  *
  * Note: Step8Monitor is a presentation component — it takes auctionEndTime as
  * a prop and renders a countdown.  No on-chain interaction is needed in tests
@@ -31,17 +31,32 @@ import {
 import { setupWalletMock } from "./fixtures/wallet-mock";
 import { step8Monitor } from "./helpers/selectors";
 import {
-  setupAuctionState,
-  createAuctionDirect,
+  createLiveWindow,
+  chainNowUs,
+  getAuctionState,
+  getReceiptStatus,
+  getWindowStatus,
+  RECEIPT_CLAIMED,
 } from "./helpers/auction-setup";
 import { Step8Monitor } from "../../src/components/SellFlow/steps/Step8Monitor";
-import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+import {
+  Aptos,
+  AptosConfig,
+  Network,
+  Account,
+  Ed25519PrivateKey,
+} from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "@atomica/sdk/aptos";
+import { ethers } from "ethers";
 
-const MIN_PRICE = 50n;
+const MIN_PRICE = 1_000_000n;
+const PAIR_BCS = new TextEncoder().encode("08-auction-monitor");
+/** The live window's bids close this far after creation. */
+const DEADLINE_AHEAD_US = 20_000_000n;
 
 describe.sequential("08: Auction Monitor countdown and status", () => {
   let fixture: IntegrationFixture;
+  let aptosClient: Aptos;
 
   beforeAll(async () => {
     fixture = await setupIntegrationFixture();
@@ -50,7 +65,8 @@ describe.sequential("08: Auction Monitor countdown and status", () => {
       network: Network.LOCAL,
       fullnode: fixture.aptos.nodeUrl,
     });
-    setAptosInstance(new Aptos(aptosConfig));
+    aptosClient = new Aptos(aptosConfig);
+    setAptosInstance(aptosClient);
 
     await setupWalletMock({
       privateKey: fixture.eth.seller.privateKey,
@@ -185,30 +201,43 @@ describe.sequential("08: Auction Monitor countdown and status", () => {
     20_000,
   );
 
-  // ── Test 6: short-duration auction created on live chain ──────────────────
+  // ── Test 6: live window counts down to its deadline ──────────────────────
 
   it(
-    "auction created with AUCTION_DURATION_SHORT shows countdown then expires",
+    "live window reads back from chain and Step8Monitor counts down to its deadline",
     async () => {
-      // Set up Ethereum lock + Aptos proof registration
-      const auctionSetup = await setupAuctionState(fixture);
+      const operator = Account.fromPrivateKey({
+        privateKey: new Ed25519PrivateKey(fixture.aptos.deployerPrivateKey),
+      });
+      const moduleAddr = fixture.aptos.moduleAddress;
+      const lockAmount = ethers.parseEther("10");
 
-      // Phase 3a: create_auction aborts with E_NOT_IMPLEMENTED (99).
-      // The Step8Monitor UI timer test uses the hardcoded endTime prop and
-      // does not depend on the on-chain registry state. Catch the scaffold
-      // error and continue — the UI countdown/expiry test is still valid.
-      await createAuctionDirect(
-        auctionSetup.aptosClient,
-        auctionSetup.deployerAccount,
-        fixture.aptos.moduleAddress,
-        auctionSetup.lockId,
-        MIN_PRICE,
-        BigInt(AUCTION_DURATION_SHORT),
-      ).catch(() => {
-        // Expected in Phase 3a — scaffold body aborts with E_NOT_IMPLEMENTED
+      const auction = await createLiveWindow(fixture, aptosClient, operator, {
+        pairBcs: PAIR_BCS,
+        minPrice: MIN_PRICE,
+        deadlineAheadUs: DEADLINE_AHEAD_US,
+        lockAmount,
       });
 
-      const endTime = Math.floor(Date.now() / 1000) + AUCTION_DURATION_SHORT;
+      expect(
+        await getWindowStatus(aptosClient, moduleAddr, auction.windowId, PAIR_BCS),
+      ).toEqual({ timelockId: auction.timelockId, revealFinal: false, refunded: false });
+      expect(await getAuctionState(aptosClient, moduleAddr, auction)).toEqual({
+        totalSupply: lockAmount,
+        bidCount: 0n,
+        settled: false,
+        clearingPrice: 0n,
+      });
+      expect(
+        await getReceiptStatus(aptosClient, moduleAddr, "FakeETH", auction.sellerLockId),
+      ).toBe(RECEIPT_CLAIMED);
+
+      // The monitor counts down to the timelock deadline, in wall-clock seconds.
+      const remainingSecs = Number(
+        (auction.deadlineUs - (await chainNowUs(aptosClient))) / 1_000_000n,
+      );
+      expect(remainingSecs).toBeGreaterThan(0);
+      const endTime = Math.floor(Date.now() / 1000) + remainingSecs;
 
       render(
         <Step8Monitor
@@ -218,20 +247,18 @@ describe.sequential("08: Auction Monitor countdown and status", () => {
         />,
       );
 
-      // Initially Active
-      const badge = screen.getByTestId(step8Monitor.auctionStatusBadge);
-      expect(badge.textContent).toBe("Active");
-
-      // After AUCTION_DURATION_SHORT passes, badge should be "Settled"
+      expect(screen.getByTestId(step8Monitor.auctionStatusBadge).textContent).toBe(
+        "Active",
+      );
       await waitFor(
         () => {
           expect(
             screen.getByTestId(step8Monitor.auctionStatusBadge).textContent,
           ).toBe("Settled");
         },
-        { timeout: 10_000 },
+        { timeout: (remainingSecs + 10) * 1000 },
       );
     },
-    600_000,
+    900_000,
   );
 });

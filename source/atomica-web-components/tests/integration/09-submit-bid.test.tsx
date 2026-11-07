@@ -1,19 +1,22 @@
 /**
  * 09-submit-bid.test.tsx
  *
- * Browser integration tests for AuctionBidder — the UI component that
- * encrypts and submits a bid on an Aptos auction.
+ * Live `submit_bid` tests on one window of the dual-chain testnet.
  *
  * Scenarios:
- *   1. Happy path: bid above min_price → tx hash shown in bid-status
- *   2. Bid below min_price → Move abort error shown in bid-status, count unchanged
- *   3. Bid on closed auction → error shown in bid-status
- *   4. Bid on nonexistent auction → error shown in bid-status
+ *   1. A sealed bid is stored: get_bid_count, get_bid_info and the collateral
+ *      receipt status change, the window status does not
+ *   2. A second bid on an already claimed collateral receipt aborts
+ *   3. AuctionBidder on a window that does not exist shows E_AUCTION_NOT_FOUND
+ *   4. A bid after the timelock deadline aborts and leaves its receipt active
  *
  * Setup:
  *   - Dual-chain testnet started in beforeAll
- *   - Auction created via deployer account (no SIWE) before UI tests
- *   - Bidder wallet mock injected for SIWE signing during UI interactions
+ *   - One window created with a real timelock (createLiveWindow)
+ *   - Bids are sealed with sealBid (the AuctionBidder code path) and sent by
+ *     the `@atomica` operator: in the Demo phase only it can claim the FakeUSD
+ *     collateral receipt (`lock_receipt::claim`)
+ *   - Bidder wallet mock injected for the AuctionBidder UI test
  */
 
 import React from "react";
@@ -29,15 +32,21 @@ import { commands } from "vitest/browser";
 import {
   setupIntegrationFixture,
   teardownIntegrationFixture,
-  AUCTION_DURATION_SHORT,
   type IntegrationFixture,
 } from "./fixtures/dual-chain";
 import { setupWalletMock } from "./fixtures/wallet-mock";
 import { auctionBidder } from "./helpers/selectors";
 import {
-  setupAuctionState,
-  createAuctionDirect,
-  viewFunction,
+  createLiveWindow,
+  lockBidCollateral,
+  submitBidDirect,
+  getWindowStatus,
+  getAuctionState,
+  getReceiptStatus,
+  waitForChainTime,
+  RECEIPT_ACTIVE,
+  RECEIPT_CLAIMED,
+  type LiveWindow,
 } from "./helpers/auction-setup";
 import { AuctionBidder } from "../../src/components/AuctionBidder";
 import {
@@ -47,16 +56,32 @@ import {
   ContractStatusProvider,
   BalancesProvider,
 } from "../../src/index";
-import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { setAptosInstance } from "@atomica/sdk/aptos";
+import {
+  Aptos,
+  AptosConfig,
+  Network,
+  Account,
+  Ed25519PrivateKey,
+} from "@aptos-labs/ts-sdk";
+import {
+  setAptosInstance,
+  getBidCount,
+  getBidInfo,
+  isSettled,
+} from "@atomica/sdk/aptos";
 import {
   setAptosInstance as setDockerAptosInstance,
   getDerivedAddress,
 } from "@atomica/aptos-docker-testnet/browser";
+import { ethers } from "ethers";
 
-const MIN_PRICE = 100n;
-const AUCTION_DURATION = 3600n; // 1 hour — long enough for bids
-const NONEXISTENT_SELLER = "0x000000000000000000000000000000000000000000000000000000000000dead";
+const MIN_PRICE = 1_000_000n;
+const BID_PRICE = 2_000_000n;
+const BID_QUANTITY = ethers.parseEther("1");
+const PAIR_BCS = new TextEncoder().encode("09-submit-bid");
+/** Bids close 180 s after the window is created: tests 1-3 run before that. */
+const DEADLINE_AHEAD_US = 180_000_000n;
+const MISSING_WINDOW_ID = 999_999n;
 
 // ---------------------------------------------------------------------------
 // Minimal provider wrapper for AuctionBidder
@@ -88,57 +113,43 @@ function BidderProviders({
 
 describe.sequential("09: Submit Bid on Auction", () => {
   let fixture: IntegrationFixture;
+  let aptosClient: Aptos;
+  let moduleAddr: string;
+  let operator: Account;
   let bidderAddress: string;
-  let sellerAptosAddress: string;
-
-  async function configureBidderForFixture(
-    nextFixture: IntegrationFixture,
-  ): Promise<void> {
-    const aptosConfig = new AptosConfig({
-      network: Network.LOCAL,
-      fullnode: nextFixture.aptos.nodeUrl,
-    });
-    const aptosInstance = new Aptos(aptosConfig);
-    setAptosInstance(aptosInstance);
-    // AuctionBidder uses submitBid from @atomica/aptos-docker-testnet/browser
-    // which has its own aptos singleton — update it too.
-    setDockerAptosInstance(aptosInstance);
-
-    bidderAddress = await setupWalletMock({
-      privateKey: nextFixture.eth.bidder.privateKey,
-      rpcUrl: nextFixture.eth.rpcUrl,
-      chainId: nextFixture.eth.chainId,
-    });
-
-    const bidderAptosAddress = await getDerivedAddress(
-      bidderAddress.toLowerCase(),
-    );
-    await commands.fundAccount(bidderAptosAddress.toString(), 500_000_000);
-  }
+  let auction: LiveWindow;
+  let firstCollateral: string;
 
   beforeAll(async () => {
     fixture = await setupIntegrationFixture();
-    await configureBidderForFixture(fixture);
+    moduleAddr = fixture.aptos.moduleAddress;
 
-    // Set up Ethereum lock + Aptos registration (seller side, no SIWE)
-    const auctionSetup = await setupAuctionState(fixture);
-    sellerAptosAddress =
-      auctionSetup.deployerAccount.accountAddress.toString();
+    aptosClient = new Aptos(
+      new AptosConfig({ network: Network.LOCAL, fullnode: fixture.aptos.nodeUrl }),
+    );
+    setAptosInstance(aptosClient);
+    setDockerAptosInstance(aptosClient);
 
-    // Phase 3a: create_auction aborts with E_NOT_IMPLEMENTED (99).
-    // Catch the error — the bidder UI tests still exercise the AuctionBidder
-    // component's error-handling and the new windowId input interface.
-    await createAuctionDirect(
-      auctionSetup.aptosClient,
-      auctionSetup.deployerAccount,
-      fixture.aptos.moduleAddress,
-      auctionSetup.lockId,
-      MIN_PRICE,
-      AUCTION_DURATION,
-    ).catch(() => {
-      // Expected: scaffold body aborts with E_NOT_IMPLEMENTED
+    operator = Account.fromPrivateKey({
+      privateKey: new Ed25519PrivateKey(fixture.aptos.deployerPrivateKey),
     });
-  }, 600_000);
+
+    bidderAddress = await setupWalletMock({
+      privateKey: fixture.eth.bidder.privateKey,
+      rpcUrl: fixture.eth.rpcUrl,
+      chainId: fixture.eth.chainId,
+    });
+    const bidderAptosAddress = await getDerivedAddress(bidderAddress.toLowerCase());
+    await commands.fundAccount(bidderAptosAddress.toString(), 500_000_000);
+
+    // Collateral first: the timelock deadline starts counting at createLiveWindow.
+    firstCollateral = await lockBidCollateral(fixture, aptosClient, operator);
+    auction = await createLiveWindow(fixture, aptosClient, operator, {
+      pairBcs: PAIR_BCS,
+      minPrice: MIN_PRICE,
+      deadlineAheadUs: DEADLINE_AHEAD_US,
+    });
+  }, 1_200_000);
 
   afterAll(async () => {
     await teardownIntegrationFixture();
@@ -148,194 +159,121 @@ describe.sequential("09: Submit Bid on Auction", () => {
     cleanup();
   });
 
-  // ── Test 1: scaffold abort (Phase 3a) ─────────────────────────────────────
-  //
-  // Phase 3a: submit_bid aborts with E_NOT_IMPLEMENTED (99). AuctionBidder
-  // now uses windowId instead of sellerAddress. The test verifies that:
-  //   - window-id-input is present (new v0 Beta interface)
-  //   - bid submission surfaces an Error status (scaffold abort)
+  // ── Test 1: a sealed bid is stored ─────────────────────────────────────────
 
-  it("shows error in bid-status when submit_bid aborts (Phase 3a scaffold)", async () => {
-    render(
-      <BidderProviders account={bidderAddress}>
-        <AuctionBidder />
-      </BidderProviders>,
-    );
+  it("stores a sealed bid and claims its FakeUSD collateral receipt", async () => {
+    expect(await getBidCount(auction.windowId, PAIR_BCS)).toBe(0n);
+    expect(
+      await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", firstCollateral),
+    ).toBe(RECEIPT_ACTIVE);
 
-    // Phase 3b: AuctionBidder starts in the "lock-collateral" step.
-    // Skip to the bid submission step (no real on-chain lock needed in CI).
-    fireEvent.click(screen.getByTestId(auctionBidder.skipToBidButton));
-
-    // v0 Beta: fill in window ID instead of seller address
-    const windowInput = screen.getByTestId(auctionBidder.windowIdInput);
-    fireEvent.change(windowInput, { target: { value: "0" } });
-
-    // Set bid amount
-    const bidInput = screen.getByTestId(auctionBidder.bidAmountInput);
-    fireEvent.change(bidInput, { target: { value: "150" } });
-
-    // Click Submit Encrypted Bid
-    const submitBtn = screen.getByTestId(auctionBidder.submitBidButton);
-    fireEvent.click(submitBtn);
-
-    // Phase 3a: submit_bid aborts with E_NOT_IMPLEMENTED — error shown
-    await waitFor(
-      () => {
-        const statusEl = screen.getByTestId(auctionBidder.bidStatus);
-        expect(statusEl).toBeTruthy();
-        expect(statusEl.textContent).toMatch(/Error/);
-      },
-      { timeout: 60_000 },
-    );
-  }, 90_000);
-
-  // ── Test 2: bid below min_price ────────────────────────────────────────────
-
-  it("shows error in bid-status on any bid submission (Phase 3a scaffold)", async () => {
-    // Phase 3a: submit_bid aborts with E_NOT_IMPLEMENTED (99) regardless of
-    // bid amount. Bid count remains 0 (get_bid_count returns 0 for non-existent windows).
-    const aptosConfig = new AptosConfig({
-      network: Network.LOCAL,
-      fullnode: fixture.aptos.nodeUrl,
-    });
-    const aptosClient = new Aptos(aptosConfig);
-    // v0 Beta: get_bid_count takes (window_id, pair_bcs); returns 0 when window not found
-    const countBefore = await viewFunction(
+    const bid = await submitBidDirect(
       aptosClient,
-      `${fixture.aptos.moduleAddress}::auction::get_bid_count`,
-      [],
-      [0n, new Uint8Array(0)],
+      operator,
+      auction,
+      BID_PRICE,
+      firstCollateral,
+      BID_QUANTITY,
     );
-    const bidCountBefore = BigInt(countBefore[0]);
 
+    expect(await getBidCount(auction.windowId, PAIR_BCS)).toBe(1n);
+    const stored = await getBidInfo(auction.windowId, PAIR_BCS, 0n);
+    expect(stored.bidder.replace(/^0x0*/, "")).toBe(
+      operator.accountAddress.toString().replace(/^0x0*/, ""),
+    );
+    expect(stored.ciphertext).toEqual(bid.ciphertext);
+    expect(stored.commitment).toEqual(bid.commitment);
+    expect(stored.opened).toBe(false);
+    expect(stored.price).toBe(0n);
+
+    expect(
+      await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", firstCollateral),
+    ).toBe(RECEIPT_CLAIMED);
+    expect(await getWindowStatus(aptosClient, moduleAddr, auction.windowId, PAIR_BCS)).toEqual({
+      timelockId: auction.timelockId,
+      revealFinal: false,
+      refunded: false,
+    });
+    expect(await isSettled(auction.windowId, PAIR_BCS)).toBe(false);
+  }, 120_000);
+
+  // ── Test 2: a claimed collateral receipt cannot back a second bid ─────────
+
+  it("rejects a second bid on the same collateral receipt with E_RECEIPT_ALREADY_CLAIMED", async () => {
+    await expect(
+      submitBidDirect(
+        aptosClient,
+        operator,
+        auction,
+        BID_PRICE + 1n,
+        firstCollateral,
+        BID_QUANTITY,
+      ),
+    ).rejects.toThrow(/E_RECEIPT_ALREADY_CLAIMED/);
+
+    expect(await getBidCount(auction.windowId, PAIR_BCS)).toBe(1n);
+    expect(
+      await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", firstCollateral),
+    ).toBe(RECEIPT_CLAIMED);
+  }, 120_000);
+
+  // ── Test 3: AuctionBidder on a missing window ──────────────────────────────
+
+  it("AuctionBidder shows E_AUCTION_NOT_FOUND for a window that does not exist", async () => {
     render(
       <BidderProviders account={bidderAddress}>
         <AuctionBidder />
       </BidderProviders>,
     );
 
-    // Phase 3b: skip to bid step before filling the form.
     fireEvent.click(screen.getByTestId(auctionBidder.skipToBidButton));
-
-    // v0 Beta: fill window ID (was seller address)
     fireEvent.change(screen.getByTestId(auctionBidder.windowIdInput), {
-      target: { value: "0" },
+      target: { value: MISSING_WINDOW_ID.toString() },
     });
-
     fireEvent.change(screen.getByTestId(auctionBidder.bidAmountInput), {
-      target: { value: "50" },
+      target: { value: BID_PRICE.toString() },
     });
-
     fireEvent.click(screen.getByTestId(auctionBidder.submitBidButton));
 
-    // Phase 3a: any submit_bid call aborts — error surfaced in UI
+    // sealBid reads get_window_status first, which aborts for a missing window.
     await waitFor(
       () => {
         const statusEl = screen.getByTestId(auctionBidder.bidStatus);
-        expect(statusEl).toBeTruthy();
-        expect(statusEl.textContent).toMatch(/Error/);
+        expect(statusEl.textContent).toMatch(/^Error: /);
+        expect(statusEl.textContent).toMatch(/E_AUCTION_NOT_FOUND/);
       },
       { timeout: 60_000 },
     );
 
-    // Bid count must not have changed (still 0 for window 0)
-    const countAfter = await viewFunction(
-      aptosClient,
-      `${fixture.aptos.moduleAddress}::auction::get_bid_count`,
-      [],
-      [0n, new Uint8Array(0)],
-    );
-    expect(BigInt(countAfter[0])).toBe(bidCountBefore);
+    expect(await getBidCount(MISSING_WINDOW_ID, new Uint8Array(0))).toBe(0n);
+    expect(await getBidCount(auction.windowId, PAIR_BCS)).toBe(1n);
   }, 90_000);
 
-  // ── Test 3: bid on nonexistent auction ────────────────────────────────────
+  // ── Test 4: bids close at the timelock deadline ───────────────────────────
 
-  it("shows error in bid-status for any window ID (Phase 3a scaffold)", async () => {
-    // Phase 3a: submit_bid aborts with E_NOT_IMPLEMENTED (99) for any window.
-    render(
-      <BidderProviders account={bidderAddress}>
-        <AuctionBidder />
-      </BidderProviders>,
-    );
+  it("rejects a bid after the timelock deadline and leaves its receipt active", async () => {
+    const lateCollateral = await lockBidCollateral(fixture, aptosClient, operator);
+    await waitForChainTime(aptosClient, auction.deadlineUs);
 
-    // Phase 3b: skip to bid step before filling the form.
-    fireEvent.click(screen.getByTestId(auctionBidder.skipToBidButton));
+    // Right after the deadline the timelock is still Pending (E_BID_AFTER_DEADLINE).
+    // Once the validators reveal it, the status check fires first (E_TIMELOCK_NOT_PENDING).
+    await expect(
+      submitBidDirect(
+        aptosClient,
+        operator,
+        auction,
+        BID_PRICE,
+        lateCollateral,
+        BID_QUANTITY,
+      ),
+    ).rejects.toThrow(/E_BID_AFTER_DEADLINE|E_TIMELOCK_NOT_PENDING/);
 
-    // v0 Beta: use a large window ID that has no registered auction
-    fireEvent.change(screen.getByTestId(auctionBidder.windowIdInput), {
-      target: { value: "999999" },
-    });
-
-    fireEvent.change(screen.getByTestId(auctionBidder.bidAmountInput), {
-      target: { value: "150" },
-    });
-
-    fireEvent.click(screen.getByTestId(auctionBidder.submitBidButton));
-
-    await waitFor(
-      () => {
-        const statusEl = screen.getByTestId(auctionBidder.bidStatus);
-        expect(statusEl).toBeTruthy();
-        expect(statusEl.textContent).toMatch(/Error/);
-      },
-      { timeout: 60_000 },
-    );
-  }, 90_000);
-
-  // ── Test 4: bid on closed auction ─────────────────────────────────────────
-
-  it("shows error in bid-status after auction window elapses (Phase 3a scaffold)", async () => {
-    // Phase 3a: submit_bid aborts with E_NOT_IMPLEMENTED (99) before any
-    // window-closed check can occur. This test verifies the UI error path
-    // using the new v0 Beta windowId interface.
-    await teardownIntegrationFixture();
-    fixture = await setupIntegrationFixture();
-    await configureBidderForFixture(fixture);
-
-    const auctionSetup = await setupAuctionState(fixture);
-
-    // Phase 3a: create_auction aborts — catch and continue
-    await createAuctionDirect(
-      auctionSetup.aptosClient,
-      auctionSetup.deployerAccount,
-      fixture.aptos.moduleAddress,
-      auctionSetup.lockId,
-      MIN_PRICE,
-      BigInt(AUCTION_DURATION_SHORT),
-    ).catch(() => {
-      // Expected: scaffold body aborts with E_NOT_IMPLEMENTED
-    });
-
-    await new Promise((r) =>
-      setTimeout(r, (AUCTION_DURATION_SHORT + 3) * 1000),
-    );
-
-    render(
-      <BidderProviders account={bidderAddress}>
-        <AuctionBidder />
-      </BidderProviders>,
-    );
-
-    // Phase 3b: skip to bid step before filling the form.
-    fireEvent.click(screen.getByTestId(auctionBidder.skipToBidButton));
-
-    // v0 Beta: use window ID 0
-    fireEvent.change(screen.getByTestId(auctionBidder.windowIdInput), {
-      target: { value: "0" },
-    });
-
-    fireEvent.change(screen.getByTestId(auctionBidder.bidAmountInput), {
-      target: { value: "150" },
-    });
-
-    fireEvent.click(screen.getByTestId(auctionBidder.submitBidButton));
-
-    await waitFor(
-      () => {
-        const statusEl = screen.getByTestId(auctionBidder.bidStatus);
-        expect(statusEl.textContent).toMatch(/Error/);
-      },
-      { timeout: 60_000 },
-    );
-  }, 600_000);
+    // The abort rolled back the collateral claim.
+    expect(
+      await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", lateCollateral),
+    ).toBe(RECEIPT_ACTIVE);
+    const state = await getAuctionState(aptosClient, moduleAddr, auction);
+    expect(state.bidCount).toBe(1n);
+    expect(state.settled).toBe(false);
+  }, 900_000);
 });
