@@ -1,5 +1,10 @@
 name: Test Web (TypeScript/Vitest)
 
+# The gating workflow. The Move, browser, and EVM jobs live here, not in their
+# own files, because a job can only `needs:` jobs in the same workflow. The
+# `required-checks` job at the end aggregates them all. It is meant to be the
+# only required check in ruleset 11921934.
+
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -8,6 +13,12 @@ on:
     branches: [main]
     paths-ignore: ["**.md", "**.txt"]
   workflow_dispatch:
+
+env:
+  # The atomica-aptos binary release the Move jobs install. Its commit must equal
+  # the AptosFramework rev in source/atomica-move-contracts/Move.toml (checked
+  # by move-framework-pin).
+  APTOS_VERSION: binary-2c32b09d95
 
 jobs:
   test-coverage-guard:
@@ -217,7 +228,7 @@ jobs:
 
   aptos-testnet-sdk:
     # Starts the Aptos Docker testnet, so it waits for ready-for-review.
-    name: Web Tests (unit)  # required check name in the main ruleset; runs the Aptos testnet SDK suite
+    name: Aptos Testnet SDK (docker)
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -328,3 +339,546 @@ jobs:
           APTOS_VALIDATOR_5_SEED: "0000000000000000000000000000000000000000000000000000000000000006"
           APTOS_VALIDATOR_6_SEED: "0000000000000000000000000000000000000000000000000000000000000007"
         run: bun run test
+
+  # ── Move contracts (formerly move-ci.yml) ─────────────────────────────────
+  move-framework-pin:
+    name: Move Framework Pin
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CI_CLASS: code-hygiene
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Move.toml rev must be the full SHA of APTOS_VERSION
+        run: |
+          MOVE_TOML=source/atomica-move-contracts/Move.toml
+          REV=$(sed -n 's/^AptosFramework = .*rev = "\([^"]*\)".*/\1/p' "$MOVE_TOML")
+          APTOS_HASH="${APTOS_VERSION#binary-}"
+          echo "Move.toml rev: ${REV:-<none>}"
+          echo "APTOS_VERSION: ${APTOS_VERSION}"
+          if ! [[ "$REV" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error file=${MOVE_TOML}::AptosFramework rev '${REV}' is not a full 40-character commit SHA"
+            exit 1
+          fi
+          if [[ "$REV" != "$APTOS_HASH"* ]]; then
+            echo "::error file=${MOVE_TOML}::AptosFramework rev ${REV} does not match ${APTOS_VERSION}"
+            exit 1
+          fi
+          echo "Move.toml rev matches ${APTOS_VERSION}"
+
+  move-unit-tests:
+    name: Move Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI_CLASS: feature-correctness
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Aptos CLI
+        run: |
+          # Download aptos binary from atomica-aptos releases (APTOS_VERSION is set in the workflow env)
+          # Extract hash from version tag (format: binary-HASH)
+          APTOS_HASH="${APTOS_VERSION#binary-}"
+          APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
+          APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
+
+          echo "Downloading aptos binary from ${APTOS_URL}..."
+          curl -L -o /tmp/aptos "${APTOS_URL}"
+
+          echo "Installing aptos binary to /usr/local/bin/aptos..."
+          chmod +x /tmp/aptos
+          sudo mv /tmp/aptos /usr/local/bin/aptos
+
+          echo "Verifying aptos installation..."
+          aptos --version
+          which aptos
+
+      - name: Run Move Tests
+        run: |
+          aptos move test --package-dir source/atomica-move-contracts
+
+  move-lint:
+    name: Move Lint Warnings
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI_CLASS: code-hygiene
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Aptos CLI
+        run: |
+          # Download aptos binary from atomica-aptos releases (APTOS_VERSION is set in the workflow env)
+          # Extract hash from version tag (format: binary-HASH)
+          APTOS_HASH="${APTOS_VERSION#binary-}"
+          APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
+          APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
+
+          echo "Downloading aptos binary from ${APTOS_URL}..."
+          curl -L -o /tmp/aptos "${APTOS_URL}"
+
+          echo "Installing aptos binary to /usr/local/bin/aptos..."
+          chmod +x /tmp/aptos
+          sudo mv /tmp/aptos /usr/local/bin/aptos
+
+          echo "Verifying aptos installation..."
+          aptos --version
+          which aptos
+
+      - name: Check for Lint Warnings
+        run: |
+          aptos move compile --package-dir source/atomica-move-contracts --fail-on-warning --named-addresses atomica=0xcafe
+
+  # ── Browser tests (formerly test-browser.yaml) ─────────────────────────────
+  # The Ethereum-backed chunks run in two tiers. Only ETH_BACKEND differs.
+  # The `component` chunk does not use Ethereum and runs only in the anvil tier.
+  # Chunks that start the Aptos Docker testnet need GHCR in both tiers.
+  browser-tests-anvil:
+    name: Browser Tests (${{ matrix.chunk }}, anvil)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI_CLASS: feature-correctness
+      ETH_BACKEND: anvil
+    permissions:
+      packages: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - chunk: component
+            test_files: >-
+              tests/AccountStatus.test.tsx
+              tests/TxButton.skip-submit.test.tsx
+          - chunk: faucet-wallet
+            test_files: >-
+              tests/integration/01-faucet.test.tsx
+              tests/integration/02-wallet-connect.test.tsx
+          - chunk: auction
+            test_files: >-
+              tests/integration/07-create-auction.test.tsx
+              tests/integration/08-auction-monitor.test.tsx
+          - chunk: bid-settle
+            test_files: >-
+              tests/integration/09-submit-bid.test.tsx
+              tests/integration/10-settle.test.tsx
+          - chunk: settle-100-bids
+            test_files: >-
+              tests/integration/16-settle-100-bids.test.tsx
+          - chunk: claim-reclaim-fees
+            test_files: >-
+              tests/integration/11-claim-and-reclaim.test.tsx
+              tests/integration/12-fee-rebate.test.tsx
+              tests/integration/13-bid-history.test.tsx
+          - chunk: happy-path
+            test_files: >-
+              tests/integration/14-happy-path.test.tsx
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build Ethereum Testnet SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: |
+          bun install
+          bun run build
+
+      - name: Build State Proofs
+        working-directory: source/state-proofs/typescript
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Atomica SDK
+        working-directory: source/atomica-sdk
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Aptos Testnet SDK
+        working-directory: source/docker-testnet/aptos-testnet
+        run: |
+          bun install
+          bun run build
+
+      - name: Install Foundry
+        if: matrix.chunk != 'component'
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Build EVM contracts
+        if: matrix.chunk != 'component'
+        working-directory: source/evm-contracts
+        run: forge build
+
+      - name: Install Aptos CLI
+        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path'
+        run: |
+          APTOS_VERSION="binary-2c32b09d95"
+          APTOS_HASH="${APTOS_VERSION#binary-}"
+          APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
+          APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
+
+          echo "Downloading aptos binary from ${APTOS_URL}..."
+          curl -L -o /tmp/aptos "${APTOS_URL}"
+
+          echo "Installing aptos binary to /usr/local/bin/aptos..."
+          chmod +x /tmp/aptos
+          sudo mv /tmp/aptos /usr/local/bin/aptos
+
+          echo "Verifying aptos installation..."
+          aptos --version
+          which aptos
+
+      - name: Pre-warm Move git dependency cache
+        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path'
+        run: |
+          # Step 1: Fetch the atomica-aptos git dependency by compiling atomica-move-contracts.
+          # This clones the repo and generates Move.lock for atomica-move-contracts.
+          aptos move compile \
+            --package-dir source/atomica-move-contracts \
+            --named-addresses atomica=0x1
+          # Step 2: Compile the noop fixture using the already-cached dep
+          # (--skip-fetch-latest-git-deps avoids a second git fetch that fails
+          # with exit 128 when trying to reset an already-cloned repo).
+          aptos move compile \
+            --package-dir source/docker-testnet/aptos-testnet/test/fixtures/noop \
+            --named-addresses noop=0x1 \
+            --skip-fetch-latest-git-deps
+
+      - name: Install Web UI dependencies
+        working-directory: source/atomica-web-components
+        run: bun install
+
+      - name: Build Atomica Web UI
+        if: matrix.chunk != 'faucet-wallet'
+        working-directory: source/atomica-web-components
+        run: bun run build
+
+      - name: Install Playwright browsers
+        working-directory: source/atomica-web-components
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        working-directory: source/atomica-web-components
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
+        run: bunx vitest run ${{ matrix.test_files }}
+
+  browser-tests-docker:
+    name: Browser Tests (${{ matrix.chunk }}, docker)
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CI_CLASS: system-correctness
+      ETH_BACKEND: docker
+    permissions:
+      packages: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - chunk: faucet-wallet
+            test_files: >-
+              tests/integration/01-faucet.test.tsx
+              tests/integration/02-wallet-connect.test.tsx
+          - chunk: auction
+            test_files: >-
+              tests/integration/07-create-auction.test.tsx
+              tests/integration/08-auction-monitor.test.tsx
+          - chunk: bid-settle
+            test_files: >-
+              tests/integration/09-submit-bid.test.tsx
+              tests/integration/10-settle.test.tsx
+          - chunk: settle-100-bids
+            test_files: >-
+              tests/integration/16-settle-100-bids.test.tsx
+          - chunk: claim-reclaim-fees
+            test_files: >-
+              tests/integration/11-claim-and-reclaim.test.tsx
+              tests/integration/12-fee-rebate.test.tsx
+              tests/integration/13-bid-history.test.tsx
+          - chunk: happy-path
+            test_files: >-
+              tests/integration/14-happy-path.test.tsx
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build Ethereum Testnet SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: |
+          bun install
+          bun run build
+
+      - name: Build State Proofs
+        working-directory: source/state-proofs/typescript
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Atomica SDK
+        working-directory: source/atomica-sdk
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Aptos Testnet SDK
+        working-directory: source/docker-testnet/aptos-testnet
+        run: |
+          bun install
+          bun run build
+
+      - name: Install Foundry
+        if: matrix.chunk != 'component'
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Build EVM contracts
+        if: matrix.chunk != 'component'
+        working-directory: source/evm-contracts
+        run: forge build
+
+      - name: Install Aptos CLI
+        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path'
+        run: |
+          APTOS_VERSION="binary-2c32b09d95"
+          APTOS_HASH="${APTOS_VERSION#binary-}"
+          APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
+          APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
+
+          echo "Downloading aptos binary from ${APTOS_URL}..."
+          curl -L -o /tmp/aptos "${APTOS_URL}"
+
+          echo "Installing aptos binary to /usr/local/bin/aptos..."
+          chmod +x /tmp/aptos
+          sudo mv /tmp/aptos /usr/local/bin/aptos
+
+          echo "Verifying aptos installation..."
+          aptos --version
+          which aptos
+
+      - name: Pre-warm Move git dependency cache
+        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path'
+        run: |
+          # Step 1: Fetch the atomica-aptos git dependency by compiling atomica-move-contracts.
+          # This clones the repo and generates Move.lock for atomica-move-contracts.
+          aptos move compile \
+            --package-dir source/atomica-move-contracts \
+            --named-addresses atomica=0x1
+          # Step 2: Compile the noop fixture using the already-cached dep
+          # (--skip-fetch-latest-git-deps avoids a second git fetch that fails
+          # with exit 128 when trying to reset an already-cloned repo).
+          aptos move compile \
+            --package-dir source/docker-testnet/aptos-testnet/test/fixtures/noop \
+            --named-addresses noop=0x1 \
+            --skip-fetch-latest-git-deps
+
+      - name: Install Web UI dependencies
+        working-directory: source/atomica-web-components
+        run: bun install
+
+      - name: Build Atomica Web UI
+        if: matrix.chunk != 'faucet-wallet'
+        working-directory: source/atomica-web-components
+        run: bun run build
+
+      - name: Install Playwright browsers
+        working-directory: source/atomica-web-components
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        working-directory: source/atomica-web-components
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
+        run: bunx vitest run ${{ matrix.test_files }}
+
+  # ── EVM contracts (formerly evm-contracts-ci.yml) ──────────────────────────
+  evm-e2e-tests-anvil:
+    name: EVM e2e tests (anvil)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI_CLASS: feature-correctness
+      ETH_BACKEND: anvil
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install Forge dependencies
+        working-directory: source/evm-contracts
+        run: forge install
+
+      - name: Install test-orchestration dependencies
+        working-directory: source/evm-contracts
+        run: bun install
+
+      - name: Build SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: bun install && bun run build
+
+      - name: Run e2e tests
+        working-directory: source/evm-contracts
+        run: bun run test:docker
+        env:
+          ETH_RPC_URL: http://localhost:8545
+
+  evm-e2e-tests-docker:
+    name: EVM e2e tests (docker)
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI_CLASS: system-correctness
+      ETH_BACKEND: docker
+    permissions:
+      packages: read
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install Forge dependencies
+        working-directory: source/evm-contracts
+        run: forge install
+
+      - name: Install test-orchestration dependencies
+        working-directory: source/evm-contracts
+        run: bun install
+
+      - name: Build SDK
+        working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
+        run: bun install && bun run build
+
+      - name: Run e2e tests
+        working-directory: source/evm-contracts
+        run: bun run test:docker
+        env:
+          ETH_RPC_URL: http://localhost:8545
+
+  # ── Gate ───────────────────────────────────────────────────────────────────
+  required-checks:
+    # The one required check. It always runs and passes only when every job
+    # above succeeded. A skipped job counts as a failure, except the docker
+    # tier on a draft PR, which skips drafts on purpose.
+    # On a draft PR it reports as "Required Checks (draft)", so a draft run
+    # can never leave a stale green "Required Checks" on a SHA whose
+    # ready-for-review run is still going.
+    name: ${{ github.event.pull_request.draft && 'Required Checks (draft)' || 'Required Checks' }}
+    if: ${{ always() }}
+    needs:
+      - test-coverage-guard
+      - unit-tests
+      - test-web
+      - aptos-testnet-sdk
+      - move-framework-pin
+      - move-unit-tests
+      - move-lint
+      - browser-tests-anvil
+      - browser-tests-docker
+      - evm-e2e-tests-anvil
+      - evm-e2e-tests-docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CI_CLASS: ignore
+      DRAFT: ${{ github.event.pull_request.draft == true }}
+      DOCKER_TIER: "aptos-testnet-sdk browser-tests-docker evm-e2e-tests-docker"
+      RESULTS: ${{ toJSON(needs) }}
+    steps:
+      - name: Fail unless every needed job succeeded
+        run: |
+          fail=0
+          jq -e 'length > 0' <<<"$RESULTS" >/dev/null || { echo "::error::no needed job results"; exit 1; }
+          while read -r job result; do
+            ok="success"
+            if [ "$DRAFT" = "true" ] && [[ " $DOCKER_TIER " == *" $job "* ]]; then
+              ok="success skipped"
+            fi
+            if [[ " $ok " == *" $result "* ]]; then
+              echo "ok:   $job = $result"
+            else
+              echo "::error::$job = $result (want: $ok)"
+              fail=1
+            fi
+          done < <(jq -r 'to_entries[] | "\(.key) \(.value.result)"' <<<"$RESULTS")
+          exit "$fail"
+
+  legacy-web-tests-unit:
+    # Transitional alias. Ruleset 11921934 still requires "Web Tests (unit)".
+    # The job that used that name is now "Aptos Testnet SDK (docker)". This
+    # job runs no tests: it passes only when "Required Checks" passed. Delete
+    # it once the ruleset requires only "Required Checks" (issue 173).
+    name: ${{ github.event.pull_request.draft && 'Web Tests (unit) (draft)' || 'Web Tests (unit)' }}
+    if: ${{ always() }}
+    needs: required-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CI_CLASS: ignore
+      GATE: ${{ needs.required-checks.result }}
+    steps:
+      - name: Pass only when Required Checks passed
+        run: |
+          echo "Required Checks = $GATE"
+          test "$GATE" = "success"

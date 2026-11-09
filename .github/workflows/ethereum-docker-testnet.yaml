@@ -6,11 +6,11 @@ name: Ethereum Docker Testnet Tests
 #   onward and on main (system-correctness). Beacon-only tests self-skip on anvil.
 
 on:
+  # Every code push to main runs it, so main catches breakage from changes
+  # outside ethereum-testnet/. Pull requests keep the path filter.
   push:
     branches: [main]
-    paths:
-      - "source/docker-testnet/ethereum-testnet/**"
-      - ".github/workflows/ethereum-docker-testnet.yaml"
+    paths-ignore: ["**.md", "**.txt"]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
