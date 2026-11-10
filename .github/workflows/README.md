@@ -6,9 +6,35 @@ This directory contains CI/CD workflows for the Atomica project.
 
 ### `test-web.yaml` (Gating Workflow)
 
-Holds every merge-gating job. The `required-checks` job ("Required Checks")
-aggregates them. Ruleset 11921934 also requires "Web Tests (integration)",
-"Web Tests (meta)" and "Web Tests (unit)".
+Holds every merge-gating job. The `required-checks` job aggregates them.
+Ruleset 11921934 requires "Web Tests (integration)", "Web Tests (meta)" and
+"Web Tests (unit)".
+
+**Gate:** `required-checks` is a two-leg matrix. Both legs run the same check
+and report it as "Required Checks" and as "Web Tests (unit)". The second name
+is a transitional alias for the ruleset, to drop in issue 173. On a draft PR
+each name gets a " (draft)" suffix.
+
+The gate needs only `changes`, so its check runs appear within a minute or two
+of the run's start. It then polls this run's jobs through the Actions API
+(`actions: read`) every 30 seconds until every gated job has finished. A
+`needs:` on the gated jobs would create its check runs only after the slowest
+job ends. Until then an older run's green check would stand on the same head
+SHA, for example after a base retarget.
+
+The gate holds an explicit list of gated job names, with each matrix leg
+expanded. A whole matrix skipped by a job-level `if` shows up under its
+unexpanded name, which the list also holds. The gate fails closed when:
+- a gated job fails, is cancelled, or times out;
+- a gated job is skipped, except the docker tier on a draft PR or any job on a
+  docs-only PR;
+- a listed job is still missing after about two minutes;
+- the run has a job the list does not name (update the list with the job);
+- the jobs API fails five times in a row;
+- gated jobs are still unfinished after 150 minutes.
+
+A newer run for the same PR cancels the older one. Push and dispatch runs are
+never cancelled.
 
 **Docs-only PRs:** the `pull_request` trigger has no `paths-ignore`, because a
 workflow skipped by a path filter never reports its checks. Instead the
@@ -22,6 +48,10 @@ when:
   the files API cap of 3000;
 - the PR's live head SHA differs from the head SHA the run was started for.
 
+The job counts code rows with `grep -c` on a here-string, never with a pipe
+into `grep -q`. Under `pipefail` such a pipe can fail with SIGPIPE on a long
+file list.
+
 The `pull_request` trigger includes `edited`, so retargeting a PR's base
 reruns the classification. The job prints the file list between
 `::stop-commands::` markers, so a file name cannot act as a workflow command.
@@ -30,8 +60,8 @@ When the PR is docs-only:
 - most test jobs skip at job level;
 - `test-web` runs but skips every step, so it reports its expanded matrix
   names ("Web Tests (integration)", "Web Tests (meta)") as success;
-- `required-checks` accepts `skipped` for every job and passes;
-- `legacy-web-tests-unit` ("Web Tests (unit)") passes because Required Checks did.
+- `required-checks` accepts `skipped` for every gated job, so "Required
+  Checks" and "Web Tests (unit)" pass.
 
 Detection fails open: if `changes` fails, its output is empty, which is not
 `false`, so every test runs and must succeed. Pushes to `main` keep

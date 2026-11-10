@@ -18,6 +18,13 @@ on:
     paths-ignore: ["**.md", "**.txt"]
   workflow_dispatch:
 
+# A newer run for the same PR cancels the older one, for example after each
+# title or body edit. Push and dispatch runs key on their own run id, so they
+# are never cancelled.
+concurrency:
+  group: test-web-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   # The atomica-aptos binary release the Move jobs install. Its commit must equal
   # the AptosFramework rev in source/atomica-move-contracts/Move.toml (checked
@@ -76,7 +83,10 @@ jobs:
           echo "::stop-commands::$token"
           printf '%s\n' "$rows"
           echo "::$token::"
-          count=$(printf '%s\n' "$rows" | grep -c . || true)
+          # Counts use a here-string, not a pipe. Under pipefail a pipe into
+          # an early-exiting grep can fail with SIGPIPE.
+          count=$(grep -c . <<<"$rows" || true)
+          ncode=$(grep -c '^C' <<<"$rows" || true)
           # The files API returns at most 3000 files. A short or capped list
           # may hide a code file.
           if [ "$count" -ne "$CHANGED_FILES" ] || [ "$count" -ge 3000 ]; then
@@ -88,7 +98,7 @@ jobs:
           if [ "$live_head" != "$HEAD_SHA" ]; then
             code "PR head is $live_head, run is for $HEAD_SHA: treat as code."
           fi
-          if [ "$count" -gt 0 ] && ! printf '%s\n' "$rows" | grep -q '^C'; then
+          if [ "$count" -gt 0 ] && [ "$ncode" -eq 0 ]; then
             echo "Docs-only change: test jobs report success without running."
             echo "code=false" >> "$GITHUB_OUTPUT"
           else
@@ -920,76 +930,171 @@ jobs:
 
   # ── Gate ───────────────────────────────────────────────────────────────────
   required-checks:
-    # The one required check. It always runs and passes only when every job
-    # above succeeded. A skipped job counts as a failure, except the docker
-    # tier on a draft PR, which skips drafts on purpose, and every job on a
-    # docs-only PR, which skips its work on purpose.
-    # Docs-only mode needs `changes` to output exactly "false". If `changes`
-    # failed, its output is empty, which is != 'false', so every job must
-    # succeed. Its own result is logged but does not gate (fail-open).
-    # On a draft PR it reports as "Required Checks (draft)", so a draft run
-    # can never leave a stale green "Required Checks" on a SHA whose
-    # ready-for-review run is still going.
-    name: ${{ github.event.pull_request.draft && 'Required Checks (draft)' || 'Required Checks' }}
+    # The gate. It passes only when every gated job above succeeded. A skipped
+    # job counts as a failure, except the docker tier on a draft PR, which
+    # skips drafts on purpose, and every job on a docs-only PR, which skips
+    # its work on purpose.
+    #
+    # It needs only `changes`, so its check runs appear as soon as `changes`
+    # ends. A `needs:` on the gated jobs would create them only after the
+    # slowest job ends (about 30 minutes). Until then an older run's green
+    # check would stand on the same head SHA, for example after a base
+    # retarget. Instead it polls this run's jobs through the API until every
+    # gated job has finished.
+    #
+    # Fail-closed: a missing or unknown job, an API error, or the poll limit
+    # fails it. Docs-only mode needs `changes` to output exactly "false". If
+    # `changes` failed, its output is empty, which is != 'false', so every
+    # job must succeed.
+    #
+    # Two matrix legs report the same verdict under two names. Ruleset
+    # 11921934 requires "Web Tests (unit)". The job that used that name is now
+    # "Aptos Testnet SDK (docker)". Drop that leg once the ruleset requires
+    # "Required Checks" instead (issue 173). On a draft PR each name gets a
+    # " (draft)" suffix, so a draft run never leaves a green required check
+    # on a SHA whose ready-for-review run is still going.
+    name: ${{ github.event.pull_request.draft && format('{0} (draft)', matrix.check) || matrix.check }}
     if: ${{ always() }}
-    needs:
-      - changes
-      - test-coverage-guard
-      - unit-tests
-      - test-web
-      - aptos-testnet-sdk
-      - move-framework-pin
-      - move-unit-tests
-      - move-lint
-      - browser-tests-anvil
-      - browser-tests-docker
-      - evm-e2e-tests-anvil
-      - evm-e2e-tests-docker
+    needs: changes
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 160
     env:
       CI_CLASS: ignore
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      RUN_ID: ${{ github.run_id }}
       DRAFT: ${{ github.event.pull_request.draft == true }}
       CODE_CHANGED: ${{ needs.changes.outputs.code != 'false' }}
-      DOCKER_TIER: "aptos-testnet-sdk browser-tests-docker evm-e2e-tests-docker"
-      RESULTS: ${{ toJSON(needs) }}
+      CHANGES_RESULT: ${{ needs.changes.result }}
+      POLL_SECONDS: "30"
+      POLL_LIMIT_MINUTES: "150"
+    permissions:
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        check: ["Required Checks", "Web Tests (unit)"]
     steps:
-      - name: Fail unless every needed job succeeded
+      - name: Wait for every gated job, fail unless each succeeded
         run: |
-          fail=0
-          jq -e 'length > 1' <<<"$RESULTS" >/dev/null || { echo "::error::no needed job results"; exit 1; }
-          echo "changes = $(jq -r '.changes.result' <<<"$RESULTS"), code changed = $CODE_CHANGED"
-          while read -r job result; do
-            ok="success"
-            if [ "$CODE_CHANGED" = "false" ]; then
-              ok="success skipped"
-            elif [ "$DRAFT" = "true" ] && [[ " $DOCKER_TIER " == *" $job "* ]]; then
-              ok="success skipped"
-            fi
-            if [[ " $ok " == *" $result "* ]]; then
-              echo "ok:   $job = $result"
-            else
-              echo "::error::$job = $result (want: $ok)"
-              fail=1
-            fi
-          done < <(jq -r 'del(.changes) | to_entries[] | "\(.key) \(.value.result)"' <<<"$RESULTS")
-          exit "$fail"
+          set -euo pipefail
+          # Every gated job, as "tier;skipped-name;name...". A matrix job lists
+          # each leg's expanded name. When a job-level `if` skips the whole
+          # matrix, the API shows one job under the unexpanded skipped-name.
+          # The D variable keeps the Actions expression parser off that name.
+          # Keep this list in step with the jobs above: an unknown job fails.
+          D='$'
+          groups=(
+            "base;;Test Coverage Guard"
+            "base;;Unit Tests (atomica-sdk, atomica-web-components)"
+            "base;Web Tests (${D}{{ matrix.type }});Web Tests (integration);Web Tests (meta)"
+            "docker;;Aptos Testnet SDK (docker)"
+            "base;;Move Framework Pin"
+            "base;;Move Unit Tests"
+            "base;;Move Lint Warnings"
+            "base;Browser Tests (${D}{{ matrix.chunk }}, anvil);Browser Tests (component, anvil);Browser Tests (faucet-wallet, anvil);Browser Tests (auction, anvil);Browser Tests (bid-settle, anvil);Browser Tests (settle-100-bids, anvil);Browser Tests (claim-reclaim-fees, anvil);Browser Tests (happy-path, anvil)"
+            "docker;Browser Tests (${D}{{ matrix.chunk }}, docker);Browser Tests (faucet-wallet, docker);Browser Tests (auction, docker);Browser Tests (bid-settle, docker);Browser Tests (settle-100-bids, docker);Browser Tests (claim-reclaim-fees, docker);Browser Tests (happy-path, docker)"
+            "base;;EVM e2e tests (anvil)"
+            "docker;;EVM e2e tests (docker)"
+          )
+          # Jobs that are not gated: the classifier and this job's own legs.
+          ignored=("Detect docs-only change" "Required Checks" "Web Tests (unit)"
+                   "Required Checks (draft)" "Web Tests (unit) (draft)")
+          echo "changes = $CHANGES_RESULT, code changed = $CODE_CHANGED, draft = $DRAFT"
 
-  legacy-web-tests-unit:
-    # Transitional alias. Ruleset 11921934 still requires "Web Tests (unit)".
-    # The job that used that name is now "Aptos Testnet SDK (docker)". This
-    # job runs no tests: it passes only when "Required Checks" passed. Delete
-    # it once the ruleset requires only "Required Checks" (issue 173).
-    name: ${{ github.event.pull_request.draft && 'Web Tests (unit) (draft)' || 'Web Tests (unit)' }}
-    if: ${{ always() }}
-    needs: required-checks
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    env:
-      CI_CLASS: ignore
-      GATE: ${{ needs.required-checks.result }}
-    steps:
-      - name: Pass only when Required Checks passed
-        run: |
-          echo "Required Checks = $GATE"
-          test "$GATE" = "success"
+          # Reads one job listing ("name<TAB>status<TAB>conclusion" lines) and
+          # sets verdict to pass, fail, or wait, with the reasons in report.
+          decide() {
+            local -A status=() concl=() known=()
+            local name st co spec tier skipname leg ok present
+            local -a legs
+            verdict="pass" report=""
+            while IFS=$'\t' read -r name st co; do
+              [ -n "$name" ] || continue
+              status[$name]=$st concl[$name]=$co
+            done <<<"$1"
+            for name in "${ignored[@]}"; do known[$name]=1; done
+            for spec in "${groups[@]}"; do
+              IFS=';' read -r tier skipname _ <<<"$spec"
+              ok="success"
+              if [ "$CODE_CHANGED" = "false" ]; then
+                ok="success skipped"
+              elif [ "$DRAFT" = "true" ] && [ "$tier" = "docker" ]; then
+                ok="success skipped"
+              fi
+              IFS=';' read -ra legs <<<"${spec#*;*;}"
+              present=0
+              if [ -n "$skipname" ]; then
+                known[$skipname]=1
+                if [ -n "${status[$skipname]+x}" ]; then
+                  present=1
+                  check_job "$skipname" "$ok"
+                fi
+              fi
+              for leg in "${legs[@]}"; do
+                known[$leg]=1
+                if [ -n "${status[$leg]+x}" ]; then
+                  check_job "$leg" "$ok"
+                elif [ "$present" = 0 ]; then
+                  note wait "missing: $leg"
+                fi
+              done
+            done
+            for name in "${!status[@]}"; do
+              [ -n "${known[$name]+x}" ] || note fail "unknown job, not in the gate's list: $name"
+            done
+          }
+          # note LEVEL MSG raises the verdict to LEVEL (pass < wait < fail).
+          note() {
+            report+="$1: $2"$'\n'
+            case "$1:$verdict" in
+              fail:*) verdict="fail" ;;
+              wait:pass) verdict="wait" ;;
+            esac
+          }
+          check_job() {
+            local st=${status[$1]} co=${concl[$1]}
+            if [ "$st" != "completed" ]; then
+              note wait "$1 is $st"
+            elif [[ " $2 " == *" $co "* ]]; then
+              report+="ok: $1 = $co"$'\n'
+            else
+              note fail "$1 = ${co:-none} (want: $2)"
+            fi
+          }
+
+          deadline=$((SECONDS + POLL_LIMIT_MINUTES * 60))
+          errors=0
+          missing_polls=0
+          while :; do
+            if listing=$(gh api --paginate \
+                "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100&filter=latest" \
+                --jq '.jobs[] | [.name, .status, (.conclusion // "")] | @tsv'); then
+              errors=0
+              decide "$listing"
+              if [ "$verdict" = wait ] && ! grep -q '^wait: .* is ' <<<"$report"; then
+                # Only missing jobs remain. Gated jobs start with this job, so
+                # one still missing after a few polls never existed.
+                missing_polls=$((missing_polls + 1))
+                [ "$missing_polls" -lt 4 ] || verdict="fail"
+              else
+                missing_polls=0
+              fi
+              if [ "$verdict" != wait ]; then
+                printf '%s' "$report"
+                [ "$verdict" = pass ] && { echo "All gated jobs passed."; exit 0; }
+                echo "::error::the gate failed, see the lines above"
+                exit 1
+              fi
+            else
+              errors=$((errors + 1))
+              echo "::warning::job listing failed ($errors in a row)"
+              [ "$errors" -lt 5 ] || { echo "::error::job listing kept failing"; exit 1; }
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              printf '%s' "$report"
+              echo "::error::gated jobs still unfinished after $POLL_LIMIT_MINUTES minutes"
+              exit 1
+            fi
+            sleep "$POLL_SECONDS"
+          done
