@@ -2,8 +2,10 @@
  * 16-settle-100-bids.test.tsx
  *
  * Live gas test: one window filled to MAX_BIDS_PER_WINDOW = 100 sealed bids
- * is opened, cleared and settled on the dual-chain testnet, and the gas_used
- * of each step is logged.
+ * is opened and settled on the dual-chain testnet, and the gas_used of each
+ * step is logged. Opening the last bid finalizes the reveal and clears the
+ * window in the same `submit_cleartext_and_clear` transaction, so its gas
+ * includes the clearing and `settle` needs no separate clearing call.
  *
  * Gas feature version 53 charges 10x the gas of the old schedule, and the
  * ts-sdk default maxGasAmount stays at 200,000 units. The settle goes through
@@ -29,7 +31,6 @@ import {
   submitManyDirect,
   waitForReveal,
   openWindowBidsDirect,
-  clearWindowDirect,
   getAuctionState,
   type LiveWindow,
 } from "./helpers/auction-setup";
@@ -173,7 +174,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
   });
 
   it(
-    "opens, clears and settles 100 bids within the gas limit and logs gas_used",
+    "opens and clears 100 bids in one call, settles them and logs gas_used",
     async () => {
       await waitForReveal(
         auction.timelockId,
@@ -191,15 +192,20 @@ describe.sequential("16: Settle a 100-bid window", () => {
         accountAddress: operator.accountAddress,
         options: { offset: Number(openSequence), limit: 1 },
       });
-      await logGas(aptosClient, "submit_cleartext_and_clear", openTx.hash);
-
-      const clearHash = await clearWindowDirect(
+      const openTxResponse = await logGas(
         aptosClient,
-        operator,
-        moduleAddr,
-        auction,
+        "submit_cleartext_and_clear",
+        openTx.hash,
       );
-      await logGas(aptosClient, "clear_uniform_price", clearHash);
+      expect(openTxResponse.success).toBe(true);
+
+      // The opening call cleared the window: bid results exist before settle.
+      const cleared = await getAuctionState(aptosClient, moduleAddr, auction);
+      expect(cleared.settled).toBe(false);
+      expect(cleared.clearingPrice).toBeGreaterThan(0n);
+      expect(await getBidResults(auction.windowId, PAIR_BCS)).toHaveLength(
+        BID_COUNT,
+      );
 
       const { hash: settleHash } = await submitNativeTransaction(
         aptosClient,

@@ -36,7 +36,6 @@ import {
   submitBidDirect,
   waitForReveal,
   openWindowBidsDirect,
-  clearWindowDirect,
   settleAuctionDirect,
   getAuctionState,
   type LiveWindow,
@@ -260,7 +259,6 @@ describe.sequential("12: FeeRebateDisplay — live fee and rebate after settleme
         Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS,
       );
       await openWindowBidsDirect(aptosClient, operator, auction);
-      await clearWindowDirect(aptosClient, operator, moduleAddr, auction);
       await settleAuctionDirect(aptosClient, operator, auction);
 
       const state = await getAuctionState(aptosClient, moduleAddr, auction);

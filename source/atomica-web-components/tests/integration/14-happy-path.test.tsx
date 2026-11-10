@@ -32,8 +32,8 @@
  *        recovers the same price and salt. Opening the bid with them passes the
  *        on-chain commitment check.
  *   Settlement:
- *   9-10. clear_uniform_price writes the bid results, then the real
- *        SettleButton settles the window. is_settled, the clearing price and
+ *   9-10. Opening the bid already cleared the window, so the real
+ *        SettleButton settles it with no separate clearing call. is_settled, the clearing price and
  *        the collateral and seller receipt statuses are asserted on chain
  *    11. ClaimButton — click real component, verify the FakeETH balance change
  *    12. BidHistory — Step8Monitor records the settled window and its price
@@ -118,7 +118,6 @@ import {
   chainNowUs,
   registerTimelockDirect,
   submitDirect,
-  clearWindowDirect,
   pollUntil,
   RECEIPT_CLAIMED,
   TEST_PAIR_BCS,
@@ -614,21 +613,17 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
     (Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS + 120) * 1000,
   );
 
-  // ── Step 9-10: clear + settle via the real SettleButton ─────────────────
+  // ── Step 9-10: settle via the real SettleButton ──────────────────────────
   //
-  // The window has one opened bid. clear_uniform_price (no UI calls it yet)
-  // writes the bid results; then the real SettleButton sends `settle` through
-  // SIWE and reads the settlement back.
+  // The window has one opened bid. Opening it finalized the reveal and cleared
+  // the window, so the bid results already exist; the real SettleButton sends
+  // `settle` through SIWE and reads the settlement back.
 
   it(
-    "step 9-10 — clear + settle: SettleButton settles the window at the bid price",
+    "step 9-10 — settle: SettleButton settles the cleared window at the bid price",
     async () => {
-      console.log("[14-happy-path] Steps 9-10: clear_uniform_price, then settle via real SettleButton");
+      console.log("[14-happy-path] Steps 9-10: settle the cleared window via real SettleButton");
 
-      await clearWindowDirect(aptosClient, deployerAccount, moduleAddr, {
-        windowId,
-        pairBcs: TEST_PAIR_BCS,
-      });
       const results = await getBidResults(windowId, TEST_PAIR_BCS);
       expect(results.map((r) => [r.isWinner, r.fillAmount])).toEqual([[true, BID_QUANTITY]]);
 

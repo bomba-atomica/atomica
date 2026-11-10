@@ -38,7 +38,6 @@ import {
   submitBidDirect,
   waitForReveal,
   openWindowBidsDirect,
-  clearWindowDirect,
   settleAuctionDirect,
   getAuctionState,
   getReceiptStatus,
@@ -175,7 +174,6 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
         Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS,
       );
       await openWindowBidsDirect(aptosClient, operator, auction);
-      await clearWindowDirect(aptosClient, operator, moduleAddr, auction);
       await settleAuctionDirect(aptosClient, operator, auction);
 
       const state = await getAuctionState(aptosClient, moduleAddr, auction);

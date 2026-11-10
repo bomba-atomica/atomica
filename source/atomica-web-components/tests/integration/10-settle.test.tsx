@@ -10,8 +10,8 @@
  * Scenarios:
  *   1. SettleButton is disabled before the window ends
  *   2. settle before the timelock deadline aborts with E_DEADLINE_NOT_PASSED
- *   3. After the reveal: the bids open, clearing sets the winner, and the real
- *      SettleButton settles the window. is_settled, the clearing price, the bid
+ *   3. After the reveal: opening the bids also clears the window, and the real
+ *      SettleButton settles it with no separate clearing call. is_settled, the clearing price, the bid
  *      results and every receipt status are asserted on chain
  *   4. A second settle aborts with E_WINDOW_ALREADY_SETTLED; SettleButton
  *      shows "Already Settled"
@@ -44,7 +44,6 @@ import {
   submitBidDirect,
   waitForReveal,
   openWindowBidsDirect,
-  clearWindowDirect,
   settleAuctionDirect,
   getWindowStatus,
   getAuctionState,
@@ -192,7 +191,7 @@ describe.sequential("10: Settle Auction", () => {
     expect(await isSettled(auction.windowId, PAIR_BCS)).toBe(false);
   }, 60_000);
 
-  // ── Test 3: reveal → open → clear → SettleButton ───────────────────────────
+  // ── Test 3: reveal → open (clears) → SettleButton ──────────────────────────
 
   it(
     "after the reveal SettleButton settles the window at the winning price",
@@ -210,7 +209,7 @@ describe.sequential("10: Settle Auction", () => {
         await getWindowStatus(aptosClient, moduleAddr, auction.windowId, PAIR_BCS),
       ).toEqual({ timelockId: auction.timelockId, revealFinal: true, refunded: false });
 
-      await clearWindowDirect(aptosClient, operator, moduleAddr, auction);
+      // Opening the last bid finalized the reveal and cleared the window.
       const results = await getBidResults(auction.windowId, PAIR_BCS);
       expect(results.map((r) => [r.isWinner, r.fillAmount])).toEqual([
         [true, SUPPLY],
@@ -241,6 +240,10 @@ describe.sequential("10: Settle Auction", () => {
           expect(screen.getByTestId(settleButton.settleStatus).textContent).toBe("Settled");
         },
         { timeout: 60_000 },
+      );
+      const settleResult = screen.getByTestId(settleButton.settleResult);
+      expect(settleResult.contains(screen.getByTestId(settleButton.settleClearingPrice))).toBe(
+        true,
       );
       expect(screen.getByTestId(settleButton.settleClearingPrice).textContent).toBe("$2.00");
 
