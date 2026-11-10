@@ -6,5 +6,5 @@
  *
  * Aptos receipt count is fetched live via lock_receipt::get_receipt_count.
  */
-export declare function PoolStatus(): import("react/jsx-runtime").JSX.Element;
+export declare function PoolStatus(): import("react").JSX.Element;
 //# sourceMappingURL=PoolStatus.d.ts.map

@@ -138,25 +138,35 @@ export function getRegisterLockPayload(proof) {
     };
 }
 /**
- * Build payload for auction::submit_bid (v0 Beta sealed-bid).
+ * Build payload for auction::submit_bid (V2 bid wrapper).
  *
- * Parameters match the Phase 3a rewrite from issue #86:
- *   submit_bid(bidder, window_id, pair_bcs, u_bytes, ciphertext, collateral_lock_id)
+ *   submit_bid(bidder, window_id, pair_bcs, ciphertext, commitment,
+ *              collateral_lock_id, quantity)
  *
- * `uBytes`    — IBE ephemeral point U = rG (48-byte G1, Boneh-Franklin)
- * `ciphertext` — AES-GCM ciphertext of the plaintext price
- * `collateralLockId` — FakeUSD LockReceipt ID held as margin
+ * `ciphertext` is the V2 bid ciphertext `BCS(vk, U, nonce, C, sig)`. The contract
+ * builds the associated data on chain (see `buildBidAd`) and aborts unless
+ * `ibe::verify_bid_ct` accepts the ciphertext for it.
+ * `commitment` is the 32-byte price commitment (see `computeBidCommitment`).
+ * `collateralLockId` is the FakeUSD LockReceipt ID held as margin.
+ * `quantity` is the bid quantity in wei (u256).
  *
- * @see docs/architecture/v0-architecture.md §2.5
+ * @see atomica/docs/decisions/auction-v2-bid-wrapper.md
  */
-export function getBidPayload(windowId, pairBcs, uBytes, ciphertext, collateralLockId) {
+export function getBidPayload(windowId, pairBcs, ciphertext, commitment, collateralLockId, quantity) {
     return {
         function: `${CONTRACT_ADDR}::auction::submit_bid`,
-        functionArguments: [windowId, pairBcs, uBytes, ciphertext, collateralLockId],
+        functionArguments: [
+            windowId,
+            pairBcs,
+            ciphertext,
+            commitment,
+            collateralLockId,
+            quantity,
+        ],
     };
 }
-export async function submitBid(ethAddress, windowId, pairBcs, uBytes, ciphertext, collateralLockId) {
-    return await submitNativeTransaction(aptos, ethAddress, getBidPayload(windowId, pairBcs, uBytes, ciphertext, collateralLockId));
+export async function submitBid(ethAddress, windowId, pairBcs, ciphertext, commitment, collateralLockId, quantity) {
+    return await submitNativeTransaction(aptos, ethAddress, getBidPayload(windowId, pairBcs, ciphertext, commitment, collateralLockId, quantity));
 }
 /**
  * Build payload for auction::settle (v0 Beta global-registry).
@@ -213,6 +223,100 @@ export async function getSettlement(windowId, pairBcs) {
     };
 }
 /**
+ * Query `auction::get_bid_results` view function (issue #112).
+ *
+ * Returns the full list of bid results for a settled auction window.
+ * Used by the settlement relayer to derive per-winner Ethereum addresses
+ * and fill amounts for `BLSVerifierTestnet::authorizeSettlement`.
+ *
+ * The relayer must:
+ *   1. Filter results where `is_winner == true`.
+ *   2. Convert each winner's Aptos address to Ethereum via `aptosToEthereumAddress`.
+ *   3. Use `fill_amount` from each winning BidResult as the `fills` entry.
+ *
+ * NOTE: This function will return an empty array if called before settlement
+ * is finalized for the given window/pair combination.
+ *
+ * @param windowId - Auction window ID
+ * @param pairBcs  - BCS-encoded Pair struct
+ * @returns Array of {@link BidResult} entries (empty if not yet settled).
+ *
+ * @see docs/architecture/v0-architecture.md §2.9
+ * @see bridge.ts — submitSettlement join step
+ */
+export async function getBidResults(windowId, pairBcs) {
+    try {
+        const result = await aptos.view({
+            payload: {
+                function: `${CONTRACT_ADDR}::auction::get_bid_results`,
+                functionArguments: [windowId, pairBcs],
+            },
+        });
+        // The Move function returns vector<BidResult> serialised as an array of objects.
+        const raw = result[0];
+        return raw.map(({ bidder, fill_amount, is_winner }) => ({
+            bidder,
+            fillAmount: BigInt(fill_amount),
+            isWinner: is_winner,
+        }));
+    }
+    catch (e) {
+        // Return empty array for not-yet-settled windows to allow callers to handle gracefully.
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("E_NOT_IMPLEMENTED") ||
+            msg.includes("ABORTED") ||
+            msg.includes("abort_code")) {
+            return [];
+        }
+        throw e;
+    }
+}
+/**
+ * Query `auction::compute_rebates` view function (Phase 3c scaffold).
+ *
+ * Returns a `Rebate[]` for all bidders in the specified window based on their
+ * distance to the uniform clearing price.  Coefficient calibration is TBD in v0;
+ * the Move body aborts with E_NOT_IMPLEMENTED (99) until Phase 3c impl lands.
+ *
+ * Callers must handle the `E_NOT_IMPLEMENTED` abort gracefully — this function
+ * returns `null` when the on-chain function is not yet implemented, allowing
+ * the UI to show a "pending" state.
+ *
+ * @param windowId      - Auction window ID
+ * @param pairBcs       - BCS-encoded Pair struct
+ * @param clearingPrice - Uniform clearing price from `get_settlement`
+ * @returns Array of {@link Rebate} entries, or `null` if not yet implemented.
+ *
+ * @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
+ */
+export async function fetchRebates(windowId, pairBcs, clearingPrice) {
+    try {
+        const result = await aptos.view({
+            payload: {
+                function: `${CONTRACT_ADDR}::auction::compute_rebates`,
+                functionArguments: [windowId, pairBcs, clearingPrice],
+            },
+        });
+        // The Move function returns vector<Rebate> serialised as an array of objects.
+        const raw = result[0];
+        return raw.map(({ bidder, amount }) => ({
+            bidder,
+            amount: BigInt(amount),
+        }));
+    }
+    catch (e) {
+        // E_NOT_IMPLEMENTED (99) abort from scaffold — return null for "pending" state.
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("E_NOT_IMPLEMENTED") ||
+            msg.includes("ABORTED") ||
+            msg.includes('abort_code":99') ||
+            msg.includes("abort_code: 99")) {
+            return null;
+        }
+        throw e;
+    }
+}
+/**
  * Build payload for fake_eth::mint (Demo-phase winner payout).
  *
  * Entry function: mint(account: &signer, amount: u64)
@@ -244,4 +348,131 @@ export async function getFakeEthBalance(ownerAddr) {
         },
     });
     return BigInt(result[0]);
+}
+/**
+ * Query `timelock::get_mpk` view function.
+ *
+ * Returns the master public key of the current epoch (compressed G2, 96 bytes)
+ * stored by the registry.
+ *
+ * @see atomica/docs/decisions/aptos-upgrade-ibe-chunky-spec.md section 7
+ */
+export async function getMpk() {
+    const result = await aptos.view({
+        payload: {
+            function: `${CONTRACT_ADDR}::timelock::get_mpk`,
+            functionArguments: [],
+        },
+    });
+    const hex = result[0];
+    const clean = hex.replace(/^0x/, "");
+    const bytes = new Uint8Array(clean.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+    }
+    return bytes;
+}
+/**
+ * Query `timelock::is_revealed` view function.
+ *
+ * Returns true once the verified decryption key of the timelock is on chain,
+ * enabling off-chain bid decryption.
+ *
+ * @param timelockId - Timelock identifier
+ */
+export async function isRevealed(timelockId) {
+    const result = await aptos.view({
+        payload: {
+            function: `${CONTRACT_ADDR}::timelock::is_revealed`,
+            functionArguments: [timelockId],
+        },
+    });
+    return result[0];
+}
+/**
+ * Query `timelock::get_status` and, for an expired timelock,
+ * `timelock::get_expiry_reason`.
+ *
+ * An expired window can never open its bids. Call `refund_expired_window`.
+ */
+export async function getTimelockStatus(timelockId) {
+    const statusResult = await aptos.view({
+        payload: {
+            function: `${CONTRACT_ADDR}::timelock::get_status`,
+            functionArguments: [timelockId],
+        },
+    });
+    const code = Number(statusResult[0]);
+    if (code === 0)
+        return { status: "pending" };
+    if (code === 1)
+        return { status: "revealed" };
+    const reasonResult = await aptos.view({
+        payload: {
+            function: `${CONTRACT_ADDR}::timelock::get_expiry_reason`,
+            functionArguments: [timelockId],
+        },
+    });
+    const reasons = [
+        "epoch-ended",
+        "reveal-window-elapsed",
+        "key-check-failed",
+    ];
+    return { status: "expired", reason: reasons[Number(reasonResult[0]) - 1] };
+}
+/**
+ * Build payload for `auction::submit_cleartext_and_clear`.
+ *
+ * Called after the timelock status is `Revealed` and bids were decrypted off
+ * chain with the revealed key. Index-aligned to the window's bids.
+ * `cleartexts[i]` and `salts[i]` open bid `i`. An empty salt skips bid `i`.
+ * The contract checks every opening against the commitment made at submission,
+ * so a relayer cannot change a price.
+ *
+ * @see atomica/docs/decisions/auction-v2-bid-wrapper.md
+ */
+export function getSubmitCleartextPayload(windowId, pairBcs, cleartexts, salts) {
+    return {
+        function: `${CONTRACT_ADDR}::auction::submit_cleartext_and_clear`,
+        functionArguments: [windowId, pairBcs, cleartexts, salts],
+    };
+}
+export async function submitCleartextAndClear(ethAddress, windowId, pairBcs, cleartexts, salts) {
+    return await submitNativeTransaction(aptos, ethAddress, getSubmitCleartextPayload(windowId, pairBcs, cleartexts, salts));
+}
+/** Build payload for `auction::open_bid` (one bid, any caller). */
+export function getOpenBidPayload(windowId, pairBcs, bidIndex, price, salt) {
+    return {
+        function: `${CONTRACT_ADDR}::auction::open_bid`,
+        functionArguments: [windowId, pairBcs, bidIndex, price, salt],
+    };
+}
+export async function openBid(ethAddress, windowId, pairBcs, bidIndex, price, salt) {
+    return await submitNativeTransaction(aptos, ethAddress, getOpenBidPayload(windowId, pairBcs, bidIndex, price, salt));
+}
+/**
+ * Build payload for `auction::finalize_reveal`: close openings once every bid
+ * is open or the opening window ended. Unopened bids become invalid.
+ */
+export function getFinalizeRevealPayload(windowId, pairBcs) {
+    return {
+        function: `${CONTRACT_ADDR}::auction::finalize_reveal`,
+        functionArguments: [windowId, pairBcs],
+    };
+}
+export async function finalizeReveal(ethAddress, windowId, pairBcs) {
+    return await submitNativeTransaction(aptos, ethAddress, getFinalizeRevealPayload(windowId, pairBcs));
+}
+/**
+ * Build payload for `auction::refund_expired_window`: release every receipt of
+ * a window whose timelock expired (any reason).
+ */
+export function getRefundExpiredWindowPayload(windowId, pairBcs) {
+    return {
+        function: `${CONTRACT_ADDR}::auction::refund_expired_window`,
+        functionArguments: [windowId, pairBcs],
+    };
+}
+export async function refundExpiredWindow(ethAddress, windowId, pairBcs) {
+    return await submitNativeTransaction(aptos, ethAddress, getRefundExpiredWindowPayload(windowId, pairBcs));
 }

@@ -5,6 +5,6 @@ interface Props {
     error?: string;
     onGenerate: () => Promise<void>;
 }
-export declare function Step4Proof({ proof, loading, error, onGenerate }: Props): import("react/jsx-runtime").JSX.Element;
+export declare function Step4Proof({ proof, loading, error, onGenerate }: Props): import("react").JSX.Element;
 export {};
 //# sourceMappingURL=Step4Proof.d.ts.map

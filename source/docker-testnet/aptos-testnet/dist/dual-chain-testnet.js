@@ -123,6 +123,8 @@ export async function setupDualChainTestnet() {
     console.log(`[Dual-Chain] Bidder:   ${bidderAddress}`);
     await waitForFirstBlock(provider);
     ensureCompiled();
+    // FakeETH and FakeUSD share the same deployer signer, so they must be
+    // deployed sequentially to avoid nonce collisions.
     const fakeETH = await deployContract(deployer, readArtifact("FakeETH"));
     console.log(`[Dual-Chain] ✓ FakeETH: ${fakeETH}`);
     const fakeUSD = await deployContract(deployer, readArtifact("FakeUSD"));
@@ -132,6 +134,8 @@ export async function setupDualChainTestnet() {
     // Fund seller and bidder with FakeETH so tests can lock tokens immediately.
     const fakeETHArtifact = readArtifact("FakeETH");
     const mintAmount = ethers.parseEther("10000");
+    // Mint calls share the deployer signer and must be sequential to avoid
+    // nonce collisions (ethers v6 does not serialize concurrent transactions).
     await mintFakeETH(provider, fakeETH, fakeETHArtifact.abi, deployer, deployerAddress, mintAmount);
     console.log(`[Dual-Chain] ✓ Minted FakeETH to seller`);
     await mintFakeETH(provider, fakeETH, fakeETHArtifact.abi, deployer, bidderAddress, mintAmount);

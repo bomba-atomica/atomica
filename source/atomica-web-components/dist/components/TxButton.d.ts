@@ -39,6 +39,6 @@ interface TxButtonProps {
  * The component handles all internal states (idle, preparing, simulating, ready, submitting, success, error)
  * and provides visual feedback for each stage.
  */
-export declare function TxButton({ label, accountAddress, prepareTransaction, onSuccess, className, disabled, }: TxButtonProps): import("react/jsx-runtime").JSX.Element;
+export declare function TxButton({ label, accountAddress, prepareTransaction, onSuccess, className, disabled, }: TxButtonProps): import("react").JSX.Element;
 export {};
 //# sourceMappingURL=TxButton.d.ts.map

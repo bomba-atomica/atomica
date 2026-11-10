@@ -1,2 +1,2 @@
-export declare function SellFlow(): import("react/jsx-runtime").JSX.Element;
+export declare function SellFlow(): import("react").JSX.Element;
 //# sourceMappingURL=SellFlow.d.ts.map

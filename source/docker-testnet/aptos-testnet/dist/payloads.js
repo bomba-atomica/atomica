@@ -73,9 +73,7 @@ export async function areContractsDeployed() {
         const modules = await aptos.getAccountModules({
             accountAddress: CONTRACT_ADDR,
         });
-        const deployed = new Set(modules
-            .map((m) => m.abi?.name)
-            .filter(Boolean));
+        const deployed = new Set(modules.map((m) => m.abi?.name).filter(Boolean));
         return deployed.has("auction") && deployed.has("lock_receipt");
     }
     catch (e) {
@@ -107,12 +105,14 @@ export function getCreateAuctionPayload(amountEth, minPrice, duration, mpk) {
 export async function submitCreateAuction(ethAddress, amountEth, minPrice, duration, mpk) {
     return await submitNativeTransaction(ethAddress, getCreateAuctionPayload(amountEth, minPrice, duration, mpk));
 }
-export function getBidPayload(sellerAddr, amountUsd, _u, _v) {
+export function getBidPayload(sellerAddr, amountUsd) {
     return {
         function: `${CONTRACT_ADDR}::auction::submit_bid`,
         functionArguments: [sellerAddr, amountUsd],
     };
 }
-export async function submitBid(ethAddress, sellerAddr, amountUsd, u, v) {
-    return await submitNativeTransaction(ethAddress, getBidPayload(sellerAddr, amountUsd, u, v));
+export async function submitBid(ethAddress, sellerAddr, amountUsd, _u, _v) {
+    // _u and _v are IBE params not yet wired up at this layer; kept in the
+    // signature so callers don't need to change when IBE is wired in.
+    return await submitNativeTransaction(ethAddress, getBidPayload(sellerAddr, amountUsd));
 }

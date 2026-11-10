@@ -97,7 +97,7 @@ interface AppStateContextValue {
 }
 export declare function AppStateProvider({ children }: {
     children: ReactNode;
-}): import("react/jsx-runtime").JSX.Element;
+}): import("react").JSX.Element;
 /**
  * Access the centralized app state and dispatch function.
  *

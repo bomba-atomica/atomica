@@ -7,7 +7,7 @@ interface BalancesContextValue {
 }
 export declare function BalancesProvider({ children }: {
     children: React.ReactNode;
-}): import("react/jsx-runtime").JSX.Element;
+}): import("react").JSX.Element;
 export declare const useBalances: () => BalancesContextValue;
 export {};
 //# sourceMappingURL=BalancesContext.d.ts.map

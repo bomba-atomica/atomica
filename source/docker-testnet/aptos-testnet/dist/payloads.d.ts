@@ -40,5 +40,5 @@ export declare function requestTestTokens(_ethAddress: string): Promise<{
 }>;
 export declare function getCreateAuctionPayload(amountEth: bigint, minPrice: bigint, duration: bigint, mpk: Uint8Array): InputGenerateTransactionPayloadData;
 export declare function submitCreateAuction(ethAddress: string, amountEth: bigint, minPrice: bigint, duration: bigint, mpk: Uint8Array): Promise<SubmitResult>;
-export declare function getBidPayload(sellerAddr: string, amountUsd: bigint, _u: Uint8Array, _v: Uint8Array): InputGenerateTransactionPayloadData;
-export declare function submitBid(ethAddress: string, sellerAddr: string, amountUsd: bigint, u: Uint8Array, v: Uint8Array): Promise<SubmitResult>;
+export declare function getBidPayload(sellerAddr: string, amountUsd: bigint): InputGenerateTransactionPayloadData;
+export declare function submitBid(ethAddress: string, sellerAddr: string, amountUsd: bigint, _u: Uint8Array, _v: Uint8Array): Promise<SubmitResult>;
