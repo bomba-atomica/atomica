@@ -625,6 +625,99 @@ module atomica::auction_bid_wrapper_tests {
         auction::clear_uniform_price(AUCTION_ID, pair());
     }
 
+    // ---- clearing runs when the reveal finalizes (decision D3) ----
+
+    // Two bids on a supply of 5: the golden bid (2010, qty 5) and a second bid (1500, qty 1)
+    // whose collateral receipt is real and claimed, so `settle` can release it.
+    fun setup_two_bid_window(atomica: &signer): signer {
+        setup_window(atomica);
+        let bidder = account::create_signer_for_test(golden_bidder());
+        submit_golden(&bidder, 2010, 7);
+        let other = @0x2222;
+        let other_lock = b"usd_lock_other_bidder_32bytes____";
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(other_lock, other, 1000u256, 1);
+        lock_receipt::claim<Ethereum, FakeUSD>(other, other_lock);
+        let other_ad = auction::bid_associated_data(TIMELOCK_ID, AUCTION_ID, other);
+        auction::test_insert_committed_bid(
+            atomica, AUCTION_ID, pair(), other, b"ct2",
+            auction::compute_bid_commitment(1500, salt(9), other_ad), other_lock, 1u256,
+        );
+        reveal_timelock();
+        bidder
+    }
+
+    // Opening every bid in one batch call finalizes the reveal and clears in that call.
+    // `settle` then succeeds with no `clear_uniform_price` call.
+    #[test(atomica = @atomica)]
+    fun batch_open_of_every_bid_clears_and_settle_needs_no_clearing_call(atomica: &signer) {
+        let bidder = setup_two_bid_window(atomica);
+        let (_, _, _, _, before) = auction::get_auction(AUCTION_ID, pair());
+        assert!(before == 0 && auction::test_get_bid_results(AUCTION_ID, pair()).length() == 0, 1);
+
+        auction::submit_cleartext_and_clear(
+            &bidder, AUCTION_ID, pair(), vector[2010u64, 1500u64], vector[salt(7), salt(9)],
+        );
+
+        let (_, reveal_final, _) = auction::get_window_status(AUCTION_ID, pair());
+        assert!(reveal_final, 2);
+        let (_, _, _, _, clearing_price) = auction::get_auction(AUCTION_ID, pair());
+        assert!(clearing_price == 2010, 3);
+        let results = auction::test_get_bid_results(AUCTION_ID, pair());
+        assert!(results.length() == 2, 4);
+        let (win0, fill0, price0) = auction::test_bid_result_fields(vector::borrow(&results, 0));
+        let (win1, fill1, _) = auction::test_bid_result_fields(vector::borrow(&results, 1));
+        assert!(win0 && fill0 == 5 && price0 == 2010, 5);
+        assert!(!win1 && fill1 == 0, 6);
+
+        auction::settle(&bidder, AUCTION_ID, pair());
+        assert!(auction::is_settled(AUCTION_ID, pair()), 7);
+        assert!(
+            lock_receipt::get_receipt_status<Ethereum, FakeUSD>(b"usd_lock_other_bidder_32bytes____")
+                == lock_receipt::status_revoked(),
+            8,
+        );
+    }
+
+    // finalize_reveal on a partly opened window clears it: the unopened bid gets no fill.
+    #[test(atomica = @atomica)]
+    fun finalize_reveal_clears_a_partly_opened_window(atomica: &signer) {
+        let bidder = setup_two_bid_window(atomica);
+        // Open only the second bid. The golden bid stays unopened.
+        auction::open_bid(&bidder, AUCTION_ID, pair(), 1, 1500, salt(9));
+        timestamp::update_global_time_for_test(DEADLINE_US + 20 * MIN);
+        auction::finalize_reveal(&bidder, AUCTION_ID, pair());
+
+        let (_, _, _, _, clearing_price) = auction::get_auction(AUCTION_ID, pair());
+        assert!(clearing_price == 1500, 1);
+        let results = auction::test_get_bid_results(AUCTION_ID, pair());
+        assert!(results.length() == 2, 2);
+        let (win0, fill0, _) = auction::test_bid_result_fields(vector::borrow(&results, 0));
+        let (win1, fill1, price1) = auction::test_bid_result_fields(vector::borrow(&results, 1));
+        assert!(!win0 && fill0 == 0, 3);
+        assert!(win1 && fill1 == 1 && price1 == 1500, 4);
+
+        auction::settle(&bidder, AUCTION_ID, pair());
+        assert!(auction::is_settled(AUCTION_ID, pair()), 5);
+    }
+
+    // clear_uniform_price on an already-cleared window does not abort and changes nothing.
+    #[test(atomica = @atomica)]
+    fun clear_uniform_price_is_a_no_op_on_a_cleared_window(atomica: &signer) {
+        let bidder = setup_two_bid_window(atomica);
+        auction::submit_cleartext_and_clear(
+            &bidder, AUCTION_ID, pair(), vector[2010u64, 1500u64], vector[salt(7), salt(9)],
+        );
+        let (_, _, _, _, price_before) = auction::get_auction(AUCTION_ID, pair());
+        let results_before = auction::test_get_bid_results(AUCTION_ID, pair());
+
+        auction::clear_uniform_price(AUCTION_ID, pair());
+        auction::clear_uniform_price(AUCTION_ID, pair());
+
+        let (_, _, _, _, price_after) = auction::get_auction(AUCTION_ID, pair());
+        assert!(price_after == price_before && price_after == 2010, 1);
+        assert!(auction::test_get_bid_results(AUCTION_ID, pair()) == results_before, 2);
+    }
+
     // ===================== Expiry: no reveal after Expired =====================
 
     #[test(atomica = @atomica)]

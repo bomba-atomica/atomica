@@ -621,7 +621,11 @@ module atomica::auction {
     }
 
     /// Closes openings: copies the opened prices into `revealed_prices` (zero for an
-    /// unopened bid) and sets `reveal_final`.
+    /// unopened bid), sets `reveal_final`, and clears the window at the uniform price.
+    /// Every finalizing path (`open_bid`, `submit_cleartext_and_clear`, `finalize_reveal`)
+    /// therefore leaves the window ready for `settle`.
+    ///
+    /// @see docs/architecture/v0-architecture.md §2.6 and §2.7
     fun finalize_internal(state: &mut WindowState) {
         let prices = vector::empty<u64>();
         let i = 0u64;
@@ -634,6 +638,7 @@ module atomica::auction {
         state.revealed_prices = prices;
         state.reveal_final = true;
         event::emit(RevealFinalized { window_id: state.window_id, bid_count: n, opened_count });
+        clear_internal(state);
     }
 
     /// Opens one bid. Anyone may call it, for any bid, with the bid's price and 32-byte salt.
@@ -665,8 +670,9 @@ module atomica::auction {
     ///
     /// `cleartexts[i]` and `salts[i]` open bid `i`. An empty salt skips bid `i`: use it for
     /// a bid that is already opened, or one the caller cannot open. Any wrong opening aborts
-    /// the whole call. When every bid is opened the reveal finalizes. Otherwise call
-    /// `finalize_reveal` after the opening window.
+    /// the whole call. When every bid is opened the reveal finalizes and the window clears
+    /// at the uniform price in the same call. Otherwise call `finalize_reveal` after the
+    /// opening window.
     ///
     /// Nothing here is trusted: the contract checks each opening against the commitment and
     /// the registry status. A settler cannot change a price.
@@ -708,6 +714,7 @@ module atomica::auction {
     ///
     /// The opening window ends `OPENING_WINDOW_US` after the registry's `reveal_expiry_us`.
     /// Unopened bids become invalid: no fill, and `settle` does not release their collateral.
+    /// The window clears at the uniform price in the same call.
     public entry fun finalize_reveal(
         _caller:   &signer,
         window_id: u64,
@@ -770,27 +777,12 @@ module atomica::auction {
         event::emit(AuctionRefunded { window_id, pair_bcs, timelock_id, reason, bid_count, seller_lock_count });
     }
 
-    /// Sort sealed bids descending by revealed price and compute the marginal
-    /// (uniform) clearing price that allocates the full supply.  Partial fill
-    /// is applied to the last qualifying bid so that total allocation equals
-    /// `total_supply` exactly.
+    /// Clears a window whose reveal is final. Anyone may call it.
     ///
-    /// Algorithm (§2.7):
-    ///   1. Build an index array sorted descending by revealed_prices.
-    ///   2. Walk sorted indices, accumulating quantity until total_supply is met.
-    ///   3. The last bid whose cumulative quantity does not exceed supply sets
-    ///      the clearing price. If that bid would overfill, it gets a partial
-    ///      fill equal to the remaining supply. All bids at higher prices win
-    ///      fully; all bids below the clearing price are marked losing.
-    ///   4. Write BidResult for each bid into WindowState.bid_results.
-    ///   5. Write clearing_price into WindowState.clearing_price.
-    ///
-    /// Precondition: submit_cleartext_and_clear must have already populated
-    /// revealed_prices. Aborts with E_AUCTION_NOT_FOUND if window is missing.
-    ///
-    /// Called internally by `settle` after `submit_cleartext_and_clear` has
-    /// populated the cleartext prices.  Exposed as a separate entry function
-    /// so it can be invoked independently for testing or gas-profiling.
+    /// Finalizing the reveal already clears the window (`finalize_internal`), so on a
+    /// window with bids this call changes nothing: `clearing_price` and `bid_results` stay
+    /// as they are. A window with no bids gets `clearing_price = 0`. Aborts on a settled or
+    /// refunded window, and on a window with bids whose reveal is not final.
     ///
     /// @see docs/architecture/v0-architecture.md §2.7
     public entry fun clear_uniform_price(
@@ -806,6 +798,36 @@ module atomica::auction {
         assert!(!state.settled, E_WINDOW_ALREADY_SETTLED);
         assert!(!state.refunded, E_WINDOW_REFUNDED);
         let bid_count = vector::length(&state.bids);
+        if (bid_count > 0) {
+            // Openings must be closed. Unopened bids are invalid and never fill.
+            assert!(state.reveal_final, E_REVEAL_NOT_FINAL);
+            // Already cleared: finalization ran the clearing. Change nothing.
+            if (vector::length(&state.bid_results) == bid_count) return
+        };
+        clear_internal(state);
+    }
+
+    /// Sort sealed bids descending by revealed price and compute the marginal
+    /// (uniform) clearing price that allocates the full supply.  Partial fill
+    /// is applied to the last qualifying bid so that total allocation equals
+    /// `total_supply` exactly.
+    ///
+    /// Algorithm (§2.7):
+    ///   1. Build an index array sorted descending by revealed_prices.
+    ///   2. Walk sorted indices, accumulating quantity until total_supply is met.
+    ///   3. The last bid whose cumulative quantity does not exceed supply sets
+    ///      the clearing price. If that bid would overfill, it gets a partial
+    ///      fill equal to the remaining supply. All bids at higher prices win
+    ///      fully; all bids below the clearing price are marked losing.
+    ///   4. Write BidResult for each bid into WindowState.bid_results.
+    ///   5. Write clearing_price into WindowState.clearing_price.
+    ///
+    /// Precondition: the reveal is final, so `revealed_prices` is populated.
+    /// Callers: `finalize_internal` and `clear_uniform_price`.
+    ///
+    /// @see docs/architecture/v0-architecture.md §2.7
+    fun clear_internal(state: &mut WindowState) {
+        let bid_count = vector::length(&state.bids);
 
         // 1. Handle zero-bid case: no clearing possible — set clearing_price=0,
         //    bid_results stays empty, and return without aborting.
@@ -813,9 +835,6 @@ module atomica::auction {
             state.clearing_price = 0;
             return
         };
-
-        // Openings must be closed. Unopened bids are invalid and never fill.
-        assert!(state.reveal_final, E_REVEAL_NOT_FINAL);
 
         // 2. Build a sorted index array (descending by revealed price).
         //    Insertion sort O(n^2) — acceptable for small auction windows (≤ 100 bids).
@@ -941,10 +960,12 @@ module atomica::auction {
 
     /// Settle the window: release losing collateral, emit AuctionSettled.
     ///
-    /// Prerequisites: `submit_cleartext_and_clear` and `clear_uniform_price` must
-    /// have already run so that `WindowState.bid_results` is populated.  If
-    /// `bid_results` is empty and there are bids, the function aborts with
-    /// E_AUCTION_NOT_ENDED to signal that clearing has not yet occurred.
+    /// Prerequisites: a window with bids must have a final reveal. Finalizing the reveal
+    /// (`open_bid` or `submit_cleartext_and_clear` opening the last bid, or
+    /// `finalize_reveal` after the opening window) clears the window, which populates
+    /// `WindowState.bid_results`. If `bid_results` is not populated and there are bids,
+    /// the function aborts with E_AUCTION_NOT_ENDED to signal that clearing has not yet
+    /// occurred. A window with no bids needs no clearing call.
     ///
     /// Steps (§2.8, §2.9):
     ///   1. Validate window exists and has not already been settled or refunded.
@@ -999,8 +1020,8 @@ module atomica::auction {
         assert!(bid_count == 0 || state.reveal_final, E_REVEAL_NOT_FINAL);
 
         // 2. Verify clearing has been run.
-        //    If there are bids but bid_results is not yet populated, the caller
-        //    must run clear_uniform_price first.
+        //    Finalizing the reveal clears the window, so bid_results is populated
+        //    whenever reveal_final is set.
         assert!(result_count == bid_count, E_AUCTION_NOT_ENDED);
 
         // 3. Release losing bidders' FakeUSD collateral receipts and tally totals.

@@ -15,8 +15,8 @@
  *   lockBidCollateral()     — FakeUSD collateral receipt for one bid
  *   lockBidCollaterals()    — many FakeUSD receipts proven at one Ethereum block
  *   submitBidDirect()       — `sealBid` + the current `submit_bid` ABI
- *   waitForReveal(), openWindowBidsDirect(), clearWindowDirect(),
- *   settleAuctionDirect()   — the reveal → open → clear → settle sequence
+ *   waitForReveal(), openWindowBidsDirect(),
+ *   settleAuctionDirect()   — the reveal → open (clears) → settle sequence
  *   getAuctionState(), getWindowStatus(), getReceiptStatus() — chain reads
  *
  * Aptos calls here use a native Ed25519 account (no SIWE / MetaMask). Each
@@ -643,8 +643,9 @@ export async function waitForReveal(
 
 /**
  * Decrypt every bid of a window with the revealed key (`decryptWindowBids`)
- * and open them all in one `submit_cleartext_and_clear`. Throws unless every
- * bid decrypts to an opening that matches its commitment.
+ * and open them all in one `submit_cleartext_and_clear`. Opening the last bid
+ * finalizes the reveal and clears the window, so `settle` can follow directly.
+ * Throws unless every bid decrypts to an opening that matches its commitment.
  */
 export async function openWindowBidsDirect(
   aptosClient: Aptos,
@@ -670,22 +671,6 @@ export async function openWindowBidsDirect(
     ),
   );
   return opened;
-}
-
-/**
- * Run `auction::clear_uniform_price(window_id, pair_bcs)`. `settle` needs it:
- * it aborts with E_AUCTION_NOT_ENDED until the bid results exist.
- */
-export async function clearWindowDirect(
-  aptosClient: Aptos,
-  sender: Account,
-  moduleAddr: string,
-  window: { windowId: bigint; pairBcs: Uint8Array },
-): Promise<string> {
-  return submitDirect(aptosClient, sender, {
-    function: `${moduleAddr}::auction::clear_uniform_price`,
-    functionArguments: [window.windowId, window.pairBcs],
-  });
 }
 
 /**
