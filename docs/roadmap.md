@@ -32,7 +32,7 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 | **IBE timelock — client-side (Boneh-Franklin)** | `atomica-web-ui/src/lib/ibe.ts` | `live` |
 | **IBE timelock — on-chain Move scaffolding** | `atomica-move-contracts/sources/timelock.move`, `timelock_config.move` | `scaffold` |
 | **Uniform-price batch auction (`auction.move`)** | `atomica-move-contracts/sources/auction.move` | `scaffold` — current `settle()` picks single highest bid; uniform-price clearing unimplemented |
-| **Sealed bids end-to-end (encrypted on-chain, plaintext-reveal path)** | `atomica-move-contracts/sources/auction.move`, `atomica-web-ui/src/lib/ibe.ts` | `scaffold` — bids stored plaintext; no `submit_cleartext_and_clear` reveal path |
+| **Sealed bids end-to-end (encrypted on-chain, plaintext-reveal path)** | `atomica-move-contracts/sources/auction.move`, `atomica-web-ui/src/lib/ibe.ts` | `live` — bids are stored as IBE ciphertext with a price commitment; `submit_cleartext_and_clear` opens them and, once every bid is open, clears the window in the same transaction; `finalize_reveal` closes and clears a partly opened window after the opening window |
 | **Twice-daily global auction windows (07:45 / 16:15 UTC)** | `atomica-move-contracts/sources/auction.move` | `missing` — auctions are per-seller with caller-supplied duration |
 | **Multi-asset / multi-pair clearing** | `atomica-move-contracts/sources/auction.move` | `missing` — single pair hard-coded |
 | **Bidder collateral on Aptos** | `atomica-move-contracts/sources/auction.move` | `missing` — Demo explicitly skips collateral |

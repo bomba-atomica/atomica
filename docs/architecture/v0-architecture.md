@@ -170,8 +170,12 @@ public entry fun submit_cleartext_and_clear(
 ```
 
 The entry function verifies each cleartext against the corresponding
-`(u_bytes, ciphertext)` using `timelock_config::get_decryption_key`, then
-runs the clearing algorithm.
+`(u_bytes, ciphertext)` using `timelock_config::get_decryption_key`. When the
+call opens the last unopened bid, the reveal becomes final and the same
+transaction runs the clearing algorithm (§2.7). If some bids stay unopened,
+`finalize_reveal` closes the openings after the opening window and runs the
+clearing algorithm in that call. `clear_uniform_price` stays public: on an
+already-cleared window it changes nothing.
 
 ### 2.7 Uniform-price clearing algorithm
 
