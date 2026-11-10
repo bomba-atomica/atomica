@@ -17,15 +17,15 @@ Forward links to `docs/architecture/` files are permitted to be unresolved at me
 
 ---
 
-## v0.1 Beta — Trustless single-chain auction with BLS-only settlement
+## v0.1 Beta — Trustless single-chain auction with verified BLS settlement
 
-Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ethereum, settled back to Ethereum via BLS threshold signatures.
+Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ethereum, settled back to Ethereum by a verified BLS outcome proof. v0.1 trusts only the 2/3 validator threshold. No relayer is trusted, and any user can unwind a finished or stuck auction. See the [trustless v0.1 unwinding ADR](decisions/trustless-v0-1-unwinding.md).
 
 | Capability | Owning module(s) under `source/` | Status |
 |---|---|---|
 | **Ethereum ERC-20 lock / LockBox** | `evm-contracts/src/escrow/LockBox.sol` | `live` |
 | **Fake-token issuance (FakeETH / FakeUSD)** | `evm-contracts/src/tokens/`, `atomica-move-contracts/sources/fake_eth.move`, `fake_usd.move` | `live` |
-| **Cross-chain state-proof verification (Ethereum → Aptos)** | `atomica-move-contracts/sources/eth_proof.move`, `mpt.move`, `rlp.move` | `live` |
+| **Cross-chain state-proof verification (Ethereum → Aptos)** | `atomica-move-contracts/sources/eth_proof.move`, `mpt.move`, `rlp.move` | `live` — proofs check against admin-submitted roots; validator-attested headers that anyone carries are `missing` (issues 196, 197) |
 | **Lock-receipt registry** | `atomica-move-contracts/sources/lock_receipt.move` | `live` |
 | **Bridged-asset minting on Aptos (`mint_from_lock`)** | `atomica-move-contracts/sources/fake_eth.move`, `fake_usd.move` | `live` |
 | **SIWE / account abstraction (Ethereum wallet → Aptos)** | `atomica-web-ui/src/lib/aptos/siwe.ts` | `live` |
@@ -36,7 +36,8 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 | **Twice-daily global auction windows (07:45 / 16:15 UTC)** | `atomica-move-contracts/sources/auction.move` | `missing` — auctions are per-seller with caller-supplied duration |
 | **Multi-asset / multi-pair clearing** | `atomica-move-contracts/sources/auction.move` | `missing` — single pair hard-coded |
 | **Bidder collateral on Aptos** | `atomica-move-contracts/sources/auction.move` | `missing` — Demo explicitly skips collateral |
-| **Cross-chain settlement back to Ethereum (BLS relayer)** | `evm-contracts/src/Settlement.sol`, `BLSVerifier.sol` | `scaffold` — contracts exist but not wired; no relayer, no `BLSVerifierTestnet.sol` |
+| **Cross-chain settlement back to Ethereum (verified BLS outcome proof)** | `evm-contracts/src/escrow/LockBox.sol`, `BLSVerifier.sol` | `missing` — real BLS verification of Aptos outcomes ships in v0.1; the Aptos light client verifier and proof-gated LockBox are issues 201, 202, 203 |
+| **Permissionless unwind (finished or stuck auction, lock deadline reclaim)** | `atomica-move-contracts/sources/auction.move`, `lock_receipt.move`, `evm-contracts/src/escrow/LockBox.sol` | `missing` — issues 194, 195, 203 |
 | **Distance-to-clearing fee rebates (on-chain)** | `atomica-move-contracts/sources/auction.move` | `missing` — no uniform-price anchor to compute rebates against |
 | **Fee-rebate UI display** | `atomica-web-ui/src/components/FeeRebateDisplay.tsx` | `scaffold` — component present but driven by stubbed input |
 | **Sell flow wizard (8-step UI)** | `atomica-web-ui/src/components/SellFlow/` | `live` |
@@ -57,7 +58,7 @@ See [`docs/architecture/v0-architecture.md`](architecture/v0-architecture.md) (a
 
 ## v1.0 — ZK double-verification
 
-Goal: same validator honesty assumption as v0.1; add an independent ZK circuit that re-verifies auction clearing so validators cannot manipulate outcomes without detection.
+Goal: same validator honesty assumption as v0.1; add an independent ZK circuit that re-verifies auction clearing so validators cannot manipulate outcomes without detection. ZK double verification is the only v1.0 addition: v0.1 already has no trusted relayer to replace.
 
 | Capability | Owning module(s) under `source/` | Status |
 |---|---|---|
