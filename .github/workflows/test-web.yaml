@@ -6,9 +6,12 @@ name: Test Web (TypeScript/Vitest)
 # only required check in ruleset 11921934.
 
 on:
+  # No paths-ignore on pull_request. A workflow skipped by a path filter never
+  # reports its checks, so a docs-only PR could never satisfy the ruleset. The
+  # `changes` job below detects docs-only PRs and the test jobs skip their work
+  # instead, so every required check still reports success.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths-ignore: ["**.md", "**.txt"]
   push:
     branches: [main]
     paths-ignore: ["**.md", "**.txt"]
@@ -21,10 +24,51 @@ env:
   APTOS_VERSION: binary-2c32b09d95
 
 jobs:
+  changes:
+    # Decides whether a PR changes anything but .md/.txt files (the old
+    # paths-ignore rule). Fails open: if this job fails, its output is empty,
+    # which is not "false", so every test still runs and gates.
+    name: Detect docs-only change
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CI_CLASS: ignore
+    permissions:
+      pull-requests: read
+    outputs:
+      code: ${{ steps.scope.outputs.code }}
+    steps:
+      - name: Classify changed files
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "Not a pull request: code changed."
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A rename counts both paths, so renaming code to .md is not docs-only.
+          files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" \
+            --jq '.[] | .filename, (.previous_filename // empty)')
+          printf '%s\n' "$files"
+          if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -qvE '\.(md|txt)$'; then
+            echo "Docs-only change: test jobs report success without running."
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Code changed: every test runs."
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+
   test-coverage-guard:
     # Fails when a test file under source/ is run by no CI job,
     # or when git tracks build output under a dist/ directory.
     name: Test Coverage Guard
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -75,6 +119,8 @@ jobs:
   unit-tests:
     # No chain, no Docker: runs on every PR, drafts included.
     name: Unit Tests (atomica-sdk, atomica-web-components)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -142,7 +188,11 @@ jobs:
         run: bun run test:unit
 
   test-web:
+    # Gated at step level, not job level: a matrix job skipped by a job-level
+    # `if` reports an unexpanded name that never matches the required check.
     name: Web Tests (${{ matrix.type }})
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -157,11 +207,13 @@ jobs:
         type: [integration, meta]
     steps:
       - name: Checkout repository
+        if: needs.changes.outputs.code != 'false'
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Login to GitHub Container Registry
+        if: needs.changes.outputs.code != 'false'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -169,36 +221,41 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Bun
+        if: needs.changes.outputs.code != 'false'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
       - name: Build Ethereum Testnet SDK
+        if: needs.changes.outputs.code != 'false'
         working-directory: source/docker-testnet/ethereum-testnet/typescript-sdk
         run: |
           bun install
           bun run build
 
       - name: Build State Proofs
+        if: needs.changes.outputs.code != 'false'
         working-directory: source/state-proofs/typescript
         run: |
           bun install
           bun run build
 
       - name: Build Atomica SDK
+        if: needs.changes.outputs.code != 'false'
         working-directory: source/atomica-sdk
         run: |
           bun install
           bun run build
 
       - name: Build Aptos Testnet SDK
+        if: needs.changes.outputs.code != 'false'
         working-directory: source/docker-testnet/aptos-testnet
         run: |
           bun install
           bun run build
 
       - name: Build Atomica Web UI
-        if: matrix.type == 'meta'
+        if: needs.changes.outputs.code != 'false' && matrix.type == 'meta'
         working-directory: source/atomica-web-components
         run: |
           bun install
@@ -206,30 +263,31 @@ jobs:
 
       # ── integration: State Proofs Tests ────────────────────────────────────
       - name: Run IBE / State Proofs tests
-        if: matrix.type == 'integration'
+        if: needs.changes.outputs.code != 'false' && matrix.type == 'integration'
         working-directory: source/state-proofs/typescript
         run: bun test tests/ibe.test.ts
 
       # ── meta: Web Demo unit tests ───────────────────────────────────────────
       - name: Install demo dependencies
-        if: matrix.type == 'meta'
+        if: needs.changes.outputs.code != 'false' && matrix.type == 'meta'
         working-directory: source/atomica-demo
         run: bun install
 
       - name: Install Playwright browsers (demo)
-        if: matrix.type == 'meta'
+        if: needs.changes.outputs.code != 'false' && matrix.type == 'meta'
         working-directory: source/atomica-demo
         run: bunx playwright install --with-deps chromium
 
       - name: Run Web Demo unit tests
-        if: matrix.type == 'meta'
+        if: needs.changes.outputs.code != 'false' && matrix.type == 'meta'
         working-directory: source/atomica-demo
         run: bunx vitest run tests/simple.test.ts tests/sdk-import.test.ts tests/aptos-sdk.test.ts tests/mock-wallet.test.ts tests/app-import.test.ts tests/app-component.test.tsx
 
   aptos-testnet-sdk:
     # Starts the Aptos Docker testnet, so it waits for ready-for-review.
     name: Aptos Testnet SDK (docker)
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -343,6 +401,8 @@ jobs:
   # ── Move contracts (formerly move-ci.yml) ─────────────────────────────────
   move-framework-pin:
     name: Move Framework Pin
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -369,6 +429,8 @@ jobs:
 
   move-unit-tests:
     name: Move Unit Tests
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -403,6 +465,8 @@ jobs:
 
   move-lint:
     name: Move Lint Warnings
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -441,6 +505,8 @@ jobs:
   # Chunks that start the Aptos Docker testnet need GHCR in both tiers.
   browser-tests-anvil:
     name: Browser Tests (${{ matrix.chunk }}, anvil)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -588,7 +654,8 @@ jobs:
 
   browser-tests-docker:
     name: Browser Tests (${{ matrix.chunk }}, docker)
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -733,6 +800,8 @@ jobs:
   # ── EVM contracts (formerly evm-contracts-ci.yml) ──────────────────────────
   evm-e2e-tests-anvil:
     name: EVM e2e tests (anvil)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -770,7 +839,8 @@ jobs:
 
   evm-e2e-tests-docker:
     name: EVM e2e tests (docker)
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -820,13 +890,18 @@ jobs:
   required-checks:
     # The one required check. It always runs and passes only when every job
     # above succeeded. A skipped job counts as a failure, except the docker
-    # tier on a draft PR, which skips drafts on purpose.
+    # tier on a draft PR, which skips drafts on purpose, and every job on a
+    # docs-only PR, which skips its work on purpose.
+    # Docs-only mode needs `changes` to output exactly "false". If `changes`
+    # failed, its output is empty, which is != 'false', so every job must
+    # succeed. Its own result is logged but does not gate (fail-open).
     # On a draft PR it reports as "Required Checks (draft)", so a draft run
     # can never leave a stale green "Required Checks" on a SHA whose
     # ready-for-review run is still going.
     name: ${{ github.event.pull_request.draft && 'Required Checks (draft)' || 'Required Checks' }}
     if: ${{ always() }}
     needs:
+      - changes
       - test-coverage-guard
       - unit-tests
       - test-web
@@ -843,16 +918,20 @@ jobs:
     env:
       CI_CLASS: ignore
       DRAFT: ${{ github.event.pull_request.draft == true }}
+      CODE_CHANGED: ${{ needs.changes.outputs.code != 'false' }}
       DOCKER_TIER: "aptos-testnet-sdk browser-tests-docker evm-e2e-tests-docker"
       RESULTS: ${{ toJSON(needs) }}
     steps:
       - name: Fail unless every needed job succeeded
         run: |
           fail=0
-          jq -e 'length > 0' <<<"$RESULTS" >/dev/null || { echo "::error::no needed job results"; exit 1; }
+          jq -e 'length > 1' <<<"$RESULTS" >/dev/null || { echo "::error::no needed job results"; exit 1; }
+          echo "changes = $(jq -r '.changes.result' <<<"$RESULTS"), code changed = $CODE_CHANGED"
           while read -r job result; do
             ok="success"
-            if [ "$DRAFT" = "true" ] && [[ " $DOCKER_TIER " == *" $job "* ]]; then
+            if [ "$CODE_CHANGED" = "false" ]; then
+              ok="success skipped"
+            elif [ "$DRAFT" = "true" ] && [[ " $DOCKER_TIER " == *" $job "* ]]; then
               ok="success skipped"
             fi
             if [[ " $ok " == *" $result "* ]]; then
@@ -861,7 +940,7 @@ jobs:
               echo "::error::$job = $result (want: $ok)"
               fail=1
             fi
-          done < <(jq -r 'to_entries[] | "\(.key) \(.value.result)"' <<<"$RESULTS")
+          done < <(jq -r 'del(.changes) | to_entries[] | "\(.key) \(.value.result)"' <<<"$RESULTS")
           exit "$fail"
 
   legacy-web-tests-unit:
