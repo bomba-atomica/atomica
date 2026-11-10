@@ -27,3 +27,5 @@ The test fails with `Uint8Array.prototype.fromHex` errors inside the Aptos inter
 2.  **Edit**: Apply fixes to `proof-generation.test.ts` (async/await txs).
 3.  **Edit**: Apply fixes to `lock-receipt-e2e.test.ts` (ABI & Hex string cleanup).
 4.  **Verify**: Run the tests using `npx vitest source/atomica-web/tests/meta/`.
+
+<!-- docs-only probe for issue 200, do not merge -->
