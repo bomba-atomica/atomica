@@ -4,6 +4,26 @@ This directory contains CI/CD workflows for the Atomica project.
 
 ## Workflows
 
+### `test-web.yaml` (Gating Workflow)
+
+Holds every merge-gating job. The `required-checks` job ("Required Checks")
+aggregates them. Ruleset 11921934 also requires "Web Tests (integration)",
+"Web Tests (meta)" and "Web Tests (unit)".
+
+**Docs-only PRs:** the `pull_request` trigger has no `paths-ignore`, because a
+workflow skipped by a path filter never reports its checks. Instead the
+`changes` job ("Detect docs-only change") outputs `code=false` when every
+changed file ends in `.md` or `.txt`. Then:
+- most test jobs skip at job level;
+- `test-web` runs but skips every step, so it reports its expanded matrix
+  names ("Web Tests (integration)", "Web Tests (meta)") as success;
+- `required-checks` accepts `skipped` for every job and passes;
+- `legacy-web-tests-unit` ("Web Tests (unit)") passes because Required Checks did.
+
+Detection fails open: if `changes` fails, its output is empty, which is not
+`false`, so every test runs and must succeed. Pushes to `main` keep
+`paths-ignore`.
+
 ### `build-aptos-binary.yaml` (Reusable Workflow)
 
 A reusable workflow that builds and caches the `aptos` binary from the `source/atomica-aptos` submodule.
