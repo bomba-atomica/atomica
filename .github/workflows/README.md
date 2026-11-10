@@ -13,7 +13,20 @@ aggregates them. Ruleset 11921934 also requires "Web Tests (integration)",
 **Docs-only PRs:** the `pull_request` trigger has no `paths-ignore`, because a
 workflow skipped by a path filter never reports its checks. Instead the
 `changes` job ("Detect docs-only change") outputs `code=false` when every
-changed file ends in `.md` or `.txt`. Then:
+changed file ends in `.md`, or ends in `.txt` outside `source/` and `lib/`.
+A `.txt` under `source/` or `lib/` counts as code, because some are build
+inputs (`source/evm-contracts/remappings.txt` is read by `forge build`). A
+rename checks both its old and new path. The job outputs `code=true` instead
+when:
+- the listed file count differs from the event's `changed_files`, or reaches
+  the files API cap of 3000;
+- the PR's live head SHA differs from the head SHA the run was started for.
+
+The `pull_request` trigger includes `edited`, so retargeting a PR's base
+reruns the classification. The job prints the file list between
+`::stop-commands::` markers, so a file name cannot act as a workflow command.
+
+When the PR is docs-only:
 - most test jobs skip at job level;
 - `test-web` runs but skips every step, so it reports its expanded matrix
   names ("Web Tests (integration)", "Web Tests (meta)") as success;

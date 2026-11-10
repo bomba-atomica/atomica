@@ -11,7 +11,8 @@ on:
   # `changes` job below detects docs-only PRs and the test jobs skip their work
   # instead, so every required check still reports success.
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    # `edited` reruns the classification when the base branch is retargeted.
+    types: [opened, synchronize, reopened, ready_for_review, edited]
   push:
     branches: [main]
     paths-ignore: ["**.md", "**.txt"]
@@ -25,9 +26,12 @@ env:
 
 jobs:
   changes:
-    # Decides whether a PR changes anything but .md/.txt files (the old
-    # paths-ignore rule). Fails open: if this job fails, its output is empty,
-    # which is not "false", so every test still runs and gates.
+    # Decides whether a PR is docs-only: every changed file ends in .md, or
+    # ends in .txt outside source/ and lib/ (a .txt there can be a build input,
+    # such as source/evm-contracts/remappings.txt). Fails open: if this job
+    # fails, its output is empty, which is not "false", so every test still
+    # runs and gates. Any doubt (a truncated file list, a moved head) also
+    # outputs code=true.
     name: Detect docs-only change
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -45,22 +49,50 @@ jobs:
           EVENT: ${{ github.event_name }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
         run: |
+          set -euo pipefail
+          code() { echo "$1"; echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; }
           if [ "$EVENT" != "pull_request" ]; then
-            echo "Not a pull request: code changed."
-            echo "code=true" >> "$GITHUB_OUTPUT"
-            exit 0
+            code "Not a pull request: code changed."
           fi
-          # A rename counts both paths, so renaming code to .md is not docs-only.
-          files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" \
-            --jq '.[] | .filename, (.previous_filename // empty)')
-          printf '%s\n' "$files"
-          if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -qvE '\.(md|txt)$'; then
+          case "$CHANGED_FILES" in
+            '' | *[!0-9]*) code "No numeric changed_files in the event: treat as code." ;;
+          esac
+          # One line per changed file: D (docs) or C (code), a tab, then the
+          # file's paths as a JSON array. A rename lists both paths, and both
+          # must be docs, so renaming code to .md is not docs-only. jq does
+          # the test with endswith/startswith, so a newline in a name cannot
+          # split it. JSON-encoding keeps each entry on one line.
+          rows=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '
+            def docs: endswith(".md")
+              or (endswith(".txt") and (startswith("source/") or startswith("lib/") | not));
+            .[] | [.filename, (.previous_filename // empty)]
+                | (if all(.[]; docs) then "D" else "C" end) + "\t" + tojson')
+          # Raw file names could read as workflow commands, so the listing is
+          # printed with workflow commands stopped by a random token.
+          token=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          echo "::stop-commands::$token"
+          printf '%s\n' "$rows"
+          echo "::$token::"
+          count=$(printf '%s\n' "$rows" | grep -c . || true)
+          # The files API returns at most 3000 files. A short or capped list
+          # may hide a code file.
+          if [ "$count" -ne "$CHANGED_FILES" ] || [ "$count" -ge 3000 ]; then
+            code "Listed $count files, PR reports $CHANGED_FILES (cap 3000): treat as code."
+          fi
+          # The list is read live. If the head moved, it may not match the
+          # commit this run tests.
+          live_head=$(gh api "repos/$REPO/pulls/$PR" --jq '.head.sha')
+          if [ "$live_head" != "$HEAD_SHA" ]; then
+            code "PR head is $live_head, run is for $HEAD_SHA: treat as code."
+          fi
+          if [ "$count" -gt 0 ] && ! printf '%s\n' "$rows" | grep -q '^C'; then
             echo "Docs-only change: test jobs report success without running."
             echo "code=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Code changed: every test runs."
-            echo "code=true" >> "$GITHUB_OUTPUT"
+            code "Code changed: every test runs."
           fi
 
   test-coverage-guard:
