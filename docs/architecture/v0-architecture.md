@@ -238,196 +238,158 @@ struct AuctionSettled has drop, store {
 
 ---
 
-## §3 — Cross-Chain Settlement (v0.1 BLS-Relayer Flow)
+## §3 — Cross-Chain Settlement (v0.1 Trustless Flow)
+
+v0.1 trusts only the 2/3 Aptos validator threshold. No relayer, admin key or
+operator account decides where funds go. The
+[trustless v0.1 unwinding ADR](../decisions/trustless-v0-1-unwinding.md)
+records the three owner axioms behind this section:
+
+1. All funds unwind to their origin unless the auction executes flawlessly.
+2. No relayer is trusted.
+3. Any user can send a transaction to a finished or stuck auction to unwind it.
+
+The code is moving to this model through issues 194 to 203. Where the code
+still has a relayer-only path, that path is legacy and the ADR wins.
 
 ### 3.1 End-to-end flow
 
 ```
-Aptos chain                          Off-chain relayer             Ethereum chain
-──────────────                       ─────────────────             ──────────────
-AuctionSettled / AuctionRefunded /
-BidUnopened event emitted
+Ethereum chain                      Aptos chain                       Ethereum chain
+──────────────                      ───────────                       ──────────────
+LockBox.lock(token, amount,
+  window, pair, deadline)
         │
         ▼
-Event scanned by relayer ──────────► relayer reads lock ids
-                                     (auction::get_window_lock_ids)
-                                     and lock receipts
-                                     (lock_receipt::get_receipt)
-                                             │
-                                             ▼
-                                     LockBox.sol (settlementAuthority call)
-                                     settleFill(seller → winner FakeETH,
-                                                winner → seller FakeUSD)
-                                     refund(owner, token, amount)
-                                             │
-                                             ▼
-                                     LockBox.withdrawWinnings(token)
-                                     (each user pulls credited tokens)
+Validators attest the header ─────► ethereum_headers stores
+(2/3+ voting power, anyone carries)  (block_hash, state_root)
+                                            │
+                                            ▼
+                                    register_ethereum_lock
+                                    (storage proof vs certified root)
+                                            │
+                                            ▼
+                                    auction settle / unwind
+                                    emits AuctionOutcome
+                                            │
+                                            ▼
+                                    any user fetches the signed ──────► light client verifies
+                                    LedgerInfo + event proof            BLS quorum + inclusion
+                                                                               │
+                                                                               ▼
+                                                                      LockBox.recordOutcome
+                                                                      LockBox.releaseByOutcome
+                                                                      (or reclaim after deadline)
 ```
 
-LockBox releases a lock only on an Aptos outcome. Time alone never releases
-it. The relayer consumes three module events:
+Every step is a permissionless call. A relayer may carry data as a
+convenience, but every byte it carries is checked on chain, and any user can
+make the same call.
 
-| Aptos event | LockBox calls |
-| --- | --- |
-| `AuctionSettled` (§2.9) | Only for a window of the served `pair_bcs` that `auction::is_settled` confirms. One `settleFill` per (seller lock, winner) chunk, at `fill × clearing_price`. Then `refund` of a winner's unused collateral, each seller's unsold supply, and each losing bid's collateral whose receipt Aptos released. |
-| `AuctionRefunded` | `refund` of every seller and collateral lock of the window whose receipt Aptos released. Only for a window of the served `pair_bcs`. |
-| `BidUnopened` | `refund` of the unopened bid's collateral. No penalty in v0.1: the griefing-deposit destination is still undecided. |
+A lock proof is checked on Aptos against trusted inputs only (issues 171, 196,
+197):
 
-Payouts go to the Ethereum owner of each lock receipt (the address the
-storage proof names), not to the bidder's Aptos signer address. Every release
-carries an outcome id derived from the lock id. LockBox rejects a reused id,
-so a relayer retry never pays twice. The relayer signs through an ethers
-`NonceManager`.
-
-Windows are keyed by `(window_id, pair_bcs)`, where `pair_bcs` is the opaque
-byte string the creator passed (the sell flow passes empty bytes). The relayer
-serves one `pair_bcs` (`PAIR_BCS`, default empty). `AuctionSettled` and
-`AuctionRefunded` carry the window's `pair_bcs`, so the relayer checks it
-before it reads any window.
-
-The relayer handles each outcome on its own. A permanent failure (a LockBox
-revert such as `InsufficientLocked`, a Move abort, or an outcome that does
-not fit the locks) becomes a dead letter: it is written to
-`SETTLEMENT_DEAD_LETTER_FILE` with an alert, the other releases of the same
-outcome still go out, and the cursor moves on. Only transient errors (RPC
-down, transaction wait timeout) keep the cursor at that outcome for a retry.
-A dead letter needs an operator; the relayer script header gives the replay
-steps. A window whose `pair_bcs` the relayer does not serve is a dead letter
-too, not a silent skip, because only this relayer can release its locks.
-
-Each receipt is one LockBox lock. `lock` takes a fresh nonce and records
-the lock's amount in `lockAmounts[getLockId(user, token, nonce)]` (slot 4).
-`lock_receipt::register_ethereum_lock` proves that slot, and the receipt's
-`lock_id` is that LockBox lock id, so one lock gives exactly one receipt
-however many blocks it is proven at. The relayer releases each receipt's
-amount as is. LockBox still caps every release at the real locked balance.
-
-A lock proof is checked on chain against trusted inputs only (issue 171):
-
-- The state root comes from `eth_proof::submit_header`, which only the
-  `@atomica` admin (the v0.1 trusted relayer) can call. A stored root never
-  changes. The caller names a block number, never a root.
+- The state root comes from an Ethereum header that Aptos validators certify
+  with a 2/3+ voting-power quorum, like JWK consensus. Anyone may carry a
+  certified header. No entry function writes headers, and a stored header
+  never changes. The caller names a block number, never a root.
 - `eth_proof::initialize` pins the LockBox address and the FakeETH and
   FakeUSD token addresses once at deploy. The receipt's asset type picks
   the token.
-- `eth_proof` derives the storage key from the user, the token and the
-  lock nonce.
+- `eth_proof` derives the storage key from the lock fields, and the receipt's
+  `lock_id` is the LockBox lock id, so one lock gives exactly one receipt
+  however many blocks it is proven at.
 
-**Abandoned locks are frozen.** A lock that never reaches an auction has no
-Aptos outcome, so nothing releases it. The sell flow no longer offers a
-pre-auction "Cancel & Unlock" button. The recovery path (a relayer refund of
-a lock id never claimed on Aptos, or an outcome-gated timeout) is an open
-owner decision recorded on issue 170.
+**Every auction ends in an outcome Ethereum can verify (issues 194, 199).**
+Aptos emits one `AuctionOutcome` per auction, from `settle` or from the
+permissionless `auction::unwind(window_id, pair_bcs)`. Any account may call
+`unwind` on a finished window or on a stuck one (not settled and past the
+reveal deadline plus the opening window plus a grace period). It gives every
+receipt of the window a terminal state. Winning fills go to buyers at the
+clearing price. Unopened bids, losing bids, winner excess collateral, unsold
+seller supply and refunded windows go back to their depositors. A receipt that
+never reached an auction can be cancelled by anyone after a delay, and it goes
+back to its depositor.
 
-In v0.1 the `settlementAuthority` is the trusted relayer EOA. That address is
-the verification seam: §3.3 and §3.4 replace it with a verifier contract.
+**Every lock has a deadline (issue 203).** A lock carries a deadline bound to
+its auction. Before the deadline, a verified Aptos outcome pays it out. After
+the deadline, anyone may `reclaim` an open lock, and the whole amount returns
+to the depositor unless a proven settle covers that lock. So an auction
+settles on Ethereum fully or not at all.
 
-### 3.2 BLSVerifierTestnet.sol trusted-relayer interface
+Payouts go to the Ethereum owner of each lock (the depositor the storage proof
+names), not to the bidder's Aptos signer address. A lock leaves the open
+status once, so a retried release never pays twice.
 
-The v0.1 testnet verifier skips real BLS verification and instead accepts a
-call from a trusted EOA set at deploy time. This keeps settlement unblocked
-while EIP-2537 precompile availability is confirmed.
+There is no `settlementAuthority`. LockBox releases a lock only on a verified
+Aptos outcome or a passed deadline.
 
-```solidity
-// source/evm-contracts/src/settlement/BLSVerifierTestnet.sol
-// Comment-only stub — implementation in Phase 3b
+### 3.2 Aptos outcome verification on Ethereum (real BLS in v0.1)
 
-interface IBLSVerifierTestnet {
-    /// Called by the trusted relayer with data extracted from AuctionSettled.
-    /// @param windowId   auction_window_id from the Move event
-    /// @param pairHash   keccak256 of ABI-encoded (baseChain, baseToken, quoteChain, quoteToken)
-    /// @param clearingPrice   USD per base token (no decimal shift)
-    /// @param winners    winning bidder Ethereum addresses
-    /// @param fills      corresponding fill amounts in wei
-    function authorizeSettlement(
-        uint64  windowId,
-        bytes32 pairHash,
-        uint64  clearingPrice,
-        address[] calldata winners,
-        uint256[] calldata fills
-    ) external;
+Ethereum checks Aptos outcomes itself (issues 201, 202). Any Atomica node
+serves the signed `LedgerInfoWithSignatures`, the transaction and event
+inclusion proofs, and the epoch change chain. An Ethereum light client
+verifies them:
 
-    event SettlementAuthorized(
-        uint64  indexed windowId,
-        bytes32 indexed pairHash,
-        uint64  clearingPrice,
-        address[] winners,
-        uint256[] fills
-    );
-}
-```
+- The trust root is the Aptos genesis waypoint, pinned at deploy. Anyone can
+  advance the stored validator set one epoch at a time with an epoch-ending
+  LedgerInfo signed by the previous set's quorum.
+- A proof verifies when signers hold strictly more than two thirds of the
+  voting power and the aggregate BLS12-381 signature checks out through the
+  EIP-2537 precompiles.
+- The event must sit in the signed ledger through its accumulator proofs.
 
-### 3.3 Why EIP-2537 / real BLS is deferred to v1
+The verifier has no owner, pause, proxy or trusted caller. The old
+`BLSVerifierTestnet` stub, which accepted one deploy-time caller in place of a
+signature check, is retired by the ADR.
 
-EIP-2537 (BLS12-381 precompiles) ships in the Ethereum Pectra upgrade. As of
-the v0.1 testnet phase the precompiles are not yet universally available on
-public testnets. The production path (`BLSVerifier.sol`, already implemented
-at `source/evm-contracts/src/BLSVerifier.sol`) uses precompiles `0x09`
-(G1_MULTIEXP) and `0x0c` (PAIRING). When EIP-2537 is confirmed stable:
+### 3.3 Real BLS ships in v0.1
 
-1. Deploy `BLSVerifier.sol` replacing `BLSVerifierTestnet.sol`.
-2. The relayer submits an aggregated BLS signature over the Aptos event hash
-   instead of a raw EOA signature.
-3. `Settlement.sol` switches its verifier reference from testnet to production.
-4. No other Settlement logic changes.
+Real BLS verification is a v0.1 requirement, not a v1 upgrade. The target
+Ethereum networks, including the docker testnet, must enable EIP-2537
+(Pectra / Electra). The existing `BLSVerifier.sol` signs Ethereum block hashes
+with the wrong key and signature sizes for Aptos, so issue 202 replaces it with
+an Aptos LedgerInfo verifier.
 
 ### 3.4 ZK seam (v1 path)
 
-In v1 a ZK proof replaces the trusted relayer entirely:
+In v1 a ZK proof adds a second, independent check. It does not replace a
+relayer, because v0.1 has none to replace:
 
 ```
-Aptos event → ZK circuit (proves event inclusion in Aptos state)
+Aptos event → ZK circuit (re-verifies auction clearing)
              → proof posted to Ethereum
-             → BLSVerifier verifies proof
-             → Settlement.sol executes without relayer trust
+             → BLS outcome proof AND ZK proof must agree
+             → LockBox releases
 ```
 
-The seam point is `BLSVerifierTestnet.authorizeSettlement`. In v1 this
-function is replaced by a proof-verification entry point:
+Both checks gate the same release entry point. The validator threshold stays
+the same trust assumption.
+
+### 3.5 Releases and the legacy relayer path
+
+In the target model each lock is released on its own. `releaseByOutcome`
+checks the lock against the verified outcome and transfers each payout to its
+recipient. `reclaim` returns an open lock to its depositor after the deadline.
+Both calls are permissionless (issue 203).
+
+The current `LockBox.sol` (`source/evm-contracts/src/escrow/LockBox.sol`) still
+has the legacy path below. Only `settlementAuthority` can call `refund` and
+`settleFill`, which credit balances that users then pull with
+`withdrawWinnings`. The [ADR](../decisions/trustless-v0-1-unwinding.md)
+supersedes this path, and issue 203 replaces it with a new LockBox at a new
+address.
 
 ```solidity
-function verifyAndAuthorize(
-    bytes calldata aptosStateProof,
-    bytes calldata zkProof,
-    AuctionSettledData calldata eventData
-) external;
-```
-
-Everything downstream of `SettlementAuthorized` remains identical.
-
-### 3.5 WithdrawWinnings flow
-
-Users do not receive assets automatically. When the relayer posts an Aptos
-outcome, `LockBox.sol` (`source/evm-contracts/src/escrow/LockBox.sol`) moves
-the locked amounts into withdrawable balances. Winners, sellers and refunded
-users then call:
-
-```solidity
-/// Withdraw every credited balance of `token`.
-/// @param token  ERC-20 token address (FakeETH or FakeUSD)
-function withdrawWinnings(address token) external;
-
-event WithdrawWinnings(
-    address indexed winner,
-    address indexed token,
-    uint256 amount
-);
-```
-
-The relayer-only calls that credit those balances:
-
-```solidity
+// Legacy, superseded: settlementAuthority-only calls
 function refund(bytes32 outcomeId, address user, address token, uint256 amount) external;
 function settleFill(bytes32 outcomeId, address seller, address winner,
                     uint256 baseAmount, uint256 quoteAmount) external;
+function withdrawWinnings(address token) external;
 ```
-
-This pull pattern prevents gas issues from pushing to many addresses in one
-transaction, and gives winners control over when they claim.
 
 ---
 
 *Document version: v0.1 — covers Phase 0b deliverables. Phase 3a will expand
 §2 with the full Move module implementation. Phase 3b will expand §3 with the
-production BLS verifier deployment.*
+light-client verifier and proof-gated LockBox deployment.*

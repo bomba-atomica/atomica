@@ -221,7 +221,7 @@ Bidders (arbitrageurs) earn through bid-ask spreads (buy at auction price, sell/
 **Current Progress:**
 - ✅ **Risk #1 (Ethereum Signing):** Complete - users can sign Atomica transactions with MetaMask
 - 🟡 **Risk #2 (Timelock Encryption):** In progress - N-layer onion encryption implementation
-- ⏳ **Risk #3 (Cross-Chain Verification):** Pending - Trusted validators + BLS for Ethereum state verification (v0.1 Beta); ZK light client (v1.0)
+- ⏳ **Risk #3 (Cross-Chain Verification):** Pending - v0.1 Beta trusts only the 2/3 validator threshold, no relayer: validators attest Ethereum headers, Ethereum verifies validator BLS signatures over Aptos outcomes, and any user can unwind a finished or stuck auction ([trustless v0.1 unwinding ADR](docs/decisions/trustless-v0-1-unwinding.md)); ZK double verification (v1.0)
 
 **Timeline Estimate:**
 - Risk #2: 7-10 weeks (current sprint)
@@ -326,9 +326,11 @@ See [Plan Evolution](docs/PLAN-EVOLUTION.md) for the multi-phase roadmap from v0
 
 | Phase | Trust Model | Key Innovation |
 |-------|-------------|----------------|
-| **v0.1 Beta** | 2/3 validator threshold | Working system (current) |
+| **v0.1 Beta** | 2/3 validator threshold only, no relayer | Working system with verified BLS settlement and permissionless unwind (current) |
 | **v1.0** | Same validator assumption + ZK | ZK auction verification |
 | **v2.0** | Same validator assumption + ratchet | Cross-chain auctions + BitVM |
+
+**v0.1 Trust Model:** v0.1 trusts only the 2/3 validator threshold. No relayer, admin key or operator can move or freeze funds. All funds unwind to their origin unless the auction executes flawlessly, and any user can send a transaction to a finished or stuck auction to unwind it. See the [trustless v0.1 unwinding ADR](docs/decisions/trustless-v0-1-unwinding.md).
 
 **v0 → v1 Trust Reduction:**
 - Same validator honesty assumption (2/3 threshold)
