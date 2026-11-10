@@ -261,3 +261,5 @@ atomica/
 - How CoW Swap works (batch auctions, solvers)
 - Key limitations (no cross-chain)
 - Insights for Atomica design
+
+<!-- docs-only probe for issue 200, do not merge -->
