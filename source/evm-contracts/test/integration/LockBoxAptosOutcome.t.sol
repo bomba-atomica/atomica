@@ -93,6 +93,8 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
             _hex(".event.event_data"), OutcomeTreeBuilder.outcomeBcs(windowId, pairHash, deadline, root, leafCount)
         );
 
+        // The golden deadline (2026-01-01) must lie ahead when locking, also on a live chain.
+        vm.warp(deadline - 1 days);
         LockBox.Lock memory l = _lock(lockBox, seller, address(fakeETH), 1 ether, windowId, pairHash, deadline);
 
         bytes32 key = lockBox.auctionKey(windowId, pairHash, deadline);
