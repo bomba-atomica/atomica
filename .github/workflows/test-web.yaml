@@ -928,6 +928,143 @@ jobs:
         env:
           ETH_RPC_URL: http://localhost:8545
 
+  # ── Aptos light client (source/evm-contracts/src/aptos) ────────────────────
+  evm-contract-tests:
+    # Forge unit tests of the Aptos light client against the golden vectors
+    # copied from atomica-aptos. foundry.toml sets evm_version prague, so the
+    # EIP-2537 BLS12-381 precompiles exist.
+    name: EVM Contract Tests (forge)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI_CLASS: feature-correctness
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Build EVM contracts
+        working-directory: source/evm-contracts
+        run: forge build
+
+      # Older contracts predate forge fmt. The light client sources are checked.
+      - name: Check light client formatting
+        working-directory: source/evm-contracts
+        run: forge fmt --check src/aptos test/unit/aptos script/DeployAptosLightClient.s.sol
+
+      - name: Run light client tests (at least 20 must run)
+        working-directory: source/evm-contracts
+        run: |
+          set -euo pipefail
+          forge test --match-path 'test/unit/aptos/*' -vv | tee forge-aptos.log
+          passed=$(grep -oE '[0-9]+ tests passed' forge-aptos.log | tail -1 | grep -oE '^[0-9]+' || echo 0)
+          echo "Aptos light client tests passed: $passed"
+          if [ "$passed" -lt 20 ]; then
+            echo "::error::expected at least 20 Aptos light client tests, $passed ran"
+            exit 1
+          fi
+
+  aptos-light-client-live:
+    # verifyEvent on anvil (prague) against a live proof from the Atomica
+    # validator. Starts the Aptos Docker testnet, so it waits for
+    # ready-for-review. The image is built here from the pinned atomica-aptos
+    # binary release, the first one that serves /v1/atomica (issue 201).
+    name: Aptos Light Client Live (docker)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI_CLASS: system-correctness
+      APTOS_PROOF_RELEASE: binary-55609bcfe3
+      APTOS_PROOF_COMMIT: 55609bcfe36661a6857bb1bd1cad6a88f6ef44d4
+      IMAGE_NAME: atomica-validator:55609bcfe3
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Checkout the atomica-aptos Docker context
+        uses: actions/checkout@v4
+        with:
+          repository: bomba-atomica/atomica-aptos
+          ref: ${{ env.APTOS_PROOF_COMMIT }}
+          path: atomica-aptos
+          sparse-checkout: |
+            atomica/docker
+            atomica/timelock-params
+
+      - name: Build the Atomica validator image from the pinned release
+        working-directory: atomica-aptos
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="${APTOS_PROOF_RELEASE#binary-}"
+          bin=atomica/docker/binaries
+          # Fails loudly when the release or an asset is missing.
+          gh release download "$APTOS_PROOF_RELEASE" --repo bomba-atomica/atomica-aptos --dir "$bin" \
+            --pattern "aptos-node-${sha}" --pattern "aptos-node-${sha}.sha256" \
+            --pattern "aptos-${sha}" --pattern "aptos-${sha}.sha256" \
+            --pattern "aptos-faucet-service-${sha}" --pattern "aptos-faucet-service-${sha}.sha256" \
+            --pattern "framework-*.mrb" --pattern "framework-*.mrb.sha256"
+          (cd "$bin" && sha256sum -c ./*.sha256)
+          docker build -f atomica/docker/Dockerfile \
+            --build-arg GIT_SHA="$sha" \
+            --build-arg BINARY_RELEASE_TAG="$APTOS_PROOF_RELEASE" \
+            -t "$IMAGE_NAME" .
+          docker image inspect "$IMAGE_NAME" --format '{{.Id}}'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Build Atomica SDK
+        working-directory: source/atomica-sdk
+        run: |
+          bun install
+          bun run build
+
+      - name: Build Aptos Testnet SDK
+        working-directory: source/docker-testnet/aptos-testnet
+        run: |
+          bun install
+          bun run build
+
+      - name: Install test-orchestration dependencies
+        working-directory: source/evm-contracts/test-orchestration
+        run: bun install
+
+      - name: Build EVM contracts
+        working-directory: source/evm-contracts
+        run: forge build
+
+      - name: Run the live light client check
+        working-directory: source/evm-contracts
+        env:
+          APTOS_ROOT_ACCOUNT_PRIVATE_KEY: "0x970daae6672b68f76de3418f2f61cc469ff6659393b95c25fc72142c1433fa2d"
+        run: |
+          set -uo pipefail
+          bun test-orchestration/src/aptos-light-client-live.ts
+          code=$?
+          echo "aptos-light-client-live exit code: $code"
+          [ "$code" -eq 0 ]
+
   # ── Gate ───────────────────────────────────────────────────────────────────
   required-checks:
     # The gate. It passes only when every gated job above succeeded. A skipped
@@ -996,6 +1133,8 @@ jobs:
             "docker;Browser Tests (${D}{{ matrix.chunk }}, docker);Browser Tests (faucet-wallet, docker);Browser Tests (auction, docker);Browser Tests (bid-settle, docker);Browser Tests (settle-100-bids, docker);Browser Tests (claim-reclaim-fees, docker);Browser Tests (happy-path, docker)"
             "base;;EVM e2e tests (anvil)"
             "docker;;EVM e2e tests (docker)"
+            "base;;EVM Contract Tests (forge)"
+            "docker;;Aptos Light Client Live (docker)"
           )
           # Jobs that are not gated: the classifier and this job's own legs.
           ignored=("Detect docs-only change" "Required Checks" "Web Tests (unit)"
