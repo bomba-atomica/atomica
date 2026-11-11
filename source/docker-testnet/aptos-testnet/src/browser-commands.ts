@@ -384,7 +384,10 @@ const LOCKBOX_LOCK_ABI = [
  * so Aptos registers it and it cannot be reclaimed during a test.
  */
 export function testLockBinding(pairBcsHex: string = "0x"): LockBinding {
-    return lockBinding(currentWindowId(BigInt(Math.floor(Date.now() / 1000))), ethers.getBytes(pairBcsHex));
+    return lockBinding(
+        currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
+        ethers.getBytes(pairBcsHex),
+    );
 }
 
 /**
