@@ -15,10 +15,10 @@ A mainnet-like Ethereum Proof-of-Stake testnet for local development and testing
 └─────────────────┴─────────────────┴─────────────────────────┘
 ```
 
-- **Execution Layer**: Geth v1.13.14 (PoS mode, archive node)
-- **Consensus Layer**: Lighthouse v5.1.0 (beacon node + validator client)
+- **Execution Layer**: Geth v1.16.7 (PoS mode, archive node)
+- **Consensus Layer**: Lighthouse v7.1.0 (beacon node + validator client)
 - **Consensus**: Proof-of-Stake from genesis (no PoW transition)
-- **Fork Schedule**: All forks enabled at genesis (Altair, Bellatrix, Capella, Deneb)
+- **Fork Schedule**: All forks through Electra enabled at genesis (Altair, Bellatrix, Capella, Deneb, Electra). Electra (Prague) brings the EIP-2537 BLS12-381 precompiles. Fulu is off.
 
 ## Quick Start
 

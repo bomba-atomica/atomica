@@ -15,12 +15,14 @@ services:
       # Merge Config
       - TERMINAL_TOTAL_DIFFICULTY=0
       
-      # Consensus Config (All forks active at epoch 0)
+      # Consensus Config (All forks through Electra active at epoch 0)
+      # Electra (EL: Prague) brings the EIP-2537 BLS12-381 precompiles that the
+      # Aptos light client (src/aptos in evm-contracts) needs.
       - ALTAIR_FORK_EPOCH=0
       - BELLATRIX_FORK_EPOCH=0
       - CAPELLA_FORK_EPOCH=0
       - DENEB_FORK_EPOCH=0
-      - ELECTRA_FORK_EPOCH=100000000
+      - ELECTRA_FORK_EPOCH=0
       - FULU_FORK_EPOCH=100000000
       
       # Genesis Config
@@ -33,7 +35,7 @@ services:
 
   # 4. Main Execution Client
   geth:
-    image: ethereum/client-go:v1.13.14
+    image: ethereum/client-go:v1.16.7
     container_name: eth-execution
     restart: unless-stopped
     depends_on:
@@ -47,7 +49,7 @@ services:
         if [ ! -d /data/geth/geth/chaindata ]; then
           geth init --datadir=/data/geth /data/geth/genesis.json
         fi
-        exec geth --datadir=/data/geth --networkid=32382 --http --http.api=eth,net,web3,debug,engine,txpool --http.addr=0.0.0.0 --http.port=8545 --http.vhosts=* --http.corsdomain=* --ws --ws.api=eth,net,web3,debug,engine --ws.addr=0.0.0.0 --ws.port=8546 --ws.origins=* --authrpc.addr=0.0.0.0 --authrpc.port=8551 --authrpc.vhosts=* --authrpc.jwtsecret=/data/jwtsecret --nodiscover --syncmode=full --gcmode=archive --maxpeers=0 --txlookuplimit=0 --cache=256
+        exec geth --datadir=/data/geth --networkid=32382 --http --http.api=eth,net,web3,debug,engine,txpool --http.addr=0.0.0.0 --http.port=8545 --http.vhosts=* --http.corsdomain=* --ws --ws.api=eth,net,web3,debug,engine --ws.addr=0.0.0.0 --ws.port=8546 --ws.origins=* --authrpc.addr=0.0.0.0 --authrpc.port=8551 --authrpc.vhosts=* --authrpc.jwtsecret=/data/jwtsecret --nodiscover --syncmode=full --gcmode=archive --maxpeers=0 --history.transactions=0 --cache=256
     volumes:
       - testnet-data:/data
     ports:
@@ -63,7 +65,7 @@ services:
 
   # 5. Main Beacon Node
   beacon:
-    image: sigp/lighthouse:v5.3.0
+    image: sigp/lighthouse:v7.1.0
     container_name: eth-beacon
     restart: unless-stopped
     depends_on:
@@ -89,7 +91,6 @@ services:
       - --staking
       - --subscribe-all-subnets
       - --always-prepare-payload
-      - --light-client-server
     volumes:
       - testnet-data:/data
     ports:
@@ -97,7 +98,7 @@ services:
 
   # 6. Main Validator Clients
   validator-1:
-    image: sigp/lighthouse:v5.3.0
+    image: sigp/lighthouse:v7.1.0
     container_name: eth-validator-1
     restart: unless-stopped
     depends_on:
@@ -117,7 +118,7 @@ services:
       - testnet-data:/data
 
   validator-2:
-    image: sigp/lighthouse:v5.3.0
+    image: sigp/lighthouse:v7.1.0
     container_name: eth-validator-2
     restart: unless-stopped
     depends_on:
@@ -137,7 +138,7 @@ services:
       - testnet-data:/data
 
   validator-3:
-    image: sigp/lighthouse:v5.3.0
+    image: sigp/lighthouse:v7.1.0
     container_name: eth-validator-3
     restart: unless-stopped
     depends_on:
@@ -157,7 +158,7 @@ services:
       - testnet-data:/data
 
   validator-4:
-    image: sigp/lighthouse:v5.3.0
+    image: sigp/lighthouse:v7.1.0
     container_name: eth-validator-4
     restart: unless-stopped
     depends_on:
