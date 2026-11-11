@@ -30,6 +30,7 @@ export const APTOS_ROOT_ACCOUNT_PRIVATE_KEY = env(
 );
 
 // Aptos — contract deployer
+// SCOUT(#243) ADD: a constant for the timelock registrar address derived from this deployer address, for the genesis layout field timelock_registrar and for the tests.
 export const APTOS_DEPLOYER_ADDRESS = env(
   "APTOS_DEPLOYER_ADDRESS",
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa",

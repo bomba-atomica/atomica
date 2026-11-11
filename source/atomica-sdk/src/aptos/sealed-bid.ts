@@ -1,3 +1,4 @@
+// SCOUT(#228) EDIT: the header below describes the salt and the commitment; rewrite it for the 8-byte price plaintext and on-chain opening.
 /**
  * V2 sealed bids against the live chain: seal a bid for a window and open a
  * window's bids after the timelock reveal.
@@ -18,6 +19,7 @@
 import { randomBytes } from "@noble/hashes/utils";
 import { decryptBid, encryptBid } from "@atomica/state-proof-verifier/ibe";
 import { CONTRACT_ADDR, aptos } from "./config.js";
+// SCOUT(#228) EDIT: computeBidCommitment is deleted; only the 8-byte price encoder remains.
 import { computeBidCommitment, encodeBidPlaintext } from "../ibe/bid.js";
 
 function hexToBytes(value: unknown): Uint8Array {
@@ -45,6 +47,7 @@ async function view(
   });
 }
 
+// SCOUT(#243) EDIT: the timelock now belongs to the window id; read the new window_timelock view, or keep get_window_status, which needs an existing (window, pair).
 /** The timelock id recorded on a window (`auction::get_window_status`). */
 export async function getWindowTimelockId(
   windowId: bigint,
@@ -98,6 +101,8 @@ export async function getBidAssociatedData(
   return hexToBytes(ad);
 }
 
+// SCOUT(#216) EDIT: add the validity flag the bid view returns.
+// SCOUT(#228) EDIT: drop commitment.
 /** One stored bid (`auction::get_bid_info`). */
 export interface BidInfo {
   bidder: string;
@@ -107,6 +112,8 @@ export interface BidInfo {
   price: bigint;
 }
 
+// SCOUT(#216) EDIT: read the validity element the get_bid_info tuple gains.
+// SCOUT(#228) EDIT: the tuple is positional; without commitment, opened and price move up one place.
 /** Bid `bidIndex` of a window (`auction::get_bid_info`). */
 export async function getBidInfo(
   windowId: bigint,
@@ -138,6 +145,24 @@ export async function getBidCount(
   return BigInt(count as string);
 }
 
+// SCOUT(#235) ADD: reader for timelock::get_timelock_epoch.
+export async function getTimelockEpoch(_timelockId: bigint): Promise<bigint> {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#235) getTimelockEpoch");
+}
+
+// SCOUT(#235) ADD: reader for timelock::get_deadline, in microseconds.
+export async function getTimelockDeadlineUs(
+  _timelockId: bigint,
+): Promise<bigint> {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#235) getTimelockDeadlineUs");
+}
+
+// SCOUT(#235) ADD: reads timelock::get_mpk from every configured Aptos endpoint and throws when two answers differ.
+export async function getMpkFromAllEndpoints(): Promise<Uint8Array> {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#235) getMpkFromAllEndpoints");
+}
+
+// SCOUT(#228) EDIT: drop commitment and salt.
 /** A bid sealed for `submit_bid`. Keep `salt`: it opens the bid. */
 export interface SealedBid {
   timelockId: bigint;
@@ -146,6 +171,9 @@ export interface SealedBid {
   salt: Uint8Array;
 }
 
+// SCOUT(#235) EDIT: build the identity and the associated data locally, throw when the node's values differ, and compare the master public key across endpoints.
+// SCOUT(#228) EDIT: encrypt the 8-byte little-endian price only; no salt parameter and no commitment.
+// SCOUT(#217) EDIT: price is whole USD per whole base token; callers pass parsePrice output.
 /**
  * Seal a bid of `price` for `bidder` on window `(windowId, pairBcs)`.
  *
@@ -176,6 +204,7 @@ export async function sealBid(
   };
 }
 
+// SCOUT(#228) EDIT: drop salt and matchesCommitment.
 /** One bid of a window after off-chain decryption. */
 export interface OpenedBid {
   index: number;
@@ -190,6 +219,7 @@ export interface OpenedBid {
   error?: string;
 }
 
+// SCOUT(#228) EDIT: keep as a read-only preview; expect an 8-byte plaintext and drop the commitment check.
 /**
  * Decrypt every bid of a window with the revealed key.
  *
@@ -220,6 +250,7 @@ export async function decryptWindowBids(
     };
     try {
       const plaintext = decryptBid(dk, identity, ad, info.ciphertext);
+      // SCOUT(#228) EDIT: the plaintext is 8 bytes.
       if (plaintext.length !== 40) {
         throw new Error("bid plaintext is not price_le8 || salt32");
       }

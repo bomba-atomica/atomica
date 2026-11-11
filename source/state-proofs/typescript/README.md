@@ -22,6 +22,7 @@ This package provides the cryptographic primitives needed for:
 - **Receipt Verification**: Validate transaction receipts against state root
 - **Account State**: Verify account balance, nonce, storage
 
+<!-- SCOUT(#237) DOC: remove the Beacon Chain section. -->
 ### Beacon Chain
 - **Consensus verification**: Verify beacon chain blocks
 - **Validator data**: Process validator state
@@ -39,6 +40,7 @@ Uses BLS12-381 curve for pairing-based encryption:
 Identity → Hash → Point on curve → Pair with MPK → Encryption key
 ```
 
+<!-- SCOUT(#237) DOC: step 1 of the flow below fetches the state root from the beacon chain; the root now comes from the validator-certified headers on Aptos. -->
 ### State Proof Flow
 1. Fetch Ethereum state root from beacon chain
 2. Generate Merkle proof for specific account/storage
@@ -118,6 +120,7 @@ bun test
 - **Identity collisions**: Use domain separation (e.g., "auction:123")
 - **Randomness**: Uses cryptographically secure random for key generation
 
+<!-- SCOUT(#237) DOC: the first bullet below names a light client as the source of the state root. -->
 ### State Proofs
 - **State root must be trusted**: Verify source of state root (e.g., light client)
 - **Proof completeness**: Ensure all required nodes are in proof

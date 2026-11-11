@@ -207,6 +207,7 @@ describe("End-to-End Verification", () => {
         // expect(result.error).toContain("root");
     });
 
+    // SCOUT(#239) REMOVE: named for a beacon check it never makes; the case above it already verifies against the block state root.
     test("should verify proof matches beacon block execution payload", async () => {
         // This test verifies the full chain:
         // Beacon Block -> Execution Payload -> State Root -> Account Proof

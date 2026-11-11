@@ -151,6 +151,7 @@ export interface EthLockProofResult {
         windowId: string;
         /** keccak256 of the window's pair BCS */
         pairHash: string;
+        // SCOUT(#221) EDIT: deadline stays in the proven commitment but stops being a register_ethereum_lock argument; keep or drop this field in step with the SDK LockedBalanceProof type.
         /** decimal string of the lock deadline: auction::eth_lock_deadline(windowId) */
         deadline: string;
         /** storage key of LockBox.commitments[lockId] (slot 0) */
@@ -175,6 +176,7 @@ declare module "vitest/browser" {
             address: string,
             amount?: number,
         ): Promise<{ success: boolean; txHash: string }>;
+        // SCOUT(#224) ADD: declare allowTestPair here once source/atomica-web-components/vitest.config.ts registers allowTestPairCommand (a file the issue text does not name).
         setupDualChainTestnet(siweDomain?: string): Promise<DualChainTestnetInfo>;
         teardownDualChainTestnet(): Promise<{ success: boolean }>;
         setupEthereumTestnet(): Promise<EthereumTestnetInfo>;
@@ -250,6 +252,7 @@ export const teardownLocalnetCommand: BrowserCommand<[]> = async () => {
     return { success: true };
 };
 
+// SCOUT(#238) EDIT: the comment below names the registry module, which is deleted.
 /**
  * Deploy Atomica contracts to localnet.
  *
@@ -361,6 +364,20 @@ export const teardownDualChainTestnetCommand: BrowserCommand<[]> = async () => {
     return { success: true };
 };
 
+/**
+ * Add a test pair to the auction allowlist, signed by the package (deployer)
+ * account. The Move entry takes the four `Pair` fields and computes the BCS
+ * key itself. Returns the pair's BCS bytes as hex, to pass as `pair_bcs`.
+ *
+ * EXECUTION: Node.js (holds the deployer key)
+ */
+// SCOUT(#224) ADD: deployer-signed command that adds a test pair; each browser test file that uses its own PAIR_BCS today must call it before create_auction.
+export const allowTestPairCommand: BrowserCommand<
+    [baseChain: string, baseToken: string, quoteChain: string, quoteToken: string]
+> = async (): Promise<{ pairBcsHex: string }> => {
+    throw new Error("NOT_IMPLEMENTED: SCOUT(#224) allowTestPairCommand");
+};
+
 // ---------------------------------------------------------------------------
 // Minimal ABI fragments for LockBox proof generation
 // ---------------------------------------------------------------------------
@@ -370,11 +387,15 @@ const ERC20_MINT_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
 ];
 
+// SCOUT(#221) EDIT: lock() loses its deadline argument; the Locked event keeps the deadline field.
 const LOCKBOX_LOCK_ABI = [
     "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) returns (bytes32)",
     "event Locked(bytes32 indexed lockId, address indexed depositor, address indexed token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)",
 ];
 
+// SCOUT(#220) EDIT: the window id comes from the SDK currentWindowId mirror and the host clock; the doc comment's window and close wording follows the new formula.
+// SCOUT(#221) EDIT: binding.deadline stops being a lock() argument, and LockBox then rejects a window id that is closed at block.timestamp, so the host clock, the Ethereum block time and the Aptos clock must agree on the window.
+// SCOUT(#224) EDIT: the empty pair BCS default is not on the allowlist; default to the SDK launch pair constant.
 /**
  * The binding of a test lock: the current window by the wall clock (the
  * `auction::current_window_id` formula) and the pair BCS of the window the
@@ -390,6 +411,7 @@ export function testLockBinding(pairBcsHex: string = "0x"): LockBinding {
     );
 }
 
+// SCOUT(#219) EDIT: the round-trip test calls this for three depositors (a FakeETH seller and two FakeUSD bidders) bound to one window and the launch pair; that needs the pairBcsHex parameter that pull request 213 adds, and an export (it is module private today).
 /**
  * Lock `count` times and return the storage proof of each lock.
  *
@@ -445,6 +467,7 @@ async function lockAndProve(
     const binding = testLockBinding(pairBcsHex);
     const lockHashes: string[] = [];
     for (let i = 0; i < count; i++) {
+        // SCOUT(#221) EDIT: the lock call below drops the deadline parameter and the binding.deadline argument.
         const lockTx = await (
             lockBox.lock as (
                 token: string,
@@ -474,6 +497,7 @@ async function lockAndProve(
         proofBlockNumber = Math.max(proofBlockNumber, receipt.blockNumber);
     }
 
+    // SCOUT(#221) EDIT: on anvil each proof mines 12 blocks 12 seconds apart, which pushes block.timestamp ahead of the host and Aptos clocks; with a window check inside LockBox.lock that drift can close the window early on Ethereum.
     // Wait for archive proof availability (12 blocks). Mines them on anvil.
     await waitForEthBlock(provider, proofBlockNumber + 12, 300, "Lock Proof");
 
@@ -595,6 +619,7 @@ export const generateEthLockProofCommand: BrowserCommand<
     return result;
 };
 
+// SCOUT(#218) EDIT: the seller-cap test reuses this batch for 100 FakeETH seller locks; lockAmountWei must meet the new minimum lock sizes.
 /**
  * Lock `count` times in a few blocks and prove every lock at one block.
  *

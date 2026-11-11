@@ -15,6 +15,19 @@ export default defineConfig({
       },
     }),
   ],
+  // SCOUT(#236) ADD: dev proxies for the two API paths the SDK calls in a browser (network-host.ts).
+  // server: {
+  //   proxy: {
+  //     "/aptos-api": {
+  //       target: "http://127.0.0.1:8080",
+  //       rewrite: (path) => path.replace(/^\/aptos-api/, ""),
+  //     },
+  //     "/eth-api": {
+  //       target: "http://127.0.0.1:8545",
+  //       rewrite: (path) => path.replace(/^\/eth-api/, ""),
+  //     },
+  //   },
+  // },
   resolve: {
     alias: {
       "@": "/src",

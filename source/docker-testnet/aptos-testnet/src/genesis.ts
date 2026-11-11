@@ -26,11 +26,22 @@ function debug(message: string, data?: Record<string, unknown>): void {
     }
 }
 
+// SCOUT(#243) EDIT: GenesisConfig gains the registrar address that the layout's timelock_registrar field is written from.
 interface GenesisConfig {
     numValidators: number;
     chainId: number;
     workspaceDir: string;
     baseIp?: string; // Base IP for validators (default: 172.19.0.10)
+}
+
+/**
+ * Address of the auction package's timelock registrar object: the named object
+ * address of `packageAddress` and the package's fixed seed. Genesis must name it
+ * before the package is published.
+ */
+// SCOUT(#243) ADD: derive the registrar address (sha3-256 of package address, seed and the named-object scheme byte) for the genesis layout; the SDK gains the same derivation.
+export function timelockRegistrarAddress(_packageAddress: string): string {
+    throw new Error("NOT_IMPLEMENTED: SCOUT(#243) timelockRegistrarAddress");
 }
 
 /**
@@ -112,6 +123,8 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         const configDir = pathResolve(workspaceDir, "..", "config");
         const composeImage = extractImageFromCompose(configDir);
 
+        // SCOUT(#228) EDIT: the fallback digest below must move with the compose default to the image of the fork commit with the decrypt native.
+        // SCOUT(#243) EDIT: the fallback digest below must move with the compose default to the image of the fork commit with the timelock registrar.
         const genesisImage =
             process.env.IMAGE_NAME_GENESIS ||
             process.env.IMAGE_NAME ||
@@ -179,6 +192,8 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
             dockerArgs.push("-e", `ATOMICA_DEBUG_TESTNET=${process.env.ATOMICA_DEBUG_TESTNET}`);
         }
 
+        // SCOUT(#243) ADD: pass the registrar address to the script here (a new env var, derived with timelockRegistrarAddress below from the package address the testnet will publish to).
+        // SCOUT(#231) ADD: pass the epoch boundary layout values to the script here once the fork adds them.
         // Ethereum header attestation overrides (the script defaults to the
         // host's Ethereum testnet on port 8545, chain id 32382, tag latest).
         for (const varName of [

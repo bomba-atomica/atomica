@@ -1,3 +1,5 @@
+// SCOUT(#222) EDIT: the header below names two ways out of LockBox; reclaimUnpayable is a third.
+// SCOUT(#221) EDIT: the header below says a lock names its auction by deadline too; the auction key is (window id, pair hash), and LockBox computes the deadline.
 /**
  * LockBox Contract Helpers
  *
@@ -35,6 +37,7 @@ export interface LockFields {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// SCOUT(#234) EDIT: this configured address must equal the eth_proof pin before any approve or lock.
 function getLockBoxAddress(): string {
   return getChainConfig().ethereum.lockBox;
 }
@@ -77,6 +80,8 @@ async function getFakeUsdWithSigner(provider: ethers.BrowserProvider) {
   return new ethers.Contract(address, FAKE_USD_ABI, signer);
 }
 
+// SCOUT(#221) EDIT: call lock(token, amount, windowId, pairHash); LockBox computes the deadline.
+// SCOUT(#234) EDIT: assert the pin here before the lock is sent; lockFakeEth and lockFakeUsd both pass through.
 async function lockToken(
   provider: ethers.BrowserProvider,
   token: string,
@@ -89,6 +94,7 @@ async function lockToken(
     amount,
     binding.windowId,
     binding.pairHash,
+    // SCOUT(#221) REMOVE: the deadline argument.
     binding.deadline,
   );
   const receipt = await tx.wait();
@@ -98,6 +104,7 @@ async function lockToken(
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+// SCOUT(#234) EDIT: call assertEthereumConfigMatchesPin before the approve is sent.
 /**
  * Approve LockBox to spend `amount` of FakeETH on the user's behalf.
  *
@@ -117,6 +124,7 @@ export async function approveFakeEth(
   return receipt;
 }
 
+// SCOUT(#234) EDIT: refuses on a pin mismatch, through lockToken.
 /**
  * Lock `amount` of FakeETH in LockBox into the auction `binding` names
  * (see `lockBinding`).
@@ -229,6 +237,8 @@ export async function getLockedBalance(
   return total;
 }
 
+// SCOUT(#221) EDIT: the tuple below follows the final LockBox.Lock struct, with or without its deadline.
+// SCOUT(#236) EDIT: ReleaseButton calls recordOutcome and releaseByOutcome bindings that do not exist yet; the SDK unwind issue (195) adds them to this file.
 /**
  * Return an open lock to its depositor after its deadline (`LockBox.reclaim`).
  * Anyone may send it. This form carries no non-membership proof, so it works
@@ -282,6 +292,7 @@ export async function getTotalLockedEth(
 
 // ── FakeUSD bidder-collateral lock helpers (Phase 3b #87) ──────────────────────
 
+// SCOUT(#234) EDIT: call assertEthereumConfigMatchesPin before the approve is sent.
 /**
  * Approve LockBox to spend `amount` of FakeUSD on the bidder's behalf.
  *
@@ -303,6 +314,7 @@ export async function approveFakeUsd(
   return receipt;
 }
 
+// SCOUT(#234) EDIT: refuses on a pin mismatch, through lockToken.
 /**
  * Lock `amount` of FakeUSD in LockBox as bidder collateral margin, into the
  * auction `binding` names.

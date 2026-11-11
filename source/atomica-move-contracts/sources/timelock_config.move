@@ -1,3 +1,5 @@
+// SCOUT(#228) EDIT: once the unwind pull request (213) is in, its `unwind_grace_us` row and its budget test in this file drop the 10 minute opening window. Nothing here names it on `main`.
+// SCOUT(#242) DOC: the 67 percent reveal threshold in this header has no caller and disagrees with the fork's thresholds (review decision 31); the issue text lists only the five canonical docs.
 /// Atomica Timelock Configuration module.
 ///
 /// This module provides configurable timelock parameters for the Atomica

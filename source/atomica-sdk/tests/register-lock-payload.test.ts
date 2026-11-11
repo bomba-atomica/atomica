@@ -47,6 +47,8 @@ import type { Aptos } from "@aptos-labs/ts-sdk";
 
 // ── Fixture ──────────────────────────────────────────────────────────────────
 
+// SCOUT(#220) EDIT: window 83075 and deadline 1794700800 follow the old window formula; use a window id and deadline of the new one.
+// SCOUT(#221) EDIT: the proof's deadline is no longer a payload argument.
 function makeMockProof(): LockedBalanceProof {
   return {
     blockNumber: 42,
@@ -82,6 +84,7 @@ describe("getRegisterLockPayload", () => {
     );
   });
 
+  // SCOUT(#233) EDIT: FakeETH stays the default; add the FakeUSD case.
   it("includes FakeETH as the type argument", () => {
     const payload = getRegisterLockPayload(
       makeMockProof(),
@@ -90,6 +93,7 @@ describe("getRegisterLockPayload", () => {
     expect(payload.typeArguments![0]).toContain("::lock_receipt::FakeETH");
   });
 
+  // SCOUT(#221) EDIT: eight arguments once the deadline goes; the proof indexes 7 and 8 below become 6 and 7.
   it("has exactly 9 function arguments matching the Move signature", () => {
     // Move entry function args (excluding implicit `account: &signer`):
     //   0: block_number  (u64)
@@ -106,6 +110,8 @@ describe("getRegisterLockPayload", () => {
     expect(payload.functionArguments!.length).toBe(9);
   });
 
+  // SCOUT(#221) EDIT: the deadline at index 6 is no longer sent.
+  // SCOUT(#220) EDIT: the pinned "83075" and "1794700800" change with the fixture.
   it("sends the lock fields Aptos hashes into the commitment (indexes 3 to 6)", () => {
     const args = getRegisterLockPayload(makeMockProof()).functionArguments!;
     expect(args[3]).toBe("1000000000000000000");
@@ -224,6 +230,10 @@ describe("waitForCertifiedBlock", () => {
 
 // ── getCreateAuctionPayload ───────────────────────────────────────────────────
 
+// SCOUT(#238) EDIT: no mpk argument.
+// SCOUT(#241) EDIT: no minimum price argument.
+// SCOUT(#243) EDIT: no timelock id argument.
+// SCOUT(#217) EDIT: MIN_PRICE = 500_000n reads as micro-dollars; use a whole-USD value while the field exists.
 describe("getCreateAuctionPayload", () => {
   const WINDOW_ID = 41n;
   const PAIR_BCS = new Uint8Array([1, 2, 3]);
@@ -265,6 +275,7 @@ describe("getCreateAuctionPayload", () => {
 
 // ── register_timelock ─────────────────────────────────────────────────────────
 
+// SCOUT(#243) REMOVE: the builder is deleted.
 describe("getRegisterTimelockPayload", () => {
   it("targets the framework register_timelock with the deadline in microseconds", () => {
     const payload = getRegisterTimelockPayload(
@@ -275,6 +286,7 @@ describe("getRegisterTimelockPayload", () => {
   });
 });
 
+// SCOUT(#243) EDIT: keep or remove with timelockIdFromEvents.
 describe("timelockIdFromEvents", () => {
   it("reads timelock_id from the TimelockRegistrationEvent", () => {
     const id = timelockIdFromEvents([
@@ -289,4 +301,28 @@ describe("timelockIdFromEvents", () => {
       /no TimelockRegistrationEvent/,
     );
   });
+});
+
+describe("planned tests (SCOUT)", () => {
+  it.todo(
+    "SCOUT(#233) getRegisterLockPayload with asset FakeUSD has the lock_receipt::FakeUSD type argument, and FakeETH with no asset",
+  );
+  it.todo(
+    "SCOUT(#221) getRegisterLockPayload sends eight arguments and no deadline",
+  );
+  it.todo(
+    "SCOUT(#238) getCreateAuctionPayload builds no mpk argument (five arguments only while min_price and timelock_id remain)",
+  );
+  it.todo(
+    "SCOUT(#241) getCreateAuctionPayload has no price value between the lock id and the timelock id",
+  );
+  it.todo(
+    "SCOUT(#243) the create_auction payload has no timelock id: five arguments if it lands before the mpk (238) and reserve price (241) removals, three after all of them",
+  );
+  it.todo(
+    "SCOUT(#243) the payloads module exports no registerTimelock and no getRegisterTimelockPayload",
+  );
+  it.todo(
+    "SCOUT(#243) timelockRegistrarAddress equals object::create_object_address of the module address and the seed",
+  );
 });

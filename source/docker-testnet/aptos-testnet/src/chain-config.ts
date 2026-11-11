@@ -1,3 +1,5 @@
+// SCOUT(#239) REMOVE: whole file; the issue text misses it. It is an unused copy of the SDK chain config (no importer, not exported from index.ts or browser-index.ts).
+// SCOUT(#235) EDIT: if this copy stays, its ChainConfig must gain the optional extra Aptos endpoints that the SDK type gains.
 /// <reference types="vite/client" />
 
 export type ChainConfig = {

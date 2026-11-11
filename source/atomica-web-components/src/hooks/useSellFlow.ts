@@ -22,6 +22,7 @@ import {
   reclaimLock,
 } from "@atomica/sdk/ethereum";
 import { getChainConfig } from "@atomica/sdk/chain-config";
+// SCOUT(#243) REMOVE: drop the registerTimelock import.
 import {
   getRegisterLockPayload,
   getCreateAuctionPayload,
@@ -50,6 +51,7 @@ interface PersistedState {
   windowId?: string; // bigint as string
   lockId?: string; // hex string
   auctionEndTime?: number;
+  // SCOUT(#241) EDIT: keep reading saved state that still has minPrice, and ignore it.
   minPrice?: string; // bigint as string
   amount?: string; // bigint as string
   unlockTime?: number;
@@ -67,6 +69,8 @@ export interface SellFlowState {
   windowId?: bigint;
   lockId?: string;
   auctionEndTime?: number;
+  // SCOUT(#241) REMOVE: minPrice leaves the flow state.
+  // SCOUT(#217) EDIT: holds micro-dollars today (Step2Lock parses with 6 decimals).
   minPrice?: bigint;
   amount?: bigint;
   /** The lock's deadline (unix seconds): after it, anyone may reclaim it to the seller */
@@ -76,12 +80,14 @@ export interface SellFlowState {
 }
 
 export interface SellFlowActions {
+  // SCOUT(#241) EDIT: lockEth takes the amount only.
   /** Step 2: approve + lock FakeETH. amount and minPrice in wei. */
   lockEth: (amount: bigint, minPrice: bigint) => Promise<void>;
   /** Step 4: generate storage proof for the confirmed lock block */
   generateProof: () => Promise<void>;
   /** Step 5: submit proof to Aptos → creates LockReceipt */
   submitProof: () => Promise<void>;
+  // SCOUT(#243) EDIT: createAuction sends one transaction.
   /** Step 6: register the window timelock, then create the auction (consumes the LockReceipt) */
   createAuction: () => Promise<void>;
   /** Return the lock to the seller after its deadline (LockBox.reclaim) */
@@ -94,6 +100,7 @@ export interface SellFlowActions {
 
 const CONFIRMATION_TARGET = 1; // Demo: 1 block; MVP: 64
 
+// SCOUT(#224) EDIT: SELL_PAIR_BCS becomes the SDK launch pair constant; a lock made with the empty bytes cannot join a window.
 /** Pair BCS of the sell flow's window (scaffold: empty, as in createAuction). */
 const SELL_PAIR_BCS = new Uint8Array(0);
 
@@ -147,6 +154,7 @@ export function useSellFlow(
       blockConfirmed: false, // will be re-checked on mount
       lockId: persisted.lockId,
       auctionEndTime: persisted.auctionEndTime,
+      // SCOUT(#241) REMOVE: restore of minPrice (first of two copies of this block).
       minPrice: persisted.minPrice ? BigInt(persisted.minPrice) : undefined,
       amount: persisted.amount ? BigInt(persisted.amount) : undefined,
       unlockTime: persisted.unlockTime,
@@ -182,6 +190,7 @@ export function useSellFlow(
         blockConfirmed: false,
         lockId: persisted.lockId,
         auctionEndTime: persisted.auctionEndTime,
+        // SCOUT(#241) REMOVE: restore of minPrice (second copy).
         minPrice: persisted.minPrice ? BigInt(persisted.minPrice) : undefined,
         amount: persisted.amount ? BigInt(persisted.amount) : undefined,
         unlockTime: persisted.unlockTime,
@@ -205,6 +214,7 @@ export function useSellFlow(
       windowId: state.windowId?.toString(),
       lockId: state.lockId,
       auctionEndTime: state.auctionEndTime,
+      // SCOUT(#241) REMOVE: minPrice is no longer persisted.
       minPrice: state.minPrice?.toString(),
       amount: state.amount?.toString(),
       unlockTime: state.unlockTime,
@@ -219,6 +229,7 @@ export function useSellFlow(
     state.windowId,
     state.lockId,
     state.auctionEndTime,
+    // SCOUT(#241) REMOVE: minPrice leaves the persisted-state dependency list.
     state.minPrice,
     state.amount,
     state.unlockTime,
@@ -270,6 +281,9 @@ export function useSellFlow(
     setState((s) => ({ ...s, error, loading: false }));
   }, []);
 
+  // SCOUT(#241) EDIT: drop the minPrice parameter.
+  // SCOUT(#234) EDIT: no code change expected: approveFakeEth and lockFakeEth reject on a LockBox or token pin mismatch and setError shows the message.
+  // SCOUT(#218) EDIT: a lock below the new minimum, or a seller lock past the cap, locks on Ethereum and then aborts in create_auction; pre-check with the SDK limits view reader, or the lock waits for reclaim.
   const lockEth = useCallback(
     async (amount: bigint, minPrice: bigint) => {
       if (!account || !window.ethereum) return;
@@ -282,6 +296,8 @@ export function useSellFlow(
         setState((s) => ({ ...s, loading: true }));
         await approveFakeEth(provider, amount);
 
+        // SCOUT(#220) EDIT: no code change: the window id follows the SDK currentWindowId on the client clock.
+        // SCOUT(#221) EDIT: the binding loses the caller deadline; LockBox.lock reverts for a closed window or one more than one ahead, so a wrong client clock fails here.
         // Step 2: Lock into the current window. Its deadline is
         // auction::eth_lock_deadline(windowId): after it, anyone may
         // reclaim the lock to the seller.
@@ -292,6 +308,7 @@ export function useSellFlow(
         const receipt = await lockFakeEth(provider, amount, binding);
         const lock = lockFromReceipt(receipt);
         const lockNonce = lock.nonce;
+        // SCOUT(#221) EDIT: the Locked event still carries the computed deadline; no change if lockFromReceipt keeps the field.
         const unlockTime = Number(lock.deadline);
 
         setState((s) => ({
@@ -302,6 +319,7 @@ export function useSellFlow(
           lockNonce,
           windowId: lock.windowId,
           amount,
+          // SCOUT(#241) REMOVE: lockEth stores no minPrice.
           minPrice,
           unlockTime,
           loading: false,
@@ -336,6 +354,8 @@ export function useSellFlow(
       // Aptos checks the proof against the root the validators certified, so
       // prove at a certified block that covers the lock.
       const proofBlock = await waitForCertifiedBlock(state.lockBlock);
+      // SCOUT(#221) EDIT: lockBinding spreads a deadline into the proof input; follow the SDK shape.
+      // SCOUT(#233) EDIT: the bidder reuses this proof step with the FakeUSD token; extract it so both flows share it.
       const proof = await generateLockedBalanceProof(
         provider,
         config.ethereum.lockBox,
@@ -344,6 +364,8 @@ export function useSellFlow(
         state.lockNonce,
         {
           amount: state.amount,
+          // SCOUT(#221) EDIT: the proof input takes the lock fields; follow the SDK lockBinding shape once the caller deadline goes.
+          // SCOUT(#224) EDIT: SELL_PAIR_BCS becomes the launch pair, so this binding and the lock stay equal.
           ...lockBinding(state.windowId, SELL_PAIR_BCS),
         },
         proofBlock,
@@ -380,6 +402,8 @@ export function useSellFlow(
 
     try {
       const proof = proofRef.current;
+      // SCOUT(#233) EDIT: getRegisterLockPayload gains an asset parameter; FakeETH stays the default here.
+      // SCOUT(#221) EDIT: the payload drops the deadline argument inside the SDK; no change here.
       const payload = getRegisterLockPayload(proof);
       await submitNativeTransaction(aptos, account, payload);
 
@@ -400,6 +424,7 @@ export function useSellFlow(
   }, [account, setError]);
 
   const createAuction = useCallback(async () => {
+    // SCOUT(#241) EDIT: this guard returns early when minPrice is missing or zero; drop the minPrice test or createAuction never runs.
     if (!account || !state.minPrice || !state.lockId) return;
     setState((s) => ({
       ...s,
@@ -410,16 +435,21 @@ export function useSellFlow(
 
     try {
       const lockIdBytes = ethers.getBytes(state.lockId);
+      // SCOUT(#220) EDIT: the fallback window id from the client clock follows the SDK formula.
       // The window the lock is bound to. Older persisted state has none:
       // fall back to the current_window_id formula on the client clock.
       const windowId =
         state.windowId ??
         currentWindowId(BigInt(Math.floor(Date.now() / 1000)));
+      // SCOUT(#224) EDIT: use the launch pair.
       // pairBcs: empty bytes for scaffold
       const pairBcs = SELL_PAIR_BCS;
+      // SCOUT(#238) REMOVE: the mpk argument.
       // MPK: empty bytes for scaffold (create_auction does not read it yet)
       const mpk = new Uint8Array(0);
 
+      // SCOUT(#243) REMOVE: registerTimelock and the local one hour auctionEndTime; read the window deadline from the new view instead.
+      // SCOUT(#225) EDIT: this call aborts with E_NOT_REGISTRAR once the validator image has the registrar check.
       // create_auction records the timelock that opens the window's bids, so
       // register it first. Its deadline is the auction end.
       const auctionEndTime = Math.floor(Date.now() / 1000) + 3600;
@@ -428,6 +458,9 @@ export function useSellFlow(
         BigInt(auctionEndTime) * 1_000_000n,
       );
 
+      // SCOUT(#241) EDIT: drop state.minPrice.
+      // SCOUT(#243) EDIT: drop timelockId.
+      // SCOUT(#238) EDIT: drop mpk.
       const payload = getCreateAuctionPayload(
         windowId,
         pairBcs,
@@ -447,6 +480,7 @@ export function useSellFlow(
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
+    // SCOUT(#241) EDIT: drop state.minPrice from this dependency list.
   }, [account, state.minPrice, state.lockId, state.windowId, setError]);
 
   const cancelAndUnlock = useCallback(async () => {
@@ -462,6 +496,8 @@ export function useSellFlow(
 
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
+      // SCOUT(#221) EDIT: reclaim still takes the full lock struct with its deadline; follow the SDK lockBinding shape.
+      // SCOUT(#222) EDIT: reclaim keeps its rule; a lock whose leaf is unpayable needs reclaimUnpayable, which no UI calls.
       // Reverts before the lock deadline (DeadlineNotReached), and once the
       // window's outcome is recorded on Ethereum (that path is releaseByOutcome).
       await reclaimLock(provider, {
@@ -469,6 +505,8 @@ export function useSellFlow(
         token: getChainConfig().ethereum.fakeETH,
         nonce: state.lockNonce,
         amount: state.amount,
+        // SCOUT(#221) EDIT: reclaim passes the full Lock struct; its deadline is the computed lockDeadline(windowId), which lockBinding must still return.
+        // SCOUT(#224) EDIT: the reclaim binding must use the same pair bytes as the lock, so change both together.
         ...lockBinding(state.windowId, SELL_PAIR_BCS),
       });
 

@@ -1,3 +1,4 @@
+// SCOUT(#238) REMOVE: whole file.
 /**
  * Props for {@link FeeRebateDisplay}.
  *

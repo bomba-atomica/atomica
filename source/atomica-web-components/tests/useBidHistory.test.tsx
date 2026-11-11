@@ -91,6 +91,7 @@ describe("useBidHistory", () => {
       screen.getByTestId("entries-json").textContent!,
     );
     expect(entries[0].auctionId).toBe("0xseller1");
+    // SCOUT(#217) EDIT: recorded price fixture in micro-dollar style.
     expect(entries[0].clearingPrice).toBe("100000000");
   });
 

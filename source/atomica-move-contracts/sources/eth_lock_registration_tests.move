@@ -24,6 +24,7 @@ module atomica::eth_lock_registration_tests {
     const FAKE_USD: vector<u8> = x"e7f1725E7734CE288F8367e1Bb143E90bb3F0512";
     const USER: vector<u8> = x"f39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
     const TEN_ETH: u256 = 10000000000000000000;
+    // SCOUT(#220) EDIT: regenerate the anvil fixture. Under the new formula window 83075 has another close, so WINDOW_ID, DEADLINE, COMMITMENT, both state roots and all four proofs change. No script in the repo makes this fixture.
     /// The window the fixture lock is bound to.
     const WINDOW_ID: u64 = 83075;
     /// eth_lock_deadline(WINDOW_ID): window close 1794441600 plus 72 hours.
@@ -94,6 +95,7 @@ module atomica::eth_lock_registration_tests {
         lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
     }
 
+    // SCOUT(#221) EDIT: `register_6`, its 14 callers, the 4 direct `register_ethereum_lock` calls and the `verify_lock` call of this file drop the deadline argument.
     /// Register the fixture lock with the given fields, proven at block 6.
     fun register_6(carrier: &signer, amount: u256, window_id: u64, pair_hash: vector<u8>, deadline: u64) {
         lock_receipt::register_ethereum_lock<FakeETH>(
@@ -114,6 +116,9 @@ module atomica::eth_lock_registration_tests {
         assert!(auction::pair_hash(b"") == PAIR_HASH, 3);
     }
 
+    // SCOUT(#220) EDIT: `eth_lock_deadline_is_window_close_plus_delay` asserts four closes of the old formula (window 2 then closes at 114 300 s).
+    // SCOUT(#220) TEST: window_close_secs_follows_0745_and_1615_utc (27 900, 58 500, 114 300 and 144 900 s for windows 0 to 3)
+    // SCOUT(#221) TEST: window_close_and_lock_deadline_match_the_shared_table (the same table as the forge and SDK tests)
     #[test]
     fun eth_lock_deadline_is_window_close_plus_delay() {
         assert!(eth_proof::window_close_secs(WINDOW_ID) == 1794441600, 0);
@@ -138,6 +143,7 @@ module atomica::eth_lock_registration_tests {
 
     // ==================== register_ethereum_lock ====================
 
+    // SCOUT(#221) EDIT: the `auction_key` assert at the end of `registers_lock_proven_at_certified_header` loses the deadline argument.
     #[test(framework = @0x1, atomica = @atomica, carrier = @0x123)]
     fun registers_lock_proven_at_certified_header(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
@@ -173,6 +179,7 @@ module atomica::eth_lock_registration_tests {
         register_6(carrier, TEN_ETH - 1, WINDOW_ID, PAIR_HASH, DEADLINE);
     }
 
+    // SCOUT(#221) EDIT: `rejects_wrong_deadline` becomes a commitment mismatch in `verify_lock`. It needs a proof of a commitment made with another deadline, and the new LockBox cannot make one: keep today's fixture for it.
     // Wrong deadline: any deadline but eth_lock_deadline(window_id) is refused,
     // so every registered lock of an auction shares one deadline.
     #[test(framework = @0x1, atomica = @atomica, carrier = @0x123)]

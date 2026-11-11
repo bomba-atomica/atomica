@@ -52,8 +52,12 @@ import { ethers } from "ethers";
 import { getCreateAuctionPayload } from "@atomica/sdk/aptos";
 import { submitNativeTransaction } from "@atomica/sdk";
 
+// SCOUT(#241) REMOVE: MIN_PRICE and every minPrice argument and prop in this file.
+// SCOUT(#217) EDIT: a price constant (100 raw units, shown as $0.00 below).
 const MIN_PRICE = 100n;
+// SCOUT(#224) EDIT: these bytes are not on the allowlist; use the SDK launch pair, and keep unlisted bytes only for the new abort case.
 const PAIR_BCS = new TextEncoder().encode("07-create-auction");
+// SCOUT(#243) EDIT: the test no longer picks the deadline; it needs the test cap of open question 1.
 /** The timelock deadline is far enough out that the window stays open. */
 const DEADLINE_AHEAD_US = 600_000_000n;
 
@@ -157,6 +161,8 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
       ethProof.proof,
     );
 
+    // SCOUT(#243) REMOVE: the manual timelock registration; create_auction registers it.
+    // SCOUT(#225) EDIT: this operator registration aborts with E_NOT_REGISTRAR on a validator image with the registrar check.
     // create_auction needs a Pending timelock in the current epoch.
     await waitForTimelockKey(aptosGlobal);
     timelockId = await registerTimelockDirect(
@@ -190,6 +196,8 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     ).toBe(RECEIPT_ACTIVE);
 
     const onCreateAuction = async () => {
+      // SCOUT(#241) EDIT: drop MIN_PRICE here and in the third case.
+      // SCOUT(#243) EDIT: drop timelockId here and in the third case.
       const txHash = await createAuctionDirect(
         aptosGlobal,
         fixture.eth.seller,
@@ -223,6 +231,7 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     );
     expect(document.querySelector(".text-red-400")).toBeNull();
 
+    // SCOUT(#243) EDIT: expect the timelock id that create_auction registered (ibe_config::get_next_timelock_id before the call).
     expect(
       await getWindowStatus(aptosGlobal, moduleAddr, windowId, PAIR_BCS),
     ).toEqual({ timelockId, revealFinal: false, refunded: false });
@@ -233,6 +242,8 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
 
   // ── Test 2: amount and min price displayed ─────────────────────────────────
 
+  // SCOUT(#241) REMOVE: the min price half of this case.
+  // SCOUT(#217) EDIT: it asserts $0.00 for a price of 100 raw units.
   it("shows formatted amount and min price in description text", () => {
     render(
       <Step7Auction
@@ -316,6 +327,9 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     const mpk = new Uint8Array(0);
 
     const onCreateAuction = async () => {
+      // SCOUT(#241) EDIT: no minPrice argument.
+      // SCOUT(#243) EDIT: no timelockId argument.
+      // SCOUT(#238) EDIT: no mpk argument.
       // getCreateAuctionPayload(windowId, pairBcs, lockId, minPrice, timelockId, mpkBytes)
       const payload = getCreateAuctionPayload(
         0n,                // windowId
@@ -346,4 +360,10 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
       { timeout: 30_000 },
     );
   }, 60_000);
+
+  it.todo("SCOUT(#224) create_auction through the UI with the SDK launch pair constant creates the window");
+  it.todo("SCOUT(#224) create_auction with bytes that are not on the allowlist fails with the new abort code");
+  it.todo("SCOUT(#243) the window timelock deadline equals the window_deadline_us view and the TimelockRegistrationEvent sender is the registrar address");
+  it.todo("SCOUT(#243) the SDK registrar address equals auction::timelock_registrar_address and 0x1::ibe_config::timelock_registrar");
+  it.todo("SCOUT(#243) register_timelock from the operator account fails with E_NOT_REGISTRAR");
 });

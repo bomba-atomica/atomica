@@ -55,6 +55,7 @@ import {
 const WINDOW_ID = 7n;
 const PAIR_BCS = new Uint8Array([0x01, 0x02, 0x03, 0x04]);
 const CIPHERTEXT = new Uint8Array(190).fill(0xbb); // V2 bid ciphertext BCS(vk, U, nonce, C, sig)
+// SCOUT(#228) REMOVE: the commitment fixture.
 const COMMITMENT = new Uint8Array(32).fill(0xaa); // price commitment
 const COLLATERAL_LOCK_ID = new Uint8Array(32).fill(0xcc);
 const QUANTITY = 1_000_000_000_000_000_000n;
@@ -67,6 +68,7 @@ const SALTS = [
 
 // ─── getBidPayload ─────────────────────────────────────────────────────────────
 
+// SCOUT(#228) EDIT: the cases below pin six arguments; getBidPayload has five and no commitment.
 describe("getBidPayload", () => {
   const build = () =>
     getBidPayload(
@@ -158,6 +160,7 @@ describe("getSettlePayload", () => {
 
 // ─── getSubmitCleartextPayload ─────────────────────────────────────────────────
 
+// SCOUT(#228) REMOVE: the builder is deleted.
 describe("getSubmitCleartextPayload", () => {
   it("targets auction::submit_cleartext_and_clear", () => {
     const payload = getSubmitCleartextPayload(
@@ -207,6 +210,7 @@ describe("getSubmitCleartextPayload", () => {
 
 // ─── getOpenBidPayload / getFinalizeRevealPayload / getRefundExpiredWindowPayload
 
+// SCOUT(#228) EDIT: remove the open_bid and finalize_reveal cases and keep the refund case.
 describe("open, finalize and refund payloads", () => {
   it("getOpenBidPayload targets auction::open_bid with 5 arguments", () => {
     const payload = getOpenBidPayload(
@@ -243,4 +247,19 @@ describe("open, finalize and refund payloads", () => {
     expect(payload.function).toMatch(/::auction::refund_expired_window$/);
     expect(payload.functionArguments).toEqual([WINDOW_ID, PAIR_BCS]);
   });
+});
+
+describe("planned tests (SCOUT)", () => {
+  it.todo(
+    "SCOUT(#228) getBidPayload has five function arguments and no commitment",
+  );
+  it.todo(
+    "SCOUT(#228) getOpenBidsPayload targets auction::open_bids with the window id, the pair bytes and max_bids",
+  );
+  it.todo(
+    "SCOUT(#236) the payloads module exports no getClaimMintPayload and no submitClaim",
+  );
+  it.todo(
+    "SCOUT(#224) LAUNCH_PAIR_BCS equals the BCS of the launch Pair (ethereum, FakeETH, aptos, FakeUSD)",
+  );
 });

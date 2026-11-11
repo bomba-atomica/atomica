@@ -10,6 +10,7 @@ import { Step5Submit } from "./steps/Step5Submit";
 import { Step7Auction } from "./steps/Step7Auction";
 import { Step8Monitor } from "./steps/Step8Monitor";
 
+// SCOUT(#236) EDIT: SellFlow gets exported from the package index and mounted in the demo.
 export function SellFlow() {
   const { account, connect } = useWallet();
   const { ethBalances } = useBalances();
@@ -67,6 +68,7 @@ export function SellFlow() {
           loading={flow.loading}
           error={flow.error}
           amount={flow.amount}
+          // SCOUT(#241) REMOVE: minPrice prop.
           minPrice={flow.minPrice}
           onCreateAuction={flow.createAuction}
           unlockTime={flow.unlockTime}
@@ -74,9 +76,11 @@ export function SellFlow() {
       ) : (
         <Step8Monitor
           amount={flow.amount}
+          // SCOUT(#241) REMOVE: minPrice prop.
           minPrice={flow.minPrice}
           auctionEndTime={flow.auctionEndTime}
           unlockTime={flow.unlockTime}
+          // SCOUT(#236) EDIT: pass windowId and pairBcs; without them Step8Monitor never renders the settle or release step.
           sellerAddress={account}
           onCancelAndUnlock={flow.cancelAndUnlock}
           loading={flow.loading}

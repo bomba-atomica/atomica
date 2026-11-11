@@ -51,6 +51,7 @@ export function useAptosBalances(
       // The Atomica address is deterministically derived from the Ethereum address,
       // so users get a single keypair that works across both chains.
       const derived = await getDerivedAddress(ethAddress.toLowerCase());
+      // SCOUT(#238) EDIT: no code change: the SDK check requires the registry module; if the Move package drops it before the SDK list changes, this hook reports the contracts as missing.
       const contractsDeployed = await areContractsDeployed();
 
       // Existence check: getAccountInfo throws for uninitialised addresses.

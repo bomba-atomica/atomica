@@ -1,3 +1,5 @@
+<!-- SCOUT(#239) DOC: wholly superseded: a README snapshot of the older Aptos testnet SDK that this issue deletes; archive it or replace it with the aptos-testnet README. -->
+
 # Aptos Docker Testnet - TypeScript SDK
 
 Production-like Aptos testnet for local development and testing. Runs 1-7 validators with full consensus, block production, and **production-like account funding**.

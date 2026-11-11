@@ -3,6 +3,9 @@ module atomica::integration_tests {
     use std::vector;
     use aptos_framework::timestamp;
 
+    // SCOUT(#218) TEST: unwind_at_both_caps_returns_every_lock (`unwind` exists only in the unwind pull request (213))
+    // SCOUT(#218) TEST: refund_at_both_caps_releases_every_lock
+    // SCOUT(#238) REMOVE: the commented-out tests of this file and `get_golden_proof_10_faketh`; they call a `register_ethereum_lock` signature that no longer exists. On `main` this file runs no test.
     // NOTE: These integration tests use REAL Ethereum MPT proofs from golden_vectors.json
     // located in /home/lucas/atomica/lib/ethereum-fixtures/golden_vectors.json
     //

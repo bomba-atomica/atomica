@@ -154,6 +154,8 @@ async function main() {
     console.log("   ✅ Approved");
 
     console.log("   Locking tokens...");
+    // SCOUT(#221) EDIT: LockBox.lock loses the deadline argument.
+    // SCOUT(#224) EDIT: bind the lock to the launch pair, not to empty bytes.
     // Bound to the current window, empty pair BCS, deadline
     // auction::eth_lock_deadline(window) (see @atomica/sdk lock-binding).
     const binding = lockBinding(

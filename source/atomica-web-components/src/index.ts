@@ -6,7 +6,10 @@ export { AccountStatus } from "./components/AccountStatus";
 export { NetworkStatus } from "./components/NetworkStatus";
 export { TxButton } from "./components/TxButton";
 export { SettleButton } from "./components/SettleButton";
+// SCOUT(#236) REMOVE: drop the ClaimButton export with the component.
+// SCOUT(#236) ADD: export AuctionRevealer, SellFlow and ReleaseButton here; SellFlow pulls @atomica/sdk/ethereum/proofs (Node-only dependencies) into every consumer of this index, so check the demo browser test first.
 export { ClaimButton } from "./components/ClaimButton";
+// SCOUT(#238) REMOVE: drop the FeeRebateDisplay export.
 export { FeeRebateDisplay } from "./components/FeeRebateDisplay";
 export { BidHistory } from "./components/BidHistory";
 export type { BidHistoryEntry } from "./components/BidHistory";
@@ -14,8 +17,12 @@ export type { BidHistoryEntry } from "./components/BidHistory";
 export { useTokenBalances } from "./hooks/useTokenBalances";
 export { useBidHistory } from "./hooks/useBidHistory";
 export type { UseBidHistoryResult } from "./hooks/useBidHistory";
+// SCOUT(#238) REMOVE: drop the useFeeRebate and FeeRebateResult exports.
 export { useFeeRebate } from "./hooks/useFeeRebate";
 export type { FeeRebateResult } from "./hooks/useFeeRebate";
+// SCOUT(#235) ADD: export saveBidOpening, loadBidOpening and clearBidOpening (stubs in storage/bidStorage.ts).
+// SCOUT(#228) REMOVE: the bid opening exports that the salt issue (235) adds go away with the salt.
+// SCOUT(#238) EDIT: saveBidPrice has no reader once useFeeRebate is gone (no component calls loadBidPrice today).
 export {
   saveBidPrice,
   loadBidPrice,

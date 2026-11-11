@@ -213,6 +213,8 @@ export class EthereumDockerTestnet {
       "10",
       "--balance",
       "1000",
+      // SCOUT(#219) EDIT: the comment below is stale (the Docker genesis has ELECTRA_FORK_EPOCH=0, Prague on the EL); anvil must start on prague for the EIP-2537 precompiles that AptosLightClient needs.
+      // SCOUT(#236) EDIT: the happy-path release step on the anvil tier needs anvil on prague; neither issue text names this file.
       // The Docker chain runs Deneb with Electra disabled, which is Cancun on the EL.
       "--hardfork",
       "cancun",
@@ -631,6 +633,7 @@ export class EthereumDockerTestnet {
     throw new Error(`Timeout waiting for block ${targetBlock}`);
   }
 
+  // SCOUT(#221) EDIT: anvil_mine with a 12 second interval moves anvil's clock ahead of the host clock for good; once LockBox.lock checks the window id against block.timestamp, that drift decides which window is open on Ethereum.
   /**
    * Advance the chain by `count` blocks.
    *

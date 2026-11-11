@@ -85,6 +85,9 @@ done
 # timelock_dkg_enabled: true turns the timelock DKG on at genesis (atomica-aptos
 # layout flag, issue 155). Its default chunky DKG config and validator
 # transactions are already on for CLI genesis.
+# SCOUT(#225) EDIT: once the pinned fork revision has the registrar rule, the layout below must set timelock_registrar, or every register_timelock call on this testnet aborts (unset never means open).
+# SCOUT(#243) EDIT: add timelock_registrar to the layout below: the named object address of the package address and the fixed seed, passed in as an env var by genesis.ts (this script runs in the validator image and cannot hash sha3-256 itself).
+# SCOUT(#231) EDIT: epoch_duration_secs: 86400 and the "first epoch ends at the first block" note above change when epochs end at fixed UTC times; the layout below then needs the boundary values, chosen so no live test registers a timelock within 25 minutes of an epoch end.
 echo "Step 2/6: Creating layout.yaml..."
 cat > layout.yaml <<EOF
 ---

@@ -620,6 +620,7 @@ export class DockerTestnet {
         throw new Error("Timeout waiting for blocks");
     }
 
+    // SCOUT(#238) EDIT: the example in the comment below calls registry::initialize; it needs no edit once the removal issue (239) deletes this SDK.
     /**
      * Deploy Move contracts using aptos CLI from within the validator container.
      *

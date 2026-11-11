@@ -6,6 +6,8 @@ Status: `live`
 
 Full-featured Aptos testnet running in Docker with production-like account funding.
 
+<!-- SCOUT(#239) DOC: this README documents the old SDK throughout: the @atomica/docker-testnet import here and under Usage Examples, the typescript-sdk links under Documentation (two of them point at files that do not exist), the Directory Structure tree with validator-config.yaml, and the Installation path. -->
+
 ## Quick Start
 
 ```typescript
@@ -106,6 +108,8 @@ Runtime Phase:
   Validators → New Accounts: X APT (TRANSFER) ← Production-like!
 ```
 
+<!-- SCOUT(#239) DOC: the tree below lists config/validator-config.yaml and typescript-sdk/, both deleted; aptos-testnet/ and ethereum-testnet/ are missing from it. -->
+
 ## Directory Structure
 
 ```
@@ -188,6 +192,8 @@ console.log(`Epoch: ${info.epoch}, Block: ${info.block_height}`);
 | Minting        | None (after genesis)  | None (after bootstrap)           |
 | Magic accounts | Don't exist           | Only for bootstrap               |
 | Code behavior  | Standard transfers    | **Identical** standard transfers |
+
+<!-- SCOUT(#239) DOC: the install path below is the deleted SDK; the acceptance grep matches it. -->
 
 ## Installation
 

@@ -1,3 +1,4 @@
+// SCOUT(#237) REMOVE: whole file (beacon light client test).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, test, mock, spyOn, afterEach } from "bun:test";
 import { syncLightClient, type LightClientConfig } from "../../src/beacon/cli";

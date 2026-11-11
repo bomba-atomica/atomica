@@ -33,6 +33,7 @@ const DEFAULT_UI_BRIDGE_CONFIG: BridgeConfig = {
     _env.VITE_CONTRACT_ADDRESS ??
     "0x0000000000000000000000000000000000000000000000000000000000000000",
   ethRpcUrl: _env.VITE_ETH_RPC_URL ?? "http://localhost:8545",
+  // SCOUT(#234) EDIT: a second LockBox address source (VITE_LOCK_BOX_ADDRESS, not getChainConfig); read-only, so no pin check is needed, but the SDK unwind issue (195) should read getChainConfig here.
   lockBoxAddress:
     _env.VITE_LOCK_BOX_ADDRESS ?? "0x0000000000000000000000000000000000000000",
   // The UI does not have a relayer private key — settlement is relayer-driven.
@@ -136,6 +137,7 @@ export function SettlementStatus({
                 key={i}
                 className="rounded border border-emerald-900/40 bg-emerald-950/20 px-2 py-1.5 text-xs text-emerald-400"
               >
+                {/* SCOUT(#217) EDIT: clearing price shown as a raw integer; use formatPrice (the SDK unwind issue (195) also rewrites this panel). */}
                 <span className="font-mono">
                   Window {ev.windowId.toString()} — {ev.winnerCount.toString()}{" "}
                   winner(s), clearing price {ev.clearingPrice.toString()}

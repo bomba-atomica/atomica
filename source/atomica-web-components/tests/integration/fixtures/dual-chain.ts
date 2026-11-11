@@ -58,6 +58,8 @@ export interface EthFixture {
   /** EVM chain ID. */
   chainId: number;
   /** Deployed contract addresses. */
+  // SCOUT(#219) EDIT: the dual-chain testnet will deploy AptosLightClient and a LockBox wired to it; expose the light client address here.
+  // SCOUT(#236) EDIT: the release browser test needs that address, and a validator image that serves /v1/atomica/event_proof.
   contracts: {
     fakeETH: string;
     fakeUSD: string;
@@ -136,6 +138,8 @@ export async function setupIntegrationFixture(): Promise<IntegrationFixture> {
     },
   };
 
+  // SCOUT(#234) EDIT: the pin check compares this config with eth_proof::get_config; the fixture pins the same LockBox and tokens, so live tests pass unchanged.
+  // SCOUT(#235) EDIT: the chain config gains optional extra Aptos endpoints; this fixture has one node URL.
   // Configure the app to use testnet addresses
   (
     window as unknown as {

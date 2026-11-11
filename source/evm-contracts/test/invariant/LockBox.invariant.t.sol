@@ -21,8 +21,10 @@ contract LockBoxHandler is Test {
     FakeUSD public fakeUSD;
 
     address[3] internal actors = [address(0xA11CE), address(0xB0B), address(0xCA401)];
+    // SCOUT(#221) EDIT: fixed window ids 10 and 11 no longer lock; use `lockBox.currentWindowId()` and the next window.
     uint64[2] internal windows = [uint64(10), uint64(11)];
     bytes32 internal constant PAIR = keccak256("pair");
+    // SCOUT(#221) EDIT: one shared deadline becomes one per window, `lockBox.lockDeadline(windows[w])`; the two windows close at different times.
     uint64 public deadline;
 
     LockBox.Lock[] internal locks;
@@ -57,6 +59,7 @@ contract LockBoxHandler is Test {
         return locks[i];
     }
 
+    // SCOUT(#221) EDIT: drop the deadline argument; skip the call once the chosen window is closed, because `reclaim` warps the clock past the deadline.
     function lock(uint256 actorSeed, uint256 tokenSeed, uint256 amount, uint256 windowSeed) external {
         if (block.timestamp >= deadline || locks.length >= 40) return;
         address who = actors[actorSeed % 3];
@@ -71,6 +74,7 @@ contract LockBoxHandler is Test {
         calls++;
     }
 
+    // SCOUT(#222) EDIT: also build short leaves (remainder to the depositor), empty leaves and unpayable leaves (sum above the amount, overflow, zero recipient), and remember which kind each lock got.
     /// Records an outcome over every open lock of a window. Each lock pays part to another actor
     /// and the rest to its depositor.
     function recordOutcome(uint256 windowSeed, uint256 splitSeed) external {
@@ -113,6 +117,7 @@ contract LockBoxHandler is Test {
         calls++;
     }
 
+    // SCOUT(#222) EDIT: skip a lock whose leaf is unpayable; every handler call must stay valid (fail-on-revert).
     function releaseByOutcome(uint256 lockSeed) external {
         if (locks.length == 0) return;
         uint256 i = lockSeed % locks.length;
@@ -126,6 +131,7 @@ contract LockBoxHandler is Test {
         _exit(i);
     }
 
+    // SCOUT(#221) EDIT: warp to the deadline of this lock's own window, not to one shared deadline.
     function reclaim(uint256 lockSeed) external {
         if (locks.length == 0) return;
         uint256 i = lockSeed % locks.length;
@@ -137,6 +143,8 @@ contract LockBoxHandler is Test {
         lockBox.reclaim(locks[i], nb);
         _exit(i);
     }
+
+    // SCOUT(#222) TEST: handler function `reclaimUnpayable(uint256 lockSeed)`: closes an in-tree lock whose leaf is unpayable, before the deadline, and counts it in `_exit`.
 
     function _absence(uint256 w, bytes32 id) internal view returns (OutcomeTree.Neighbour[] memory nb) {
         bytes32[] memory ids = treeIds[w];
@@ -172,6 +180,7 @@ contract LockBoxHandler is Test {
         return lockBox.getLockId(locks[i].depositor, locks[i].token, locks[i].nonce);
     }
 
+    // SCOUT(#221) EDIT: the key drops the deadline argument.
     function _key(uint256 w) internal view returns (bytes32) {
         return lockBox.auctionKey(windows[w], PAIR, deadline);
     }
@@ -193,6 +202,7 @@ contract LockBoxInvariantTest is Test {
         fakeETH = new FakeETH();
         fakeUSD = new FakeUSD();
         lockBox = new LockBox(address(fakeETH), address(fakeUSD), new MockAptosLightClient(TYPE_TAG), TYPE_TAG);
+        // SCOUT(#221) EDIT: the handler takes no deadline; it reads the window ids and deadlines from LockBox at the warped time.
         handler = new LockBoxHandler(lockBox, fakeETH, fakeUSD, uint64(block.timestamp + 3 days));
         address[3] memory actors = [address(0xA11CE), address(0xB0B), address(0xCA401)];
         for (uint256 i = 0; i < 3; i++) {
@@ -210,6 +220,7 @@ contract LockBoxInvariantTest is Test {
         targetContract(address(handler));
     }
 
+    // SCOUT(#222) EDIT: count unpayable reclaims too, and require that the run built at least one short and one unpayable leaf.
     /// Guards against a vacuous run: once locks exist, the sequence ends some of them.
     function afterInvariant() public view {
         if (handler.lockCount() > 5) assertGt(handler.releases() + handler.reclaims(), 0);
@@ -242,6 +253,8 @@ contract LockBoxInvariantTest is Test {
             assertEq(lockBox.statuses(id) == LockBox.Status.Open, exits == 0);
         }
     }
+
+    // SCOUT(#222) TEST: invariant_everyInTreeLockCanClose: after an outcome is recorded, each open in-tree lock closes by `releaseByOutcome` or `reclaimUnpayable` (check on a state snapshot).
 
     /// Value is conserved: tokens held by actors plus LockBox never change.
     function invariant_supplyConserved() public view {

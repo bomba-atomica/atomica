@@ -1,3 +1,4 @@
+// SCOUT(#236) EDIT: this file becomes the release test; a rename also needs the claim-reclaim-fees file list of test-web.yaml (both tiers) and the exemptions list changed.
 /**
  * @file 11-claim-and-reclaim.test.tsx
  * @description Live ClaimButton tests on one window of the dual-chain testnet.
@@ -45,6 +46,7 @@ import {
   RECEIPT_FILLED,
   type LiveWindow,
 } from "./helpers/auction-setup";
+// SCOUT(#236) REMOVE: import ReleaseButton instead.
 import { ClaimButton } from "../../src/components/ClaimButton";
 import {
   Aptos,
@@ -64,12 +66,17 @@ import { WalletContext } from "../../src/context/WalletContext";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
 
+// SCOUT(#241) REMOVE: MIN_PRICE and the minPrice option below.
 const MIN_PRICE = 1_000_000n;
+// SCOUT(#217) EDIT: bid 2000 whole USD.
+// SCOUT(#216) EDIT: on main, 1 FakeETH at this price needs 2,000,000 FakeUSD and the 500 FakeUSD default makes the bid invalid; pull request 213 already shrinks BID_QUANTITY to 0.0001 FakeETH (200 FakeUSD), so after 213 the bid stays valid.
 const BID_PRICE = 2_000_000n;
 // Small enough that the winner's quote fits the 500 FakeUSD collateral:
 // 0.0001 FakeETH at BID_PRICE (USD per whole FakeETH, `quoteForFill`) = 200.
 const BID_QUANTITY = ethers.parseEther("0.0001");
 const PAIR_BCS = new TextEncoder().encode("11-claim");
+// SCOUT(#224) EDIT: PAIR_BCS above: use the launch pair (marker sits below it to avoid a merge conflict with pull request 213).
+// SCOUT(#243) EDIT: a 120 second deadline needs the test cap.
 const DEADLINE_AHEAD_US = 120_000_000n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
 const REVEAL_TIMEOUT_SECS = 300;
@@ -176,6 +183,7 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
         auction.timelockId,
         Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS,
       );
+      // SCOUT(#228) EDIT: open with open_bids.
       await openWindowBidsDirect(aptosClient, operator, auction);
       await settleAuctionDirect(aptosClient, operator, auction);
 
@@ -227,6 +235,8 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
         "Claimed",
       );
       const balanceAfter = await getFakeEthBalance(derivedAddress);
+      // SCOUT(#236) REMOVE: the faucet mint of the clearing price; assert ERC-20 balances on Ethereum after release.
+      // SCOUT(#217) EDIT: this compares a FakeETH balance change with a price.
       expect(balanceAfter - balanceBefore).toBe(BID_PRICE);
     },
     (Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS + 180) * 1000,
@@ -253,4 +263,8 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
     expect((reclaimBtn as HTMLButtonElement).disabled).toBe(true);
     expect(reclaimBtn.textContent).toBe("Not applicable (Demo)");
   }, 30_000);
+
+  it.todo("SCOUT(#236) release pressed by a wallet that is neither seller nor bidder pays the winner FakeETH and the seller FakeUSD on Ethereum");
+  it.todo("SCOUT(#236) LockBox.statuses reads released for the seller lock and the winner collateral lock");
+  it.todo("SCOUT(#236) a second press finds no open lock and sends no transaction");
 });

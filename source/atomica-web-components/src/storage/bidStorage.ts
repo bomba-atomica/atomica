@@ -1,3 +1,5 @@
+// SCOUT(#217) EDIT: the stored bid price changes unit (this comment says USD micro-units, AuctionBidder stores whole USD); values already in localStorage are not migrated.
+// SCOUT(#235) EDIT: the key is documented as seller and bidder, but AuctionBidder passes the window id; key the opening by window, pair, bidder and bid, or a second bid overwrites the first salt.
 /**
  * Persist and retrieve the user's bid price in localStorage.
  *
@@ -45,4 +47,37 @@ export function clearBidPrice(sellerAddr: string, bidderAddr: string): void {
   } catch {
     // Ignore.
   }
+}
+
+// SCOUT(#235) ADD: what a bidder must keep to open its own bid with open_bid while commit and reveal exists.
+// SCOUT(#228) REMOVE: delete BidOpening and the three functions below when the salt and the commitment go.
+export interface BidOpening {
+  /** Bid price, in the one price unit (whole USD per whole base token). */
+  price: bigint;
+  /** 32-byte salt that sealBid returned. */
+  salt: Uint8Array;
+  /** 32-byte commitment that sealBid returned. */
+  commitment: Uint8Array;
+}
+
+// SCOUT(#235) ADD: store the price, salt and commitment after submit_bid succeeds.
+export function saveBidOpening(
+  _windowId: bigint,
+  _bidderAddr: string,
+  _opening: BidOpening,
+): void {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#235) saveBidOpening");
+}
+
+// SCOUT(#235) ADD: return the stored opening of a bid, or null when none exists.
+export function loadBidOpening(
+  _windowId: bigint,
+  _bidderAddr: string,
+): BidOpening | null {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#235) loadBidOpening");
+}
+
+// SCOUT(#235) ADD: remove the stored opening once the bid is opened or the window is final.
+export function clearBidOpening(_windowId: bigint, _bidderAddr: string): void {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#235) clearBidOpening");
 }

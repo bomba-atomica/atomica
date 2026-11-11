@@ -630,6 +630,7 @@ describe("planSettlementReleases", () => {
     ).toThrow(/owes/);
   });
 
+  // SCOUT(#217) EDIT: this is the only SDK test that pins the price unit; move it to the price test file with quoteForFill, before the SDK unwind issue (195) deletes this suite.
   it("prices FakeUSD with 6 decimals against 18-decimal FakeETH", () => {
     expect(quoteForFill(ETH / 2n, 2010n)).toBe(1_005n * USD);
   });

@@ -1,3 +1,4 @@
+// SCOUT(#239) REMOVE: whole file; nothing outside source/test-utils imports it, and no package.json, tsconfig or lint config covers this folder.
 import { ethers, Wallet } from 'ethers';
 import { MockBLSKeyGenerator } from './MockBLSKeyGenerator';
 import { MockStateProofGenerator } from './MockStateProofGenerator';
@@ -66,6 +67,7 @@ export class TestAuctionOrchestrator {
       nonce: 0,
       description,
       deadlineMicro: deadlineMicroseconds,
+      // SCOUT(#241) EDIT: this minPrice feeds the mock config only; it needs no edit once the removal issue (239) deletes this file.
       minPrice: 0n,
       maxPrice: 0n,
       minEthAmount: 0n,

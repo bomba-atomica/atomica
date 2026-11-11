@@ -2,6 +2,7 @@
  * The two canonical auction windows, per docs/specifications/auction-timing.md.
  * All times are UTC. Names from the naming section of that document.
  */
+// SCOUT(#220) EDIT: second copy of the 07:45 and 16:15 UTC closes (already correct); derive it from the SDK windowCloseSecs so the UI and the chain cannot drift.
 const AUCTION_WINDOWS = [
   { name: "Euro-Asia Bridge", utcHour: 7, utcMinute: 45 },
   { name: "Atlantic / Americas Bridge", utcHour: 16, utcMinute: 15 },

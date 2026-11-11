@@ -29,12 +29,14 @@ contract LockBoxTest is Test {
     address internal carol = address(0xCA401);
     address internal stranger = address(0x5157);
 
+    // SCOUT(#221) EDIT: a fixed window id no longer locks; take `lockBox.currentWindowId()` in setUp, or warp into window 42 (it closed in 1970).
     uint64 internal constant WINDOW = 42;
     bytes32 internal constant PAIR = keccak256("pair");
     uint64 internal deadline;
 
     function setUp() public {
         vm.warp(1_700_000_000);
+        // SCOUT(#221) EDIT: becomes `lockBox.lockDeadline(WINDOW)`; a deadline three days after the warp is no longer the lock deadline.
         deadline = uint64(block.timestamp + 3 days);
         fakeETH = new FakeETH();
         fakeUSD = new FakeUSD();
@@ -51,12 +53,14 @@ contract LockBoxTest is Test {
         }
     }
 
+    // SCOUT(#221) EDIT: every `lockBox.auctionKey(..., deadline)` call in this contract (12 calls) and every `lockBox.lock(...)` call (7 calls, one in `_lockInto`) drops the deadline argument.
     // ---------------------------------------------------------------- helpers
 
     function _lock(address who, address token, uint256 amount) internal returns (LockBox.Lock memory l) {
         return _lockInto(who, token, amount, WINDOW, PAIR, deadline);
     }
 
+    // SCOUT(#221) EDIT: drop `dl`; the returned `Lock` takes `lockBox.lockDeadline(windowId)`, and `windowId` must be the current or the next window.
     function _lockInto(address who, address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 dl)
         internal
         returns (LockBox.Lock memory l)
@@ -201,17 +205,20 @@ contract LockBoxTest is Test {
         lockBox.lock(address(fakeUSD), 5e6, WINDOW, PAIR, deadline);
     }
 
+    // SCOUT(#221) EDIT: the key no longer depends on the deadline; assert keccak256(abi.encode(WINDOW, PAIR)) and that another window or pair gives another key.
     function test_lockAuctionKeyDependsOnDeadline() public view {
         assertTrue(lockBox.auctionKey(WINDOW, PAIR, deadline) != lockBox.auctionKey(WINDOW, PAIR, deadline + 1));
         assertEq(lockBox.auctionKey(WINDOW, PAIR, deadline), keccak256(abi.encode(WINDOW, PAIR, deadline)));
     }
 
+    // SCOUT(#221) REMOVE: `DeadlinePassed` is gone; the closed-window test replaces this case.
     function test_lockRevertsOnPastDeadline() public {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(LockBox.DeadlinePassed.selector, uint64(block.timestamp - 1)));
         lockBox.lock(address(fakeETH), 1 ether, WINDOW, PAIR, uint64(block.timestamp - 1));
     }
 
+    // SCOUT(#221) REMOVE: `DeadlinePassed` is gone; the closed-window test replaces this case.
     function test_lockRevertsOnDeadlineNow() public {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(LockBox.DeadlinePassed.selector, uint64(block.timestamp)));
@@ -230,6 +237,12 @@ contract LockBoxTest is Test {
         vm.expectRevert(LockBox.ZeroAmount.selector);
         lockBox.lock(address(fakeETH), 0, WINDOW, PAIR, deadline);
     }
+
+    // SCOUT(#221) TEST: test_lockStoresComputedDeadlineAndEmitsIt
+    // SCOUT(#221) TEST: test_lockRevertsOnClosedWindow
+    // SCOUT(#221) TEST: test_lockRevertsOnWindowTwoAhead
+    // SCOUT(#221) TEST: test_lockAcceptsCurrentAndNextWindow
+    // SCOUT(#221) TEST: test_windowClockMatchesSharedTable (currentWindowId, windowClose and lockDeadline on both sides of 07:45 and 16:15 UTC, read from a new JSON table under ../atomica-sdk/tests/fixtures, a path foundry.toml already lets forge read)
 
     // ---------------------------------------------------------------- recordOutcome
 
@@ -279,6 +292,8 @@ contract LockBoxTest is Test {
         vm.expectRevert(LockBox.BadOutcomeEvent.selector);
         _record(bytes32(0), 1);
     }
+
+    // SCOUT(#221) TEST: test_recordOutcomeKeysByWindowAndPairAndIgnoresEventDeadline
 
     // ---------------------------------------------------------------- releaseByOutcome
 
@@ -333,6 +348,7 @@ contract LockBoxTest is Test {
         lockBox.releaseByOutcome(s.locks[0], _payouts1(stranger, 10 ether), _leaf(s.leaves, s.pos[0]));
     }
 
+    // SCOUT(#222) EDIT: 9 of 10 ether becomes a payable short sum, so this call reaches the proof check and reverts `InvalidProof`; keep the sum error with an over-sum leaf that is in the tree.
     function test_releaseByOutcomeRevertsOnPayoutSumMismatch() public {
         Settled memory s = _settledAuction();
         vm.expectRevert(abi.encodeWithSelector(LockBox.PayoutSumMismatch.selector, 9 ether, 10 ether));
@@ -370,6 +386,7 @@ contract LockBoxTest is Test {
         lockBox.releaseByOutcome(l, _payouts1(address(0), 1 ether), _leaf(leaves, 0));
     }
 
+    // SCOUT(#221) EDIT: another deadline no longer makes another auction; lock into another window or pair to keep this case.
     /// A lock bound to another deadline is another auction: its outcome does not cover it.
     function test_releaseByOutcomeIgnoresOutcomeOfOtherAuction() public {
         LockBox.Lock memory l = _lockInto(alice, address(fakeETH), 1 ether, WINDOW, PAIR, deadline + 1);
@@ -380,6 +397,11 @@ contract LockBoxTest is Test {
         vm.expectRevert(abi.encodeWithSelector(LockBox.NoOutcome.selector, key));
         lockBox.releaseByOutcome(l, _payouts1(bob, 1 ether), _leaf(leaves, 0));
     }
+
+    // SCOUT(#222) TEST: test_releaseByOutcomeShortLeafPaysRemainderToDepositor
+    // SCOUT(#222) TEST: test_releaseByOutcomeEmptyPayoutsReturnsWholeLockToDepositor
+    // SCOUT(#222) TEST: test_releaseByOutcomeExactSumSendsNoRemainder
+    // SCOUT(#222) TEST: test_releaseByOutcomeRevertsOnSumAboveAmount
 
     // ---------------------------------------------------------------- reclaim
 
@@ -549,6 +571,7 @@ contract LockBoxTest is Test {
         assertEq(uint8(lockBox.statuses(_id(b))), uint8(LockBox.Status.Reclaimed));
     }
 
+    // SCOUT(#221) EDIT: window `WINDOW + 1` gets its own, later deadline; it must be the next window at lock time, and the warp must reach `lockBox.lockDeadline(WINDOW + 1)`.
     /// A reclaim of one auction does not block the outcome of another.
     function test_reclaimOnlyVoidsItsOwnAuction() public {
         LockBox.Lock memory early = _lockInto(alice, address(fakeETH), 1 ether, WINDOW + 1, PAIR, deadline);
@@ -557,6 +580,14 @@ contract LockBoxTest is Test {
         bytes32 key = _record(keccak256("root"), 1);
         assertEq(key, lockBox.auctionKey(WINDOW, PAIR, deadline));
     }
+
+    // SCOUT(#222) TEST: test_reclaimUnpayableOnSumAboveAmountReturnsLockToDepositor (third party, before the deadline)
+    // SCOUT(#222) TEST: test_reclaimUnpayableOnSumOverflowReturnsLockToDepositor
+    // SCOUT(#222) TEST: test_reclaimUnpayableOnZeroRecipientReturnsLockToDepositor
+    // SCOUT(#222) TEST: test_reclaimUnpayableRevertsOnPayableLeaf
+    // SCOUT(#222) TEST: test_reclaimUnpayableRevertsOnWrongProof
+    // SCOUT(#222) TEST: test_reclaimUnpayableRevertsWithoutOutcome
+    // SCOUT(#222) TEST: test_reclaimUnpayableRevertsOnSecondCall
 }
 
 /**
@@ -612,6 +643,7 @@ contract OutcomeTreeVectorsTest is Test {
             _checkPayoutHashes(base, n);
             cases++;
         }
+        // SCOUT(#222) TEST: test_emptyPayoutsHashIsKeccakOfEmpty, a separate test: an empty list becomes a real leaf, but the issue keeps this fixture unchanged, so do not add a case here (it would change this count of 4, the four Move case tests and the SDK length check).
         assertEq(cases, 4);
     }
 

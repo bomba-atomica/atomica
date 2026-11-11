@@ -1,3 +1,5 @@
+<!-- SCOUT(#242) DOC: wholly superseded (last updated 2025-12-22) yet the PRD links here "for detailed status"; archive it or rewrite it with the PRD status block. -->
+
 # Atomica Technical Risks
 
 **Document Type**: Risk Assessment & Status Tracking

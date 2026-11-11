@@ -81,6 +81,7 @@ export function buildEthRpcUrl(host: string): string {
   return url.toString();
 }
 
+// SCOUT(#235) EDIT: a browser gets one proxied endpoint here; extra endpoints need their own proxy paths or direct URLs.
 /**
  * Returns the Aptos fullnode URL.
  *

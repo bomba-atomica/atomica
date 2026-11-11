@@ -14,3 +14,14 @@ describe("Address Derivation Helpers", () => {
     });
   });
 });
+
+describe("planned tests (SCOUT)", () => {
+  it.todo(
+    "SCOUT(#232) getDerivedAddress returns one address for the checksummed, lowercase and uppercase-hex forms of an Ethereum address",
+  );
+  // Recorded on main at 4ca0acd: getDerivedAddress("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "localhost:3000")
+  // is 0x50ccc023d06341b127ca69fd9a204f401118aca3385292926aa2a9ed42ae80e6.
+  it.todo(
+    "SCOUT(#232) getDerivedAddress of a fixed lowercase address and domain equals the constant recorded before the change",
+  );
+});

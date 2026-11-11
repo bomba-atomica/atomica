@@ -31,6 +31,8 @@ vi.mock("@atomica/sdk/chain-config", () => ({
     aptos: {},
   }),
 }));
+// SCOUT(#220) EDIT: 83075 and 1_794_700_800 are a window id and a deadline of the old formula; the mock keeps this green, but pick a pair that is consistent under the new formula.
+// SCOUT(#221) EDIT: the lockBinding mock returns a deadline.
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeEth: vi.fn(),
   lockFakeEth: vi.fn(),
@@ -46,6 +48,7 @@ vi.mock("@atomica/sdk/ethereum", () => ({
 vi.mock("@atomica/sdk/ethereum/proofs", () => ({
   generateLockedBalanceProof: vi.fn(),
 }));
+// SCOUT(#243) REMOVE: the registerTimelock mock.
 vi.mock("@atomica/sdk/aptos", () => ({
   getRegisterLockPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
@@ -132,6 +135,7 @@ describe("SellFlow localStorage resume", () => {
     expect(screen.getByText(/Waiting for/i)).toBeTruthy();
   });
 
+  // SCOUT(#241) EDIT: saved state with minPrice must still resume.
   it("resumes to creating-auction step when localStorage has creating-auction step", async () => {
     // When the creating-auction step loads, Step7Auction auto-calls onCreateAuction.
     // With mocked submitNativeTransaction (no-op), it transitions to monitoring immediately.
@@ -243,6 +247,8 @@ describe("SellFlow localStorage resume", () => {
     );
   });
 
+  // SCOUT(#241) EDIT: this case reaches monitoring only because the saved state has minPrice; createAuction returns early without it today.
+  // SCOUT(#243) EDIT: still two Aptos transactions (register lock, create auction) and no timelock registration.
   it("auto-progresses proof → submit proof → create auction → monitor on successful Aptos transactions", async () => {
     const proof = {
       blockNumber: 100,
@@ -322,4 +328,6 @@ describe("SellFlow localStorage resume", () => {
     expect(persisted.step).toBe("lock");
     expect(persisted.txHash).toBeUndefined();
   });
+
+  it.todo("SCOUT(#241) saved sell flow state that contains a minimum price resumes at the saved step and ignores the price");
 });

@@ -6,6 +6,7 @@ export const BID_AD_TAG = "atomica/timelock-bid/v2";
 /** Domain tag of the V2 timelock identity (`ibe_config::compute_identity`). */
 export const TIMELOCK_IDENTITY_TAG = "ATOMICA_TIMELOCK_IBE_V2_ID";
 
+// SCOUT(#228) REMOVE: the commitment tag.
 /** Domain tag of the price commitment (`auction::compute_bid_commitment`). */
 export const BID_COMMIT_TAG = "atomica/bid-commitment/v1";
 
@@ -113,6 +114,7 @@ export function buildBidAd(f: BidAdFields): Uint8Array {
   );
 }
 
+// SCOUT(#228) EDIT: the plaintext is the 8-byte little-endian price, with no salt.
 /**
  * Bid plaintext convention: `price_le8 || salt32`. The relayer that decrypts a
  * bid with the revealed key reads the price and salt from it.
@@ -125,6 +127,7 @@ export function encodeBidPlaintext(
   return concat(u64le(price), salt);
 }
 
+// SCOUT(#228) REMOVE: auction::compute_bid_commitment is deleted.
 /**
  * Price commitment. Matches `auction::compute_bid_commitment` in Move:
  *   SHA3-256( tag || BCS(price: u64) || salt || SHA3-256(ad) )

@@ -52,6 +52,7 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
         }
     }
 
+    // SCOUT(#221) EDIT: drop `d`; the returned `Lock` takes `lockBox.lockDeadline(w)`.
     function _lock(LockBox lockBox, address who, address token, uint256 amount, uint64 w, bytes32 p, uint64 d)
         internal
         returns (LockBox.Lock memory l)
@@ -93,6 +94,7 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
             _hex(".event.event_data"), OutcomeTreeBuilder.outcomeBcs(windowId, pairHash, deadline, root, leafCount)
         );
 
+        // SCOUT(#221) EDIT: the golden event pairs window 42 with deadline 1767225600, which no window formula gives; warp into window 42 (it closes at second 1842300) to lock, and expect the key without the deadline.
         // The golden deadline (2026-01-01) must lie ahead when locking, also on a live chain.
         vm.warp(deadline - 1 days);
         LockBox.Lock memory l = _lock(lockBox, seller, address(fakeETH), 1 ether, windowId, pairHash, deadline);
@@ -121,6 +123,7 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
         bytes32[] memory proof = new bytes32[](2);
         vm.expectRevert(LockBox.InvalidProof.selector);
         lockBox.releaseByOutcome(l, _one(winner, 1 ether), OutcomeTree.LeafProof(0, proof));
+        // SCOUT(#221) EDIT: warp to `l.deadline`, which is `lockBox.lockDeadline(windowId)`, not the golden event's deadline.
         vm.warp(deadline);
         vm.expectRevert(
             abi.encodeWithSelector(LockBox.LockInTree.selector, lockBox.getLockId(seller, address(fakeETH), 0))
@@ -141,6 +144,7 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
         vm.expectRevert(abi.encodeWithSelector(IAptosLightClient.InsufficientVotingPower.selector, 7, 8));
         lockBox.recordOutcome(p);
         (bytes32 root,) = lockBox.outcomes(
+            // SCOUT(#221) EDIT: the key drops the deadline argument.
             lockBox.auctionKey(
                 uint64(vm.parseJsonUint(vectors, ".event.auction_outcome.window_id")),
                 _b32(".event.auction_outcome.pair_hash"),
@@ -160,6 +164,7 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
         _approveAll(lockBox);
 
         vm.warp(1_700_000_000);
+        // SCOUT(#221) EDIT: window 7 is closed at the warped time; take `lockBox.currentWindowId()` and `lockBox.lockDeadline(windowId)`, and keep that deadline in the signed event.
         uint64 windowId = 7;
         bytes32 pairHash = keccak256("pair bcs");
         uint64 deadline = uint64(block.timestamp + 3 days);
@@ -211,6 +216,8 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
         assertEq(fakeETH.balanceOf(address(lockBox)), 0);
         assertEq(fakeUSD.balanceOf(address(lockBox)), 0);
     }
+
+    // SCOUT(#221) TEST: test_recordOutcomeIgnoresEventDeadlineOfSignedOutcome (a signed event whose deadline differs from `lockDeadline(windowId)` still records under `auctionKey(windowId, pairHash)`)
 
     // ---------------------------------------------------------------- helpers
 

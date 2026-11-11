@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ethers } from "ethers";
+// SCOUT(#243) REMOVE: drop the registerTimelock import.
+// SCOUT(#238) REMOVE: drop the getMpk import.
 import {
   submitCreateAuction,
   getMpk,
@@ -7,6 +9,9 @@ import {
 } from "@atomica/sdk/aptos";
 import { useWallet } from "../context/WalletContext";
 
+// SCOUT(#238) EDIT: this header describes the MPK fetch and the mpk_bytes argument; both go.
+// SCOUT(#241) EDIT: this header lists the minimum price; it goes.
+// SCOUT(#243) EDIT: this header says the screen registers the timelock; create_auction does it.
 /**
  * UI panel for creating a new sealed-bid auction on Aptos (v0 Beta).
  *
@@ -21,6 +26,9 @@ import { useWallet } from "../context/WalletContext";
  * authoritative key.
  *
  * `create_auction` takes
+ // SCOUT(#241) EDIT: min_price leaves this argument list.
+ // SCOUT(#243) EDIT: timelock_id leaves this argument list.
+ // SCOUT(#238) EDIT: mpk_bytes leaves this argument list.
  * `(window_id, pair_bcs, lock_id, min_price, timelock_id, mpk_bytes)`.
  *
  * Requires {@link WalletContext} to be mounted above this component.
@@ -31,7 +39,10 @@ export function AuctionCreator() {
   const { account } = useWallet();
   const [lockIdHex, setLockIdHex] = useState("");
   const [windowId, setWindowId] = useState("0");
+  // SCOUT(#224) EDIT: default to the SDK launch pair constant.
   const [pairBcsHex, setPairBcsHex] = useState("");
+  // SCOUT(#241) REMOVE: the minimum price state, its input and its argument.
+  // SCOUT(#217) EDIT: while the field exists, its text goes through parsePrice.
   const [minPrice, setMinPrice] = useState("100");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -41,9 +52,12 @@ export function AuctionCreator() {
     setLoading(true);
     setStatus("Fetching MPK from chain...");
     try {
+      // SCOUT(#238) REMOVE: create_auction has no _mpk_bytes argument, so the getMpk fetch goes.
       // 1. Fetch Master Public Key from on-chain timelock_config::get_mpk()
       const mpk = await getMpk();
 
+      // SCOUT(#243) REMOVE: create_auction registers the window timelock itself; this caller-chosen one hour deadline goes.
+      // SCOUT(#225) EDIT: this call aborts with E_NOT_REGISTRAR once the validator image has the registrar check.
       // 2. Register the timelock that opens the window's bids. Its deadline
       //    is one hour out, the sell flow's auction length.
       setStatus("Please sign the timelock registration in MetaMask...");
@@ -55,14 +69,21 @@ export function AuctionCreator() {
       setStatus("Please sign the transaction in MetaMask...");
 
       // Convert inputs
+      // SCOUT(#243) EDIT: remove the 32 zero byte default lock id; the UI happy path issue (236) assigns it to this issue, whose text does not mention it.
       const lockId = ethers.getBytes(lockIdHex || "0x" + "00".repeat(32));
       const windowIdBn = BigInt(windowId);
+      // SCOUT(#224) EDIT: fall back to the launch pair; empty bytes are not on the allowlist.
       // pairBcs: BCS-encoded Pair struct; demo uses empty bytes (scaffold body aborts anyway)
       const pairBcs = pairBcsHex
         ? ethers.getBytes(pairBcsHex)
         : new Uint8Array(0);
+      // SCOUT(#217) EDIT: price parse (BigInt of the text); use parsePrice while the field exists.
+      // SCOUT(#241) REMOVE: minPriceBn.
       const minPriceBn = BigInt(minPrice);
 
+      // SCOUT(#241) EDIT: drop the minPriceBn argument.
+      // SCOUT(#243) EDIT: drop the timelockId argument.
+      // SCOUT(#238) EDIT: drop the mpk argument.
       const pendingTx = await submitCreateAuction(
         account,
         windowIdBn,
@@ -98,6 +119,7 @@ export function AuctionCreator() {
             className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
           />
         </div>
+        {/* SCOUT(#224) EDIT: the hint text and the empty fallback change to the launch pair. */}
         <div>
           <label className="block text-zinc-500 text-sm mb-1">
             Pair BCS (0x hex, optional)
@@ -122,6 +144,8 @@ export function AuctionCreator() {
             className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500 font-mono text-xs"
           />
         </div>
+        {/* SCOUT(#241) REMOVE: the Min Price field. */}
+        {/* SCOUT(#217) EDIT: price input in whole USD, while it exists. */}
         <div>
           <label className="block text-zinc-500 text-sm mb-1">
             Min Price (USD)

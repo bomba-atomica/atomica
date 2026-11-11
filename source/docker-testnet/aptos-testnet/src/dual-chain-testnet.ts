@@ -52,6 +52,7 @@ export interface DualChainTestnetInfo {
     eth: {
         rpcUrl: string;
         chainId: number;
+        // SCOUT(#219) EDIT: contracts gains aptosLightClient, the AptosLightClient that LockBox was deployed with.
         contracts: {
             fakeETH: string;
             fakeUSD: string;
@@ -63,11 +64,13 @@ export interface DualChainTestnetInfo {
         /** Bidder account (testnet account 1) */
         bidderPrivateKey: string;
         bidderAddress: string;
+        // SCOUT(#219) EDIT: the comment below is stale (LockBox has no settlementAuthority); this account is the natural outcome carrier, neither a depositor nor the Aptos deployer, and a second bidder (test account 3) must be added beside it.
         /** Relayer account (testnet account 2): the LockBox settlementAuthority */
         relayerPrivateKey: string;
         relayerAddress: string;
     };
     aptos: {
+        // SCOUT(#235) EDIT: expose every validator API URL here (the testnet runs four), so tests can give sealBid extra endpoints for the master public key comparison.
         nodeUrl: string;
         moduleAddress: string;
         deployerPrivateKey: string;
@@ -133,6 +136,7 @@ function readArtifact(contractName: string): {
  * (eth_getTransactionReceipt returns -32000 "transaction indexing is in
  * progress" for a short window after startup). On anvil it mines block 1.
  */
+// SCOUT(#219) REMOVE: NO_LIGHT_CLIENT goes when setup deploys a real AptosLightClient.
 /** Stand-in light client address: this testnet has no Aptos light client on Ethereum. */
 const NO_LIGHT_CLIENT = "0x000000000000000000000000000000000000dEaD";
 
@@ -148,6 +152,19 @@ export function auctionOutcomeTypeTag(atomicaAddress: string): string {
             new Uint8Array([0]),
         ]),
     );
+}
+
+/**
+ * Deploy AptosLightClient from the Aptos node's genesis LedgerInfo and waypoint
+ * (`/v1/atomica/epoch_change_proof?start_epoch=0&end_epoch=1` and
+ * `/v1/atomica/genesis_waypoint`) and return its address.
+ */
+// SCOUT(#219) ADD: deploy AptosLightClient with ethers from the forge artifact, as script/DeployAptosLightClient.s.sol does with forge; remove the leading underscores when wired.
+export async function deployAptosLightClient(
+    _deployer: ethers.Signer,
+    _aptosNodeUrl: string,
+): Promise<string> {
+    throw new Error("NOT_IMPLEMENTED: SCOUT(#219) deployAptosLightClient");
 }
 
 async function waitForFirstBlock(provider: ethers.JsonRpcProvider): Promise<void> {
@@ -203,6 +220,8 @@ export async function setupDualChainTestnet(
     console.log("[Dual-Chain] Starting dual-chain testnet...");
 
     // ── Ethereum ──────────────────────────────────────────────────────────────
+    // SCOUT(#219) EDIT: on ETH_BACKEND=anvil this chain runs the cancun hardfork, which has no EIP-2537 precompiles, so AptosLightClient cannot verify a signature there until the Ethereum testnet SDK starts anvil on prague.
+    // SCOUT(#236) EDIT: the happy-path release step needs the same prague change on the anvil tier.
     ethTestnet = await EthereumDockerTestnet.start(4);
     await ethTestnet.waitForHealthy(180);
 
@@ -229,6 +248,7 @@ export async function setupDualChainTestnet(
     console.log(`[Dual-Chain] Deployer: ${deployerAddress}`);
     console.log(`[Dual-Chain] Bidder:   ${bidderAddress}`);
 
+    // SCOUT(#243) EDIT: the genesis layout must name the registrar derived from this package address, so DockerTestnet.new below needs it before the package is published.
     const aptosModuleAddress =
         process.env.APTOS_ATOMICA_CONTRACT_ADDRESS ||
         "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
@@ -236,6 +256,7 @@ export async function setupDualChainTestnet(
     await waitForFirstBlock(provider);
     ensureCompiled();
 
+    // SCOUT(#219) EDIT: also fund a second bidder (test account 3) with gas ETH here; the round trip needs a seller, a winner, a loser and a carrier.
     // Gas for the bidder and the relayer (they sign their own transactions).
     for (const to of [bidderAddress, relayerAddress]) {
         const tx = await deployer.sendTransaction({ to, value: ethers.parseEther("10") });
@@ -251,6 +272,7 @@ export async function setupDualChainTestnet(
     const fakeUSD = await deployContract(deployer, readArtifact("FakeUSD"));
     console.log(`[Dual-Chain] ✓ FakeUSD: ${fakeUSD}`);
 
+    // SCOUT(#219) EDIT: deploy AptosLightClient and pass its address in place of NO_LIGHT_CLIENT; that needs the Aptos genesis, so the Aptos testnet start below must move above this deploy (the validators still need the Ethereum RPC up first).
     // The proof-gated LockBox: a lock leaves on a proven Aptos AuctionOutcome
     // or by reclaim after its deadline. This testnet deploys no Aptos light
     // client, so outcome recording is off here (it reverts) and every lock
@@ -283,6 +305,7 @@ export async function setupDualChainTestnet(
     console.log(`[Dual-Chain] ✓ Minted FakeETH to bidder`);
 
     // ── Aptos ─────────────────────────────────────────────────────────────────
+    // SCOUT(#219) EDIT: this start moves above the LockBox deploy (see the marker there).
     // The timelock DKG needs 4 validators (see localnet.ts setupLocalnet).
     aptosTestnet = await DockerTestnet.new(4);
     setTestnet(aptosTestnet);
@@ -303,12 +326,14 @@ export async function setupDualChainTestnet(
         deployerAddress: aptosModuleAddress,
         namedAddresses: { atomica: aptosModuleAddress },
         initFunctions: [
+            // SCOUT(#238) REMOVE: this registry::initialize call goes with registry.move.
             {
                 functionId: `${aptosModuleAddress}::registry::initialize`,
                 args: ["hex:0123456789abcdef"],
             },
             { functionId: `${aptosModuleAddress}::fake_eth::initialize`, args: [] },
             { functionId: `${aptosModuleAddress}::fake_usd::initialize`, args: [] },
+            // SCOUT(#234) TEST: the pin that the client guard reads through eth_proof::get_config is written here; a fixture that leaves the client chain config at the zero addresses of source/.env.test, or runs with no Aptos chain, will be refused.
             // Pin the LockBox, the token behind each asset (issue 171) and
             // the SIWE domain of receipt owners (issue 197).
             {

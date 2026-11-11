@@ -1,3 +1,4 @@
+// SCOUT(#237) EDIT: drop the beacon and state persistence note from the header below; package.json exports no ./browser path, so decide whether this entry stays.
 /**
  * Ethereum State Proof Verifier - Browser Entry Point
  *

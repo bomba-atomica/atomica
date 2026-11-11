@@ -17,6 +17,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { WalletContext } from "../../src/context/WalletContext";
 
+// SCOUT(#243) REMOVE: the registerTimelock mock.
+// SCOUT(#238) REMOVE: the getMpk mock.
 vi.mock("@atomica/sdk/aptos", () => ({
   submitCreateAuction: vi.fn().mockResolvedValue({ hash: "0xdeadbeef" }),
   getMpk: vi.fn().mockResolvedValue(new Uint8Array(48)),
@@ -60,6 +62,7 @@ describe("AuctionCreator — unit", () => {
     vi.clearAllMocks();
   });
 
+  // SCOUT(#241) EDIT: there is no Min Price field.
   it("renders form fields for window_id, min_price, and lock_id", () => {
     renderAuctionCreator();
 
@@ -68,6 +71,7 @@ describe("AuctionCreator — unit", () => {
     expect(windowIdLabel).toBeTruthy();
 
     // Min Price input
+    // SCOUT(#241) REMOVE: the Min Price label assert.
     const minPriceLabel = screen.getByText(/Min Price/i);
     expect(minPriceLabel).toBeTruthy();
 
@@ -80,6 +84,7 @@ describe("AuctionCreator — unit", () => {
     expect(submitButton).toBeTruthy();
   });
 
+  // SCOUT(#238) EDIT: there is no getMpk call.
   it("calls submitCreateAuction when the button is clicked with a connected account", async () => {
     renderAuctionCreator();
 
@@ -92,6 +97,9 @@ describe("AuctionCreator — unit", () => {
     });
   });
 
+  // SCOUT(#243) REMOVE: this case; assert one transaction and no register_timelock.
+  // SCOUT(#241) EDIT: the argument count drops (7 today).
+  // SCOUT(#238) EDIT: no mpk at the end.
   it("registers the timelock before create_auction and passes its id", async () => {
     renderAuctionCreator();
 
@@ -151,4 +159,8 @@ describe("AuctionCreator — unit", () => {
     expect(registerTimelock).not.toHaveBeenCalled();
     expect(submitCreateAuction).not.toHaveBeenCalled();
   });
+
+  it.todo("SCOUT(#243) the create step submits exactly one transaction and none to 0x1::ibe_config::register_timelock");
+  it.todo("SCOUT(#241) submitCreateAuction is called without a price argument");
+  it.todo("SCOUT(#224) the pair defaults to the SDK launch pair constant");
 });

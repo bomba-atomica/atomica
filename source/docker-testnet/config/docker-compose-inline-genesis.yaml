@@ -1,3 +1,5 @@
+# SCOUT(#239) REMOVE: whole file; no SDK, script or workflow reads it (only this file names itself).
+# SCOUT(#243) EDIT: carries the validator image digest five times; needs no pin move if the removal issue (239) deleted it first.
 # Atomica Aptos Local Testnet - Simplified with Inline Genesis
 #
 # validator-0 generates genesis on startup; peers wait for it on the shared volume

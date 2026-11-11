@@ -69,10 +69,19 @@ module atomica::eth_proof {
     /// Storage slot of `LockBox.commitments` (LockBox.sol storage layout).
     const LOCK_COMMITMENTS_SLOT: u8 = 0;
 
+    // SCOUT(#220) REMOVE: `WINDOW_EPOCH_SECS` and `WINDOW_SPLIT_SECS`; the three constants below replace them.
     /// Seconds per auction epoch (`auction::current_window_id`).
     const WINDOW_EPOCH_SECS: u64 = 43200;
     /// Offset of the second window within an epoch (`auction::current_window_id`).
     const WINDOW_SPLIT_SECS: u64 = 28500;
+    // SCOUT(#220) ADD: named constants of the two-closes-a-day formula. `auction::current_window_id` needs the same three numbers, and a Move constant is private to its module.
+    /// Seconds per day.
+    const WINDOW_DAY_SECS: u64 = 86400;
+    /// Second of the day of the morning close, 07:45:00 UTC.
+    const WINDOW_MORNING_CLOSE_SECS: u64 = 27900;
+    /// Second of the day of the afternoon close, 16:15:00 UTC.
+    const WINDOW_AFTERNOON_CLOSE_SECS: u64 = 58500;
+    // SCOUT(#221) EDIT: LockBox freezes `ETH_RECLAIM_DELAY_SECS` as its reclaim delay; the owner decides the value first (review decision 36).
     /// Delay from a window's close to the Ethereum lock deadline of its locks:
     /// 72 hours. The auction's stuck deadline plus the outcome carrier margin
     /// must end before it (docs/specifications/auction-timing.md).
@@ -219,6 +228,7 @@ module atomica::eth_proof {
     /// The auction a lock is bound to:
     /// keccak256(abi.encode(uint64 window_id, bytes32 pair_hash, uint64 deadline)).
     /// Equals `LockBox.auctionKey`.
+    // SCOUT(#221) EDIT: `eth_proof::auction_key` drops the `deadline` argument: keccak256(abi.encode(uint64 window_id, bytes32 pair_hash)).
     public fun auction_key(window_id: u64, pair_hash: vector<u8>, deadline: u64): vector<u8> {
         assert!(vector::length(&pair_hash) == 32, E_INVALID_PAIR_HASH);
         let data = u256_be((window_id as u256));
@@ -228,6 +238,7 @@ module atomica::eth_proof {
     }
 
     /// Unix second at which `window_id` stops being `auction::current_window_id`.
+    // SCOUT(#220) EDIT: `window_close_secs` becomes (w / 2) * 86400 + (27900 for an even w, 58500 for an odd w).
     public fun window_close_secs(window_id: u64): u64 {
         let epoch_start = (window_id / 2) * WINDOW_EPOCH_SECS;
         if (window_id % 2 == 0) { epoch_start + WINDOW_SPLIT_SECS } else { epoch_start + WINDOW_EPOCH_SECS }
@@ -255,6 +266,7 @@ module atomica::eth_proof {
     /// with `E_EMPTY_LOCK` for a zero amount, and aborts with
     /// `E_COMMITMENT_MISMATCH` if the slot does not hold the commitment of
     /// (user, token, amount, window_id, pair_hash, deadline).
+    // SCOUT(#221) EDIT: `verify_lock` drops the `deadline` argument and commits to `eth_lock_deadline(window_id)`.
     public fun verify_lock(
         block_number: u64,
         user: vector<u8>,

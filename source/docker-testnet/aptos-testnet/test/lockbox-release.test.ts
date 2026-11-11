@@ -21,6 +21,7 @@ import {
 import { generateEthLockProofCommand, type EthLockProofResult } from "../src/browser-commands";
 import { waitForCertifiedEthBlock, waitForEthBlock } from "../src/eth-blocks";
 
+// SCOUT(#219) EDIT: the header comment below says outcome release is covered only by forge tests; test/auction-round-trip.test.ts adds the live release, and setup then deploys a real light client, so the NoOutcome case below still holds but recordOutcome no longer reverts on this testnet.
 /**
  * Live dual-chain test of the proof-gated LockBox (issue 203).
  *
@@ -45,6 +46,8 @@ import { waitForCertifiedEthBlock, waitForEthBlock } from "../src/eth-blocks";
  */
 
 const ERC20_ABI = ["function balanceOf(address) view returns (uint256)"];
+// SCOUT(#221) EDIT: LOCKBOX_ABI below follows the redeployed LockBox: the Lock tuple and lockCommitment keep the deadline only if the Solidity struct and helper keep it.
+// SCOUT(#222) EDIT: LOCKBOX_ABI below gains reclaimUnpayable and its errors if this live test covers the new path; the NoOutcome case is unchanged.
 const LOCK_TUPLE =
     "(address depositor, address token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)";
 const LOCKBOX_ABI = [
@@ -88,6 +91,8 @@ async function submitAsDeployer(data: InputGenerateTransactionPayloadData): Prom
     });
 }
 
+// SCOUT(#221) EDIT: register() below drops proof.deadline from the register_ethereum_lock arguments.
+// SCOUT(#233) EDIT: register() below hand-builds the register payload, a third copy of that ABI; it can call the SDK getRegisterLockPayload once it takes the asset.
 /**
  * Register the lock proven at the certified block `proof.blockNumber`. Aptos
  * derives the storage key, recomputes the commitment from the lock fields and
@@ -212,6 +217,7 @@ describe.sequential("Proof-gated LockBox with Aptos lock registration (live dual
         expect(BigInt(proof.storageValue)).toBe(BigInt(commitment));
         expect(await lockBox.statuses(proof.lockId)).toBe(STATUS_OPEN);
 
+        // SCOUT(#220) EDIT: the deadline this case reads back follows the new window close formula on both sides; no constant here changes.
         // Aptos keeps the binding and accepts only eth_lock_deadline(window id).
         const moduleAddr = info.aptos.moduleAddress;
         const [windowId, pairHash] = await aptos.view({
@@ -235,6 +241,7 @@ describe.sequential("Proof-gated LockBox with Aptos lock registration (live dual
         expect(String(deadline)).toBe(proof.deadline);
     }, 900_000);
 
+    // SCOUT(#221) EDIT: the wrong-deadline half of this case goes with the deadline argument and E_WRONG_DEADLINE; a commitment with another deadline can no longer be created through lock().
     it("registration rejects a wrong amount and a wrong deadline", async () => {
         const { proof } = await lockAndProve(
             info.eth.bidderPrivateKey,

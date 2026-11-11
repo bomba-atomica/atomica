@@ -45,6 +45,7 @@ describe("SellFlow error display", () => {
       expect(screen.getByText(/Waiting for MetaMask/i)).toBeTruthy();
     });
 
+    // SCOUT(#241) EDIT: assert that onLock is called with the amount only.
     it("calls onLock when button is clicked", () => {
       const onLock = vi.fn();
       render(<Step2Lock onLock={onLock} loading={false} />);
@@ -118,6 +119,7 @@ describe("SellFlow error display", () => {
   });
 
   describe("Step7Auction", () => {
+    // SCOUT(#241) EDIT: drop the minPrice prop below.
     it("shows error message when error prop is set", () => {
       render(
         <Step7Auction
@@ -171,4 +173,7 @@ describe("SellFlow error display", () => {
       expect(screen.queryByText(/Cancel & Unlock/i)).toBeFalsy();
     });
   });
+
+  it.todo("SCOUT(#241) Step2Lock renders no element with test id min-price-input and calls onLock with the amount only");
+  it.todo("SCOUT(#234) the Step2Lock error line shows the pinned address of the mismatch error");
 });

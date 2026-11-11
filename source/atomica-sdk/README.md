@@ -26,6 +26,8 @@ Sub-path exports are available via the `"exports"` field in `package.json`.
 | `submitPreparedTransaction` | Submit a prepared transaction and wait for execution |
 | `submitNativeTransaction` | All-in-one: prepare → simulate → submit |
 
+<!-- SCOUT(#217) DOC: add rows for parsePrice and formatPrice (src/price.ts), the one price parser and formatter. -->
+
 ### `@atomica/sdk/aptos`
 
 Aptos contract interaction helpers.

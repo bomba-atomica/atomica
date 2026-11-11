@@ -1,3 +1,4 @@
+// SCOUT(#237) REMOVE: whole file; it only benchmarks the beacon sync committee check.
 import { describe, expect, test } from "bun:test";
 import {
     verifySyncCommitteeSignature,

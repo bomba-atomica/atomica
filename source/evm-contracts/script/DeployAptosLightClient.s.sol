@@ -20,6 +20,7 @@ import {AptosLightClient} from "../src/aptos/AptosLightClient.sol";
  *          --rpc-url http://localhost:8545 --broadcast
  */
 contract DeployAptosLightClient is Script {
+    // SCOUT(#219) EDIT: the dual-chain testnet deploys with ethers from forge artifacts, not with this script, so it must port these two node reads and the same-LedgerInfo check; it also deploys LockBox before Aptos starts today.
     function run() external returns (AptosLightClient client) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         string memory node = vm.envString("APTOS_NODE_URL");
@@ -52,6 +53,7 @@ contract DeployAptosLightClient is Script {
         return string(vm.ffi(cmd));
     }
 
+    // SCOUT(#219) EDIT: this writes the tracked file test-results/deployment.json on every run; write to an untracked path, or only return the address, before the testnet setup calls it.
     function _record(address client) internal {
         string memory dir = string.concat(vm.projectRoot(), "/test-results");
         vm.createDir(dir, true);

@@ -65,6 +65,7 @@ describe("V2 bid helpers", () => {
     );
   });
 
+  // SCOUT(#228) REMOVE: the commitment and its Move known answer are deleted.
   it("computeBidCommitment equals the Move known answer", () => {
     const ad = buildBidAd({
       chainId: 7,
@@ -80,6 +81,7 @@ describe("V2 bid helpers", () => {
     );
   });
 
+  // SCOUT(#228) EDIT: the plaintext is the 8-byte price.
   it("encodeBidPlaintext is price_le8 || salt32", () => {
     const salt = new Uint8Array(32).fill(7);
     const pt = encodeBidPlaintext(2010n, salt);
@@ -88,6 +90,7 @@ describe("V2 bid helpers", () => {
     expect(pt.slice(8)).toEqual(salt);
   });
 
+  // SCOUT(#228) REMOVE: there is no salt.
   it("rejects a salt that is not 32 bytes", () => {
     expect(() => encodeBidPlaintext(1n, new Uint8Array(31))).toThrow();
     expect(() =>

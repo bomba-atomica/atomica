@@ -29,6 +29,8 @@ env:
   # The atomica-aptos binary release the Move jobs install. Its commit must equal
   # the AptosFramework rev in source/atomica-move-contracts/Move.toml (checked
   # by move-framework-pin).
+  # SCOUT(#228) EDIT: move APTOS_VERSION to the fork release that ships the ibe::decrypt_bid native (227).
+  # SCOUT(#243) EDIT: move APTOS_VERSION to the fork release that ships the timelock registrar (225).
   APTOS_VERSION: binary-52beee31a6
 
 jobs:
@@ -221,10 +223,13 @@ jobs:
           cargo run --quiet
           git diff --exit-code -- ../atomica-sdk/tests/fixtures/golden_vectors.json
 
+      # SCOUT(#217) TEST: the new SDK price test file runs here with no workflow edit; vitest.config.ts includes tests/**/*.test.ts.
+      # SCOUT(#234) TEST: the new tests/ethereum lock guard file runs here with no workflow edit (same include glob).
       - name: Run atomica-sdk tests
         working-directory: source/atomica-sdk
         run: bun run test
 
+      # SCOUT(#236) TEST: the new tests/unit/ReleaseButton.test.tsx runs here with no workflow edit; vitest.unit.config.ts includes tests/unit/**.
       - name: Run atomica-web-components unit tests
         working-directory: source/atomica-web-components
         run: bun run test:unit
@@ -304,6 +309,7 @@ jobs:
           bun run build
 
       # ── integration: State Proofs Tests ────────────────────────────────────
+      # SCOUT(#237) TEST: this step is the only gated run of a state-proofs test; every other state-proofs test, and so the proof that the package still works without the beacon client, runs only in the non-gated State Proof Verifier workflow.
       - name: Run IBE / State Proofs tests
         if: needs.changes.outputs.code != 'false' && matrix.type == 'integration'
         working-directory: source/state-proofs/typescript
@@ -320,6 +326,7 @@ jobs:
         working-directory: source/atomica-demo
         run: bunx playwright install --with-deps chromium
 
+      # SCOUT(#236) EDIT: this step names demo test files one by one, so a new demo test file (the dev proxy table check) must be added to the list below.
       - name: Run Web Demo unit tests
         if: needs.changes.outputs.code != 'false' && matrix.type == 'meta'
         working-directory: source/atomica-demo
@@ -331,6 +338,8 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
     runs-on: ubuntu-latest
+    # SCOUT(#219) EDIT: this job took 20.8 of its 45 minutes on main (run 43093915182); the round-trip file adds a dual-chain boot, three locks and a timelock reveal, so the limit needs review.
+    # SCOUT(#239) EDIT: the moved timelock-genesis file adds one more testnet boot and an epoch wait to this job's 45 minutes.
     timeout-minutes: 45
     env:
       CI_CLASS: system-correctness
@@ -379,6 +388,8 @@ jobs:
           bun install
           bun run build
 
+      # SCOUT(#228) EDIT: the binary tag in this step is hardcoded (it does not read the workflow env) and must move with APTOS_VERSION.
+      # SCOUT(#243) EDIT: the binary tag in this step is hardcoded and must move with APTOS_VERSION; the stricter Move Framework Pin check will fail on it otherwise.
       - name: Install Aptos CLI
         run: |
           # Download aptos binary from atomica-aptos releases
@@ -423,6 +434,12 @@ jobs:
         run: forge build
 
       # ── Aptos Testnet SDK Tests ────────────────────────────────────────────
+      # SCOUT(#219) TEST: this step runs test/auction-round-trip.test.ts; no image step is needed, because the compose default image is validator:binary-52beee31a6, which already serves /v1/atomica.
+      # SCOUT(#219) EDIT: ETH_BACKEND is unset here, so the Ethereum side is the Docker PoS chain (Prague active); the anvil backend starts on cancun and cannot run AptosLightClient.
+      # SCOUT(#239) TEST: this step runs the moved test/timelock-genesis.test.ts.
+      # SCOUT(#238) TEST: this step runs test/deploy-atomica-contracts.test.ts, which must stop calling and asserting the registry module.
+      # SCOUT(#221) TEST: this step runs test/lockbox-release.test.ts against the redeployed LockBox.
+      # SCOUT(#243) EDIT: genesis must write timelock_registrar from the deployer address in the env block below, before the package is published.
       - name: Run Aptos Testnet SDK tests
         working-directory: source/docker-testnet/aptos-testnet
         env:
@@ -452,6 +469,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # SCOUT(#228) EDIT: this check passes only when Move.toml rev and APTOS_VERSION move together to the fork commit with the decrypt native.
       - name: Move.toml rev must be the full SHA of APTOS_VERSION
         run: |
           MOVE_TOML=source/atomica-move-contracts/Move.toml
@@ -468,6 +486,18 @@ jobs:
             exit 1
           fi
           echo "Move.toml rev matches ${APTOS_VERSION}"
+
+      # SCOUT(#243) ADD: new step that fails when any workflow names a binary- tag other than APTOS_VERSION (today 7 hardcoded copies exist in 3 workflow files, plus APTOS_PROOF_RELEASE).
+      # - name: Every workflow binary- tag must equal APTOS_VERSION
+      #   run: |
+      #     set -euo pipefail
+      #     others=$(grep -rnoE 'binary-[0-9a-f]{10,40}' .github/workflows --include='*.yml' --include='*.yaml' | grep -v ":${APTOS_VERSION}\$" || true)
+      #     if [ -n "$others" ]; then
+      #       echo "::error::workflow binary tags differ from ${APTOS_VERSION}:"
+      #       echo "$others"
+      #       exit 1
+      #     fi
+      # SCOUT(#243) ADD: nothing checks the validator image digest in source/docker-testnet/config/docker-compose.yaml against APTOS_VERSION; a digest cannot be compared with a tag without a registry read.
 
   move-unit-tests:
     name: Move Unit Tests
@@ -501,6 +531,14 @@ jobs:
           aptos --version
           which aptos
 
+      # SCOUT(#216) ADD: this step has no test-count floor (the forge step below has one), so the test plan line "reports more than zero tests in the auction modules" is not enforced; a guarded form is sketched here.
+      # - name: Run Move Tests (at least N must run)
+      #   run: |
+      #     set -euo pipefail
+      #     aptos move test --package-dir source/atomica-move-contracts | tee move-test.log
+      #     total=$(grep -oE 'Test result: OK\. Total tests: [0-9]+' move-test.log | grep -oE '[0-9]+$' || echo 0)
+      #     [ "$total" -ge "$MIN_MOVE_TESTS" ] || { echo "::error::expected at least $MIN_MOVE_TESTS Move tests, $total ran"; exit 1; }
+      # SCOUT(#228) TEST: the rewritten auction tests need the fork's price-plaintext golden ciphertexts and the decrypt native, so this step fails until the pins move.
       - name: Run Move Tests
         run: |
           aptos move test --package-dir source/atomica-move-contracts
@@ -569,22 +607,39 @@ jobs:
             test_files: >-
               tests/integration/01-faucet.test.tsx
               tests/integration/02-wallet-connect.test.tsx
+          # SCOUT(#224) TEST: this chunk runs 07-create-auction with the listed and unlisted pair cases.
+          # SCOUT(#243) TEST: this chunk runs 07-create-auction, which registers the timelock through create_auction and checks the rejected direct registration.
+          # SCOUT(#241) TEST: this chunk runs 07-create-auction and 08-auction-monitor with the reserve price argument gone.
+          # SCOUT(#220) TEST: this chunk exercises the window id formula copy in helpers/auction-setup.ts against the live current_window_id.
           - chunk: auction
             test_files: >-
               tests/integration/07-create-auction.test.tsx
               tests/integration/08-auction-monitor.test.tsx
+          # SCOUT(#233) TEST: this chunk runs the new bidder-screen case in 09-submit-bid.
+          # SCOUT(#216) TEST: this chunk runs 09-submit-bid and 10-settle against the bid validity rules; helper bids must carry valid quantity, price and collateral.
+          # SCOUT(#217) TEST: this chunk runs 09 and 10 with whole-USD prices.
+          # SCOUT(#228) TEST: this chunk runs open_bids in 09 and 10 against the live validators.
           - chunk: bid-settle
             test_files: >-
               tests/integration/09-submit-bid.test.tsx
               tests/integration/10-settle.test.tsx
+          # SCOUT(#218) TEST: this chunk runs 16-settle-100-bids at both caps; it took 10.5 of 45 minutes on main and 100 seller locks add 100 register and 100 create_auction transactions.
+          # SCOUT(#228) TEST: this chunk opens 100 bids in batches through open_bids.
           - chunk: settle-100-bids
             test_files: >-
               tests/integration/16-settle-100-bids.test.tsx
+          # SCOUT(#238) REMOVE: tests/integration/12-fee-rebate.test.tsx leaves this chunk's test_files when the file is deleted.
+          # SCOUT(#236) EDIT: tests/integration/11-claim-and-reclaim.test.tsx becomes a release test; rename it in this chunk's test_files if the file is renamed.
           - chunk: claim-reclaim-fees
             test_files: >-
               tests/integration/11-claim-and-reclaim.test.tsx
               tests/integration/12-fee-rebate.test.tsx
               tests/integration/13-bid-history.test.tsx
+          # SCOUT(#236) TEST: this chunk runs 14-happy-path ending with release on Ethereum; on this anvil tier that needs the anvil backend on the prague hardfork (it starts on cancun today).
+          # SCOUT(#217) TEST: this chunk runs 14-happy-path with the 2000 price.
+          # SCOUT(#221) TEST: this chunk runs 14-happy-path, which locks through the new lock() call with no deadline argument.
+          # SCOUT(#228) TEST: this chunk runs 14-happy-path with the on-chain open step.
+          # SCOUT(#234) TEST: this chunk runs 14-happy-path, which must still lock once the client compares its LockBox with the eth_proof pin.
           - chunk: happy-path
             test_files: >-
               tests/integration/14-happy-path.test.tsx
@@ -640,6 +695,9 @@ jobs:
         working-directory: source/evm-contracts
         run: forge build
 
+      # SCOUT(#228) EDIT: the binary tag in this step is hardcoded and must move with APTOS_VERSION.
+      # SCOUT(#243) EDIT: the binary tag in this step is hardcoded and must move with APTOS_VERSION.
+      # SCOUT(#236) EDIT: a new or renamed chunk must also be added to the two chunk lists in the `if:` lines of this step and the next, and to the gate list in required-checks.
       - name: Install Aptos CLI
         if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path'
         run: |
@@ -722,14 +780,18 @@ jobs:
             test_files: >-
               tests/integration/09-submit-bid.test.tsx
               tests/integration/10-settle.test.tsx
+          # SCOUT(#218) TEST: this chunk runs 16-settle-100-bids at both caps on the Docker PoS chain; it took 18.1 of 60 minutes on main, and each lock batch waits real 12 second slots.
           - chunk: settle-100-bids
             test_files: >-
               tests/integration/16-settle-100-bids.test.tsx
+          # SCOUT(#238) REMOVE: tests/integration/12-fee-rebate.test.tsx leaves this chunk's test_files when the file is deleted.
+          # SCOUT(#236) EDIT: tests/integration/11-claim-and-reclaim.test.tsx becomes a release test; rename it in this chunk's test_files if the file is renamed.
           - chunk: claim-reclaim-fees
             test_files: >-
               tests/integration/11-claim-and-reclaim.test.tsx
               tests/integration/12-fee-rebate.test.tsx
               tests/integration/13-bid-history.test.tsx
+          # SCOUT(#236) TEST: this chunk runs 14-happy-path ending with release on Ethereum against the Docker PoS chain, where Prague is active.
           - chunk: happy-path
             test_files: >-
               tests/integration/14-happy-path.test.tsx
@@ -785,6 +847,8 @@ jobs:
         working-directory: source/evm-contracts
         run: forge build
 
+      # SCOUT(#228) EDIT: the binary tag in this step is hardcoded and must move with APTOS_VERSION.
+      # SCOUT(#243) EDIT: the binary tag in this step is hardcoded and must move with APTOS_VERSION.
       - name: Install Aptos CLI
         if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path'
         run: |
@@ -957,6 +1021,8 @@ jobs:
         run: forge build
 
       # Older contracts predate forge fmt. The light client and LockBox sources are checked.
+      # SCOUT(#221) EDIT: a new forge test file for the window bounds or the shared deadline table must be added to this fmt list and must match the --match-path glob of the next step, or it never runs here.
+      # SCOUT(#222) EDIT: a new forge test file for reclaimUnpayable must be added to this fmt list and must match the --match-path glob of the next step, or it never runs here.
       - name: Check light client and LockBox formatting
         working-directory: source/evm-contracts
         run: >-
@@ -992,6 +1058,9 @@ jobs:
     timeout-minutes: 45
     env:
       CI_CLASS: system-correctness
+      # SCOUT(#228) EDIT: APTOS_PROOF_RELEASE, APTOS_PROOF_COMMIT (full SHA) and the IMAGE_NAME tag below must move with APTOS_VERSION.
+      # SCOUT(#243) EDIT: APTOS_PROOF_RELEASE, APTOS_PROOF_COMMIT (full SHA) and the IMAGE_NAME tag below must move with APTOS_VERSION.
+      # SCOUT(#219) EDIT: this job builds its own image because the compose default once lacked /v1/atomica; the default is now binary-52beee31a6, so the round-trip job needs no such build.
       APTOS_PROOF_RELEASE: binary-52beee31a6
       APTOS_PROOF_COMMIT: 52beee31a6ec0a64f2471971d202e6b0e2392440
       IMAGE_NAME: atomica-validator:52beee31a6
@@ -1141,6 +1210,8 @@ jobs:
       matrix:
         check: ["Required Checks", "Web Tests (unit)"]
     steps:
+      # SCOUT(#219) TEST: the gate list below already holds "Aptos Testnet SDK (docker)" in the docker tier, so the round-trip test is gated from ready-for-review on and skipped on drafts.
+      # SCOUT(#236) EDIT: a new or renamed browser chunk must be added to both Browser Tests lines of the gate list below, or the gate fails on an unknown job.
       - name: Wait for every gated job, fail unless each succeeded
         run: |
           set -euo pipefail

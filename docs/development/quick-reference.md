@@ -1,3 +1,5 @@
+<!-- SCOUT(#239) DOC: wholly superseded: pre-pivot contract set (AtomicaController, DepositBox) and test commands under the deleted ZK scaffold; archive it. -->
+
 # Atomica EVM Contracts - Quick Reference
 
 ## Contract Architecture

@@ -11,6 +11,7 @@ export interface TokenContract {
 }
 
 export interface LockBoxContract {
+  // SCOUT(#221) EDIT: drop the deadline parameter (not in the issue text); the demo script deploy-lockbox-real.ts uses this type.
   lock(
     token: string,
     amount: bigint,

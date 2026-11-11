@@ -8,6 +8,13 @@
 
 **How:** Users lock native assets on their home chains and participate in twice-daily sealed-bid batch auctions. Assets settle 1-3 hours after auction close. Cross-chain atomic trades execute without bridges or custodians.
 
+<!-- SCOUT(#242) DOC: "Non-custodial with minimal lock time" bullet: on main a lock leaves LockBox only by reclaim, 72 h after its window closes, so say what the lock time is today. -->
+<!-- SCOUT(#228) DOC: "Timelock IBE cryptography" bullet: bids open by a submitted (price, salt) pair today; "no interactive reveal phase" holds only once open_bids decrypts on chain. -->
+<!-- SCOUT(#242) DOC: "Encrypted mempools" bullet: only the price is sealed; the bid quantity is a clear argument of submit_bid and no encrypted mempool is used; say so. -->
+<!-- SCOUT(#242) DOC: "Double verification pathways" bullet: label the ZK half as a later-phase item, in the wording the acceptance check greps for. -->
+<!-- SCOUT(#242) DOC: "Zero operator fees" bullet: no fee or rebate exists on chain and Bitcoin is not supported; label the deal-breaker rebate as a later-phase item. -->
+<!-- SCOUT(#238) DOC: "deal breakers pay deal makers": the zero-returning rebate scaffolding this points at is deleted from Move, SDK and UI. -->
+
 **Key Innovations:**
 - **Non-custodial with minimal lock time**: Assets locked only for the auction period—no prolonged custody risk
 - **True cross-chain atomic trades**: Native assets move between chains without bridges, wrapped tokens, or custodians
@@ -41,6 +48,8 @@ Cross-chain asset exchange compounds risks from bridges and DEX mechanics:
 
 Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined with auction-based competitive price discovery.
 
+<!-- SCOUT(#242) DOC: property 3 "N-layer timelock encryption": one validator layer is built; label the other layers as a later-phase item. -->
+
 **Core Properties:**
 1. Native cross-chain execution (no bridges, no wrapped tokens)
 2. Batch auction clearing with 1-3 hour settlement
@@ -52,6 +61,12 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 
 ### Twice-Daily Batch Auctions
 
+<!-- SCOUT(#242) DOC: the 07:45 and 16:15 UTC closes are the target; on main window ids change at 00:00, 07:55, 12:00 and 19:55 UTC until the window id issue (220) lands; say so or land that first. -->
+<!-- SCOUT(#242) DOC: "All trading pairs clear simultaneously": one FakeETH and FakeUSD pair is hardcoded; label multi-pair clearing as a later-phase item (the pair allowlist issue (224) adds one launch pair). -->
+<!-- SCOUT(#242) DOC: "Sellers ... with quote assets wanting base assets" and "Bidders: Base asset holders" are inverted against the code: sellers lock the base token (FakeETH) and bidders lock the quote token (FakeUSD). -->
+<!-- SCOUT(#241) DOC: "No reserve prices at launch" becomes true in code with this issue: create_auction still takes min_price and the sell flow shows it today; no text change is needed afterwards. -->
+<!-- SCOUT(#242) DOC: "Settlement: 1-3 hours post-auction" (also Executive Summary, Core Properties, "Why 1-3 Hour Settlement", Key Tradeoffs): no code times settlement; on main no outcome reaches Ethereum and a lock goes home by reclaim after 72 h. -->
+
 **Structure:**
 - **Two auctions per day** to capture global liquidity:
   - **Western Auction:** 16:15 UTC
@@ -61,6 +76,11 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 - **Bidders:** Base asset holders submit sealed bids
 - No reserve prices at launch (relies on competitive bidding in large batch)
 - Settlement: 1-3 hours post-auction
+
+<!-- SCOUT(#242) DOC: timeline: no code opens bidding at 12:15 or delays settlement to 17:15; bids run from create_auction to the window timelock deadline, and settle is callable from the reveal. -->
+<!-- SCOUT(#228) DOC: "automatic decryption" at the close needs open_bids; today each bid needs a submitted price and salt. -->
+<!-- SCOUT(#243) DOC: "16:15 UTC Auction close": the close is the first seller's timelock deadline today; it is the window close only once create_auction registers the timelock itself. -->
+<!-- SCOUT(#231) DOC: "12:15 UTC Bid window opens": bids can start only in the chain epoch that holds the close, so the opening time depends on the epoch ends the owner picks. -->
 
 **Example Timeline (16:15 UTC Auction):**
 ```
@@ -88,6 +108,8 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 
 ### Multi-Asset Auctions
 
+<!-- SCOUT(#242) DOC: "Multi-Asset Auctions" section: unbuilt; label it as a later-phase item, and note that the linked product design is archived. -->
+
 **Simultaneous Clearing:** All trading pairs clear at the same time within each auction window. This provides:
 - **Consistent pricing:** All assets priced at the same moment in time
 - **Simpler mechanism:** No ordering dependencies or cascading effects
@@ -101,6 +123,10 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 
 ### Cross-Chain Verification
 
+<!-- SCOUT(#242) DOC: "All away chains (Ethereum, Solana, Base, Arbitrum)": only Ethereum is built. -->
+<!-- SCOUT(#242) DOC: verification item 1: validators do not sign merkle roots with a threshold signature; Ethereum checks a 2/3+ aggregate BLS signature over an Aptos LedgerInfo plus an event inclusion proof (AptosLightClient). -->
+<!-- SCOUT(#242) DOC: verification item 2 (ZK computation layer): label as a later-phase item. -->
+
 **Unified Architecture:** All away chains (Ethereum, Solana, Base, Arbitrum, etc.) use identical verification mechanisms.
 
 **Verification:**
@@ -112,6 +138,11 @@ No trusted oracles or bridges.
 **→ See:** [Architecture Overview](docs/technical/architecture-overview.md) and [Unified Away Chain Architecture](docs/decisions/unified-away-chain-architecture.md)
 
 ### Sealed Bid Implementation
+
+<!-- SCOUT(#242) DOC: Sealed Bid Implementation: only the validator timelock layer exists; label the onion layers, the seller DKG layer and the Drand layer as later-phase items. -->
+<!-- SCOUT(#242) DOC: the 67 percent sentence (owner decision 31): the fork keeps bids secret only against at most one half of stake and needs two thirds to reveal; the seller-set 33 percent is unbuilt. -->
+<!-- SCOUT(#216) DOC: "Invalid bids filtered post-decryption": nothing is filtered today; after this issue a zero-price or under-collateralised bid is invalid at opening and never fills. -->
+<!-- SCOUT(#228) DOC: after on-chain opening, a ciphertext that does not decrypt to an 8-byte price is also an invalid bid. -->
 
 **N-Layer "Onion" Timelock Encryption:** Bids encrypted using pluggable, configurable layers.
 
@@ -130,6 +161,10 @@ This prevents "Invisible Handshake" attacks where validators collude off-chain. 
 
 ### Uniform Price Auction Mechanism
 
+<!-- SCOUT(#242) DOC: "sealed bids (quantity + price)": only the price is sealed; the quantity is public at submission. -->
+<!-- SCOUT(#217) DOC: the example prices (2000, 1980, 1950) are whole USD per whole base token, the one unit this issue pins; say the unit here. -->
+<!-- SCOUT(#216) DOC: "clearing price set at lowest qualifying bid": the rule for an undersubscribed window (review decision 34) is not stated; today the lowest opened bid sets the price, even at zero. -->
+
 Bidders submit sealed bids (quantity + price). Bids sorted, clearing price set at lowest qualifying bid. All winners pay same uniform price (regardless of bid).
 
 **Example:** Auction for 100 ETH with bids: A (40@$2000), B (30@$1980), C (40@$1950) → All clear at $1950
@@ -139,6 +174,8 @@ Bidders submit sealed bids (quantity + price). Bids sorted, clearing price set a
 **→ See:** [Uniform Price Auctions](docs/game-theory/uniform-price-auctions.md) for game theory analysis
 
 ### Account Abstraction
+
+<!-- SCOUT(#242) DOC: "without needing ... gas tokens": the derived Aptos account pays its own gas; the demo funds it with APT through a funding API, and no fee payer exists in the SDK. -->
 
 **Seamless Cross-Chain UX:** Users deposit on their preferred chain using familiar wallets (MetaMask, Phantom). Account abstraction maps Ethereum addresses to Atomica accounts, enabling users to sign bids with their Ethereum wallet without needing Atomica-native wallets or gas tokens.
 
@@ -160,6 +197,8 @@ Equities trade on scheduled hours with opening/closing auctions. Bonds clear via
 - No canonical reference price—just noisy continuous feeds
 
 **The Gap:** Institutional-grade auction infrastructure exists for every major asset class except crypto. No opening auction. No closing auction. No batch price discovery. Just continuous fragmentation.
+
+<!-- SCOUT(#242) DOC: "(12:00 NYC, 12:00 Tokyo)" contradicts the canonical 07:45 and 16:15 UTC closes, and "on business days" has no code: window ids run every calendar day. -->
 
 **Atomica's Position:** The global canonical market open/close auction for crypto on business days. Two auctions per day (12:00 NYC, 12:00 Tokyo) establish reference prices for Bitcoin, Ethereum, and cross-chain assets—just as the NYSE open/close does for equities and the LBMA fixing does for gold.
 
@@ -195,6 +234,9 @@ Bidders (arbitrageurs) earn through bid-ask spreads (buy at auction price, sell/
 
 ### Fee Structure: Deal Breakers Pay Deal Makers
 
+<!-- SCOUT(#242) DOC: "Fee Structure: Deal Breakers Pay Deal Makers" section: unbuilt (the rebate coefficient is zero); label the rebate curve as a later-phase item. -->
+<!-- SCOUT(#238) DOC: the rebate scaffolding (compute_rebates, fetchRebates, useFeeRebate, FeeRebateDisplay) is deleted; nothing on chain computes a fee after this issue. -->
+
 **Core Principle:** All externalities are internalized. Participants whose bids move the market away from efficient clearing compensate those whose bids improve price discovery.
 
 **Distance-to-Clearing-Price Rebates:**
@@ -217,6 +259,9 @@ Bidders (arbitrageurs) earn through bid-ask spreads (buy at auction price, sell/
 **→ See:** [CPMM vs Auction Comparison](docs/game-theory/cpmm-vs-auction-comparison.md) and [Bear Market Analysis](docs/analysis/bear-market.md)
 
 ## Development Status
+
+<!-- SCOUT(#242) DOC: status block: Risk #2 is no longer "in progress, N-layer onion" (validator timelock DKG, V2 bid ciphertexts and key reveal are merged); Risk #3 is no longer "Pending" (attested headers, the Aptos light client and the proof-gated LockBox are merged; outcome emission (194) and the carrier (195) are open); the timeline estimate is stale. -->
+<!-- SCOUT(#242) DOC: the Risk #3 bullet repeats "trusts only the 2/3 validator threshold, no relayer" without the package upgrade-key assumption (owner decision 30). -->
 
 **Current Progress:**
 - ✅ **Risk #1 (Ethereum Signing):** Complete - users can sign Atomica transactions with MetaMask
@@ -242,6 +287,8 @@ Atomica prioritizes:
 
 ### System Characteristics & Tradeoffs
 
+<!-- SCOUT(#242) DOC: "Custodial Risk" row: "locked only for auction duration; guaranteed delivery or refund": the lock deadline is the window close plus 72 h (owner decision 36), and the package upgrade-key holder can redirect a lock (owner decision 30). -->
+
 | Characteristic | Ideal State | Atomica's Approach |
 |----------------|-------------|--------------------|
 | **Private Strategies** | Full privacy of strategies & prices | **Timelock Sealed Bids:** Temporary privacy during auction window; public post-decryption. |
@@ -261,6 +308,12 @@ Atomica prioritizes:
 - **Practical Privacy:** Accepting temporary privacy (timelock) rather than waiting for FHE.
 
 ## Open Questions
+
+<!-- SCOUT(#241) DOC: question 3 (reserve price mechanics): this issue takes the "no reserve at launch" answer (review decision 33); keep the question only as a later item. -->
+<!-- SCOUT(#218) DOC: question 6 (DoS prevention): partly answered by the seller-lock cap, the bid cap and the minimum lock sizes; name the values the owner picks. -->
+<!-- SCOUT(#243) DOC: question 6 also covers timelock registration spam: closed when only the auction package registers a timelock, one per window. -->
+<!-- SCOUT(#216) DOC: question 7 (griefing bounds): a dust bid can no longer cancel a window once invalid bids are skipped. -->
+<!-- SCOUT(#242) DOC: question 5: headers are validator transactions now; the open incentive question is who pays the outcome carrier's gas (review K-2). Question 9: the package upgrade-key is the governance question that matters (owner decision 30). -->
 
 1. Optimal settlement delay within 1-3 hour range
 2. Distance-to-clearing-price rebate curve calibration
@@ -296,6 +349,8 @@ Atomica prioritizes:
 
 ## Documentation Map
 
+<!-- SCOUT(#242) DOC: links: 31 links in this file are repo-root paths (docs/...) that do not resolve from docs/specifications/ on GitHub; only the timing-spec line uses file-relative links; "Bear Market Analysis" is listed twice. -->
+
 **Background & Context:**
 - [Prior Art: Decentralized Exchanges](docs/background/prior-art.md) - Existing DEX mechanisms
 - [CoW Swap Analysis](docs/background/cow-swap-analysis.md) - Batch auction case study
@@ -322,6 +377,9 @@ Atomica prioritizes:
 
 ## Protocol Evolution Roadmap
 
+<!-- SCOUT(#242) DOC: broken link: the plan evolution file lives under docs/archived/ in kebab-case. -->
+<!-- SCOUT(#242) DOC: table row v0.1 Beta: "2/3 validator threshold only" omits the package upgrade-key (owner decision 30), and "permissionless unwind (current)" is not on main until the Aptos unwind (194) merges. -->
+
 See [Plan Evolution](docs/PLAN-EVOLUTION.md) for the multi-phase roadmap from v0.1 Beta to v2.0:
 
 | Phase | Trust Model | Key Innovation |
@@ -329,6 +387,8 @@ See [Plan Evolution](docs/PLAN-EVOLUTION.md) for the multi-phase roadmap from v0
 | **v0.1 Beta** | 2/3 validator threshold only, no relayer | Working system with verified BLS settlement and permissionless unwind (current) |
 | **v1.0** | Same validator assumption + ZK | ZK auction verification |
 | **v2.0** | Same validator assumption + ratchet | Cross-chain auctions + BitVM |
+
+<!-- SCOUT(#242) DOC: trust model sentence (owner decision 30): "No relayer, admin key or operator can move or freeze funds" contradicts the decision record's Trust Assumptions; also state the bid secrecy bound (owner decision 31). -->
 
 **v0.1 Trust Model:** v0.1 trusts only the 2/3 validator threshold. No relayer, admin key or operator can move or freeze funds. All funds unwind to their origin unless the auction executes flawlessly, and any user can send a transaction to a finished or stuck auction to unwind it. See the [trustless v0.1 unwinding ADR](docs/decisions/trustless-v0-1-unwinding.md).
 
@@ -361,6 +421,8 @@ See [Plan Evolution](docs/PLAN-EVOLUTION.md) for the multi-phase roadmap from v0
 - Glosten & Milgrom (1985). Bid-ask spread with adverse selection
 
 ---
+
+<!-- SCOUT(#242) DOC: last-updated date and status line are stale. -->
 
 **Last Updated:** 2025-01-17
 **Status:** Risk #1 complete, Risk #2 in progress (timelock encryption)

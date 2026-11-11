@@ -4,6 +4,7 @@
  * Live settlement tests for SettleButton on one window of the dual-chain
  * testnet. Two sealed bids compete for the seller's 10 FakeETH:
  *
+ // SCOUT(#217) EDIT: header prices read 2.00 and 1.50; they become 2000 and 1500 whole USD.
  *   winner — price 2.00, quantity 10 FakeETH (fills the whole supply)
  *   loser  — price 1.50, quantity  1 FakeETH
  *
@@ -72,7 +73,10 @@ import { WalletContext } from "../../src/context/WalletContext";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
 
+// SCOUT(#241) REMOVE: MIN_PRICE and the minPrice option below.
 const MIN_PRICE = 1_000_000n;
+// SCOUT(#217) EDIT: whole-USD prices (2000 and 1500); the $2.00 expectations below become $2000.
+// SCOUT(#216) EDIT: on main the winner bids the whole 10 FakeETH supply, far above its 500 FakeUSD collateral; pull request 213 already shrinks SUPPLY to 0.0001 FakeETH (200 FakeUSD at 2_000_000), but LOSE_QUANTITY stays 1 FakeETH, which is above that supply, so the loser's submit_bid aborts with the new over-supply code; shrink LOSE_QUANTITY too.
 const WIN_PRICE = 2_000_000n;
 const LOSE_PRICE = 1_500_000n;
 // The winner bids the whole supply. Its quote must fit the 500 FakeUSD
@@ -80,7 +84,9 @@ const LOSE_PRICE = 1_500_000n;
 // `quoteForFill`) = 200.
 const SUPPLY = ethers.parseEther("0.0001");
 const LOSE_QUANTITY = ethers.parseEther("1");
+// SCOUT(#224) EDIT: use the launch pair.
 const PAIR_BCS = new TextEncoder().encode("10-settle");
+// SCOUT(#243) EDIT: a 120 second deadline needs the test cap.
 const DEADLINE_AHEAD_US = 120_000_000n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
 const REVEAL_TIMEOUT_SECS = 300;
@@ -139,6 +145,7 @@ describe.sequential("10: Settle Auction", () => {
       pairBcs: PAIR_BCS,
       minPrice: MIN_PRICE,
       deadlineAheadUs: DEADLINE_AHEAD_US,
+      // SCOUT(#218) EDIT: pull request 213 sets SUPPLY to 0.0001 FakeETH, below the proposed 0.01 FakeETH minimum seller lock, so create_auction aborts; raise SUPPLY and size collateral with whole-USD prices (217).
       lockAmount: SUPPLY,
     });
     await submitBidDirect(aptosClient, fixture.eth.bidder, auction, WIN_PRICE, winCollateral, SUPPLY);
@@ -148,6 +155,7 @@ describe.sequential("10: Settle Auction", () => {
       auction,
       LOSE_PRICE,
       loseCollateral,
+      // SCOUT(#216) EDIT: after pull request 213 this quantity (1 FakeETH) is above the window supply (0.0001 FakeETH) and aborts with the new over-supply code.
       LOSE_QUANTITY,
     );
 
@@ -206,10 +214,12 @@ describe.sequential("10: Settle Auction", () => {
         Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS,
       );
 
+      // SCOUT(#228) EDIT: call open_bids from an account that is not the bidder, with no prices and no salts.
       const opened = await openWindowBidsDirect(aptosClient, operator, auction);
       expect(opened.map((b) => b.price)).toEqual([WIN_PRICE, LOSE_PRICE]);
       expect((await getBidInfo(auction.windowId, PAIR_BCS, 0n)).opened).toBe(true);
       expect((await getBidInfo(auction.windowId, PAIR_BCS, 1n)).opened).toBe(true);
+      // SCOUT(#228) EDIT: reveal_final has no finalize step any more; assert the cleared state the new view gives.
       expect(
         await getWindowStatus(aptosClient, moduleAddr, auction.windowId, PAIR_BCS),
       ).toEqual({ timelockId: auction.timelockId, revealFinal: true, refunded: false });
@@ -250,6 +260,7 @@ describe.sequential("10: Settle Auction", () => {
       expect(settleResult.contains(screen.getByTestId(settleButton.settleClearingPrice))).toBe(
         true,
       );
+      // SCOUT(#217) EDIT: the displayed clearing price becomes $2000.
       expect(screen.getByTestId(settleButton.settleClearingPrice).textContent).toBe("$2.00");
 
       const state = await getAuctionState(aptosClient, moduleAddr, auction);
@@ -298,6 +309,7 @@ describe.sequential("10: Settle Auction", () => {
     );
     const btn = screen.getByTestId(settleButton.settleButton) as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
+    // SCOUT(#217) EDIT: the displayed clearing price becomes $2000.
     expect(screen.getByTestId(settleButton.settleClearingPrice).textContent).toBe("$2.00");
   }, 60_000);
 
@@ -330,9 +342,13 @@ describe.sequential("10: Settle Auction", () => {
         const rows = screen.getAllByTestId(bidHistory.bidHistoryRow);
         expect(rows).toHaveLength(1);
         expect(rows[0].textContent).toContain(auction.windowId.toString());
+        // SCOUT(#217) EDIT: the bid history price becomes $2000.
         expect(rows[0].textContent).toContain("$2.00");
       },
       { timeout: 15_000 },
     );
   }, 60_000);
+
+  it.todo("SCOUT(#216) an under-collateralized bid opens without abort, reads invalid, takes no fill, and settle returns its whole collateral to its depositor");
+  it.todo("SCOUT(#238) get_settlement returns the sum of the winners' fills and SettleButton shows it as the total filled");
 });

@@ -39,6 +39,7 @@ const ERC20_ABI = [
   "function balanceOf(address account) external view returns (uint256)",
 ] as const;
 
+// SCOUT(#221) EDIT: private copy of the lock ABI with the deadline argument; this file is missing from the issue's touchpoints and runs in no CI job.
 const LOCKBOX_ABI = [
   "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) external returns (bytes32)",
 ] as const;
@@ -49,6 +50,8 @@ async function lockNow(lockBox: ethers.Contract, token: string, amount: bigint) 
     currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
     new Uint8Array(0),
   );
+  // SCOUT(#221) EDIT: lock takes no deadline argument.
+  // SCOUT(#224) EDIT: bind to the launch pair instead of new Uint8Array(0) above.
   const tx = await lockBox.lock(token, amount, b.windowId, b.pairHash, b.deadline);
   await tx.wait();
 }

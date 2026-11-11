@@ -214,3 +214,21 @@ describe("isRevealed", () => {
     expect(payload.functionArguments[0]).toBe(TIMELOCK_ID);
   });
 });
+
+describe("planned tests (SCOUT)", () => {
+  it.todo(
+    "SCOUT(#238) areCoreContractsDeployed returns true for a module list without registry",
+  );
+  it.todo(
+    "SCOUT(#234) getPinnedEthereumConfig reads eth_proof::get_config and returns the LockBox, FakeETH and FakeUSD addresses",
+  );
+  it.todo(
+    "SCOUT(#218) getWindowLimits reads the limits view and returns the bid cap, the seller cap and the two minimums",
+  );
+  it.todo(
+    "SCOUT(#224) isPairAllowed and getLaunchPairBcs read the allowlist views",
+  );
+  it.todo(
+    "SCOUT(#243) getWindowTimelock and getWindowDeadlineUs read the new window views",
+  );
+});

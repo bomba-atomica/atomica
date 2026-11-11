@@ -1,3 +1,5 @@
+<!-- SCOUT(#239) DOC: historical planning spec: it names the older Aptos testnet SDK package and atomica-web paths that no longer exist; archive it rather than edit lines. -->
+
 # Dual Testnet Integration: Ethereum + Aptos
 ## Project Specification v1.0
 
@@ -512,6 +514,8 @@ atomica/
 ```
 
 ---
+
+<!-- SCOUT(#237) DOC: ETH_BEACON_URL below is the env var a beacon light client would read; nothing in the SDK reads it, so drop it with the light client or say it only reaches the beacon node API. -->
 
 ## Appendix B: Environment Variables
 

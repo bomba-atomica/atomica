@@ -9,6 +9,8 @@ Atomica is a cross-chain auction and settlement system with core workstreams in:
 
 ## Current Repository Layout
 
+<!-- SCOUT(#239) DOC: layout: the ZK scaffold crate and the test-utils mocks are deleted; the tree is stale beyond that (atomica-web/ and web/ are gone; atomica-sdk, atomica-web-components, atomica-demo, golden-vectors and shared are missing), and Key Docs points at a superseded quick reference. -->
+
 ```text
 source/
 ├── atomica-web/              # Main app + cross-chain tests

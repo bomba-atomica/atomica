@@ -40,6 +40,7 @@ const PAIR: Pair = {
 
 const WINDOW_ID = 1n;
 
+// SCOUT(#217) EDIT: clearingPrice fixture 1000; this browser-mode file runs in no CI job, so the $2000 case goes in tests/unit/price-display.test.tsx.
 const MOCK_EVENT: AuctionSettledEvent = {
   windowId: WINDOW_ID,
   pair: PAIR,

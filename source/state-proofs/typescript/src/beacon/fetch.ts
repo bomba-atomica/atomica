@@ -1,3 +1,4 @@
+// SCOUT(#237) REMOVE: whole file (off-chain beacon light client).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Beacon API Fetcher

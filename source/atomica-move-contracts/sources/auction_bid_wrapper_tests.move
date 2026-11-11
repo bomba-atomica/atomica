@@ -27,11 +27,14 @@ module atomica::auction_bid_wrapper_tests {
 
     const MIN: u64 = 60_000_000;
     const DEADLINE_US: u64 = 1_700_000_000_000_000;
+    // SCOUT(#220) EDIT: under the new formula 120 000 s is window 3, so AUCTION_ID 5 is neither current nor next and `create_auction` aborts; move BID_TIME_US into [200 700, 231 300) s. The issue text does not list this file.
     // 120_000 s falls in window 5 (2 * 2 + 1).
     const BID_TIME_US: u64 = 120_000_000_000;
     const EPOCH_INTERVAL_US: u64 = 2_000_000_000_000_000;
     const TIMELOCK_ID: u64 = 11;
     const AUCTION_ID: u64 = 5;
+    // SCOUT(#218) EDIT: the 5 wei seller locks (SUPPLY) and the 1000-unit FakeUSD receipts of this file are below the proposed minimums; 56 of the 63 tests of this file go through `submit_bid` or `create_auction` and need new amounts.
+    // SCOUT(#224) EDIT: `pair()` is not the BCS of a `Pair`; use the launch pair bytes or add this test pair to the allowlist.
     const SUPPLY: u256 = 5u256;
 
     fun pair(): vector<u8> { b"eth-fakeusd" }
@@ -57,11 +60,15 @@ module atomica::auction_bid_wrapper_tests {
         *vector::borrow(&fixtures::bid_case_cts(), 0)
     }
 
+    // SCOUT(#228) REMOVE: `commitment_for` and `salt` above.
     fun commitment_for(price: u64, s: u8, bidder: address): vector<u8> {
         let ad = auction::bid_associated_data(TIMELOCK_ID, AUCTION_ID, bidder);
         auction::compute_bid_commitment(price, salt(s), ad)
     }
 
+    // SCOUT(#225) EDIT: once the pin holds the fork registrar change, `ibe_config::register_timelock` aborts `E_NOT_REGISTRAR` for the framework signer; `setup` must set a registrar first. This breaks at the first pin bump past that change, whichever product issue makes it.
+    // SCOUT(#231) EDIT: if epoch ends become UTC anchored, the epoch config and the golden deadline of `setup` must still pass the 15 minute guard after the pin bump.
+    // SCOUT(#243) EDIT: `setup` sets the package's registrar address before any registration.
     // Chain state of the golden bid: chain id 7, epoch 3, timelock id 11 pending with the
     // golden deadline, clock inside auction window 5. Public so `auction_tests` can bind
     // windows to a real registered timelock.
@@ -130,6 +137,8 @@ module atomica::auction_bid_wrapper_tests {
         framework
     }
 
+    // SCOUT(#216) EDIT: `submit_golden` fixes the quantity at 5; the zero-quantity and over-supply tests need a quantity argument.
+    // SCOUT(#228) EDIT: `submit_golden` passes no commitment; the bid becomes one of the fork's price-plaintext golden ciphertexts.
     fun submit_golden(bidder: &signer, price: u64, s: u8) {
         auction::submit_bid(
             bidder, AUCTION_ID, pair(), golden_ct(),
@@ -166,6 +175,7 @@ module atomica::auction_bid_wrapper_tests {
         assert!(!ibe_config::finalize_for_testing(TIMELOCK_ID, x"00"), 901);
     }
 
+    // SCOUT(#226) EDIT: once the pin holds the fork status change, the status reads expired at the reveal expiry without the `on_new_block_for_testing` call of `expire_reveal_window`.
     // No key by the end of the reveal window: Expired(reveal-window-elapsed).
     fun expire_reveal_window() {
         timestamp::update_global_time_for_test(DEADLINE_US + 10 * MIN);
@@ -189,6 +199,7 @@ module atomica::auction_bid_wrapper_tests {
         assert!(ibe::verify_bid_ct(golden_ct(), ad), 2);
     }
 
+    // SCOUT(#228) REMOVE: `commitment_known_answer_matches_sdk`, and its twin in the SDK `ibe-bid.test.ts`.
     // Known answer shared with the TypeScript SDK test (`ibe-bid.test.ts`): the commitment of
     // price 2010 with salt 0x07 * 32 under the golden associated data.
     #[test]
@@ -202,6 +213,8 @@ module atomica::auction_bid_wrapper_tests {
 
     // ===================== submit_bid: V2 ciphertext check =====================
 
+    // SCOUT(#216) EDIT: `submit_bid_accepts_the_golden_ciphertext` destructures `get_bid_info`; the tuple gains the validity flag.
+    // SCOUT(#228) EDIT: `submit_bid_accepts_the_golden_ciphertext` destructures `get_bid_info`; the tuple loses `commitment`.
     #[test(atomica = @atomica)]
     fun submit_bid_accepts_the_golden_ciphertext(atomica: &signer) {
         setup_window(atomica);
@@ -317,6 +330,7 @@ module atomica::auction_bid_wrapper_tests {
         ibe_config::set_epoch_config_for_testing(
             &framework, 4, fixtures::timelock_basic_mpk(), 3, vector[2, 1, 2], EPOCH_INTERVAL_US,
         );
+        // SCOUT(#225) EDIT: second direct `register_timelock` of this file; it needs the registrar signer after the pin bump.
         ibe_config::register_timelock(&framework, DEADLINE_US);
         let epoch4_timelock = ibe_config::get_next_timelock_id() - 1;
         assert!(ibe_config::get_timelock_epoch(epoch4_timelock) == 4, 1);
@@ -415,6 +429,12 @@ module atomica::auction_bid_wrapper_tests {
         submit_golden(&bidder, 2010, 7);
     }
 
+    // SCOUT(#228) REMOVE: the 23 tests of this file that call `open_bid`, `submit_cleartext_and_clear` or `finalize_reveal` (18 in this section, 3 under "Expiry", 2 under the settle guards); the `open_bids` tests named below replace them.
+    // SCOUT(#228) TEST: open_bids_clears_three_golden_price_bids
+    // SCOUT(#228) TEST: open_bids_marks_undecryptable_and_wrong_length_bids_invalid
+    // SCOUT(#228) TEST: open_bids_in_batches_equals_one_full_call
+    // SCOUT(#228) TEST: open_bids_aborts_in_a_wrong_state (pending, expired, refunded, every bid opened)
+    // SCOUT(#228) TEST: settle_aborts_until_every_bid_is_opened
     // ===================== Reveal: opening against the commitment =====================
 
     // Before the registry reveals, nothing opens.
@@ -428,6 +448,7 @@ module atomica::auction_bid_wrapper_tests {
         auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
     }
 
+    // SCOUT(#238) EDIT: `open_bid_accepts_the_committed_price_and_finalizes` and two more tests of this file read `test_get_revealed_prices`; assert the `get_bid_info` prices instead.
     #[test(atomica = @atomica)]
     fun open_bid_accepts_the_committed_price_and_finalizes(atomica: &signer) {
         setup_window(atomica);
@@ -527,6 +548,8 @@ module atomica::auction_bid_wrapper_tests {
         ibe_config::finalize_for_testing(TIMELOCK_ID, fixtures::timelock_basic_reconstructed_dk());
     }
 
+    // SCOUT(#216) TEST: batch_opening_with_invalid_bid_finalizes
+    // SCOUT(#216) TEST: settle_returns_invalid_bid_collateral_to_depositor
     // ---- batch entry ----
 
     #[test(atomica = @atomica)]
@@ -783,6 +806,7 @@ module atomica::auction_bid_wrapper_tests {
         auction::submit_cleartext_and_clear(&bidder, AUCTION_ID, pair(), vector[2010u64], vector[salt(7)]);
     }
 
+    // SCOUT(#243) EDIT: `setup_funded_window` below binds the golden timelock 11 through `create_auction`; that stops working. The unwind pull request (213) already replaces the call with a test insert.
     // ===================== Refund after Expired =====================
 
     // A window with one seller lock and one bid submitted through `submit_bid`.
@@ -961,6 +985,9 @@ module atomica::auction_bid_wrapper_tests {
         lock_receipt::insert_test_receipt<Ethereum, FakeETH>(SELLER_LOCK, @atomica, 5u256, 1);
     }
 
+    // SCOUT(#238) EDIT: drop the `vector::empty<u8>()` mpk argument of `create_auction` in `create_with_timelock` and in `setup_funded_window`.
+    // SCOUT(#241) EDIT: drop the price argument of `create_auction` in `create_with_timelock` and in `setup_funded_window`.
+    // SCOUT(#243) EDIT: `create_with_timelock` cannot pick a timelock by id any more; the five `create_auction_rejects_*` and `review_create_auction_*` tests below need a new shape.
     fun create_with_timelock(atomica: &signer, timelock_id: u64) {
         auction::create_auction(
             atomica, auction::current_window_id(), pair(), SELLER_LOCK, 2000, timelock_id, vector::empty<u8>(),
@@ -1019,6 +1046,7 @@ module atomica::auction_bid_wrapper_tests {
         auction::settle(&attacker, AUCTION_ID, pair());
     }
 
+    // SCOUT(#243) REMOVE: `review_create_auction_unregistered_timelock_aborts`; with no caller-supplied id the attack has no entry point.
     // Attack: bind a window to a timelock id the registry never issued (setup issues 0 to 12).
     #[test(atomica = @atomica)]
     #[expected_failure(abort_code = 28, location = atomica::auction)] // E_TIMELOCK_NOT_REGISTERED
@@ -1098,6 +1126,7 @@ module atomica::auction_bid_wrapper_tests {
         create_with_timelock(atomica, TIMELOCK_ID);
     }
 
+    // SCOUT(#243) EDIT: in `create_auction_rejects_a_missing_registry` the abort then comes from the framework registration, not from `E_TIMELOCK_NOT_REGISTERED`.
     // create_auction: no timelock registry at all.
     #[test(atomica = @atomica)]
     #[expected_failure(abort_code = 28, location = atomica::auction)] // E_TIMELOCK_NOT_REGISTERED

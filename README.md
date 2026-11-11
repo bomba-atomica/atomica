@@ -37,6 +37,8 @@ Bids are encrypted using an **N-Layer "Onion"** scheme with configurable layer c
 ### Uniform Price Auction
 All winning bidders pay the same clearing price (lowest qualifying bid), regardless of original bid. Similar properties to Vickrey auctions (Nobel Prize-winning research).
 
+<!-- SCOUT(#242) DOC: the rebate curve below is described as product behaviour; the issue marks it as a later phase in the PRD but does not list this README, and the dead-code issue (238) deletes the only rebate code. -->
+
 ### Fee Model: Deal Breakers Pay Deal Makers
 All externalities internalized. Fees proportional to distance from clearing price—accurate bidders get rebates, noisy bidders pay. **Zero operator fees for Bitcoin and Ethereum markets.**
 
@@ -104,6 +106,8 @@ atomica/
 ## Document Guide
 
 ### 🚧 Development & Implementation
+
+<!-- SCOUT(#242) DOC: the status lines below are stale (Risk #2 and Risk #3 changed with issues 196, 197, 201, 202, 203); this README repeats the PRD status block and is not in the issue's touchpoints. -->
 
 **[Technical Risks](docs/development/technical-risks.md)** ⭐
 - Three major technical risks and current status

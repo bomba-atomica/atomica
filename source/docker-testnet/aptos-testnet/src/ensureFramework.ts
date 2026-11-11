@@ -1,3 +1,4 @@
+// SCOUT(#239) REMOVE: whole file; the issue text misses it. It reads source/atomica-aptos and source/move-framework-fixtures, which do not exist, and has no importer besides the re-export in index.ts.
 import { exec as execCb } from "child_process";
 import { promisify } from "util";
 import { existsSync } from "fs";

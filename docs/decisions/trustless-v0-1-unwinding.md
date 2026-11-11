@@ -9,15 +9,24 @@
 
 ## Decision
 
+<!-- SCOUT(#242) DOC: decision sentence (owner decision 30): "No relayer, admin key or operator account can move, hold or freeze user funds" contradicts Trust Assumptions below, where the package upgrade-key holder can emit any AuctionOutcome. -->
+
 v0.1 Beta is trustless. It trusts only the 2/3 Aptos validator threshold. No relayer, admin key or operator account can move, hold or freeze user funds.
 
 The owner set three axioms:
+
+<!-- SCOUT(#222) DOC: axiom 1: "Every other path returns the full amount to the depositor" fails on Ethereum for a leaf that does not sum (frozen for good) until this issue; record the leaf rule: payouts, then the remainder to the depositor, and an unpayable leaf reclaims. -->
 
 1. **All funds unwind to their origin unless the auction executes flawlessly.** A lock pays out to counterparties only on a proven, complete auction outcome. Every other path returns the full amount to the depositor.
 2. **No relayer is trusted.** A relayer may carry data. It never decides anything. Every byte it carries is checked on chain against the validator threshold.
 3. **Any user can send a transaction to a finished or stuck auction to unwind it.** Unwinding needs no special account and no operator action.
 
 The axioms force four mechanisms:
+
+<!-- SCOUT(#221) DOC: per-lock deadline row: LockBox computes the deadline from the window id; no caller supplies one, so a wrong or far-future deadline cannot strand a lock. -->
+<!-- SCOUT(#222) DOC: per-lock deadline row: add reclaimUnpayable beside reclaim. -->
+<!-- SCOUT(#228) DOC: unwind row: "stuck" no longer waits for an opening window. -->
+<!-- SCOUT(#242) DOC: unwind row: not on main; open pull request 213 (194) and the SDK and UI unwind (195) implement it. -->
 
 | Mechanism | What it replaces | Implementing issues |
 | --- | --- | --- |
@@ -46,11 +55,15 @@ The PRD already set the v0.1 trust model as the 2/3 validator threshold. The rel
 
 **Positive**
 
+<!-- SCOUT(#242) DOC: "Funds never depend on one key" contradicts the upgrade-key assumption below (owner decision 30); "matches the PRD ... plus the one named assumption" is false while the PRD names no upgrade-key holder. -->
+
 - Funds never depend on one key. A stuck auction always has a way home.
 - The v0.1 trust model matches the PRD: the 2/3 validator threshold, plus the one named assumption below.
 - ZK in v1.0 becomes a second, independent check on auction clearing. It no longer has to remove a trusted relayer.
 
 **Negative**
+
+<!-- SCOUT(#221) DOC: "LockBox has no upgrade path. The proof-gated LockBox ships at a new address": this issue needs one more redeploy; batch it with the leaf rule (222) and the light client age limit (195). -->
 
 - Real BLS verification on Ethereum now ships in v0.1. It needs EIP-2537 precompiles on every target Ethereum network, including the docker testnet (Electra enabled).
 - `LockBox` has no upgrade path. The proof-gated LockBox ships at a new address.
@@ -63,6 +76,8 @@ The PRD already set the v0.1 trust model as the 2/3 validator threshold. The rel
 ---
 
 ## Trust Assumptions
+
+<!-- SCOUT(#242) DOC: add the bid secrecy assumption once the owner answers decision 31: the fork keeps bids secret only against at most one half of stake, which this section does not name. -->
 
 - **The 2/3 validator threshold.** A quorum of the current Aptos validator set can finalize any outcome.
 - **The `@atomica` package upgrade key (owner decision, 2026-11-11).** The `@atomica` Move package stays upgradeable at v0.1. v0.1 does not set `upgrade_policy` to immutable. The upgrade key holder can publish code that emits any `AuctionOutcome` event, and the validator quorum signs it like any other transaction. The Ethereum light client proves only that the event is final, so Ethereum lock safety at v0.1 also trusts that key.

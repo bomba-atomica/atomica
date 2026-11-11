@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { DockerTestnet } from "../src/index";
 
+// SCOUT(#228) EDIT: the comment below repeats the validator image digest and must move with the compose default.
+// SCOUT(#243) EDIT: the comment below repeats the validator image digest and must move with the compose default.
 /**
  * Test: Docker Testnet - Multi-Validator Blockchain Progress
  *

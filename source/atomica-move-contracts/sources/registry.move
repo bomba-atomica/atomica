@@ -1,3 +1,4 @@
+// SCOUT(#238) REMOVE: whole file. No function writes a user; only setup scripts call `registry::initialize`.
 /// Registry module — Ethereum-to-Aptos address mapping.
 ///
 /// Maintains a mapping from raw Ethereum address bytes (20 bytes) to the

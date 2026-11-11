@@ -6,6 +6,10 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IAptosLightClient} from "../aptos/IAptosLightClient.sol";
 import {OutcomeTree} from "./OutcomeTree.sol";
 
+// SCOUT(#221) DOC: "Auction binding" in the comment below becomes `auctionKey(windowId, pairHash)`, and LockBox computes the deadline itself.
+// SCOUT(#222) DOC: "Every lock ends in one of two ways" below gains `reclaimUnpayable`, and a leaf means "these payouts, the remainder to the depositor".
+// SCOUT(#222) DOC: "All or nothing" below no longer holds for a short or unpayable leaf: that lock goes home while other locks of the auction still release.
+// SCOUT(#242) DOC: "no admin, relayer, owner or upgrade key" below cites the decision record; say here too that a recorded outcome trusts the Aptos package upgrade key, if the owner names it (decision 30).
 /**
  * @title LockBox
  * @notice Escrow for FakeETH and FakeUSD locked into Atomica auctions.
@@ -57,6 +61,7 @@ contract LockBox {
         uint256 amount;
         uint64 windowId;
         bytes32 pairHash;
+        // SCOUT(#221) EDIT: the field stays, because the commitment binds it, but its only valid value becomes `lockDeadline(windowId)`.
         uint64 deadline;
     }
 
@@ -93,6 +98,15 @@ contract LockBox {
     /// @notice BCS length of an AuctionOutcome: u64, vector<u8>(32), u64, vector<u8>(32), u64.
     uint256 private constant OUTCOME_BCS_LEN = 8 + 1 + 32 + 8 + 1 + 32 + 8;
 
+    // SCOUT(#221) ADD: the window clock this contract freezes at deploy; it must equal `eth_proof.move` and the SDK `lock-binding.ts`; the three constants become public.
+    // SCOUT(#220) EDIT: these are the 07:45 and 16:15 UTC closes of the window id formula; if that issue ships other numbers, change them here before any deploy.
+    uint64 internal constant WINDOW_DAY_SECS = 86_400;
+    uint64 internal constant MORNING_CLOSE_SECS = 27_900;
+    uint64 internal constant AFTERNOON_CLOSE_SECS = 58_500;
+
+    // SCOUT(#221) ADD: seconds from a window's close to its reclaim deadline, equal to `eth_proof::ETH_RECLAIM_DELAY_SECS`; the value waits for owner decision 36; becomes public.
+    uint64 internal constant RECLAIM_DELAY = 259_200;
+
     // ==================== Events ====================
 
     event Locked(
@@ -106,6 +120,7 @@ contract LockBox {
         uint64 deadline
     );
 
+    // SCOUT(#221) EDIT: `deadline` is no longer part of the key; emit `lockDeadline(windowId)` here or drop the field (dropping it changes topic0 and the SDK ABI).
     event OutcomeRecorded(
         bytes32 indexed auctionKey,
         uint64 windowId,
@@ -116,14 +131,21 @@ contract LockBox {
         uint64 aptosVersion
     );
 
+    // SCOUT(#222) EDIT: a release may now also send a remainder to the depositor; decide whether this event carries that amount.
     event LockReleased(bytes32 indexed lockId, bytes32 indexed auctionKey);
 
     event LockReclaimed(bytes32 indexed lockId, address indexed depositor, uint256 amount);
+
+    // SCOUT(#222) ADD: emitted by `reclaimUnpayable`; or reuse `LockReclaimed` and delete this.
+    event LockReclaimedUnpayable(
+        bytes32 indexed lockId, bytes32 indexed auctionKey, address indexed depositor, uint256 amount
+    );
 
     // ==================== Errors ====================
 
     error UnsupportedToken(address token);
     error ZeroAmount();
+    // SCOUT(#221) REMOVE: no caller-supplied deadline is left to check.
     error DeadlinePassed(uint64 deadline);
     error LockMismatch(bytes32 lockId);
     error LockNotOpen(bytes32 lockId, Status status);
@@ -132,10 +154,21 @@ contract LockBox {
     error BadOutcomeEvent();
     error NoOutcome(bytes32 auctionKey);
     error InvalidProof();
+    // SCOUT(#222) EDIT: raised only when the payouts sum above the lock amount or overflow; a short sum is paid.
     error PayoutSumMismatch(uint256 sum, uint256 amount);
     error ZeroRecipient();
     error DeadlineNotReached(uint64 deadline);
     error LockInTree(bytes32 lockId);
+
+    // SCOUT(#221) REMOVE: scout scaffolding; delete it with the last stub of this contract.
+    // SCOUT(#222) REMOVE: scout scaffolding; delete it with the last stub of this contract.
+    error NotImplemented();
+    // SCOUT(#221) ADD: `lock` names a window below `currentWindowId()`.
+    error WindowClosed(uint64 windowId, uint64 current);
+    // SCOUT(#221) ADD: `lock` names a window above `currentWindowId() + 1`.
+    error WindowTooFarAhead(uint64 windowId, uint64 current);
+    // SCOUT(#222) ADD: `reclaimUnpayable` was called for a leaf that `releaseByOutcome` can pay.
+    error LeafPayable(bytes32 lockId);
 
     // ==================== Constructor ====================
 
@@ -163,9 +196,25 @@ contract LockBox {
         return keccak256(abi.encodePacked(depositor, token, nonce));
     }
 
+    // SCOUT(#221) EDIT: becomes `auctionKey(uint64 windowId, bytes32 pairHash)` = keccak256(abi.encode(windowId, pairHash)); `eth_proof::auction_key` and the SDK `auctionKey` change with it.
     /// @notice The auction a lock is bound to. Mirrored by `auction::auction_key`.
     function auctionKey(uint64 windowId, bytes32 pairHash, uint64 deadline) public pure returns (bytes32) {
         return keccak256(abi.encode(windowId, pairHash, deadline));
+    }
+
+    // SCOUT(#221) ADD: `currentWindowId()`, the window id at `block.timestamp` (mirror of `auction::current_window_id`); becomes `public view`, not virtual.
+    function currentWindowId() internal view virtual returns (uint64) {
+        revert NotImplemented();
+    }
+
+    // SCOUT(#221) ADD: `windowClose(uint64 windowId)`, the first second of window `windowId + 1` (mirror of `eth_proof::window_close_secs`); becomes `public pure`.
+    function windowClose(uint64) internal pure returns (uint64) {
+        revert NotImplemented();
+    }
+
+    // SCOUT(#221) ADD: `lockDeadline(uint64 windowId)` = `windowClose(windowId) + RECLAIM_DELAY` (mirror of `eth_proof::eth_lock_deadline`); becomes `public pure`.
+    function lockDeadline(uint64) internal pure returns (uint64) {
+        revert NotImplemented();
     }
 
     /// @notice The value stored at slot 0 for a lock. Mirrored by `eth_proof::lock_commitment`.
@@ -187,6 +236,7 @@ contract LockBox {
 
     // ==================== Lock ====================
 
+    // SCOUT(#221) EDIT: becomes `lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash)`; the commitment and `Locked` carry `lockDeadline(windowId)`.
     /**
      * @notice Lock `amount` of `token` into the auction (windowId, pairHash, deadline).
      * @dev The token must be approved first. Aptos registers the lock only when `deadline` equals
@@ -200,6 +250,7 @@ contract LockBox {
     {
         if (token != address(fakeETH) && token != address(fakeUSD)) revert UnsupportedToken(token);
         if (amount == 0) revert ZeroAmount();
+        // SCOUT(#221) EDIT: replace this check with the window bounds: revert `WindowClosed` below `currentWindowId()` and `WindowTooFarAhead` above `currentWindowId() + 1`.
         if (deadline <= block.timestamp) revert DeadlinePassed(deadline);
 
         uint256 nonce = nextLockNonce++;
@@ -223,6 +274,7 @@ contract LockBox {
         (uint64 windowId, bytes32 pairHash, uint64 deadline, bytes32 root, uint64 leafCount) = _decodeOutcome(data);
         if (root == bytes32(0) || leafCount == 0) revert BadOutcomeEvent();
 
+        // SCOUT(#221) EDIT: the key becomes `auctionKey(windowId, pairHash)`; the event's `eth_lock_deadline` is decoded and ignored (the golden vector pairs window 42 with a deadline no formula gives).
         key = auctionKey(windowId, pairHash, deadline);
         if (outcomes[key].root != bytes32(0)) revert OutcomeAlreadyRecorded(key);
         if (auctionReclaimed[key]) revert AuctionWasReclaimed(key);
@@ -231,6 +283,7 @@ contract LockBox {
         emit OutcomeRecorded(key, windowId, pairHash, deadline, root, leafCount, version);
     }
 
+    // SCOUT(#222) EDIT: the `payouts` text below changes: the list may sum to less than the lock amount, and the remainder goes to the depositor.
     /**
      * @notice Pay a lock out per its leaf in the recorded outcome of its auction. Permissionless.
      * @param l The lock's fields (checked against its commitment)
@@ -243,10 +296,12 @@ contract LockBox {
         OutcomeTree.LeafProof calldata leaf
     ) external {
         bytes32 lockId = _openLock(l);
+        // SCOUT(#221) EDIT: the key becomes `auctionKey(l.windowId, l.pairHash)`.
         bytes32 key = auctionKey(l.windowId, l.pairHash, l.deadline);
         Outcome memory o = outcomes[key];
         if (o.root == bytes32(0)) revert NoOutcome(key);
 
+        // SCOUT(#222) EDIT: replace this loop and the sum check with the shared unpayable test (`_leafUnpayable`): revert on a zero recipient, a sum above `l.amount` or an overflow, and accept a short sum.
         uint256 sum;
         for (uint256 i = 0; i < payouts.length; i++) {
             if (payouts[i].recipient == address(0)) revert ZeroRecipient();
@@ -261,6 +316,7 @@ contract LockBox {
         for (uint256 i = 0; i < payouts.length; i++) {
             if (payouts[i].amount > 0) IERC20(l.token).safeTransfer(payouts[i].recipient, payouts[i].amount);
         }
+        // SCOUT(#222) ADD: after the payouts, send `l.amount - sum` to `l.depositor` when the sum is below the lock amount.
     }
 
     // ==================== Reclaim ====================
@@ -278,6 +334,7 @@ contract LockBox {
         bytes32 lockId = _openLock(l);
         if (block.timestamp < l.deadline) revert DeadlineNotReached(l.deadline);
 
+        // SCOUT(#221) EDIT: the key becomes `auctionKey(l.windowId, l.pairHash)`.
         bytes32 key = auctionKey(l.windowId, l.pairHash, l.deadline);
         Outcome memory o = outcomes[key];
         if (o.root == bytes32(0)) {
@@ -291,6 +348,14 @@ contract LockBox {
         IERC20(l.token).safeTransfer(l.depositor, l.amount);
     }
 
+    // SCOUT(#222) ADD: `reclaimUnpayable(Lock calldata l, OutcomeTree.Payout[] calldata payouts, OutcomeTree.LeafProof calldata leaf)`; becomes `external`, not virtual; proves the leaf against the recorded outcome, requires it to be unpayable, and returns the whole lock to its depositor with no deadline wait.
+    function reclaimUnpayable(Lock calldata, OutcomeTree.Payout[] calldata, OutcomeTree.LeafProof calldata)
+        internal
+        virtual
+    {
+        revert NotImplemented();
+    }
+
     // ==================== Internal ====================
 
     /// @dev The lock's id, after checking its fields against the commitment and its open status.
@@ -302,6 +367,12 @@ contract LockBox {
         if (s != Status.Open) revert LockNotOpen(lockId, s);
     }
 
+    // SCOUT(#222) ADD: `_leafUnpayable(uint256 amount, OutcomeTree.Payout[] calldata payouts)` returns (unpayable, sum); unpayable means a zero recipient, a sum above `amount`, or a sum that overflows; it must not revert on overflow.
+    function _leafUnpayable(uint256, OutcomeTree.Payout[] calldata) internal pure returns (bool, uint256) {
+        revert NotImplemented();
+    }
+
+    // SCOUT(#221) EDIT: the BCS layout stays, because the fork golden vectors pin it; `deadline` at offset 41 is still decoded but no longer enters the auction key.
     /// @dev BCS of `AuctionOutcome { window_id: u64, pair_hash: vector<u8>, eth_lock_deadline: u64,
     ///      dispositions_root: vector<u8>, leaf_count: u64 }` with 32-byte vectors.
     function _decodeOutcome(bytes memory d)

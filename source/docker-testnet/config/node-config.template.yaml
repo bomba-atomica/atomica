@@ -1,3 +1,4 @@
+# SCOUT(#239) REMOVE: whole file; only docker-compose-inline-genesis.yaml and validator-entrypoint.sh read it.
 base:
   role: "validator"
   data_dir: "/opt/aptos/var/data"

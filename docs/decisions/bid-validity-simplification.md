@@ -10,6 +10,8 @@
 
 **We will NOT require zero-knowledge proofs of bid validity (balance sufficiency) at submission time.**
 
+<!-- SCOUT(#216) DOC: this accepted record slashes a griefing deposit for invalid bids; the bid validity issue returns the whole collateral and leaves any penalty out of scope: the owner must say which wins (closest open item: review decision 35, the cost of an unopened bid). -->
+
 Instead, bids will be validated post-decryption by checking balance and filtering out invalid bids. Invalid bids that waste auction resources will incur a griefing deposit penalty.
 
 This significantly simplifies the cryptographic stack while maintaining auction integrity through economic incentives rather than cryptographic guarantees.
@@ -169,6 +171,10 @@ Client workflow:
 ```
 
 ### Post-Decryption Validation
+
+<!-- SCOUT(#216) DOC: rules as built differ: no deposit and no 3-sigma price or units filter; a bid is invalid when its price is zero or its quote exceeds its collateral, and zero or over-supply quantity aborts at submission. -->
+<!-- SCOUT(#218) DOC: spam is bounded by a minimum collateral size and per-window caps, not by a slashed deposit. -->
+<!-- SCOUT(#228) DOC: steps a and b: a ciphertext that does not decrypt to an 8-byte price is invalid and its collateral returns; nothing is slashed. -->
 
 ```
 1. Auction closes at time T

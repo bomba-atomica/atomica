@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+// SCOUT(#222) DOC: the comment below must say what a leaf means: its payouts, then the remainder of the lock to the depositor; no hash changes, so the shared fixture stays valid.
 /**
  * @title OutcomeTree
  * @notice Keccak Merkle tree over an auction's dispositions: one leaf per lock, sorted by lock id.

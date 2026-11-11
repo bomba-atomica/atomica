@@ -14,12 +14,15 @@ exemptions:
     files:
       - source/atomica-web-components/tests/AccountStatus.test.tsx
       - source/atomica-web-components/tests/FakeEthMint.test.tsx
+      # SCOUT(#217) TEST: no CI job runs this browser-mode file, so the SettlementStatus price assert must go in a new tests/unit file to run in the Unit Tests job.
       - source/atomica-web-components/tests/SettlementStatus.test.tsx
       - source/atomica-web-components/tests/TxButton.skip-submit.test.tsx
+      # SCOUT(#217) TEST: no CI job runs this browser-mode file, so the WithdrawWinnings price assert must go in a new tests/unit file to run in the Unit Tests job.
       - source/atomica-web-components/tests/WithdrawWinnings.test.tsx
       - source/atomica-web-components/tests/app-config.test.ts
       - source/atomica-web-components/tests/app-state.test.tsx
       - source/atomica-web-components/tests/useBidHistory.test.tsx
+      # SCOUT(#238) REMOVE: drop this line when tests/useFeeRebate.test.tsx is deleted, or the guard fails on a missing exempt file.
       - source/atomica-web-components/tests/useFeeRebate.test.tsx
       - source/atomica-web-components/tests/usePoolEvents.test.tsx
 
@@ -31,6 +34,7 @@ exemptions:
     files:
       - source/atomica-web-components/tests/integration/01-faucet.test.tsx
       - source/atomica-web-components/tests/integration/02-wallet-connect.test.tsx
+      # SCOUT(#241) TEST: this file is exempt and in no browser chunk, so its minimum price edits never run in CI.
       - source/atomica-web-components/tests/integration/03-approve-and-lock.test.tsx
       - source/atomica-web-components/tests/integration/04-lock-confirmation.test.tsx
       - source/atomica-web-components/tests/integration/05-proof-generation.test.tsx
@@ -39,13 +43,20 @@ exemptions:
       - source/atomica-web-components/tests/integration/08-auction-monitor.test.tsx
       - source/atomica-web-components/tests/integration/09-submit-bid.test.tsx
       - source/atomica-web-components/tests/integration/10-settle.test.tsx
+      # SCOUT(#236) EDIT: rename this line with the file when 11-claim-and-reclaim becomes the release test; the guard does not expand the browser matrix, so the new name must be listed here.
       - source/atomica-web-components/tests/integration/11-claim-and-reclaim.test.tsx
+      # SCOUT(#235) TEST: this file is exempt and in no browser chunk, so new stored-opening cases here never run in CI; add it to a chunk or test bid storage in tests/unit.
       - source/atomica-web-components/tests/integration/12a-bid-storage.test.tsx
+      # SCOUT(#238) REMOVE: drop this line when 12b-fee-rebate-computation.test.tsx is deleted (no CI job runs that file today).
       - source/atomica-web-components/tests/integration/12b-fee-rebate-computation.test.tsx
+      # SCOUT(#238) REMOVE: drop this line when 12-fee-rebate.test.tsx is deleted; the issue text names only the two workflow lines.
       - source/atomica-web-components/tests/integration/12-fee-rebate.test.tsx
       - source/atomica-web-components/tests/integration/13-bid-history.test.tsx
       - source/atomica-web-components/tests/integration/15-pool-events.test.tsx
       - source/atomica-web-components/tests/integration/16-settle-100-bids.test.tsx
+      # SCOUT(#236) TEST: this file is exempt and in no browser chunk, so its claim and release selector asserts never run in CI.
+      # SCOUT(#238) TEST: this file is exempt and in no browser chunk, so its fee-rebate selector edits never run in CI.
+      # SCOUT(#241) TEST: this file is exempt and in no browser chunk, so its minimum price selector edits never run in CI.
       - source/atomica-web-components/tests/integration/selectors.test.tsx
       - source/atomica-web-components/tests/integration/wallet-mock-smoke.test.tsx
 
