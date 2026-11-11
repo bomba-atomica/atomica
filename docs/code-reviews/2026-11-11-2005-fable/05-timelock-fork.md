@@ -1,7 +1,7 @@
 # Chapter 5: Timelock in the Aptos Fork
 
 **Scope:** `bomba-atomica/atomica-aptos`, branch `dev-atomica` at commit `52beee31a6`. Only the Atomica delta against `aptos-node-v1.49.6` was reviewed: about 120 files and 18 700 added lines outside docs, CI and generated files.
-**Method:** A delegated reviewer read the code. I then re-read the lines behind F-1, F-2 and the threshold claim myself. Nothing was built or run. All paths in this chapter are relative to the fork repo unless they start with `source/`.
+**Method:** A delegated reviewer read the code. I then re-read the lines behind F-1, F-2 and the threshold claim myself. A second pass re-read them again at `origin/dev-atomica` and sampled F-3 to F-7. Nothing was built or run. "I confirmed this" below means the cited lines say what the bullet says. It does not mean the scenario was executed. All paths in this chapter are relative to the fork repo unless they start with `source/`.
 
 **Premise correction.** The project instructions describe a "dual-output DKG". That design was retired (fork commit `3fc4f34a07`). The shipped design is a second upstream chunky DKG session per epoch, plus Boneh-Franklin identity-based encryption on BLS12-381.
 
@@ -9,9 +9,9 @@
 
 ## The trust assumption, as coded
 
-- **Secrecy needs more than one half of stake to stay honest.** `DEFAULT_SECRECY_THRESHOLD` is 1/2 (`types/src/dkg/real_dkg/rounding/mod.rs:360-361`).
-- **A reveal needs more than two thirds of stake.** `DEFAULT_RECONSTRUCT_THRESHOLD` is 2/3 (`rounding/mod.rs:363-364`), used at `types/src/dkg/chunky_dkg.rs:352-364`.
-- **The PRD says something stronger.** "Decryption requires cooperation from ... the Validator Set (>67%)" (`docs/specifications/prd.md:122`). A coalition above one half of stake can read every bid early. Nobody can detect it, and nothing punishes it.
+- **Secrecy is guaranteed only against a coalition of at most one half of stake.** `DEFAULT_SECRECY_THRESHOLD` is 1/2 (`types/src/dkg/real_dkg/rounding/mod.rs:359-360`). The on-chain config default is the same (`types/src/on_chain_config/chunky_dkg_config.rs:28-38`).
+- **A reveal is guaranteed with two thirds of stake.** `DEFAULT_RECONSTRUCT_THRESHOLD` is 2/3 (`rounding/mod.rs:362-363`), used at `types/src/dkg/chunky_dkg.rs:352-364`.
+- **The PRD says something stronger.** "Decryption requires cooperation from ... the Validator Set (>67%)" (`docs/specifications/prd.md:122`). A coalition above one half of stake may be able to read every bid early. Between one half and two thirds the answer depends on how stake rounds to shares. Nobody can detect it, and nothing punishes it.
 - **The thresholds are shared with another feature.** The timelock session reads the mempool session's on-chain config (`aptos-move/framework/aptos-framework/sources/reconfiguration_with_dkg.move:96-101`). A governance change to the mempool thresholds silently changes the timelock's.
 - **The product contract advertises a number nothing reads.** `source/atomica-move-contracts/sources/timelock_config.move:43-46` says 67 of 100.
 
@@ -29,7 +29,7 @@ The PRD and the decision record state the trust model as "the 2/3 validator thre
 | F-4 | Medium | A timelock cannot outlive an epoch, and an epoch can start with no key |
 | F-5 | Medium | Withholding reveal shares has no consequence, and the evidence is erased |
 | F-6 | Medium | The chain never decrypts a bid |
-| F-7 | Medium | Status can read `Pending` after the reveal window closed |
+| F-7 | Low | Status can read `Pending` after the reveal window closed |
 | F-8 | Low | Validator work and state grow without bound |
 | F-9 | Low | The range-proof key comes from a single-party setup |
 | F-10 | Low | A proposer can frame a validator with rejection events |
@@ -40,19 +40,23 @@ The PRD and the decision record state the trust model as "the 2/3 validator thre
 
 **Evidence**
 
-- `register_timelock` is a public entry with no fee, cap or permission (`aptos-move/framework/aptos-framework/sources/ibe_config.move:445`). I confirmed this.
-- The per-block validator transaction limit is 2 (`types/src/on_chain_config/consensus_config.rs:124`). I confirmed this.
-- The validator transaction pool pulls in first-in order (`crates/validator-transaction-pool/src/lib.rs:152-199`).
-- Each validator queues one share transaction per due timelock, in id order (`dkg/src/timelock_share_service.rs:173-237`).
+- `register_timelock` is a public entry with no fee, cap or permission (`aptos-move/framework/aptos-framework/sources/ibe_config.move:445`). I confirmed this. It costs gas and a storage deposit.
+- The per-block validator transaction limit is 2 (`types/src/on_chain_config/consensus_config.rs:124`). I confirmed this. It is the genesis default of an on-chain config, so governance can raise it.
+- The validator transaction pool pulls in first-in order (`crates/validator-transaction-pool/src/lib.rs:152-199`). I confirmed this.
+- Each validator queues one share transaction per due timelock, once its deadline has passed (`dkg/src/timelock_share_service.rs:173-237`). I confirmed this. A timelock with an earlier deadline is queued earlier, whatever its id.
 - The reveal window is 10 minutes (`ibe_config.move:101`).
 
 **Failure scenario**
 
-Mallory registers a few thousand timelocks with deadlines just before the victim auction's. Every validator queues the spam shares first. Two land per block. The victim's shares miss the 10 minute window. The timelock becomes `Expired`, and the auction unwinds. The cost is registration gas. The exact count depends on block time, which was not measured.
+Mallory registers a few thousand timelocks with deadlines just before the victim auction's. Every validator queues the spam shares first. A proposer lands at most two of its own per block. The victim's shares miss the 10 minute window. The timelock becomes `Expired`, and the auction unwinds. The cost is registration gas.
+
+**Not confirmed**
+
+The count was not measured. It depends on block time and on the number of validators, because each spam timelock leaves the queues as soon as two thirds of stake has shared for it. A live swarm with a few thousand registrations and one later timelock would confirm or refute the scenario.
 
 **Smallest fix**
 
-Stop serving arbitrary registrations. Make `register_timelock` callable only by the auction package, one per window (this also fixes A-7 in Chapter 3). Order pooled shares by `reveal_expiry_us`.
+Stop serving arbitrary registrations. Make `register_timelock` callable only by the auction package, one per window (this also fixes A-7 in Chapter 3). The framework cannot name that package, so it needs a stored caller address that governance sets. The auction must also refuse unknown pair bytes (Chapter 3, A-12), or each made-up pair gets its own window and timelock. Order pooled shares by `reveal_expiry_us`.
 
 ---
 
@@ -61,13 +65,14 @@ Stop serving arbitrary registrations. Make `register_timelock` callable only by 
 **Evidence**
 
 - The parameters hash check runs only when an expected hash is set: `if let Some(expected) = expected_params_hash && expected != ...` (`types/src/dkg/timelock_dkg.rs:768-772`). I confirmed this.
-- `set_expected_public_parameters_hash` has no caller outside tests (`aptos-move/framework/aptos-framework/sources/timelock_dkg.move:94`). I confirmed this with a repo-wide search.
+- `set_expected_public_parameters_hash` has no caller outside tests (`aptos-move/framework/aptos-framework/sources/timelock_dkg.move:94`). I confirmed this with a repo-wide search. It takes the framework signer, so a governance proposal could call it. No genesis step does.
 - The hash is supplied by the proposer and is not in the signed message (`dkg/src/chunky/dkg_manager/mod.rs:695`, `timelock_dkg.rs:77-84`).
-- Honest nodes refuse to serve shares on a mismatch (`timelock_dkg.rs:872-876`).
+- The consensus-side check of this transaction type is empty and leaves everything to the VM handler (`types/src/validator_txn.rs`, `verify`).
+- Honest nodes refuse to serve shares on a mismatch (`timelock_dkg.rs:871-875`).
 
 **Failure scenario**
 
-A malicious validator lands its own DKG result first, with a valid certificate and a garbage parameters hash. The key reads as ready, so auctions open. Every honest node refuses to serve. No share is ever submitted. Every auction in that epoch expires. The attacker can repeat it each epoch it wins the race.
+A malicious validator is the block proposer before an honest result lands. It includes its own DKG result, with a valid certificate and a garbage parameters hash. The key reads as ready, so auctions open. Every honest node refuses to serve. No share is ever submitted. Every auction in that epoch expires. The attacker can repeat it each epoch it wins the race. How often one validator wins that race was not measured.
 
 **Smallest fix**
 
@@ -103,7 +108,7 @@ Reject a result when no expected hash is set, except on the test chain. Set the 
 
 ## F-5 Medium: withholding reveal shares has no consequence
 
-`expire()` clears the list of validators that did submit (`ibe_config.move:674-681`). No stake or performance hook exists. Validators above one third of stake can skip shares for one chosen auction. It expires and unwinds. Nothing on chain records who abstained. With the one-half secrecy bound, a coalition can look first and then abort.
+`expire()` clears the list of validators that did submit (`ibe_config.move:674-681`). No stake or performance hook exists. Validators above one third of stake can skip shares for one chosen auction. It expires and unwinds. Nothing on chain records who abstained. With the one-half secrecy bound, a coalition that can reconstruct the key may look first and then abort.
 
 **Smallest fix:** keep the submitter list on expiry and emit it in the expiry event.
 
@@ -115,9 +120,11 @@ Reject a result when no expected hash is set, except on the test chain. Set the 
 
 ---
 
-## F-7 Medium: status can read `Pending` after the reveal window closed
+## F-7 Low: status can read `Pending` after the reveal window closed
 
-Expiry is written by a queue that handles 50 entries per block (`ibe_config.move:103`). `effective_status` overrides the stored status only for an epoch change (`:728-734`). Spam registrations (F-1) sit ahead in the queue. During the backlog the auction's `refund_expired_window` aborts with `E_TIMELOCK_NOT_EXPIRED`.
+Expiry is written by a queue that handles 50 entries per block (`ibe_config.move:103`, `:702`). `effective_status` overrides the stored status only for an epoch change (`:728-734`). Spam registrations (F-1) sit ahead in the queue. During the backlog the auction's `refund_expired_window` aborts with `E_TIMELOCK_NOT_EXPIRED`.
+
+The backlog is short. Five thousand spam entries drain in 100 blocks. The refund is late by that much and no more, so this was lowered from Medium.
 
 **Smallest fix:** have `effective_status` return expired when the status is pending and the reveal expiry has passed.
 

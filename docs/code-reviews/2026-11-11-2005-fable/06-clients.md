@@ -1,7 +1,7 @@
 # Chapter 6: SDK, Web Components and Demo
 
 **Scope:** `source/atomica-sdk/src`, `source/atomica-web-components/src`, `source/atomica-demo`, `source/shared`, `source/test-utils`.
-**Method:** A delegated reviewer read the code at commit `cbd03f4`. The LockBox change (212) then merged and touched some of these files. I re-read the lines behind C-1 to C-5 at `main` commit `4ca0acd` and dropped the findings that the merge fixed. Line numbers are at `4ca0acd` where I re-checked them, and at `cbd03f4` otherwise (marked "before the merge"). Nothing was built or run.
+**Method:** A delegated reviewer read the code at commit `cbd03f4`. The LockBox change (212) then merged and touched some of these files. I re-read the lines behind C-1 to C-5 at `main` commit `4ca0acd` and dropped the findings that the merge fixed. Line numbers are at `4ca0acd` where I re-checked them, and at `cbd03f4` otherwise (marked "before the merge"). A second pass re-read C-1 to C-5 at `4ca0acd`, updated the line numbers it could, and lowered C-4 and C-5 to Medium. Nothing was built or run.
 
 ---
 
@@ -12,8 +12,8 @@
 | C-1 | High | The client cannot complete a trade end to end |
 | C-2 | High | The price unit differs by one million between screens |
 | C-3 | High | The bidder screen locks FakeUSD that can never become a receipt |
-| C-4 | High | Every bid from the bidder screen is sealed to the wrong address |
-| C-5 | High | The client never checks its host against the pinned sign-in domain |
+| C-4 | Medium | Every bid from the bidder screen is sealed to the wrong address |
+| C-5 | Medium | The client never checks its host against the pinned sign-in domain |
 | C-6 | Medium | Bid encryption trusts the RPC for the key and the identity |
 | C-7 | Medium | The relayer bridge targets a contract that no longer exists |
 | C-8 | Medium | The settlement status panel goes blind on a long chain |
@@ -28,8 +28,8 @@
 - No client code calls `recordOutcome` or `releaseByOutcome`. The only mentions are comments and one ABI line (`source/atomica-sdk/src/ethereum/abis.ts:35`). I confirmed this with a search.
 - `source/atomica-demo/src/App.tsx:57-58` mounts only `AuctionCreator` and `AuctionBidder`. `SellFlow` and `AuctionRevealer` are not exported from the component package index.
 - `ClaimButton` "claims" by calling the public faucet `fake_eth::mint` (`source/atomica-sdk/src/aptos/payloads.ts`, `getClaimMintPayload`). It moves nothing from the seller.
-- `openBid`, `finalizeReveal` and `refundExpiredWindow` payload builders have no caller in any component (before the merge: `payloads.ts:687-829`).
-- `AuctionCreator` defaults the lock id to 32 zero bytes, so the user must paste a real one (before the merge: `AuctionCreator.tsx:58`).
+- `openBid`, `finalizeReveal` and `refundExpiredWindow` payload builders have no caller in any component (`payloads.ts:760-828`).
+- `AuctionCreator` defaults the lock id to 32 zero bytes, so the user must paste a real one (`AuctionCreator.tsx:58`). It also registers its own timelock one hour out (`:47-52`), which is the caller-chosen close of A-7.
 - The demo has no dev-server proxy for the `/aptos-api` and `/eth-api` paths the SDK calls in a browser (before the merge: `source/atomica-sdk/src/network-host.ts:69`, `:97`).
 
 **Consequence**
@@ -45,8 +45,9 @@ A user can lock, register, create an auction and (with hand edits) bid. Nothing 
 - The settlement math uses whole dollars: "USD per base token, no decimal shift" (`source/atomica-sdk/src/settlement/bridge.ts:478-487`).
 - The sell flow sends micro-dollars: `parseUnits(minPrice || "0", 6)` (`source/atomica-web-components/src/components/SellFlow/steps/Step2Lock.tsx:17`).
 - The bidder sends whole dollars: `BigInt(bidAmount)` (`components/AuctionBidder.tsx:133`).
-- The settle display divides by one million (before the merge: `components/SettleButton.tsx:148`).
-- The happy-path test bids `2_000_000n` with 500 dollars of collateral (before the merge: `tests/integration/14-happy-path.test.tsx:172`).
+- The settle display divides by one million (`components/SettleButton.tsx:148`).
+- The happy-path test bids `2_000_000n` with 500 dollars of collateral (`tests/integration/14-happy-path.test.tsx:172`, `:178`).
+- The unwind pull request (213) ports the whole-dollar meaning into Move as `quote_for_fill`. I read that part only.
 
 **Failure scenario**
 
@@ -75,17 +76,23 @@ Add an asset parameter to `getRegisterLockPayload`. Reuse the seller's proof ste
 
 ---
 
-## C-4 High: every bid from the bidder screen is sealed to the wrong address
+## C-4 Medium: every bid from the bidder screen is sealed to the wrong address
 
 **Evidence** (confirmed at `4ca0acd`)
 
-- The bidder derives its Aptos address from the checksummed wallet address: `getDerivedAddress(account)` (`components/AuctionBidder.tsx:158`), where `account` comes from `signer.getAddress()` (`context/WalletContext.tsx:49`).
+- The bidder derives its Aptos address from the checksummed wallet address: `getDerivedAddress(account)` (`components/AuctionBidder.tsx:158`), where `account` comes from `signer.getAddress()` (`context/WalletContext.tsx:49`) or from `listAccounts()` (`:68-73`). ethers returns a mixed-case checksum address on both paths.
+- Every other component lowercases first (`ClaimButton.tsx:93`, `useAptosBalances.ts:53`, `useTokenBalances.ts:59`). The bidder is the one caller that does not.
+- The seal step asks the chain for the associated data of that wrong address (`source/atomica-sdk/src/aptos/sealed-bid.ts:93`).
 - `getDerivedAddress` hashes the text of the address as given (`source/atomica-sdk/src/siwe.ts:56-70`).
 - The transaction sender is derived from the lowercase address (`source/atomica-sdk/src/transaction.ts:166-168`).
 
 **Failure scenario**
 
-The associated data names a different Aptos address from the sender. `submit_bid` rejects the ciphertext with `E_INVALID_CIPHERTEXT`. The unit test hides this by mocking `getDerivedAddress`, and the integration helper lowercases first.
+The associated data names a different Aptos address from the sender. `submit_bid` rebuilds it from the real sender (`auction.move:614`), so the one-time signature fails and the bid aborts with `E_INVALID_CIPHERTEXT`. The unit test hides this by mocking `getDerivedAddress`, and the integration helper lowercases first.
+
+**Severity**
+
+Lowered from High. The bid fails closed and nothing is lost by this defect alone. The screen is already unable to bid because of C-3. The fix is one line.
 
 **Smallest fix**
 
@@ -93,7 +100,7 @@ Lowercase inside `getDerivedAddress`.
 
 ---
 
-## C-5 High: the client never checks its host against the pinned sign-in domain
+## C-5 Medium: the client never checks its host against the pinned sign-in domain
 
 **Evidence**
 
@@ -106,6 +113,10 @@ Lowercase inside `getDerivedAddress`.
 A user opens the app on another host or port, locks, and registers. The receipt belongs to an account that only the pinned host can sign for. The lock waits for reclaim. A stale LockBox address in the environment has the same effect.
 
 The SDK issue (195) adds the domain check. Add the LockBox address check to it.
+
+**Severity**
+
+Lowered from High. It needs the app served from a host other than the pinned one, or a wrong address in the environment. The funds come back at the reclaim deadline.
 
 ---
 

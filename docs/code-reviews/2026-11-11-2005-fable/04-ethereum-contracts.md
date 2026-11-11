@@ -11,13 +11,13 @@ The proof-gated LockBox (issue 203, pull request 212) merged while this review r
 
 | ID | Severity | Finding | Tracked |
 | --- | --- | --- | --- |
-| E-1 | Critical | A lock bound to one window can be used in another | No |
+| E-1 | Critical | A lock bound to one window can be used in another | Not in the issue text. Checked in the open unwind pull request (213) |
 | E-2 | High | A bad leaf freezes a lock forever | No |
 | E-3 | High | The light client has no age limit | SDK issue (195), sequenced last |
 | E-4 | High | The package upgrade key can drain the LockBox | Accepted in the decision record |
 | E-5 | Medium | The caller supplies a deadline the contract could compute | No |
 | E-6 | Medium | The deploy script takes the trust root from the node it does not trust | SDK issue (195) |
-| E-7 | Medium | Reclaim beside a recorded outcome needs Aptos data | No |
+| E-7 | Low | Reclaim beside a recorded outcome needs Aptos data | No |
 | E-8 | Low | The gas ceilings do not cover the worst case | No |
 | E-9 | Low | One reverting recipient blocks a whole lock | No |
 | E-10 | Low | Retired contracts still ship and deploy | SDK issue (195) |
@@ -30,26 +30,32 @@ The proof-gated LockBox (issue 203, pull request 212) merged while this review r
 
 - LockBox pays a lock only from the outcome of the lock's own auction key: `auctionKey(l.windowId, l.pairHash, l.deadline)` (`escrow/LockBox.sol:167`, used in `releaseByOutcome` at `:240-264` and `reclaim` at `:277-292`).
 - The Aptos receipt stores `window_id` and `pair_hash`, and `lock_receipt.move:420` adds the view `get_receipt_binding`.
-- No caller reads that view. `create_auction` and `submit_bid` call `lock_receipt::claim` with the owner and lock id only (`auction.move:468`, `:591`).
-- The unwind issue (194) does not add the check. Its timing rule compares deadlines, not the receipt's binding.
+- On `main` no product code reads that view. Only a test does. `create_auction` and `submit_bid` call `lock_receipt::claim` with the owner and lock id only (`auction.move:468`, `:591`).
+- Registration does not compare the lock's window with the clock. It accepts any window id whose deadline matches (`lock_receipt.move:196`).
+- The text of the unwind issue (194) does not ask for the check. Its timing rule compares deadlines, not the receipt's binding.
+- The open pull request for that issue (213) does add it. Both entries claim through a new `lock_receipt::claim_for_window`, which aborts with `E_WRONG_BINDING`, and a test bids with collateral bound to another window. I read that part of the pull request only. It is not merged.
 
 **Failure scenario**
+
+This is the path on `main` once anything emits an outcome. Any binding other than the window's own works: another window id, or another pair hash.
 
 1. Mallory locks FakeUSD on Ethereum bound to window `w + 1`.
 2. Mallory registers the lock. The deadline matches `eth_lock_deadline(w + 1)`, so Aptos accepts it.
 3. Mallory bids in window `w` with that receipt and wins.
 4. Aptos emits the outcome of window `w`. Its tree pays the seller's FakeETH to Mallory.
 5. The seller's lock is bound to window `w`. LockBox releases it to Mallory.
-6. Mallory's collateral lock is bound to window `w + 1`. LockBox looks for it under that key, where no outcome names it.
-7. After the deadline of `w + 1`, Mallory reclaims the full collateral.
+6. Mallory's collateral lock is bound to window `w + 1`. LockBox looks for it under that key (`LockBox.sol:246`, `:281`). The outcome of window `w` is stored under another key and cannot touch it.
+7. After the deadline of `w + 1`, Mallory reclaims the full collateral. With no outcome under that key the reclaim needs no proof. With one, the lock is not in that tree, so a non-membership proof passes.
 
 Mallory receives the FakeETH and keeps the FakeUSD. The seller receives nothing.
 
-The attack needs the outcome emitter from the unwind issue (194). It is not exploitable on `main` today, because nothing emits an outcome (Chapter 3, A-9). It becomes exploitable the day that issue merges without the check.
+The attack needs the outcome emitter from the unwind issue (194). It is not exploitable on `main` today, because nothing emits an outcome (Chapter 3, A-9). It becomes exploitable the day an emitter merges without the check. The severity is for that case. The pull request (213) as read carries the check, so the risk is a later change that drops it.
+
+A seller can run the mirror image: sell with a FakeETH lock bound elsewhere, collect the winner's FakeUSD, and reclaim the FakeETH.
 
 **Smallest fix**
 
-In `create_auction` and `submit_bid`, abort unless the receipt's `(window_id, pair_hash)` equals the window's `(window_id, keccak256(pair_bcs))`. Add a Move test that bids with a receipt bound to another window and expects the abort. Add this to the unwind issue's acceptance criteria.
+In `create_auction` and `submit_bid`, abort unless the receipt's `(window_id, pair_hash)` equals the window's `(window_id, keccak256(pair_bcs))`. Add a Move test that bids with a receipt bound to another window and expects the abort. The pull request (213) does both for the bid. Add the check to the unwind issue's acceptance criteria, and add the same test for a seller lock, so that neither can be dropped unseen.
 
 ---
 
@@ -59,11 +65,15 @@ In `create_auction` and `submit_bid`, abort unless the receipt's `(window_id, pa
 
 - `releaseByOutcome` reverts unless the leaf's payouts sum to the lock amount (`LockBox.sol:255`), and on a zero recipient (`:252`).
 - `reclaim` reverts for any lock that is in the tree (`:286`).
-- LockBox is immutable. The Move code that builds the tree is not written yet and stays upgradeable.
+- LockBox is immutable. The Move code that builds the tree is not on `main`. It is in the open pull request (213), which this review did not read in full, and it stays upgradeable after it merges.
 
 **Failure scenario**
 
 A rounding bug in the Move outcome builder produces a leaf whose payouts sum to one unit less than the lock amount. That lock can never be released and never be reclaimed.
+
+**Precondition**
+
+This needs a defect in the builder, now or after a later upgrade. No such defect was found, because the builder was not reviewed. The finding is High because the result is permanent and it breaks axiom 1 exactly where the axiom applies: an auction that did not execute flawlessly must send funds home, and here it freezes them.
 
 **Smallest fix**
 
@@ -83,7 +93,11 @@ Make every leaf payable. Define the leaf as "these payouts, and the remainder to
 
 Nobody advances the client for longer than the stake lockup. The validators of the last known epoch have withdrawn their stake. Two thirds of them sign a fake `AuctionOutcome`. The client accepts it. They drain every open lock and lose nothing.
 
-The safety of every lock therefore rests on an honest party calling `advanceEpoch` in time. That is a liveness duty for a carrier, which is the relayer trust the decision record set out to remove.
+**Preconditions**
+
+Both must hold: no `advanceEpoch` call for longer than the stake lockup, and two thirds of the old set acting together. The contract comment names the same risk (`AptosLightClient.sol:22-25`).
+
+The safety of every lock therefore rests on somebody calling `advanceEpoch` in time. Anyone can do it, so this is not a trusted key. It is still a liveness duty that nothing guarantees, on a path the decision record wanted free of such duties.
 
 **Sequencing problem**
 
@@ -130,7 +144,7 @@ A wallet or script passes a wrong deadline. Aptos refuses the lock with `E_WRONG
 
 **Smallest fix**
 
-Compute the deadline in `lock` from `windowId` with the same formula. Drop the parameter, drop it from the auction key, and drop `E_WRONG_DEADLINE`. That is one less argument on both chains, and the user error is gone. Reject a `windowId` that is already closed or more than one window ahead. Fix the window formula first (Chapter 3, A-8), because this change freezes it into an immutable contract.
+Compute the deadline in `lock` from `windowId` with the same formula. Drop the parameter, drop it from the auction key, and drop `E_WRONG_DEADLINE`. The key loses nothing, because the deadline is then a function of the window id. That is one less argument on both chains, and the user error is gone. Reject a `windowId` that is already closed or more than one window ahead. Fix the window formula first (Chapter 3, A-8), and settle the reclaim delay first (Chapter 2, S-2), because this change freezes both into an immutable contract.
 
 ---
 
@@ -140,20 +154,27 @@ Compute the deadline in `lock` from `windowId` with the same formula. Drop the p
 
 ---
 
-## E-7 Medium: reclaim beside a recorded outcome needs Aptos data
+## E-7 Low: reclaim beside a recorded outcome needs Aptos data
 
 **Evidence**
 
-- Once an auction has a root, `reclaim` needs a non-membership proof built from neighbouring leaves (`LockBox.sol:277-292`, `OutcomeTree.sol` `verifyAbsent`).
-- The leaves exist only in Aptos state and events.
+- Once an auction has a root, `reclaim` needs a non-membership proof built from neighbouring leaves (`LockBox.sol:277-292`, `OutcomeTree.sol:81-99`).
+- A proof needs the whole leaf list, not only the two neighbours, because each neighbour needs its sibling path.
+- LockBox stores the root and the leaf count only. The leaves live on Aptos.
 
 **Failure scenario**
 
-Alice locks for a window and never registers on Aptos. The window settles and its outcome is recorded. After the deadline Alice needs the lock ids and payout hashes of her two neighbours in the tree. If no Aptos node she can reach still serves that data, her lock cannot go home.
+Alice locks for a window and never registers on Aptos. The window settles and its outcome is recorded. After the deadline Alice needs the leaf list of that auction. If she cannot get it, her lock cannot go home.
+
+**How likely**
+
+An earlier draft rated this Medium and said the data could vanish with old events. That overstated it. The unwind issue (194) keeps a stored record per lock, and its pull request (213) adds the view `lock_receipt::get_lock_outcome`. Chain state is served by every live node and is not pruned like events. Alice loses access only if the Aptos chain is gone, if a later upgrade deletes the records, or if the records are replaced by events alone. The first draft of Chapter 2 (S-4) proposed exactly that last step, and it has been corrected.
+
+The dependency is still real: a lock that never touched Aptos needs Aptos data to leave Ethereum.
 
 **Smallest fix**
 
-Emit every leaf (lock id and payouts hash) in the `AuctionOutcome` transaction's events, and have the first `releaseByOutcome` caller's tooling republish them. A stronger fix is to let a carrier post the leaf list to LockBox as calldata, checked against the root, so Ethereum alone holds what a reclaim needs.
+Keep the per-lock records in Aptos state for good, and say so in the unwind issue. A stronger fix is to let a carrier post the leaf list to LockBox as calldata, checked against the root, so Ethereum alone holds what a reclaim needs.
 
 ---
 
