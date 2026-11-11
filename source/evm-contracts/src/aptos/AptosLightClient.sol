@@ -16,8 +16,13 @@ import {Sha3_256} from "./Sha3_256.sol";
  *      anyone can audit a deployment by comparing its waypoint with the chain's.
  *
  *      Rotation: `advanceEpoch` stores keccak256(BCS(next_epoch_state)) for epoch + 1 from an
- *      epoch-ending LedgerInfo signed by a quorum of the latest known epoch. Old epochs stay, so a
- *      proof signed in any known epoch verifies forever. There is no owner, pause, proxy or expiry.
+ *      epoch-ending LedgerInfo signed by a quorum of the latest known epoch. There is no owner,
+ *      pause, proxy or expiry.
+ *
+ *      Freshness: verifyEvent accepts only a LedgerInfo signed by the latest known epoch's set.
+ *      A retired set is no longer bonded, so its quorum could sign a fake outcome at no cost.
+ *      After an epoch change a carrier fetches a new proof; the node always serves the latest
+ *      LedgerInfo. Old epoch hashes stay readable but no longer verify events.
  *
  *      Signature check (Aptos `ValidatorVerifier::verify_multi_signatures`):
  *      1. The validator set in calldata hashes to the stored hash of the LedgerInfo's epoch.
@@ -73,6 +78,8 @@ contract AptosLightClient is IAptosLightClient {
     {
         bytes memory b = proof.ledgerInfo.ledgerInfoWithSignatures;
         AptosTypes.LedgerInfo memory li = AptosTypes.parseLedgerInfoWithSignatures(b);
+        if (li.epoch > latestEpoch) revert UnknownEpoch(li.epoch);
+        if (li.epoch < latestEpoch) revert StaleEpoch(li.epoch, latestEpoch);
         _verifyQuorum(b, li, proof.ledgerInfo);
 
         // 6. The TransactionInfo is in the ledger accumulator and succeeded.

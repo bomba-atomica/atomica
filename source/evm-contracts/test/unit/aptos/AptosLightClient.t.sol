@@ -207,6 +207,27 @@ contract AptosLightClientTest is AptosVectors, AptosTestChain {
         client.verifyEvent(p, auctionOutcomeTag);
     }
 
+    /// A valid quorum proof from epoch 1 stops verifying once the client advances to epoch 2.
+    function test_verifyEventRevertsOnStaleEpoch() public {
+        ValidatorSet memory set1 = makeSet(1, 4, 1, 1);
+        ValidatorSet memory set2 = makeSet(2, 4, 2, 1);
+        AptosLightClient client = _syntheticClient(set1);
+        IAptosLightClient.EventProof memory p = _syntheticEventProof(set1, 7, 3, true);
+        client.verifyEvent(p, auctionOutcomeTag);
+
+        LedgerInfoFields memory f;
+        f.epoch = 1;
+        f.round = 10;
+        f.executedStateId = keccak256("epoch 1 end");
+        f.version = 20;
+        f.nextEpochState = set2.epochState;
+        client.advanceEpoch(signLedgerInfo(set1, firstSigners(4, 3), f));
+        assertEq(client.latestEpoch(), 2);
+
+        vm.expectRevert(abi.encodeWithSelector(IAptosLightClient.StaleEpoch.selector, 1, 2));
+        client.verifyEvent(p, auctionOutcomeTag);
+    }
+
     function test_verifyEventAcceptsSyntheticProof() public {
         ValidatorSet memory set1 = makeSet(1, 4, 1, 1);
         AptosLightClient client = _syntheticClient(set1);

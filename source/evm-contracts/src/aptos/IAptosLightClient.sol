@@ -51,6 +51,8 @@ interface IAptosLightClient {
     error BadNextEpoch(uint64 epoch, uint64 nextEpoch);
     /// @notice No validator set is known for this epoch.
     error UnknownEpoch(uint64 epoch);
+    /// @notice The LedgerInfo was signed by a retired validator set. Only the latest epoch verifies events.
+    error StaleEpoch(uint64 epoch, uint64 latestEpoch);
     /// @notice This epoch change was already applied.
     error EpochAlreadyAdvanced(uint64 epoch);
     /// @notice The validator set in calldata does not hash to the stored set of the LedgerInfo's epoch.
@@ -78,6 +80,7 @@ interface IAptosLightClient {
 
     /**
      * @notice Checks that an event of type `typeTag` is final on Aptos and returns it.
+     * @dev The LedgerInfo must be signed in the latest known epoch (see StaleEpoch).
      * @param typeTag BCS of the expected `TypeTag`.
      * @return version Ledger version of the transaction that emitted the event.
      * @return eventData BCS of the event payload.
