@@ -173,12 +173,12 @@ const BID_PRICE = 2_000_000n;
 /** How SettleButton and BidHistory display {@link BID_PRICE}. */
 const BID_PRICE_USD = "$2.00";
 /** Bid quantity in wei of FakeETH. */
-const BID_QUANTITY = ethers.parseEther("1");
+// Small enough that the winner's quote fits the 500 FakeUSD collateral:
+// 0.0001 FakeETH at BID_PRICE (USD per whole FakeETH, `quoteForFill`) = 200.
+const BID_QUANTITY = ethers.parseEther("0.0001");
 /** FakeUSD collateral locked for the bid (6 decimals). */
-// Settle pays 1 FakeETH at BID_PRICE (USD per whole FakeETH, `quoteForFill`)
-// from the collateral: 2 million USD.
-const COLLATERAL_AMOUNT = 2_000_000n * 10n ** 6n;
-const COLLATERAL_MINT = 10_000_000n * 10n ** 6n;
+const COLLATERAL_AMOUNT = 500n * 10n ** 6n;
+const COLLATERAL_MINT = 10_000n * 10n ** 6n;
 /**
  * How far ahead of the chain clock the timelock deadline is set. The bid must
  * land before it: create_auction, the Step8Monitor check and the sealed bid

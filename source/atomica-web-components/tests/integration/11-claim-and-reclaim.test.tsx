@@ -66,7 +66,9 @@ import { ethers } from "ethers";
 
 const MIN_PRICE = 1_000_000n;
 const BID_PRICE = 2_000_000n;
-const BID_QUANTITY = ethers.parseEther("1");
+// Small enough that the winner's quote fits the 500 FakeUSD collateral:
+// 0.0001 FakeETH at BID_PRICE (USD per whole FakeETH, `quoteForFill`) = 200.
+const BID_QUANTITY = ethers.parseEther("0.0001");
 const PAIR_BCS = new TextEncoder().encode("11-claim");
 const DEADLINE_AHEAD_US = 120_000_000n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */

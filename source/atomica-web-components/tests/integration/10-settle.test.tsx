@@ -75,7 +75,10 @@ import { ethers } from "ethers";
 const MIN_PRICE = 1_000_000n;
 const WIN_PRICE = 2_000_000n;
 const LOSE_PRICE = 1_500_000n;
-const SUPPLY = ethers.parseEther("10");
+// The winner bids the whole supply. Its quote must fit the 500 FakeUSD
+// collateral: 0.0001 FakeETH at WIN_PRICE (USD per whole FakeETH,
+// `quoteForFill`) = 200.
+const SUPPLY = ethers.parseEther("0.0001");
 const LOSE_QUANTITY = ethers.parseEther("1");
 const PAIR_BCS = new TextEncoder().encode("10-settle");
 const DEADLINE_AHEAD_US = 120_000_000n;

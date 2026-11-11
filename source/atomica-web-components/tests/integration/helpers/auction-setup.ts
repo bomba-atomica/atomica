@@ -274,12 +274,13 @@ function registerLockPayload(
 export const TEST_PAIR_BCS = new Uint8Array(0);
 
 /**
- * Default FakeUSD collateral locked for one bid (6 decimals): 20 million USD.
- * Aptos `settle` pays a winner's fill from its collateral at
- * `quote_for_fill` (clearing price in USD per whole FakeETH, SDK
- * `quoteForFill`), so 10 FakeETH at a price of 2_000_000 needs 20 million.
+ * Default FakeUSD collateral locked for one bid (6 decimals). The lock mints
+ * 20x this, which must fit FakeUSD's 10,000 FakeUSD MAX_MINT_AMOUNT. Aptos
+ * `settle` pays a winner's fill from its collateral at `quote_for_fill`
+ * (clearing price in USD per whole FakeETH, SDK `quoteForFill`), so tests
+ * bid small quantities: 0.0001 FakeETH at 2_000_000 costs 200 FakeUSD.
  */
-export const DEFAULT_COLLATERAL = 20_000_000n * 10n ** 6n;
+export const DEFAULT_COLLATERAL = 500n * 10n ** 6n;
 
 /**
  * `lock_receipt` status codes (`status_active`, `status_claimed`,
