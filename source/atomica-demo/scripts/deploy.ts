@@ -29,6 +29,17 @@ import {
   deployWithRetry,
 } from "../tests/meta/ethereum/solidity-compiler.js";
 
+/**
+ * SIWE domain pinned in eth_proof: the host (with port) the webapp is served
+ * on. Receipts belong to the Ethereum-derivable account of this domain.
+ */
+function siweDomain(): string {
+  return (
+    process.env.ATOMICA_SIWE_DOMAIN?.trim() ||
+    `localhost:${process.env.VITE_WEBAPP_HTTP_PORT ?? "5173"}`
+  );
+}
+
 const ETH_RPC_URL = process.env.ETH_RPC_URL || "http://localhost:8545";
 // LockBox settlementAuthority (immutable). Empty or unset: the deployer.
 const RELAYER_ADDRESS = process.env.RELAYER_ADDRESS?.trim() || undefined;
@@ -202,12 +213,16 @@ async function deployAptosContracts(eth: {
     },
     { functionId: `${APTOS_DEPLOYER_ADDRESS}::fake_eth::initialize`, args: [] },
     { functionId: `${APTOS_DEPLOYER_ADDRESS}::fake_usd::initialize`, args: [] },
-    // Pin the LockBox and the token behind each asset (issue 171).
+    // Pin the LockBox, the token behind each asset (issue 171) and the SIWE
+    // domain of receipt owners (issue 197): the host the webapp is served on.
     {
       functionId: `${APTOS_DEPLOYER_ADDRESS}::eth_proof::initialize`,
-      args: [eth.lockBox, eth.fakeETH, eth.fakeUSD].map(
-        (addr) => `hex:${addr.slice(2)}`,
-      ),
+      args: [
+        ...[eth.lockBox, eth.fakeETH, eth.fakeUSD].map(
+          (addr) => `hex:${addr.slice(2)}`,
+        ),
+        `hex:${Buffer.from(siweDomain(), "utf8").toString("hex")}`,
+      ],
     },
   ];
 

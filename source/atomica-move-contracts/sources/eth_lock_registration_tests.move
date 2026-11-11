@@ -1,11 +1,16 @@
 #[test_only]
-/// Lock registration against trusted Ethereum headers (issue 171).
+/// Lock registration against validator-certified Ethereum headers (issues 171, 197).
 ///
 /// Fixtures are real `eth_getProof` output from anvil: LockBox.sol deployed
 /// with FakeETH / FakeUSD, then USER locked 10 FakeETH (nonce 0) in block 6,
 /// and an unrelated transaction mined block 7. The same lock is proven at
 /// both blocks, under different state roots.
+///
+/// `ethereum_headers::set_header_for_test` stands in for a validator quorum
+/// certificate. Every registration is carried by an account that is neither
+/// @atomica nor the depositor: any account may carry a proof.
 module atomica::eth_lock_registration_tests {
+    use aptos_framework::ethereum_headers;
     use aptos_framework::timestamp;
     use atomica::eth_proof;
     use atomica::lock_receipt::{Self, Ethereum, FakeETH, FakeUSD};
@@ -15,8 +20,18 @@ module atomica::eth_lock_registration_tests {
     const FAKE_USD: vector<u8> = x"e7f1725E7734CE288F8367e1Bb143E90bb3F0512";
     const USER: vector<u8> = x"f39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
     const TEN_ETH: u256 = 10000000000000000000;
+    /// Any 32-byte block hash: eth_proof reads only the state root.
+    const BLOCK_HASH: vector<u8> = x"1111111111111111111111111111111111111111111111111111111111111111";
+    /// `getDerivedAddress("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "localhost:3000")`
+    /// from the SDK (source/atomica-sdk/src/siwe.ts).
+    const USER_ACCOUNT: address = @0x50ccc023d06341b127ca69fd9a204f401118aca3385292926aa2a9ed42ae80e6;
 
-    /// Trusted state root of anvil block 6.
+    /// The validators certify `root` for `block`.
+    fun certify(block: u64, root: vector<u8>) {
+        ethereum_headers::set_header_for_test(block, BLOCK_HASH, root);
+    }
+
+    /// State root of anvil block 6.
     fun root_6(): vector<u8> { x"5b6545b4c0f529b4be8977fd5a1521a5768b58d2d3e79c1172f9e3bcc089a618" }
 
     /// LockBox account proof at block 6.
@@ -37,7 +52,7 @@ module atomica::eth_lock_registration_tests {
         ]
     }
 
-    /// Trusted state root of anvil block 7.
+    /// State root of anvil block 7.
     fun root_7(): vector<u8> { x"dbfb2e7809d2e11e9359c3ec55d8aa0254a04bc795e2d62a6c85ea34f977d7ba" }
 
     /// LockBox account proof at block 7.
@@ -60,7 +75,7 @@ module atomica::eth_lock_registration_tests {
 
     fun setup(framework: &signer, atomica: &signer) {
         timestamp::set_time_has_started_for_testing(framework);
-        eth_proof::initialize(atomica, LOCKBOX, FAKE_ETH, FAKE_USD);
+        eth_proof::initialize(atomica, LOCKBOX, FAKE_ETH, FAKE_USD, b"localhost:3000");
         lock_receipt::initialize<Ethereum, FakeETH>(atomica);
         lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
     }
@@ -70,7 +85,7 @@ module atomica::eth_lock_registration_tests {
     #[test(framework = @0x1, atomica = @atomica)]
     fun verify_lock_reads_one_lock_amount(framework: &signer, atomica: &signer) {
         setup(framework, atomica);
-        eth_proof::submit_header(atomica, 6, root_6());
+        certify(6, root_6());
         let amount = eth_proof::verify_lock(
             6, USER, FAKE_ETH, 0, account_proof_6(), storage_proof_6()
         );
@@ -79,105 +94,144 @@ module atomica::eth_lock_registration_tests {
 
     // ==================== register_ethereum_lock ====================
 
-    #[test(framework = @0x1, atomica = @atomica)]
-    fun registers_lock_proven_at_trusted_header(framework: &signer, atomica: &signer) {
+    #[test(framework = @0x1, atomica = @atomica, carrier = @0x123)]
+    fun registers_lock_proven_at_certified_header(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
-        eth_proof::submit_header(atomica, 6, root_6());
+        certify(6, root_6());
 
         lock_receipt::register_ethereum_lock<FakeETH>(
-            atomica, 6, USER, 0, account_proof_6(), storage_proof_6()
+            carrier, 6, USER, 0, account_proof_6(), storage_proof_6()
         );
 
         let lock_id = eth_proof::lock_id(USER, FAKE_ETH, 0);
         assert!(lock_receipt::is_lock_claimed<Ethereum, FakeETH>(lock_id), 0);
-        let (user, amount, block, status) = lock_receipt::get_receipt<Ethereum, FakeETH>(lock_id);
-        assert!(user == @0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266, 1);
+        let (user, amount, block, status, eth_owner) =
+            lock_receipt::get_receipt<Ethereum, FakeETH>(lock_id);
+        // The receipt names the proven depositor and its Ethereum-derivable
+        // account, never the carrier.
+        assert!(eth_owner == USER, 1);
+        assert!(user == USER_ACCOUNT, 6);
+        assert!(user == eth_proof::ethereum_account_address(USER), 7);
         assert!(amount == TEN_ETH, 2);
         assert!(block == 6, 3);
         assert!(status == lock_receipt::status_active(), 4);
         assert!(lock_receipt::get_receipt_count<Ethereum, FakeETH>() == 1, 5);
     }
 
-    // Bad root: the proof is for block 6, but the trusted root of block 6 is
+    // Bad root: the proof is for block 6, but the certified root of block 6 is
     // another one. The caller cannot supply its own root.
-    #[test(framework = @0x1, atomica = @atomica)]
+    #[test(framework = @0x1, atomica = @atomica, carrier = @0x123)]
     #[expected_failure(abort_code = 2, location = atomica::mpt)]
-    fun rejects_proof_against_untrusted_root(framework: &signer, atomica: &signer) {
+    fun rejects_proof_against_other_certified_root(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
-        eth_proof::submit_header(atomica, 6, root_7());
+        certify(6, root_7());
         lock_receipt::register_ethereum_lock<FakeETH>(
-            atomica, 6, USER, 0, account_proof_6(), storage_proof_6()
+            carrier, 6, USER, 0, account_proof_6(), storage_proof_6()
         );
     }
 
-    // No trusted header for the proof block: nothing to verify against.
-    #[test(framework = @0x1, atomica = @atomica)]
+    // The validators have not certified the proof block: nothing to verify
+    // against, even when a later block is certified.
+    #[test(framework = @0x1, atomica = @atomica, carrier = @0x123)]
     #[expected_failure(abort_code = 9, location = atomica::eth_proof)]
-    fun rejects_block_without_trusted_header(framework: &signer, atomica: &signer) {
+    fun rejects_block_without_certified_header(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
+        certify(7, root_7());
         lock_receipt::register_ethereum_lock<FakeETH>(
-            atomica, 6, USER, 0, account_proof_6(), storage_proof_6()
+            carrier, 6, USER, 0, account_proof_6(), storage_proof_6()
         );
     }
 
     // Duplicate lock: the same lock proven again at a later block (a new
     // state root and a new block hash) is the same lock id, so it aborts.
-    #[test(framework = @0x1, atomica = @atomica)]
+    #[test(framework = @0x1, atomica = @atomica, carrier = @0x123)]
     #[expected_failure(abort_code = 1, location = atomica::lock_receipt)]
-    fun rejects_same_lock_proven_at_second_block(framework: &signer, atomica: &signer) {
+    fun rejects_same_lock_proven_at_second_block(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
-        eth_proof::submit_header(atomica, 6, root_6());
-        eth_proof::submit_header(atomica, 7, root_7());
+        certify(6, root_6());
+        certify(7, root_7());
         lock_receipt::register_ethereum_lock<FakeETH>(
-            atomica, 6, USER, 0, account_proof_6(), storage_proof_6()
+            carrier, 6, USER, 0, account_proof_6(), storage_proof_6()
         );
         lock_receipt::register_ethereum_lock<FakeETH>(
-            atomica, 7, USER, 0, account_proof_7(), storage_proof_7()
+            carrier, 7, USER, 0, account_proof_7(), storage_proof_7()
         );
     }
 
     // The block 7 proof is valid on its own, so the duplicate test above
     // fails for the duplicate, not for a bad proof.
-    #[test(framework = @0x1, atomica = @atomica)]
-    fun second_block_proof_is_valid_alone(framework: &signer, atomica: &signer) {
+    #[test(framework = @0x1, atomica = @atomica, carrier = @0x123)]
+    fun second_block_proof_is_valid_alone(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
-        eth_proof::submit_header(atomica, 7, root_7());
+        certify(7, root_7());
         lock_receipt::register_ethereum_lock<FakeETH>(
-            atomica, 7, USER, 0, account_proof_7(), storage_proof_7()
+            carrier, 7, USER, 0, account_proof_7(), storage_proof_7()
         );
         assert!(lock_receipt::get_receipt_count<Ethereum, FakeETH>() == 1, 0);
     }
 
     // The token comes from the pinned asset mapping: a FakeETH lock cannot
     // be registered as FakeUSD (the derived storage key differs).
-    #[test(framework = @0x1, atomica = @atomica)]
+    #[test(framework = @0x1, atomica = @atomica, carrier = @0x123)]
     #[expected_failure(abort_code = 1, location = atomica::mpt)]
-    fun rejects_lock_under_another_asset(framework: &signer, atomica: &signer) {
+    fun rejects_lock_under_another_asset(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
-        eth_proof::submit_header(atomica, 6, root_6());
+        certify(6, root_6());
         lock_receipt::register_ethereum_lock<FakeUSD>(
-            atomica, 6, USER, 0, account_proof_6(), storage_proof_6()
+            carrier, 6, USER, 0, account_proof_6(), storage_proof_6()
         );
     }
 
     // Another nonce names another slot, which this proof does not cover.
-    #[test(framework = @0x1, atomica = @atomica)]
+    #[test(framework = @0x1, atomica = @atomica, carrier = @0x123)]
     #[expected_failure(abort_code = 1, location = atomica::mpt)]
-    fun rejects_lock_under_another_nonce(framework: &signer, atomica: &signer) {
+    fun rejects_lock_under_another_nonce(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
-        eth_proof::submit_header(atomica, 6, root_6());
+        certify(6, root_6());
         lock_receipt::register_ethereum_lock<FakeETH>(
-            atomica, 6, USER, 1, account_proof_6(), storage_proof_6()
+            carrier, 6, USER, 1, account_proof_6(), storage_proof_6()
         );
     }
 
-    #[test(framework = @0x1, atomica = @atomica, other = @0x123)]
-    #[expected_failure(abort_code = 9, location = atomica::lock_receipt)]
-    fun rejects_unauthorized_signer(framework: &signer, atomica: &signer, other: &signer) {
+    // The depositor's own Ethereum-derivable account may carry the proof too.
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun depositor_account_registers(framework: &signer, atomica: &signer) {
         setup(framework, atomica);
-        eth_proof::submit_header(atomica, 6, root_6());
+        certify(6, root_6());
+        let depositor = aptos_framework::account::create_signer_for_test(USER_ACCOUNT);
         lock_receipt::register_ethereum_lock<FakeETH>(
-            other, 6, USER, 0, account_proof_6(), storage_proof_6()
+            &depositor, 6, USER, 0, account_proof_6(), storage_proof_6()
         );
+        let (user, _, _, _, _) =
+            lock_receipt::get_receipt<Ethereum, FakeETH>(eth_proof::lock_id(USER, FAKE_ETH, 0));
+        assert!(user == USER_ACCOUNT, 0);
+    }
+
+    // ==================== Claim after registration ====================
+
+    // The @atomica account cannot claim a registered receipt: only the
+    // depositor's Ethereum-derivable account can.
+    #[test(framework = @0x1, atomica = @atomica, carrier = @0x123)]
+    #[expected_failure(abort_code = 5, location = atomica::lock_receipt)]
+    fun atomica_cannot_claim_registered_receipt(framework: &signer, atomica: &signer, carrier: &signer) {
+        setup(framework, atomica);
+        certify(6, root_6());
+        lock_receipt::register_ethereum_lock<FakeETH>(
+            carrier, 6, USER, 0, account_proof_6(), storage_proof_6()
+        );
+        lock_receipt::claim<Ethereum, FakeETH>(@atomica, eth_proof::lock_id(USER, FAKE_ETH, 0));
+    }
+
+    #[test(framework = @0x1, atomica = @atomica, carrier = @0x123)]
+    fun derived_owner_claims_registered_receipt(framework: &signer, atomica: &signer, carrier: &signer) {
+        setup(framework, atomica);
+        certify(6, root_6());
+        lock_receipt::register_ethereum_lock<FakeETH>(
+            carrier, 6, USER, 0, account_proof_6(), storage_proof_6()
+        );
+        let amount = lock_receipt::claim<Ethereum, FakeETH>(
+            USER_ACCOUNT, eth_proof::lock_id(USER, FAKE_ETH, 0)
+        );
+        assert!(amount == TEN_ETH, 0);
     }
 }

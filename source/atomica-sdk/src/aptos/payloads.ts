@@ -1,4 +1,7 @@
-import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
+import type {
+  Aptos,
+  InputGenerateTransactionPayloadData,
+} from "@aptos-labs/ts-sdk";
 import { ethers } from "ethers";
 import { CONTRACT_ADDR, aptos } from "./config.js";
 import { getDerivedAddress } from "../siwe.js";
@@ -238,12 +241,15 @@ export async function registerTimelock(
  * Build payload for lock_receipt::register_ethereum_lock<FakeETH>.
  *
  * Serialises directly from LockedBalanceProof, matching the Move entry function:
- *   register_ethereum_lock<Asset>(account, block_number, user_address,
+ *   register_ethereum_lock<Asset>(carrier, block_number, user_address,
  *     lock_nonce, account_proof, storage_proof)
  *
- * Aptos derives the state root (a trusted header, see
- * getSubmitEthereumHeaderPayload), the LockBox address, the token and the
- * storage key itself, so the proof's own root and key are not sent.
+ * Any account may send it. Aptos reads the state root of `blockNumber` from
+ * the validator-certified `0x1::ethereum_headers` store, so prove at a
+ * certified block ({@link waitForCertifiedBlock}). Aptos also derives the
+ * LockBox address, the token, the storage key and the receipt owner (the
+ * depositor's Ethereum-derivable account), so the proof's own root and key are
+ * not sent.
  */
 export function getRegisterLockPayload(
   proof: LockedBalanceProof,
@@ -262,21 +268,48 @@ export function getRegisterLockPayload(
 }
 
 /**
- * Build payload for eth_proof::submit_header (the @atomica admin only).
- *
- *   submit_header(admin, block_number, state_root)
- *
- * Stores the trusted state root a lock proof of `blockNumber` is checked
- * against. v0.1: the trusted relayer (the Aptos deployer) posts it.
+ * Highest Ethereum block number the Aptos validators certified
+ * (`0x1::ethereum_headers::latest_block_number`), or `undefined` before the
+ * first certified header.
  */
-export function getSubmitEthereumHeaderPayload(
-  blockNumber: number,
-  stateRoot: string,
-): InputGenerateTransactionPayloadData {
-  return {
-    function: `${CONTRACT_ADDR}::eth_proof::submit_header`,
-    functionArguments: [blockNumber, ethers.getBytes(stateRoot)],
-  };
+export async function getLatestCertifiedBlock(
+  client: Aptos = aptos,
+): Promise<number | undefined> {
+  const [latest] = await client.view({
+    payload: {
+      function: "0x1::ethereum_headers::latest_block_number",
+      functionArguments: [],
+    },
+  });
+  // Option<u64> is returned as { vec: [] } or { vec: ["123"] }.
+  const vec = (latest as { vec: (string | number)[] }).vec;
+  return vec.length === 0 ? undefined : Number(vec[0]);
+}
+
+/**
+ * Wait until the validators certify an Ethereum block at or after
+ * `minBlock`, and return the highest certified block number. Prove a lock at
+ * that block: its state root is on Aptos and it includes the lock.
+ *
+ * Throws after `timeoutMs` without such a block.
+ */
+export async function waitForCertifiedBlock(
+  minBlock: number,
+  timeoutMs = 120_000,
+  client: Aptos = aptos,
+  pollMs = 2_000,
+): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  let latest: number | undefined;
+  for (;;) {
+    latest = await getLatestCertifiedBlock(client);
+    if (latest !== undefined && latest >= minBlock) return latest;
+    if (Date.now() >= deadline) break;
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+  throw new Error(
+    `No certified Ethereum block at or after ${minBlock} within ${timeoutMs} ms (latest certified: ${latest ?? "none"})`,
+  );
 }
 
 /**

@@ -71,6 +71,8 @@ export interface DualChainTestnetInfo {
         nodeUrl: string;
         moduleAddress: string;
         deployerPrivateKey: string;
+        /** SIWE domain pinned in eth_proof: receipts belong to accounts of this domain */
+        siweDomain: string;
     };
 }
 
@@ -167,10 +169,20 @@ async function mintFakeETH(
 /**
  * Start both testnets, deploy all contracts, fund seller and bidder.
  *
+ * `siweDomain` is pinned in eth_proof: a lock receipt belongs to the
+ * depositor's Ethereum-derivable account of this domain, so pass the host the
+ * SIWE-signing page runs on (`window.location.host`).
+ *
+ * The validators certify the Ethereum testnet's headers (genesis
+ * `eth_chain_id`, see config/generate-genesis.sh). A lock registers only at a
+ * certified block.
+ *
  * Idempotent — if called again while a fixture is live the existing info is
  * reconstructed from the running instances.
  */
-export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
+export async function setupDualChainTestnet(
+    siweDomain = "localhost:3000",
+): Promise<DualChainTestnetInfo> {
     console.log("[Dual-Chain] Starting dual-chain testnet...");
 
     // ── Ethereum ──────────────────────────────────────────────────────────────
@@ -275,10 +287,14 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
             },
             { functionId: `${aptosModuleAddress}::fake_eth::initialize`, args: [] },
             { functionId: `${aptosModuleAddress}::fake_usd::initialize`, args: [] },
-            // Pin the LockBox and the token behind each asset (issue 171).
+            // Pin the LockBox, the token behind each asset (issue 171) and
+            // the SIWE domain of receipt owners (issue 197).
             {
                 functionId: `${aptosModuleAddress}::eth_proof::initialize`,
-                args: [lockBox, fakeETH, fakeUSD].map((addr) => `hex:${addr.slice(2)}`),
+                args: [
+                    ...[lockBox, fakeETH, fakeUSD].map((addr) => `hex:${addr.slice(2)}`),
+                    `hex:${Buffer.from(siweDomain, "utf8").toString("hex")}`,
+                ],
             },
             {
                 functionId: `${aptosModuleAddress}::lock_receipt::initialize`,
@@ -319,6 +335,7 @@ export async function setupDualChainTestnet(): Promise<DualChainTestnetInfo> {
             nodeUrl,
             moduleAddress: aptosModuleAddress,
             deployerPrivateKey: aptosDeployerPrivateKey,
+            siweDomain,
         },
     };
 }

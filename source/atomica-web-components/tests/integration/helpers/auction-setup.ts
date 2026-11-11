@@ -5,11 +5,15 @@
  * chain call fails. Tests must not swallow those errors: a test that expects
  * a rejection asserts the abort code with `rejects.toThrow`.
  *
- *   generateEthLockProof()  — Mint → Approve → Lock on Ethereum, generate storage proof
+ *   generateEthLockProof()  — Mint → Approve → Lock on Ethereum, wait for the
+ *                             Aptos validators to certify a block that covers
+ *                             the lock, and prove the lock at that block
  *                             (runs via vitest browser command on Node.js side to avoid
  *                             @ethereumjs/util EventEmitter incompatibility in browser)
- *   registerLockOnAptos()   — Trust the proof block's state root and register
- *                             the lock on Aptos as the `@atomica` deployer
+ *   registerLockOnAptos()   — Register the lock on Aptos from any account: no
+ *                             header submission, no special signer
+ *   submitAsEthAccount()    — SIWE-sign a transaction as the Ethereum-derivable
+ *                             account of an Ethereum key (the receipt owner)
  *   createLiveWindow()      — Seller lock + timelock + `create_auction` for the
  *                             current window, read back with `get_window_status`
  *   lockBidCollateral()     — FakeUSD collateral receipt for one bid
@@ -19,11 +23,13 @@
  *   settleAuctionDirect()   — the reveal → open (clears) → settle sequence
  *   getAuctionState(), getWindowStatus(), getReceiptStatus() — chain reads
  *
- * Aptos calls here use a native Ed25519 account (no SIWE / MetaMask). Each
- * call simulates first and signs with the SDK's simulated `maxGasAmount`. In the
- * Demo phase only the `@atomica` operator can claim another address's lock
- * receipt, so the operator creates windows and places bids. UI components in
- * the tests still go through SIWE, so the wallet mock must be set up first.
+ * A lock receipt belongs to the depositor's Ethereum-derivable Aptos account,
+ * and only that account can claim it (issue 197). So `create_auction` is
+ * SIWE-signed as the seller's account and `submit_bid` as the bidder's
+ * ({@link submitAsEthAccount}). Calls that claim nothing (registration,
+ * timelocks, openings, settle) use a native Ed25519 account, which has no
+ * special rights. Each call simulates first and signs with the SDK's simulated
+ * `maxGasAmount`.
  */
 
 import { ethers } from "ethers";
@@ -44,10 +50,15 @@ import {
   timelockIdFromEvents,
   type OpenedBid,
 } from "@atomica/sdk/aptos";
-import { simulateMaxGasAmount } from "@atomica/sdk";
+import {
+  getDerivedAddress,
+  simulateMaxGasAmount,
+  submitNativeTransaction,
+} from "@atomica/sdk";
 import { commands } from "vitest/browser";
 import type { EthLockProofResult as CommandEthLockProofResult } from "@atomica/aptos-docker-testnet/browser-commands";
 import type { IntegrationFixture } from "../fixtures/dual-chain";
+import { setupWalletMock } from "../fixtures/wallet-mock";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -96,22 +107,28 @@ export interface EthLockProofResult {
  * Delegates to commands.generateEthLockProof() which runs on the Node.js side
  * (browser can't access @ethereumjs/util EventEmitter).
  *
+ * The proof block is one the Aptos validators certified, so no header is
+ * submitted before registration.
+ *
  * @param fixture    - Dual-chain integration fixture
  * @param lockAmount - Amount of the token to lock (base units, default: 10 ETH)
  * @param mintAmount - Amount of the token to mint (base units, default: 1000 ETH)
  * @param token      - ERC-20 to mint and lock (default: FakeETH)
+ * @param depositor  - Ethereum account that locks (default: the seller)
  */
 export async function generateEthLockProof(
   fixture: IntegrationFixture,
   lockAmount: bigint = ethers.parseEther("10"),
   mintAmount: bigint = ethers.parseEther("1000"),
   token: string = fixture.eth.contracts.fakeETH,
+  depositor: EthSigner = fixture.eth.seller,
 ): Promise<EthLockProofResult> {
   const { eth } = fixture;
 
   const result: CommandEthLockProofResult = await commands.generateEthLockProof(
     eth.rpcUrl,
-    eth.seller.privateKey,
+    fixture.aptos.nodeUrl,
+    depositor.privateKey,
     token,
     eth.contracts.lockBox,
     lockAmount.toString(),
@@ -129,15 +146,14 @@ export async function generateEthLockProof(
 }
 
 /**
- * Trust the proof block's state root, then register the lock on Aptos.
- *
- * `eth_proof::submit_header` and the Demo-phase `register_ethereum_lock` rule
- * both accept the `@atomica` deployer, so `sender` must be that account.
- * Aptos checks the proof against the trusted root only and derives the
- * storage key and lock id from the user, the token and the lock nonce.
+ * Register the lock on Aptos. Any account may carry the proof: `sender`
+ * needs no special rights. Aptos checks the proof against the root the
+ * validators certified for the proof block, derives the storage key and lock
+ * id from the user, the token and the lock nonce, and gives the receipt to
+ * the depositor's Ethereum-derivable account.
  *
  * @param aptosClient - Aptos client
- * @param sender      - Account to sign the register transaction
+ * @param sender      - Account that carries the proof
  * @param moduleAddr  - Atomica module address
  * @param proof       - Storage proof returned by generateEthLockProof
  * @param asset       - Receipt asset type (default: FakeETH)
@@ -152,24 +168,71 @@ export async function registerLockOnAptos(
   await submitDirect(
     aptosClient,
     sender,
-    submitHeaderPayload(moduleAddr, proof),
-  );
-  await submitDirect(
-    aptosClient,
-    sender,
     registerLockPayload(moduleAddr, proof, asset),
   );
 }
 
-/** `eth_proof::submit_header` for the block of `proof`. */
-function submitHeaderPayload(
-  moduleAddr: string,
-  proof: LockedBalanceProof,
-): InputGenerateTransactionPayloadData {
-  return {
-    function: `${moduleAddr}::eth_proof::submit_header`,
-    functionArguments: [proof.blockNumber, ethers.getBytes(proof.stateRoot)],
-  };
+// ---------------------------------------------------------------------------
+// Ethereum-derivable accounts (receipt owners)
+// ---------------------------------------------------------------------------
+
+/** An Ethereum key, e.g. `fixture.eth.seller` or `fixture.eth.bidder`. */
+export interface EthSigner {
+  privateKey: string;
+}
+
+/**
+ * Aptos address of the Ethereum-derivable account of `signer`: the owner of
+ * its lock receipts. The SIWE domain is `window.location.host`, which the
+ * fixture pinned in `eth_proof`.
+ */
+export async function ethAccountAddress(signer: EthSigner): Promise<string> {
+  const ethAddress = new ethers.Wallet(signer.privateKey).address;
+  return (await getDerivedAddress(ethAddress.toLowerCase())).toString();
+}
+
+/** APT the derivable account keeps for gas (5 APT). */
+const ETH_ACCOUNT_GAS_OCTAS = 500_000_000;
+
+/** Fund the Ethereum-derivable account of `signer` once it runs low on gas. */
+async function ensureEthAccountGas(
+  aptosClient: Aptos,
+  signer: EthSigner,
+): Promise<string> {
+  const address = await ethAccountAddress(signer);
+  const balance = await aptosClient
+    .getAccountAPTAmount({ accountAddress: address })
+    .catch(() => 0);
+  if (balance < ETH_ACCOUNT_GAS_OCTAS / 5) {
+    await commands.fundAccount(address, ETH_ACCOUNT_GAS_OCTAS);
+  }
+  return address;
+}
+
+/**
+ * SIWE-sign and submit `data` as the Ethereum-derivable account of `signer`,
+ * through the SDK's `submitNativeTransaction` (the app's own signing path).
+ * Funds the account first if it is low on gas. Leaves the test's wallet mock
+ * in place afterwards. Throws if the transaction aborts.
+ */
+export async function submitAsEthAccount(
+  aptosClient: Aptos,
+  signer: EthSigner,
+  data: InputGenerateTransactionPayloadData,
+): Promise<string> {
+  await ensureEthAccountGas(aptosClient, signer);
+  const previous = window.ethereum;
+  try {
+    const ethAddress = await setupWalletMock({ privateKey: signer.privateKey });
+    const pending = await submitNativeTransaction(
+      aptosClient,
+      ethAddress,
+      data,
+    );
+    return pending.hash;
+  } finally {
+    window.ethereum = previous;
+  }
 }
 
 /** `lock_receipt::register_ethereum_lock<asset>` for `proof`. */
@@ -394,7 +457,8 @@ export async function submitManyDirect(
 }
 
 /**
- * Create an auction directly (no SIWE) with a native account.
+ * Create an auction as the seller's Ethereum-derivable account (SIWE), the
+ * only account that can claim the seller's FakeETH receipt.
  *
  * Same 6-argument call as the SDK's `getCreateAuctionPayload`:
  *   create_auction(seller, window_id, pair_bcs, lock_id, min_price,
@@ -404,14 +468,14 @@ export async function submitManyDirect(
  */
 export async function createAuctionDirect(
   aptosClient: Aptos,
-  seller: Account,
+  seller: EthSigner,
   lockId: string,
   minPrice: bigint,
   windowId: bigint,
   pairBcs: Uint8Array,
   timelockId: bigint,
 ): Promise<string> {
-  return submitDirect(
+  return submitAsEthAccount(
     aptosClient,
     seller,
     getCreateAuctionPayload(
@@ -437,11 +501,12 @@ export interface LiveWindow {
 }
 
 /**
- * Lock FakeETH on Ethereum, register the receipt on Aptos, register a
- * timelock that closes `deadlineAheadUs` after the chain clock, and create the
- * current window for `pairBcs` bound to it. The operator signs everything:
- * in the Demo phase only it, or the receipt's own address, can claim a
- * receipt.
+ * Lock FakeETH on Ethereum as the seller, register the receipt on Aptos,
+ * register a timelock that closes `deadlineAheadUs` after the chain clock, and
+ * create the current window for `pairBcs` bound to it. The operator (no
+ * special rights) carries the proof and registers the timelock. The seller's
+ * Ethereum-derivable account creates the window: only it can claim the
+ * seller receipt.
  *
  * Throws unless `get_window_status` reads back the new timelock with
  * `reveal_final` and `refunded` both false.
@@ -475,7 +540,7 @@ export async function createLiveWindow(
   const windowId = await currentWindowId(aptosClient);
   await createAuctionDirect(
     aptosClient,
-    operator,
+    fixture.eth.seller,
     lockId,
     options.minPrice,
     windowId,
@@ -513,20 +578,23 @@ export async function createLiveWindow(
 }
 
 /**
- * Lock FakeUSD collateral on Ethereum and register its receipt on Aptos under
- * the operator. Returns the lock id that `submit_bid` claims.
+ * Lock FakeUSD collateral on Ethereum as `bidder` and register its receipt on
+ * Aptos (the operator carries the proof). The receipt belongs to the bidder's
+ * Ethereum-derivable account. Returns the lock id that `submit_bid` claims.
  */
 export async function lockBidCollateral(
   fixture: IntegrationFixture,
   aptosClient: Aptos,
   operator: Account,
   amount: bigint = DEFAULT_COLLATERAL,
+  bidder: EthSigner = fixture.eth.bidder,
 ): Promise<string> {
   const { lockId, proof } = await generateEthLockProof(
     fixture,
     amount,
     amount * 20n,
     fixture.eth.contracts.fakeUSD,
+    bidder,
   );
   await registerLockOnAptos(
     aptosClient,
@@ -539,9 +607,9 @@ export async function lockBidCollateral(
 }
 
 /**
- * Lock FakeUSD collateral `count` times in a few Ethereum blocks, trust the
- * one block that proves them all, and register every receipt under the
- * operator. Returns the lock ids in lock order.
+ * Lock FakeUSD collateral `count` times as `bidder` in a few Ethereum blocks,
+ * prove them all at one certified block, and register every receipt (the
+ * operator carries the proofs). Returns the lock ids in lock order.
  */
 export async function lockBidCollaterals(
   fixture: IntegrationFixture,
@@ -549,12 +617,14 @@ export async function lockBidCollaterals(
   operator: Account,
   count: number,
   amount: bigint = DEFAULT_COLLATERAL,
+  bidder: EthSigner = fixture.eth.bidder,
 ): Promise<string[]> {
   const moduleAddr = fixture.aptos.moduleAddress;
   const results: CommandEthLockProofResult[] =
     await commands.generateEthLockProofs(
       fixture.eth.rpcUrl,
-      fixture.eth.seller.privateKey,
+      fixture.aptos.nodeUrl,
+      bidder.privateKey,
       fixture.eth.contracts.fakeUSD,
       fixture.eth.contracts.lockBox,
       amount.toString(),
@@ -564,11 +634,6 @@ export async function lockBidCollaterals(
     ...r.proof,
     storageValue: BigInt(r.proof.storageValue),
   }));
-  await submitDirect(
-    aptosClient,
-    operator,
-    submitHeaderPayload(moduleAddr, proofs[0]),
-  );
   await submitManyDirect(
     aptosClient,
     operator,
@@ -593,12 +658,15 @@ export interface SubmittedBid {
  *   submit_bid(bidder, window_id, pair_bcs, ciphertext, commitment,
  *              collateral_lock_id, quantity)
  *
+ * The bidder's Ethereum-derivable account signs (SIWE): only it can claim
+ * the bidder's collateral receipt.
+ *
  * The SDK's Aptos instance must point at the testnet (`setAptosInstance`).
  * Throws if the transaction aborts.
  */
 export async function submitBidDirect(
   aptosClient: Aptos,
-  bidder: Account,
+  bidder: EthSigner,
   window: { windowId: bigint; pairBcs: Uint8Array },
   price: bigint,
   collateralLockId: string,
@@ -607,10 +675,10 @@ export async function submitBidDirect(
   const sealed = await sealBid(
     window.windowId,
     window.pairBcs,
-    bidder.accountAddress.toString(),
+    await ethAccountAddress(bidder),
     price,
   );
-  const hash = await submitDirect(
+  const hash = await submitAsEthAccount(
     aptosClient,
     bidder,
     getBidPayload(

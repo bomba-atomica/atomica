@@ -115,9 +115,45 @@ module atomica::lock_receipt_tests {
 
     // New comprehensive tests below
 
-    // Note: Tests for claim_wrong_owner and claim_already_claimed require
-    // full E2E integration with register_ethereum_lock, which will be tested
-    // in integration_tests.move
+    // ==================== Claim: owner only ====================
+
+    /// A depositor's Ethereum-derivable account (any address other than @atomica).
+    const OWNER: address = @0x50ccc023d06341b127ca69fd9a204f401118aca3385292926aa2a9ed42ae80e6;
+
+    // The @atomica account has no claim privilege over another user's receipt.
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 5, location = atomica::lock_receipt)]
+    fun atomica_cannot_claim_users_receipt(framework: &signer, atomica: &signer) {
+        setup_timestamp(framework);
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        let lock_id = create_test_lock_id(0x42);
+        lock_receipt::insert_test_receipt<Ethereum, FakeETH>(lock_id, OWNER, 1000u256, 6);
+        lock_receipt::claim<Ethereum, FakeETH>(@atomica, lock_id);
+    }
+
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun owner_claims_own_receipt(framework: &signer, atomica: &signer) {
+        setup_timestamp(framework);
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        let lock_id = create_test_lock_id(0x42);
+        lock_receipt::insert_test_receipt<Ethereum, FakeETH>(lock_id, OWNER, 1000u256, 6);
+        assert!(lock_receipt::claim<Ethereum, FakeETH>(OWNER, lock_id) == 1000u256, 0);
+        assert!(
+            lock_receipt::get_receipt_status<Ethereum, FakeETH>(lock_id)
+                == lock_receipt::status_claimed(),
+            1
+        );
+    }
+
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 5, location = atomica::lock_receipt)]
+    fun other_account_cannot_claim(framework: &signer, atomica: &signer) {
+        setup_timestamp(framework);
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        let lock_id = create_test_lock_id(0x42);
+        lock_receipt::insert_test_receipt<Ethereum, FakeETH>(lock_id, OWNER, 1000u256, 6);
+        lock_receipt::claim<Ethereum, FakeETH>(@0x123, lock_id);
+    }
 
     #[test(framework = @0x1, atomica = @atomica)]
     #[expected_failure(abort_code = 3, location = atomica::lock_receipt)]

@@ -3,8 +3,9 @@
  * @description Live ClaimButton tests on one window of the dual-chain testnet.
  *
  * One sealed bid (price 2.00, 1 FakeETH of the seller's 10) is placed by the
- * `@atomica` operator (Demo-phase claim rule). The ClaimButton signs through
- * SIWE with the bidder wallet mock.
+ * bidder's Ethereum-derivable account, the only account that can claim the
+ * bidder's collateral receipt. The ClaimButton signs through SIWE with the
+ * bidder wallet mock.
  *
  * Scenarios:
  *   1. Before settlement: ClaimButton shows "Auction not yet settled" and both
@@ -123,7 +124,7 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
       minPrice: MIN_PRICE,
       deadlineAheadUs: DEADLINE_AHEAD_US,
     });
-    await submitBidDirect(aptosClient, operator, auction, BID_PRICE, collateral, BID_QUANTITY);
+    await submitBidDirect(aptosClient, fixture.eth.bidder, auction, BID_PRICE, collateral, BID_QUANTITY);
   }, 1_200_000);
 
   afterAll(async () => {

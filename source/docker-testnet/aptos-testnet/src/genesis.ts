@@ -179,6 +179,18 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
             dockerArgs.push("-e", `ATOMICA_DEBUG_TESTNET=${process.env.ATOMICA_DEBUG_TESTNET}`);
         }
 
+        // Ethereum header attestation overrides (the script defaults to the
+        // host's Ethereum testnet on port 8545, chain id 32382, tag latest).
+        for (const varName of [
+            "ETH_CHAIN_ID",
+            "ETH_RPC_URL",
+            "ETH_BLOCK_TAG",
+            "ETH_POLL_INTERVAL_MS",
+        ]) {
+            const value = process.env[varName];
+            if (value) dockerArgs.push("-e", `${varName}=${value}`);
+        }
+
         // Pass deterministic credentials so the genesis script produces reproducible keys
         const credentialEnvVars = [
             "APTOS_ROOT_ACCOUNT_PUBLIC_KEY",

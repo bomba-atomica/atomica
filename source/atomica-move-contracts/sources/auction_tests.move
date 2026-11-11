@@ -200,8 +200,7 @@ module atomica::auction_tests {
     //
     // The seller signer is @atomica (= @0xcafe in dev) so that the lazy registry
     // bootstrap (move_to(seller, ...)) publishes the AuctionRegistry at @atomica.
-    // Real sellers calling after the first create_auction find the registry already
-    // present. A pre-inserted FakeETH LockReceipt is required for each call so
+    // On chain, init_module publishes it, so any seller may be first. A pre-inserted FakeETH LockReceipt is required for each call so
     // that lock_receipt::claim can succeed without proof verification.
 
     // Helper: initialize FakeETH registry and insert a receipt for a given lock_id.
@@ -246,6 +245,46 @@ module atomica::auction_tests {
         assert!(bid_count == 0, 3);
         assert!(!settled, 4);
         assert!(clearing_price == 0, 5);
+    }
+
+    // A depositor's Ethereum-derivable account (lock_receipt owner), not @atomica.
+    const DERIVED_OWNER: address = @0x50ccc023d06341b127ca69fd9a204f401118aca3385292926aa2a9ed42ae80e6;
+
+    // The @atomica account cannot claim another user's receipt into a window.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 5, location = atomica::lock_receipt)] // E_NOT_RECEIPT_OWNER
+    fun test_create_auction_atomica_cannot_claim_users_receipt(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        let lock_id = b"eth_lock_receipt_of_derived_user";
+        insert_eth_receipt(atomica, lock_id, DERIVED_OWNER, 1_000_000_000_000_000_000u256);
+        auction::create_auction(
+            atomica, auction::current_window_id(), default_pair_bcs(), lock_id, 2000u64,
+            TIMELOCK_ID, vector::empty<u8>(),
+        );
+    }
+
+    // The receipt's derived owner claims it into a window, and is the first
+    // seller: init_module published the registry.
+    #[test(atomica = @atomica)]
+    fun test_create_auction_by_derived_owner(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        let lock_id = b"eth_lock_receipt_of_derived_user";
+        let lock_amount = 1_000_000_000_000_000_000u256;
+        insert_eth_receipt(atomica, lock_id, DERIVED_OWNER, lock_amount);
+        let owner = aptos_framework::account::create_signer_for_test(DERIVED_OWNER);
+        let window_id = auction::current_window_id();
+        auction::create_auction(
+            &owner, window_id, default_pair_bcs(), lock_id, 2000u64, TIMELOCK_ID,
+            vector::empty<u8>(),
+        );
+        let (_, supply, _, _, _) = auction::get_auction(window_id, default_pair_bcs());
+        assert!(supply == lock_amount, 0);
+        assert!(
+            lock_receipt::get_receipt_status<Ethereum, FakeETH>(lock_id)
+                == lock_receipt::status_claimed(),
+            1
+        );
     }
 
     // Next-window registration: create_auction accepts window_id == current + 1.
@@ -690,7 +729,7 @@ module atomica::auction_tests {
         lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(
             alice_lock, @0xA11CE, 10_500_000_000u256, 1u64,
         );
-        lock_receipt::claim<Ethereum, FakeUSD>(@atomica, alice_lock);
+        lock_receipt::claim<Ethereum, FakeUSD>(@0xA11CE, alice_lock);
 
         // Single winning bid: Alice (price=2100, qty=5) fills supply exactly.
         auction::test_insert_bid_with_qty(
@@ -747,8 +786,8 @@ module atomica::auction_tests {
             bob_lock, @0xB0B, 6_000_000_000u256, 1u64,
         );
         // Claim both receipts to simulate submit_bid consuming them.
-        lock_receipt::claim<Ethereum, FakeUSD>(@atomica, alice_lock);
-        lock_receipt::claim<Ethereum, FakeUSD>(@atomica, bob_lock);
+        lock_receipt::claim<Ethereum, FakeUSD>(@0xA11CE, alice_lock);
+        lock_receipt::claim<Ethereum, FakeUSD>(@0xB0B, bob_lock);
 
         // Alice wins (price=2100, qty=5 fills supply), Bob loses (price=2000).
         auction::test_insert_bid_with_qty(
@@ -800,9 +839,9 @@ module atomica::auction_tests {
         lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(alice_lock, @0xA11CE, 10_500_000_000u256, 1u64);
         lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(bob_lock,   @0xB0B,   7_175_000_000u256, 1u64);
         lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(carol_lock, @0xCA401, 6_650_000_000u256, 1u64);
-        lock_receipt::claim<Ethereum, FakeUSD>(@atomica, alice_lock);
-        lock_receipt::claim<Ethereum, FakeUSD>(@atomica, bob_lock);
-        lock_receipt::claim<Ethereum, FakeUSD>(@atomica, carol_lock);
+        lock_receipt::claim<Ethereum, FakeUSD>(@0xA11CE, alice_lock);
+        lock_receipt::claim<Ethereum, FakeUSD>(@0xB0B, bob_lock);
+        lock_receipt::claim<Ethereum, FakeUSD>(@0xCA401, carol_lock);
 
         // Alice (2100, 4) + Bob (2050, 3) = 7 fills supply. Carol (1900, 2) loses.
         auction::test_insert_bid_with_qty(
@@ -860,8 +899,8 @@ module atomica::auction_tests {
         lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
         lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(alice_lock, @0xA11CE, 10_500_000_000u256, 1u64);
         lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(bob_lock,   @0xB0B,   4_100_000_000u256, 1u64);
-        lock_receipt::claim<Ethereum, FakeUSD>(@atomica, alice_lock);
-        lock_receipt::claim<Ethereum, FakeUSD>(@atomica, bob_lock);
+        lock_receipt::claim<Ethereum, FakeUSD>(@0xA11CE, alice_lock);
+        lock_receipt::claim<Ethereum, FakeUSD>(@0xB0B, bob_lock);
 
         // Alice wins (price=2100, qty=5 fills supply), Bob loses (price=2000).
         auction::test_insert_bid_with_qty(
@@ -1074,8 +1113,8 @@ module atomica::auction_tests {
             bob_lock, @0xB0B, 4_100_000_000u256, 1u64,
         );
         // Claim both receipts to simulate submit_bid consuming them.
-        lock_receipt::claim<Ethereum, FakeUSD>(@atomica, alice_lock);
-        lock_receipt::claim<Ethereum, FakeUSD>(@atomica, bob_lock);
+        lock_receipt::claim<Ethereum, FakeUSD>(@0xA11CE, alice_lock);
+        lock_receipt::claim<Ethereum, FakeUSD>(@0xB0B, bob_lock);
 
         // Insert bid metadata into the window (test helper bypasses submit_bid).
         auction::test_insert_bid_with_qty(

@@ -24,6 +24,16 @@ CHAIN_ID="${2:-4}"
 BASE_IP="${3:-172.19.0.10}"
 STAKE_AMOUNT="100000000000000"  # 1M APT in octas
 
+# Ethereum header attestation (atomica-aptos issue 196). Genesis turns it on
+# for ETH_CHAIN_ID, and every validator observes ETH_RPC_URL at ETH_BLOCK_TAG.
+# The defaults match the Ethereum testnet (anvil or the Docker chain, chain id
+# 32382) on the host's port 8545. Anvil has no finality, so the tag is latest.
+# Lock proofs register only at a block the validators certified.
+ETH_CHAIN_ID="${ETH_CHAIN_ID:-32382}"
+ETH_RPC_URL="${ETH_RPC_URL:-http://host.docker.internal:8545}"
+ETH_BLOCK_TAG="${ETH_BLOCK_TAG:-latest}"
+ETH_POLL_INTERVAL_MS="${ETH_POLL_INTERVAL_MS:-2000}"
+
 WORKSPACE="${WORKSPACE:-/workspace}"
 cd "$WORKSPACE"
 
@@ -93,6 +103,7 @@ rewards_apy_percentage: 10
 voting_duration_secs: 43200
 voting_power_increase_limit: 20
 timelock_dkg_enabled: true
+eth_chain_id: ${ETH_CHAIN_ID}
 EOF
 
 # Step 3: Set validator configurations
@@ -217,6 +228,12 @@ indexer_db_config:
   enable_transaction: true
   enable_event: true
   enable_statekeys: true
+
+eth_header_observer:
+  enabled: true
+  rpc_url: "${ETH_RPC_URL}"
+  block_tag: "${ETH_BLOCK_TAG}"
+  poll_interval_ms: ${ETH_POLL_INTERVAL_MS}
 EOF
 done
 

@@ -2,7 +2,7 @@
 ///
 /// Provides a generic framework for verifying and registering cross-chain asset locks.
 ///
-/// @see docs/architecture/v0-architecture.md#§3-cross-chain-settlement-v01-bls-relayer-flow
+/// @see docs/architecture/v0-architecture.md §3 (Cross-Chain Settlement)
 /// Uses phantom types to create type-safe receipts for any asset locked on any chain.
 ///
 /// Example: A receipt for FakeETH locked on Ethereum is represented as:
@@ -13,12 +13,16 @@
 /// - Compile-time type safety
 /// - Cryptographic verification of all locks
 /// - Protection against replay attacks
+///
+/// Trust (docs/decisions/trustless-v0-1-unwinding.md): any account may carry a
+/// lock proof. The proof names the depositor, and the receipt belongs to the
+/// depositor's Ethereum-derivable Aptos account. Only that account may claim
+/// it. The `@atomica` account has no registration or claim privilege.
 module atomica::lock_receipt {
     use std::vector;
     use std::signer;
     use aptos_std::table::{Self, Table};
     use aptos_std::simple_map::{Self, SimpleMap};
-    use aptos_std::from_bcs;
     use aptos_framework::event;
     use aptos_framework::timestamp;
     use aptos_std::type_info;
@@ -33,7 +37,6 @@ module atomica::lock_receipt {
     const E_REGISTRY_NOT_INITIALIZED: u64 = 6;
     const E_INVALID_STATUS: u64 = 7;
     const E_INVALID_ADDRESS_LENGTH: u64 = 8;
-    const E_UNAUTHORIZED_SIGNER: u64 = 9;
     /// Asset has no pinned Ethereum token
     const E_UNSUPPORTED_ASSET: u64 = 10;
 
@@ -66,8 +69,11 @@ module atomica::lock_receipt {
         /// Unique identifier for this lock (prevents replay)
         lock_id: vector<u8>,
 
-        /// User who locked the assets on the remote chain
+        /// The depositor's Ethereum-derivable Aptos account: the only claimer
         user: address,
+
+        /// The depositor's Ethereum address (20 bytes), as proven
+        eth_owner: vector<u8>,
 
         /// Amount of this one LockBox lock (in the asset's base units)
         amount: u256,
@@ -135,24 +141,6 @@ module atomica::lock_receipt {
 
     // ===================== Ethereum Lock Registration =====================
 
-    /// Convert Ethereum address (20 bytes) to Aptos address (32 bytes)
-    /// Pads with zeros on the left to create a valid Aptos address
-    fun address_from_bytes(eth_address: vector<u8>): address {
-        assert!(vector::length(&eth_address) == 20, E_INVALID_ADDRESS_LENGTH);
-        
-        // Pad to 32 bytes (Aptos address length)
-        let aptos_addr_bytes = vector::empty<u8>();
-        let i = 0;
-        while (i < 12) {
-            vector::push_back(&mut aptos_addr_bytes, 0);
-            i = i + 1;
-        };
-        vector::append(&mut aptos_addr_bytes, eth_address);
-        
-        // Deserialize bytes to address
-        from_bcs::to_address(aptos_addr_bytes)
-    }
-
     /// Ethereum token address pinned for `Asset` in eth_proof's config.
     fun token_for<Asset>(): vector<u8> {
         let asset = type_info::type_of<Asset>();
@@ -168,16 +156,20 @@ module atomica::lock_receipt {
     ///
     /// This function:
     /// 1. Resolves the token of `Asset` from the pinned config
-    /// 2. Verifies the lock's MPT proof against the trusted state root of
-    ///    `block_number` (eth_proof::verify_lock derives the storage key)
+    /// 2. Verifies the lock's MPT proof against the validator-certified state
+    ///    root of `block_number` (eth_proof::verify_lock derives the storage key)
     /// 3. Derives the lock id from the LockBox lock nonce and rejects a lock
     ///    already registered, so one lock gives exactly one receipt
     /// 4. Creates and stores a LockReceipt for the amount of that one lock
     /// 5. Emits a LockRegistered event
     ///
+    /// Any account may carry the proof: `_carrier` gains nothing. The receipt
+    /// belongs to the depositor `user_address` named in the proof, through its
+    /// Ethereum-derivable Aptos account (eth_proof::ethereum_account_address).
+    ///
     /// Type parameter Asset determines which asset is being locked (FakeETH, FakeUSD).
     public entry fun register_ethereum_lock<Asset>(
-        account: &signer,
+        _carrier: &signer,
         block_number: u64,
         user_address: vector<u8>,
         lock_nonce: u64,
@@ -186,30 +178,20 @@ module atomica::lock_receipt {
     ) acquires ReceiptRegistry {
         let token = token_for<Asset>();
 
-        // 1. The user named in the proof owns the receipt. This prevents
-        // frontrunning attacks where someone could steal the receipt.
-        let user = address_from_bytes(user_address);
+        // 1. The depositor named in the proof owns the receipt, through the
+        // Aptos account its Ethereum key controls. Whoever carries the proof
+        // cannot redirect the receipt.
+        assert!(vector::length(&user_address) == 20, E_INVALID_ADDRESS_LENGTH);
+        let user = eth_proof::ethereum_account_address(user_address);
 
-        // 2. Verify the signer is authorized.
-        //
-        // Demo: The @atomica admin (fee-payer) signs on behalf of the user.
-        // The user-derived Aptos address (SHA3-256 of SIWE pubkey + domain) does
-        // not match the zero-padded Ethereum address, so user self-signing is not
-        // supported here. MVP must implement proper user-signer auth (I-M4).
-        let signer_addr = signer::address_of(account);
-        assert!(
-            signer_addr == user || signer_addr == @atomica,
-            E_UNAUTHORIZED_SIGNER
-        );
-
-        // 3. One lock, one receipt: the id names the LockBox lock, not the block.
+        // 2. One lock, one receipt: the id names the LockBox lock, not the block.
         let lock_id = eth_proof::lock_id(user_address, token, lock_nonce);
         assert!(
             !is_lock_claimed<Ethereum, Asset>(lock_id),
             E_ALREADY_CLAIMED
         );
 
-        // 4. Verify the lock against the trusted header and read its amount.
+        // 3. Verify the lock against the certified header and read its amount.
         let amount = eth_proof::verify_lock(
             block_number,
             user_address,
@@ -219,10 +201,11 @@ module atomica::lock_receipt {
             storage_proof,
         );
 
-        // 5. Create and store the receipt
+        // 4. Create and store the receipt
         let receipt = LockReceipt<Ethereum, Asset> {
             lock_id,
             user,
+            eth_owner: user_address,
             amount,
             block_number,
             timestamp: timestamp::now_seconds(),
@@ -230,7 +213,7 @@ module atomica::lock_receipt {
         };
         store_receipt<Ethereum, Asset>(receipt, lock_id);
 
-        // 6. Emit event
+        // 5. Emit event
         event::emit(LockRegistered<Ethereum, Asset> {
             lock_id,
             user,
@@ -326,14 +309,8 @@ module atomica::lock_receipt {
         // Verify receipt is active
         assert!(receipt.status == STATUS_ACTIVE, E_RECEIPT_ALREADY_CLAIMED);
 
-        // Verify claimer is the receipt owner or the atomica admin.
-        //
-        // Demo: The @atomica admin (fee-payer) calls create_auction on behalf of
-        // the user. The user's Aptos address (zero-padded Ethereum address) differs
-        // from the admin's native Aptos address, so we allow @atomica as an
-        // authorized claimer in this phase. MVP must implement proper user-signer
-        // auth (I-M4) and remove this bypass.
-        assert!(receipt.user == claimer || claimer == @atomica, E_NOT_RECEIPT_OWNER);
+        // Only the receipt owner (the depositor's Ethereum-derivable account) claims.
+        assert!(receipt.user == claimer, E_NOT_RECEIPT_OWNER);
 
         // Mark as claimed
         receipt.status = STATUS_CLAIMED;
@@ -385,10 +362,11 @@ module atomica::lock_receipt {
     }
 
     #[view]
-    /// Get receipt details
+    /// Get receipt details: (owner account, amount, block number, status,
+    /// depositor Ethereum address).
     public fun get_receipt<Chain, Asset>(
         lock_id: vector<u8>
-    ): (address, u256, u64, u8) acquires ReceiptRegistry {
+    ): (address, u256, u64, u8, vector<u8>) acquires ReceiptRegistry {
         assert!(
             exists<ReceiptRegistry<Chain, Asset>>(@atomica),
             E_REGISTRY_NOT_INITIALIZED
@@ -403,7 +381,7 @@ module atomica::lock_receipt {
 
         let receipt = table::borrow(&registry.receipts, lock_id);
 
-        (receipt.user, receipt.amount, receipt.block_number, receipt.status)
+        (receipt.user, receipt.amount, receipt.block_number, receipt.status, receipt.eth_owner)
     }
 
     #[view]
@@ -426,6 +404,7 @@ module atomica::lock_receipt {
         let receipt = LockReceipt<Chain, Asset> {
             lock_id,
             user,
+            eth_owner: vector::empty(),
             amount,
             block_number,
             timestamp: 0,
@@ -444,6 +423,7 @@ module atomica::lock_receipt {
         LockReceipt<Chain, Asset> {
             lock_id,
             user,
+            eth_owner: vector::empty(),
             amount,
             block_number,
             timestamp: 0,

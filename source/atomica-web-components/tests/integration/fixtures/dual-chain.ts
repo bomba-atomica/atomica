@@ -105,7 +105,11 @@ export interface IntegrationFixture {
 export async function setupIntegrationFixture(): Promise<IntegrationFixture> {
   console.log("[IntegrationFixture] Starting dual-chain testnet...");
 
-  const info: DualChainTestnetInfo = await commands.setupDualChainTestnet();
+  // Pin this page's host as the SIWE domain: lock receipts belong to the
+  // Ethereum-derivable accounts the SDK derives here (getDerivedAddress).
+  const info: DualChainTestnetInfo = await commands.setupDualChainTestnet(
+    window.location.host,
+  );
 
   const fixture: IntegrationFixture = {
     eth: {

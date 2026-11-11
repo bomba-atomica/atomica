@@ -13,7 +13,10 @@
  *
  * Setup:
  *   - Dual-chain testnet started in beforeAll
- *   - Ethereum lock → Aptos proof registration via deployer account (no SIWE)
+ *   - Ethereum lock → the validators certify a block covering it → the
+ *     deployer account (no special rights) carries the proof to Aptos, with
+ *     no header submission. The receipt belongs to the seller's
+ *     Ethereum-derivable account, which signs create_auction (SIWE)
  *   - A real timelock registered for the window (the epoch key must exist)
  *   - Seller wallet mock injected for SIWE signing in UI callbacks
  */
@@ -130,20 +133,16 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
       chainId: fixture.eth.chainId,
     });
 
-    // Build the deployer's native Aptos account (@atomica admin).
-    // The Move contracts only allow @atomica or the zero-padded Ethereum
-    // address to call register_ethereum_lock and create_auction in this
-    // Demo phase (see lock_receipt.move E_UNAUTHORIZED_SIGNER check).
-    // The SIWE-derived address matches neither, so we use the deployer directly.
+    // The deployer's native Aptos account carries the proof and registers the
+    // timelock. It has no special rights: any account could.
     deployerAccount = Account.fromPrivateKey({
       privateKey: new Ed25519PrivateKey(fixture.aptos.deployerPrivateKey),
     });
 
-    // Lock ETH on Ethereum and generate storage proof (no Aptos registration)
+    // Lock ETH on Ethereum and prove it at a validator-certified block.
     ethProof = await generateEthLockProof(fixture);
 
-    // Register the lock on Aptos via the deployer account (@atomica).
-    // The contract authorizes @atomica to register on behalf of any user.
+    // Register the lock on Aptos: no submit_header, any carrier.
     await registerLockOnAptos(
       aptosGlobal,
       deployerAccount,
@@ -186,7 +185,7 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     const onCreateAuction = async () => {
       const txHash = await createAuctionDirect(
         aptosGlobal,
-        deployerAccount,
+        fixture.eth.seller,
         ethProof.lockId,
         MIN_PRICE,
         windowId,
@@ -249,7 +248,7 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     const onCreateAuction = async () => {
       const txHash = await createAuctionDirect(
         aptosGlobal,
-        deployerAccount,
+        fixture.eth.seller,
         ethProof.lockId,
         MIN_PRICE,
         windowId,

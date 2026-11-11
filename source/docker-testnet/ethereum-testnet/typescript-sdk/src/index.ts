@@ -198,9 +198,11 @@ export class EthereumDockerTestnet {
         : "anvil");
     const mnemonic =
       process.env.ETHEREUM_DEPLOYER_MNEMONIC?.trim() || DEFAULT_MNEMONIC;
+    // 0.0.0.0, not 127.0.0.1: the Aptos validators in Docker observe this
+    // chain's headers through host.docker.internal:8545.
     const args = [
       "--host",
-      "127.0.0.1",
+      "0.0.0.0",
       "--port",
       "8545",
       "--chain-id",
