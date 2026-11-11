@@ -2,7 +2,7 @@
  * Integration tests: usePoolEvents Ethereum event subscription
  *
  * Covers:
- *   - Subscribe to TokensLocked events, lock FakeETH, verify callback fires
+ *   - Subscribe to Locked events, lock FakeETH, verify callback fires
  *   - Unmount component, verify event listener is cleaned up
  *   - Ethereum RPC unreachable, verify no crash and graceful degradation
  *
@@ -18,6 +18,7 @@ import {
   teardownIntegrationFixture,
   type IntegrationFixture,
 } from "./fixtures/dual-chain";
+import { currentWindowId, lockBinding } from "@atomica/sdk/ethereum";
 import { usePoolEvents } from "../../src/hooks/usePoolEvents";
 
 // ---------------------------------------------------------------------------
@@ -39,8 +40,18 @@ const ERC20_ABI = [
 ] as const;
 
 const LOCKBOX_ABI = [
-  "function lock(address token, uint256 amount) external",
+  "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) external returns (bytes32)",
 ] as const;
+
+/** Lock `amount` of `token` into the current window (empty pair BCS). */
+async function lockNow(lockBox: ethers.Contract, token: string, amount: bigint) {
+  const b = lockBinding(
+    currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
+    new Uint8Array(0),
+  );
+  const tx = await lockBox.lock(token, amount, b.windowId, b.pairHash, b.deadline);
+  await tx.wait();
+}
 
 // ---------------------------------------------------------------------------
 // Suite
@@ -64,7 +75,7 @@ describe.sequential("15 — pool events (usePoolEvents)", () => {
   // ── Happy path: event fires on lock ────────────────────────────────────────
 
   it(
-    "calls onEvent when a TokensLocked event is emitted after locking FakeETH",
+    "calls onEvent when a Locked event is emitted after locking FakeETH",
     async () => {
       const onEvent = vi.fn();
       render(<PoolEventsHarness onEvent={onEvent} />);
@@ -72,7 +83,7 @@ describe.sequential("15 — pool events (usePoolEvents)", () => {
       // Give the effect time to subscribe
       await new Promise((r) => setTimeout(r, 500));
 
-      // Lock FakeETH to trigger a TokensLocked event
+      // Lock FakeETH to trigger a Locked event
       const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
       const wallet = new ethers.Wallet(fixture.eth.seller.privateKey, provider);
       const lockBoxAddress = fixture.eth.contracts.lockBox;
@@ -85,8 +96,7 @@ describe.sequential("15 — pool events (usePoolEvents)", () => {
       const amount = ethers.parseEther("1");
       const approveTx = await fakeEth.approve(lockBoxAddress, amount);
       await approveTx.wait();
-      const lockTx = await lockBox.lock(fakeEthAddress, amount);
-      await lockTx.wait();
+      await lockNow(lockBox, fakeEthAddress, amount);
 
       // Wait for the event polling to detect the new event (ethers v6 HTTP
       // polling interval is ~4 seconds by default)
@@ -124,8 +134,7 @@ describe.sequential("15 — pool events (usePoolEvents)", () => {
     const amount = ethers.parseEther("1");
     const approveTx = await fakeEth.approve(lockBoxAddress, amount);
     await approveTx.wait();
-    const lockTx = await lockBox.lock(fakeEthAddress, amount);
-    await lockTx.wait();
+    await lockNow(lockBox, fakeEthAddress, amount);
 
     // Wait well past polling interval — callback should NOT have been called
     await new Promise((r) => setTimeout(r, 6_000));

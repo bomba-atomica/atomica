@@ -23,7 +23,7 @@ The axioms force four mechanisms:
 | --- | --- | --- |
 | **Validator-attested Ethereum headers.** Aptos validators certify Ethereum block headers with a 2/3+ voting-power quorum. Anyone may carry a certified header. No entry function writes headers. | The admin-only `eth_proof::submit_header` relayer. | 196, 197 |
 | **Verified Aptos outcome proof releases Ethereum locks.** Ethereum checks a validator-signed Aptos LedgerInfo with real BLS12-381 (EIP-2537) and an event inclusion proof. Anyone may submit it. | The `settlementAuthority` EOA and the `BLSVerifierTestnet` trusted-EOA verifier. Real BLS verification moves from v1 into v0.1. | 201, 202, 203 |
-| **Per-lock deadline with permissionless reclaim.** Every Ethereum lock carries a deadline. After it, anyone may return an open lock to its depositor, unless a proven settle covers that lock. | "Abandoned locks are frozen." | 203 |
+| **Per-lock deadline with permissionless reclaim.** Every Ethereum lock carries a deadline, and all locks of one auction share it: Aptos registers a lock only when its deadline equals `auction::eth_lock_deadline(window_id)`. After the deadline, anyone may return an open lock to its depositor, unless the auction's recorded outcome covers that lock. A reclaim before any outcome is recorded voids that auction's outcome on Ethereum, so an auction settles on Ethereum fully or not at all. | "Abandoned locks are frozen." | 203 |
 | **One permissionless unwind entry per auction on Aptos.** Any account may call the unwind entry on a finished or stuck window. It gives every receipt of the window a terminal state and emits an outcome Ethereum can verify. A never-auctioned receipt can be cancelled by anyone after a delay. | Relayer-driven refunds and the open recovery question on issue 170. | 194, 195 |
 
 This ADR names the mechanisms. The implementing issues specify the exact proof formats.
@@ -79,6 +79,7 @@ This ADR supersedes the following text. Where older text disagrees with the thre
 - [PRD](../specifications/prd.md): Risk #3 and the Protocol Evolution trust table, where they imply any trust beyond the validator threshold.
 - [Aptos 1.49.6 Upgrade Review](../code-reviews/aptos-1-49-6-upgrade-review.md): any statement that accepts a trusted operator or relayer, such as the Demo trust model note in finding 11.
 - The open owner decision on issue 170 about recovering abandoned locks.
+- `fake_eth::mint_from_lock` and `fake_usd::mint_from_lock`: they minted Aptos FA from a lock receipt with no `AuctionOutcome`. With deadline reclaim a depositor could mint FA and then reclaim the Ethereum lock. Both are retired and abort with `E_RETIRED` (issue 203).
 
 ---
 

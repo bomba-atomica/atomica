@@ -23,11 +23,11 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 
 | Capability | Owning module(s) under `source/` | Status |
 |---|---|---|
-| **Ethereum ERC-20 lock / LockBox** | `evm-contracts/src/escrow/LockBox.sol` | `live` |
+| **Ethereum ERC-20 lock / LockBox** | `evm-contracts/src/escrow/LockBox.sol` | `live` — proof-gated: a lock leaves by `releaseByOutcome` on a proven Aptos `AuctionOutcome` or by permissionless `reclaim` after its deadline; no settlement authority (issue 203) |
 | **Fake-token issuance (FakeETH / FakeUSD)** | `evm-contracts/src/tokens/`, `atomica-move-contracts/sources/fake_eth.move`, `fake_usd.move` | `live` |
 | **Cross-chain state-proof verification (Ethereum → Aptos)** | `atomica-move-contracts/sources/eth_proof.move`, `mpt.move`, `rlp.move` | `live` — proofs check against admin-submitted roots; validator-attested headers that anyone carries are `missing` (issues 196, 197) |
 | **Lock-receipt registry** | `atomica-move-contracts/sources/lock_receipt.move` | `live` |
-| **Bridged-asset minting on Aptos (`mint_from_lock`)** | `atomica-move-contracts/sources/fake_eth.move`, `fake_usd.move` | `live` |
+| **Bridged-asset minting on Aptos (`mint_from_lock`)** | `atomica-move-contracts/sources/fake_eth.move`, `fake_usd.move` | `retired` — aborts with `E_RETIRED`; locks pay out only by a proven `AuctionOutcome` or go home by deadline reclaim (issue 203) |
 | **SIWE / account abstraction (Ethereum wallet → Aptos)** | `atomica-web-ui/src/lib/aptos/siwe.ts` | `live` |
 | **IBE timelock — client-side (Boneh-Franklin)** | `atomica-web-ui/src/lib/ibe.ts` | `live` |
 | **IBE timelock — on-chain Move scaffolding** | `atomica-move-contracts/sources/timelock.move`, `timelock_config.move` | `scaffold` |

@@ -1,223 +1,118 @@
 import { describe, it, expect } from "vitest";
 import { ethers } from "ethers";
 import {
-  calculateLockedBalanceStorageKey,
-  calculateUnlockTimeStorageKey,
-  calculateBatchStorageKeys,
   calculateLockStorageKey,
   getLockId,
-} from "../../src/ethereum/proofs/storage-key.js";
+  LOCK_COMMITMENTS_SLOT,
+} from "../../src/ethereum/proofs/storage-key";
+import {
+  auctionKey,
+  currentWindowId,
+  ETH_RECLAIM_DELAY_SECS,
+  ethLockDeadline,
+  lockBinding,
+  lockCommitment,
+  pairHashOf,
+  windowCloseSecs,
+} from "../../src/ethereum/lock-binding";
 
 /**
- * Unit tests for storage key calculation
+ * Lock id, storage key and commitment of one LockBox lock (issues 171, 203).
  *
- * These tests verify that our TypeScript storage key calculation
- * matches Solidity's storage layout for nested mappings.
+ * The pinned values were read from the proof-gated LockBox on anvil
+ * (getLockId, commitmentStorageKey, commitments) for USER locking 10 FakeETH
+ * (nonce 0) into window 83075 with pair hash keccak256(""). The Move tests
+ * eth_proof_tests.move and eth_lock_registration_tests.move pin the same
+ * values, so the SDK, Solidity and Move agree.
  */
-describe("Storage Key Calculation", () => {
-  const ALICE = "0x0000000000000000000000000000000000000001";
-  const BOB = "0x0000000000000000000000000000000000000002";
-  const FAKE_ETH = "0x0000000000000000000000000000000000000010";
-  const FAKE_USD = "0x0000000000000000000000000000000000000020";
+describe("LockBox lock id, storage key and commitment", () => {
+  const USER = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+  const TOKEN = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+  const WINDOW = 83075n;
+  const TEN_ETH = 10n * 10n ** 18n;
 
-  describe("calculateLockedBalanceStorageKey", () => {
-    it("should calculate storage key for Alice + FakeETH", () => {
-      const key = calculateLockedBalanceStorageKey(ALICE, FAKE_ETH);
-
-      // Should be a valid hex string
-      expect(key).toMatch(/^0x[0-9a-f]{64}$/i);
-
-      // Should be deterministic
-      const key2 = calculateLockedBalanceStorageKey(ALICE, FAKE_ETH);
-      expect(key).toBe(key2);
-    });
-
-    it("should calculate different keys for different users", () => {
-      const aliceKey = calculateLockedBalanceStorageKey(ALICE, FAKE_ETH);
-      const bobKey = calculateLockedBalanceStorageKey(BOB, FAKE_ETH);
-
-      expect(aliceKey).not.toBe(bobKey);
-    });
-
-    it("should calculate different keys for different tokens", () => {
-      const ethKey = calculateLockedBalanceStorageKey(ALICE, FAKE_ETH);
-      const usdKey = calculateLockedBalanceStorageKey(ALICE, FAKE_USD);
-
-      expect(ethKey).not.toBe(usdKey);
-    });
-
-    it("should handle checksummed addresses", () => {
-      const checksummed = ethers.getAddress(ALICE.toLowerCase());
-      const key1 = calculateLockedBalanceStorageKey(ALICE, FAKE_ETH);
-      const key2 = calculateLockedBalanceStorageKey(checksummed, FAKE_ETH);
-
-      expect(key1).toBe(key2);
-    });
-
-    it("should match Solidity's single-level mapping calculation", () => {
-      // For mapping(bytes32 => uint256) at slot 0 with composite key:
-      // 1. compositeKey = keccak256(abi.encodePacked(user, token))
-      // 2. storageKey = keccak256(abi.encode(compositeKey, slot))
-
-      const compositeKey = ethers.keccak256(
-        ethers.solidityPacked(["address", "address"], [ALICE, FAKE_ETH]),
-      );
-
-      const expectedKey = ethers.keccak256(
-        ethers.AbiCoder.defaultAbiCoder().encode(
-          ["bytes32", "uint256"],
-          [compositeKey, 0],
-        ),
-      );
-
-      const actualKey = calculateLockedBalanceStorageKey(ALICE, FAKE_ETH);
-
-      expect(actualKey).toBe(expectedKey);
-    });
-
-    it("should use custom slot if provided", () => {
-      const slot0 = calculateLockedBalanceStorageKey(ALICE, FAKE_ETH, 0);
-      const slot1 = calculateLockedBalanceStorageKey(ALICE, FAKE_ETH, 1);
-      const slot2 = calculateLockedBalanceStorageKey(ALICE, FAKE_ETH, 2);
-
-      // All should be different
-      expect(slot0).not.toBe(slot1);
-      expect(slot1).not.toBe(slot2);
-      expect(slot0).not.toBe(slot2);
-    });
+  it("getLockId matches LockBox.getLockId", () => {
+    expect(getLockId(USER, TOKEN, 0n)).toBe(
+      "0x971e89c2b26f64aa4fc94b73baad52f35b2beb721f37991b5771e8328a10586a",
+    );
   });
 
-  describe("calculateUnlockTimeStorageKey", () => {
-    it("should calculate storage key at slot 1", () => {
-      const unlockKey = calculateUnlockTimeStorageKey(ALICE, FAKE_ETH);
-      const slot1Key = calculateLockedBalanceStorageKey(ALICE, FAKE_ETH, 1);
-
-      expect(unlockKey).toBe(slot1Key);
-    });
-
-    it("should be different from locked balance key", () => {
-      const balanceKey = calculateLockedBalanceStorageKey(ALICE, FAKE_ETH);
-      const unlockKey = calculateUnlockTimeStorageKey(ALICE, FAKE_ETH);
-
-      expect(balanceKey).not.toBe(unlockKey);
-    });
+  it("calculateLockStorageKey matches LockBox.commitmentStorageKey (slot 0)", () => {
+    expect(LOCK_COMMITMENTS_SLOT).toBe(0);
+    expect(calculateLockStorageKey(USER, TOKEN, 0n)).toBe(
+      "0xd06824aae8fc45f9d700be7d63b09e0baf2d07b123582f9e14a61e62c3ff0e71",
+    );
   });
 
-  describe("calculateBatchStorageKeys", () => {
-    it("should calculate keys for multiple users and tokens", () => {
-      const users = [ALICE, BOB];
-      const tokens = [FAKE_ETH, FAKE_USD];
-
-      const keys = calculateBatchStorageKeys(users, tokens);
-
-      // Should have 2 users × 2 tokens = 4 keys
-      expect(keys).toHaveLength(4);
-
-      // All keys should be unique
-      const uniqueKeys = new Set(keys);
-      expect(uniqueKeys.size).toBe(4);
-    });
-
-    it("should calculate keys in correct order", () => {
-      const users = [ALICE, BOB];
-      const tokens = [FAKE_ETH, FAKE_USD];
-
-      const keys = calculateBatchStorageKeys(users, tokens);
-
-      // Order should be: Alice+ETH, Alice+USD, Bob+ETH, Bob+USD
-      expect(keys[0]).toBe(calculateLockedBalanceStorageKey(ALICE, FAKE_ETH));
-      expect(keys[1]).toBe(calculateLockedBalanceStorageKey(ALICE, FAKE_USD));
-      expect(keys[2]).toBe(calculateLockedBalanceStorageKey(BOB, FAKE_ETH));
-      expect(keys[3]).toBe(calculateLockedBalanceStorageKey(BOB, FAKE_USD));
-    });
-
-    it("should handle single user and token", () => {
-      const keys = calculateBatchStorageKeys([ALICE], [FAKE_ETH]);
-
-      expect(keys).toHaveLength(1);
-      expect(keys[0]).toBe(calculateLockedBalanceStorageKey(ALICE, FAKE_ETH));
-    });
-
-    it("should handle empty arrays", () => {
-      const keys = calculateBatchStorageKeys([], []);
-
-      expect(keys).toHaveLength(0);
-    });
+  it("each nonce names its own lock", () => {
+    expect(getLockId(USER, TOKEN, 0n)).not.toBe(getLockId(USER, TOKEN, 1n));
   });
 
-  describe("Edge Cases", () => {
-    it("should handle zero address", () => {
-      const zeroAddr = ethers.ZeroAddress;
-
-      const key = calculateLockedBalanceStorageKey(zeroAddr, FAKE_ETH);
-
-      expect(key).toMatch(/^0x[0-9a-f]{64}$/i);
-    });
-
-    it("should handle same user and token address", () => {
-      // Edge case: user address == token address
-      const key = calculateLockedBalanceStorageKey(ALICE, ALICE);
-
-      expect(key).toMatch(/^0x[0-9a-f]{64}$/i);
-
-      // Should be different from Alice + FAKE_ETH
-      const normalKey = calculateLockedBalanceStorageKey(ALICE, FAKE_ETH);
-      expect(key).not.toBe(normalKey);
-    });
-
-    it("should throw on invalid address", () => {
-      expect(() => {
-        calculateLockedBalanceStorageKey("not-an-address", FAKE_ETH);
-      }).toThrow();
-
-      expect(() => {
-        calculateLockedBalanceStorageKey(ALICE, "not-an-address");
-      }).toThrow();
-    });
+  it("lockCommitment matches LockBox.commitments for the anvil lock", () => {
+    const binding = lockBinding(WINDOW, new Uint8Array(0));
+    expect(binding.pairHash).toBe(
+      "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+    );
+    expect(binding.deadline).toBe(1794700800n);
+    expect(lockCommitment(USER, TOKEN, TEN_ETH, binding)).toBe(
+      "0x47aeb7321d102da54ae9a862722094e50a626d1bb23a2651a6acc48cde9bc0b6",
+    );
   });
 
-  describe("Consistency with Solidity", () => {
-    it("should produce same key as Solidity calculateStorageKey", () => {
-      // These test vectors verify the math against known manual calculations
-      const user = "0x0000000000000000000000000000000000000001";
-      const token = "0x0000000000000000000000000000000000000010";
-      const key = calculateLockedBalanceStorageKey(user, token);
-
-      // Calculate manually using new single-level mapping approach
-      const compositeKey = ethers.keccak256(
-        ethers.solidityPacked(["address", "address"], [user, token]),
-      );
-      const expected = ethers.keccak256(
-        ethers.AbiCoder.defaultAbiCoder().encode(
-          ["bytes32", "uint256"],
-          [compositeKey, 0],
-        ),
-      );
-
-      expect(key).toBe(expected);
-    });
+  it("the commitment changes with the amount, the window and the pair", () => {
+    const binding = lockBinding(WINDOW, new Uint8Array(0));
+    const base = lockCommitment(USER, TOKEN, TEN_ETH, binding);
+    expect(lockCommitment(USER, TOKEN, TEN_ETH - 1n, binding)).not.toBe(base);
+    expect(
+      lockCommitment(
+        USER,
+        TOKEN,
+        TEN_ETH,
+        lockBinding(WINDOW + 1n, new Uint8Array(0)),
+      ),
+    ).not.toBe(base);
+    expect(
+      lockCommitment(
+        USER,
+        TOKEN,
+        TEN_ETH,
+        lockBinding(WINDOW, new Uint8Array([1])),
+      ),
+    ).not.toBe(base);
   });
 
-  describe("Per-lock id and storage key (issue 171)", () => {
-    // Read from LockBox.getLockId / calculateLockStorageKey on anvil, and
-    // pinned by eth_proof_tests.move, so the SDK, Solidity and Move agree.
-    const USER = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-    const TOKEN = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+  it("auctionKey is keccak256(abi.encode(windowId, pairHash, deadline))", () => {
+    const binding = lockBinding(WINDOW, new Uint8Array(0));
+    const expected = ethers.keccak256(
+      ethers.AbiCoder.defaultAbiCoder().encode(
+        ["uint256", "bytes32", "uint256"],
+        [WINDOW, binding.pairHash, binding.deadline],
+      ),
+    );
+    expect(auctionKey(binding)).toBe(expected);
+    expect(
+      auctionKey({ ...binding, deadline: binding.deadline + 1n }),
+    ).not.toBe(expected);
+  });
+});
 
-    it("getLockId matches LockBox.getLockId", () => {
-      expect(getLockId(USER, TOKEN, 0n)).toBe(
-        "0x971e89c2b26f64aa4fc94b73baad52f35b2beb721f37991b5771e8328a10586a",
-      );
-    });
+describe("eth_lock_deadline", () => {
+  it("is the window close plus 72 hours", () => {
+    expect(ETH_RECLAIM_DELAY_SECS).toBe(259_200n);
+    expect(windowCloseSecs(83075n)).toBe(1794441600n);
+    expect(ethLockDeadline(83075n)).toBe(1794700800n);
+    expect(windowCloseSecs(2n)).toBe(43_200n + 28_500n);
+  });
 
-    it("calculateLockStorageKey matches LockBox.calculateLockStorageKey", () => {
-      expect(calculateLockStorageKey(USER, TOKEN, 0n)).toBe(
-        "0xa64f5e3f73fd5de7a6385dddf214ac430a21cc86902db5bd6560d9babea4ec89",
-      );
-    });
+  it("every second of a window maps back to it, and the window closes at its last second + 1", () => {
+    for (const w of [0n, 1n, 2n, 3n, 83074n, 83075n]) {
+      const close = windowCloseSecs(w);
+      expect(currentWindowId(close - 1n)).toBe(w);
+      expect(currentWindowId(close)).toBe(w + 1n);
+    }
+  });
 
-    it("each nonce names its own lock", () => {
-      expect(getLockId(USER, TOKEN, 0n)).not.toBe(getLockId(USER, TOKEN, 1n));
-    });
+  it("pairHashOf is keccak256 of the pair BCS", () => {
+    expect(pairHashOf(new Uint8Array([1, 2]))).toBe(ethers.keccak256("0x0102"));
   });
 });

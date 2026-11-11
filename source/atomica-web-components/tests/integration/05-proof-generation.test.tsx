@@ -63,7 +63,8 @@ describe.sequential("05 — proof generation", () => {
             blockNumber: 42,
             blockHash: "0x" + "a".repeat(64),
             stateRoot: "0x" + "b".repeat(64),
-            storageValue: 10_000_000_000_000_000n, // 0.01 FETH
+            amount: 10_000_000_000_000_000n, // 0.01 FETH
+            storageValue: 0x99n, // the proven commitment
             storageKey: "0x" + "c".repeat(64),
             accountProof: ["0xabc", "0xdef"],
             storageProof: ["0x123", "0x456"],
@@ -111,7 +112,7 @@ describe.sequential("05 — proof generation", () => {
     // ── Full flow against testnet ─────────────────────────────────────────────
 
     it(
-        "happy path: proof spinner then proof-ready; storageValue matches on-chain balance",
+        "happy path: proof spinner then proof-ready; the amount matches the on-chain lock",
         async () => {
             const lockAmount = "0.01"; // FETH — small enough to complete quickly
 
@@ -178,21 +179,22 @@ describe.sequential("05 — proof generation", () => {
             // 0.01 FETH = 10000000000000000 wei → displayed as "0.0100 FETH"
             expect(proofReadyEl.textContent).toMatch(/0\.0100 FETH/);
 
-            // Verify storageValue matches on-chain locked balance
+            // Verify the shown amount matches the seller's latest on-chain lock
             const { ethers } = await import("ethers");
             const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
             const lockBoxAbi = [
-                "function getLockedBalance(address user, address token) external view returns (uint256)",
+                "event Locked(bytes32 indexed lockId, address indexed depositor, address indexed token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)",
             ];
             const lockBox = new ethers.Contract(
                 fixture.eth.contracts.lockBox,
                 lockBoxAbi,
                 provider,
             );
-            const onChainBalance: bigint = await lockBox.getLockedBalance(
-                fixture.eth.seller.address,
-                fixture.eth.contracts.fakeETH,
+            const locks = await lockBox.queryFilter(
+                lockBox.filters.Locked(null, fixture.eth.seller.address, fixture.eth.contracts.fakeETH),
             );
+            expect(locks.length).toBeGreaterThan(0);
+            const onChainBalance = (locks[locks.length - 1] as unknown as { args: { amount: bigint } }).args.amount;
             const expectedEth = (Number(onChainBalance) / 1e18).toFixed(4);
             expect(proofReadyEl.textContent).toMatch(new RegExp(expectedEth));
         },

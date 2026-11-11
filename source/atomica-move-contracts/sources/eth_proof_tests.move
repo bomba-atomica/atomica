@@ -84,7 +84,8 @@ module atomica::eth_proof_tests {
             x"5FbDB2315678afecb367f032d93F642f64180aa3",
             0,
         );
-        assert!(key == x"a64f5e3f73fd5de7a6385dddf214ac430a21cc86902db5bd6560d9babea4ec89", 0);
+        // LockBox.commitmentStorageKey(lock id): commitments sit at slot 0.
+        assert!(key == x"d06824aae8fc45f9d700be7d63b09e0baf2d07b123582f9e14a61e62c3ff0e71", 0);
     }
 
     #[test]

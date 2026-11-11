@@ -14,7 +14,11 @@ export interface LockBoxContract {
   lock(
     token: string,
     amount: bigint,
+    windowId: bigint,
+    pairHash: string,
+    deadline: bigint,
   ): Promise<ethers.ContractTransactionResponse>;
-  getLockedBalance(user: string, token: string): Promise<bigint>;
+  commitments(lockId: string): Promise<string>;
+  statuses(lockId: string): Promise<bigint>;
   getAddress(): Promise<string>;
 }

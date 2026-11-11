@@ -39,6 +39,8 @@ module atomica::lock_receipt {
     const E_INVALID_ADDRESS_LENGTH: u64 = 8;
     /// Asset has no pinned Ethereum token
     const E_UNSUPPORTED_ASSET: u64 = 10;
+    /// The lock deadline is not `auction::eth_lock_deadline(window_id)`
+    const E_WRONG_DEADLINE: u64 = 11;
 
     // Receipt status constants
     const STATUS_ACTIVE: u8 = 0;
@@ -77,6 +79,12 @@ module atomica::lock_receipt {
 
         /// Amount of this one LockBox lock (in the asset's base units)
         amount: u256,
+
+        /// Auction window the lock is bound to (LockBox lock field)
+        window_id: u64,
+
+        /// keccak256 of the window's pair BCS (LockBox lock field, 32 bytes)
+        pair_hash: vector<u8>,
 
         /// Block number where the lock occurred
         block_number: u64,
@@ -156,12 +164,16 @@ module atomica::lock_receipt {
     ///
     /// This function:
     /// 1. Resolves the token of `Asset` from the pinned config
-    /// 2. Verifies the lock's MPT proof against the validator-certified state
-    ///    root of `block_number` (eth_proof::verify_lock derives the storage key)
+    /// 2. Rejects a deadline other than `auction::eth_lock_deadline(window_id)`
+    ///    (eth_proof::eth_lock_deadline), so every registered lock of an
+    ///    auction shares one deadline
     /// 3. Derives the lock id from the LockBox lock nonce and rejects a lock
     ///    already registered, so one lock gives exactly one receipt
-    /// 4. Creates and stores a LockReceipt for the amount of that one lock
-    /// 5. Emits a LockRegistered event
+    /// 4. Verifies the lock's MPT proof against the validator-certified state
+    ///    root of `block_number`: the LockBox slot `commitments[lock_id]` must
+    ///    hold the commitment of the named amount, window, pair and deadline
+    /// 5. Creates and stores a LockReceipt for the amount of that one lock
+    /// 6. Emits a LockRegistered event
     ///
     /// Any account may carry the proof: `_carrier` gains nothing. The receipt
     /// belongs to the depositor `user_address` named in the proof, through its
@@ -173,10 +185,15 @@ module atomica::lock_receipt {
         block_number: u64,
         user_address: vector<u8>,
         lock_nonce: u64,
+        amount: u256,
+        window_id: u64,
+        pair_hash: vector<u8>,
+        deadline: u64,
         account_proof: vector<vector<u8>>,
         storage_proof: vector<vector<u8>>,
     ) acquires ReceiptRegistry {
         let token = token_for<Asset>();
+        assert!(deadline == eth_proof::eth_lock_deadline(window_id), E_WRONG_DEADLINE);
 
         // 1. The depositor named in the proof owns the receipt, through the
         // Aptos account its Ethereum key controls. Whoever carries the proof
@@ -191,12 +208,16 @@ module atomica::lock_receipt {
             E_ALREADY_CLAIMED
         );
 
-        // 3. Verify the lock against the certified header and read its amount.
-        let amount = eth_proof::verify_lock(
+        // 3. Verify the lock and its fields against the certified header.
+        eth_proof::verify_lock(
             block_number,
             user_address,
             token,
             lock_nonce,
+            amount,
+            window_id,
+            pair_hash,
+            deadline,
             account_proof,
             storage_proof,
         );
@@ -207,6 +228,8 @@ module atomica::lock_receipt {
             user,
             eth_owner: user_address,
             amount,
+            window_id,
+            pair_hash,
             block_number,
             timestamp: timestamp::now_seconds(),
             status: STATUS_ACTIVE,
@@ -392,6 +415,25 @@ module atomica::lock_receipt {
     }
 
     #[view]
+    /// The auction binding of a receipt's lock: (window_id, pair_hash). Its
+    /// deadline is `auction::eth_lock_deadline(window_id)`.
+    public fun get_receipt_binding<Chain, Asset>(
+        lock_id: vector<u8>
+    ): (u64, vector<u8>) acquires ReceiptRegistry {
+        assert!(
+            exists<ReceiptRegistry<Chain, Asset>>(@atomica),
+            E_REGISTRY_NOT_INITIALIZED
+        );
+        let registry = borrow_global<ReceiptRegistry<Chain, Asset>>(@atomica);
+        assert!(
+            table::contains(&registry.receipts, lock_id),
+            E_RECEIPT_NOT_FOUND
+        );
+        let receipt = table::borrow(&registry.receipts, lock_id);
+        (receipt.window_id, receipt.pair_hash)
+    }
+
+    #[view]
     /// Check if registry is initialized for a Chain/Asset pair
     public fun is_registry_initialized<Chain, Asset>(): bool {
         exists<ReceiptRegistry<Chain, Asset>>(@atomica)
@@ -413,6 +455,8 @@ module atomica::lock_receipt {
             user,
             eth_owner: vector::empty(),
             amount,
+            window_id: 0,
+            pair_hash: vector::empty(),
             block_number,
             timestamp: 0,
             status: STATUS_ACTIVE,
@@ -432,6 +476,8 @@ module atomica::lock_receipt {
             user,
             eth_owner: vector::empty(),
             amount,
+            window_id: 0,
+            pair_hash: vector::empty(),
             block_number,
             timestamp: 0,
             status: STATUS_ACTIVE,

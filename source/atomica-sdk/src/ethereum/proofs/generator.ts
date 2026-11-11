@@ -2,7 +2,8 @@
  * LockBox-Specific Proof Generation
  *
  * Generates the state proof of one LockBox lock: the
- * `lockAmounts[getLockId(user, token, nonce)]` slot. Aptos derives the same
+ * `commitments[getLockId(user, token, nonce)]` slot, which holds
+ * `lockCommitment(user, token, amount, binding)`. Aptos derives the same
  * storage key on chain and checks the proof against the state root the
  * validators certified for the proof block (`0x1::ethereum_headers`), so the
  * proof carries no root of its own. Prove at a certified block: wait for one
@@ -17,11 +18,14 @@ import {
   type EthereumProof,
   type StorageProof,
 } from "@atomica/state-proof-verifier";
-import {
-  calculateLockedBalanceStorageKey,
-  calculateLockStorageKey,
-  getLockId,
-} from "./storage-key.js";
+import { calculateLockStorageKey, getLockId } from "./storage-key.js";
+import { lockCommitment, type LockBinding } from "../lock-binding.js";
+
+/** The lock fields Aptos checks against the proven commitment. */
+export interface LockTerms extends LockBinding {
+  /** Amount of this one lock */
+  amount: bigint;
+}
 
 /**
  * State proof of one lock in the LockBox contract
@@ -43,14 +47,21 @@ export interface LockedBalanceProof {
   // User, token and lock (LockBox-specific)
   userAddress: string;
   tokenAddress: string;
-  /** Nonce of the lock (from its `TokensLocked` event) */
+  /** Nonce of the lock (from its `Locked` event) */
   lockNonce: bigint;
   /** LockBox.getLockId(user, token, nonce): the Aptos receipt id */
   lockId: string;
 
-  // Storage proof of lockAmounts[lockId]
-  storageKey: string;
+  // Lock fields (the commitment preimage) that register_ethereum_lock sends
   /** Amount of this one lock */
+  amount: bigint;
+  windowId: bigint;
+  pairHash: string;
+  deadline: bigint;
+
+  // Storage proof of commitments[lockId]
+  storageKey: string;
+  /** The proven commitment, as a uint256 */
   storageValue: bigint;
 
   // MPT proofs
@@ -72,7 +83,8 @@ export type { StorageProof };
  * @param lockBoxAddress - Address of LockBox contract
  * @param userAddress - Address of user who locked tokens
  * @param tokenAddress - Address of token (FakeETH or FakeUSD)
- * @param lockNonce - Nonce of the lock (see `lockNonceFromReceipt`)
+ * @param lockNonce - Nonce of the lock (see `lockFromReceipt`)
+ * @param terms - The lock's amount and binding (see `lockFromReceipt`)
  * @param blockNumber - Block to prove at (default: latest). Registration
  *   needs a validator-certified block at or after the lock block.
  * @returns Complete state proof with LockBox context
@@ -83,6 +95,7 @@ export async function generateLockedBalanceProof(
   userAddress: string,
   tokenAddress: string,
   lockNonce: bigint,
+  terms: LockTerms,
   blockNumber?: number,
 ): Promise<LockedBalanceProof> {
   // Normalize addresses
@@ -95,7 +108,7 @@ export async function generateLockedBalanceProof(
     blockNumber = await provider.getBlockNumber();
   }
 
-  // Storage key of lockAmounts[getLockId(user, token, nonce)]
+  // Storage key of commitments[getLockId(user, token, nonce)]
   const storageKey = calculateLockStorageKey(userAddr, tokenAddr, lockNonce);
 
   // Get RPC URL from provider
@@ -122,9 +135,18 @@ export async function generateLockedBalanceProof(
     throw new Error(`Block ${blockNumber} missing hash or stateRoot`);
   }
 
-  // Extract storage value from proof
+  // The proven slot must hold the commitment of the named lock fields,
+  // or Aptos rejects the registration.
   const storageProofData = ethereumProof.storageProof[0];
   const storageValue = BigInt(storageProofData.value);
+  const expected = BigInt(
+    lockCommitment(userAddr, tokenAddr, terms.amount, terms),
+  );
+  if (storageValue !== expected) {
+    throw new Error(
+      `LockBox commitment of lock ${lockNonce} does not match its fields at block ${blockNumber}`,
+    );
+  }
 
   // Return LockBox-specific proof format
   return {
@@ -136,6 +158,10 @@ export async function generateLockedBalanceProof(
     tokenAddress: tokenAddr,
     lockNonce,
     lockId: getLockId(userAddr, tokenAddr, lockNonce),
+    amount: terms.amount,
+    windowId: terms.windowId,
+    pairHash: terms.pairHash,
+    deadline: terms.deadline,
     storageKey,
     storageValue,
     accountProof: ethereumProof.accountProof,
@@ -187,8 +213,8 @@ export function validateProof(proof: LockedBalanceProof): void {
     throw new Error("Storage proof is empty");
   }
 
-  if (proof.storageValue < 0n) {
-    throw new Error("Storage value cannot be negative");
+  if (proof.amount <= 0n) {
+    throw new Error("Lock amount must be positive");
   }
 
   // Verify addresses are valid
@@ -219,7 +245,8 @@ LockBox Proof:
   Token: ${proof.tokenAddress}
   Lock: nonce ${proof.lockNonce} (${proof.lockId.slice(0, 10)}...)
   Storage Key: ${proof.storageKey.slice(0, 10)}...
-  Storage Value: ${proof.storageValue.toString()} wei
+  Amount: ${proof.amount.toString()} wei
+  Window: ${proof.windowId} (deadline ${proof.deadline})
   Account Proof Nodes: ${proof.accountProof.length}
   Storage Proof Nodes: ${proof.storageProof.length}
   Timestamp: ${new Date(proof.timestamp * 1000).toISOString()}
@@ -228,4 +255,3 @@ LockBox Proof:
 
 // Alias for backwards compatibility / simpler naming
 export const generateLockProof = generateLockedBalanceProof;
-export const calculateStorageKey = calculateLockedBalanceStorageKey;

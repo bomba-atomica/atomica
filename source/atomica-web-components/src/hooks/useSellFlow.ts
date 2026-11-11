@@ -15,10 +15,11 @@ import { generateLockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
 import type { LockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
 import {
   approveFakeEth,
+  currentWindowId,
+  lockBinding,
   lockFakeEth,
-  lockNonceFromReceipt,
-  getUnlockTime,
-  withdrawFakeEth,
+  lockFromReceipt,
+  reclaimLock,
 } from "@atomica/sdk/ethereum";
 import { getChainConfig } from "@atomica/sdk/chain-config";
 import {
@@ -46,6 +47,7 @@ interface PersistedState {
   txHash?: string;
   lockBlock?: number;
   lockNonce?: string; // bigint as string
+  windowId?: string; // bigint as string
   lockId?: string; // hex string
   auctionEndTime?: number;
   minPrice?: string; // bigint as string
@@ -61,10 +63,13 @@ export interface SellFlowState {
   proof?: LockedBalanceProof; // not persisted
   /** LockBox nonce of the lock: names the lock and its Aptos receipt */
   lockNonce?: bigint;
+  /** Auction window the lock is bound to (LockBox lock field) */
+  windowId?: bigint;
   lockId?: string;
   auctionEndTime?: number;
   minPrice?: bigint;
   amount?: bigint;
+  /** The lock's deadline (unix seconds): after it, anyone may reclaim it to the seller */
   unlockTime?: number;
   error?: string; // not persisted (transient)
   loading: boolean;
@@ -79,7 +84,7 @@ export interface SellFlowActions {
   submitProof: () => Promise<void>;
   /** Step 6: register the window timelock, then create the auction (consumes the LockReceipt) */
   createAuction: () => Promise<void>;
-  /** Withdraw FakeETH that an Aptos refund credited (LockBox.withdrawWinnings) */
+  /** Return the lock to the seller after its deadline (LockBox.reclaim) */
   cancelAndUnlock: () => Promise<void>;
   /** Hard reset — clears localStorage and returns to connect step */
   reset: () => void;
@@ -88,6 +93,9 @@ export interface SellFlowActions {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const CONFIRMATION_TARGET = 1; // Demo: 1 block; MVP: 64
+
+/** Pair BCS of the sell flow's window (scaffold: empty, as in createAuction). */
+const SELL_PAIR_BCS = new Uint8Array(0);
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
 
@@ -135,6 +143,7 @@ export function useSellFlow(
       txHash: persisted.txHash,
       lockBlock: persisted.lockBlock,
       lockNonce: persisted.lockNonce ? BigInt(persisted.lockNonce) : undefined,
+      windowId: persisted.windowId ? BigInt(persisted.windowId) : undefined,
       blockConfirmed: false, // will be re-checked on mount
       lockId: persisted.lockId,
       auctionEndTime: persisted.auctionEndTime,
@@ -169,6 +178,7 @@ export function useSellFlow(
         lockNonce: persisted.lockNonce
           ? BigInt(persisted.lockNonce)
           : undefined,
+        windowId: persisted.windowId ? BigInt(persisted.windowId) : undefined,
         blockConfirmed: false,
         lockId: persisted.lockId,
         auctionEndTime: persisted.auctionEndTime,
@@ -192,6 +202,7 @@ export function useSellFlow(
       txHash: state.txHash,
       lockBlock: state.lockBlock,
       lockNonce: state.lockNonce?.toString(),
+      windowId: state.windowId?.toString(),
       lockId: state.lockId,
       auctionEndTime: state.auctionEndTime,
       minPrice: state.minPrice?.toString(),
@@ -205,6 +216,7 @@ export function useSellFlow(
     state.txHash,
     state.lockBlock,
     state.lockNonce,
+    state.windowId,
     state.lockId,
     state.auctionEndTime,
     state.minPrice,
@@ -270,14 +282,17 @@ export function useSellFlow(
         setState((s) => ({ ...s, loading: true }));
         await approveFakeEth(provider, amount);
 
-        // Step 2: Lock
-        const receipt = await lockFakeEth(provider, amount);
-        const lockNonce = lockNonceFromReceipt(receipt);
-
-        const unlockTime = await getUnlockTime(
-          new ethers.JsonRpcProvider(getChainConfig().ethereum.rpcUrl),
-          account,
+        // Step 2: Lock into the current window. Its deadline is
+        // auction::eth_lock_deadline(windowId): after it, anyone may
+        // reclaim the lock to the seller.
+        const binding = lockBinding(
+          currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
+          SELL_PAIR_BCS,
         );
+        const receipt = await lockFakeEth(provider, amount, binding);
+        const lock = lockFromReceipt(receipt);
+        const lockNonce = lock.nonce;
+        const unlockTime = Number(lock.deadline);
 
         setState((s) => ({
           ...s,
@@ -285,6 +300,7 @@ export function useSellFlow(
           txHash: receipt.hash,
           lockBlock: receipt.blockNumber ?? undefined,
           lockNonce,
+          windowId: lock.windowId,
           amount,
           minPrice,
           unlockTime,
@@ -298,7 +314,14 @@ export function useSellFlow(
   );
 
   const generateProof = useCallback(async () => {
-    if (!account || !state.lockBlock || state.lockNonce === undefined) return;
+    if (
+      !account ||
+      !state.lockBlock ||
+      state.lockNonce === undefined ||
+      state.windowId === undefined ||
+      !state.amount
+    )
+      return;
     setState((s) => ({
       ...s,
       step: "generating-proof",
@@ -319,6 +342,10 @@ export function useSellFlow(
         account,
         config.ethereum.fakeETH,
         state.lockNonce,
+        {
+          amount: state.amount,
+          ...lockBinding(state.windowId, SELL_PAIR_BCS),
+        },
         proofBlock,
       );
 
@@ -333,7 +360,14 @@ export function useSellFlow(
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [account, state.lockBlock, state.lockNonce, setError]);
+  }, [
+    account,
+    state.lockBlock,
+    state.lockNonce,
+    state.windowId,
+    state.amount,
+    setError,
+  ]);
 
   const submitProof = useCallback(async () => {
     if (!account || !proofRef.current) return;
@@ -376,14 +410,13 @@ export function useSellFlow(
 
     try {
       const lockIdBytes = ethers.getBytes(state.lockId);
-      // v0 Beta: use current_window_id formula (epoch*2 + offset)
-      // Client-side approximation — the contract will use the on-chain clock.
-      const nowSec = BigInt(Math.floor(Date.now() / 1000));
-      const epoch = nowSec / 43200n;
-      const tmod = nowSec % 43200n;
-      const windowId = epoch * 2n + (tmod >= 28500n ? 1n : 0n);
+      // The window the lock is bound to. Older persisted state has none:
+      // fall back to the current_window_id formula on the client clock.
+      const windowId =
+        state.windowId ??
+        currentWindowId(BigInt(Math.floor(Date.now() / 1000)));
       // pairBcs: empty bytes for scaffold
-      const pairBcs = new Uint8Array(0);
+      const pairBcs = SELL_PAIR_BCS;
       // MPK: empty bytes for scaffold (create_auction does not read it yet)
       const mpk = new Uint8Array(0);
 
@@ -414,22 +447,37 @@ export function useSellFlow(
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [account, state.minPrice, state.lockId, setError]);
+  }, [account, state.minPrice, state.lockId, state.windowId, setError]);
 
   const cancelAndUnlock = useCallback(async () => {
-    if (!account || !window.ethereum || !state.amount) return;
+    if (
+      !account ||
+      !window.ethereum ||
+      !state.amount ||
+      state.lockNonce === undefined ||
+      state.windowId === undefined
+    )
+      return;
     setState((s) => ({ ...s, loading: true, error: undefined }));
 
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
-      await withdrawFakeEth(provider);
+      // Reverts before the lock deadline (DeadlineNotReached), and once the
+      // window's outcome is recorded on Ethereum (that path is releaseByOutcome).
+      await reclaimLock(provider, {
+        depositor: account,
+        token: getChainConfig().ethereum.fakeETH,
+        nonce: state.lockNonce,
+        amount: state.amount,
+        ...lockBinding(state.windowId, SELL_PAIR_BCS),
+      });
 
       if (account) clearState(account);
       setState({ step: "lock", blockConfirmed: false, loading: false });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [account, state.amount, setError]);
+  }, [account, state.amount, state.lockNonce, state.windowId, setError]);
 
   const reset = useCallback(() => {
     if (account) clearState(account);

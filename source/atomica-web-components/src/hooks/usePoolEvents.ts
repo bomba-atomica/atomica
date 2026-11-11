@@ -1,7 +1,7 @@
 /**
  * usePoolEvents — Subscribe to real-time pool events from both chains.
  *
- * Phase 1 (current): Subscribes to `TokensLocked` events on the Ethereum
+ * Phase 1 (current): Subscribes to `Locked` events on the Ethereum
  * LockBox contract via ethers.js. Calls the provided `onEvent` callback
  * whenever a new lock is detected, enabling immediate UI refresh.
  *
@@ -19,16 +19,16 @@ import { getChainConfig } from "@atomica/sdk/chain-config";
 
 // Minimal ABI — only the event we need to subscribe to.
 const LOCKBOX_EVENT_ABI = [
-  "event TokensLocked(address indexed user, address indexed token, uint256 amount, uint256 unlockTime, uint256 nonce)",
+  "event Locked(bytes32 indexed lockId, address indexed depositor, address indexed token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)",
 ] as const;
 
 /** Zero address used as the default when no contract is deployed. */
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 /**
- * Subscribe to `TokensLocked` events on the Ethereum LockBox contract.
+ * Subscribe to `Locked` events on the Ethereum LockBox contract.
  *
- * Calls `onEvent()` each time a new `TokensLocked` event is received.
+ * Calls `onEvent()` each time a new `Locked` event is received.
  * Cleans up the event listener when the component unmounts or `onEvent`
  * changes.
  *
@@ -73,20 +73,17 @@ export function usePoolEvents(onEvent: () => void): void {
 
     // Subscribe. ethers v6 `on` uses polling on JsonRpcProvider (which is fine
     // for HTTP endpoints — it polls `eth_getFilterChanges`).
-    contract.on("TokensLocked", listener).catch((err: unknown) => {
+    contract.on("Locked", listener).catch((err: unknown) => {
       console.warn(
-        "[usePoolEvents] Failed to subscribe to TokensLocked events:",
+        "[usePoolEvents] Failed to subscribe to Locked events:",
         err,
       );
     });
 
     // Cleanup: remove the listener when the component unmounts.
     return () => {
-      contract.off("TokensLocked", listener).catch((err: unknown) => {
-        console.warn(
-          "[usePoolEvents] Failed to remove TokensLocked listener:",
-          err,
-        );
+      contract.off("Locked", listener).catch((err: unknown) => {
+        console.warn("[usePoolEvents] Failed to remove Locked listener:", err);
       });
     };
   }, []); // Empty deps — subscribe once on mount, clean up on unmount.

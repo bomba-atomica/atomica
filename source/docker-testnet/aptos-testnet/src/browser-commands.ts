@@ -112,6 +112,7 @@ import { setupDualChainTestnet, teardownDualChainTestnet } from "./dual-chain-te
 import type { DualChainTestnetInfo } from "./dual-chain-testnet.js";
 import { ethers } from "ethers";
 import { waitForCertifiedEthBlock, waitForEthBlock } from "./eth-blocks.js";
+import { currentWindowId, lockBinding, type LockBinding } from "@atomica/sdk/ethereum/lock-binding";
 
 /**
  * Module augmentation to add our custom commands to Vitest's browser commands types.
@@ -127,8 +128,8 @@ export interface EthereumTestnetInfo {
 
 /**
  * Serializable result of generateEthLockProofCommand.
- * storageValue is a string to survive JSON serialisation over the RPC bridge
- * (bigint cannot be transferred as-is).
+ * Big integers are decimal strings to survive JSON serialisation over the RPC
+ * bridge (bigint cannot be transferred as-is).
  */
 export interface EthLockProofResult {
     /** LockBox.getLockId(user, token, nonce): the Aptos receipt id */
@@ -144,8 +145,17 @@ export interface EthLockProofResult {
         /** decimal string of the lock's LockBox nonce */
         lockNonce: string;
         lockId: string;
+        /** decimal string of the locked amount */
+        amount: string;
+        /** decimal string of the auction window the lock is bound to */
+        windowId: string;
+        /** keccak256 of the window's pair BCS */
+        pairHash: string;
+        /** decimal string of the lock deadline: auction::eth_lock_deadline(windowId) */
+        deadline: string;
+        /** storage key of LockBox.commitments[lockId] (slot 0) */
         storageKey: string;
-        /** decimal string representation of the bigint storageValue */
+        /** decimal string of the proven commitment */
         storageValue: string;
         accountProof: string[];
         storageProof: string[];
@@ -359,9 +369,19 @@ const ERC20_MINT_ABI = [
 ];
 
 const LOCKBOX_LOCK_ABI = [
-    "function lock(address token, uint256 amount) external",
-    "event TokensLocked(address indexed user, address indexed token, uint256 amount, uint256 unlockTime, uint256 nonce)",
+    "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) returns (bytes32)",
+    "event Locked(bytes32 indexed lockId, address indexed depositor, address indexed token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)",
 ];
+
+/**
+ * The binding of a test lock: the current window by the wall clock (the
+ * `auction::current_window_id` formula) and the empty pair BCS the tests use.
+ * Its deadline is `auction::eth_lock_deadline(windowId)`, 72 hours past the
+ * window close, so Aptos registers it and it cannot be reclaimed during a test.
+ */
+export function testLockBinding(): LockBinding {
+    return lockBinding(currentWindowId(BigInt(Math.floor(Date.now() / 1000))), new Uint8Array(0));
+}
 
 /**
  * Lock `count` times and return the storage proof of each lock.
@@ -369,12 +389,13 @@ const LOCKBOX_LOCK_ABI = [
  * Steps:
  *   1. Mint the token to the signer
  *   2. Approve LockBox for count * lockAmount
- *   3. Send `count` LockBox.lock() calls with consecutive nonces
- *   4. Read each lock nonce from its TokensLocked event
+ *   3. Send `count` LockBox.lock() calls with consecutive nonces, bound to
+ *      `testLockBinding()`
+ *   4. Read each lock nonce from its Locked event
  *   5. Wait 12 blocks past the last lock for archive proof availability
  *   6. Wait until the Aptos validators certify a block at or after the last
  *      lock (0x1::ethereum_headers), and take the highest certified block
- *   7. Fetch one eth_getProof of every lockAmounts[lockId] at that certified
+ *   7. Fetch one eth_getProof of every commitments[lockId] at that certified
  *      block, where lockId = keccak256(abi.encodePacked(user, token,
  *      uint256(nonce))) (LockBox.getLockId, eth_proof::lock_id)
  *
@@ -413,15 +434,21 @@ async function lockAndProve(
     )(lockBoxAddress, lockAmount * BigInt(count), { nonce: nonce++ });
     await provider.waitForTransaction(approveTx.hash, 1);
 
+    const binding = testLockBinding();
     const lockHashes: string[] = [];
     for (let i = 0; i < count; i++) {
         const lockTx = await (
             lockBox.lock as (
                 token: string,
                 amount: bigint,
+                windowId: bigint,
+                pairHash: string,
+                deadline: bigint,
                 opts: { nonce: number },
             ) => Promise<ethers.ContractTransactionResponse>
-        )(tokenAddress, lockAmount, { nonce: nonce++ });
+        )(tokenAddress, lockAmount, binding.windowId, binding.pairHash, binding.deadline, {
+            nonce: nonce++,
+        });
         lockHashes.push(lockTx.hash);
     }
 
@@ -433,8 +460,8 @@ async function lockAndProve(
         if (!receipt || receipt.status !== 1) throw new Error(`Lock ${hash} failed`);
         const lockLog = receipt.logs
             .map((log) => lockIface.parseLog(log))
-            .find((parsed) => parsed?.name === "TokensLocked");
-        if (!lockLog) throw new Error(`No TokensLocked event in ${hash}`);
+            .find((parsed) => parsed?.name === "Locked");
+        if (!lockLog) throw new Error(`No Locked event in ${hash}`);
         lockNonces.push(lockLog.args.nonce as bigint);
         proofBlockNumber = Math.max(proofBlockNumber, receipt.blockNumber);
     }
@@ -454,7 +481,7 @@ async function lockAndProve(
         `[Lock Proof] Locks mined by block ${lastLockBlock}; proving at certified block ${proofBlockNumber}`,
     );
 
-    // Storage key of lockAmounts[lockId] (LockBox slot 4), as Aptos derives it.
+    // Storage key of commitments[lockId] (LockBox slot 0), as Aptos derives it.
     const lockIds = lockNonces.map((lockNonce) =>
         ethers.keccak256(
             ethers.solidityPacked(
@@ -465,7 +492,7 @@ async function lockAndProve(
     );
     const storageKeys = lockIds.map((lockId) =>
         ethers.keccak256(
-            ethers.AbiCoder.defaultAbiCoder().encode(["bytes32", "uint256"], [lockId, 4]),
+            ethers.AbiCoder.defaultAbiCoder().encode(["bytes32", "uint256"], [lockId, 0]),
         ),
     );
 
@@ -496,6 +523,10 @@ async function lockAndProve(
             tokenAddress: ethers.getAddress(tokenAddress),
             lockNonce: lockNonces[i].toString(),
             lockId,
+            amount: lockAmount.toString(),
+            windowId: binding.windowId.toString(),
+            pairHash: binding.pairHash,
+            deadline: binding.deadline.toString(),
             storageKey: storageKeys[i],
             storageValue: BigInt(ethProof.storageProof[i].value).toString(),
             accountProof: ethProof.accountProof as string[],

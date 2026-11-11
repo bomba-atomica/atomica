@@ -124,6 +124,15 @@ section and [v0 Architecture §3](../architecture/v0-architecture.md#3--cross-ch
 
 ## Component 1: Ethereum LockBox Contract
 
+> **Current contract (issue 203).** The design below is the original plan. The
+> shipped LockBox is proof-gated: `lock(token, amount, windowId, pairHash,
+> deadline)` stores one commitment per lock at slot 0, which Aptos proves; a
+> lock leaves only by `releaseByOutcome` on a proven Aptos `AuctionOutcome` or
+> by permissionless `reclaim` after its deadline. There is no `withdraw`,
+> `getLockedBalance` or settlement authority. See
+> [v0 Architecture §3](../architecture/v0-architecture.md) and
+> [auction timing](auction-timing.md).
+
 ### Purpose
 Escrow contract that holds FAKETH and FAKEUSD tokens with timelock and withdrawal mechanisms.
 
