@@ -47,7 +47,7 @@ The PRD already set the v0.1 trust model as the 2/3 validator threshold. The rel
 **Positive**
 
 - Funds never depend on one key. A stuck auction always has a way home.
-- The v0.1 trust model matches the PRD: the 2/3 validator threshold, and nothing else.
+- The v0.1 trust model matches the PRD: the 2/3 validator threshold, plus the one named assumption below.
 - ZK in v1.0 becomes a second, independent check on auction clearing. It no longer has to remove a trusted relayer.
 
 **Negative**
@@ -59,6 +59,13 @@ The PRD already set the v0.1 trust model as the 2/3 validator threshold. The rel
 **Neutral**
 
 - A relayer process may still exist as a convenience carrier. Users can do everything it does themselves.
+
+---
+
+## Trust Assumptions
+
+- **The 2/3 validator threshold.** A quorum of the current Aptos validator set can finalize any outcome.
+- **The `@atomica` package upgrade key (owner decision, 2026-11-11).** The `@atomica` Move package stays upgradeable at v0.1. v0.1 does not set `upgrade_policy` to immutable. The upgrade key holder can publish code that emits any `AuctionOutcome` event, and the validator quorum signs it like any other transaction. The Ethereum light client proves only that the event is final, so Ethereum lock safety at v0.1 also trusts that key.
 
 ---
 
