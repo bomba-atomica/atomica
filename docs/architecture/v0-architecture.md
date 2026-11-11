@@ -304,6 +304,11 @@ A lock proof is checked on Aptos against trusted inputs only (issues 171, 196,
 - `eth_proof` derives the storage key from the lock fields, and the receipt's
   `lock_id` is the LockBox lock id, so one lock gives exactly one receipt
   however many blocks it is proven at.
+- The proven slot is `LockBox.commitments[lock_id]` (slot 0). It holds
+  `keccak256(abi.encode(depositor, token, amount, window_id, pair_hash,
+  deadline))`. Aptos recomputes it from the fields the carrier names, so a
+  wrong amount or binding does not verify, and it accepts only
+  `deadline == auction::eth_lock_deadline(window_id)`.
 
 Any account may send `register_ethereum_lock`. The proof names the
 depositor. The receipt stores that Ethereum address as `eth_owner`, and its
@@ -334,10 +339,18 @@ never reached an auction can be cancelled by anyone after a delay, and it goes
 back to its depositor.
 
 **Every lock has a deadline (issue 203).** A lock carries a deadline bound to
-its auction. Before the deadline, a verified Aptos outcome pays it out. After
-the deadline, anyone may `reclaim` an open lock, and the whole amount returns
-to the depositor unless a proven settle covers that lock. So an auction
-settles on Ethereum fully or not at all.
+its auction: the auction key is `keccak256(window_id, pair_hash, deadline)`.
+All locks of an auction share one deadline, because Aptos registers a lock
+only when its deadline equals `auction::eth_lock_deadline(window_id)` (the
+window close plus `ETH_RECLAIM_DELAY_SECS`, see
+[auction timing](../specifications/auction-timing.md)). A recorded outcome
+pays a lock out at any time. After the deadline, anyone may `reclaim` an open
+lock, and the whole amount returns to the depositor unless the auction's
+recorded outcome covers that lock. A lock the outcome does not cover goes home
+with a non-membership proof against the sorted outcome tree. A reclaim before
+any outcome is recorded voids that auction's outcome on Ethereum: no outcome
+can be recorded for it afterwards. So an auction settles on Ethereum fully or
+not at all.
 
 Payouts go to the Ethereum owner of each lock (the depositor the storage proof
 names), not to the bidder's Aptos signer address. A lock leaves the open
@@ -392,27 +405,32 @@ Aptos event → ZK circuit (re-verifies auction clearing)
 Both checks gate the same release entry point. The validator threshold stays
 the same trust assumption.
 
-### 3.5 Releases and the legacy relayer path
+### 3.5 Releases
 
-In the target model each lock is released on its own. `releaseByOutcome`
-checks the lock against the verified outcome and transfers each payout to its
-recipient. `reclaim` returns an open lock to its depositor after the deadline.
-Both calls are permissionless (issue 203).
-
-The current `LockBox.sol` (`source/evm-contracts/src/escrow/LockBox.sol`) still
-has the legacy path below. Only `settlementAuthority` can call `refund` and
-`settleFill`, which credit balances that users then pull with
-`withdrawWinnings`. The [ADR](../decisions/trustless-v0-1-unwinding.md)
-supersedes this path, and issue 203 replaces it with a new LockBox at a new
-address.
+Each lock is released on its own (`source/evm-contracts/src/escrow/LockBox.sol`,
+issue 203). Every call is permissionless, and LockBox has no admin, relayer or
+upgrade key. It ships at a new address.
 
 ```solidity
-// Legacy, superseded: settlementAuthority-only calls
-function refund(bytes32 outcomeId, address user, address token, uint256 amount) external;
-function settleFill(bytes32 outcomeId, address seller, address winner,
-                    uint256 baseAmount, uint256 quoteAmount) external;
-function withdrawWinnings(address token) external;
+function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)
+    external returns (bytes32 lockId);
+// Verifies the AuctionOutcome event through the Aptos light client and stores
+// its dispositions root and leaf count for the auction key.
+function recordOutcome(IAptosLightClient.EventProof calldata proof) external returns (bytes32 auctionKey);
+// Pays a lock per its leaf: payouts sum to the lock amount.
+function releaseByOutcome(Lock calldata l, OutcomeTree.Payout[] calldata payouts,
+                          OutcomeTree.LeafProof calldata leaf) external;
+// After the deadline: back to the depositor, with a non-membership proof
+// when the auction has a recorded outcome.
+function reclaim(Lock calldata l, OutcomeTree.Neighbour[] calldata neighbours) external;
 ```
+
+The outcome tree (`OutcomeTree.sol`, `atomica::outcome_tree`, SDK
+`settlement/outcome-tree.ts`) has one leaf per lock claimed into the window,
+sorted by lock id: `keccak256(0x00 || lock_id || payouts_hash)`, where
+`payouts_hash` packs the (Ethereum recipient, amount) payouts. Recipients are
+receipt `eth_owner` addresses, never the Aptos `user`. The relayer-only
+`refund`, `settleFill` and `withdrawWinnings` are gone.
 
 ---
 

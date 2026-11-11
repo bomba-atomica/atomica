@@ -34,6 +34,32 @@ function siweDomain(): string {
   );
 }
 
+/**
+ * LockBox constructor inputs. LockBox releases a lock only on an Aptos
+ * AuctionOutcome proven by the Aptos light client, or by reclaim after its
+ * deadline. LIGHT_CLIENT is the AptosLightClient address
+ * (evm-contracts/script/DeployAptosLightClient.s.sol). Unset: a stand-in
+ * address, so outcomes cannot be recorded and every lock goes home by reclaim.
+ */
+const LIGHT_CLIENT =
+  process.env.LIGHT_CLIENT?.trim() ||
+  "0x000000000000000000000000000000000000dEaD";
+
+/** BCS TypeTag of `<atomica>::auction::AuctionOutcome`. */
+function auctionOutcomeTypeTag(atomicaAddress: string): string {
+  const name = (s: string) =>
+    ethers.concat([new Uint8Array([s.length]), ethers.toUtf8Bytes(s)]);
+  return ethers.hexlify(
+    ethers.concat([
+      new Uint8Array([7]),
+      ethers.zeroPadValue(atomicaAddress, 32),
+      name("auction"),
+      name("AuctionOutcome"),
+      new Uint8Array([0]),
+    ]),
+  );
+}
+
 const NUM_ETH_VALIDATORS = 4;
 const NUM_APTOS_VALIDATORS = 4;
 
@@ -140,8 +166,13 @@ async function deployEthereumContracts(testnet: EthereumDockerTestnet) {
       signer,
     ),
     signer,
-    // settlementAuthority: the deployer relays Aptos outcomes in the demo.
-    [fakeETHAddress, fakeUSDAddress, await signer.getAddress()],
+    // No relayer: outcomes are proven through the Aptos light client.
+    [
+      fakeETHAddress,
+      fakeUSDAddress,
+      LIGHT_CLIENT,
+      auctionOutcomeTypeTag(DEPLOYER_ADDR),
+    ],
   );
   const lockBoxAddress = await lockBox.getAddress();
   console.log(`  ✓ LockBox: ${lockBoxAddress}`);

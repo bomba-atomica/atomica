@@ -9,13 +9,7 @@ import {
     type InputGenerateTransactionPayloadData,
 } from "@aptos-labs/ts-sdk";
 import {
-    executeLockBoxReleases,
     getLockReceipt,
-    planRefundReleases,
-    planSettlementReleases,
-    quoteForFill,
-    RECEIPT_STATUS_REVOKED,
-    type BridgeConfig,
     type LockAsset,
     type LockReceiptInfo,
 } from "@atomica/sdk/settlement/bridge";
@@ -28,62 +22,54 @@ import { generateEthLockProofCommand, type EthLockProofResult } from "../src/bro
 import { waitForCertifiedEthBlock, waitForEthBlock } from "../src/eth-blocks";
 
 /**
- * Live dual-chain test: Ethereum LockBox releases follow Aptos outcomes.
+ * Live dual-chain test of the proof-gated LockBox (issue 203).
  *
  * Both chains run for real (Aptos Docker testnet + Ethereum, ETH_BACKEND).
- * Each case locks real ERC-20s in LockBox, proves the lock on Aptos with
- * `lock_receipt::register_ethereum_lock`, reads the receipt back through
- * the relayer (`getLockReceipt`), sends the planned releases with the
- * relayer's NonceManager (`executeLockBoxReleases`), pulls them with
- * `withdrawWinnings`, and asserts ERC-20 balances.
+ * Each case locks real ERC-20s in LockBox, bound to an auction window (window
+ * id, pair hash, deadline = auction::eth_lock_deadline(window id)), and proves
+ * the lock's commitment slot on Aptos with `lock_receipt::register_ethereum_lock`.
  *
- * Cases: refund, winner payout, seller payout, and one lock giving one
- * receipt (the same lock proven at a later certified block is rejected).
+ * Cases: the receipt holds the proven lock and its binding; registration
+ * rejects a wrong amount and a wrong deadline; one lock gives one receipt;
+ * and LockBox releases nothing without a proven outcome or before the lock
+ * deadline. No relayer exists: LockBox has no relayer-only release or
+ * pull-payment path. Outcome release (releaseByOutcome) and reclaim are covered
+ * by the forge LockBox unit, invariant and light client integration tests.
  *
  * Every proof is checked against a header the Aptos validators certified
  * (0x1::ethereum_headers). No one submits a header. The registering account
  * is the Aptos deployer, which has no special rights: any account may carry
  * a proof.
  *
- * The auction outcome itself (AuctionRefunded / AuctionSettled) is applied to
- * the live receipts here. A live auction cannot settle until real V2 bids
- * land (issue 167, then the browser auction suite in issue 168).
- *
  * Fails loudly when Docker, the Aptos CLI or forge output is missing.
  */
 
 const ERC20_ABI = ["function balanceOf(address) view returns (uint256)"];
+const LOCK_TUPLE =
+    "(address depositor, address token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)";
 const LOCKBOX_ABI = [
-    "function withdrawWinnings(address token)",
-    "function getLockedBalance(address user, address token) view returns (uint256)",
-    "function getWithdrawable(address user, address token) view returns (uint256)",
+    "function commitments(bytes32 lockId) view returns (bytes32)",
+    "function statuses(bytes32 lockId) view returns (uint8)",
+    "function lockCommitment(address depositor, address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) pure returns (bytes32)",
+    `function reclaim(${LOCK_TUPLE} l, (bytes32 lockId, bytes32 payoutsHash, uint256 index, bytes32[] proof)[] neighbours)`,
+    `function releaseByOutcome(${LOCK_TUPLE} l, (address recipient, uint256 amount)[] payouts, (uint256 index, bytes32[] proof) leaf)`,
+    "error DeadlineNotReached(uint64 deadline)",
+    "error NoOutcome(bytes32 auctionKey)",
 ];
+const STATUS_OPEN = 1n;
 
 const ETH = 10n ** 18n;
 const USD = 10n ** 6n;
+
+type Proof = EthLockProofResult["proof"];
 
 let info: DualChainTestnetInfo;
 let provider: ethers.JsonRpcProvider;
 let aptos: Aptos;
 let aptosDeployer: Account;
-let bridge: BridgeConfig;
 
 function token(asset: LockAsset): string {
     return asset === "FakeETH" ? info.eth.contracts.fakeETH : info.eth.contracts.fakeUSD;
-}
-
-async function balanceOf(asset: LockAsset, owner: string): Promise<bigint> {
-    const erc20 = new ethers.Contract(token(asset), ERC20_ABI, provider);
-    return (await erc20.balanceOf(owner)) as bigint;
-}
-
-/** Pull every credited balance of `asset` for the holder of `privateKey`. */
-async function withdrawWinnings(privateKey: string, asset: LockAsset): Promise<void> {
-    const signer = new ethers.NonceManager(new ethers.Wallet(privateKey, provider));
-    const lockBox = new ethers.Contract(info.eth.contracts.lockBox, LOCKBOX_ABI, signer);
-    const tx = await lockBox.withdrawWinnings(token(asset));
-    const receipt = await tx.wait();
-    expect(receipt?.status).toBe(1);
 }
 
 /** Submit one Aptos entry function as the deployer, here just a carrier account. */
@@ -103,19 +89,11 @@ async function submitAsDeployer(data: InputGenerateTransactionPayloadData): Prom
 }
 
 /**
- * Register the lock proven at the certified block `blockNumber`. Aptos derives
- * the storage key and checks the proof against the certified root only.
+ * Register the lock proven at the certified block `proof.blockNumber`. Aptos
+ * derives the storage key, recomputes the commitment from the lock fields and
+ * checks the proof against the certified root only.
  */
-async function register(
-    asset: LockAsset,
-    proof: {
-        blockNumber: number;
-        userAddress: string;
-        lockNonce: string;
-        accountProof: string[];
-        storageProof: string[];
-    },
-): Promise<void> {
+async function register(asset: LockAsset, proof: Proof): Promise<void> {
     const moduleAddr = info.aptos.moduleAddress;
     await submitAsDeployer({
         function: `${moduleAddr}::lock_receipt::register_ethereum_lock`,
@@ -124,23 +102,24 @@ async function register(
             proof.blockNumber,
             ethers.getBytes(proof.userAddress),
             proof.lockNonce,
+            proof.amount,
+            proof.windowId,
+            ethers.getBytes(proof.pairHash),
+            proof.deadline,
             proof.accountProof.map((p: string) => ethers.getBytes(p)),
             proof.storageProof.map((p: string) => ethers.getBytes(p)),
         ],
     });
 }
 
-/**
- * Lock `amount` of `asset` in LockBox for the holder of `privateKey`, prove the
- * lock on Aptos, and return the receipt the relayer reads back from Aptos.
- */
-async function lockAndRegister(
+/** Lock `amount` of `asset` for the holder of `privateKey` and prove it, without registering. */
+async function lockAndProve(
     privateKey: string,
     asset: LockAsset,
     amount: bigint,
     mintAmount: bigint,
-): Promise<LockReceiptInfo & { proof: EthLockProofResult["proof"] }> {
-    const { lockId, proof } = await generateEthLockProofCommand(
+): Promise<EthLockProofResult> {
+    return generateEthLockProofCommand(
         {} as never,
         info.eth.rpcUrl,
         info.aptos.nodeUrl,
@@ -150,6 +129,16 @@ async function lockAndRegister(
         amount.toString(),
         mintAmount.toString(),
     );
+}
+
+/** Lock, prove and register; return the receipt Aptos holds for the lock. */
+async function lockAndRegister(
+    privateKey: string,
+    asset: LockAsset,
+    amount: bigint,
+    mintAmount: bigint,
+): Promise<LockReceiptInfo & { proof: Proof }> {
+    const { lockId, proof } = await lockAndProve(privateKey, asset, amount, mintAmount);
     await register(asset, proof);
 
     const receipt = await getLockReceipt(aptos, info.aptos.moduleAddress, asset, lockId);
@@ -160,7 +149,30 @@ async function lockAndRegister(
     return { ...receipt, proof };
 }
 
-describe.sequential("LockBox releases follow Aptos outcomes (live dual-chain)", () => {
+/** Expect `call` to revert with the LockBox custom error `name`. */
+async function expectLockBoxRevert(call: Promise<unknown>, name: string): Promise<void> {
+    const error = await call.then(
+        () => undefined,
+        (e: unknown) => e,
+    );
+    expect(error, `expected ${name}`).toBeDefined();
+    const revert = (error as { revert?: { name?: string } }).revert;
+    expect(revert?.name ?? String(error)).toContain(name);
+}
+
+function lockTuple(proof: Proof) {
+    return [
+        proof.userAddress,
+        proof.tokenAddress,
+        BigInt(proof.lockNonce),
+        BigInt(proof.amount),
+        BigInt(proof.windowId),
+        proof.pairHash,
+        BigInt(proof.deadline),
+    ];
+}
+
+describe.sequential("Proof-gated LockBox with Aptos lock registration (live dual-chain)", () => {
     beforeAll(async () => {
         info = await setupDualChainTestnet();
         provider = new ethers.JsonRpcProvider(info.eth.rpcUrl, undefined, { cacheTimeout: -1 });
@@ -170,102 +182,110 @@ describe.sequential("LockBox releases follow Aptos outcomes (live dual-chain)", 
         aptosDeployer = Account.fromPrivateKey({
             privateKey: new Ed25519PrivateKey(info.aptos.deployerPrivateKey),
         });
-        bridge = {
-            aptosRpcUrl: info.aptos.nodeUrl,
-            contractAddress: info.aptos.moduleAddress,
-            ethRpcUrl: info.eth.rpcUrl,
-            lockBoxAddress: info.eth.contracts.lockBox,
-            relayerPrivateKey: info.eth.relayerPrivateKey,
-        };
     }, 1_200_000);
 
     afterAll(async () => {
         await teardownDualChainTestnet();
     }, 300_000);
 
-    it("refund: AuctionRefunded returns the locked FakeETH to the seller", async () => {
-        const seller = info.eth.deployerAddress;
+    it("registers the lock's commitment: the receipt holds the amount, the binding and the depositor", async () => {
         const lockAmount = 10n * ETH;
-        const sellerReceipt = await lockAndRegister(
+        const receipt = await lockAndRegister(
             info.eth.deployerPrivateKey,
             "FakeETH",
             lockAmount,
             100n * ETH,
         );
-        const afterLock = await balanceOf("FakeETH", seller);
+        const { proof } = receipt;
 
-        // Time alone releases nothing: there is no credited balance yet.
-        await expect(withdrawWinnings(info.eth.deployerPrivateKey, "FakeETH")).rejects.toThrow();
+        // The proven slot holds LockBox's commitment to the lock fields.
+        const lockBox = new ethers.Contract(info.eth.contracts.lockBox, LOCKBOX_ABI, provider);
+        const commitment = await lockBox.lockCommitment(
+            proof.userAddress,
+            proof.tokenAddress,
+            lockAmount,
+            BigInt(proof.windowId),
+            proof.pairHash,
+            BigInt(proof.deadline),
+        );
+        expect(await lockBox.commitments(proof.lockId)).toBe(commitment);
+        expect(BigInt(proof.storageValue)).toBe(BigInt(commitment));
+        expect(await lockBox.statuses(proof.lockId)).toBe(STATUS_OPEN);
 
-        // refund_expired_window releases (revokes) every receipt of the window.
-        const releases = planRefundReleases({
-            sellers: [{ ...sellerReceipt, status: RECEIPT_STATUS_REVOKED }],
-            collateral: [],
+        // Aptos keeps the binding and accepts only eth_lock_deadline(window id).
+        const moduleAddr = info.aptos.moduleAddress;
+        const [windowId, pairHash] = await aptos.view({
+            payload: {
+                function: `${moduleAddr}::lock_receipt::get_receipt_binding`,
+                typeArguments: [
+                    `${moduleAddr}::lock_receipt::Ethereum`,
+                    `${moduleAddr}::lock_receipt::FakeETH`,
+                ],
+                functionArguments: [ethers.getBytes(proof.lockId)],
+            },
         });
-        expect(releases).toHaveLength(1);
-        const hashes = await executeLockBoxReleases(releases, bridge);
-        expect(hashes).toHaveLength(1);
-        // A relayer retry is a no-op.
-        expect(await executeLockBoxReleases(releases, bridge)).toEqual([]);
-
-        await withdrawWinnings(info.eth.deployerPrivateKey, "FakeETH");
-        expect(await balanceOf("FakeETH", seller)).toBe(afterLock + lockAmount);
+        expect(String(windowId)).toBe(proof.windowId);
+        expect(String(pairHash)).toBe(proof.pairHash);
+        const [deadline] = await aptos.view({
+            payload: {
+                function: `${moduleAddr}::auction::eth_lock_deadline`,
+                functionArguments: [proof.windowId],
+            },
+        });
+        expect(String(deadline)).toBe(proof.deadline);
     }, 900_000);
 
-    it("winner payout and seller payout: AuctionSettled swaps the locked tokens at the clearing price", async () => {
-        const seller = info.eth.deployerAddress;
-        const winner = info.eth.bidderAddress;
-        const supply = 5n * ETH;
-        const collateral = 10_000n * USD;
-        const clearingPrice = 1_500n;
-        const payment = quoteForFill(supply, clearingPrice);
-        expect(payment).toBe(7_500n * USD);
-
-        const sellerReceipt = await lockAndRegister(
-            info.eth.deployerPrivateKey,
-            "FakeETH",
-            supply,
-            100n * ETH,
-        );
-        const winnerReceipt = await lockAndRegister(
+    it("registration rejects a wrong amount and a wrong deadline", async () => {
+        const { proof } = await lockAndProve(
             info.eth.bidderPrivateKey,
             "FakeUSD",
-            collateral,
-            collateral,
+            500n * USD,
+            1_000n * USD,
+        );
+        await expect(
+            register("FakeUSD", { ...proof, amount: (BigInt(proof.amount) - 1n).toString() }),
+        ).rejects.toThrow(/E_COMMITMENT_MISMATCH/);
+        await expect(
+            register("FakeUSD", { ...proof, deadline: (BigInt(proof.deadline) + 1n).toString() }),
+        ).rejects.toThrow(/E_WRONG_DEADLINE/);
+        // The true fields register.
+        await register("FakeUSD", proof);
+    }, 900_000);
+
+    it("LockBox releases nothing before the deadline or without a proven outcome", async () => {
+        const amount = 1n * ETH;
+        const { proof } = await lockAndProve(
+            info.eth.bidderPrivateKey,
+            "FakeETH",
+            amount,
+            10n * ETH,
+        );
+        const lockBox = new ethers.Contract(
+            info.eth.contracts.lockBox,
+            LOCKBOX_ABI,
+            new ethers.NonceManager(new ethers.Wallet(info.eth.deployerPrivateKey, provider)),
+        );
+        const erc20 = new ethers.Contract(token("FakeETH"), ERC20_ABI, provider);
+        const held = (await erc20.balanceOf(info.eth.contracts.lockBox)) as bigint;
+
+        // Any caller, before the deadline: reclaim reverts.
+        await expectLockBoxRevert(
+            lockBox.reclaim.staticCall(lockTuple(proof), []),
+            "DeadlineNotReached",
+        );
+        // No AuctionOutcome was recorded for the lock's auction: nothing to release.
+        await expectLockBoxRevert(
+            lockBox.releaseByOutcome.staticCall(
+                lockTuple(proof),
+                [[proof.userAddress, amount]],
+                [0n, []],
+            ),
+            "NoOutcome",
         );
 
-        const before = {
-            sellerEth: await balanceOf("FakeETH", seller),
-            sellerUsd: await balanceOf("FakeUSD", seller),
-            winnerEth: await balanceOf("FakeETH", winner),
-            winnerUsd: await balanceOf("FakeUSD", winner),
-        };
-
-        // settle: the winner fills the whole supply; its collateral receipt stays claimed.
-        const releases = planSettlementReleases({
-            clearingPrice,
-            sellers: [sellerReceipt],
-            bids: [{ isWinner: true, fillAmount: supply, collateral: winnerReceipt }],
-        });
-        expect(releases.map((r) => r.kind)).toEqual(["fill", "refund"]);
-        await executeLockBoxReleases(releases, bridge);
-
-        await withdrawWinnings(info.eth.bidderPrivateKey, "FakeETH");
-        await withdrawWinnings(info.eth.bidderPrivateKey, "FakeUSD");
-        await withdrawWinnings(info.eth.deployerPrivateKey, "FakeUSD");
-        // The seller sold all its FakeETH: nothing is left to take back.
-        await expect(withdrawWinnings(info.eth.deployerPrivateKey, "FakeETH")).rejects.toThrow();
-
-        // Winner payout: the FakeETH fill, minus the FakeUSD payment (excess collateral returned).
-        expect(await balanceOf("FakeETH", winner)).toBe(before.winnerEth + supply);
-        expect(await balanceOf("FakeUSD", winner)).toBe(before.winnerUsd + collateral - payment);
-        // Seller payout: the FakeUSD payment; the sold FakeETH stays gone.
-        expect(await balanceOf("FakeUSD", seller)).toBe(before.sellerUsd + payment);
-        expect(await balanceOf("FakeETH", seller)).toBe(before.sellerEth);
-
-        const lockBox = new ethers.Contract(info.eth.contracts.lockBox, LOCKBOX_ABI, provider);
-        expect(await lockBox.getLockedBalance(seller, token("FakeETH"))).toBe(0n);
-        expect(await lockBox.getLockedBalance(winner, token("FakeUSD"))).toBe(0n);
+        expect(await lockBox.statuses(proof.lockId)).toBe(STATUS_OPEN);
+        expect(await erc20.balanceOf(info.eth.contracts.lockBox)).toBe(held);
+        expect(held).toBeGreaterThanOrEqual(amount);
     }, 900_000);
 
     it("one lock gives one receipt: the same lock proven at a later certified block is rejected", async () => {

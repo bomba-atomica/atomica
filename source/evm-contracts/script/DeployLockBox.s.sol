@@ -4,48 +4,52 @@ pragma solidity ^0.8.20;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {LockBox} from "../src/escrow/LockBox.sol";
+import {IAptosLightClient} from "../src/aptos/IAptosLightClient.sol";
 import {FakeETH} from "../src/tokens/FakeETH.sol";
 import {FakeUSD} from "../src/tokens/FakeUSD.sol";
 
 /**
  * @title DeployLockBox
- * @notice Deployment script for LockBox escrow contract and fake tokens
- * @dev Usage:
- *   forge script script/DeployLockBox.s.sol:DeployLockBox \
- *     --rpc-url http://localhost:8545 \
- *     --broadcast \
- *     --private-key <key>
- *   SETTLEMENT_AUTHORITY sets the relayer allowed to release locks
- *   (default: the deployer).
+ * @notice Deploys the fake tokens and the proof-gated LockBox.
+ * @dev LockBox has no admin and no upgrade path, so each release ships at a new address.
+ *      Usage:
+ *        PRIVATE_KEY=<key> LIGHT_CLIENT=<AptosLightClient address> ATOMICA_ADDRESS=<0x… 32 bytes> \
+ *        forge script script/DeployLockBox.s.sol:DeployLockBox \
+ *          --rpc-url http://localhost:8545 --broadcast
+ *      LIGHT_CLIENT comes from script/DeployAptosLightClient.s.sol. ATOMICA_ADDRESS is the Aptos
+ *      account of the `atomica` package; the outcome type tag is `<ATOMICA_ADDRESS>::auction::AuctionOutcome`.
  */
 contract DeployLockBox is Script {
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address settlementAuthority = vm.envOr("SETTLEMENT_AUTHORITY", vm.addr(deployerPrivateKey));
+        IAptosLightClient lightClient = IAptosLightClient(vm.envAddress("LIGHT_CLIENT"));
+        bytes memory typeTag = outcomeTypeTag(vm.envBytes32("ATOMICA_ADDRESS"));
         vm.startBroadcast(deployerPrivateKey);
 
-        // Deploy tokens
         FakeETH fakeETH = new FakeETH();
         console.log("FakeETH deployed at:", address(fakeETH));
 
         FakeUSD fakeUSD = new FakeUSD();
         console.log("FakeUSD deployed at:", address(fakeUSD));
 
-        // Deploy LockBox
-        LockBox lockBox = new LockBox(address(fakeETH), address(fakeUSD), settlementAuthority);
+        LockBox lockBox = new LockBox(address(fakeETH), address(fakeUSD), lightClient, typeTag);
         console.log("LockBox deployed at:", address(lockBox));
 
         vm.stopBroadcast();
 
-        // Print summary
         console.log("\n=== Deployment Summary ===");
-        console.log("FakeETH:  ", address(fakeETH));
-        console.log("FakeUSD:  ", address(fakeUSD));
-        console.log("LockBox:  ", address(lockBox));
-        console.log("Authority:", settlementAuthority);
+        console.log("FakeETH:     ", address(fakeETH));
+        console.log("FakeUSD:     ", address(fakeUSD));
+        console.log("LockBox:     ", address(lockBox));
+        console.log("LightClient: ", address(lightClient));
         console.log("\nAdd to .env:");
         console.log("VITE_FAKE_ETH_ADDRESS=", vm.toString(address(fakeETH)));
         console.log("VITE_FAKE_USD_ADDRESS=", vm.toString(address(fakeUSD)));
         console.log("VITE_LOCK_BOX_ADDRESS=", vm.toString(address(lockBox)));
+    }
+
+    /// @notice BCS TypeTag of `<atomica>::auction::AuctionOutcome`.
+    function outcomeTypeTag(bytes32 atomica) public pure returns (bytes memory) {
+        return abi.encodePacked(uint8(7), atomica, uint8(7), "auction", uint8(14), "AuctionOutcome", uint8(0));
     }
 }

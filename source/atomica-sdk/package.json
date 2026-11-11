@@ -38,6 +38,14 @@
       "import": "./dist/settlement/bridge.js",
       "types": "./dist/settlement/bridge.d.ts"
     },
+    "./ethereum/lock-binding": {
+      "import": "./dist/ethereum/lock-binding.js",
+      "types": "./dist/ethereum/lock-binding.d.ts"
+    },
+    "./settlement/outcome-tree": {
+      "import": "./dist/settlement/outcome-tree.js",
+      "types": "./dist/settlement/outcome-tree.d.ts"
+    },
     "./ibe": {
       "import": "./dist/ibe/index.js",
       "types": "./dist/ibe/index.d.ts"

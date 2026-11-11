@@ -34,9 +34,14 @@ vi.mock("@atomica/sdk/chain-config", () => ({
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeEth: vi.fn(),
   lockFakeEth: vi.fn(),
-  lockNonceFromReceipt: vi.fn(() => 0n),
-  getUnlockTime: vi.fn(),
-  withdrawFakeEth: vi.fn(),
+  currentWindowId: vi.fn(() => 83075n),
+  lockBinding: vi.fn((windowId: bigint) => ({
+    windowId,
+    pairHash: "0x" + "ee".repeat(32),
+    deadline: 1_794_700_800n,
+  })),
+  lockFromReceipt: vi.fn(),
+  reclaimLock: vi.fn(),
 }));
 vi.mock("@atomica/sdk/ethereum/proofs", () => ({
   generateLockedBalanceProof: vi.fn(),
@@ -208,6 +213,8 @@ describe("SellFlow localStorage resume", () => {
         txHash: "0xdeadbeef",
         lockBlock: 100,
         lockNonce: "5",
+        windowId: "83075",
+        amount: "1000000000000000000",
       }),
     );
     await act(async () => {
@@ -226,6 +233,12 @@ describe("SellFlow localStorage resume", () => {
       ACCOUNT,
       expect.any(String),
       5n,
+      {
+        amount: 10n ** 18n,
+        windowId: 83075n,
+        pairHash: "0x" + "ee".repeat(32),
+        deadline: 1_794_700_800n,
+      },
       100,
     );
   });
@@ -240,8 +253,9 @@ describe("SellFlow localStorage resume", () => {
       tokenAddress: "0x" + "22".repeat(20),
       lockNonce: 5n,
       lockId: "0x" + "dd".repeat(32),
+      amount: 10n ** 18n,
       storageKey: "0x" + "cc".repeat(32),
-      storageValue: 10n ** 18n,
+      storageValue: 0x99n,
       accountProof: ["0x01"],
       storageProof: ["0x02"],
     } as unknown as LockedBalanceProof;
@@ -253,6 +267,7 @@ describe("SellFlow localStorage resume", () => {
         step: "generating-proof",
         lockBlock: 100,
         lockNonce: "5",
+        windowId: "83075",
         amount: "1000000000000000000",
         minPrice: "2000000000",
       }),

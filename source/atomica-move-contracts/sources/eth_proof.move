@@ -1,7 +1,8 @@
 /// Ethereum State Proof Verifier
 ///
-/// Verifies that one LockBox lock exists on Ethereum, using MPT
-/// (Merkle-Patricia Trie) proofs checked against a validator-certified state root.
+/// Verifies that one LockBox lock exists on Ethereum with the fields the
+/// caller names, using MPT (Merkle-Patricia Trie) proofs checked against a
+/// validator-certified state root.
 ///
 /// Trust anchors (none of them come from the caller of a proof):
 /// - State roots: `aptos_framework::ethereum_headers`. Only a certificate
@@ -12,7 +13,12 @@
 /// - Contract, tokens and SIWE domain: `initialize` pins the LockBox address,
 ///   the FakeETH / FakeUSD token addresses and the SIWE domain once.
 /// - Storage slot: the proven slot is derived here from the user, the token
-///   and the lock nonce, as `LockBox.calculateLockStorageKey` does.
+///   and the lock nonce: `commitments[lock_id]`, LockBox slot 0
+///   (`LockBox.commitmentStorageKey`).
+/// - Lock fields: the slot holds a commitment to the depositor, token,
+///   amount, window id, pair hash and deadline (`LockBox.lockCommitment`).
+///   It is recomputed here from the fields the caller names, so a wrong
+///   amount or binding does not verify.
 /// - Receipt owner: the depositor's Ethereum-derivable Aptos account
 ///   (`ethereum_account_address`), derived from the proven Ethereum address
 ///   and the pinned SIWE domain.
@@ -21,8 +27,8 @@
 /// 1. Look up the certified state root of the proof block
 /// 2. Verify the LockBox account proof against it
 /// 3. Extract the LockBox storage root from the account data
-/// 4. Verify the storage proof of `lockAmounts[lock_id(user, token, nonce)]`
-/// 5. Return the amount of that single lock
+/// 4. Verify the storage proof of `commitments[lock_id(user, token, nonce)]`
+/// 5. Check that the proven value equals `lock_commitment` of the named fields
 ///
 /// @see docs/architecture/v0-architecture.md §3 (Cross-Chain Settlement)
 /// @see docs/decisions/trustless-v0-1-unwinding.md
@@ -55,9 +61,22 @@ module atomica::eth_proof {
     const E_EMPTY_LOCK: u64 = 12;
     /// The SIWE domain must not be empty
     const E_INVALID_DOMAIN: u64 = 13;
+    /// The proven slot does not hold the commitment of the named lock fields
+    const E_COMMITMENT_MISMATCH: u64 = 14;
+    /// A pair hash must be 32 bytes
+    const E_INVALID_PAIR_HASH: u64 = 15;
 
-    /// Storage slot of `LockBox.lockAmounts` (LockBox.sol storage layout).
-    const LOCK_AMOUNTS_SLOT: u8 = 4;
+    /// Storage slot of `LockBox.commitments` (LockBox.sol storage layout).
+    const LOCK_COMMITMENTS_SLOT: u8 = 0;
+
+    /// Seconds per auction epoch (`auction::current_window_id`).
+    const WINDOW_EPOCH_SECS: u64 = 43200;
+    /// Offset of the second window within an epoch (`auction::current_window_id`).
+    const WINDOW_SPLIT_SECS: u64 = 28500;
+    /// Delay from a window's close to the Ethereum lock deadline of its locks:
+    /// 72 hours. The auction's stuck deadline plus the outcome carrier margin
+    /// must end before it (docs/specifications/auction-timing.md).
+    const ETH_RECLAIM_DELAY_SECS: u64 = 259200;
 
     /// The pinned Ethereum side: the LockBox, the token behind each asset, and
     /// the SIWE domain of Ethereum-derivable accounts that own receipts.
@@ -166,30 +185,90 @@ module atomica::eth_proof {
         keccak256(data)
     }
 
-    /// Storage key of `LockBox.lockAmounts[lock_id(user, token, nonce)]`:
-    /// keccak256(lock_id ‖ uint256(4)). Equals `LockBox.calculateLockStorageKey`.
+    /// Storage key of `LockBox.commitments[lock_id(user, token, nonce)]`:
+    /// keccak256(lock_id ‖ uint256(0)). Equals `LockBox.commitmentStorageKey`.
     public fun lock_storage_key(user: vector<u8>, token: vector<u8>, nonce: u64): vector<u8> {
         let data = lock_id(user, token, nonce);
-        vector::append(&mut data, u256_be((LOCK_AMOUNTS_SLOT as u256)));
+        vector::append(&mut data, u256_be((LOCK_COMMITMENTS_SLOT as u256)));
         keccak256(data)
+    }
+
+    // ==================== Lock binding ====================
+
+    /// The value LockBox stores for a lock:
+    /// keccak256(abi.encode(user, token, amount, window_id, pair_hash, deadline)).
+    /// Equals `LockBox.lockCommitment`.
+    public fun lock_commitment(
+        user: vector<u8>,
+        token: vector<u8>,
+        amount: u256,
+        window_id: u64,
+        pair_hash: vector<u8>,
+        deadline: u64,
+    ): vector<u8> {
+        assert!(vector::length(&pair_hash) == 32, E_INVALID_PAIR_HASH);
+        let data = address_word(user);
+        vector::append(&mut data, address_word(token));
+        vector::append(&mut data, u256_be(amount));
+        vector::append(&mut data, u256_be((window_id as u256)));
+        vector::append(&mut data, pair_hash);
+        vector::append(&mut data, u256_be((deadline as u256)));
+        keccak256(data)
+    }
+
+    /// The auction a lock is bound to:
+    /// keccak256(abi.encode(uint64 window_id, bytes32 pair_hash, uint64 deadline)).
+    /// Equals `LockBox.auctionKey`.
+    public fun auction_key(window_id: u64, pair_hash: vector<u8>, deadline: u64): vector<u8> {
+        assert!(vector::length(&pair_hash) == 32, E_INVALID_PAIR_HASH);
+        let data = u256_be((window_id as u256));
+        vector::append(&mut data, pair_hash);
+        vector::append(&mut data, u256_be((deadline as u256)));
+        keccak256(data)
+    }
+
+    /// Unix second at which `window_id` stops being `auction::current_window_id`.
+    public fun window_close_secs(window_id: u64): u64 {
+        let epoch_start = (window_id / 2) * WINDOW_EPOCH_SECS;
+        if (window_id % 2 == 0) { epoch_start + WINDOW_SPLIT_SECS } else { epoch_start + WINDOW_EPOCH_SECS }
+    }
+
+    /// The Ethereum lock deadline of every lock of window `window_id`: window
+    /// close plus ETH_RECLAIM_DELAY_SECS. A pure function of the window id,
+    /// because a lock is made before its window or timelock exists.
+    public fun eth_lock_deadline(window_id: u64): u64 {
+        window_close_secs(window_id) + ETH_RECLAIM_DELAY_SECS
+    }
+
+    /// ETH_RECLAIM_DELAY_SECS.
+    public fun eth_reclaim_delay_secs(): u64 {
+        ETH_RECLAIM_DELAY_SECS
     }
 
     // ==================== Verification ====================
 
-    /// Verify one LockBox lock at a certified block and return its amount.
+    /// Verify one LockBox lock and its fields at a certified block.
     ///
     /// The state root, the LockBox address and the storage key are all
     /// derived on chain. Aborts with `E_UNKNOWN_HEADER` if the validators have
-    /// not certified the block, and aborts if either
-    /// proof does not match, or if the lock is empty.
+    /// not certified the block, aborts if either proof does not match, aborts
+    /// with `E_EMPTY_LOCK` for a zero amount, and aborts with
+    /// `E_COMMITMENT_MISMATCH` if the slot does not hold the commitment of
+    /// (user, token, amount, window_id, pair_hash, deadline).
     public fun verify_lock(
         block_number: u64,
         user: vector<u8>,
         token: vector<u8>,
         nonce: u64,
+        amount: u256,
+        window_id: u64,
+        pair_hash: vector<u8>,
+        deadline: u64,
         account_proof: vector<vector<u8>>,
         storage_proof: vector<vector<u8>>,
-    ): u256 acquires EthereumConfig {
+    ) acquires EthereumConfig {
+        assert!(amount > 0, E_EMPTY_LOCK);
+        let expected = lock_commitment(user, token, amount, window_id, pair_hash, deadline);
         assert!(vector::length(&account_proof) > 0, E_INVALID_PROOF);
         assert!(vector::length(&storage_proof) > 0, E_INVALID_PROOF);
         let state_root = get_state_root(block_number);
@@ -215,9 +294,8 @@ module atomica::eth_proof {
         let (is_list, items) = rlp::decode(storage_value_rlp);
         assert!(!is_list, E_INVALID_PROOF);
         assert!(vector::length(&items) == 1, E_INVALID_PROOF);
-        let amount = decode_u256(*vector::borrow(&items, 0));
-        assert!(amount > 0, E_EMPTY_LOCK);
-        amount
+        let proven = decode_u256(*vector::borrow(&items, 0));
+        assert!(proven == decode_u256(expected), E_COMMITMENT_MISMATCH);
     }
 
     // ==================== Helper Functions ====================
@@ -234,6 +312,19 @@ module atomica::eth_proof {
             vector::push_back(&mut out, *vector::borrow(&digits, ((b & 0x0f) as u64)));
             i = i + 1;
         };
+        out
+    }
+
+    /// A 20-byte address as a 32-byte ABI word (Solidity abi.encode of address).
+    fun address_word(addr: vector<u8>): vector<u8> {
+        assert!(vector::length(&addr) == 20, E_INVALID_ADDRESS);
+        let out = vector::empty<u8>();
+        let i = 0;
+        while (i < 12) {
+            vector::push_back(&mut out, 0);
+            i = i + 1;
+        };
+        vector::append(&mut out, addr);
         out
     }
 

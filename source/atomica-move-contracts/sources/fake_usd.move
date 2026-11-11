@@ -1,9 +1,8 @@
 /// FakeUSD fungible asset module — Aptos-side test stablecoin.
 ///
 /// Manages the FAKEUSD fungible asset on Aptos. Mirrors `fake_eth.move`;
-/// `mint` is a legacy faucet and `mint_from_lock` converts a verified
-/// Ethereum FakeUSD LockReceipt into Aptos FA. Canonical issuance is
-/// EVM-only.
+/// `mint` is a legacy faucet and `mint_from_lock` is retired (it aborts
+/// with `E_RETIRED`). Canonical issuance is EVM-only.
 ///
 /// @see docs/architecture/v0-architecture.md#§3-cross-chain-settlement-v01-bls-relayer-flow
 module atomica::fake_usd {
@@ -13,7 +12,6 @@ module atomica::fake_usd {
     use std::string::utf8;
     use std::option;
     use std::signer;
-    use atomica::lock_receipt::{Self, Ethereum, FakeUSD};
 
     const ASSET_SYMBOL: vector<u8> = b"FAKEUSD";
 
@@ -22,9 +20,9 @@ module atomica::fake_usd {
 
     /// Error code when trying to mint more than the maximum allowed
     const E_EXCEEDS_MAX_MINT: u64 = 1;
-    
-    /// Error code when u256 to u64 conversion would overflow
-    const E_AMOUNT_OVERFLOW: u64 = 2;
+
+    /// `mint_from_lock` is retired (issue 203)
+    const E_RETIRED: u64 = 3;
 
     /// Holds the refs for minting, transferring, and burning
     struct ManagingRefs has key {
@@ -83,44 +81,18 @@ module atomica::fake_usd {
         primary_fungible_store::deposit(recipient, fa);
     }
 
-    /// Mint FAKEUSD from a verified Ethereum lock receipt.
-    /// Used in Demo/MVP phases. Production may replace with receipt-direct-escrow (I-P4),
-    /// where auction.move accepts LockReceipt directly without minting FAs on Aptos.
-    /// DEPRECATED (canonical): In canonical flow, receipts are consumed for Aptos
-    /// auction/settlement accounting and FakeUSD is not minted on Aptos.
+    /// RETIRED: always aborts with `E_RETIRED`, and the receipt stays ACTIVE.
     ///
-    /// Process:
-    /// 1. User locks USDC on Ethereum via LockBox contract
-    /// 2. User generates Ethereum state proof off-chain
-    /// 3. User registers lock on Aptos via lock_receipt::register_ethereum_lock<FakeUSD>()
-    /// 4. (Legacy only) user calls this function to claim and mint Aptos FA
-    /// 
-    /// Decimal conversion:
-    /// - Ethereum USDC uses 6 decimals
-    /// - FakeUSD uses 6 decimals
-    /// - Direct conversion (1:1 ratio)
-    /// 
-    /// Example:
-    /// - Lock 100 USDC = 100_000_000 (u256, 6 decimals)
-    /// - Mint 100_000_000 FakeUSD (u64, 6 decimals = 100.000000 FakeUSD)
+    /// It minted Aptos FA from a lock receipt with no `AuctionOutcome`. Now that
+    /// LockBox returns a lock to its depositor by `reclaim` after its deadline,
+    /// the depositor could mint FA here and then reclaim the Ethereum lock with
+    /// a non-membership proof. The signature stays for upgrade compatibility.
+    /// See docs/decisions/trustless-v0-1-unwinding.md (Supersedes).
     public entry fun mint_from_lock(
-        account: &signer,
-        lock_id: vector<u8>,
-    ) acquires ManagingRefs {
-        let user = signer::address_of(account);
-        
-        // Claim the receipt (verifies ownership and marks as claimed)
-        let amount_u256 = lock_receipt::claim<Ethereum, FakeUSD>(user, lock_id);
-        
-        // Convert u256 to u64 with overflow check
-        // Both Ethereum USDC and FakeUSD use 6 decimals - direct conversion
-        assert!(amount_u256 <= (18446744073709551615 as u256), E_AMOUNT_OVERFLOW);
-        let amount = (amount_u256 as u64);
-        
-        // Legacy prototype behavior: mint Aptos FA from claimed receipt amount.
-        let refs = borrow_global<ManagingRefs>(@atomica);
-        let fa = fungible_asset::mint(&refs.mint_ref, amount);
-        primary_fungible_store::deposit(user, fa);
+        _account: &signer,
+        _lock_id: vector<u8>,
+    ) {
+        abort E_RETIRED
     }
 
     #[view]

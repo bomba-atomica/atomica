@@ -30,7 +30,7 @@ export function Step4Proof({ proof, loading, error, onGenerate }: Props) {
           </div>
           <div>
             <span className="text-zinc-600">Amount:</span>{" "}
-            {(Number(proof.storageValue) / 1e18).toFixed(4)} FETH
+            {(Number(proof.amount) / 1e18).toFixed(4)} FETH
           </div>
           <div>
             <span className="text-zinc-600">Proof nodes:</span>{" "}

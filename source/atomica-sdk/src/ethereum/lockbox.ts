@@ -1,30 +1,37 @@
 /**
  * LockBox Contract Helpers
  *
- * Ethereum-side interactions for locking FakeETH/FakeUSD in LockBox.sol.
- * Covers approve → lock → query → withdrawWinnings lifecycle.
+ * Ethereum-side interactions for locking FakeETH/FakeUSD in the proof-gated
+ * LockBox.sol. Covers approve → lock → query → reclaim.
  *
- * Locked tokens are released only by an Aptos auction outcome that the
- * relayer posts to LockBox (see settlement/bridge.ts). The user then pulls
- * the credited tokens with `withdrawWinnings`.
+ * Every lock names its auction (window id, pair hash, deadline; see
+ * lock-binding.ts). It leaves LockBox in one of two ways, and anyone may
+ * trigger either: `releaseByOutcome` pays it out per a proven Aptos
+ * `AuctionOutcome`, or `reclaim` returns it to its depositor after its
+ * deadline. There is no relayer.
  */
 
 import { ethers, type TransactionReceipt } from "ethers";
 import { getChainConfig } from "../chain-config.js";
-import { FAKE_ETH_ABI, FAKE_USD_ABI } from "./abis.js";
+import {
+  FAKE_ETH_ABI,
+  FAKE_USD_ABI,
+  LOCKBOX_ABI,
+  LOCK_STATUS,
+} from "./abis.js";
+import type { LockBinding } from "./lock-binding.js";
 
-// ── ABI ──────────────────────────────────────────────────────────────────────
-
-const LOCKBOX_ABI = [
-  "function lock(address token, uint256 amount) external",
-  "function withdrawWinnings(address token) external",
-  "function getWithdrawable(address user, address token) external view returns (uint256)",
-  "function getLockedBalance(address user, address token) external view returns (uint256)",
-  "function getUnlockTime(address user, address token) external view returns (uint256)",
-  "function isUnlocked(address user, address token) external view returns (bool)",
-  "event TokensLocked(address indexed user, address indexed token, uint256 amount, uint256 unlockTime, uint256 nonce)",
-  "event WithdrawWinnings(address indexed winner, address indexed token, uint256 amount)",
-] as const;
+/** The fields one lock commits to (`LockBox.Lock`), plus its id. */
+export interface LockFields {
+  lockId: string;
+  depositor: string;
+  token: string;
+  nonce: bigint;
+  amount: bigint;
+  windowId: bigint;
+  pairHash: string;
+  deadline: bigint;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,6 +77,25 @@ async function getFakeUsdWithSigner(provider: ethers.BrowserProvider) {
   return new ethers.Contract(address, FAKE_USD_ABI, signer);
 }
 
+async function lockToken(
+  provider: ethers.BrowserProvider,
+  token: string,
+  amount: bigint,
+  binding: LockBinding,
+): Promise<TransactionReceipt> {
+  const lockBox = await getLockBoxWithSigner(provider);
+  const tx = await lockBox.lock(
+    token,
+    amount,
+    binding.windowId,
+    binding.pairHash,
+    binding.deadline,
+  );
+  const receipt = await tx.wait();
+  if (!receipt) throw new Error("lock() tx receipt is null");
+  return receipt;
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -92,95 +118,141 @@ export async function approveFakeEth(
 }
 
 /**
- * Lock `amount` of FakeETH in LockBox.
+ * Lock `amount` of FakeETH in LockBox into the auction `binding` names
+ * (see `lockBinding`).
  *
  * The caller must have approved LockBox for at least `amount` first.
  */
 export async function lockFakeEth(
   provider: ethers.BrowserProvider,
   amount: bigint,
+  binding: LockBinding,
 ): Promise<TransactionReceipt> {
-  const lockBox = await getLockBoxWithSigner(provider);
-  const tokenAddress = getFakeEthAddress();
-
-  const tx = await lockBox.lock(tokenAddress, amount);
-  const receipt = await tx.wait();
-  if (!receipt) throw new Error("lock() tx receipt is null");
-  return receipt;
+  return lockToken(provider, getFakeEthAddress(), amount, binding);
 }
 
 /**
- * Nonce of the lock made by a `lock()` transaction, read from its
- * `TokensLocked` event. The nonce names the lock: its Aptos receipt id is
- * `getLockId(user, token, nonce)` (see ethereum/proofs).
+ * The lock made by a `lock()` transaction, read from its `Locked` event.
+ * The nonce names the lock: its Aptos receipt id is
+ * `getLockId(depositor, token, nonce)`.
  */
-export function lockNonceFromReceipt(receipt: TransactionReceipt): bigint {
+export function lockFromReceipt(receipt: TransactionReceipt): LockFields {
   const iface = new ethers.Interface(LOCKBOX_ABI);
   for (const log of receipt.logs) {
-    const parsed = iface.parseLog(log);
-    if (parsed?.name === "TokensLocked") return parsed.args.nonce as bigint;
+    let parsed: ethers.LogDescription | null = null;
+    try {
+      parsed = iface.parseLog(log);
+    } catch {
+      continue;
+    }
+    if (parsed?.name === "Locked") {
+      const a = parsed.args;
+      return {
+        lockId: a.lockId as string,
+        depositor: a.depositor as string,
+        token: a.token as string,
+        nonce: a.nonce as bigint,
+        amount: a.amount as bigint,
+        windowId: a.windowId as bigint,
+        pairHash: a.pairHash as string,
+        deadline: a.deadline as bigint,
+      };
+    }
   }
-  throw new Error(`No TokensLocked event in transaction ${receipt.hash}`);
+  throw new Error(`No Locked event in transaction ${receipt.hash}`);
+}
+
+/** Nonce of the lock made by a `lock()` transaction (see `lockFromReceipt`). */
+export function lockNonceFromReceipt(receipt: TransactionReceipt): bigint {
+  return lockFromReceipt(receipt).nonce;
 }
 
 /**
- * Get the FakeETH amount currently locked by `userAddress` in LockBox.
+ * `LockBox.statuses(lockId)`: 0 none, 1 open, 2 released, 3 reclaimed
+ * (`LOCK_STATUS`).
+ */
+export async function getLockStatus(
+  provider: ethers.Provider,
+  lockId: string,
+): Promise<number> {
+  const contract = new ethers.Contract(
+    getLockBoxAddress(),
+    LOCKBOX_ABI,
+    provider,
+  );
+  return Number(await contract.statuses(lockId));
+}
+
+/** Every lock `depositor` made of `token`, from the `Locked` events. */
+export async function getLocks(
+  provider: ethers.Provider,
+  depositor: string | null,
+  token: string,
+): Promise<LockFields[]> {
+  const contract = new ethers.Contract(
+    getLockBoxAddress(),
+    LOCKBOX_ABI,
+    provider,
+  );
+  const events = await contract.queryFilter(
+    contract.filters.Locked(null, depositor, token),
+  );
+  return events.map((event) => {
+    const a = (event as ethers.EventLog).args;
+    return {
+      lockId: a.lockId as string,
+      depositor: a.depositor as string,
+      token: a.token as string,
+      nonce: a.nonce as bigint,
+      amount: a.amount as bigint,
+      windowId: a.windowId as bigint,
+      pairHash: a.pairHash as string,
+      deadline: a.deadline as bigint,
+    };
+  });
+}
+
+/**
+ * Get the FakeETH amount `userAddress` still holds in open locks.
  */
 export async function getLockedBalance(
   provider: ethers.Provider,
   userAddress: string,
 ): Promise<bigint> {
-  const lockBoxAddress = getLockBoxAddress();
-  const tokenAddress = getFakeEthAddress();
-  const contract = new ethers.Contract(lockBoxAddress, LOCKBOX_ABI, provider);
-  return contract.getLockedBalance(
-    userAddress,
-    tokenAddress,
-  ) as Promise<bigint>;
+  const locks = await getLocks(provider, userAddress, getFakeEthAddress());
+  let total = 0n;
+  for (const lock of locks) {
+    if ((await getLockStatus(provider, lock.lockId)) === LOCK_STATUS.Open) {
+      total += lock.amount;
+    }
+  }
+  return total;
 }
 
 /**
- * Get the Unix timestamp (seconds) when the lock passes its minimum age.
- * Informational only: time does not release a lock. Returns 0 if no tokens
- * are locked.
+ * Return an open lock to its depositor after its deadline (`LockBox.reclaim`).
+ * Anyone may send it. This form carries no non-membership proof, so it works
+ * only while the lock's auction has no recorded outcome.
  */
-export async function getUnlockTime(
-  provider: ethers.Provider,
-  userAddress: string,
-): Promise<number> {
-  const lockBoxAddress = getLockBoxAddress();
-  const tokenAddress = getFakeEthAddress();
-  const contract = new ethers.Contract(lockBoxAddress, LOCKBOX_ABI, provider);
-  const ts: bigint = await contract.getUnlockTime(userAddress, tokenAddress);
-  return Number(ts);
-}
-
-/**
- * Check whether the user's lock is past its minimum age. Informational only.
- */
-export async function isUnlocked(
-  provider: ethers.Provider,
-  userAddress: string,
-): Promise<boolean> {
-  const lockBoxAddress = getLockBoxAddress();
-  const tokenAddress = getFakeEthAddress();
-  const contract = new ethers.Contract(lockBoxAddress, LOCKBOX_ABI, provider);
-  return contract.isUnlocked(userAddress, tokenAddress) as Promise<boolean>;
-}
-
-/**
- * Withdraw all FakeETH that an Aptos outcome credited to the user (a refund
- * or a winning fill). Reverts on-chain when nothing is credited.
- */
-export async function withdrawFakeEth(
+export async function reclaimLock(
   provider: ethers.BrowserProvider,
+  lock: Omit<LockFields, "lockId">,
 ): Promise<TransactionReceipt> {
   const lockBox = await getLockBoxWithSigner(provider);
-  const tokenAddress = getFakeEthAddress();
-
-  const tx = await lockBox.withdrawWinnings(tokenAddress);
+  const tx = await lockBox.reclaim(
+    [
+      lock.depositor,
+      lock.token,
+      lock.nonce,
+      lock.amount,
+      lock.windowId,
+      lock.pairHash,
+      lock.deadline,
+    ],
+    [],
+  );
   const receipt = await tx.wait();
-  if (!receipt) throw new Error("withdrawWinnings() tx receipt is null");
+  if (!receipt) throw new Error("reclaim() tx receipt is null");
   return receipt;
 }
 
@@ -198,26 +270,14 @@ export async function getLockBoxAllowance(
 }
 
 /**
- * Get total FakeETH locked by all users in LockBox.
- * Queries all TokensLocked events and sums the amounts.
+ * Get total FakeETH ever locked by all users in LockBox.
+ * Queries all Locked events and sums the amounts.
  */
 export async function getTotalLockedEth(
   provider: ethers.Provider,
 ): Promise<bigint> {
-  const lockBoxAddress = getLockBoxAddress();
-  const tokenAddress = getFakeEthAddress();
-  const contract = new ethers.Contract(lockBoxAddress, LOCKBOX_ABI, provider);
-
-  const filter = contract.filters.TokensLocked(null, tokenAddress, null, null);
-  const events = await contract.queryFilter(filter);
-
-  let total = 0n;
-  for (const event of events) {
-    const amount = (event as unknown as { args: { amount: bigint } }).args
-      .amount;
-    total += amount;
-  }
-  return total;
+  const locks = await getLocks(provider, null, getFakeEthAddress());
+  return locks.reduce((total, lock) => total + lock.amount, 0n);
 }
 
 // ── FakeUSD bidder-collateral lock helpers (Phase 3b #87) ──────────────────────
@@ -244,24 +304,19 @@ export async function approveFakeUsd(
 }
 
 /**
- * Lock `amount` of FakeUSD in LockBox as bidder collateral margin.
+ * Lock `amount` of FakeUSD in LockBox as bidder collateral margin, into the
+ * auction `binding` names.
  *
  * The caller must have approved LockBox for at least `amount` first (via
- * `approveFakeUsd`).  Returns the transaction receipt; the `TokensLocked`
- * event on the receipt is used off-chain to derive the `collateral_lock_id`
- * for `auction::submit_bid`.
+ * `approveFakeUsd`).  Returns the transaction receipt; its `Locked` event
+ * (`lockFromReceipt`) gives the `collateral_lock_id` for `auction::submit_bid`.
  *
  * @see docs/architecture/v0-architecture.md §2.5 — Bidder Collateral
  */
 export async function lockFakeUsd(
   provider: ethers.BrowserProvider,
   amount: bigint,
+  binding: LockBinding,
 ): Promise<TransactionReceipt> {
-  const lockBox = await getLockBoxWithSigner(provider);
-  const tokenAddress = getFakeUsdAddress();
-
-  const tx = await lockBox.lock(tokenAddress, amount);
-  const receipt = await tx.wait();
-  if (!receipt) throw new Error("FakeUSD lock() tx receipt is null");
-  return receipt;
+  return lockToken(provider, getFakeUsdAddress(), amount, binding);
 }

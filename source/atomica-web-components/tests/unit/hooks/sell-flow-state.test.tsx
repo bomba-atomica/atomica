@@ -29,9 +29,23 @@ vi.mock("@atomica/sdk/chain-config", () => ({
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeEth: vi.fn(),
   lockFakeEth: vi.fn(),
-  lockNonceFromReceipt: vi.fn(() => 3n),
-  getUnlockTime: vi.fn(),
-  withdrawFakeEth: vi.fn(),
+  currentWindowId: vi.fn(() => 83075n),
+  lockBinding: vi.fn((windowId: bigint) => ({
+    windowId,
+    pairHash: "0x" + "ee".repeat(32),
+    deadline: 1_794_700_800n,
+  })),
+  lockFromReceipt: vi.fn(() => ({
+    lockId: "0x" + "dd".repeat(32),
+    depositor: "0x1234567890123456789012345678901234567890",
+    token: "0x" + "22".repeat(20),
+    nonce: 3n,
+    amount: 10n ** 18n,
+    windowId: 83075n,
+    pairHash: "0x" + "ee".repeat(32),
+    deadline: 1_794_700_800n,
+  })),
+  reclaimLock: vi.fn(),
 }));
 vi.mock("@atomica/sdk/ethereum/proofs", () => ({
   generateLockedBalanceProof: vi.fn(),
@@ -51,8 +65,8 @@ import { useSellFlow } from "../../../src/hooks/useSellFlow";
 import {
   approveFakeEth,
   lockFakeEth,
-  getUnlockTime,
-  withdrawFakeEth,
+  lockFromReceipt,
+  reclaimLock,
 } from "@atomica/sdk/ethereum";
 import { generateLockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
 import type { LockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
@@ -84,6 +98,15 @@ const PROOF = {
   accountProof: ["0x01"],
   storageProof: ["0x02"],
 } as unknown as LockedBalanceProof;
+
+/** Persisted state of a confirmed lock, ready for proof generation. */
+const LOCKED = {
+  step: "generating-proof",
+  lockBlock: 100,
+  lockNonce: "3",
+  windowId: "83075",
+  amount: "1000000000000000000",
+};
 
 /** The receipt id is the proof's LockBox lock id (issue 171). */
 const EXPECTED_LOCK_ID = PROOF.lockId;
@@ -252,7 +275,6 @@ describe("useSellFlow state machine", () => {
         hash: "0xlocktx",
         blockNumber: 77,
       } as never);
-      vi.mocked(getUnlockTime).mockResolvedValue(1_700_000_000 as never);
 
       const { result, unmount } = renderHook(() => useSellFlow(ACCOUNT));
       await act(async () => {});
@@ -266,18 +288,28 @@ describe("useSellFlow state machine", () => {
         expect.anything(),
         10n ** 18n,
       );
-      expect(lockFakeEth).toHaveBeenCalledWith(expect.anything(), 10n ** 18n);
+      // The lock is bound to the current window, with its eth_lock_deadline.
+      expect(lockFakeEth).toHaveBeenCalledWith(expect.anything(), 10n ** 18n, {
+        windowId: 83075n,
+        pairHash: "0x" + "ee".repeat(32),
+        deadline: 1_794_700_800n,
+      });
       expect(
         vi.mocked(approveFakeEth).mock.invocationCallOrder[0],
       ).toBeLessThan(vi.mocked(lockFakeEth).mock.invocationCallOrder[0]);
-      expect(getUnlockTime).toHaveBeenCalledWith(expect.anything(), ACCOUNT);
+      expect(lockFromReceipt).toHaveBeenCalledWith({
+        hash: "0xlocktx",
+        blockNumber: 77,
+      });
       expect(result.current.step).toBe("confirming");
       expect(result.current.txHash).toBe("0xlocktx");
       expect(result.current.lockBlock).toBe(77);
       expect(result.current.lockNonce).toBe(3n);
       expect(result.current.amount).toBe(10n ** 18n);
       expect(result.current.minPrice).toBe(2_000_000_000n);
-      expect(result.current.unlockTime).toBe(1_700_000_000);
+      expect(result.current.windowId).toBe(83075n);
+      // unlockTime is the lock deadline: after it anyone may reclaim the lock.
+      expect(result.current.unlockTime).toBe(1_794_700_800);
       expect(result.current.loading).toBe(false);
       expect(result.current.error).toBeUndefined();
       expect(stored()).toMatchObject({
@@ -285,6 +317,7 @@ describe("useSellFlow state machine", () => {
         txHash: "0xlocktx",
         lockBlock: 77,
         lockNonce: "3",
+        windowId: "83075",
         amount: "1000000000000000000",
         minPrice: "2000000000",
       });
@@ -311,7 +344,7 @@ describe("useSellFlow state machine", () => {
       vi.mocked(generateLockedBalanceProof).mockResolvedValue(PROOF);
       // The validators certified block 104, after the lock block 100.
       vi.mocked(waitForCertifiedBlock).mockResolvedValueOnce(104);
-      persist({ step: "generating-proof", lockBlock: 100, lockNonce: "3" });
+      persist(LOCKED);
 
       const { result } = renderHook(() => useSellFlow(ACCOUNT));
       await act(async () => {});
@@ -326,6 +359,12 @@ describe("useSellFlow state machine", () => {
         ACCOUNT,
         FAKE_ETH,
         3n,
+        {
+          amount: 10n ** 18n,
+          windowId: 83075n,
+          pairHash: "0x" + "ee".repeat(32),
+          deadline: 1_794_700_800n,
+        },
         104,
       );
       expect(result.current.step).toBe("submitting-proof");
@@ -342,7 +381,7 @@ describe("useSellFlow state machine", () => {
         fn: "register_lock",
       } as never);
       vi.mocked(submitNativeTransaction).mockResolvedValue(undefined as never);
-      persist({ step: "generating-proof", lockBlock: 100, lockNonce: "3" });
+      persist(LOCKED);
 
       const { result } = renderHook(() => useSellFlow(ACCOUNT));
       await act(async () => {});
@@ -449,11 +488,13 @@ describe("useSellFlow state machine", () => {
       expect(result.current.error).toBe("E_IBE_NOT_READY");
     });
 
-    it("cancelAndUnlock: withdraws the credited FakeETH and resets the flow to lock", async () => {
-      vi.mocked(withdrawFakeEth).mockResolvedValue(undefined as never);
+    it("cancelAndUnlock: reclaims the lock to the seller and resets the flow to lock", async () => {
+      vi.mocked(reclaimLock).mockResolvedValue(undefined as never);
       persist({
         step: "creating-auction",
         lockId: EXPECTED_LOCK_ID,
+        lockNonce: "3",
+        windowId: "83075",
         amount: "1000000000000000000",
         unlockTime: 1,
       });
@@ -464,7 +505,15 @@ describe("useSellFlow state machine", () => {
         await result.current.cancelAndUnlock();
       });
 
-      expect(withdrawFakeEth).toHaveBeenCalledWith(expect.anything());
+      expect(reclaimLock).toHaveBeenCalledWith(expect.anything(), {
+        depositor: ACCOUNT,
+        token: FAKE_ETH,
+        nonce: 3n,
+        amount: 10n ** 18n,
+        windowId: 83075n,
+        pairHash: "0x" + "ee".repeat(32),
+        deadline: 1_794_700_800n,
+      });
       expect(result.current.step).toBe("lock");
       expect(result.current.lockId).toBeUndefined();
       expect(result.current.amount).toBeUndefined();
@@ -485,7 +534,7 @@ describe("useSellFlow state machine", () => {
       expect(result.current.error).toBe("user rejected lock");
       expect(result.current.loading).toBe(false);
       expect(result.current.txHash).toBeUndefined();
-      expect(getUnlockTime).not.toHaveBeenCalled();
+      expect(lockFromReceipt).not.toHaveBeenCalled();
       expect(stored().step).toBe("lock");
     });
 
@@ -497,7 +546,7 @@ describe("useSellFlow state machine", () => {
       vi.mocked(submitNativeTransaction).mockRejectedValue(
         new Error("SIWE signature rejected"),
       );
-      persist({ step: "generating-proof", lockBlock: 100, lockNonce: "3" });
+      persist(LOCKED);
 
       const { result } = renderHook(() => useSellFlow(ACCOUNT));
       await act(async () => {});

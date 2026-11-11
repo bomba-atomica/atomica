@@ -242,7 +242,12 @@ export async function registerTimelock(
  *
  * Serialises directly from LockedBalanceProof, matching the Move entry function:
  *   register_ethereum_lock<Asset>(carrier, block_number, user_address,
- *     lock_nonce, account_proof, storage_proof)
+ *     lock_nonce, amount, window_id, pair_hash, deadline, account_proof,
+ *     storage_proof)
+ *
+ * The proof covers LockBox `commitments[lockId]`; Aptos recomputes the
+ * commitment from (amount, window_id, pair_hash, deadline) and accepts only
+ * `deadline == auction::eth_lock_deadline(window_id)`.
  *
  * Any account may send it. Aptos reads the state root of `blockNumber` from
  * the validator-certified `0x1::ethereum_headers` store, so prove at a
@@ -261,6 +266,10 @@ export function getRegisterLockPayload(
       proof.blockNumber,
       ethers.getBytes(proof.userAddress),
       proof.lockNonce.toString(), // u64 as decimal string
+      proof.amount.toString(), // u256 as decimal string
+      proof.windowId.toString(), // u64 as decimal string
+      ethers.getBytes(proof.pairHash),
+      proof.deadline.toString(), // u64 as decimal string
       proof.accountProof.map((node) => ethers.getBytes(node)),
       proof.storageProof.map((node) => ethers.getBytes(node)),
     ],

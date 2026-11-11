@@ -3,8 +3,8 @@
  *
  * Verifies parameter order and types match the Move entry function signatures:
  *   lock_receipt::register_ethereum_lock<FakeETH>(
- *     carrier, block_number, user_address, lock_nonce,
- *     account_proof, storage_proof
+ *     carrier, block_number, user_address, lock_nonce, amount, window_id,
+ *     pair_hash, deadline, account_proof, storage_proof
  *   )
  *   0x1::ethereum_headers::latest_block_number(): Option<u64>
  *   auction::create_auction(seller, window_id, pair_bcs, lock_id, min_price,
@@ -57,8 +57,12 @@ function makeMockProof(): LockedBalanceProof {
     tokenAddress: "0x" + "33".repeat(20),
     lockNonce: 7n,
     lockId: "0x" + "77".repeat(32),
+    amount: 1_000_000_000_000_000_000n, // 1 FETH in wei
+    windowId: 83075n,
+    pairHash: "0x" + "88".repeat(32),
+    deadline: 1794700800n,
     storageKey: "0x" + "44".repeat(32),
-    storageValue: 1_000_000_000_000_000_000n, // 1 FETH in wei
+    storageValue: 0x99n, // the proven commitment
     accountProof: ["0x" + "55".repeat(20)],
     storageProof: ["0x" + "66".repeat(20)],
     timestamp: 1700000000,
@@ -86,16 +90,36 @@ describe("getRegisterLockPayload", () => {
     expect(payload.typeArguments![0]).toContain("::lock_receipt::FakeETH");
   });
 
-  it("has exactly 5 function arguments matching the Move signature", () => {
+  it("has exactly 9 function arguments matching the Move signature", () => {
     // Move entry function args (excluding implicit `account: &signer`):
     //   0: block_number  (u64)
     //   1: user_address  (vector<u8>)
     //   2: lock_nonce    (u64 as decimal string)
-    //   3: account_proof (vector<vector<u8>>)
-    //   4: storage_proof (vector<vector<u8>>)
-    // The state root, LockBox, token and storage key are derived on chain.
+    //   3: amount        (u256 as decimal string)
+    //   4: window_id     (u64 as decimal string)
+    //   5: pair_hash     (vector<u8>, 32 bytes)
+    //   6: deadline      (u64 as decimal string)
+    //   7: account_proof (vector<vector<u8>>)
+    //   8: storage_proof (vector<vector<u8>>)
+    // The state root, LockBox, token, storage key and commitment are derived on chain.
     const payload = getRegisterLockPayload(makeMockProof());
-    expect(payload.functionArguments!.length).toBe(5);
+    expect(payload.functionArguments!.length).toBe(9);
+  });
+
+  it("sends the lock fields Aptos hashes into the commitment (indexes 3 to 6)", () => {
+    const args = getRegisterLockPayload(makeMockProof()).functionArguments!;
+    expect(args[3]).toBe("1000000000000000000");
+    expect(args[4]).toBe("83075");
+    const pairHash = args[5] as Uint8Array;
+    expect(pairHash).toBeInstanceOf(Uint8Array);
+    expect(ethers.hexlify(pairHash)).toBe("0x" + "88".repeat(32));
+    expect(args[6]).toBe("1794700800");
+  });
+
+  it("never sends the proven commitment itself", () => {
+    const args = getRegisterLockPayload(makeMockProof()).functionArguments!;
+    expect(args).not.toContain("153");
+    expect(args).not.toContain(0x99n);
   });
 
   it("places block_number (number) at index 0", () => {
@@ -123,16 +147,16 @@ describe("getRegisterLockPayload", () => {
     }
   });
 
-  it("serializes account_proof as Uint8Array[] at index 3", () => {
+  it("serializes account_proof as Uint8Array[] at index 7", () => {
     const payload = getRegisterLockPayload(makeMockProof());
-    const proof = payload.functionArguments![3] as Uint8Array[];
+    const proof = payload.functionArguments![7] as Uint8Array[];
     expect(Array.isArray(proof)).toBe(true);
     expect(proof[0]).toBeInstanceOf(Uint8Array);
   });
 
-  it("serializes storage_proof as Uint8Array[] at index 4", () => {
+  it("serializes storage_proof as Uint8Array[] at index 8", () => {
     const payload = getRegisterLockPayload(makeMockProof());
-    const proof = payload.functionArguments![4] as Uint8Array[];
+    const proof = payload.functionArguments![8] as Uint8Array[];
     expect(Array.isArray(proof)).toBe(true);
     expect(proof[0]).toBeInstanceOf(Uint8Array);
   });

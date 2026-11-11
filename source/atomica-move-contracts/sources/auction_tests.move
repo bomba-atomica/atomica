@@ -814,9 +814,10 @@ module atomica::auction_tests {
     // A receipt a live window holds cannot be pulled out through the public
     // entry functions, so nothing outside settle/refund can revoke it and
     // make them abort E_INVALID_STATUS. (`claim` and `release` are
-    // package-only, so other modules cannot call them at all.)
+    // package-only, so other modules cannot call them at all, and the old
+    // `mint_from_lock` path is retired: it aborts E_RETIRED.)
     #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 4, location = atomica::lock_receipt)] // E_RECEIPT_ALREADY_CLAIMED
+    #[expected_failure(abort_code = 3, location = atomica::fake_usd)] // E_RETIRED
     fun test_owner_cannot_pull_collateral_held_by_window(atomica: &signer) {
         revealed_window(atomica, 5u256);
         let bob_lock = b"held_collat_bob___lock_32bytes__";
@@ -832,7 +833,7 @@ module atomica::auction_tests {
     }
 
     #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 4, location = atomica::lock_receipt)] // E_RECEIPT_ALREADY_CLAIMED
+    #[expected_failure(abort_code = 3, location = atomica::fake_eth)] // E_RETIRED
     fun test_owner_cannot_pull_seller_receipt_held_by_window(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
         auction::init_for_test(atomica);

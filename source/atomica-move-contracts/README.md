@@ -18,13 +18,13 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 | `atomica::auction` | `refund_expired_window` | live (releases every receipt once the timelock is `Expired`) |
 | `atomica::auction` | `settle` | live (single highest bid; uniform-price clearing is scaffold) |
 | `atomica::lock_receipt` | `initialize<Chain, Asset>` | live |
-| `atomica::lock_receipt` | `register_ethereum_lock<Asset>` | live |
+| `atomica::lock_receipt` | `register_ethereum_lock<Asset>` | live (proves the LockBox commitment slot; deadline must equal `auction::eth_lock_deadline(window_id)`) |
 | `atomica::fake_eth` | `initialize` | live |
 | `atomica::fake_eth` | `mint` | live (legacy faucet) |
-| `atomica::fake_eth` | `mint_from_lock` | live (legacy; canonical flow skips Aptos FA minting) |
+| `atomica::fake_eth` | `mint_from_lock` | retired (aborts `E_RETIRED`; issue 203) |
 | `atomica::fake_usd` | `initialize` | live |
 | `atomica::fake_usd` | `mint` | live (legacy faucet) |
-| `atomica::fake_usd` | `mint_from_lock` | live (legacy) |
+| `atomica::fake_usd` | `mint_from_lock` | retired (aborts `E_RETIRED`; issue 203) |
 | `atomica::registry` | `initialize` | live |
 | `atomica::timelock` | — (view funs only) | live (facade of `aptos_framework::ibe_config`) |
 
@@ -33,7 +33,7 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 | Module | Function |
 |---|---|
 | `atomica::auction` | `get_auction`, `get_bid_count`, `get_bid_info`, `get_window_status`, `bid_associated_data`, `compute_bid_commitment`, `is_settled`, `auction_exists`, `get_settlement` |
-| `atomica::lock_receipt` | `is_lock_claimed`, `get_total_locked`, `get_receipt_count`, `get_receipt`, `is_registry_initialized` |
+| `atomica::lock_receipt` | `is_lock_claimed`, `get_total_locked`, `get_receipt_count`, `get_receipt`, `get_receipt_binding`, `is_registry_initialized` |
 | `atomica::fake_eth` | `get_metadata`, `balance` |
 | `atomica::fake_usd` | `get_metadata`, `balance` |
 | `atomica::registry` | `get_aptos_address`, `get_nonce` |
@@ -41,7 +41,8 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 
 ### Internal modules (not directly called by clients)
 
-- `atomica::eth_proof` — Ethereum MPT state proof verification
+- `atomica::eth_proof` — Ethereum MPT state proof verification, LockBox lock commitment, auction key and `eth_lock_deadline` (also exposed as `auction::eth_lock_deadline` and `auction::auction_key`)
+- `atomica::outcome_tree` — keccak Merkle tree of an auction's dispositions; LockBox (`OutcomeTree.sol`) verifies its root from `auction::AuctionOutcome`
 - `atomica::mpt` — Merkle-Patricia Trie node decoding
 - `atomica::rlp` — RLP decoding for Ethereum account data
 

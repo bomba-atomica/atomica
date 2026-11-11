@@ -44,6 +44,7 @@ module atomica::auction {
     use aptos_std::ibe;
     use aptos_framework::ibe_config;
     use aptos_framework::reconfiguration;
+    use atomica::eth_proof;
     use atomica::lock_receipt::{Self, Ethereum, FakeETH, FakeUSD};
     use atomica::timelock;
 
@@ -299,7 +300,44 @@ module atomica::auction {
         seller_lock_count: u64,
     }
 
+    // The one outcome of an auction on Ethereum. Settle or the permissionless unwind
+    // (issues 194 and 199) emits it once per auction. `dispositions_root` is the
+    // `outcome_tree` root over every lock claimed into the window, and `leaf_count` its
+    // number of leaves. LockBox `recordOutcome` verifies it through the Aptos light client
+    // and rebuilds the auction key `auction_key(window_id, pair_hash, eth_lock_deadline)`.
+    // The field layout is pinned by the golden vectors of issue 201
+    // (`0xcafe::auction::AuctionOutcome`); change it only together with those vectors.
+    #[event]
+    struct AuctionOutcome has drop, store {
+        window_id:         u64,
+        pair_hash:         vector<u8>,
+        eth_lock_deadline: u64,
+        dispositions_root: vector<u8>,
+        leaf_count:        u64,
+    }
+
     // ===================== Helpers =====================
+
+    #[view]
+    /// The Ethereum lock deadline of window `window_id` (window close plus
+    /// `eth_proof::eth_reclaim_delay_secs`). A pure function of the window id.
+    /// `lock_receipt::register_ethereum_lock` accepts only this deadline.
+    public fun eth_lock_deadline(window_id: u64): u64 {
+        eth_proof::eth_lock_deadline(window_id)
+    }
+
+    #[view]
+    /// The auction key LockBox binds a lock to:
+    /// keccak256(abi.encode(window_id, pair_hash, eth_lock_deadline(window_id))).
+    public fun auction_key(window_id: u64, pair_hash: vector<u8>): vector<u8> {
+        eth_proof::auction_key(window_id, pair_hash, eth_lock_deadline(window_id))
+    }
+
+    #[view]
+    /// The pair hash of a window: keccak256 of its pair BCS (the window key's pair bytes).
+    public fun pair_hash(pair_bcs: vector<u8>): vector<u8> {
+        aptos_std::aptos_hash::keccak256(pair_bcs)
+    }
 
     /// Compute `auction_window_id` from on-chain clock.
     ///
@@ -353,6 +391,18 @@ module atomica::auction {
     /// published, so the first `create_auction` may come from any seller.
     fun init_module(atomica: &signer) {
         move_to(atomica, AuctionRegistry { windows: table::new() });
+    }
+
+    #[test_only]
+    /// BCS of an `AuctionOutcome`, as its event payload.
+    public fun test_auction_outcome_bcs(
+        window_id: u64,
+        pair_hash: vector<u8>,
+        eth_lock_deadline: u64,
+        dispositions_root: vector<u8>,
+        leaf_count: u64,
+    ): vector<u8> {
+        bcs::to_bytes(&AuctionOutcome { window_id, pair_hash, eth_lock_deadline, dispositions_root, leaf_count })
     }
 
     #[test_only]

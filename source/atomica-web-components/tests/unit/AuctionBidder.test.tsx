@@ -40,6 +40,12 @@ vi.mock("@atomica/sdk", () => ({
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeUsd: vi.fn().mockResolvedValue({ hash: "0xapprove" }),
   lockFakeUsd: vi.fn().mockResolvedValue({ hash: "0xlock123" }),
+  currentWindowId: vi.fn(() => 7n),
+  lockBinding: vi.fn((windowId: bigint) => ({
+    windowId,
+    pairHash: "0x" + "00".repeat(32),
+    deadline: 1_800_000_000n,
+  })),
 }));
 
 vi.mock("../../src/storage/bidStorage", () => ({

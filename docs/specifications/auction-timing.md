@@ -1,7 +1,7 @@
 # Auction Timing Specification (Canonical)
 
 **Status:** Canonical
-**Last Updated:** 2026-03-02
+**Last Updated:** 2026-11-11
 **Owner:** Product + Protocol Design
 
 This document is the single source of truth for Atomica auction timing.
@@ -34,6 +34,62 @@ This document is the single source of truth for Atomica auction timing.
 
 - Auction close occurs at the canonical timestamps above.
 - Settlement target remains **1-3 hours post-close** (see PRD for settlement flow details).
+
+## Ethereum Lock Deadline
+
+Every Ethereum lock is bound to one auction window and carries that window's
+lock deadline (issue 203). After the deadline, anyone may `reclaim` an open
+lock to its depositor on Ethereum. Before it, only a proven Aptos
+`AuctionOutcome` releases the lock.
+
+- **Window close.** `auction::current_window_id` splits each 43 200 s epoch at
+  offset 28 500 s. Window `w` closes at
+  `close(w) = (w / 2) * 43200 + (w even ? 28500 : 43200)` (unix seconds), the
+  first second of window `w + 1` (`eth_proof::window_close_secs`).
+- **`ETH_RECLAIM_DELAY_SECS = 259200` (72 hours)**
+  (`eth_proof::ETH_RECLAIM_DELAY_SECS`, SDK `ETH_RECLAIM_DELAY_SECS`).
+- **`eth_lock_deadline(w) = close(w) + ETH_RECLAIM_DELAY_SECS`**
+  (`auction::eth_lock_deadline`). It is a pure function of the window id,
+  because a lock is made before its window or timelock exists. Aptos
+  registers a lock only with this deadline, so every lock of an auction
+  shares it.
+
+### Settle deadline, stuck deadline and lock deadline
+
+The owner decision of 2026-11-11 (issue 194) keeps two Aptos deadlines apart
+from the Ethereum lock deadline:
+
+- **Settle.** From reveal onward, any account may call `settle`. It honours
+  the cleared fills and stays callable until the window's stuck deadline.
+- **Stuck deadline** (issue 194): the reveal deadline plus the 10-minute
+  opening window (`OPENING_WINDOW_US`) plus the unwind grace. After it, any
+  account may `unwind` the window, and every coin it still holds goes back to
+  its depositor.
+- **Carrier margin:** the time any user needs to fetch the outcome proof from
+  an Atomica node and call `LockBox.recordOutcome` on Ethereum, including any
+  light client epoch advance.
+
+The order is a protocol invariant:
+
+```
+stuck deadline + carrier margin  <  eth_lock_deadline(window_id)
+```
+
+So unwind and outcome carrying always finish before Ethereum reclaim opens,
+and a reclaim never races an outcome that Aptos already finalized. Issue 194
+makes `create_auction` and `submit_bid` abort when a window breaks it.
+
+| Segment | Budget within the 72 h delay |
+| --- | --- |
+| Window close to reveal deadline (key release) | at most 23 h 50 min |
+| Opening window | 10 min |
+| Unwind grace (stuck deadline) | 24 h |
+| Carrier margin | 24 h |
+| **Total** | **at most 72 h** |
+
+The unwind grace and carrier margin values are set by issue 194 as
+`timelock_config` values. Any choice must keep the sum within
+`ETH_RECLAIM_DELAY_SECS`.
 
 ## Superseded Documents
 

@@ -1,0 +1,256 @@
+{
+  "description": "Outcome tree vectors shared by OutcomeTree.sol (LockBox), atomica::outcome_tree (Move) and settlement/outcome-tree.ts (SDK)",
+  "generator": "buildOutcomeTree in source/atomica-sdk/src/settlement/outcome-tree.ts; tests/outcome-tree.test.ts checks this file against it",
+  "encoding": {
+    "payouts_hash": "keccak256(recipient_0 (20 bytes) || amount_0 (uint256 BE) || ...)",
+    "leaf": "keccak256(0x00 || lock_id || payouts_hash)",
+    "node": "keccak256(0x01 || left || right); a last node without a partner moves up unchanged",
+    "order": "leaves sorted by lock_id ascending; entries are the unsorted input",
+    "proof": "siblings from the leaf up, skipping levels where the node moves up alone"
+  },
+  "cases": [
+    {
+      "name": "1_leaves",
+      "entries": [
+        {
+          "lock_id": "0x4c7ede30b604e961a1f5c18e8a5f5af0df99710196167a7496fddd8b32cb69e5",
+          "payouts": [
+            {
+              "recipient": "0x6B9EaD1b3fE055DBf9c24b7c2c23fF4A5362608B",
+              "amount": "1000"
+            }
+          ]
+        }
+      ],
+      "leaves": [
+        {
+          "lock_id": "0x4c7ede30b604e961a1f5c18e8a5f5af0df99710196167a7496fddd8b32cb69e5",
+          "payouts_hash": "0xb70518a445992e99b5b57c87806e8c30c410214ec35220b91412323a92a0b399",
+          "leaf": "0x3f775ad0ff796e0991ce5a15c22b4fb2aaabbcef25629477cbf572050324a884",
+          "proof": []
+        }
+      ],
+      "root": "0x3f775ad0ff796e0991ce5a15c22b4fb2aaabbcef25629477cbf572050324a884"
+    },
+    {
+      "name": "2_leaves",
+      "entries": [
+        {
+          "lock_id": "0x803214d868a55f50284ebd3eae18aae94acd16e35584423a58aa9a0dd59800f7",
+          "payouts": [
+            {
+              "recipient": "0xEa1Ae982455Eb410F68A740afcB829f43A752191",
+              "amount": "1000"
+            }
+          ]
+        },
+        {
+          "lock_id": "0x5b4e11a41a66bebd134a25ced045bd694f520a4b5f604dc698216720ed9b3195",
+          "payouts": [
+            {
+              "recipient": "0x3d1529634eA171E7eB899983A9E0fd26E79e3C3d",
+              "amount": "2000"
+            },
+            {
+              "recipient": "0x7fcc0c2bB6C65b5413ff3fbD36381BBBf6483E5a",
+              "amount": "8"
+            }
+          ]
+        }
+      ],
+      "leaves": [
+        {
+          "lock_id": "0x5b4e11a41a66bebd134a25ced045bd694f520a4b5f604dc698216720ed9b3195",
+          "payouts_hash": "0x31bddc275acb301352b4918fb558f40878e15d796aac83a5de02a8b73ca4e666",
+          "leaf": "0xb58e67487df3eb0f8136100d39b79133661912db6c86cdaac239e443c7a6da50",
+          "proof": [
+            "0xfe987237b62d8bb979fd829a5891a4ddb88b03e67b35c982d6666eea650e93e4"
+          ]
+        },
+        {
+          "lock_id": "0x803214d868a55f50284ebd3eae18aae94acd16e35584423a58aa9a0dd59800f7",
+          "payouts_hash": "0x860a786873023b58838df24c4d79287524327f83501b65c28bd94be86fd6964a",
+          "leaf": "0xfe987237b62d8bb979fd829a5891a4ddb88b03e67b35c982d6666eea650e93e4",
+          "proof": [
+            "0xb58e67487df3eb0f8136100d39b79133661912db6c86cdaac239e443c7a6da50"
+          ]
+        }
+      ],
+      "root": "0x2c0de764b59eee6c83a21bfb0309669b03169e609a8a023da960230825b20c43"
+    },
+    {
+      "name": "3_leaves",
+      "entries": [
+        {
+          "lock_id": "0x5fe9dc5a28229c015cd41e053827e6c4ddabea2b76981e38281aef2192088349",
+          "payouts": [
+            {
+              "recipient": "0xdD5d6E82cd15aE0d73441e4b0f05B40EB72Cb719",
+              "amount": "1000"
+            }
+          ]
+        },
+        {
+          "lock_id": "0x3e0b2ff2c03e729626fd38a127cabd694e12d9ab89df579373cae28b0e2c86f6",
+          "payouts": [
+            {
+              "recipient": "0xBee4FC952206011506b3893F1383dFeFA6f42f4c",
+              "amount": "2000"
+            },
+            {
+              "recipient": "0x035C9dC1B253EF5ff312647fc34E784587788bb4",
+              "amount": "8"
+            }
+          ]
+        },
+        {
+          "lock_id": "0x4e90d3d7d098b9d328813fd7faa5deede0a0f63324235e12f27ab7b072a324aa",
+          "payouts": [
+            {
+              "recipient": "0xfE559aa79cfb7F7396B330714CC9254CA6c3D4b0",
+              "amount": "3000"
+            }
+          ]
+        }
+      ],
+      "leaves": [
+        {
+          "lock_id": "0x3e0b2ff2c03e729626fd38a127cabd694e12d9ab89df579373cae28b0e2c86f6",
+          "payouts_hash": "0xcdebfcc30f3a7fcea51ed019ab115f962ec33186add9eeced75c496dfe49d703",
+          "leaf": "0x0c71ceb0baa8d5e92d7176e0ef42f4795659615348d7278f22fbeb165760f381",
+          "proof": [
+            "0xb9bbb4dcbf53339bc0b05d8cf210214c5a03185a4c09de2ea7fb9355d84ce2d3",
+            "0x3c34759adcbac4f94de7f6613c0a5d04d9e2db847091d60fee915d2af5f9cfea"
+          ]
+        },
+        {
+          "lock_id": "0x4e90d3d7d098b9d328813fd7faa5deede0a0f63324235e12f27ab7b072a324aa",
+          "payouts_hash": "0xa9bff72b896b4e2e7396ad1da6856b10ab07cbab80551497be75e8d41cb863f7",
+          "leaf": "0xb9bbb4dcbf53339bc0b05d8cf210214c5a03185a4c09de2ea7fb9355d84ce2d3",
+          "proof": [
+            "0x0c71ceb0baa8d5e92d7176e0ef42f4795659615348d7278f22fbeb165760f381",
+            "0x3c34759adcbac4f94de7f6613c0a5d04d9e2db847091d60fee915d2af5f9cfea"
+          ]
+        },
+        {
+          "lock_id": "0x5fe9dc5a28229c015cd41e053827e6c4ddabea2b76981e38281aef2192088349",
+          "payouts_hash": "0x9b773ca33f5e3f4b7c6c2c08b4ea88104bb739143dbf4c34d2c5488ade7a0caf",
+          "leaf": "0x3c34759adcbac4f94de7f6613c0a5d04d9e2db847091d60fee915d2af5f9cfea",
+          "proof": [
+            "0x1b658344cce13056f207fb04a75f0165aca89f5b5b3c0b2c9000d8ee8e33d739"
+          ]
+        }
+      ],
+      "root": "0xdf2d64c259652f9abf9a6d9c8e07abf48f07c9fe50c97e98b17a33057f20fcc2"
+    },
+    {
+      "name": "5_leaves",
+      "entries": [
+        {
+          "lock_id": "0xf1820b5c0123ae536bfd759e2ca9484baefae2e63cac701c06aee85db59a5b62",
+          "payouts": [
+            {
+              "recipient": "0xB35e5276320578ff06514CADd30048a3A2C563CC",
+              "amount": "1000"
+            }
+          ]
+        },
+        {
+          "lock_id": "0xbc36fd8d1b1533535a10de78c26c25e1152f7f7945923f5453da7b77a0251cec",
+          "payouts": [
+            {
+              "recipient": "0x4F9138CFC86c6FBE9424c2c964e2e3740C7cb027",
+              "amount": "2000"
+            },
+            {
+              "recipient": "0xe5240eEcCfdE5EE9aD419a5B34F4978004a18704",
+              "amount": "8"
+            }
+          ]
+        },
+        {
+          "lock_id": "0xb7e9437a3b349fcd6bbdf556931d6f2e1fc923510efdd5e9d1e1b074ad5ecc14",
+          "payouts": [
+            {
+              "recipient": "0x5BB0A325b89B6b64B807725ef4D39fFAdA9F3b82",
+              "amount": "3000"
+            }
+          ]
+        },
+        {
+          "lock_id": "0xb00bed94dc6fb9958709324d012d24dbd86ec2301824b31f6c27937b2eaa71a6",
+          "payouts": [
+            {
+              "recipient": "0xA5A1B82638da1C4d31131E7403bBB996cB3ba090",
+              "amount": "4000"
+            },
+            {
+              "recipient": "0x562CA9F65C2544Fa4b1BBE8BB17E4EAB37736f45",
+              "amount": "10"
+            }
+          ]
+        },
+        {
+          "lock_id": "0xfcdba792b7ce280f23e522f0f0e4a1ed6b7b4e4230cfb38cfe889734bba08819",
+          "payouts": [
+            {
+              "recipient": "0x7519b08Cf821cB9F64DF706E31A30DB876BcF3d6",
+              "amount": "5000"
+            }
+          ]
+        }
+      ],
+      "leaves": [
+        {
+          "lock_id": "0xb00bed94dc6fb9958709324d012d24dbd86ec2301824b31f6c27937b2eaa71a6",
+          "payouts_hash": "0x2712eabdfb3b160d2ef9630314ea10e8bf757f885727de0e45c87253df66ba35",
+          "leaf": "0x613c09760d544508a001af3d0ca791df3726f79df087f19efb23b8432efb243f",
+          "proof": [
+            "0xedc9f0b11025b4c89511f16ee6a698371e035925c177ff5836faeeb837dd6bdb",
+            "0xce012cf6ed4b77a920a1eb286a6492d05b3658c90b0d2a75de3bc8614ce5cb7c",
+            "0x7d075c315a0226e77f7fe3cd33059b06ee56a8474a079bf87036d922a8904761"
+          ]
+        },
+        {
+          "lock_id": "0xb7e9437a3b349fcd6bbdf556931d6f2e1fc923510efdd5e9d1e1b074ad5ecc14",
+          "payouts_hash": "0x96bf6c2a23082d8153c4a78ab5430b51ff89ef3543ff016d6856c9bac8e4ec37",
+          "leaf": "0xedc9f0b11025b4c89511f16ee6a698371e035925c177ff5836faeeb837dd6bdb",
+          "proof": [
+            "0x613c09760d544508a001af3d0ca791df3726f79df087f19efb23b8432efb243f",
+            "0xce012cf6ed4b77a920a1eb286a6492d05b3658c90b0d2a75de3bc8614ce5cb7c",
+            "0x7d075c315a0226e77f7fe3cd33059b06ee56a8474a079bf87036d922a8904761"
+          ]
+        },
+        {
+          "lock_id": "0xbc36fd8d1b1533535a10de78c26c25e1152f7f7945923f5453da7b77a0251cec",
+          "payouts_hash": "0x23638cb13e46e088301685d7c684b0c5c6cfc4816fefdb4195f6439d9cbc0579",
+          "leaf": "0xcfe6333f29b37e2610fb4d6db3c7ed1d6bfc80f7523d15b8da39b2fd99d886ef",
+          "proof": [
+            "0x3e6e96dbe8dfe914f28f75a8fc2fd74e2169d7cef8c9afbb2bda0d45eac0fec3",
+            "0x922c3f86d6859eb4f6462aec05fbb288a0d6f24b25ceff441016483d9343336e",
+            "0x7d075c315a0226e77f7fe3cd33059b06ee56a8474a079bf87036d922a8904761"
+          ]
+        },
+        {
+          "lock_id": "0xf1820b5c0123ae536bfd759e2ca9484baefae2e63cac701c06aee85db59a5b62",
+          "payouts_hash": "0xbb79f6157a28e9701e0e7d7d964e7cfd27927b91565d323a90686df97d4ea65a",
+          "leaf": "0x3e6e96dbe8dfe914f28f75a8fc2fd74e2169d7cef8c9afbb2bda0d45eac0fec3",
+          "proof": [
+            "0xcfe6333f29b37e2610fb4d6db3c7ed1d6bfc80f7523d15b8da39b2fd99d886ef",
+            "0x922c3f86d6859eb4f6462aec05fbb288a0d6f24b25ceff441016483d9343336e",
+            "0x7d075c315a0226e77f7fe3cd33059b06ee56a8474a079bf87036d922a8904761"
+          ]
+        },
+        {
+          "lock_id": "0xfcdba792b7ce280f23e522f0f0e4a1ed6b7b4e4230cfb38cfe889734bba08819",
+          "payouts_hash": "0xa9cd0567a535cf1cb898512359593d535203441a30aa531005cc63b74c7e7311",
+          "leaf": "0x7d075c315a0226e77f7fe3cd33059b06ee56a8474a079bf87036d922a8904761",
+          "proof": [
+            "0xf9a51079aa295073da6fd1626cc08a2ac89c2cbbc79ea47b446ffe84d86582f6"
+          ]
+        }
+      ],
+      "root": "0xbd068efc8b3a41864838fbb8121048a2835268adf0afd7bc985872dc59cc5c96"
+    }
+  ]
+}

@@ -930,9 +930,10 @@ jobs:
 
   # ── Aptos light client (source/evm-contracts/src/aptos) ────────────────────
   evm-contract-tests:
-    # Forge unit tests of the Aptos light client against the golden vectors
-    # copied from atomica-aptos. foundry.toml sets evm_version prague, so the
-    # EIP-2537 BLS12-381 precompiles exist.
+    # Forge tests of the Aptos light client against the golden vectors copied
+    # from atomica-aptos, and of the proof-gated LockBox (unit, invariant and
+    # real-light-client integration). foundry.toml sets evm_version prague, so
+    # the EIP-2537 BLS12-381 precompiles exist.
     name: EVM Contract Tests (forge)
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
@@ -955,28 +956,35 @@ jobs:
         working-directory: source/evm-contracts
         run: forge build
 
-      # Older contracts predate forge fmt. The light client sources are checked.
-      - name: Check light client formatting
+      # Older contracts predate forge fmt. The light client and LockBox sources are checked.
+      - name: Check light client and LockBox formatting
         working-directory: source/evm-contracts
-        run: forge fmt --check src/aptos test/unit/aptos script/DeployAptosLightClient.s.sol
+        run: >-
+          forge fmt --check src/aptos src/escrow test/unit/aptos test/unit/LockBox.t.sol
+          test/invariant test/integration/LockBoxAptosOutcome.t.sol test/utils/MockAptosLightClient.sol
+          test/utils/OutcomeTreeBuilder.sol script/DeployAptosLightClient.s.sol script/DeployLockBox.s.sol
 
-      - name: Run light client tests (at least 20 must run)
+      - name: Run light client and LockBox tests (at least 60 must run)
         working-directory: source/evm-contracts
         run: |
           set -euo pipefail
-          forge test --match-path 'test/unit/aptos/*' -vv | tee forge-aptos.log
+          forge test --match-path 'test/{unit/aptos/*,unit/LockBox.t.sol,invariant/LockBox*,integration/LockBoxAptosOutcome.t.sol}' -vv | tee forge-aptos.log
           passed=$(grep -oE '[0-9]+ tests passed' forge-aptos.log | tail -1 | grep -oE '^[0-9]+' || echo 0)
-          echo "Aptos light client tests passed: $passed"
-          if [ "$passed" -lt 20 ]; then
-            echo "::error::expected at least 20 Aptos light client tests, $passed ran"
+          echo "Light client and LockBox tests passed: $passed"
+          if [ "$passed" -lt 60 ]; then
+            echo "::error::expected at least 60 light client and LockBox tests, $passed ran"
             exit 1
           fi
+          for suite in LockBoxTest OutcomeTreeVectorsTest LockBoxInvariantTest LockBoxAptosOutcomeTest; do
+            grep -q "test/.*:${suite}$" forge-aptos.log || { echo "::error::suite ${suite} did not run"; exit 1; }
+          done
 
   aptos-light-client-live:
     # verifyEvent on anvil (prague) against a live proof from the Atomica
     # validator. Starts the Aptos Docker testnet, so it waits for
     # ready-for-review. The image is built here from the pinned atomica-aptos
-    # binary release, the first one that serves /v1/atomica (issue 201).
+    # binary release. It must serve /v1/atomica (issue 201) and accept the
+    # header attestation genesis (issues 196, 197), so it matches APTOS_VERSION.
     name: Aptos Light Client Live (docker)
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
@@ -984,9 +992,9 @@ jobs:
     timeout-minutes: 45
     env:
       CI_CLASS: system-correctness
-      APTOS_PROOF_RELEASE: binary-55609bcfe3
-      APTOS_PROOF_COMMIT: 55609bcfe36661a6857bb1bd1cad6a88f6ef44d4
-      IMAGE_NAME: atomica-validator:55609bcfe3
+      APTOS_PROOF_RELEASE: binary-52beee31a6
+      APTOS_PROOF_COMMIT: 52beee31a6ec0a64f2471971d202e6b0e2392440
+      IMAGE_NAME: atomica-validator:52beee31a6
     permissions:
       contents: read
     steps:

@@ -80,7 +80,14 @@ export interface LockedBalanceProof {
   lockNonce: string;
   /** LockBox.getLockId(user, token, nonce): the Aptos receipt id */
   lockId: string;
+  /** Lock fields Aptos hashes into the commitment (decimal strings) */
+  amount: string;
+  windowId: string;
+  pairHash: string;
+  deadline: string;
+  /** Storage key of LockBox.commitments[lockId] */
   storageKey: string;
+  /** The proven commitment */
   storageValue: bigint;
   accountProof: string[];
   storageProof: string[];
@@ -248,6 +255,10 @@ function registerLockPayload(
       proof.blockNumber,
       ethers.getBytes(proof.userAddress),
       proof.lockNonce,
+      proof.amount,
+      proof.windowId,
+      ethers.getBytes(proof.pairHash),
+      proof.deadline,
       proof.accountProof.map((p: string) => ethers.getBytes(p)),
       proof.storageProof.map((p: string) => ethers.getBytes(p)),
     ],

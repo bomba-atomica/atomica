@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { ethers } from "ethers";
 import { sealBid, submitBid } from "@atomica/sdk/aptos";
-import { approveFakeUsd, lockFakeUsd } from "@atomica/sdk/ethereum";
+import {
+  approveFakeUsd,
+  currentWindowId,
+  lockBinding,
+  lockFakeUsd,
+} from "@atomica/sdk/ethereum";
 import { getDerivedAddress } from "@atomica/sdk";
 import { useWallet } from "../context/WalletContext";
 import { saveBidPrice } from "../storage/bidStorage";
@@ -26,7 +31,7 @@ import { saveBidPrice } from "../storage/bidStorage";
  *     identifies the `LockReceipt<Ethereum, FakeUSD>` that will be consumed
  *     on the Aptos side by `auction::submit_bid`.
  *
- *     In the production flow the lock ID is derived from the `TokensLocked`
+ *     In the production flow the lock ID is derived from the `Locked`
  *     event on the lock transaction receipt and a state-proof is generated
  *     off-chain.  Full proof generation for FakeUSD is deferred to the same
  *     pipeline as FakeETH (already implemented for the seller path); here the
@@ -85,11 +90,18 @@ export function AuctionBidder() {
       await approveFakeUsd(provider, amountWei);
       setLockStatus("Approved. Waiting for MetaMask — Lock FakeUSD...");
 
-      // 2. Lock FakeUSD in LockBox as collateral margin.
-      const lockReceipt = await lockFakeUsd(provider, amountWei);
+      // 2. Lock FakeUSD in LockBox as collateral margin, bound to the
+      //    current window and the scaffold pair (empty pair BCS). Step 2
+      //    starts on that window.
+      const binding = lockBinding(
+        currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
+        new Uint8Array(0),
+      );
+      const lockReceipt = await lockFakeUsd(provider, amountWei, binding);
+      setWindowId(binding.windowId.toString());
 
       // In the full proof-generation flow the lock ID is derived from the
-      // TokensLocked event via a state proof (same as the FakeETH seller path).
+      // Locked event via a state proof (same as the FakeETH seller path).
       // For this Phase 3b scaffold we pre-fill the field with the transaction
       // hash as a placeholder so the flow compiles end-to-end.  The user can
       // override the field before submitting the bid.

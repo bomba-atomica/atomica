@@ -6,14 +6,9 @@
  */
 
 export {
-  getLockKey,
   getLockId,
   calculateLockStorageKey,
-  LOCK_AMOUNTS_SLOT,
-  calculateLockedBalanceStorageKey,
-  calculateUnlockTimeStorageKey,
-  verifyStorageKeyCalculation,
-  calculateBatchStorageKeys,
+  LOCK_COMMITMENTS_SLOT,
 } from "./storage-key.js";
 
 export {
@@ -23,4 +18,5 @@ export {
   formatProof,
   type StorageProof,
   type LockedBalanceProof,
+  type LockTerms,
 } from "./generator.js";

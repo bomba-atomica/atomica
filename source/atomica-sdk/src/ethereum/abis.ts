@@ -26,6 +26,35 @@ export const FAKE_ETH_ABI = [
   "function MAX_MINT_AMOUNT() view returns (uint256)",
 ] as const;
 
+// LockBox ABI - proof-gated escrow (source/evm-contracts/src/escrow/LockBox.sol).
+// A lock leaves only by releaseByOutcome (a proven Aptos AuctionOutcome) or by
+// reclaim to its depositor after its deadline. Anyone may call either.
+export const LOCKBOX_ABI = [
+  "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) returns (bytes32 lockId)",
+  "function reclaim((address depositor, address token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) l, (bytes32 lockId, bytes32 payoutsHash, uint256 index, bytes32[] proof)[] neighbours)",
+  "function releaseByOutcome((address depositor, address token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) l, (address recipient, uint256 amount)[] payouts, (uint256 index, bytes32[] proof) leaf)",
+  "function getLockId(address depositor, address token, uint256 nonce) pure returns (bytes32)",
+  "function auctionKey(uint64 windowId, bytes32 pairHash, uint64 deadline) pure returns (bytes32)",
+  "function commitmentStorageKey(bytes32 lockId) pure returns (bytes32)",
+  "function commitments(bytes32 lockId) view returns (bytes32)",
+  "function statuses(bytes32 lockId) view returns (uint8)",
+  "function outcomes(bytes32 auctionKey) view returns (bytes32 root, uint64 leafCount)",
+  "function auctionReclaimed(bytes32 auctionKey) view returns (bool)",
+  "function nextLockNonce() view returns (uint256)",
+  "event Locked(bytes32 indexed lockId, address indexed depositor, address indexed token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)",
+  "event OutcomeRecorded(bytes32 indexed auctionKey, uint64 windowId, bytes32 pairHash, uint64 deadline, bytes32 root, uint64 leafCount, uint64 aptosVersion)",
+  "event LockReleased(bytes32 indexed lockId, bytes32 indexed auctionKey)",
+  "event LockReclaimed(bytes32 indexed lockId, address indexed depositor, uint256 amount)",
+] as const;
+
+/** `LockBox.Status`: a lock leaves Open once. */
+export const LOCK_STATUS = {
+  None: 0,
+  Open: 1,
+  Released: 2,
+  Reclaimed: 3,
+} as const;
+
 // FakeUSD ABI - ERC20 with mint function and 6 decimals
 export const FAKE_USD_ABI = [
   // ERC20 Standard

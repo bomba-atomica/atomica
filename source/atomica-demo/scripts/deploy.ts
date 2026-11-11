@@ -41,10 +41,30 @@ function siweDomain(): string {
 }
 
 const ETH_RPC_URL = process.env.ETH_RPC_URL || "http://localhost:8545";
-// LockBox settlementAuthority (immutable). Empty or unset: the deployer.
-const RELAYER_ADDRESS = process.env.RELAYER_ADDRESS?.trim() || undefined;
-if (RELAYER_ADDRESS !== undefined && !ethers.isAddress(RELAYER_ADDRESS)) {
-  throw new Error(`RELAYER_ADDRESS is not an address: ${RELAYER_ADDRESS}`);
+/**
+ * LockBox constructor inputs. LockBox releases a lock only on an Aptos
+ * AuctionOutcome proven by the Aptos light client, or by reclaim after its
+ * deadline. LIGHT_CLIENT is the AptosLightClient address
+ * (evm-contracts/script/DeployAptosLightClient.s.sol). Unset: a stand-in
+ * address, so outcomes cannot be recorded and every lock goes home by reclaim.
+ */
+const LIGHT_CLIENT =
+  process.env.LIGHT_CLIENT?.trim() ||
+  "0x000000000000000000000000000000000000dEaD";
+
+/** BCS TypeTag of `<atomica>::auction::AuctionOutcome`. */
+function auctionOutcomeTypeTag(atomicaAddress: string): string {
+  const name = (s: string) =>
+    ethers.concat([new Uint8Array([s.length]), ethers.toUtf8Bytes(s)]);
+  return ethers.hexlify(
+    ethers.concat([
+      new Uint8Array([7]),
+      ethers.zeroPadValue(atomicaAddress, 32),
+      name("auction"),
+      name("AuctionOutcome"),
+      new Uint8Array([0]),
+    ]),
+  );
 }
 const APTOS_URL = process.env.APTOS_URL || "http://localhost:8080";
 
@@ -145,8 +165,7 @@ async function deployEthereumContracts() {
   const fakeUSDAddress = await fakeUSDContract.getAddress();
   console.log(`  ✓ FakeUSD deployed at: ${fakeUSDAddress}`);
 
-  const settlementAuthority = RELAYER_ADDRESS ?? deployerAddress;
-  console.log(`  LockBox settlementAuthority: ${settlementAuthority}`);
+  console.log(`  LockBox light client: ${LIGHT_CLIENT}`);
   console.log("  Deploying LockBox...");
   const lockBoxContract = await deployWithRetry(
     new ethers.ContractFactory(
@@ -155,8 +174,13 @@ async function deployEthereumContracts() {
       ethSigner,
     ),
     ethSigner,
-    // settlementAuthority: the relayer key that releases locks on Aptos outcomes.
-    [fakeETHAddress, fakeUSDAddress, settlementAuthority],
+    // No relayer: outcomes are proven through the Aptos light client.
+    [
+      fakeETHAddress,
+      fakeUSDAddress,
+      LIGHT_CLIENT,
+      auctionOutcomeTypeTag(APTOS_DEPLOYER_ADDRESS),
+    ],
   );
   const lockBoxAddress = await lockBoxContract.getAddress();
   console.log(`  ✓ LockBox deployed at: ${lockBoxAddress}`);

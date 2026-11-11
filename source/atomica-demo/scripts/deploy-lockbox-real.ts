@@ -19,6 +19,10 @@ import { existsSync } from "fs";
 import { readFileSync } from "fs";
 import { execSync } from "child_process";
 import { generateLockedBalanceProof } from "../src/lib/ethereum/proofs/generator";
+import {
+  currentWindowId,
+  lockBinding,
+} from "@atomica/sdk/ethereum/lock-binding";
 import { serializeProofForAptos } from "../src/lib/ethereum/proofs/index";
 import type {
   TokenContract,
@@ -124,8 +128,13 @@ async function main() {
       "LockBox",
       lockBoxArtifact.abi,
       lockBoxArtifact.bytecode.object,
-      // settlementAuthority: the deployer relays Aptos outcomes here.
-      [fakeETHAddress, fakeUSDAddress, deployerAccount.address],
+      // Ethereum-only fixture run: no light client, dev Atomica address 0xcafe.
+      [
+        fakeETHAddress,
+        fakeUSDAddress,
+        "0x000000000000000000000000000000000000dEaD",
+        "0x07000000000000000000000000000000000000000000000000000000000000cafe0761756374696f6e0e41756374696f6e4f7574636f6d6500",
+      ],
     );
 
     const lockBoxAddress = await lockBox.getAddress();
@@ -145,7 +154,19 @@ async function main() {
     console.log("   ✅ Approved");
 
     console.log("   Locking tokens...");
-    tx = await lockBox.lock(fakeETHAddress, amount);
+    // Bound to the current window, empty pair BCS, deadline
+    // auction::eth_lock_deadline(window) (see @atomica/sdk lock-binding).
+    const binding = lockBinding(
+      currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
+      new Uint8Array(0),
+    );
+    tx = await lockBox.lock(
+      fakeETHAddress,
+      amount,
+      binding.windowId,
+      binding.pairHash,
+      binding.deadline,
+    );
     const lockReceipt = await tx.wait();
     console.log("   ✅ Locked");
 
@@ -155,13 +176,13 @@ async function main() {
     const lockBlock = lockReceipt.blockNumber;
     console.log(`   Lock transaction in block: ${lockBlock}`);
 
-    const lockedBalance = await lockBox.getLockedBalance(
-      deployerAccount.address,
-      fakeETHAddress,
+    const lockId = ethers.keccak256(
+      ethers.solidityPacked(
+        ["address", "address", "uint256"],
+        [deployerAccount.address, fakeETHAddress, 0n],
+      ),
     );
-    console.log(
-      `   Locked balance: ${ethers.formatEther(lockedBalance)} FAKETH`,
-    );
+    console.log(`   Lock commitment: ${await lockBox.commitments(lockId)}`);
 
     console.log("\n⏳ Step 5/6: Waiting for finality...");
     console.log(
@@ -186,12 +207,14 @@ async function main() {
       lockBoxAddress,
       deployerAccount.address,
       fakeETHAddress,
+      0n,
+      { amount, ...binding },
       proofBlock,
     );
 
     console.log("   ✅ Proof generated!");
     console.log(`   Block: ${proof.blockNumber}`);
-    console.log(`   Storage value: ${proof.storageValue.toString()}`);
+    console.log(`   Commitment: ${proof.storageValue.toString()}`);
     console.log(`   Account proof nodes: ${proof.accountProof.length}`);
     console.log(`   Storage proof nodes: ${proof.storageProof.length}`);
 

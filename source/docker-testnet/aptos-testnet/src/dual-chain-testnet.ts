@@ -133,6 +133,23 @@ function readArtifact(contractName: string): {
  * (eth_getTransactionReceipt returns -32000 "transaction indexing is in
  * progress" for a short window after startup). On anvil it mines block 1.
  */
+/** Stand-in light client address: this testnet has no Aptos light client on Ethereum. */
+const NO_LIGHT_CLIENT = "0x000000000000000000000000000000000000dEaD";
+
+/** BCS TypeTag of `<atomica>::auction::AuctionOutcome` (LockBox constructor). */
+export function auctionOutcomeTypeTag(atomicaAddress: string): string {
+    const name = (s: string) => ethers.concat([new Uint8Array([s.length]), ethers.toUtf8Bytes(s)]);
+    return ethers.hexlify(
+        ethers.concat([
+            new Uint8Array([7]),
+            ethers.zeroPadValue(atomicaAddress, 32),
+            name("auction"),
+            name("AuctionOutcome"),
+            new Uint8Array([0]),
+        ]),
+    );
+}
+
 async function waitForFirstBlock(provider: ethers.JsonRpcProvider): Promise<void> {
     console.log("[Dual-Chain] Waiting for first block...");
     await waitForEthBlock(provider, 1, 60, "Dual-Chain");
@@ -212,6 +229,10 @@ export async function setupDualChainTestnet(
     console.log(`[Dual-Chain] Deployer: ${deployerAddress}`);
     console.log(`[Dual-Chain] Bidder:   ${bidderAddress}`);
 
+    const aptosModuleAddress =
+        process.env.APTOS_ATOMICA_CONTRACT_ADDRESS ||
+        "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
+
     await waitForFirstBlock(provider);
     ensureCompiled();
 
@@ -230,11 +251,15 @@ export async function setupDualChainTestnet(
     const fakeUSD = await deployContract(deployer, readArtifact("FakeUSD"));
     console.log(`[Dual-Chain] ✓ FakeUSD: ${fakeUSD}`);
 
-    // Only the relayer can release locks, and only on an Aptos outcome.
+    // The proof-gated LockBox: a lock leaves on a proven Aptos AuctionOutcome
+    // or by reclaim after its deadline. This testnet deploys no Aptos light
+    // client, so outcome recording is off here (it reverts) and every lock
+    // still goes home by reclaim. The type tag names the Atomica package below.
     const lockBox = await deployContract(deployer, readArtifact("LockBox"), [
         fakeETH,
         fakeUSD,
-        relayerAddress,
+        NO_LIGHT_CLIENT,
+        auctionOutcomeTypeTag(aptosModuleAddress),
     ]);
     console.log(`[Dual-Chain] ✓ LockBox: ${lockBox}`);
 
@@ -266,9 +291,6 @@ export async function setupDualChainTestnet(
     const aptosDeployerPrivateKey =
         process.env.APTOS_DEPLOYER_PRIVATE_KEY ||
         "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717";
-    const aptosModuleAddress =
-        process.env.APTOS_ATOMICA_CONTRACT_ADDRESS ||
-        "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 
     // Fund the deployer so it can deploy contracts.
     await aptosTestnet.faucet(aptosModuleAddress, 100_000_000_000n);
