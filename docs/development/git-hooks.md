@@ -50,3 +50,11 @@ If you need to bypass the hooks in an emergency (not recommended), you can use t
 ```bash
 git commit -m "your message" --no-verify
 ```
+
+## Pre-push Hook
+
+The `pre-push` hook (`.githooks/pre-push`) runs the documentation rules, then builds, lints and format-checks each TypeScript module.
+
+### Docs-only pushes
+
+A push that changes only docs skips the build, lint and format checks. The documentation rules still run. A file counts as docs if it ends in `.md`, or ends in `.txt` outside `source/` and `lib/`. This is the same rule as the CI job "Detect docs-only change" in `.github/workflows/test-web.yaml`. A rename counts both paths, so renaming code to `.md` is not docs-only. When the hook cannot tell (an unknown base commit, an empty diff, a git error), it treats the push as a code change and runs every check.

@@ -17,6 +17,51 @@ else
     echo "⚠️ scripts/check-docs.js not found. Skipping documentation check."
 fi
 
+# --------------------------------------------------
+# 0b. Docs-only push: skip the code checks
+# --------------------------------------------------
+# A push that changes only docs cannot break a build, lint or format check, so
+# the module checks below are skipped. The docs rule matches the CI job
+# "Detect docs-only change" (.github/workflows/test-web.yaml): a file is docs
+# if it ends in .md, or ends in .txt outside source/ and lib/. Any doubt
+# (unknown base, empty diff, a git error) counts as a code change.
+docs_only_push() {
+    local zero="0000000000000000000000000000000000000000"
+    local saw_ref=0 local_ref local_sha remote_ref remote_sha base files file
+    while read -r local_ref local_sha remote_ref remote_sha; do
+        [ -n "$local_sha" ] || continue
+        # A branch delete pushes no files.
+        [ "$local_sha" = "$zero" ] && continue
+        saw_ref=1
+        if [ "$remote_sha" = "$zero" ]; then
+            # New branch: compare with where it left the default branch.
+            base=$(git merge-base "$local_sha" origin/main 2>/dev/null) || return 1
+        else
+            base=$remote_sha
+            git cat-file -e "$base^{commit}" 2>/dev/null || return 1
+        fi
+        # --no-renames lists both paths of a rename, so renaming code to .md
+        # is not docs-only.
+        files=$(git diff --name-only --no-renames "$base" "$local_sha" 2>/dev/null) || return 1
+        [ -n "$files" ] || return 1
+        while IFS= read -r file; do
+            case "$file" in
+                *.md) ;;
+                source/*.txt | lib/*.txt) return 1 ;;
+                *.txt) ;;
+                *) return 1 ;;
+            esac
+        done <<<"$files"
+    done
+    [ "$saw_ref" -eq 1 ]
+}
+
+# Git passes the pushed refs on stdin. The docs check above does not read it.
+if docs_only_push; then
+    echo "📄 Docs-only push: skipping build, lint and format checks."
+    exit 0
+fi
+
 # AGENT WARNING: You CANNOT push until code quality checks pass.
 # Do not try to override this hook or bypass it.
 
