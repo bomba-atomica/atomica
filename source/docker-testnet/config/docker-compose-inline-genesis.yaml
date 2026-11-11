@@ -3,7 +3,7 @@
 # validator-0 generates genesis on startup; peers wait for it on the shared volume
 #
 # Image Configuration:
-#   - Defaults to ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:33e4aeda3ea9dff33f9f70244ee3444ad80b3eb2a825f00ba869f663c07ac126
+#   - Defaults to ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:c86881514504e43b12a599152d43f1f6ad6c8453600662378684323a4942d965
 #   - Override with IMAGE_NAME environment variable
 #
 # Architecture:
@@ -24,7 +24,7 @@ services:
   # Validator 0 - Primary (sole genesis generator; peers start alongside it
   # and wait in validator-entrypoint.sh until waypoint.txt is published)
   validator-0:
-    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:33e4aeda3ea9dff33f9f70244ee3444ad80b3eb2a825f00ba869f663c07ac126}"
+    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:c86881514504e43b12a599152d43f1f6ad6c8453600662378684323a4942d965}"
     container_name: atomica-validator-0
     hostname: validator-0
     user: root
@@ -81,7 +81,7 @@ services:
 
   # Validator 1
   validator-1:
-    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:33e4aeda3ea9dff33f9f70244ee3444ad80b3eb2a825f00ba869f663c07ac126}"
+    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:c86881514504e43b12a599152d43f1f6ad6c8453600662378684323a4942d965}"
     container_name: atomica-validator-1
     hostname: validator-1
     user: root
@@ -132,7 +132,7 @@ services:
 
   # Validator 2
   validator-2:
-    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:33e4aeda3ea9dff33f9f70244ee3444ad80b3eb2a825f00ba869f663c07ac126}"
+    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:c86881514504e43b12a599152d43f1f6ad6c8453600662378684323a4942d965}"
     container_name: atomica-validator-2
     hostname: validator-2
     user: root
@@ -183,7 +183,7 @@ services:
 
   # Validator 3
   validator-3:
-    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:33e4aeda3ea9dff33f9f70244ee3444ad80b3eb2a825f00ba869f663c07ac126}"
+    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:c86881514504e43b12a599152d43f1f6ad6c8453600662378684323a4942d965}"
     container_name: atomica-validator-3
     hostname: validator-3
     user: root

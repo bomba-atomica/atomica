@@ -26,7 +26,7 @@ import { DockerTestnet } from "../src/index";
  * - 8GB RAM minimum
  *
  * NOTES:
- * - Uses pre-built images: ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:33e4aeda3ea9dff33f9f70244ee3444ad80b3eb2a825f00ba869f663c07ac126
+ * - Uses pre-built images: ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:c86881514504e43b12a599152d43f1f6ad6c8453600662378684323a4942d965
  * - First run: ~1-2 minutes (image download)
  * - Subsequent runs: ~30-45 seconds
  * - Matches Rust `DockerTestnet` harness pattern
