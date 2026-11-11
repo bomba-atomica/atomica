@@ -360,6 +360,10 @@ verifies them:
   voting power and the aggregate BLS12-381 signature checks out through the
   EIP-2537 precompiles.
 - The event must sit in the signed ledger through its accumulator proofs.
+- Only the latest known epoch's validator set can verify an event. A retired
+  set is no longer bonded, so a proof signed by it reverts with `StaleEpoch`.
+- Trust assumption: the `@atomica` package upgrade key can emit any
+  `AuctionOutcome`, so lock safety at v0.1 also trusts that key (see the ADR).
 
 The verifier has no owner, pause, proxy or trusted caller. The old
 `BLSVerifierTestnet` stub, which accepted one deploy-time caller in place of a
