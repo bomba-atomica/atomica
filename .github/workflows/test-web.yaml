@@ -983,7 +983,8 @@ jobs:
     # verifyEvent on anvil (prague) against a live proof from the Atomica
     # validator. Starts the Aptos Docker testnet, so it waits for
     # ready-for-review. The image is built here from the pinned atomica-aptos
-    # binary release, the first one that serves /v1/atomica (issue 201).
+    # binary release. It must serve /v1/atomica (issue 201) and accept the
+    # header attestation genesis (issues 196, 197), so it matches APTOS_VERSION.
     name: Aptos Light Client Live (docker)
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
@@ -991,9 +992,9 @@ jobs:
     timeout-minutes: 45
     env:
       CI_CLASS: system-correctness
-      APTOS_PROOF_RELEASE: binary-55609bcfe3
-      APTOS_PROOF_COMMIT: 55609bcfe36661a6857bb1bd1cad6a88f6ef44d4
-      IMAGE_NAME: atomica-validator:55609bcfe3
+      APTOS_PROOF_RELEASE: binary-52beee31a6
+      APTOS_PROOF_COMMIT: 52beee31a6ec0a64f2471971d202e6b0e2392440
+      IMAGE_NAME: atomica-validator:52beee31a6
     permissions:
       contents: read
     steps:
