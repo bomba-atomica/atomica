@@ -811,6 +811,41 @@ module atomica::auction_tests {
         assert!(alice_status == lock_receipt::status_claimed(), 2);
     }
 
+    // A receipt a live window holds cannot be pulled out through the public
+    // entry functions, so nothing outside settle/refund can revoke it and
+    // make them abort E_INVALID_STATUS. (`claim` and `release` are
+    // package-only, so other modules cannot call them at all.)
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 4, location = atomica::lock_receipt)] // E_RECEIPT_ALREADY_CLAIMED
+    fun test_owner_cannot_pull_collateral_held_by_window(atomica: &signer) {
+        revealed_window(atomica, 5u256);
+        let bob_lock = b"held_collat_bob___lock_32bytes__";
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(bob_lock, @0xB0B, 6_000_000_000u256, 1u64);
+        // submit_bid's claim: the window now holds the receipt.
+        lock_receipt::claim<Ethereum, FakeUSD>(@0xB0B, bob_lock);
+        auction::test_insert_bid_with_qty(
+            atomica, WINDOW_ID, default_pair_bcs(), @0xB0B, b"c", bob_lock, 3u256,
+        );
+        let bob = aptos_framework::account::create_signer_for_test(@0xB0B);
+        atomica::fake_usd::mint_from_lock(&bob, bob_lock);
+    }
+
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 4, location = atomica::lock_receipt)] // E_RECEIPT_ALREADY_CLAIMED
+    fun test_owner_cannot_pull_seller_receipt_held_by_window(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        let lock_id = b"eth_lock_receipt_of_derived_user";
+        insert_eth_receipt(atomica, lock_id, DERIVED_OWNER, 1_000_000_000_000_000_000u256);
+        let owner = aptos_framework::account::create_signer_for_test(DERIVED_OWNER);
+        auction::create_auction(
+            &owner, auction::current_window_id(), default_pair_bcs(), lock_id, 2000u64,
+            TIMELOCK_ID, vector::empty<u8>(),
+        );
+        atomica::fake_eth::mint_from_lock(&owner, lock_id);
+    }
+
     // test_settle_applies_fee_rebates
     //
     // After settle(), compute_rebates returns a vector of Rebate entries for all

@@ -257,8 +257,11 @@ module atomica::lock_receipt {
     /// Only receipts in STATUS_CLAIMED state can be released — releasing an
     /// already-active or revoked receipt aborts with E_INVALID_STATUS.
     ///
+    /// Package-only: a module outside @atomica cannot revoke a receipt a live
+    /// window holds, so it cannot make settle or a refund abort.
+    ///
     /// @see docs/architecture/v0-architecture.md §2.8
-    public fun release<Chain, Asset>(
+    public(package) fun release<Chain, Asset>(
         lock_id: vector<u8>,
     ) acquires ReceiptRegistry {
         assert!(
@@ -288,7 +291,11 @@ module atomica::lock_receipt {
     /// a receipt and mint the corresponding tokens.
     ///
     /// Returns the amount to be minted.
-    public fun claim<Chain, Asset>(
+    ///
+    /// Package-only: `claimer` must be the address of a signer the calling
+    /// @atomica entry function holds. A module outside the package could pass
+    /// any owner's address, so it cannot call this.
+    public(package) fun claim<Chain, Asset>(
         claimer: address,
         lock_id: vector<u8>,
     ): u256 acquires ReceiptRegistry {
