@@ -42,7 +42,7 @@ import {
   settleAuctionDirect,
   getAuctionState,
   getReceiptStatus,
-  RECEIPT_CLAIMED,
+  RECEIPT_FILLED,
   type LiveWindow,
 } from "./helpers/auction-setup";
 import { ClaimButton } from "../../src/components/ClaimButton";
@@ -118,7 +118,7 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
     derivedAddress = (await getDerivedAddress(ethAddress.toLowerCase())).toString();
     await commands.fundAccount(derivedAddress, 500_000_000);
 
-    collateral = await lockBidCollateral(fixture, aptosClient, operator);
+    collateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
       minPrice: MIN_PRICE,
@@ -184,13 +184,14 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
       expect(results.map((r) => [r.isWinner, r.fillAmount])).toEqual([
         [true, BID_QUANTITY],
       ]);
-      // The winner's collateral and the partly filled seller lock stay claimed.
+      // The winner's collateral pays the seller and the partly filled seller
+      // lock pays the winner: both are filled (issue 194).
       expect(
         await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", collateral),
-      ).toBe(RECEIPT_CLAIMED);
+      ).toBe(RECEIPT_FILLED);
       expect(
         await getReceiptStatus(aptosClient, moduleAddr, "FakeETH", auction.sellerLockId),
-      ).toBe(RECEIPT_CLAIMED);
+      ).toBe(RECEIPT_FILLED);
 
       const balanceBefore = await getFakeEthBalance(derivedAddress);
 

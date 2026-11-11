@@ -62,7 +62,9 @@ const PRICE_STEP = 10_000n;
 const SUPPLY = ethers.parseEther("5");
 const BID_QUANTITY = ethers.parseEther("0.1");
 /** FakeUSD per bid. 100 locks must fit one 10,000 FakeUSD MAX_MINT_AMOUNT. */
-const COLLATERAL = 50n * 10n ** 6n;
+// A winner pays 0.1 FakeETH at the clearing price (USD per whole FakeETH,
+// `quoteForFill`), at most 0.1 * 1_990_000 = 199_000 USD.
+const COLLATERAL = 200_000n * 10n ** 6n;
 const PAIR_BCS = new TextEncoder().encode("16-settle-100-bids");
 const DEADLINE_AHEAD_US = 300_000_000n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
@@ -129,6 +131,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
       fixture,
       aptosClient,
       operator,
+      PAIR_BCS,
       BID_COUNT,
       COLLATERAL,
     );

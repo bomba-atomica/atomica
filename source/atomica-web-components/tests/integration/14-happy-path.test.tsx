@@ -121,7 +121,7 @@ import {
   submitAsEthAccount,
   ethAccountAddress,
   pollUntil,
-  RECEIPT_CLAIMED,
+  RECEIPT_FILLED,
   TEST_PAIR_BCS,
 } from "./helpers/auction-setup";
 import { Faucet } from "../../src/components/Faucet";
@@ -175,8 +175,10 @@ const BID_PRICE_USD = "$2.00";
 /** Bid quantity in wei of FakeETH. */
 const BID_QUANTITY = ethers.parseEther("1");
 /** FakeUSD collateral locked for the bid (6 decimals). */
-const COLLATERAL_AMOUNT = 500n * 10n ** 6n;
-const COLLATERAL_MINT = 10_000n * 10n ** 6n;
+// Settle pays 1 FakeETH at BID_PRICE (USD per whole FakeETH, `quoteForFill`)
+// from the collateral: 2 million USD.
+const COLLATERAL_AMOUNT = 2_000_000n * 10n ** 6n;
+const COLLATERAL_MINT = 10_000_000n * 10n ** 6n;
 /**
  * How far ahead of the chain clock the timelock deadline is set. The bid must
  * land before it: create_auction, the Step8Monitor check and the sealed bid
@@ -680,12 +682,13 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       expect(state.clearingPrice).toBe(BID_PRICE);
       expect(state.bidCount).toBe(1n);
 
-      // The winning collateral and the filled seller lock stay claimed.
+      // The winning collateral pays the seller and the seller lock pays the
+      // winner: both are filled (issue 194).
       expect(
         await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", collateralLockId),
-      ).toBe(RECEIPT_CLAIMED);
+      ).toBe(RECEIPT_FILLED);
       expect(await getReceiptStatus(aptosClient, moduleAddr, "FakeETH", lockId)).toBe(
-        RECEIPT_CLAIMED,
+        RECEIPT_FILLED,
       );
 
       console.log(`[14-happy-path] Window ${windowId} settled at clearing price ${state.clearingPrice}`);

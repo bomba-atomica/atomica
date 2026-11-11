@@ -217,4 +217,129 @@ module atomica::lock_receipt_tests {
         // Same data should produce same ID
         assert!(id1 == id3, 2);
     }
+
+    // ===================== Terminal outcomes and cancel (issue 194) =====================
+
+    const OWNER_194: address = @0xA11CE;
+    const DELAY_US: u64 = 86_400_000_000; // timelock_config::get_receipt_cancel_delay_us
+
+    fun cancel_setup(framework: &signer, atomica: &signer): vector<u8> {
+        setup_timestamp(framework);
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        let lock_id = b"cancel_test_lock_id_32bytes_____";
+        // Registered at time 0.
+        lock_receipt::insert_test_receipt<Ethereum, FakeETH>(lock_id, OWNER_194, 1000u256, 1);
+        lock_id
+    }
+
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 14, location = atomica::lock_receipt)] // E_CANCEL_TOO_EARLY
+    fun cancel_unauctioned_before_delay_aborts(framework: &signer, atomica: &signer) {
+        let lock_id = cancel_setup(framework, atomica);
+        assert!(atomica::timelock_config::get_receipt_cancel_delay_us() == DELAY_US, 1);
+        timestamp::update_global_time_for_test(DELAY_US - 1);
+        let stranger = aptos_framework::account::create_signer_for_test(@0x7777);
+        lock_receipt::cancel_unauctioned<Ethereum, FakeETH>(&stranger, lock_id);
+    }
+
+    // A non-owner cancels an ACTIVE receipt after the delay: it returns to its depositor
+    // with an outcome record, and no window can claim it any more.
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun cancel_unauctioned_after_delay(framework: &signer, atomica: &signer) {
+        let lock_id = cancel_setup(framework, atomica);
+        timestamp::update_global_time_for_test(DELAY_US);
+        let stranger = aptos_framework::account::create_signer_for_test(@0x7777);
+        lock_receipt::cancel_unauctioned<Ethereum, FakeETH>(&stranger, lock_id);
+        assert!(lock_receipt::get_receipt_status<Ethereum, FakeETH>(lock_id) == lock_receipt::status_revoked(), 1);
+        let (kind, window_id, recipients, amounts) = lock_receipt::get_lock_outcome<Ethereum, FakeETH>(lock_id);
+        assert!(kind == lock_receipt::status_revoked() && window_id == 0, 2);
+        assert!(recipients == vector[lock_receipt::test_eth_owner(OWNER_194)], 3);
+        assert!(amounts == vector[1000u256], 4);
+        let events = aptos_framework::event::emitted_events<lock_receipt::LockOutcomeRecorded<Ethereum, FakeETH>>();
+        assert!(vector::length(&events) == 1, 5);
+        let (e_id, e_kind, e_window, e_to, e_amounts) =
+            lock_receipt::test_lock_outcome_event_fields(vector::borrow(&events, 0));
+        assert!(e_id == lock_id && e_kind == kind && e_window == window_id, 6);
+        assert!(e_to == recipients && e_amounts == amounts, 7);
+    }
+
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 4, location = atomica::lock_receipt)] // E_RECEIPT_ALREADY_CLAIMED
+    fun cancelled_receipt_cannot_be_claimed(framework: &signer, atomica: &signer) {
+        let lock_id = cancel_setup(framework, atomica);
+        timestamp::update_global_time_for_test(DELAY_US);
+        let stranger = aptos_framework::account::create_signer_for_test(@0x7777);
+        lock_receipt::cancel_unauctioned<Ethereum, FakeETH>(&stranger, lock_id);
+        lock_receipt::claim_for_window<Ethereum, FakeETH>(OWNER_194, lock_id, 0, vector::empty());
+    }
+
+    // A receipt a window holds cannot be cancelled: the window gives it its outcome.
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 7, location = atomica::lock_receipt)] // E_INVALID_STATUS
+    fun cancel_unauctioned_claimed_aborts(framework: &signer, atomica: &signer) {
+        let lock_id = cancel_setup(framework, atomica);
+        lock_receipt::claim<Ethereum, FakeETH>(OWNER_194, lock_id);
+        timestamp::update_global_time_for_test(DELAY_US);
+        let stranger = aptos_framework::account::create_signer_for_test(@0x7777);
+        lock_receipt::cancel_unauctioned<Ethereum, FakeETH>(&stranger, lock_id);
+    }
+
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 12, location = atomica::lock_receipt)] // E_WRONG_BINDING
+    fun claim_for_window_rejects_another_window(framework: &signer, atomica: &signer) {
+        let lock_id = cancel_setup(framework, atomica);
+        lock_receipt::claim_for_window<Ethereum, FakeETH>(OWNER_194, lock_id, 1, vector::empty());
+    }
+
+    fun claimed_lock(framework: &signer, atomica: &signer): vector<u8> {
+        let lock_id = cancel_setup(framework, atomica);
+        lock_receipt::claim<Ethereum, FakeETH>(OWNER_194, lock_id);
+        lock_id
+    }
+
+    // A filled outcome pays a counterparty: the receipt becomes FILLED.
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun record_outcome_marks_a_paying_lock_filled(framework: &signer, atomica: &signer) {
+        let lock_id = claimed_lock(framework, atomica);
+        let buyer = x"00000000000000000000000000000000000000b1";
+        lock_receipt::record_outcome<Ethereum, FakeETH>(
+            lock_id, vector[buyer, lock_receipt::test_eth_owner(OWNER_194)], vector[600u256, 400u256],
+        );
+        assert!(lock_receipt::get_receipt_status<Ethereum, FakeETH>(lock_id) == lock_receipt::status_filled(), 1);
+    }
+
+    // Unpayable leaves are refused before any outcome is emitted.
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 13, location = atomica::lock_receipt)] // E_UNPAYABLE_OUTCOME
+    fun record_outcome_rejects_a_zero_recipient(framework: &signer, atomica: &signer) {
+        let lock_id = claimed_lock(framework, atomica);
+        lock_receipt::record_outcome<Ethereum, FakeETH>(
+            lock_id, vector[x"0000000000000000000000000000000000000000"], vector[1000u256],
+        );
+    }
+
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 13, location = atomica::lock_receipt)] // E_UNPAYABLE_OUTCOME
+    fun record_outcome_rejects_a_short_recipient(framework: &signer, atomica: &signer) {
+        let lock_id = claimed_lock(framework, atomica);
+        lock_receipt::record_outcome<Ethereum, FakeETH>(lock_id, vector[x"b1"], vector[1000u256]);
+    }
+
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 13, location = atomica::lock_receipt)] // E_UNPAYABLE_OUTCOME
+    fun record_outcome_rejects_a_wrong_sum(framework: &signer, atomica: &signer) {
+        let lock_id = claimed_lock(framework, atomica);
+        lock_receipt::record_outcome<Ethereum, FakeETH>(
+            lock_id, vector[lock_receipt::test_eth_owner(OWNER_194)], vector[999u256],
+        );
+    }
+
+    // A lock gets one outcome: a second record aborts.
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 7, location = atomica::lock_receipt)] // E_INVALID_STATUS
+    fun record_outcome_runs_once(framework: &signer, atomica: &signer) {
+        let lock_id = claimed_lock(framework, atomica);
+        lock_receipt::return_to_depositor<Ethereum, FakeETH>(lock_id);
+        lock_receipt::return_to_depositor<Ethereum, FakeETH>(lock_id);
+    }
 }

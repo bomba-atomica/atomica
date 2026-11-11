@@ -15,10 +15,12 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 | `atomica::auction` | `create_auction` | live |
 | `atomica::auction` | `submit_bid` | live (V2 bid ciphertext checked with `ibe::verify_bid_ct`, price commitment) |
 | `atomica::auction` | `open_bid`, `submit_cleartext_and_clear`, `finalize_reveal` | live (openings checked against the commitment; needs registry status `Revealed`) |
-| `atomica::auction` | `refund_expired_window` | live (releases every receipt once the timelock is `Expired`) |
-| `atomica::auction` | `settle` | live (single highest bid; uniform-price clearing is scaffold) |
+| `atomica::auction` | `refund_expired_window` | live (returns every receipt and emits the all-refund `AuctionOutcome` once the timelock is `Expired`) |
+| `atomica::auction` | `settle` | live (honours the cleared fills until the stuck deadline; records every lock's outcome and emits `AuctionOutcome`) |
+| `atomica::auction` | `unwind` | live (any account, from the stuck deadline: returns every lock a window still holds; issue 194) |
 | `atomica::lock_receipt` | `initialize<Chain, Asset>` | live |
 | `atomica::lock_receipt` | `register_ethereum_lock<Asset>` | live (proves the LockBox commitment slot; deadline must equal `auction::eth_lock_deadline(window_id)`) |
+| `atomica::lock_receipt` | `cancel_unauctioned<Chain, Asset>` | live (any account returns an `ACTIVE` receipt after the cancel delay) |
 | `atomica::fake_eth` | `initialize` | live |
 | `atomica::fake_eth` | `mint` | live (legacy faucet) |
 | `atomica::fake_eth` | `mint_from_lock` | retired (aborts `E_RETIRED`; issue 203) |
@@ -32,8 +34,8 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 
 | Module | Function |
 |---|---|
-| `atomica::auction` | `get_auction`, `get_bid_count`, `get_bid_info`, `get_window_status`, `bid_associated_data`, `compute_bid_commitment`, `is_settled`, `auction_exists`, `get_settlement` |
-| `atomica::lock_receipt` | `is_lock_claimed`, `get_total_locked`, `get_receipt_count`, `get_receipt`, `get_receipt_binding`, `is_registry_initialized` |
+| `atomica::auction` | `get_auction`, `get_bid_count`, `get_bid_info`, `get_window_status`, `bid_associated_data`, `compute_bid_commitment`, `is_settled`, `auction_exists`, `get_settlement`, `get_stuck_deadline_us`, `quote_for_fill` |
+| `atomica::lock_receipt` | `is_lock_claimed`, `get_total_locked`, `get_receipt_count`, `get_receipt`, `get_receipt_binding`, `get_lock_outcome`, `is_registry_initialized` |
 | `atomica::fake_eth` | `get_metadata`, `balance` |
 | `atomica::fake_usd` | `get_metadata`, `balance` |
 | `atomica::registry` | `get_aptos_address`, `get_nonce` |

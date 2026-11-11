@@ -19,7 +19,18 @@
 /// 5. `finalize_reveal` closes openings. Unopened bids are invalid. `clear_uniform_price`
 ///    and `settle` follow.
 /// 6. If the timelock ends `Expired` (epoch ended, reveal window elapsed, key check failed)
-///    nothing can be opened and `refund_expired_window` releases every receipt of the window.
+///    nothing can be opened and `refund_expired_window` returns every receipt of the window.
+/// 7. `settle` (until the stuck deadline), `refund_expired_window` or `unwind` (after the
+///    stuck deadline) finalizes the window: every claimed lock gets a terminal outcome
+///    record (`lock_receipt::record_outcome`) and the window emits its one `AuctionOutcome`,
+///    the `outcome_tree` root Ethereum LockBox releases the locks by.
+///
+/// ## Deadlines (docs/specifications/auction-timing.md)
+///
+/// The stuck deadline of a window is its timelock's reveal expiry plus `OPENING_WINDOW_US`
+/// plus `timelock_config::get_unwind_grace_us`. `create_auction` requires
+/// `stuck deadline + carrier margin < eth_lock_deadline(window_id)`, so unwind and the
+/// carrying of the outcome to Ethereum finish before LockBox reclaim opens.
 ///
 /// ## Cleartext (open decision, see the decision doc)
 ///
@@ -46,7 +57,9 @@ module atomica::auction {
     use aptos_framework::reconfiguration;
     use atomica::eth_proof;
     use atomica::lock_receipt::{Self, Ethereum, FakeETH, FakeUSD};
+    use atomica::outcome_tree;
     use atomica::timelock;
+    use atomica::timelock_config;
 
     // ===================== Error Codes =====================
 
@@ -114,6 +127,19 @@ module atomica::auction {
     const E_TIMELOCK_DEADLINE_PASSED: u64 = 30;
     /// `settle` ran before the timelock deadline.
     const E_DEADLINE_NOT_PASSED: u64 = 31;
+    /// `create_auction` got a timelock whose stuck deadline plus the carrier margin is not
+    /// before `eth_lock_deadline(window_id)`: Ethereum reclaim could race the outcome.
+    const E_STUCK_AFTER_LOCK_DEADLINE: u64 = 32;
+    /// `unwind` ran before the window's stuck deadline.
+    const E_NOT_STUCK: u64 = 33;
+    /// `unwind` found nothing left to return: the window is final.
+    const E_WINDOW_FINAL: u64 = 34;
+    /// `settle` ran at or after the window's stuck deadline. Call `unwind`.
+    const E_PAST_STUCK_DEADLINE: u64 = 35;
+    /// The cleared fills do not fit the locks: a fill above the seller supply, or a
+    /// payment above a winner's collateral. Settle aborts; after the stuck deadline
+    /// `unwind` returns every lock to its depositor.
+    const E_UNPAYABLE_FILL: u64 = 36;
 
     // ===================== Bid Constants =====================
 
@@ -127,6 +153,10 @@ module atomica::auction {
     const MAX_BIDS_PER_WINDOW: u64 = 100;
     /// Time after the registry's `reveal_expiry_us` during which unopened bids can still be opened.
     const OPENING_WINDOW_US: u64 = 600_000_000;
+    /// FakeUSD base units per whole FakeUSD (6 decimals).
+    const QUOTE_UNIT: u256 = 1_000_000;
+    /// FakeETH wei per whole FakeETH (18 decimals).
+    const BASE_UNIT: u256 = 1_000_000_000_000_000_000;
 
     // ===================== Fee/Rebate Constants =====================
 
@@ -264,31 +294,20 @@ module atomica::auction {
         opened_count: u64,
     }
 
-    // Emitted by `settle` for a bid that was never opened. Its collateral receipt is not
-    // released. The relayer decides what happens to it.
+    // Emitted by `unwind` with the number of locks it returned to their depositors.
+    // `outcome_emitted` is true when this unwind finalized the window and emitted its
+    // `AuctionOutcome`, false when it returned coins a finalized window still held.
     #[event]
-    struct BidUnopened has drop, store {
-        window_id:          u64,
-        bidder:             address,
-        collateral_lock_id: vector<u8>,
+    struct AuctionUnwound has drop, store {
+        window_id:       u64,
+        pair_bcs:        vector<u8>,
+        returned_count:  u64,
+        outcome_emitted: bool,
     }
 
-    // Emitted by `settle` for the seller supply. `unsold_supply` is `total_supply` minus the
-    // filled amount. When nothing filled, every seller lock receipt is released
-    // (`released` is true) so the relayer can return the locked FakeETH on Ethereum. When
-    // some supply filled, the receipts stay claimed and the relayer returns `unsold_supply`.
-    #[event]
-    struct SellerSupplySettled has drop, store {
-        window_id:     u64,
-        lock_ids:      vector<vector<u8>>,
-        total_supply:  u256,
-        unsold_supply: u256,
-        released:      bool,
-    }
-
-    // Emitted when a window is refunded after its timelock expired.
-    // `reason` is the registry expiry reason: 1 epoch-ended, 2 reveal-window-elapsed,
-    // 3 key-check-failed.
+    // Emitted when a window is refunded: after its timelock expired, or by `unwind` on a
+    // window that never settled. `reason` is the registry expiry reason: 1 epoch-ended,
+    // 2 reveal-window-elapsed, 3 key-check-failed, 0 when the timelock did not expire.
     #[event]
     struct AuctionRefunded has drop, store {
         window_id:        u64,
@@ -300,8 +319,8 @@ module atomica::auction {
         seller_lock_count: u64,
     }
 
-    // The one outcome of an auction on Ethereum. Settle or the permissionless unwind
-    // (issues 194 and 199) emits it once per auction. `dispositions_root` is the
+    // The one outcome of an auction on Ethereum. `settle`, `refund_expired_window` or the
+    // permissionless `unwind`, whichever finalizes the window first, emits it once. `dispositions_root` is the
     // `outcome_tree` root over every lock claimed into the window, and `leaf_count` its
     // number of leaves. LockBox `recordOutcome` verifies it through the Aptos light client
     // and rebuilds the auction key `auction_key(window_id, pair_hash, eth_lock_deadline)`.
@@ -337,6 +356,20 @@ module atomica::auction {
     /// The pair hash of a window: keccak256 of its pair BCS (the window key's pair bytes).
     public fun pair_hash(pair_bcs: vector<u8>): vector<u8> {
         aptos_std::aptos_hash::keccak256(pair_bcs)
+    }
+
+    #[view]
+    /// FakeUSD base units a winner pays for `base_amount` FakeETH wei at `clearing_price`
+    /// (USD per whole FakeETH). Rounds down. Mirrors the SDK `quoteForFill`.
+    public fun quote_for_fill(base_amount: u256, clearing_price: u64): u256 {
+        base_amount * (clearing_price as u256) * QUOTE_UNIT / BASE_UNIT
+    }
+
+    /// Stuck deadline of a window bound to `timelock_id`, in microseconds: the reveal
+    /// expiry plus the opening window plus the unwind grace. `settle` runs strictly before
+    /// it and `unwind` at or after it.
+    fun stuck_deadline_us(timelock_id: u64): u64 {
+        timelock::get_reveal_expiry(timelock_id) + OPENING_WINDOW_US + timelock_config::get_unwind_grace_us()
     }
 
     /// Compute `auction_window_id` from on-chain clock.
@@ -418,6 +451,10 @@ module atomica::auction {
     /// calling this for the same `(window_id, pair)` accumulate into the same
     /// clearing pool.
     ///
+    /// Timing: the timelock's stuck deadline plus the carrier margin must be before
+    /// `eth_lock_deadline(window_id)` (E_STUCK_AFTER_LOCK_DEADLINE). The seller lock must be
+    /// bound to `(window_id, pair_hash(pair_bcs))` (lock_receipt E_WRONG_BINDING).
+    ///
     /// Window validation: only the current window and the immediately next window
     /// are accepted. A stale `window_id` (strictly less than `current_window_id()`)
     /// aborts with E_STALE_WINDOW_ID (6). Windows more than one step ahead are
@@ -462,10 +499,21 @@ module atomica::auction {
         //     never clear.
         assert_timelock_open(timelock_id);
 
-        // 2. Claim the seller's FakeETH LockReceipt to prove on-chain escrow.
-        //    `claim` marks the receipt STATUS_CLAIMED and returns the locked amount.
+        // 1c. Timing order: the stuck deadline plus the carrier margin ends before the
+        //     Ethereum lock deadline, so unwind and outcome carrying finish before reclaim.
+        assert!(
+            stuck_deadline_us(timelock_id) + timelock_config::get_carrier_margin_us()
+                < eth_lock_deadline(window_id) * 1_000_000,
+            E_STUCK_AFTER_LOCK_DEADLINE
+        );
+
+        // 2. Claim the seller's FakeETH LockReceipt to prove on-chain escrow. The lock must
+        //    be bound to this window and pair, so it is a leaf of this auction's outcome.
+        //    The claim marks the receipt STATUS_CLAIMED and returns the locked amount.
         let seller_addr = signer::address_of(seller);
-        let locked_amount = lock_receipt::claim<Ethereum, FakeETH>(seller_addr, lock_id);
+        let locked_amount = lock_receipt::claim_for_window<Ethereum, FakeETH>(
+            seller_addr, lock_id, window_id, pair_hash(pair_bcs),
+        );
 
         // 3. Ensure the global AuctionRegistry exists at @atomica.
         //
@@ -572,7 +620,12 @@ module atomica::auction {
     ///   - `ibe::verify_bid_ct(ciphertext, AD)` accepts, where `AD` is built here from the
     ///     registry and the sender (`bid_associated_data`). A ciphertext made for another
     ///     bidder, auction, epoch, timelock or deadline is rejected;
-    ///   - no bid with the same `H(vk, AD)` is in the window.
+    ///   - no bid with the same `H(vk, AD)` is in the window;
+    ///   - the collateral lock is bound to `(window_id, pair_hash(pair_bcs))`.
+    ///
+    /// The timing order (stuck deadline plus carrier margin before the Ethereum lock
+    /// deadline) holds for every window: `create_auction` checked it for the window's
+    /// timelock, and neither the timelock nor the configured values change.
     ///
     /// `quantity` is the bid quantity in wei (FakeETH base token).
     ///
@@ -586,12 +639,7 @@ module atomica::auction {
         collateral_lock_id: vector<u8>,
         quantity:           u256,
     ) acquires AuctionRegistry {
-        // 1. Consume the bidder's FakeUSD LockReceipt as collateral margin.
         let bidder_addr = signer::address_of(bidder);
-        let _collateral_amount = lock_receipt::claim<Ethereum, FakeUSD>(
-            bidder_addr,
-            collateral_lock_id,
-        );
 
         // 2. Locate the window in the global registry.
         assert!(exists<AuctionRegistry>(@atomica), E_AUCTION_NOT_FOUND);
@@ -623,7 +671,12 @@ module atomica::auction {
             i = i + 1;
         };
 
-        // 6. Store the sealed bid. Zero-quantity and over-supply bids are allowed:
+        // 6. Consume the bidder's FakeUSD LockReceipt bound to this window as collateral.
+        lock_receipt::claim_for_window<Ethereum, FakeUSD>(
+            bidder_addr, collateral_lock_id, window_id, pair_hash(pair_bcs),
+        );
+
+        // 7. Store the sealed bid. Zero-quantity and over-supply bids are allowed:
         //    the clearing step handles both.
         vector::push_back(&mut state.bids, SealedBid {
             bidder: bidder_addr,
@@ -795,13 +848,14 @@ module atomica::auction {
 
     // ===================== Refund =====================
 
-    /// Releases every receipt of a window whose timelock is `Expired`.
+    /// Returns every receipt of a window whose timelock is `Expired` to its depositor.
     ///
     /// The registry status must be `Expired` for any reason (epoch ended, reveal window
     /// elapsed, key check failed). No key exists, so no bid can ever open. Each bidder's
-    /// FakeUSD collateral and each seller's FakeETH lock is released so the relayer can
-    /// return the funds on Ethereum. The window is marked refunded and takes no more bids,
-    /// openings, clearing or settlement. A second call aborts.
+    /// FakeUSD collateral and each seller's FakeETH lock gets the outcome record
+    /// "whole amount to the depositor", and the window emits its one all-refund
+    /// `AuctionOutcome`. The window is marked refunded and takes no more bids, openings,
+    /// clearing or settlement. A second call aborts.
     public entry fun refund_expired_window(
         _caller:   &signer,
         window_id: u64,
@@ -817,23 +871,132 @@ module atomica::auction {
         assert!(!state.refunded, E_WINDOW_REFUNDED);
         let timelock_id = state.timelock_id;
         assert!(timelock::get_status(timelock_id) == timelock::status_expired(), E_TIMELOCK_NOT_EXPIRED);
-        let reason = timelock::get_expiry_reason(timelock_id);
+        refund_internal(state, pair_bcs);
+    }
 
+    /// The all-refund finalization of a window that never settled: every claimed lock goes
+    /// back to its depositor, the window emits its one `AuctionOutcome` and
+    /// `AuctionRefunded`, and is marked refunded. Returns the number of locks returned.
+    fun refund_internal(state: &mut WindowState, pair_bcs: vector<u8>): u64 {
+        let lock_ids = vector::empty<vector<u8>>();
+        let hashes = vector::empty<vector<u8>>();
         let bid_count = vector::length(&state.bids);
         let i = 0u64;
         while (i < bid_count) {
-            lock_receipt::release<Ethereum, FakeUSD>(vector::borrow(&state.bids, i).collateral_lock_id);
+            let id = vector::borrow(&state.bids, i).collateral_lock_id;
+            vector::push_back(&mut hashes, lock_receipt::return_to_depositor<Ethereum, FakeUSD>(id));
+            vector::push_back(&mut lock_ids, id);
             i = i + 1;
         };
         let seller_lock_count = vector::length(&state.lock_ids);
         let j = 0u64;
         while (j < seller_lock_count) {
-            lock_receipt::release<Ethereum, FakeETH>(*vector::borrow(&state.lock_ids, j));
+            let id = *vector::borrow(&state.lock_ids, j);
+            vector::push_back(&mut hashes, lock_receipt::return_to_depositor<Ethereum, FakeETH>(id));
+            vector::push_back(&mut lock_ids, id);
             j = j + 1;
         };
 
         state.refunded = true;
-        event::emit(AuctionRefunded { window_id, pair_bcs, timelock_id, reason, bid_count, seller_lock_count });
+        let window_id = state.window_id;
+        let timelock_id = state.timelock_id;
+        emit_outcome(window_id, pair_bcs, lock_ids, hashes);
+        event::emit(AuctionRefunded {
+            window_id,
+            pair_bcs,
+            timelock_id,
+            reason: timelock::get_expiry_reason(timelock_id),
+            bid_count,
+            seller_lock_count,
+        });
+        bid_count + seller_lock_count
+    }
+
+    /// Emits the window's one `AuctionOutcome`: the `outcome_tree` root over the leaves
+    /// `(lock_ids[i], payouts_hashes[i])`. A window without locks has no Ethereum side, so
+    /// it emits nothing (LockBox rejects an empty tree).
+    fun emit_outcome(
+        window_id:      u64,
+        pair_bcs:       vector<u8>,
+        lock_ids:       vector<vector<u8>>,
+        payouts_hashes: vector<vector<u8>>,
+    ) {
+        let leaf_count = vector::length(&lock_ids);
+        if (leaf_count == 0) return;
+        let leaves = outcome_tree::sorted_leaves(lock_ids, payouts_hashes);
+        event::emit(AuctionOutcome {
+            window_id,
+            pair_hash:         pair_hash(pair_bcs),
+            eth_lock_deadline: eth_lock_deadline(window_id),
+            dispositions_root: outcome_tree::root(&leaves),
+            leaf_count,
+        });
+    }
+
+    /// Unwind a finished or stuck window. Anyone may call it at or after the window's stuck
+    /// deadline (E_NOT_STUCK before it).
+    ///
+    /// - A window that never settled or refunded gets the all-refund finalization of an
+    ///   expired timelock, whatever its reveal state: every lock goes back to its depositor
+    ///   and the window emits its one all-refund `AuctionOutcome`.
+    /// - A settled or refunded window already emitted its outcome. Unwind returns only the
+    ///   receipts it still holds (status CLAIMED) to their depositors and emits no second
+    ///   `AuctionOutcome`. With nothing held it aborts E_WINDOW_FINAL.
+    ///
+    /// Emits `AuctionUnwound`.
+    ///
+    /// @see docs/specifications/auction-timing.md
+    public entry fun unwind(
+        _caller:   &signer,
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+    ) acquires AuctionRegistry {
+        assert!(exists<AuctionRegistry>(@atomica), E_AUCTION_NOT_FOUND);
+        let key = make_window_key(window_id, pair_bcs);
+        let registry = borrow_global_mut<AuctionRegistry>(@atomica);
+        assert!(table::contains(&registry.windows, key), E_AUCTION_NOT_FOUND);
+        let state = table::borrow_mut(&mut registry.windows, key);
+
+        assert!(timestamp::now_microseconds() >= stuck_deadline_us(state.timelock_id), E_NOT_STUCK);
+
+        let outcome_emitted = !state.settled && !state.refunded;
+        let returned_count = if (outcome_emitted) {
+            refund_internal(state, pair_bcs)
+        } else {
+            return_held(state)
+        };
+        assert!(returned_count > 0, E_WINDOW_FINAL);
+        event::emit(AuctionUnwound { window_id, pair_bcs, returned_count, outcome_emitted });
+    }
+
+    /// Returns every receipt of a finalized window that is still CLAIMED to its depositor.
+    /// Returns how many it returned.
+    fun return_held(state: &WindowState): u64 {
+        let count = 0u64;
+        let claimed = lock_receipt::status_claimed();
+        let i = 0u64;
+        let n = vector::length(&state.bids);
+        while (i < n) {
+            let id = vector::borrow(&state.bids, i).collateral_lock_id;
+            let (_, _, _, status, _) = lock_receipt::get_receipt<Ethereum, FakeUSD>(id);
+            if (status == claimed) {
+                lock_receipt::return_to_depositor<Ethereum, FakeUSD>(id);
+                count = count + 1;
+            };
+            i = i + 1;
+        };
+        let j = 0u64;
+        let m = vector::length(&state.lock_ids);
+        while (j < m) {
+            let id = *vector::borrow(&state.lock_ids, j);
+            let (_, _, _, status, _) = lock_receipt::get_receipt<Ethereum, FakeETH>(id);
+            if (status == claimed) {
+                lock_receipt::return_to_depositor<Ethereum, FakeETH>(id);
+                count = count + 1;
+            };
+            j = j + 1;
+        };
+        count
     }
 
     /// Clears a window whose reveal is final. Anyone may call it.
@@ -1017,7 +1180,7 @@ module atomica::auction {
         state.clearing_price = clearing_price;
     }
 
-    /// Settle the window: release losing collateral, emit AuctionSettled.
+    /// Settle the window: honour the cleared fills and give every lock its terminal outcome.
     ///
     /// Prerequisites: a window with bids must have a final reveal. Finalizing the reveal
     /// (`open_bid` or `submit_cleartext_and_clear` opening the last bid, or
@@ -1028,25 +1191,24 @@ module atomica::auction {
     ///
     /// Steps (§2.8, §2.9):
     ///   1. Validate window exists and has not already been settled or refunded.
-    ///   1b. Timelock guards: the deadline has passed (E_DEADLINE_NOT_PASSED), the
-    ///       timelock is not `Expired` (E_TIMELOCK_EXPIRED: use `refund_expired_window`)
-    ///       and it is `Revealed` (E_TIMELOCK_NOT_REVEALED). A window with bids also needs
+    ///   1b. Timelock guards: the deadline has passed (E_DEADLINE_NOT_PASSED), the stuck
+    ///       deadline has not (E_PAST_STUCK_DEADLINE: use `unwind`), the timelock is not
+    ///       `Expired` (E_TIMELOCK_EXPIRED: use `refund_expired_window`) and it is
+    ///       `Revealed` (E_TIMELOCK_NOT_REVEALED). A window with bids also needs
     ///       `reveal_final` (E_REVEAL_NOT_FINAL). Empty-auction rule: a window with no bids
     ///       settles once the key is revealed after the deadline, since no bid can arrive.
     ///   2. Verify clearing has run (bid_results length == bids length).
-    ///   3. Release opened losing bidders' FakeUSD collateral receipts so the off-chain
-    ///      relayer can return those assets to bidders on Ethereum. Unopened bids are
-    ///      invalid: their receipts stay claimed and `BidUnopened` is emitted.
-    ///   4. Compute fee/rebate amounts for winning bidders.
-    ///   5. Emit `AuctionSettled` with window_id, pair, clearing_price,
-    ///      total_filled, winner_count, and seller lock_ids.
-    ///   6. Account for the seller supply: emit `SellerSupplySettled` with the unsold amount.
-    ///      With no fill at all, release every seller FakeETH lock receipt.
-    ///   7. Mark the window settled.
-    ///
-    /// FakeUSD proceeds to the seller and fee/rebate transfers happen on Ethereum
-    /// after the relayer reads `AuctionSettled`; this function records and signals
-    /// the settlement, it does not perform on-chain FakeUSD token transfers.
+    ///   3. Allocate fills (the SDK `planSettlementReleases` order): winners in bid order
+    ///      take supply from the seller locks in `lock_ids` order. Each chunk pays the
+    ///      chunk of FakeETH to the winner's `eth_owner` and `quote_for_fill(chunk)` FakeUSD
+    ///      to the seller's `eth_owner`. A winner's unused collateral (rounding dust
+    ///      included), each seller's unsold supply, and the whole collateral of a losing or
+    ///      unopened bid go back to the depositor. A fill that does not fit the locks aborts
+    ///      E_UNPAYABLE_FILL.
+    ///   4. Record each lock's outcome (`lock_receipt::record_outcome`), which refuses a
+    ///      payout list LockBox could not pay.
+    ///   5. Emit `AuctionSettled` and the window's one `AuctionOutcome` over every lock.
+    ///   6. Mark the window settled.
     ///
     /// @see docs/architecture/v0-architecture.md §2.8 and §2.9
     public entry fun settle(
@@ -1067,9 +1229,12 @@ module atomica::auction {
         assert!(!state.refunded, E_WINDOW_REFUNDED);
 
         // 1b. Timelock guards. Before the deadline the window still takes bids, so nobody
-        //     may close it. An expired timelock goes through `refund_expired_window`.
+        //     may close it. From the stuck deadline on, only `unwind` finalizes it. An
+        //     expired timelock goes through `refund_expired_window`.
         let timelock_id = state.timelock_id;
-        assert!(timestamp::now_microseconds() >= timelock::get_deadline(timelock_id), E_DEADLINE_NOT_PASSED);
+        let now = timestamp::now_microseconds();
+        assert!(now >= timelock::get_deadline(timelock_id), E_DEADLINE_NOT_PASSED);
+        assert!(now < stuck_deadline_us(timelock_id), E_PAST_STUCK_DEADLINE);
         let status = timelock::get_status(timelock_id);
         assert!(status != timelock::status_expired(), E_TIMELOCK_EXPIRED);
         assert!(status == timelock::status_revealed(), E_TIMELOCK_NOT_REVEALED);
@@ -1083,81 +1248,133 @@ module atomica::auction {
         //    whenever reveal_final is set.
         assert!(result_count == bid_count, E_AUCTION_NOT_ENDED);
 
-        // 3. Release losing bidders' FakeUSD collateral receipts and tally totals.
-        let total_filled:  u256 = 0;
-        let winner_count:  u64  = 0;
+        // 3-4. Allocate the fills and record every lock's outcome.
+        let (lock_ids, hashes, total_filled, winner_count) = settle_locks(state);
 
+        // Fee/rebate (Phase 3c): REBATE_COEFFICIENT = 0, so all rebate amounts are 0 and
+        // no payout changes. When Phase 3c calibrates the coefficient, the rebates must
+        // become payouts of the winners' collateral leaves.
+        let _coeff = REBATE_COEFFICIENT; // TBD Phase 3c calibration
+
+        // 5. Emit AuctionSettled and the one AuctionOutcome.
+        event::emit(AuctionSettled {
+            window_id,
+            pair:           state.pair,
+            pair_bcs,
+            clearing_price: state.clearing_price,
+            total_filled,
+            winner_count,
+            lock_ids:       state.lock_ids,
+        });
+        emit_outcome(window_id, pair_bcs, lock_ids, hashes);
+
+        // 6. Mark window settled.
+        state.settled = true;
+    }
+
+    /// Allocates the cleared fills of `state` to its locks and records each lock's outcome.
+    /// Returns (lock ids, payouts hashes, total filled, winner count). See `settle` step 3.
+    fun settle_locks(state: &WindowState): (vector<vector<u8>>, vector<vector<u8>>, u256, u64) {
+        let lock_ids = vector::empty<vector<u8>>();
+        let hashes = vector::empty<vector<u8>>();
+        let clearing_price = state.clearing_price;
+
+        // Seller locks: remaining supply, Ethereum owner, and payouts so far.
+        let seller_count = vector::length(&state.lock_ids);
+        let supply_left = vector::empty<u256>();
+        let seller_owner = vector::empty<vector<u8>>();
+        let seller_to = vector::empty<vector<vector<u8>>>();
+        let seller_amounts = vector::empty<vector<u256>>();
+        let s = 0u64;
+        while (s < seller_count) {
+            let (_, amount, _, _, owner) =
+                lock_receipt::get_receipt<Ethereum, FakeETH>(*vector::borrow(&state.lock_ids, s));
+            vector::push_back(&mut supply_left, amount);
+            vector::push_back(&mut seller_owner, owner);
+            vector::push_back(&mut seller_to, vector::empty());
+            vector::push_back(&mut seller_amounts, vector::empty());
+            s = s + 1;
+        };
+
+        // Bids in bid order. Winners take supply from the sellers in lock order.
+        let total_filled: u256 = 0;
+        let winner_count = 0u64;
+        let bid_count = vector::length(&state.bids);
         let i = 0u64;
         while (i < bid_count) {
+            let collateral_id = vector::borrow(&state.bids, i).collateral_lock_id;
+            let (_, collateral, _, _, bidder_owner) =
+                lock_receipt::get_receipt<Ethereum, FakeUSD>(collateral_id);
+            let to = vector::empty<vector<u8>>();
+            let amounts = vector::empty<u256>();
+            let left = collateral;
             let result = vector::borrow(&state.bid_results, i);
             if (result.is_winner) {
-                total_filled  = total_filled + result.fill_amount;
-                winner_count  = winner_count + 1;
-                // Winning bidder: collateral receipt was consumed — nothing to release.
-            } else if (vector::borrow(&state.bids, i).opened) {
-                // Losing bidder: release collateral receipt so the off-chain relayer
-                // can return the underlying Ethereum FakeUSD to the bidder.
-                let collateral_id = vector::borrow(&state.bids, i).collateral_lock_id;
-                lock_receipt::release<Ethereum, FakeUSD>(collateral_id);
-            } else {
-                // Unopened bid: invalid. Its collateral stays claimed. The relayer
-                // reads `BidUnopened` and decides.
-                let bid = vector::borrow(&state.bids, i);
-                event::emit(BidUnopened {
-                    window_id,
-                    bidder: bid.bidder,
-                    collateral_lock_id: bid.collateral_lock_id,
-                });
+                winner_count = winner_count + 1;
+                total_filled = total_filled + result.fill_amount;
+                let unfilled = result.fill_amount;
+                let k = 0u64;
+                while (unfilled > 0 && k < seller_count) {
+                    let avail = *vector::borrow(&supply_left, k);
+                    if (avail > 0) {
+                        let chunk = if (unfilled < avail) { unfilled } else { avail };
+                        let quote = quote_for_fill(chunk, clearing_price);
+                        assert!(quote <= left, E_UNPAYABLE_FILL);
+                        vector::push_back(vector::borrow_mut(&mut seller_to, k), bidder_owner);
+                        vector::push_back(vector::borrow_mut(&mut seller_amounts, k), chunk);
+                        if (quote > 0) {
+                            vector::push_back(&mut to, *vector::borrow(&seller_owner, k));
+                            vector::push_back(&mut amounts, quote);
+                        };
+                        *vector::borrow_mut(&mut supply_left, k) = avail - chunk;
+                        unfilled = unfilled - chunk;
+                        left = left - quote;
+                    };
+                    k = k + 1;
+                };
+                assert!(unfilled == 0, E_UNPAYABLE_FILL);
             };
+            // Unused collateral, rounding dust, or a losing or unopened bid's whole
+            // collateral goes back to the bidder.
+            if (left > 0 || vector::is_empty(&to)) {
+                vector::push_back(&mut to, bidder_owner);
+                vector::push_back(&mut amounts, left);
+            };
+            vector::push_back(&mut hashes, lock_receipt::record_outcome<Ethereum, FakeUSD>(collateral_id, to, amounts));
+            vector::push_back(&mut lock_ids, collateral_id);
             i = i + 1;
         };
 
-        // 4. Compute fee/rebate vector (Phase 3c: coefficient = 0, all amounts are 0).
-        //    The compute_rebates call is elided here because at REBATE_COEFFICIENT = 0
-        //    all rebate amounts are zero and no additional transfers are needed.
-        //    When Phase 3c calibrates the coefficient, this section must apply the
-        //    rebate amounts by emitting per-winner rebate records or distributing
-        //    FakeUSD on Ethereum via the settlement event payload.
-        let _coeff = REBATE_COEFFICIENT; // TBD Phase 3c calibration
-
-        // 5. Emit AuctionSettled — the off-chain BLS relayer reads this to trigger
-        //    the Ethereum-side settlement (FakeUSD proceeds to seller, FakeETH to winners).
-        let clearing_price = state.clearing_price;
-        let pair_copy      = state.pair;
-        let lock_ids_copy  = state.lock_ids;
-
-        event::emit(AuctionSettled {
-            window_id,
-            pair:           pair_copy,
-            pair_bcs,
-            clearing_price,
-            total_filled,
-            winner_count,
-            lock_ids:       lock_ids_copy,
-        });
-
-        // 6. Seller supply. A lock receipt cannot be split, so it is released only when
-        //    nothing filled. Otherwise the event carries the unsold amount for the relayer.
-        let total_supply = state.total_supply;
-        let released = total_filled == 0;
-        if (released) {
-            let j = 0u64;
-            let n = vector::length(&state.lock_ids);
-            while (j < n) {
-                lock_receipt::release<Ethereum, FakeETH>(*vector::borrow(&state.lock_ids, j));
-                j = j + 1;
+        // Seller locks: unsold supply goes back to the seller.
+        let t = 0u64;
+        while (t < seller_count) {
+            let id = *vector::borrow(&state.lock_ids, t);
+            let to = *vector::borrow(&seller_to, t);
+            let amounts = *vector::borrow(&seller_amounts, t);
+            let unsold = *vector::borrow(&supply_left, t);
+            if (unsold > 0 || vector::is_empty(&to)) {
+                vector::push_back(&mut to, *vector::borrow(&seller_owner, t));
+                vector::push_back(&mut amounts, unsold);
             };
+            vector::push_back(&mut hashes, lock_receipt::record_outcome<Ethereum, FakeETH>(id, to, amounts));
+            vector::push_back(&mut lock_ids, id);
+            t = t + 1;
         };
-        event::emit(SellerSupplySettled {
-            window_id,
-            lock_ids:      state.lock_ids,
-            total_supply,
-            unsold_supply: total_supply - total_filled,
-            released,
-        });
+        (lock_ids, hashes, total_filled, winner_count)
+    }
 
-        // 7. Mark window settled.
-        state.settled = true;
+    #[view]
+    /// The stuck deadline of a window in microseconds: from it on, anyone may `unwind`
+    /// the window and `settle` aborts.
+    public fun get_stuck_deadline_us(
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+    ): u64 acquires AuctionRegistry {
+        assert!(exists<AuctionRegistry>(@atomica), E_AUCTION_NOT_FOUND);
+        let registry = borrow_global<AuctionRegistry>(@atomica);
+        let key = make_window_key(window_id, pair_bcs);
+        assert!(table::contains(&registry.windows, key), E_AUCTION_NOT_FOUND);
+        stuck_deadline_us(table::borrow(&registry.windows, key).timelock_id)
     }
 
     // ===================== View Functions =====================
@@ -1428,19 +1645,49 @@ module atomica::auction {
         pair_bcs:  vector<u8>,
         prices:    vector<u64>,
     ) acquires AuctionRegistry {
+        let opened = vector::empty<bool>();
+        let i = 0u64;
+        while (i < vector::length(&prices)) {
+            vector::push_back(&mut opened, true);
+            i = i + 1;
+        };
+        test_set_openings(atomica, window_id, pair_bcs, prices, opened);
+    }
+
+    // Close the reveal with bid `i` opened at `prices[i]` when `opened[i]`, and unopened
+    // (revealed price 0) otherwise (test-only). Both vectors are index-aligned to the bids.
+    #[test_only]
+    public fun test_set_openings(
+        atomica:   &signer,
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+        prices:    vector<u64>,
+        opened:    vector<bool>,
+    ) acquires AuctionRegistry {
         let addr = signer::address_of(atomica);
         let key = make_window_key(window_id, pair_bcs);
         let registry = borrow_global_mut<AuctionRegistry>(addr);
         let state = table::borrow_mut(&mut registry.windows, key);
+        let revealed = vector::empty<u64>();
         let i = 0u64;
         while (i < vector::length(&prices)) {
             let bid = vector::borrow_mut(&mut state.bids, i);
-            bid.opened = true;
-            bid.price = *vector::borrow(&prices, i);
+            if (*vector::borrow(&opened, i)) {
+                bid.opened = true;
+                bid.price = *vector::borrow(&prices, i);
+            };
+            vector::push_back(&mut revealed, bid.price);
             i = i + 1;
         };
-        state.revealed_prices = prices;
+        state.revealed_prices = revealed;
         state.reveal_final = true;
+    }
+
+    // Destructure an AuctionOutcome event into (window_id, pair_hash, eth_lock_deadline,
+    // dispositions_root, leaf_count) (test-only).
+    #[test_only]
+    public fun test_auction_outcome_fields(e: &AuctionOutcome): (u64, vector<u8>, u64, vector<u8>, u64) {
+        (e.window_id, e.pair_hash, e.eth_lock_deadline, e.dispositions_root, e.leaf_count)
     }
 
     // Return the bid_results vector for a window (test-only).
@@ -1520,6 +1767,34 @@ module atomica::auction {
             refunded:        false,
             bid_results:     vector::empty(),
         });
+    }
+
+    // Append a seller lock to a test window without touching total_supply (test-only).
+    // The lock's receipt must already be CLAIMED.
+    #[test_only]
+    public fun test_add_seller_lock(
+        atomica:   &signer,
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+        lock_id:   vector<u8>,
+        min_price: u64,
+    ) acquires AuctionRegistry {
+        let registry = borrow_global_mut<AuctionRegistry>(signer::address_of(atomica));
+        let state = table::borrow_mut(&mut registry.windows, make_window_key(window_id, pair_bcs));
+        vector::push_back(&mut state.lock_ids, lock_id);
+        vector::push_back(&mut state.min_prices, min_price);
+    }
+
+    // Mark a window settled without finalizing its receipts (test-only): the state a
+    // window settled before issue 194 left behind, whose receipts are still CLAIMED.
+    #[test_only]
+    public fun test_mark_settled(
+        atomica:   &signer,
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+    ) acquires AuctionRegistry {
+        let registry = borrow_global_mut<AuctionRegistry>(signer::address_of(atomica));
+        table::borrow_mut(&mut registry.windows, make_window_key(window_id, pair_bcs)).settled = true;
     }
 
     // Destructure a Rebate into (bidder, amount).

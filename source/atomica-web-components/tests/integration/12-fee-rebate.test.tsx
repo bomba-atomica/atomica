@@ -139,7 +139,7 @@ describe.sequential("12: FeeRebateDisplay — live fee and rebate after settleme
       privateKey: new Ed25519PrivateKey(fixture.aptos.deployerPrivateKey),
     });
 
-    const collateral = await lockBidCollateral(fixture, aptosClient, operator);
+    const collateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
       minPrice: MIN_PRICE,
