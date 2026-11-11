@@ -60,3 +60,50 @@ export async function waitForEthBlock(
     }
     throw new Error(`[${label}] Timed out waiting for block ${target} (at ${current})`);
 }
+
+/**
+ * Wait until the Aptos validators certify an Ethereum block at or after
+ * `minBlock` (`0x1::ethereum_headers::latest_block_number`) and return the
+ * highest certified block. A lock proof registers only at a certified block.
+ *
+ * Mirrors `waitForCertifiedBlock` in `@atomica/sdk/aptos`. This package reads
+ * the view directly: in Node, `@atomica/sdk/aptos` also loads the IBE bundle.
+ * Throws after `timeoutSecs` so a testnet that never certifies fails loudly.
+ */
+export async function waitForCertifiedEthBlock(
+    aptosNodeUrl: string,
+    minBlock: number,
+    timeoutSecs: number = 300,
+    label: string = "Ethereum headers",
+): Promise<number> {
+    const deadline = Date.now() + timeoutSecs * 1000;
+    let latest: number | undefined;
+    for (;;) {
+        const res = await fetch(`${aptosNodeUrl.replace(/\/$/, "")}/view`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                function: "0x1::ethereum_headers::latest_block_number",
+                type_arguments: [],
+                arguments: [],
+            }),
+        });
+        if (!res.ok) {
+            throw new Error(
+                `[${label}] latest_block_number view failed: ${res.status} ${await res.text()}`,
+            );
+        }
+        // Option<u64> is returned as [{ vec: [] }] or [{ vec: ["123"] }].
+        const [option] = (await res.json()) as [{ vec: string[] }];
+        latest = option.vec.length === 0 ? undefined : Number(option.vec[0]);
+        if (latest !== undefined && latest >= minBlock) {
+            console.log(`[${label}] ✓ Block ${latest} certified (needed ${minBlock})`);
+            return latest;
+        }
+        if (Date.now() >= deadline) break;
+        await new Promise((r) => setTimeout(r, 2000));
+    }
+    throw new Error(
+        `[${label}] No certified Ethereum block at or after ${minBlock} within ${timeoutSecs}s (latest certified: ${latest ?? "none"})`,
+    );
+}

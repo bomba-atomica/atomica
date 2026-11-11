@@ -25,8 +25,7 @@ import {
     type DualChainTestnetInfo,
 } from "../src/dual-chain-testnet";
 import { generateEthLockProofCommand, type EthLockProofResult } from "../src/browser-commands";
-import { waitForCertifiedBlock } from "@atomica/sdk/aptos";
-import { waitForEthBlock } from "../src/eth-blocks";
+import { waitForCertifiedEthBlock, waitForEthBlock } from "../src/eth-blocks";
 
 /**
  * Live dual-chain test: Ethereum LockBox releases follow Aptos outcomes.
@@ -280,7 +279,10 @@ describe.sequential("LockBox releases follow Aptos outcomes (live dual-chain)", 
         // state root. Mine past the first proof block and wait for the
         // validators to certify a later one.
         await waitForEthBlock(provider, first.proof.blockNumber + 1, 300, "Later Proof");
-        const later = await waitForCertifiedBlock(first.proof.blockNumber + 1, 300_000, aptos);
+        const later = await waitForCertifiedEthBlock(
+            info.aptos.nodeUrl,
+            first.proof.blockNumber + 1,
+        );
         const block = await provider.getBlock(later);
         expect(block?.stateRoot).toBeTruthy();
         expect(block!.stateRoot).not.toBe(first.proof.stateRoot);

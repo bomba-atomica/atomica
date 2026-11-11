@@ -111,9 +111,7 @@ import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testne
 import { setupDualChainTestnet, teardownDualChainTestnet } from "./dual-chain-testnet.js";
 import type { DualChainTestnetInfo } from "./dual-chain-testnet.js";
 import { ethers } from "ethers";
-import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { waitForCertifiedBlock } from "@atomica/sdk/aptos";
-import { waitForEthBlock } from "./eth-blocks.js";
+import { waitForCertifiedEthBlock, waitForEthBlock } from "./eth-blocks.js";
 
 /**
  * Module augmentation to add our custom commands to Vitest's browser commands types.
@@ -446,10 +444,11 @@ async function lockAndProve(
 
     // Prove at a block the validators certified that includes every lock.
     const lastLockBlock = proofBlockNumber;
-    proofBlockNumber = await waitForCertifiedBlock(
+    proofBlockNumber = await waitForCertifiedEthBlock(
+        aptosNodeUrl,
         lastLockBlock,
-        300_000,
-        new Aptos(new AptosConfig({ network: Network.LOCAL, fullnode: aptosNodeUrl })),
+        300,
+        "Lock Proof",
     );
     console.log(
         `[Lock Proof] Locks mined by block ${lastLockBlock}; proving at certified block ${proofBlockNumber}`,
