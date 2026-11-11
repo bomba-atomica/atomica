@@ -13,6 +13,32 @@ Implement the core cross-chain mechanism: users lock FAKETH/FAKEUSD on Ethereum,
 
 ---
 
+## Header Trust Model (current, issue 197)
+
+This planning spec predates the trust model below. Where they differ, this
+section and [v0 Architecture §3](../architecture/v0-architecture.md#3--cross-chain-settlement-v01-trustless-flow) win.
+
+- **State roots.** Aptos does not verify Ethereum header signatures itself,
+  and no admin submits roots. Aptos validators observe Ethereum headers and
+  certify them with a 2/3+ voting-power quorum into
+  `aptos_framework::ethereum_headers` (atomica-aptos issue 196).
+  `eth_proof::verify_lock` reads the state root of the named block from that
+  store. A proof at a block the validators have not certified aborts with
+  `E_UNKNOWN_HEADER`.
+- **Proof block.** A client waits until a certified block covers its lock,
+  then proves the lock at that block.
+- **Registration.** Any account may submit `register_ethereum_lock`. The
+  proof names the depositor. The receipt stores that Ethereum address as
+  `eth_owner`.
+- **Ownership.** The receipt belongs to the depositor's Ethereum-derivable
+  Aptos account, derived on chain from the address and the SIWE domain pinned
+  in `eth_proof::initialize`. Only that account can claim the receipt into an
+  auction.
+- **No admin path.** The `@atomica` account has no header, registration or
+  claim privilege.
+
+---
+
 ## Architecture Overview
 
 ```

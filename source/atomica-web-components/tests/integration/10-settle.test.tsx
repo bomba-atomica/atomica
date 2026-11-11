@@ -17,8 +17,9 @@
  *      shows "Already Settled"
  *   5. Step8Monitor shows the settled window and records it in the history
  *
- * The `@atomica` operator bids and relays openings (Demo-phase claim rule).
- * SettleButton signs through SIWE with the seller wallet mock.
+ * The bidder's Ethereum-derivable account bids: only it can claim the
+ * bidder's collateral receipts. The operator (no special rights) relays
+ * openings. SettleButton signs through SIWE with the seller wallet mock.
  */
 
 import React from "react";
@@ -101,6 +102,7 @@ describe.sequential("10: Settle Auction", () => {
   let moduleAddr: string;
   let operator: Account;
   let settlerEthAddress: string;
+  let settlerAptosAddress: string;
   let auction: LiveWindow;
   let winCollateral: string;
   let loseCollateral: string;
@@ -124,8 +126,8 @@ describe.sequential("10: Settle Auction", () => {
       rpcUrl: fixture.eth.rpcUrl,
       chainId: fixture.eth.chainId,
     });
-    const settlerAptosAddress = await getDerivedAddress(settlerEthAddress.toLowerCase());
-    await commands.fundAccount(settlerAptosAddress.toString(), 500_000_000);
+    settlerAptosAddress = (await getDerivedAddress(settlerEthAddress.toLowerCase())).toString();
+    await commands.fundAccount(settlerAptosAddress, 500_000_000);
 
     winCollateral = await lockBidCollateral(fixture, aptosClient, operator);
     loseCollateral = await lockBidCollateral(fixture, aptosClient, operator);
@@ -136,10 +138,10 @@ describe.sequential("10: Settle Auction", () => {
       deadlineAheadUs: DEADLINE_AHEAD_US,
       lockAmount: SUPPLY,
     });
-    await submitBidDirect(aptosClient, operator, auction, WIN_PRICE, winCollateral, SUPPLY);
+    await submitBidDirect(aptosClient, fixture.eth.bidder, auction, WIN_PRICE, winCollateral, SUPPLY);
     await submitBidDirect(
       aptosClient,
-      operator,
+      fixture.eth.bidder,
       auction,
       LOSE_PRICE,
       loseCollateral,
@@ -300,7 +302,8 @@ describe.sequential("10: Settle Auction", () => {
 
   it("Step8Monitor shows the settled window and records its clearing price", async () => {
     localStorage.clear();
-    const sellerAddress = operator.accountAddress.toString();
+    // The seller's Ethereum-derivable account created the window.
+    const sellerAddress = settlerAptosAddress;
 
     render(
       <SettleProviders account={settlerEthAddress}>

@@ -3,8 +3,11 @@
  *
  * Generates the state proof of one LockBox lock: the
  * `lockAmounts[getLockId(user, token, nonce)]` slot. Aptos derives the same
- * storage key on chain and checks the proof against a trusted state root
- * (`eth_proof::submit_header`), so the proof carries no root of its own.
+ * storage key on chain and checks the proof against the state root the
+ * validators certified for the proof block (`0x1::ethereum_headers`), so the
+ * proof carries no root of its own. Prove at a certified block: wait for one
+ * with `waitForCertifiedBlock` (`@atomica/sdk/aptos`) and pass it as
+ * `blockNumber`.
  * Uses @atomica/state-proof-verifier for core proof fetching and verification.
  */
 
@@ -25,8 +28,8 @@ import {
  *
  * This is a domain-specific wrapper around EthereumProof that includes
  * LockBox contract context (user, token, lock nonce) and timestamps.
- * `stateRoot` is informational: the Aptos admin must store it with
- * `eth_proof::submit_header` before the proof registers.
+ * `stateRoot` is informational: Aptos checks the proof against the root the
+ * validators certified for `blockNumber`, so `blockNumber` must be certified.
  */
 export interface LockedBalanceProof {
   // Block information
@@ -70,7 +73,8 @@ export type { StorageProof };
  * @param userAddress - Address of user who locked tokens
  * @param tokenAddress - Address of token (FakeETH or FakeUSD)
  * @param lockNonce - Nonce of the lock (see `lockNonceFromReceipt`)
- * @param blockNumber - Block number to generate proof at (default: latest)
+ * @param blockNumber - Block to prove at (default: latest). Registration
+ *   needs a validator-certified block at or after the lock block.
  * @returns Complete state proof with LockBox context
  */
 export async function generateLockedBalanceProof(

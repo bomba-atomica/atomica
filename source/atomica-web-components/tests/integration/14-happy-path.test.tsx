@@ -24,8 +24,8 @@
  *     8. Sealed bid — the client encrypts the bid with sealBid (the code path
  *        of AuctionBidder: timelock::get_mpk, get_timelock_identity,
  *        bid_associated_data) and submits ciphertext, commitment and quantity.
- *        The @atomica operator account bids: in the Demo phase only it can
- *        claim the FakeUSD collateral receipt (lock_receipt::claim).
+ *        The bidder's Ethereum-derivable account bids (SIWE): only it can
+ *        claim the bidder's FakeUSD collateral receipt (lock_receipt::claim).
  *   Reveal:
  *    8b. The validators reveal the timelock key after the deadline.
  *        AuctionRevealer decrypts the bid with timelock::get_decryption_key and
@@ -118,6 +118,8 @@ import {
   chainNowUs,
   registerTimelockDirect,
   submitDirect,
+  submitAsEthAccount,
+  ethAccountAddress,
   pollUntil,
   RECEIPT_CLAIMED,
   TEST_PAIR_BCS,
@@ -406,16 +408,19 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       const proofResult = await generateEthLockProof(fixture, LOCK_AMOUNT, MINT_AMOUNT);
       lockId = proofResult.lockId;
 
-      // Register lock on Aptos (deployer is authorized in Demo phase)
+      // Register the lock on Aptos. The proof block is validator-certified,
+      // and the deployer is only a carrier: the receipt belongs to the
+      // seller's Ethereum-derivable account.
       await registerLockOnAptos(aptosClient, deployerAccount, moduleAddr, proofResult.proof);
 
-      // FakeUSD collateral for the sealed bid in step 8. The @atomica operator
-      // registers it and claims it at submit_bid (Demo-phase claim rule).
+      // FakeUSD collateral for the sealed bid in step 8, locked by the bidder.
+      // Its receipt belongs to the bidder's account, which claims it at submit_bid.
       const collateral = await generateEthLockProof(
         fixture,
         COLLATERAL_AMOUNT,
         COLLATERAL_MINT,
         fixture.eth.contracts.fakeUSD,
+        fixture.eth.bidder,
       );
       collateralLockId = collateral.lockId;
       await registerLockOnAptos(
@@ -440,7 +445,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       windowId = await currentWindowId(aptosClient);
       await createAuctionDirect(
         aptosClient,
-        deployerAccount,
+        fixture.eth.seller,
         lockId,
         MIN_PRICE,
         windowId,
@@ -467,7 +472,8 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       });
 
       auctionEndTime = auctionCreatedAt + AUCTION_DURATION_BID;
-      sellerAptosAddress = deployerAccount.accountAddress.toString();
+      // The seller's Ethereum-derivable account created the window.
+      sellerAptosAddress = await ethAccountAddress(fixture.eth.seller);
 
       console.log(`[14-happy-path] Auction created. Seller: ${sellerAptosAddress}`);
       console.log(`[14-happy-path] Auction closes at: ${auctionEndTime}`);
@@ -512,7 +518,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
     "step 8 — sealed bid: the client encrypts the bid to the live timelock key and submits it",
     async () => {
       console.log("[14-happy-path] Step 8: client-encrypted bid (sealBid, the AuctionBidder path)");
-      const bidder = deployerAccount.accountAddress.toString();
+      const bidder = await ethAccountAddress(fixture.eth.bidder);
 
       // sealBid reads timelock::get_mpk, timelock::get_timelock_identity and
       // auction::bid_associated_data from chain and encrypts price || salt.
@@ -520,9 +526,9 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       expect(sealed.timelockId).toBe(timelockId);
       bidSalt = sealed.salt;
 
-      await submitDirect(
+      await submitAsEthAccount(
         aptosClient,
-        deployerAccount,
+        fixture.eth.bidder,
         getBidPayload(
           windowId,
           TEST_PAIR_BCS,

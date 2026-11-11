@@ -40,6 +40,7 @@ vi.mock("@atomica/sdk/aptos", () => ({
   getRegisterLockPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
   registerTimelock: vi.fn(),
+  waitForCertifiedBlock: vi.fn(async (minBlock: number) => minBlock),
   aptos: { mock: "aptos-client" },
 }));
 vi.mock("@atomica/sdk", () => ({
@@ -60,6 +61,7 @@ import {
   getRegisterLockPayload,
   getCreateAuctionPayload,
   registerTimelock,
+  waitForCertifiedBlock,
 } from "@atomica/sdk/aptos";
 import { submitNativeTransaction } from "@atomica/sdk";
 
@@ -305,8 +307,10 @@ describe("useSellFlow state machine", () => {
       unmount();
     });
 
-    it("generateProof: proves the lock block and moves to submitting-proof", async () => {
+    it("generateProof: proves at a certified block covering the lock and moves to submitting-proof", async () => {
       vi.mocked(generateLockedBalanceProof).mockResolvedValue(PROOF);
+      // The validators certified block 104, after the lock block 100.
+      vi.mocked(waitForCertifiedBlock).mockResolvedValueOnce(104);
       persist({ step: "generating-proof", lockBlock: 100, lockNonce: "3" });
 
       const { result } = renderHook(() => useSellFlow(ACCOUNT));
@@ -315,13 +319,14 @@ describe("useSellFlow state machine", () => {
         await result.current.generateProof();
       });
 
+      expect(waitForCertifiedBlock).toHaveBeenCalledWith(100);
       expect(generateLockedBalanceProof).toHaveBeenCalledWith(
         expect.anything(),
         LOCK_BOX,
         ACCOUNT,
         FAKE_ETH,
         3n,
-        100,
+        104,
       );
       expect(result.current.step).toBe("submitting-proof");
       expect(result.current.proof).toBe(PROOF);

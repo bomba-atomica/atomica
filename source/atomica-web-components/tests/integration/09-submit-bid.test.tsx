@@ -13,9 +13,10 @@
  * Setup:
  *   - Dual-chain testnet started in beforeAll
  *   - One window created with a real timelock (createLiveWindow)
- *   - Bids are sealed with sealBid (the AuctionBidder code path) and sent by
- *     the `@atomica` operator: in the Demo phase only it can claim the FakeUSD
- *     collateral receipt (`lock_receipt::claim`)
+ *   - The bidder locks FakeUSD collateral. Its receipt belongs to the bidder's
+ *     Ethereum-derivable account, which alone can claim it
+ *     (`lock_receipt::claim`). Bids are sealed with sealBid (the AuctionBidder
+ *     code path) and SIWE-signed as that account
  *   - Bidder wallet mock injected for the AuctionBidder UI test
  */
 
@@ -117,6 +118,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
   let moduleAddr: string;
   let operator: Account;
   let bidderAddress: string;
+  let bidderAptosAddress: string;
   let auction: LiveWindow;
   let firstCollateral: string;
 
@@ -139,8 +141,8 @@ describe.sequential("09: Submit Bid on Auction", () => {
       rpcUrl: fixture.eth.rpcUrl,
       chainId: fixture.eth.chainId,
     });
-    const bidderAptosAddress = await getDerivedAddress(bidderAddress.toLowerCase());
-    await commands.fundAccount(bidderAptosAddress.toString(), 500_000_000);
+    bidderAptosAddress = (await getDerivedAddress(bidderAddress.toLowerCase())).toString();
+    await commands.fundAccount(bidderAptosAddress, 500_000_000);
 
     // Collateral first: the timelock deadline starts counting at createLiveWindow.
     firstCollateral = await lockBidCollateral(fixture, aptosClient, operator);
@@ -169,7 +171,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
 
     const bid = await submitBidDirect(
       aptosClient,
-      operator,
+      fixture.eth.bidder,
       auction,
       BID_PRICE,
       firstCollateral,
@@ -179,7 +181,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
     expect(await getBidCount(auction.windowId, PAIR_BCS)).toBe(1n);
     const stored = await getBidInfo(auction.windowId, PAIR_BCS, 0n);
     expect(stored.bidder.replace(/^0x0*/, "")).toBe(
-      operator.accountAddress.toString().replace(/^0x0*/, ""),
+      bidderAptosAddress.replace(/^0x0*/, ""),
     );
     expect(stored.ciphertext).toEqual(bid.ciphertext);
     expect(stored.commitment).toEqual(bid.commitment);
@@ -203,7 +205,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
     await expect(
       submitBidDirect(
         aptosClient,
-        operator,
+        fixture.eth.bidder,
         auction,
         BID_PRICE + 1n,
         firstCollateral,
@@ -260,7 +262,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
     await expect(
       submitBidDirect(
         aptosClient,
-        operator,
+        fixture.eth.bidder,
         auction,
         BID_PRICE,
         lateCollateral,

@@ -25,6 +25,7 @@ import {
     type DualChainTestnetInfo,
 } from "../src/dual-chain-testnet";
 import { generateEthLockProofCommand, type EthLockProofResult } from "../src/browser-commands";
+import { waitForCertifiedEthBlock, waitForEthBlock } from "../src/eth-blocks";
 
 /**
  * Live dual-chain test: Ethereum LockBox releases follow Aptos outcomes.
@@ -37,7 +38,12 @@ import { generateEthLockProofCommand, type EthLockProofResult } from "../src/bro
  * `withdrawWinnings`, and asserts ERC-20 balances.
  *
  * Cases: refund, winner payout, seller payout, and one lock giving one
- * receipt (the same lock proven at a later trusted block is rejected).
+ * receipt (the same lock proven at a later certified block is rejected).
+ *
+ * Every proof is checked against a header the Aptos validators certified
+ * (0x1::ethereum_headers). No one submits a header. The registering account
+ * is the Aptos deployer, which has no special rights: any account may carry
+ * a proof.
  *
  * The auction outcome itself (AuctionRefunded / AuctionSettled) is applied to
  * the live receipts here. A live auction cannot settle until real V2 bids
@@ -80,7 +86,7 @@ async function withdrawWinnings(privateKey: string, asset: LockAsset): Promise<v
     expect(receipt?.status).toBe(1);
 }
 
-/** Submit one Aptos entry function as the deployer (the @atomica admin). */
+/** Submit one Aptos entry function as the deployer, here just a carrier account. */
 async function submitAsDeployer(data: InputGenerateTransactionPayloadData): Promise<void> {
     const txn = await aptos.transaction.build.simple({
         sender: aptosDeployer.accountAddress,
@@ -97,14 +103,13 @@ async function submitAsDeployer(data: InputGenerateTransactionPayloadData): Prom
 }
 
 /**
- * Trust the state root of `blockNumber`, then register the lock proven there.
- * Aptos derives the storage key and checks the proof against that root only.
+ * Register the lock proven at the certified block `blockNumber`. Aptos derives
+ * the storage key and checks the proof against the certified root only.
  */
-async function trustAndRegister(
+async function register(
     asset: LockAsset,
     proof: {
         blockNumber: number;
-        stateRoot: string;
         userAddress: string;
         lockNonce: string;
         accountProof: string[];
@@ -112,10 +117,6 @@ async function trustAndRegister(
     },
 ): Promise<void> {
     const moduleAddr = info.aptos.moduleAddress;
-    await submitAsDeployer({
-        function: `${moduleAddr}::eth_proof::submit_header`,
-        functionArguments: [proof.blockNumber, ethers.getBytes(proof.stateRoot)],
-    });
     await submitAsDeployer({
         function: `${moduleAddr}::lock_receipt::register_ethereum_lock`,
         typeArguments: [`${moduleAddr}::lock_receipt::${asset}`],
@@ -142,13 +143,14 @@ async function lockAndRegister(
     const { lockId, proof } = await generateEthLockProofCommand(
         {} as never,
         info.eth.rpcUrl,
+        info.aptos.nodeUrl,
         privateKey,
         token(asset),
         info.eth.contracts.lockBox,
         amount.toString(),
         mintAmount.toString(),
     );
-    await trustAndRegister(asset, proof);
+    await register(asset, proof);
 
     const receipt = await getLockReceipt(aptos, info.aptos.moduleAddress, asset, lockId);
     const owner = new ethers.Wallet(privateKey).address;
@@ -266,15 +268,21 @@ describe.sequential("LockBox releases follow Aptos outcomes (live dual-chain)", 
         expect(await lockBox.getLockedBalance(winner, token("FakeUSD"))).toBe(0n);
     }, 900_000);
 
-    it("one lock gives one receipt: the same lock proven at a later trusted block is rejected", async () => {
+    it("one lock gives one receipt: the same lock proven at a later certified block is rejected", async () => {
         const first = await lockAndRegister(
             info.eth.bidderPrivateKey,
             "FakeETH",
             1n * ETH,
             10n * ETH,
         );
-        // Prove the same lock slot one block later, under a new state root.
-        const later = first.proof.blockNumber + 1;
+        // Prove the same lock slot at a later certified block, under a new
+        // state root. Mine past the first proof block and wait for the
+        // validators to certify a later one.
+        await waitForEthBlock(provider, first.proof.blockNumber + 1, 300, "Later Proof");
+        const later = await waitForCertifiedEthBlock(
+            info.aptos.nodeUrl,
+            first.proof.blockNumber + 1,
+        );
         const block = await provider.getBlock(later);
         expect(block?.stateRoot).toBeTruthy();
         expect(block!.stateRoot).not.toBe(first.proof.stateRoot);
@@ -284,10 +292,9 @@ describe.sequential("LockBox releases follow Aptos outcomes (live dual-chain)", 
             `0x${later.toString(16)}`,
         ]);
         await expect(
-            trustAndRegister("FakeETH", {
+            register("FakeETH", {
                 ...first.proof,
                 blockNumber: later,
-                stateRoot: block!.stateRoot!,
                 accountProof: ethProof.accountProof as string[],
                 storageProof: ethProof.storageProof[0].proof as string[],
             }),

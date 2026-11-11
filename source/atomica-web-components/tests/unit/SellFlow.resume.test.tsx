@@ -45,6 +45,7 @@ vi.mock("@atomica/sdk/aptos", () => ({
   getRegisterLockPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
   registerTimelock: vi.fn(),
+  waitForCertifiedBlock: vi.fn(async (minBlock: number) => minBlock),
   aptos: { mock: "aptos-client" },
 }));
 vi.mock("@atomica/sdk", () => ({

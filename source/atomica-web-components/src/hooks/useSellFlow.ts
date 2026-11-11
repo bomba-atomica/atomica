@@ -25,6 +25,7 @@ import {
   getRegisterLockPayload,
   getCreateAuctionPayload,
   registerTimelock,
+  waitForCertifiedBlock,
 } from "@atomica/sdk/aptos";
 import { submitNativeTransaction } from "@atomica/sdk";
 import { aptos } from "@atomica/sdk/aptos";
@@ -309,13 +310,16 @@ export function useSellFlow(
       const config = getChainConfig();
       const provider = new ethers.JsonRpcProvider(config.ethereum.rpcUrl);
 
+      // Aptos checks the proof against the root the validators certified, so
+      // prove at a certified block that covers the lock.
+      const proofBlock = await waitForCertifiedBlock(state.lockBlock);
       const proof = await generateLockedBalanceProof(
         provider,
         config.ethereum.lockBox,
         account,
         config.ethereum.fakeETH,
         state.lockNonce,
-        state.lockBlock,
+        proofBlock,
       );
 
       proofRef.current = proof;

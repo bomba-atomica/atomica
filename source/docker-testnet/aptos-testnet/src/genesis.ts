@@ -117,7 +117,7 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
             process.env.IMAGE_NAME ||
             composeImage ||
             process.env.VALIDATOR_IMAGE_REPO ||
-            "ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:33e4aeda3ea9dff33f9f70244ee3444ad80b3eb2a825f00ba869f663c07ac126";
+            "ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:c86881514504e43b12a599152d43f1f6ad6c8453600662378684323a4942d965";
 
         const validatorImage = genesisImage;
 
@@ -177,6 +177,18 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         // Pass ATOMICA_DEBUG_TESTNET to container if set
         if (process.env.ATOMICA_DEBUG_TESTNET) {
             dockerArgs.push("-e", `ATOMICA_DEBUG_TESTNET=${process.env.ATOMICA_DEBUG_TESTNET}`);
+        }
+
+        // Ethereum header attestation overrides (the script defaults to the
+        // host's Ethereum testnet on port 8545, chain id 32382, tag latest).
+        for (const varName of [
+            "ETH_CHAIN_ID",
+            "ETH_RPC_URL",
+            "ETH_BLOCK_TAG",
+            "ETH_POLL_INTERVAL_MS",
+        ]) {
+            const value = process.env[varName];
+            if (value) dockerArgs.push("-e", `${varName}=${value}`);
         }
 
         // Pass deterministic credentials so the genesis script produces reproducible keys

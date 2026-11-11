@@ -665,9 +665,15 @@ describe("planRefundReleases", () => {
 
 // ─── Relays (Aptos reads → LockBox calls) ──────────────────────────────────
 
-/** Zero-padded Aptos form of an Ethereum address, short-form as REST may return it. */
-function aptosAddr(eth: string): string {
-  return "0x" + eth.slice(2).replace(/^0+/, "");
+/**
+ * The receipt's Aptos owner: an Ethereum-derivable account, which does not
+ * encode the depositor's address. The relayer must not read the depositor from it.
+ */
+const DERIVED_OWNER = "0x" + "5d".repeat(32);
+
+/** `get_receipt` returns the depositor's `eth_owner` as lowercase hex bytes. */
+function ethOwner(eth: string): string {
+  return eth.toLowerCase();
 }
 
 function stubReceipts(
@@ -677,7 +683,7 @@ function stubReceipts(
     const id = ethers.hexlify(args[0] as Uint8Array);
     const r = receipts[id];
     if (!r) throw new Error(`no receipt ${id}`);
-    return [aptosAddr(r[0]), String(r[1]), "1", r[2]];
+    return [DERIVED_OWNER, String(r[1]), "1", r[2], ethOwner(r[0])];
   });
 }
 
@@ -858,7 +864,7 @@ describe("relayOutcomeScan", () => {
     mocks.views.set("lock_receipt::get_receipt", (args) => {
       const id = ethers.hexlify(args[0] as Uint8Array);
       if (id === "0xdead") throw new Error(MOVE_ABORT);
-      return [aptosAddr(LOSER), String(700n * USD), "1", 1];
+      return [DERIVED_OWNER, String(700n * USD), "1", 1, ethOwner(LOSER)];
     });
 
     const result = await relayOutcomeScan(
@@ -1044,10 +1050,11 @@ describe("per-lock receipt amounts", () => {
     // so the relayer releases its amount as is.
     mocks.views.set("auction::get_window_lock_ids", () => [["0x02"], []]);
     mocks.views.set("lock_receipt::get_receipt", () => [
-      aptosAddr(SELLER),
+      DERIVED_OWNER,
       String(15n * ETH),
       "2",
       RECEIPT_STATUS_REVOKED,
+      ethOwner(SELLER),
     ]);
 
     await relayAuctionRefunded(

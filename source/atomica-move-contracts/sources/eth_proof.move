@@ -1,133 +1,108 @@
 /// Ethereum State Proof Verifier
 ///
 /// Verifies that one LockBox lock exists on Ethereum, using MPT
-/// (Merkle-Patricia Trie) proofs checked against a trusted state root.
+/// (Merkle-Patricia Trie) proofs checked against a validator-certified state root.
 ///
 /// Trust anchors (none of them come from the caller of a proof):
-/// - State roots: the `@atomica` admin (the v0.1 trusted relayer) stores one
-///   state root per Ethereum block with `submit_header`. A proof names a
-///   block number and is checked against that stored root only.
-/// - Contract and tokens: `initialize` pins the LockBox address and the
-///   FakeETH / FakeUSD token addresses once.
+/// - State roots: `aptos_framework::ethereum_headers`. Only a certificate
+///   signed by validators with 2/3+ of the voting power writes a header there.
+///   No entry function writes headers, and the `@atomica` account has no
+///   header privilege. A proof names a block number and is checked against
+///   that block's certified root only.
+/// - Contract, tokens and SIWE domain: `initialize` pins the LockBox address,
+///   the FakeETH / FakeUSD token addresses and the SIWE domain once.
 /// - Storage slot: the proven slot is derived here from the user, the token
 ///   and the lock nonce, as `LockBox.calculateLockStorageKey` does.
+/// - Receipt owner: the depositor's Ethereum-derivable Aptos account
+///   (`ethereum_account_address`), derived from the proven Ethereum address
+///   and the pinned SIWE domain.
 ///
 /// The verification process:
-/// 1. Look up the trusted state root of the proof block
+/// 1. Look up the certified state root of the proof block
 /// 2. Verify the LockBox account proof against it
 /// 3. Extract the LockBox storage root from the account data
 /// 4. Verify the storage proof of `lockAmounts[lock_id(user, token, nonce)]`
 /// 5. Return the amount of that single lock
 ///
-/// @see docs/architecture/v0-architecture.md#§3-cross-chain-settlement-v01-bls-relayer-flow
+/// @see docs/architecture/v0-architecture.md §3 (Cross-Chain Settlement)
+/// @see docs/decisions/trustless-v0-1-unwinding.md
 /// @see source/evm-contracts/src/escrow/LockBox.sol (storage layout)
 module atomica::eth_proof {
+    use std::bcs;
     use std::vector;
     use std::signer;
-    use aptos_std::table::{Self, Table};
+    use std::string;
     use aptos_std::aptos_hash::keccak256;
-    use aptos_framework::event;
+    use aptos_framework::account_abstraction;
+    use aptos_framework::ethereum_headers;
+    use aptos_framework::function_info;
     use atomica::mpt;
     use atomica::rlp;
 
     /// Error codes
     const E_INVALID_PROOF: u64 = 1;
     const E_INVALID_ACCOUNT: u64 = 4;
-    /// Only the @atomica admin may pin the config or store a header
+    /// Only the @atomica admin may pin the config
     const E_NOT_ADMIN: u64 = 5;
     /// The LockBox config is pinned once and never changes
     const E_CONFIG_ALREADY_SET: u64 = 6;
     const E_CONFIG_NOT_SET: u64 = 7;
     /// An Ethereum address must be 20 bytes
     const E_INVALID_ADDRESS: u64 = 8;
-    /// No trusted header is stored for the proof block
+    /// The validators have not certified a header for the proof block
     const E_UNKNOWN_HEADER: u64 = 9;
-    /// A different state root is already trusted for this block
-    const E_HEADER_CONFLICT: u64 = 10;
-    /// A state root must be 32 bytes
-    const E_INVALID_STATE_ROOT: u64 = 11;
     /// The proven lock holds no tokens
     const E_EMPTY_LOCK: u64 = 12;
+    /// The SIWE domain must not be empty
+    const E_INVALID_DOMAIN: u64 = 13;
 
     /// Storage slot of `LockBox.lockAmounts` (LockBox.sol storage layout).
     const LOCK_AMOUNTS_SLOT: u8 = 4;
 
-    /// The pinned Ethereum side: the LockBox and the token behind each asset.
+    /// The pinned Ethereum side: the LockBox, the token behind each asset, and
+    /// the SIWE domain of Ethereum-derivable accounts that own receipts.
     struct EthereumConfig has key {
         lockbox: vector<u8>,
         fake_eth_token: vector<u8>,
         fake_usd_token: vector<u8>,
-    }
-
-    /// Trusted Ethereum headers: block number -> state root.
-    struct TrustedHeaders has key {
-        state_roots: Table<u64, vector<u8>>,
-    }
-
-    #[event]
-    struct HeaderTrusted has drop, store {
-        block_number: u64,
-        state_root: vector<u8>,
+        siwe_domain: vector<u8>,
     }
 
     // ==================== Admin ====================
 
-    /// Pin the LockBox address and the FakeETH / FakeUSD token addresses.
+    /// Pin the LockBox address, the FakeETH / FakeUSD token addresses and the
+    /// SIWE domain (utf8, e.g. `app.example.com`) of receipt owners.
     /// Called once by the @atomica admin after both chains are deployed.
     public entry fun initialize(
         admin: &signer,
         lockbox: vector<u8>,
         fake_eth_token: vector<u8>,
         fake_usd_token: vector<u8>,
+        siwe_domain: vector<u8>,
     ) {
         assert!(signer::address_of(admin) == @atomica, E_NOT_ADMIN);
         assert!(!exists<EthereumConfig>(@atomica), E_CONFIG_ALREADY_SET);
         assert!(vector::length(&lockbox) == 20, E_INVALID_ADDRESS);
         assert!(vector::length(&fake_eth_token) == 20, E_INVALID_ADDRESS);
         assert!(vector::length(&fake_usd_token) == 20, E_INVALID_ADDRESS);
-        move_to(admin, EthereumConfig { lockbox, fake_eth_token, fake_usd_token });
-        move_to(admin, TrustedHeaders { state_roots: table::new() });
-    }
-
-    /// Trust the state root of one Ethereum block.
-    ///
-    /// v0.1: the @atomica admin (the trusted relayer) posts it. Re-posting the
-    /// same root is a no-op. A different root for a stored block aborts, so a
-    /// trusted root never changes under a proof.
-    public entry fun submit_header(
-        admin: &signer,
-        block_number: u64,
-        state_root: vector<u8>,
-    ) acquires TrustedHeaders {
-        assert!(signer::address_of(admin) == @atomica, E_NOT_ADMIN);
-        assert!(exists<TrustedHeaders>(@atomica), E_CONFIG_NOT_SET);
-        assert!(vector::length(&state_root) == 32, E_INVALID_STATE_ROOT);
-        let headers = borrow_global_mut<TrustedHeaders>(@atomica);
-        if (table::contains(&headers.state_roots, block_number)) {
-            assert!(
-                *table::borrow(&headers.state_roots, block_number) == state_root,
-                E_HEADER_CONFLICT
-            );
-            return
-        };
-        table::add(&mut headers.state_roots, block_number, state_root);
-        event::emit(HeaderTrusted { block_number, state_root });
+        assert!(vector::length(&siwe_domain) > 0, E_INVALID_DOMAIN);
+        move_to(admin, EthereumConfig { lockbox, fake_eth_token, fake_usd_token, siwe_domain });
     }
 
     // ==================== Views ====================
 
     #[view]
-    /// Whether a trusted state root is stored for `block_number`.
-    public fun has_header(block_number: u64): bool acquires TrustedHeaders {
-        exists<TrustedHeaders>(@atomica)
-            && table::contains(&borrow_global<TrustedHeaders>(@atomica).state_roots, block_number)
+    /// Whether the validators certified a header for `block_number`.
+    public fun has_header(block_number: u64): bool {
+        ethereum_headers::is_certified(block_number)
     }
 
     #[view]
-    /// The trusted state root of `block_number`. Aborts if none is stored.
-    public fun get_state_root(block_number: u64): vector<u8> acquires TrustedHeaders {
+    /// The certified state root of `block_number`. Aborts with
+    /// `E_UNKNOWN_HEADER` if the validators have not certified that block.
+    public fun get_state_root(block_number: u64): vector<u8> {
         assert!(has_header(block_number), E_UNKNOWN_HEADER);
-        *table::borrow(&borrow_global<TrustedHeaders>(@atomica).state_roots, block_number)
+        ethereum_headers::get_state_root(block_number)
     }
 
     #[view]
@@ -136,6 +111,34 @@ module atomica::eth_proof {
         assert!(exists<EthereumConfig>(@atomica), E_CONFIG_NOT_SET);
         let c = borrow_global<EthereumConfig>(@atomica);
         (c.lockbox, c.fake_eth_token, c.fake_usd_token)
+    }
+
+    #[view]
+    /// The pinned SIWE domain (utf8 bytes).
+    public fun siwe_domain(): vector<u8> acquires EthereumConfig {
+        assert!(exists<EthereumConfig>(@atomica), E_CONFIG_NOT_SET);
+        borrow_global<EthereumConfig>(@atomica).siwe_domain
+    }
+
+    #[view]
+    /// The Ethereum-derivable Aptos account of `eth_address` (20 bytes) under
+    /// the pinned SIWE domain: the account a SIWE signature of that Ethereum
+    /// key controls (`0x1::ethereum_derivable_account`). Its identity is the
+    /// lowercase `0x`-prefixed hex address, as the SDK's `getDerivedAddress`
+    /// builds it.
+    public fun ethereum_account_address(eth_address: vector<u8>): address acquires EthereumConfig {
+        assert!(vector::length(&eth_address) == 20, E_INVALID_ADDRESS);
+        // BCS of SIWEAbstractPublicKey { ethereum_address, domain }.
+        let abstract_public_key = bcs::to_bytes(&lower_hex_0x(&eth_address));
+        vector::append(&mut abstract_public_key, bcs::to_bytes(&siwe_domain()));
+        account_abstraction::derive_account_address(
+            function_info::new_function_info_from_address(
+                @aptos_framework,
+                string::utf8(b"ethereum_derivable_account"),
+                string::utf8(b"authenticate"),
+            ),
+            &abstract_public_key,
+        )
     }
 
     /// Pinned FakeETH token address.
@@ -173,10 +176,11 @@ module atomica::eth_proof {
 
     // ==================== Verification ====================
 
-    /// Verify one LockBox lock at a trusted block and return its amount.
+    /// Verify one LockBox lock at a certified block and return its amount.
     ///
     /// The state root, the LockBox address and the storage key are all
-    /// derived on chain. Aborts if the block has no trusted header, if either
+    /// derived on chain. Aborts with `E_UNKNOWN_HEADER` if the validators have
+    /// not certified the block, and aborts if either
     /// proof does not match, or if the lock is empty.
     public fun verify_lock(
         block_number: u64,
@@ -185,13 +189,13 @@ module atomica::eth_proof {
         nonce: u64,
         account_proof: vector<vector<u8>>,
         storage_proof: vector<vector<u8>>,
-    ): u256 acquires EthereumConfig, TrustedHeaders {
+    ): u256 acquires EthereumConfig {
         assert!(vector::length(&account_proof) > 0, E_INVALID_PROOF);
         assert!(vector::length(&storage_proof) > 0, E_INVALID_PROOF);
         let state_root = get_state_root(block_number);
         let (lockbox, _, _) = get_config();
 
-        // 1. Verify the LockBox account against the trusted state root.
+        // 1. Verify the LockBox account against the certified state root.
         // The key for account proofs is keccak256(address).
         let account_rlp = mpt::verify_proof(account_proof, state_root, keccak256(lockbox));
 
@@ -217,6 +221,21 @@ module atomica::eth_proof {
     }
 
     // ==================== Helper Functions ====================
+
+    /// `0x` followed by the lowercase hex of `bytes`, as utf8 bytes.
+    fun lower_hex_0x(bytes: &vector<u8>): vector<u8> {
+        let digits = b"0123456789abcdef";
+        let out = b"0x";
+        let i = 0;
+        let n = vector::length(bytes);
+        while (i < n) {
+            let b = *vector::borrow(bytes, i);
+            vector::push_back(&mut out, *vector::borrow(&digits, ((b >> 4) as u64)));
+            vector::push_back(&mut out, *vector::borrow(&digits, ((b & 0x0f) as u64)));
+            i = i + 1;
+        };
+        out
+    }
 
     /// Encode a u256 as 32 big-endian bytes (Solidity abi.encode of uint256).
     fun u256_be(value: u256): vector<u8> {

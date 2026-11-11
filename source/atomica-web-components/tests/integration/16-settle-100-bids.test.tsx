@@ -11,10 +11,12 @@
  * ts-sdk default maxGasAmount stays at 200,000 units. The settle goes through
  * the SDK's SIWE path (`submitNativeTransaction`), which simulates first and
  * signs with the simulated gas plus a margin, capped at the chain maximum.
- * The operator's direct calls use the same simulated limit.
+ * Every bid and the operator's direct calls use the same simulated limit.
  *
  * 100 bids of 0.1 FakeETH compete for 5 FakeETH, so 50 win and 50 lose.
- * The `@atomica` operator bids and relays openings (Demo-phase claim rule).
+ * The bidder's Ethereum-derivable account places every bid (SIWE): only it
+ * can claim the bidder's collateral receipts. The operator (no special
+ * rights) relays openings.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -28,7 +30,8 @@ import { setupWalletMock } from "./fixtures/wallet-mock";
 import {
   createLiveWindow,
   lockBidCollaterals,
-  submitManyDirect,
+  submitAsEthAccount,
+  ethAccountAddress,
   waitForReveal,
   openWindowBidsDirect,
   getAuctionState,
@@ -121,6 +124,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
     );
     await commands.fundAccount(settlerAptosAddress.toString(), 500_000_000);
 
+    const bidderAptosAddress = await ethAccountAddress(fixture.eth.bidder);
     const collateral = await lockBidCollaterals(
       fixture,
       aptosClient,
@@ -144,7 +148,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
       const sealed = await sealBid(
         auction.windowId,
         PAIR_BCS,
-        operator.accountAddress.toString(),
+        bidderAptosAddress,
         price,
       );
       payloads.push(
@@ -158,7 +162,9 @@ describe.sequential("16: Settle a 100-bid window", () => {
         ),
       );
     }
-    await submitManyDirect(aptosClient, operator, payloads);
+    for (const payload of payloads) {
+      await submitAsEthAccount(aptosClient, fixture.eth.bidder, payload);
+    }
 
     const state = await getAuctionState(aptosClient, moduleAddr, auction);
     expect(state).toEqual({

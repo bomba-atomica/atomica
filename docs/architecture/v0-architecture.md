@@ -262,11 +262,13 @@ LockBox.lock(token, amount,
         │
         ▼
 Validators attest the header ─────► ethereum_headers stores
-(2/3+ voting power, anyone carries)  (block_hash, state_root)
+(2/3+ voting power, validator txn)   (block_hash, state_root)
                                             │
                                             ▼
                                     register_ethereum_lock
-                                    (storage proof vs certified root)
+                                    (any carrier; storage proof vs
+                                     certified root; receipt owner =
+                                     depositor's derivable account)
                                             │
                                             ▼
                                     auction settle / unwind
@@ -289,16 +291,36 @@ make the same call.
 A lock proof is checked on Aptos against trusted inputs only (issues 171, 196,
 197):
 
-- The state root comes from an Ethereum header that Aptos validators certify
-  with a 2/3+ voting-power quorum, like JWK consensus. Anyone may carry a
-  certified header. No entry function writes headers, and a stored header
-  never changes. The caller names a block number, never a root.
-- `eth_proof::initialize` pins the LockBox address and the FakeETH and
-  FakeUSD token addresses once at deploy. The receipt's asset type picks
-  the token.
+- The state root comes from `aptos_framework::ethereum_headers`. Aptos
+  validators observe Ethereum through their own RPCs and certify a header
+  with a 2/3+ voting-power quorum, like JWK consensus. The certificate enters
+  a block as a validator transaction, so no user, relayer or special account
+  carries it. No entry function writes headers, and a stored header never
+  changes. The caller names a block number, never a root. A block the
+  validators have not certified aborts with `E_UNKNOWN_HEADER`.
+- `eth_proof::initialize` pins the LockBox address, the FakeETH and FakeUSD
+  token addresses and the SIWE domain once at deploy. The receipt's asset
+  type picks the token.
 - `eth_proof` derives the storage key from the lock fields, and the receipt's
   `lock_id` is the LockBox lock id, so one lock gives exactly one receipt
   however many blocks it is proven at.
+
+Any account may send `register_ethereum_lock`. The proof names the
+depositor. The receipt stores that Ethereum address as `eth_owner`, and its
+owner (`user`) is the depositor's Ethereum-derivable Aptos account:
+`eth_proof::ethereum_account_address` derives it on chain from the address and
+the pinned SIWE domain, as `0x1::ethereum_derivable_account` and the SDK's
+`getDerivedAddress` do. Only that account can claim the receipt into an
+auction (`create_auction`, `submit_bid`). The `@atomica` account has no
+header, registration or claim privilege.
+
+A client waits until the validators certify a block that covers its lock
+(`0x1::ethereum_headers::latest_block_number`, SDK `waitForCertifiedBlock`),
+then proves the lock at that block. The docker testnet turns attestation on at
+genesis (`eth_chain_id`) and points every validator at the host's Ethereum RPC
+with `block_tag: latest` (`source/docker-testnet/config/generate-genesis.sh`).
+Each network attests one Ethereum chain id, and headers are keyed by block
+number only.
 
 **Every auction ends in an outcome Ethereum can verify (issues 194, 199).**
 Aptos emits one `AuctionOutcome` per auction, from `settle` or from the

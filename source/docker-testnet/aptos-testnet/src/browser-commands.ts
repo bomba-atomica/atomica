@@ -111,7 +111,7 @@ import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testne
 import { setupDualChainTestnet, teardownDualChainTestnet } from "./dual-chain-testnet.js";
 import type { DualChainTestnetInfo } from "./dual-chain-testnet.js";
 import { ethers } from "ethers";
-import { waitForEthBlock } from "./eth-blocks.js";
+import { waitForCertifiedEthBlock, waitForEthBlock } from "./eth-blocks.js";
 
 /**
  * Module augmentation to add our custom commands to Vitest's browser commands types.
@@ -136,7 +136,7 @@ export interface EthLockProofResult {
     proof: {
         blockNumber: number;
         blockHash: string;
-        /** Must be trusted on Aptos (eth_proof::submit_header) before registering */
+        /** The root the validators certified for blockNumber (0x1::ethereum_headers) */
         stateRoot: string;
         contractAddress: string;
         userAddress: string;
@@ -165,12 +165,13 @@ declare module "vitest/browser" {
             address: string,
             amount?: number,
         ): Promise<{ success: boolean; txHash: string }>;
-        setupDualChainTestnet(): Promise<DualChainTestnetInfo>;
+        setupDualChainTestnet(siweDomain?: string): Promise<DualChainTestnetInfo>;
         teardownDualChainTestnet(): Promise<{ success: boolean }>;
         setupEthereumTestnet(): Promise<EthereumTestnetInfo>;
         teardownEthereumTestnet(): Promise<void>;
         generateEthLockProof(
             rpcUrl: string,
+            aptosNodeUrl: string,
             sellerPrivateKey: string,
             fakeETHAddress: string,
             lockBoxAddress: string,
@@ -179,6 +180,7 @@ declare module "vitest/browser" {
         ): Promise<EthLockProofResult>;
         generateEthLockProofs(
             rpcUrl: string,
+            aptosNodeUrl: string,
             sellerPrivateKey: string,
             tokenAddress: string,
             lockBoxAddress: string,
@@ -330,8 +332,11 @@ export const teardownEthereumTestnetCommand: BrowserCommand<[]> = async () => {
  *
  * EXECUTION: Node.js (browser can't start Docker containers)
  */
-export const setupDualChainTestnetCommand: BrowserCommand<[]> = async () => {
-    return await setupDualChainTestnet();
+export const setupDualChainTestnetCommand: BrowserCommand<[siweDomain?: string]> = async (
+    _ctx,
+    siweDomain?: string,
+) => {
+    return await setupDualChainTestnet(siweDomain);
 };
 
 /**
@@ -367,14 +372,18 @@ const LOCKBOX_LOCK_ABI = [
  *   3. Send `count` LockBox.lock() calls with consecutive nonces
  *   4. Read each lock nonce from its TokensLocked event
  *   5. Wait 12 blocks past the last lock for archive proof availability
- *   6. Fetch one eth_getProof of every lockAmounts[lockId] at the last lock
+ *   6. Wait until the Aptos validators certify a block at or after the last
+ *      lock (0x1::ethereum_headers), and take the highest certified block
+ *   7. Fetch one eth_getProof of every lockAmounts[lockId] at that certified
  *      block, where lockId = keccak256(abi.encodePacked(user, token,
  *      uint256(nonce))) (LockBox.getLockId, eth_proof::lock_id)
  *
- * All proofs share one block, so Aptos needs one trusted header for them.
+ * All proofs share one certified block. No one submits a header: Aptos reads
+ * the root the validators certified.
  */
 async function lockAndProve(
     rpcUrl: string,
+    aptosNodeUrl: string,
     sellerPrivateKey: string,
     tokenAddress: string,
     lockBoxAddress: string,
@@ -432,6 +441,18 @@ async function lockAndProve(
 
     // Wait for archive proof availability (12 blocks). Mines them on anvil.
     await waitForEthBlock(provider, proofBlockNumber + 12, 300, "Lock Proof");
+
+    // Prove at a block the validators certified that includes every lock.
+    const lastLockBlock = proofBlockNumber;
+    proofBlockNumber = await waitForCertifiedEthBlock(
+        aptosNodeUrl,
+        lastLockBlock,
+        300,
+        "Lock Proof",
+    );
+    console.log(
+        `[Lock Proof] Locks mined by block ${lastLockBlock}; proving at certified block ${proofBlockNumber}`,
+    );
 
     // Storage key of lockAmounts[lockId] (LockBox slot 4), as Aptos derives it.
     const lockIds = lockNonces.map((lockNonce) =>
@@ -492,8 +513,8 @@ async function lockAndProve(
  * transitively by @atomica/state-proof-verifier) accesses Node's EventEmitter
  * which is not available in browser context.
  *
- * Mints, approves, locks once, waits 12 blocks, and proves the lock at its
- * block (see lockAndProve).
+ * Mints, approves, locks once, waits 12 blocks and for a certified block,
+ * and proves the lock there (see lockAndProve).
  *
  * Returns a JSON-serialisable result (storageValue as decimal string).
  *
@@ -502,6 +523,7 @@ async function lockAndProve(
 export const generateEthLockProofCommand: BrowserCommand<
     [
         rpcUrl: string,
+        aptosNodeUrl: string,
         sellerPrivateKey: string,
         fakeETHAddress: string,
         lockBoxAddress: string,
@@ -511,6 +533,7 @@ export const generateEthLockProofCommand: BrowserCommand<
 > = async (
     _ctx,
     rpcUrl: string,
+    aptosNodeUrl: string,
     sellerPrivateKey: string,
     fakeETHAddress: string,
     lockBoxAddress: string,
@@ -519,6 +542,7 @@ export const generateEthLockProofCommand: BrowserCommand<
 ): Promise<EthLockProofResult> => {
     const [result] = await lockAndProve(
         rpcUrl,
+        aptosNodeUrl,
         sellerPrivateKey,
         fakeETHAddress,
         lockBoxAddress,
@@ -541,6 +565,7 @@ export const generateEthLockProofCommand: BrowserCommand<
 export const generateEthLockProofsCommand: BrowserCommand<
     [
         rpcUrl: string,
+        aptosNodeUrl: string,
         sellerPrivateKey: string,
         tokenAddress: string,
         lockBoxAddress: string,
@@ -550,6 +575,7 @@ export const generateEthLockProofsCommand: BrowserCommand<
 > = async (
     _ctx,
     rpcUrl: string,
+    aptosNodeUrl: string,
     sellerPrivateKey: string,
     tokenAddress: string,
     lockBoxAddress: string,
@@ -559,6 +585,7 @@ export const generateEthLockProofsCommand: BrowserCommand<
     const lockAmount = BigInt(lockAmountWei);
     return lockAndProve(
         rpcUrl,
+        aptosNodeUrl,
         sellerPrivateKey,
         tokenAddress,
         lockBoxAddress,

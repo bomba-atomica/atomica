@@ -3,10 +3,10 @@
  *
  * Verifies parameter order and types match the Move entry function signatures:
  *   lock_receipt::register_ethereum_lock<FakeETH>(
- *     account, block_number, user_address, lock_nonce,
+ *     carrier, block_number, user_address, lock_nonce,
  *     account_proof, storage_proof
  *   )
- *   eth_proof::submit_header(admin, block_number, state_root)
+ *   0x1::ethereum_headers::latest_block_number(): Option<u64>
  *   auction::create_auction(seller, window_id, pair_bcs, lock_id, min_price,
  *     timelock_id, mpk_bytes)
  *   ibe_config::register_timelock(account, deadline_us)
@@ -32,15 +32,18 @@ vi.mock("../src/transaction", () => ({
   submitNativeTransaction: vi.fn(),
 }));
 
+import * as payloads from "../src/aptos/payloads";
 import {
   getRegisterLockPayload,
-  getSubmitEthereumHeaderPayload,
+  getLatestCertifiedBlock,
+  waitForCertifiedBlock,
   getCreateAuctionPayload,
   getRegisterTimelockPayload,
   timelockIdFromEvents,
   TIMELOCK_REGISTRATION_EVENT,
 } from "../src/aptos/payloads";
 import type { LockedBalanceProof } from "../src/ethereum/proofs/generator";
+import type { Aptos } from "@aptos-labs/ts-sdk";
 
 // ── Fixture ──────────────────────────────────────────────────────────────────
 
@@ -143,19 +146,55 @@ describe("getRegisterLockPayload", () => {
   });
 });
 
-// ── getSubmitEthereumHeaderPayload ────────────────────────────────────────────
+// ── Certified Ethereum headers ────────────────────────────────────────────────
 
-describe("getSubmitEthereumHeaderPayload", () => {
-  it("targets eth_proof::submit_header with block number and 32-byte root", () => {
-    const payload = getSubmitEthereumHeaderPayload(
-      42,
-      "0x" + "cd".repeat(32),
-    ) as InputEntryFunctionData;
-    expect(payload.function).toBe("0xtest::eth_proof::submit_header");
-    expect(payload.functionArguments![0]).toBe(42);
-    const root = payload.functionArguments![1] as Uint8Array;
-    expect(root).toBeInstanceOf(Uint8Array);
-    expect(root.length).toBe(32);
+describe("Ethereum header source", () => {
+  it("exports no submit_header payload builder: only validators write headers", () => {
+    const names = Object.keys(payloads);
+    expect(names).not.toContain("getSubmitEthereumHeaderPayload");
+    expect(names.filter((n) => /submit.*header/i.test(n))).toEqual([]);
+  });
+});
+
+/** An Aptos client whose latest_block_number view returns `results` in turn. */
+function viewClient(results: (string | undefined)[]) {
+  const view = vi.fn(async () => {
+    const next = results.length > 1 ? results.shift() : results[0];
+    return [{ vec: next === undefined ? [] : [next] }];
+  });
+  return { client: { view } as unknown as Aptos, view };
+}
+
+describe("getLatestCertifiedBlock", () => {
+  it("reads 0x1::ethereum_headers::latest_block_number", async () => {
+    const { client, view } = viewClient(["17"]);
+    expect(await getLatestCertifiedBlock(client)).toBe(17);
+    expect(view).toHaveBeenCalledWith({
+      payload: {
+        function: "0x1::ethereum_headers::latest_block_number",
+        functionArguments: [],
+      },
+    });
+  });
+
+  it("is undefined before the first certified header", async () => {
+    const { client } = viewClient([undefined]);
+    expect(await getLatestCertifiedBlock(client)).toBeUndefined();
+  });
+});
+
+describe("waitForCertifiedBlock", () => {
+  it("polls until a certified block covers the lock and returns it", async () => {
+    const { client, view } = viewClient([undefined, "40", "45"]);
+    expect(await waitForCertifiedBlock(42, 5_000, client, 1)).toBe(45);
+    expect(view).toHaveBeenCalledTimes(3);
+  });
+
+  it("throws when no certified block covers the lock in time", async () => {
+    const { client } = viewClient(["40"]);
+    await expect(waitForCertifiedBlock(42, 20, client, 1)).rejects.toThrow(
+      /No certified Ethereum block at or after 42.*latest certified: 40/,
+    );
   });
 });
 

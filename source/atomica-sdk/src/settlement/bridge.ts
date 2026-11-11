@@ -35,7 +35,6 @@
 
 import { ethers } from "ethers";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { aptosToEthereumAddress } from "../ethereum/address-converter.js";
 
 // ============================================================
 // Types
@@ -876,14 +875,11 @@ function aptosClientFor(config: BridgeConfig): Aptos {
   );
 }
 
-/** Long-form (64 hex digit) Aptos address. */
-function longAptosAddress(addr: string): string {
-  return `0x${addr.replace(/^0x/, "").toLowerCase().padStart(64, "0")}`;
-}
-
 /**
- * Read an Aptos lock receipt with `lock_receipt::get_receipt<Ethereum, Asset>`
- * and resolve its owner to the Ethereum address that locked the tokens.
+ * Read an Aptos lock receipt with `lock_receipt::get_receipt<Ethereum, Asset>`.
+ * `user` is the depositor's Ethereum address, which the receipt stores as
+ * proven (`eth_owner`). The receipt's Aptos owner is the depositor's
+ * Ethereum-derivable account, which does not encode that address.
  */
 export async function getLockReceipt(
   aptosClient: Aptos,
@@ -892,7 +888,7 @@ export async function getLockReceipt(
   lockId: string | Uint8Array,
 ): Promise<LockReceiptInfo> {
   const id = typeof lockId === "string" ? lockId : ethers.hexlify(lockId);
-  const [user, amount, blockNumber, status] = await aptosClient.view({
+  const [, amount, blockNumber, status, ethOwner] = await aptosClient.view({
     payload: {
       function: `${contractAddress}::lock_receipt::get_receipt`,
       typeArguments: [
@@ -904,9 +900,7 @@ export async function getLockReceipt(
   });
   return {
     lockId: id,
-    user: ethers.getAddress(
-      aptosToEthereumAddress(longAptosAddress(String(user))),
-    ),
+    user: ethers.getAddress(String(ethOwner)),
     amount: BigInt(String(amount)),
     blockNumber: BigInt(String(blockNumber)),
     status: Number(status),

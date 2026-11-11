@@ -12,8 +12,8 @@
  *      the bidder is the winner with a zero rebate and fee (REBATE_COEFFICIENT
  *      is 0), and an address with no bid is not a winner
  *
- * One sealed bid (price 2.00) is placed by the `@atomica` operator
- * (Demo-phase claim rule).
+ * One sealed bid (price 2.00) is placed by the bidder's Ethereum-derivable
+ * account, the only account that can claim the bidder's collateral receipt.
  */
 
 import React from "react";
@@ -34,6 +34,7 @@ import {
   createLiveWindow,
   lockBidCollateral,
   submitBidDirect,
+  ethAccountAddress,
   waitForReveal,
   openWindowBidsDirect,
   settleAuctionDirect,
@@ -144,7 +145,7 @@ describe.sequential("12: FeeRebateDisplay — live fee and rebate after settleme
       minPrice: MIN_PRICE,
       deadlineAheadUs: DEADLINE_AHEAD_US,
     });
-    await submitBidDirect(aptosClient, operator, auction, BID_PRICE, collateral, BID_QUANTITY);
+    await submitBidDirect(aptosClient, fixture.eth.bidder, auction, BID_PRICE, collateral, BID_QUANTITY);
   }, 1_200_000);
 
   afterAll(async () => {
@@ -228,7 +229,7 @@ describe.sequential("12: FeeRebateDisplay — live fee and rebate after settleme
   it(
     "useFeeRebate stays loading while the live window is unsettled",
     async () => {
-      const bidder = operator.accountAddress.toString();
+      const bidder = await ethAccountAddress(fixture.eth.bidder);
       expect(await isSettled(auction.windowId, PAIR_BCS)).toBe(false);
 
       render(
@@ -265,7 +266,7 @@ describe.sequential("12: FeeRebateDisplay — live fee and rebate after settleme
       expect(state.settled).toBe(true);
       expect(state.clearingPrice).toBe(BID_PRICE);
 
-      const bidder = operator.accountAddress.toString();
+      const bidder = await ethAccountAddress(fixture.eth.bidder);
       render(
         <FeeRebateProviders account={bidder}>
           <FeeRebateHarness

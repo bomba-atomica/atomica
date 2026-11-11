@@ -349,6 +349,18 @@ module atomica::auction {
 
     // ===================== Entry Functions =====================
 
+    /// Publish the global AuctionRegistry at @atomica when the package is
+    /// published, so the first `create_auction` may come from any seller.
+    fun init_module(atomica: &signer) {
+        move_to(atomica, AuctionRegistry { windows: table::new() });
+    }
+
+    #[test_only]
+    /// Runs `init_module` for tests whose first seller is not @atomica.
+    public fun init_for_test(atomica: &signer) {
+        init_module(atomica);
+    }
+
     /// Create (or join) a global-registry auction for `(window_id, pair)`.
     ///
     /// Consumes a seller's FakeETH LockReceipt to prove on-chain escrow, then
@@ -407,11 +419,8 @@ module atomica::auction {
 
         // 3. Ensure the global AuctionRegistry exists at @atomica.
         //
-        // On first call the registry is bootstrapped lazily. Only the @atomica
-        // deployer can bootstrap it (move_to publishes at the signer's address,
-        // so the registry lands at @atomica only when seller == @atomica). Non-
-        // deployer sellers will find the registry already present after the
-        // deployer has made the first create_auction call.
+        // init_module publishes it. Move unit tests that skip init_module
+        // still bootstrap it here when @atomica is the first seller.
         if (!exists<AuctionRegistry>(@atomica)) {
             move_to(seller, AuctionRegistry {
                 windows: table::new(),
