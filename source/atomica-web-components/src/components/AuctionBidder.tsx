@@ -111,7 +111,6 @@ export function AuctionBidder() {
   const [status, setStatus] = useState<string | null>(null);
 
   // ── Step 1 handler: approve + lock + prove + register FakeUSD ─────────────
-  // SCOUT(#234) EDIT: no code change expected: the SDK approve and lock reject on a pin mismatch and the catch below shows the message; add the unit test.
   // SCOUT(#218) EDIT: a collateral below the new minimum locks on Ethereum and then aborts on Aptos, so the lock waits for reclaim; read the SDK limits view reader before the lock.
   const handleLockCollateral = async () => {
     if (!account) return;

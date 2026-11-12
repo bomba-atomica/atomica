@@ -149,7 +149,6 @@ export async function setupIntegrationFixture(
     },
   };
 
-  // SCOUT(#234) EDIT: the pin check compares this config with eth_proof::get_config; the fixture pins the same LockBox and tokens, so live tests pass unchanged.
   // SCOUT(#235) EDIT: the chain config gains optional extra Aptos endpoints; this fixture has one node URL.
   // Configure the app to use testnet addresses
   (

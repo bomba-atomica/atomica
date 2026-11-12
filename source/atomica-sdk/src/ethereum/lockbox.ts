@@ -16,6 +16,7 @@
 
 import { ethers, type TransactionReceipt } from "ethers";
 import { getChainConfig } from "../chain-config.js";
+import { assertEthereumConfigMatchesPin } from "../ethereum-pin.js";
 import {
   FAKE_ETH_ABI,
   FAKE_USD_ABI,
@@ -42,7 +43,6 @@ export interface LockFields {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// SCOUT(#234) EDIT: this configured address must equal the eth_proof pin before any approve or lock.
 function getLockBoxAddress(): string {
   return getChainConfig().ethereum.lockBox;
 }
@@ -86,13 +86,14 @@ async function getFakeUsdWithSigner(provider: ethers.BrowserProvider) {
 }
 
 // SCOUT(#221) EDIT: call lock(token, amount, windowId, pairHash); LockBox computes the deadline.
-// SCOUT(#234) EDIT: assert the pin here before the lock is sent; lockFakeEth and lockFakeUsd both pass through.
 async function lockToken(
   provider: ethers.BrowserProvider,
   token: string,
   amount: bigint,
   binding: LockBinding,
 ): Promise<TransactionReceipt> {
+  // Aptos accepts a lock only in the pinned LockBox and tokens.
+  await assertEthereumConfigMatchesPin();
   const lockBox = await getLockBoxWithSigner(provider);
   const tx = await lockBox.lock(
     token,
@@ -109,17 +110,18 @@ async function lockToken(
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-// SCOUT(#234) EDIT: call assertEthereumConfigMatchesPin before the approve is sent.
 /**
  * Approve LockBox to spend `amount` of FakeETH on the user's behalf.
  *
  * This must be called before `lockFakeEth` if the current allowance is
- * insufficient.
+ * insufficient. Refuses, sending nothing, unless the client's LockBox and
+ * token addresses equal the `eth_proof` pin (`assertEthereumConfigMatchesPin`).
  */
 export async function approveFakeEth(
   provider: ethers.BrowserProvider,
   amount: bigint,
 ): Promise<TransactionReceipt> {
+  await assertEthereumConfigMatchesPin();
   const fakeEth = await getFakeEthWithSigner(provider);
   const lockBoxAddress = getLockBoxAddress();
 
@@ -129,12 +131,12 @@ export async function approveFakeEth(
   return receipt;
 }
 
-// SCOUT(#234) EDIT: refuses on a pin mismatch, through lockToken.
 /**
  * Lock `amount` of FakeETH in LockBox into the auction `binding` names
  * (see `lockBinding`).
  *
  * The caller must have approved LockBox for at least `amount` first.
+ * Refuses, sending nothing, on a pin mismatch (`assertEthereumConfigMatchesPin`).
  */
 export async function lockFakeEth(
   provider: ethers.BrowserProvider,
@@ -425,12 +427,12 @@ export async function getTotalLockedEth(
 
 // ── FakeUSD bidder-collateral lock helpers (Phase 3b #87) ──────────────────────
 
-// SCOUT(#234) EDIT: call assertEthereumConfigMatchesPin before the approve is sent.
 /**
  * Approve LockBox to spend `amount` of FakeUSD on the bidder's behalf.
  *
  * Must be called before `lockFakeUsd` if the current FakeUSD allowance is
- * insufficient.  Mirrors `approveFakeEth` for the bidder collateral path.
+ * insufficient.  Mirrors `approveFakeEth` for the bidder collateral path,
+ * including the pin check.
  *
  * @see docs/architecture/v0-architecture.md §2.5 — Bidder Collateral
  */
@@ -438,6 +440,7 @@ export async function approveFakeUsd(
   provider: ethers.BrowserProvider,
   amount: bigint,
 ): Promise<TransactionReceipt> {
+  await assertEthereumConfigMatchesPin();
   const fakeUsd = await getFakeUsdWithSigner(provider);
   const lockBoxAddress = getLockBoxAddress();
 
@@ -447,13 +450,12 @@ export async function approveFakeUsd(
   return receipt;
 }
 
-// SCOUT(#234) EDIT: refuses on a pin mismatch, through lockToken.
 /**
  * Lock `amount` of FakeUSD in LockBox as bidder collateral margin, into the
  * auction `binding` names.
  *
  * The caller must have approved LockBox for at least `amount` first (via
- * `approveFakeUsd`).  Returns the transaction receipt; its `Locked` event
+ * `approveFakeUsd`).  Refuses on a pin mismatch.  Returns the transaction receipt; its `Locked` event
  * (`lockFromReceipt`) gives the `collateral_lock_id` for `auction::submit_bid`.
  *
  * @see docs/architecture/v0-architecture.md §2.5 — Bidder Collateral

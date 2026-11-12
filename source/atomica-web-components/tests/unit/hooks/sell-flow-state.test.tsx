@@ -535,7 +535,6 @@ describe("useSellFlow state machine", () => {
       expect(stored()).toEqual({ step: "lock" });
     });
 
-    // SCOUT(#234) EDIT: this existing case already covers a rejected lock; extend it with the pin mismatch message (the issue names SellFlow.error.test.tsx instead).
     it("lockEth error: sets the error message and stays at lock", async () => {
       vi.mocked(approveFakeEth).mockResolvedValue(undefined as never);
       vi.mocked(lockFakeEth).mockRejectedValue(new Error("user rejected lock"));
@@ -551,6 +550,25 @@ describe("useSellFlow state machine", () => {
       expect(result.current.loading).toBe(false);
       expect(result.current.txHash).toBeUndefined();
       expect(lockFromReceipt).not.toHaveBeenCalled();
+      expect(stored().step).toBe("lock");
+    });
+
+    it("lockEth shows the pinned address and stays at the lock step when the SDK rejects with the pin mismatch", async () => {
+      const pinned = "0x" + "77".repeat(20);
+      const message = `LockBox address mismatch: Aptos pins ${pinned}, but this client is configured with ${"0x" + "11".repeat(20)}. Aptos accepts locks only in ${pinned}. Refusing to approve or lock.`;
+      vi.mocked(approveFakeEth).mockRejectedValueOnce(new Error(message));
+
+      const { result } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      await act(async () => {
+        await result.current.lockEth(10n ** 18n, 2_000_000_000n);
+      });
+
+      expect(result.current.step).toBe("lock");
+      expect(result.current.error).toBe(message);
+      expect(result.current.error).toContain(pinned);
+      expect(result.current.loading).toBe(false);
+      expect(lockFakeEth).not.toHaveBeenCalled();
       expect(stored().step).toBe("lock");
     });
 
@@ -605,5 +623,4 @@ describe("useSellFlow state machine", () => {
 
   it.todo("SCOUT(#243) createAuction submits exactly one transaction and never calls registerTimelock");
   it.todo("SCOUT(#241) createAuction runs when the saved state has no minimum price");
-  it.todo("SCOUT(#234) lockEth shows the pinned address and stays at the lock step when the SDK rejects with the pin mismatch");
 });

@@ -282,7 +282,6 @@ export function useSellFlow(
   }, []);
 
   // SCOUT(#241) EDIT: drop the minPrice parameter.
-  // SCOUT(#234) EDIT: no code change expected: approveFakeEth and lockFakeEth reject on a LockBox or token pin mismatch and setError shows the message.
   // SCOUT(#218) EDIT: a lock below the new minimum, or a seller lock past the cap, locks on Ethereum and then aborts in create_auction; pre-check with the SDK limits view reader, or the lock waits for reclaim.
   const lockEth = useCallback(
     async (amount: bigint, minPrice: bigint) => {

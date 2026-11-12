@@ -224,7 +224,6 @@ jobs:
           git diff --exit-code -- ../atomica-sdk/tests/fixtures/golden_vectors.json
 
       # SCOUT(#217) TEST: the new SDK price test file runs here with no workflow edit; vitest.config.ts includes tests/**/*.test.ts.
-      # SCOUT(#234) TEST: the new tests/ethereum lock guard file runs here with no workflow edit (same include glob).
       - name: Run atomica-sdk tests
         working-directory: source/atomica-sdk
         run: bun run test
@@ -642,7 +641,6 @@ jobs:
           # SCOUT(#217) TEST: this chunk runs 14-happy-path with the 2000 price.
           # SCOUT(#221) TEST: this chunk runs 14-happy-path, which locks through the new lock() call with no deadline argument.
           # SCOUT(#228) TEST: this chunk runs 14-happy-path with the on-chain open step.
-          # SCOUT(#234) TEST: this chunk runs 14-happy-path, which must still lock once the client compares its LockBox with the eth_proof pin.
           - chunk: happy-path
             test_files: >-
               tests/integration/14-happy-path.test.tsx

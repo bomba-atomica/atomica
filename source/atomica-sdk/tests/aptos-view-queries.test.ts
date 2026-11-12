@@ -10,6 +10,7 @@
  *   - getSettlement  → auction::get_settlement     → { clearingPrice, totalFilled }
  *   - getMpk         → timelock::get_mpk    → Uint8Array
  *   - isRevealed     → timelock::is_revealed → boolean
+ *   - getPinnedEthereumConfig → eth_proof::get_config → { lockBox, fakeETH, fakeUSD }
  *
  * @see source/atomica-sdk/src/aptos/payloads.ts
  * @see docs/architecture/v0-architecture.md §2 — sealed-bid reveal path
@@ -44,6 +45,7 @@ import {
   getSettlement,
   getMpk,
   isRevealed,
+  getPinnedEthereumConfig,
 } from "../src/aptos/payloads.js";
 import * as config from "../src/aptos/config.js";
 
@@ -215,12 +217,41 @@ describe("isRevealed", () => {
   });
 });
 
+describe("getPinnedEthereumConfig", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("getPinnedEthereumConfig reads eth_proof::get_config and returns the LockBox, FakeETH and FakeUSD addresses", async () => {
+    vi.mocked(config.aptos.view).mockResolvedValueOnce([
+      "0x" + "11".repeat(20),
+      "0x" + "22".repeat(20),
+      "0x" + "33".repeat(20),
+    ]);
+    const pinned = await getPinnedEthereumConfig();
+    expect(pinned).toEqual({
+      lockBox: "0x" + "11".repeat(20),
+      fakeETH: "0x" + "22".repeat(20),
+      fakeUSD: "0x" + "33".repeat(20),
+    });
+    const { payload } = vi.mocked(config.aptos.view).mock.calls[0][0] as {
+      payload: { function: string; functionArguments: unknown[] };
+    };
+    expect(payload.function).toBe("0xdeadbeef::eth_proof::get_config");
+    expect(payload.functionArguments).toEqual([]);
+  });
+
+  it("rejects when the view aborts E_CONFIG_NOT_SET", async () => {
+    vi.mocked(config.aptos.view).mockRejectedValueOnce(
+      new Error("Move abort in eth_proof: E_CONFIG_NOT_SET(0x7)"),
+    );
+    await expect(getPinnedEthereumConfig()).rejects.toThrow("E_CONFIG_NOT_SET");
+  });
+});
+
 describe("planned tests (SCOUT)", () => {
   it.todo(
     "SCOUT(#238) areCoreContractsDeployed returns true for a module list without registry",
-  );
-  it.todo(
-    "SCOUT(#234) getPinnedEthereumConfig reads eth_proof::get_config and returns the LockBox, FakeETH and FakeUSD addresses",
   );
   it.todo(
     "SCOUT(#218) getWindowLimits reads the limits view and returns the bid cap, the seller cap and the two minimums",

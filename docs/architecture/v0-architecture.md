@@ -386,7 +386,6 @@ ordinary transactions from the user's own wallet. Every byte a carrier brings
 is checked on chain, so a carrier holds no special authority.
 
 <!-- SCOUT(#221) DOC: last bullet: register_ethereum_lock takes no deadline; verify_lock recomputes the commitment with eth_lock_deadline(window_id) and E_WRONG_DEADLINE goes. -->
-<!-- SCOUT(#234) DOC: second bullet (the pin): add that the client reads this pin and refuses to approve or lock when its LockBox or token address differs. -->
 
 A lock proof is checked on Aptos against trusted inputs only (issues 171, 196,
 197):
@@ -400,7 +399,10 @@ A lock proof is checked on Aptos against trusted inputs only (issues 171, 196,
   validators have not certified aborts with `E_UNKNOWN_HEADER`.
 - `eth_proof::initialize` pins the LockBox address, the FakeETH and FakeUSD
   token addresses and the SIWE domain once at deploy. The receipt's asset
-  type picks the token.
+  type picks the token. The client reads this pin (`eth_proof::get_config`)
+  before every SDK approve and lock, and refuses to send either when its
+  LockBox or token address differs (`assertEthereumConfigMatchesPin`,
+  `source/atomica-sdk/src/ethereum-pin.ts`, issue 234).
 - `eth_proof` derives the storage key from the lock fields, and the receipt's
   `lock_id` is the LockBox lock id, so one lock gives exactly one receipt
   however many blocks it is proven at.

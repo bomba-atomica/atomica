@@ -157,7 +157,16 @@ import {
   isSettled,
   getBidResults,
   getFakeEthBalance,
+  getPinnedEthereumConfig,
+  assertEthereumConfigMatchesPin,
 } from "@atomica/sdk/aptos";
+import {
+  approveFakeUsd,
+  currentWindowId as hostWindowId,
+  lockBinding,
+  lockFakeUsd,
+  lockFromReceipt,
+} from "@atomica/sdk/ethereum";
 import {
   setAptosInstance as setDockerAptosInstance,
   getDerivedAddress,
@@ -823,5 +832,44 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
   );
 
   it.todo("SCOUT(#236) release: the winner's FakeETH and the seller's FakeUSD ERC-20 balances rise by the outcome amounts and both locks read released");
-  it.todo("SCOUT(#234) an SDK approve and lock passes the pin check against the live eth_proof::get_config (no SDK lock runs in this suite today)");
+
+  // ── Pin check: the SDK approve and lock read eth_proof::get_config ───────
+
+  it(
+    "an SDK approve and lock passes the pin check against the live eth_proof::get_config",
+    async () => {
+      // The pin equals the fixture's LockBox and tokens, which the chain
+      // config of the app also holds.
+      const pinned = await getPinnedEthereumConfig();
+      expect(pinned.lockBox.toLowerCase()).toBe(fixture.eth.contracts.lockBox.toLowerCase());
+      expect(pinned.fakeETH.toLowerCase()).toBe(fixture.eth.contracts.fakeETH.toLowerCase());
+      expect(pinned.fakeUSD.toLowerCase()).toBe(fixture.eth.contracts.fakeUSD.toLowerCase());
+      await assertEthereumConfigMatchesPin();
+
+      // The bidder approves and locks 1 FakeUSD through the SDK, which
+      // checks the pin before each transaction.
+      await setupWalletMock({
+        privateKey: fixture.eth.bidder.privateKey,
+        rpcUrl: fixture.eth.rpcUrl,
+        chainId: fixture.eth.chainId,
+      });
+      const provider = new ethers.BrowserProvider(
+        (window as unknown as { ethereum: ethers.Eip1193Provider }).ethereum,
+      );
+      const rpc = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
+      const head = await rpc.getBlock("latest");
+      const amount = 1_000_000n;
+      await approveFakeUsd(provider, amount);
+      const lock = lockFromReceipt(
+        await lockFakeUsd(
+          provider,
+          amount,
+          lockBinding(hostWindowId(BigInt(head!.timestamp)), new TextEncoder().encode("14-pin")),
+        ),
+      );
+      expect(lock.token.toLowerCase()).toBe(fixture.eth.contracts.fakeUSD.toLowerCase());
+      expect(lock.amount).toBe(amount);
+    },
+    120_000,
+  );
 });

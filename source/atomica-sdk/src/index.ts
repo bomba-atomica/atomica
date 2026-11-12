@@ -5,3 +5,6 @@
 export * from "./siwe.js";
 export * from "./transaction.js";
 // SCOUT(#217) ADD: export parsePrice and formatPrice from "./price.js" here.
+// Lock guard: compare the client's LockBox and token addresses with eth_proof.
+export * from "./ethereum-pin.js";
+export { getPinnedEthereumConfig } from "./aptos/payloads.js";
