@@ -1,3 +1,4 @@
+// SCOUT(#238) REMOVE: whole file; also remove it from the claim-reclaim-fees chunk of test-web.yaml (both tiers) and from the exemptions list.
 /**
  * @file 12-fee-rebate.test.tsx
  * @description Browser integration tests for the FeeRebateDisplay component

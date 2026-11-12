@@ -51,6 +51,7 @@ describe.sequential("Atomica Contract Deployment", () => {
             deployerAddress: deployer.accountAddress.toString(),
             namedAddresses: { atomica: deployer.accountAddress.toString() },
             initFunctions: [
+                // SCOUT(#238) REMOVE: this registry::initialize call goes with registry.move.
                 {
                     functionId: `${deployer.accountAddress.toString()}::registry::initialize`,
                     args: ["hex:0123456789abcdef"],
@@ -75,6 +76,8 @@ describe.sequential("Atomica Contract Deployment", () => {
             accountAddress: deployer.accountAddress,
         });
 
+        // SCOUT(#238) EDIT: the issue text names only the initialize call above; the expected module list and the registry assert below also name the deleted module.
+        // SCOUT(#243) EDIT: this test publishes under a random address, so its package is not the genesis registrar; it stays valid only while it never calls create_auction.
         // Verify expected modules exist
         const expectedModules = ["registry", "fake_eth", "fake_usd"];
 

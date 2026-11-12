@@ -10,6 +10,7 @@ interface Props {
   onSettled?: (windowId: bigint, clearingPrice: bigint) => void;
 }
 
+// SCOUT(#236) EDIT: the button is gated on a client-clock auctionEndTime prop and stays disabled without one; gate it on chain state so the demo can mount it.
 /**
  * SettleButton — calls `auction::settle` on-chain (v0 Beta global-registry).
  *
@@ -63,6 +64,8 @@ export function SettleButton({
         if (cancelled) return;
         setSettled(s);
         if (s) {
+          // SCOUT(#238) EDIT: get_settlement returns the filled total, not total_supply, so the Total filled line below changes value.
+          // SCOUT(#217) EDIT: result.clearingPrice is whole USD per whole base token; it is stored here and passed to onSettled unchanged.
           const result = await getSettlement(windowId, pairBcs);
           if (cancelled) return;
           setClearingPrice(result.clearingPrice);
@@ -96,11 +99,13 @@ export function SettleButton({
       onSettled?.(windowId, result.clearingPrice);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unknown error";
+      // SCOUT(#238) EDIT: these matches are stale: settle raises E_DEADLINE_NOT_PASSED (31) and E_WINDOW_ALREADY_SETTLED (11), and E_ALREADY_SETTLED (5) is never raised; fix them when the unused codes go.
       if (msg.includes("E_AUCTION_NOT_ENDED") || msg.includes("abort 3")) {
         setStatus("Error: Auction window has not ended yet");
       } else if (msg.includes("E_ALREADY_SETTLED") || msg.includes("abort 5")) {
         setStatus("Error: Auction already settled");
       } else if (
+        // SCOUT(#238) REMOVE: the E_NOT_IMPLEMENTED and abort 99 branch.
         msg.includes("E_NOT_IMPLEMENTED") ||
         msg.includes("abort 99")
       ) {
@@ -142,12 +147,14 @@ export function SettleButton({
           data-testid="settle-result"
           className="text-xs font-mono p-2 bg-zinc-950 rounded border border-zinc-800 flex flex-col gap-1"
         >
+          {/* SCOUT(#217) EDIT: clearing price display divides by 1e6; use the SDK formatPrice. */}
           <div className="flex justify-between">
             <span className="text-zinc-500">Clearing price</span>
             <span data-testid="settle-clearing-price" className="text-zinc-300">
               {`$${(Number(clearingPrice) / 1e6).toFixed(2)}`}
             </span>
           </div>
+          {/* SCOUT(#238) EDIT: this value is the window supply today; it becomes the sum of the winners' fills. */}
           {totalFilled !== null && (
             <div className="flex justify-between">
               <span className="text-zinc-500">Total filled</span>

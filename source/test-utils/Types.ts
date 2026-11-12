@@ -1,3 +1,4 @@
+// SCOUT(#239) REMOVE: whole file; nothing outside source/test-utils imports it, and no package.json, tsconfig or lint config covers this folder.
 export interface BlockHeader {
   parentHash: string;
   uncleHash: string;
@@ -65,6 +66,7 @@ export interface AuctionConfig {
   nonce: number;
   description: string;
   deadlineMicro: number;
+  // SCOUT(#241) EDIT: this minPrice belongs to a mock config of an older EVM auction model, not to create_auction's min_price; it needs no edit once the removal issue (239) deletes this file.
   minPrice: bigint;
   maxPrice: bigint;
   minEthAmount: bigint;

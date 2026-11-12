@@ -102,6 +102,7 @@ export interface BridgeConfig {
 // Helpers
 // ============================================================
 
+// SCOUT(#224) EDIT: this encoder writes 4-byte lengths, which is not Move BCS; do not build LAUNCH_PAIR_BCS with it.
 /**
  * BCS-encode a Pair struct as the Aptos Move BCS format.
  *
@@ -476,6 +477,7 @@ export type LockAsset = "FakeETH" | "FakeUSD";
 const QUOTE_UNIT = 10n ** 6n;
 const BASE_UNIT = 10n ** 18n;
 
+// SCOUT(#217) EDIT: state the unit here and move this function to src/price.ts, because the SDK unwind issue (195) deletes the release planner around it.
 /**
  * FakeUSD units a winner pays for `baseAmount` FakeETH wei at
  * `clearingPrice` (USD per base token, no decimal shift). Rounds down.
@@ -926,6 +928,7 @@ async function getWindowLockIds(
   };
 }
 
+// SCOUT(#224) EDIT: the default pair is no longer empty bytes; the SDK unwind issue (195) owns this relayer.
 /** Pair bytes of the windows this relayer serves (default: empty, as the sell flow uses). */
 export function servedPairBcs(config: BridgeConfig): Uint8Array {
   return ethers.getBytes(config.pairBcs ?? "0x");

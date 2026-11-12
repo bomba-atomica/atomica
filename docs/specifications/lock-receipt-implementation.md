@@ -1,3 +1,5 @@
+<!-- SCOUT(#238) DOC: wholly superseded summary (old register_ethereum_lock signature, replay protection by block hash); the claimed_locks field in its ReceiptRegistry block goes; archive this file rather than edit one line. -->
+
 # Lock Receipt Implementation Summary
 
 > [!IMPORTANT]

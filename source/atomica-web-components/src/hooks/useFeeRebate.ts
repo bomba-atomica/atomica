@@ -1,3 +1,4 @@
+// SCOUT(#238) REMOVE: whole file (fetchRebates and auction::compute_rebates are deleted).
 import { useState, useEffect } from "react";
 import {
   getSettlement,

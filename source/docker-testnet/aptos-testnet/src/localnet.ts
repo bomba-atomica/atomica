@@ -34,6 +34,7 @@
  *
  * See: ../docker-testnet/typescript-sdk/README.md
  */
+// SCOUT(#239) EDIT: the header comment above names the old SDK twice ("@atomica/docker-testnet SDK" and its README path); the acceptance grep matches the README path.
 
 import { DockerTestnet } from "./index.js";
 import { resolve as pathResolve, dirname } from "path";
@@ -67,6 +68,7 @@ const DEPLOYER_PK = "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f2115682
  * Address derived from DEPLOYER_PK.
  * Used as the deployment address for Atomica contracts.
  */
+// SCOUT(#243) EDIT: the genesis timelock_registrar is derived from this address; test/deploy-atomica-contracts.test.ts publishes under a random address, whose package could not register a timelock.
 const DEPLOYER_ADDR = "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 
 /**
@@ -180,6 +182,7 @@ export async function fundAccount(address: string, amount: number = 100_000_000)
     return txHash;
 }
 
+// SCOUT(#238) EDIT: the deployContracts comment below lists the registry module and its initialize step, which are deleted.
 /** Guard flag to prevent duplicate contract deployments */
 let contractsDeployed = false;
 
@@ -224,6 +227,7 @@ export async function deployContracts(): Promise<void> {
         deployerAddress: DEPLOYER_ADDR,
         namedAddresses: { atomica: DEPLOYER_ADDR },
         initFunctions: [
+            // SCOUT(#238) REMOVE: this registry::initialize call goes with registry.move.
             {
                 functionId: `${DEPLOYER_ADDR}::registry::initialize`,
                 args: ["hex:0123456789abcdef"],

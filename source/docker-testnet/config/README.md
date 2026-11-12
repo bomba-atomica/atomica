@@ -49,6 +49,9 @@ curl http://localhost:8080/v1/blocks/by_height/100 | jq
 
 **Primary config**: `source/atomica-web/.env` (gitignored)
 
+<!-- SCOUT(#228) DOC: the image settings below are stale: docker-compose.yaml reads IMAGE_NAME and defaults to a pinned digest, and VALIDATOR_IMAGE_REPO with IMAGE_TAG is only a late fallback in genesis.ts; an implementer who moves the pin needs the real steps. -->
+<!-- SCOUT(#243) DOC: same stale image settings; the pin move for the registrar revision follows the same steps. -->
+
 ### Published Images (Default - Recommended)
 
 Pull pre-built validator images from GitHub Container Registry. Images are automatically published by the atomica-aptos repository.
@@ -131,6 +134,8 @@ The testnet includes a **production-like faucet** that avoids magic accounts:
 - No reliance on Core Resources (0xA550C18) during runtime
 - Test code behaves identically to production mainnet
 
+<!-- SCOUT(#239) DOC: the link below points into the deleted SDK, at a file that does not exist today. -->
+
 See **[typescript-sdk/FAUCET.md](../typescript-sdk/FAUCET.md)** for complete documentation.
 
 ## Troubleshooting
@@ -148,6 +153,8 @@ See **[typescript-sdk/FAUCET.md](../typescript-sdk/FAUCET.md)** for complete doc
 - Stop other services using ports 8080-8083
 - Run `docker compose down -v` to remove old containers
 
+<!-- SCOUT(#239) DOC: the list below names validator-config.yaml, which is deleted. -->
+
 ## Files
 
 - `docker-compose.yaml` - 4-validator testnet configuration
@@ -160,6 +167,8 @@ Docker images are built and published by the [atomica-aptos](https://github.com/
 - **Dockerfile**: `atomica/docker/Dockerfile` (in atomica-aptos repo)
 - **GitHub Workflow**: `.github/workflows/build-validator-image.yml` (in atomica-aptos repo)
 - **Published to**: `ghcr.io/bomba-atomica/atomica-aptos/validator`
+
+<!-- SCOUT(#228) DOC: the trigger list below is stale: the fork cuts a binary-<sha> release on a push to dev-atomica that changes Rust or Cargo files (about 73 minutes), and the validator image is then built by a manual dispatch of build-validator-image.yml. -->
 
 Images are automatically built on:
 - Push to `main` or `dev-atomica` branches

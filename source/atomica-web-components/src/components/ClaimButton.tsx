@@ -1,3 +1,6 @@
+// SCOUT(#236) REMOVE: whole file (the claim mints the clearing price from the public faucet and moves nothing from the seller).
+// SCOUT(#238) EDIT: the E_NOT_IMPLEMENTED note in the doc comment below goes with the abort code; moot once the file is deleted.
+// SCOUT(#217) EDIT: line 102 passes the clearing price to submitClaim as a FakeETH amount; moot once the file is deleted.
 import { useState, useEffect, useCallback } from "react";
 import {
   isSettled,

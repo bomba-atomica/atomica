@@ -1,3 +1,4 @@
+// SCOUT(#238) REMOVE: whole file; it is named in the exemptions list, which the issue does not mention.
 /**
  * @file 12b-fee-rebate-computation.test.tsx
  * @description Unit tests for rebate computation logic.

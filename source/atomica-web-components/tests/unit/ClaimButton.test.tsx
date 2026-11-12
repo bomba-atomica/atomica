@@ -1,3 +1,4 @@
+// SCOUT(#236) REMOVE: whole file.
 /**
  * Unit tests for ClaimButton component.
  *

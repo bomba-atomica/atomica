@@ -76,10 +76,15 @@ import {
 } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
 
+// SCOUT(#241) REMOVE: MIN_PRICE and the minPrice option below.
 const MIN_PRICE = 1_000_000n;
+// SCOUT(#217) EDIT: bid 2000 whole USD, not 2_000_000.
+// SCOUT(#216) EDIT: 1 FakeETH at this price needs 2,000,000 FakeUSD of collateral and the helper locks 500; the bid would be invalid once opened (this file never opens it, and pull request 213 does not shrink this quantity).
 const BID_PRICE = 2_000_000n;
 const BID_QUANTITY = ethers.parseEther("1");
+// SCOUT(#224) EDIT: use the launch pair.
 const PAIR_BCS = new TextEncoder().encode("09-submit-bid");
+// SCOUT(#243) EDIT: a 180 second deadline needs the test cap.
 /** Bids close 180 s after the window is created: tests 1-3 run before that. */
 const DEADLINE_AHEAD_US = 180_000_000n;
 const MISSING_WINDOW_ID = 999_999n;
@@ -179,6 +184,8 @@ describe.sequential("09: Submit Bid on Auction", () => {
     );
 
     expect(await getBidCount(auction.windowId, PAIR_BCS)).toBe(1n);
+    // SCOUT(#216) EDIT: the bid view gains a validity flag; assert it.
+    // SCOUT(#228) EDIT: the commitment field asserted below leaves the bid view.
     const stored = await getBidInfo(auction.windowId, PAIR_BCS, 0n);
     expect(stored.bidder.replace(/^0x0*/, "")).toBe(
       bidderAptosAddress.replace(/^0x0*/, ""),
@@ -232,6 +239,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
     fireEvent.change(screen.getByTestId(auctionBidder.windowIdInput), {
       target: { value: MISSING_WINDOW_ID.toString() },
     });
+    // SCOUT(#217) EDIT: this types the price into the bidder screen.
     fireEvent.change(screen.getByTestId(auctionBidder.bidAmountInput), {
       target: { value: BID_PRICE.toString() },
     });
@@ -253,6 +261,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
 
   // ── Test 4: bids close at the timelock deadline ───────────────────────────
 
+  // SCOUT(#243) EDIT: this waits for auction.deadlineUs, which becomes the window close or the test cap.
   it("rejects a bid after the timelock deadline and leaves its receipt active", async () => {
     const lateCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
     await waitForChainTime(aptosClient, auction.deadlineUs);
@@ -278,4 +287,8 @@ describe.sequential("09: Submit Bid on Auction", () => {
     expect(state.bidCount).toBe(1n);
     expect(state.settled).toBe(false);
   }, 900_000);
+
+  it.todo("SCOUT(#216) submit_bid with quantity zero aborts with the new zero-quantity code");
+  it.todo("SCOUT(#216) submit_bid with quantity above the window supply aborts with the new over-supply code");
+  it.todo("SCOUT(#233) a bidder approves, locks and registers FakeUSD through AuctionBidder, bids, get_bid_count rises by one and the receipt of that lock id reads claimed");
 });

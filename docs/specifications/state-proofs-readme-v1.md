@@ -2,6 +2,8 @@
 
 A self-sufficient TypeScript library and CLI tool for fetching and cryptographically verifying Ethereum state proofs using Merkle-Patricia Trie (MPT) verification.
 
+<!-- SCOUT(#237) DOC: remove the "Live Demo" and "Local Docker Demo" sections: the demo scripts and the light client they start are deleted. -->
+
 ## 🚀 Quick Start: Live Demo (Sepolia)
 
 Run a complete end-to-end verification demo on Sepolia testnet:
@@ -260,6 +262,8 @@ if (result.valid) {
     // Relay to target chain with cryptographic proof
 }
 ```
+
+<!-- SCOUT(#237) DOC: remove the "Light Clients" use case: the state root comes from the same RPC as the proof, so nothing is trusted less; Aptos reads validator-certified headers. -->
 
 ### Light Clients
 

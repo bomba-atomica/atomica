@@ -31,6 +31,7 @@ module atomica::auction_tests {
     // The registered timelock of `auction_bid_wrapper_tests::setup`.
     const TIMELOCK_ID: u64 = 11;
 
+    // SCOUT(#224) EDIT: `default_pair_bcs` is not the BCS of a `Pair`; every `create_auction` call of this file needs the launch pair bytes or a test pair added to the allowlist.
     // Canonical pair BCS encoding: matches Pair { b"ethereum", b"FakeETH", b"aptos", b"FakeUSD" }
     // In tests we use a simple byte vector; real callers BCS-encode the Pair struct.
     fun default_pair_bcs(): vector<u8> {
@@ -66,6 +67,7 @@ module atomica::auction_tests {
 
     // ===================== Window ID math =====================
 
+    // SCOUT(#220) EDIT: the five `test_window_id_*` tests below pin the old formula. Under the new one, 43 200 s is window 1 and 71 700 s is window 2, so two of them fail.
     // Window ID formula from docs/architecture/v0-architecture.md §2.2:
     //   epoch = unix_seconds / 43200
     //   tmod  = unix_seconds % 43200
@@ -116,6 +118,11 @@ module atomica::auction_tests {
         let w1 = auction::current_window_id();
         assert!(w1 > w0, 1);
     }
+
+    // SCOUT(#220) TEST: test_window_id_changes_at_0745_utc (27 899 s is window 0, 27 900 s is window 1)
+    // SCOUT(#220) TEST: test_window_id_changes_at_1615_utc (58 499 s is window 1, 58 500 s is window 2)
+    // SCOUT(#220) TEST: test_window_id_second_day (86 400 + 27 899 s is window 2, 86 400 + 27 900 s is window 3)
+    // SCOUT(#220) TEST: test_window_id_round_trips_window_close_secs (at close(w) - 1 the id is w, at close(w) it is w + 1)
 
     // ===================== View functions on test-inserted WindowState =====================
 
@@ -193,6 +200,7 @@ module atomica::auction_tests {
         auction::get_auction(WINDOW_ID, default_pair_bcs());
     }
 
+    // SCOUT(#238) EDIT: `test_get_settlement_returns_price` asserts the second value is `total_supply`; this settled window has no bids, so the new rule returns 0 filled.
     #[test(framework = @0x1, atomica = @atomica)]
     fun test_get_settlement_returns_price(framework: &signer, atomica: &signer) {
         setup(framework);
@@ -203,6 +211,14 @@ module atomica::auction_tests {
         assert!(price == clearing_price, 1);
         assert!(supply == TOTAL_SUPPLY, 2);
     }
+
+    // SCOUT(#238) TEST: get_settlement_returns_filled_total
+    // SCOUT(#238) TEST: get_settlement_zero_before_settle
+    // SCOUT(#218) TEST: window_limits_view
+
+    // SCOUT(#238) EDIT: the nine `create_auction` calls of this file drop the `mpk_bytes` argument; the three tests that reach the lazy registry bootstrap (happy path, next window, duplicate) must call `auction::init_for_test` first.
+    // SCOUT(#241) EDIT: the nine `create_auction` calls of this file drop the price argument.
+    // SCOUT(#243) EDIT: the nine `create_auction` calls of this file drop `timelock_id`; the golden timelock 11 can no longer be bound to a window through `create_auction`.
 
     // ===================== create_auction tests =====================
     //
@@ -336,6 +352,7 @@ module atomica::auction_tests {
     #[expected_failure(abort_code = 6, location = atomica::auction)] // E_STALE_WINDOW_ID
     fun test_create_auction_stale_window_id_aborts(framework: &signer, atomica: &signer) {
         setup(framework);
+        // SCOUT(#220) EDIT: under the new formula 43 200 s is window 1, not 2; the test still passes, the comment below does not hold.
         // Advance time so current_window_id() > 0; then supply window_id = 0 (stale).
         timestamp::fast_forward_seconds(43200); // epoch 1, window_id = 2
         let pair_bcs    = default_pair_bcs();
@@ -388,6 +405,25 @@ module atomica::auction_tests {
         assert!(supply == expected, 1);
     }
 
+    // SCOUT(#218) TEST: create_auction_at_seller_cap_aborts
+    // SCOUT(#218) TEST: create_auction_below_min_lock_aborts
+    // SCOUT(#218) TEST: create_auction_at_min_lock_succeeds
+    // SCOUT(#224) TEST: launch_pair_is_allowed_at_publish
+    // SCOUT(#224) TEST: create_auction_unlisted_pair_aborts
+    // SCOUT(#224) TEST: create_auction_stores_listed_pair
+    // SCOUT(#224) TEST: allow_pair_only_package_account
+    // SCOUT(#224) TEST: sellers_join_one_window_per_pair
+    // SCOUT(#238) TEST: create_auction_without_registry_aborts
+    // SCOUT(#241) TEST: create_auction_takes_no_min_price
+    // SCOUT(#243) TEST: first_create_auction_registers_the_window_timelock
+    // SCOUT(#243) TEST: second_seller_joins_the_stored_timelock
+    // SCOUT(#243) TEST: two_pairs_of_one_window_share_a_timelock (waits for open question 2)
+    // SCOUT(#243) TEST: current_and_next_window_get_two_timelocks
+    // SCOUT(#243) TEST: create_auction_aborts_when_registrar_is_not_the_package (framework `E_NOT_REGISTRAR`)
+    // SCOUT(#243) TEST: create_auction_aborts_when_close_is_inside_the_epoch_guard (framework `E_DEADLINE_AFTER_EPOCH_END`)
+    // SCOUT(#243) TEST: joining_an_expired_window_timelock_aborts
+    // SCOUT(#243) TEST: timelock_registrar_address_is_the_named_object_address
+
     // ===================== Bidder collateral claim path (Phase 3b) =====================
     //
     // End-to-end test for submit_bid:
@@ -404,6 +440,10 @@ module atomica::auction_tests {
     // existing happy-path and uninitialized-registry tests.
     //
     // @see docs/architecture/v0-architecture.md §2.5
+    // SCOUT(#216) TEST: submit_bid_zero_quantity_aborts (this file holds no `submit_bid` test: the golden bid setup is private to auction_bid_wrapper_tests.move)
+    // SCOUT(#216) TEST: submit_bid_above_supply_aborts
+    // SCOUT(#218) TEST: submit_bid_below_min_collateral_aborts
+    // SCOUT(#218) TEST: submit_bid_at_min_collateral_succeeds
 
     // settle aborts with E_AUCTION_NOT_FOUND (1) when no registry exists.
     // This replaces the old E_NOT_IMPLEMENTED scaffold test now that settle is implemented.
@@ -631,6 +671,13 @@ module atomica::auction_tests {
         assert!(vector::length(&results) == 0, 2);
     }
 
+    // SCOUT(#216) TEST: undercollateralized_bid_is_invalid_and_does_not_fill
+    // SCOUT(#216) TEST: zero_price_bid_is_invalid
+    // SCOUT(#216) TEST: exact_collateral_bid_is_valid
+    // SCOUT(#216) TEST: huge_quantity_does_not_overflow_clearing
+    // SCOUT(#217) TEST: quote_for_fill_reads_whole_usd_prices (quote_for_fill(10^18, 2000) == 2000 * 10^6; `quote_for_fill` exists only in the unwind pull request (213))
+
+    // SCOUT(#238) REMOVE: this section, the three `compute_rebates` tests.
     // ===================== compute_rebates — Phase 3b implementation tests =====================
     //
     // REBATE_COEFFICIENT = 0 in v0, so all rebate amounts are 0.
@@ -731,6 +778,7 @@ module atomica::auction_tests {
     //
     // Setup: 1 seller (5 ETH supply), 1 winning bid (price=2100, qty=5).
     // Expected total_filled = 5, clearing_price = 2100.
+    // SCOUT(#238) EDIT: `test_settle_distributes_proceeds_to_seller` reads the second `get_settlement` value as supply; it becomes the filled total (the same number here).
     #[test(atomica = @atomica, caller = @0x9999)]
     fun test_settle_distributes_proceeds_to_seller(
         atomica:   &signer,
@@ -868,6 +916,7 @@ module atomica::auction_tests {
         atomica::fake_eth::mint_from_lock(&owner, lock_id);
     }
 
+    // SCOUT(#238) REMOVE: `test_settle_applies_fee_rebates`.
     // test_settle_applies_fee_rebates
     //
     // After settle(), compute_rebates returns a vector of Rebate entries for all
@@ -1079,6 +1128,8 @@ module atomica::auction_tests {
         assert!(SUPPLY_FIXTURE == 10u256, 2);
     }
 
+    // SCOUT(#228) REMOVE: the two comment-only sections below; they describe `submit_cleartext_and_clear` tests that no longer exist.
+    // SCOUT(#240) DOC: the first section below names the fork native `reconstruct_ibe_dk_internal`, which the fork cleanup removes.
     // ===================== submit_cleartext_and_clear: IBE pairing tests =====================
     //
     // Uses the V2 golden vectors from `ibe_golden_vector_fixtures`:

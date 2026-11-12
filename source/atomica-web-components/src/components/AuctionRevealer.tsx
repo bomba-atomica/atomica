@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+// SCOUT(#228) EDIT: replace submitCleartextAndClear with the SDK openBids; decryptWindowBids stays as a read-only preview.
 import {
   decryptWindowBids,
   getWindowTimelockId,
@@ -8,6 +9,8 @@ import {
 } from "@atomica/sdk/aptos";
 import { useWallet } from "../context/WalletContext";
 
+// SCOUT(#228) EDIT: rewrite this flow comment: one permissionless Open bids action, no prices and no salts.
+// SCOUT(#236) EDIT: this component gets exported and mounted, so it needs windowId and pairBcs props instead of free-text inputs.
 /**
  * AuctionRevealer — monitors decryption key availability and triggers
  * cleartext submission for a sealed-bid auction window (v0 Beta, Phase 3e).
@@ -33,6 +36,7 @@ import { useWallet } from "../context/WalletContext";
 
 const POLL_INTERVAL_MS = 5_000;
 
+// SCOUT(#224) EDIT: an empty input must mean the launch pair, not empty bytes.
 function parsePairBcs(hex: string): Uint8Array {
   return new Uint8Array(
     (hex.replace(/^0x/, "").match(/.{1,2}/g) ?? []).map((b) => parseInt(b, 16)),
@@ -45,12 +49,15 @@ function toHex(bytes: Uint8Array): string {
   );
 }
 
+// SCOUT(#236) EDIT: make the open step one action, built from decryptWindowBids before on-chain decryption (228) and from openBids after it.
 export function AuctionRevealer() {
   const { account } = useWallet();
 
   // ── Inputs ─────────────────────────────────────────────────────────────────
   const [windowId, setWindowId] = useState("0");
   const [pairBcsHex, setPairBcsHex] = useState("");
+  // SCOUT(#228) REMOVE: hand-typed cleartext prices and salts.
+  // SCOUT(#236) REMOVE: the user types no price and no salt.
   const [cleartextsRaw, setCleartextsRaw] = useState("");
   const [saltsRaw, setSaltsRaw] = useState("");
 
@@ -72,6 +79,7 @@ export function AuctionRevealer() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Poll logic ─────────────────────────────────────────────────────────────
+  // SCOUT(#236) EDIT: only is_revealed is polled, so an expired timelock waits forever; report it and hand over to Unwind (SDK unwind issue (195)).
   const checkRevealed = useCallback(async () => {
     try {
       const timelockId = await getWindowTimelockId(
@@ -121,6 +129,7 @@ export function AuctionRevealer() {
   }, []);
 
   // ── Decrypt handler ────────────────────────────────────────────────────────
+  // SCOUT(#228) EDIT: decrypt becomes a preview only; the 8-byte plaintext has no salt and nothing to match against a commitment.
   const handleDecrypt = async () => {
     setDecrypting(true);
     setDecryptError(null);
@@ -134,6 +143,7 @@ export function AuctionRevealer() {
       // whose decryption does not match its commitment.
       const usable = (b: OpenedBid) =>
         b.matchesCommitment && !b.alreadyOpened && b.salt !== undefined;
+      // SCOUT(#217) EDIT: prices formatted to text as raw integers; this file is missing from the price unit issue's touchpoints.
       setCleartextsRaw(
         bids.map((b) => (usable(b) ? b.price!.toString() : "0")).join(", "),
       );
@@ -148,6 +158,9 @@ export function AuctionRevealer() {
   };
 
   // ── Submit handler ─────────────────────────────────────────────────────────
+  // SCOUT(#228) REMOVE: replace with openBids(account, windowId, pairBcs, maxBids), repeated until every bid is opened.
+  // SCOUT(#236) EDIT: one open-and-clear transaction with no typed input.
+  // SCOUT(#216) EDIT: an invalid bid no longer aborts this call; show the validity flag of the bid view.
   const handleSubmitCleartexts = async () => {
     if (!account) return;
     setSubmitting(true);
@@ -157,6 +170,7 @@ export function AuctionRevealer() {
       const pairBcs = parsePairBcs(pairBcsHex);
 
       // Parse comma-separated cleartext bid prices (u64 values)
+      // SCOUT(#217) EDIT: prices parsed from text with BigInt.
       const cleartexts: bigint[] = cleartextsRaw
         .split(",")
         .map((s) => s.trim())
@@ -190,6 +204,7 @@ export function AuctionRevealer() {
       }
 
       setSubmitStatus("Please sign the transaction...");
+      // SCOUT(#228) REMOVE: submitCleartextAndClear is deleted from the SDK.
       await submitCleartextAndClear(
         account,
         windowIdBn,
@@ -339,6 +354,9 @@ export function AuctionRevealer() {
                 className="text-xs font-mono text-zinc-400 space-y-1"
               >
                 {decrypted.length === 0 && <li>No bids in this window.</li>}
+                {/* SCOUT(#217) EDIT: price shown as a raw integer; route it through formatPrice. */}
+                {/* SCOUT(#216) EDIT: show whether an opened bid is valid. */}
+                {/* SCOUT(#228) EDIT: the matches-commitment wording goes. */}
                 {decrypted.map((b) => (
                   <li key={b.index} data-testid="decrypted-bid">
                     #{b.index} {b.bidder.slice(0, 10)}…{" "}
@@ -352,6 +370,8 @@ export function AuctionRevealer() {
                 ))}
               </ul>
             )}
+            {/* SCOUT(#228) REMOVE: the cleartext price input and the salt input below it. */}
+            {/* SCOUT(#217) EDIT: price input (comma-separated raw integers) until on-chain decryption removes it. */}
             <div>
               <label className="block text-zinc-500 text-sm mb-1">
                 Cleartext Bid Prices (comma-separated)
@@ -380,6 +400,7 @@ export function AuctionRevealer() {
               />
             </div>
 
+            {/* SCOUT(#228) EDIT: this becomes the Open bids button. */}
             <button
               data-testid="submit-cleartexts-button"
               onClick={handleSubmitCleartexts}

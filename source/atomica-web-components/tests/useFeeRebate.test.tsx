@@ -1,3 +1,4 @@
+// SCOUT(#238) REMOVE: whole file; it is named in the exemptions list, which the issue does not mention.
 /**
  * Unit tests for useFeeRebate hook — issue #113.
  *

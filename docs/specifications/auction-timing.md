@@ -26,21 +26,32 @@ This document is the single source of truth for Atomica auction timing.
 
 ## Operational Guidance
 
+<!-- SCOUT(#231) DOC: add the chain epoch rule: epochs end at fixed UTC times at least 25 minutes from both closes (after the owner answers the questions of this issue). -->
+<!-- SCOUT(#243) DOC: "decryption deadlines MUST key off UTC timestamps": the first seller of a window picks the timelock deadline today; say that create_auction registers it at the window close. -->
+
 - All protocol-level timing MUST be specified in UTC.
 - Frontends MAY display localized times, but UTC is authoritative.
 - Scheduling, decryption deadlines, and settlement windows MUST key off UTC timestamps.
 
 ## Settlement Coupling
 
+<!-- SCOUT(#242) DOC: "Settlement target remains 1-3 hours post-close" has no mechanism: settle is callable from the reveal and the budget below allows up to 72 h before reclaim. -->
+
 - Auction close occurs at the canonical timestamps above.
 - Settlement target remains **1-3 hours post-close** (see PRD for settlement flow details).
 
 ## Ethereum Lock Deadline
 
+<!-- SCOUT(#221) DOC: "carries that window's lock deadline": LockBox computes it from the window id; the caller passes none, and lock rejects a closed window or one more than one ahead. -->
+<!-- SCOUT(#222) DOC: "Before it, only a proven Aptos AuctionOutcome releases the lock": add reclaimUnpayable for a recorded but unpayable leaf. -->
+
 Every Ethereum lock is bound to one auction window and carries that window's
 lock deadline (issue 203). After the deadline, anyone may `reclaim` an open
 lock to its depositor on Ethereum. Before it, only a proven Aptos
 `AuctionOutcome` releases the lock.
+
+<!-- SCOUT(#220) DOC: window close bullet contradicts the Canonical Schedule above: 28 500 s is 07:55 UTC and odd windows close at 00:00 and 12:00; new close(w) = (w / 2) * 86400 + (w even ? 27900 : 58500). -->
+<!-- SCOUT(#221) DOC: reclaim delay bullet: the value is frozen into the immutable LockBox, so the owner fixes it first (review decision 36); third bullet: "Aptos registers a lock only with this deadline" becomes "LockBox computes it". -->
 
 - **Window close.** `auction::current_window_id` splits each 43 200 s epoch at
   offset 28 500 s. Window `w` closes at
@@ -55,6 +66,9 @@ lock to its depositor on Ethereum. Before it, only a proven Aptos
   shares it.
 
 ### Settle deadline, stuck deadline and lock deadline
+
+<!-- SCOUT(#242) DOC: the settle and stuck deadline bullets describe open pull request 213: main has no stuck deadline, no unwind and no time limit on settle. -->
+<!-- SCOUT(#228) DOC: stuck deadline bullet: drop "plus the 10-minute opening window (OPENING_WINDOW_US)", and drop OPENING_WINDOW_US from the stuck_deadline_us block that open pull request 213 adds below. -->
 
 The owner decision of 2026-11-11 (issue 194) keeps two Aptos deadlines apart
 from the Ethereum lock deadline:
@@ -90,6 +104,10 @@ unwind:  now >= stuck_deadline_us
 ```
 
 `auction::get_stuck_deadline_us(window_id, pair_bcs)` returns it.
+
+<!-- SCOUT(#221) DOC: budget table: the 72 h total is the reclaim delay the owner must fix before LockBox freezes it (review decision 36). -->
+<!-- SCOUT(#228) DOC: budget table: remove the "Opening window, 10 min" row. -->
+<!-- SCOUT(#243) DOC: budget table: once the timelock deadline is the window close, the first row shrinks from 23 h 50 min to the 10-minute reveal window. -->
 
 | Segment | Budget within the 72 h delay |
 | --- | --- |

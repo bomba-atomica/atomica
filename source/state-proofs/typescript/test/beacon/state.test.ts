@@ -1,3 +1,4 @@
+// SCOUT(#237) REMOVE: whole file (beacon light client test).
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import type {
     LightClientState,

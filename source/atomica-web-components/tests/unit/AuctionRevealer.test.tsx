@@ -37,6 +37,7 @@ const {
   mockDecryptWindowBids: vi.fn(),
 }));
 
+// SCOUT(#228) EDIT: mock openBids instead of submitCleartextAndClear.
 vi.mock("@atomica/sdk/aptos", () => ({
   isRevealed: mockIsRevealed,
   submitCleartextAndClear: mockSubmitCleartextAndClear,
@@ -56,6 +57,8 @@ function renderRevealer(account: string | null = ACCOUNT) {
   );
 }
 
+// SCOUT(#228) EDIT: rewrite this suite for the single Open bids action.
+// SCOUT(#236) EDIT: the same suite asserts one open-and-clear transaction with no typed price or salt.
 describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => {
   afterEach(() => {
     cleanup();
@@ -91,6 +94,7 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
     const status = screen.getByTestId("reveal-status");
     expect(status.textContent).toContain("Waiting for decryption key reveal");
     // The window's timelock id, not the window id, is polled.
+    // SCOUT(#224) EDIT: an empty pair input means the launch pair, so expect the SDK launch pair bytes.
     expect(mockGetWindowTimelockId).toHaveBeenCalledWith(0n, new Uint8Array(0));
     expect(mockIsRevealed).toHaveBeenCalledWith(42n);
   });
@@ -111,6 +115,8 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
     expect(screen.getByTestId("cleartexts-input")).toBeTruthy();
   });
 
+  // SCOUT(#228) REMOVE: this case.
+  // SCOUT(#217) EDIT: it types the cleartext prices 110, 105, 95.
   it("calls submitCleartextAndClear and shows submitted count", async () => {
     mockIsRevealed.mockResolvedValue(true);
     mockSubmitCleartextAndClear.mockResolvedValue({ hash: "0xsubmit" });
@@ -153,6 +159,7 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
     expect(count.textContent).toContain("3");
   });
 
+  // SCOUT(#228) REMOVE: this case.
   it("rejects a salt count that does not match the cleartexts", async () => {
     mockIsRevealed.mockResolvedValue(true);
     renderRevealer();
@@ -175,6 +182,8 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
     expect(mockSubmitCleartextAndClear).not.toHaveBeenCalled();
   });
 
+  // SCOUT(#228) EDIT: decrypt is a preview only, with no salts.
+  // SCOUT(#217) EDIT: it asserts the text price 200.
   it("decrypts the bids with the revealed key and fills in prices and salts", async () => {
     mockIsRevealed.mockResolvedValue(true);
     mockSubmitCleartextAndClear.mockResolvedValue({ hash: "0xsubmit" });
@@ -227,4 +236,8 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
       [salt, new Uint8Array(0)],
     );
   });
+
+  it.todo("SCOUT(#236) the open step sends one open-and-clear transaction built from decryptWindowBids, with no price or salt typed by the user");
+  it.todo("SCOUT(#228) Open bids calls openBids until every bid is opened and shows the count");
+  it.todo("SCOUT(#216) an opened bid that the chain marks invalid is shown as invalid");
 });

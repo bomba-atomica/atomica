@@ -21,6 +21,8 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { WalletContext } from "../../src/context/WalletContext";
 
 // Stub SDK modules so no blockchain calls are made.
+// SCOUT(#228) EDIT: the sealBid mock returns no commitment and no salt.
+// SCOUT(#235) EDIT: the stored opening must equal this mocked salt and commitment.
 vi.mock("@atomica/sdk/aptos", () => ({
   submitBid: vi.fn().mockResolvedValue({ hash: "0xabc123" }),
   sealBid: vi.fn().mockResolvedValue({
@@ -31,12 +33,16 @@ vi.mock("@atomica/sdk/aptos", () => ({
   }),
 }));
 
+// SCOUT(#232) EDIT: this mock hides the checksum defect; the new case needs the real getDerivedAddress (importActual) or a file of its own.
 vi.mock("@atomica/sdk", () => ({
   getDerivedAddress: vi
     .fn()
     .mockResolvedValue({ toString: () => "0x" + "0d".repeat(32) }),
 }));
 
+// SCOUT(#221) EDIT: the lockBinding mock returns a deadline.
+// SCOUT(#233) EDIT: add lockFromReceipt, and mock the proof generator, waitForCertifiedBlock and getRegisterLockPayload.
+// SCOUT(#234) EDIT: make approveFakeUsd or lockFakeUsd reject with the pin mismatch error.
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeUsd: vi.fn().mockResolvedValue({ hash: "0xapprove" }),
   lockFakeUsd: vi.fn().mockResolvedValue({ hash: "0xlock123" }),
@@ -48,6 +54,7 @@ vi.mock("@atomica/sdk/ethereum", () => ({
   })),
 }));
 
+// SCOUT(#235) EDIT: mock saveBidOpening too, or use the real storage for the loadBidOpening case.
 vi.mock("../../src/storage/bidStorage", () => ({
   saveBidPrice: vi.fn(),
 }));
@@ -110,6 +117,7 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     expect(screen.getByTestId("bid-quantity-input")).toBeTruthy();
   });
 
+  // SCOUT(#217) EDIT: parsePrice rejects 0; the assert on the word positive depends on its message.
   it("rejects a price that is not positive without sealing or submitting", async () => {
     const { submitBid, sealBid } = await import("@atomica/sdk/aptos");
     renderBidder();
@@ -124,6 +132,8 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     expect(submitBid).not.toHaveBeenCalled();
   });
 
+  // SCOUT(#228) EDIT: the submitBid arguments shift (no commitment at index 4).
+  // SCOUT(#217) EDIT: this types 200 and expects 200n; add the 2000 case.
   it("seals the bid for the derived address and submits ciphertext, commitment, lock id and quantity", async () => {
     const { submitBid, sealBid } = await import("@atomica/sdk/aptos");
     renderBidder();
@@ -192,4 +202,16 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     const bidButton = screen.getByTestId("submit-bid-button");
     expect(bidButton.textContent).toContain("Submit Encrypted Bid");
   });
+
+  it.todo("SCOUT(#217) typing 2000 in the price field makes sealBid receive 2000n");
+  it.todo("SCOUT(#217) a price of 2000.5, -1 or an empty field shows an error and neither seals nor submits");
+  it.todo("SCOUT(#232) with a checksummed account and the real getDerivedAddress, sealBid receives the address derived from the lowercase account");
+  it.todo("SCOUT(#233) after the lock, the collateral lock id field equals the lockId of the Locked event and never the transaction hash");
+  it.todo("SCOUT(#233) the lock step calls approve, lock, the certified block wait, the proof generator with the FakeUSD token and the register transaction with asset FakeUSD, in that order");
+  it.todo("SCOUT(#233) the pair bytes passed to lockBinding equal the pair bytes passed to sealBid and submitBid");
+  it.todo("SCOUT(#233) when the register transaction rejects, the error shows, the step stays on the lock step, and a retry sends no second approve or lock");
+  it.todo("SCOUT(#234) when the SDK lock rejects with the pin mismatch error, the lock step shows the expected address and does not advance");
+  it.todo("SCOUT(#235) after a successful bid, loadBidOpening returns the price, salt and commitment that sealBid returned");
+  it.todo("SCOUT(#235) nothing is stored when submitBid rejects");
+  it.todo("SCOUT(#228) submitBid is called with no commitment");
 });

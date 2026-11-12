@@ -115,6 +115,7 @@ module atomica::lock_receipt_tests {
 
     // New comprehensive tests below
 
+    // SCOUT(#238) TEST: is_lock_claimed_reads_receipts_table_at_2000_locks
     // ==================== Claim: owner only ====================
 
     /// A depositor's Ethereum-derivable account (any address other than @atomica).

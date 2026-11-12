@@ -28,6 +28,7 @@ import {
 describe("LockBox lock id, storage key and commitment", () => {
   const USER = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
   const TOKEN = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+  // SCOUT(#220) EDIT: under the new formula window 83075 closes in 2083; the window of the anvil lock becomes about 41538.
   const WINDOW = 83075n;
   const TEN_ETH = 10n * 10n ** 18n;
 
@@ -48,6 +49,8 @@ describe("LockBox lock id, storage key and commitment", () => {
     expect(getLockId(USER, TOKEN, 0n)).not.toBe(getLockId(USER, TOKEN, 1n));
   });
 
+  // SCOUT(#220) EDIT: the deadline 1794700800 and the commitment pin change with the formula; read both again from LockBox on anvil.
+  // SCOUT(#224) EDIT: the anvil lock is bound to empty pair bytes; decide whether the shared fixture moves to the launch pair.
   it("lockCommitment matches LockBox.commitments for the anvil lock", () => {
     const binding = lockBinding(WINDOW, new Uint8Array(0));
     expect(binding.pairHash).toBe(
@@ -81,6 +84,7 @@ describe("LockBox lock id, storage key and commitment", () => {
     ).not.toBe(base);
   });
 
+  // SCOUT(#221) EDIT: the key drops the deadline, and the check that a later deadline changes the key goes.
   it("auctionKey is keccak256(abi.encode(windowId, pairHash, deadline))", () => {
     const binding = lockBinding(WINDOW, new Uint8Array(0));
     const expected = ethers.keccak256(
@@ -96,6 +100,7 @@ describe("LockBox lock id, storage key and commitment", () => {
   });
 });
 
+// SCOUT(#220) EDIT: every pinned close and deadline below follows the old formula, and one line spells 28_500n.
 describe("eth_lock_deadline", () => {
   it("is the window close plus 72 hours", () => {
     expect(ETH_RECLAIM_DELAY_SECS).toBe(259_200n);
@@ -115,4 +120,19 @@ describe("eth_lock_deadline", () => {
   it("pairHashOf is keccak256 of the pair BCS", () => {
     expect(pairHashOf(new Uint8Array([1, 2]))).toBe(ethers.keccak256("0x0102"));
   });
+});
+
+describe("planned tests (SCOUT)", () => {
+  it.todo(
+    "SCOUT(#220) currentWindowId is 0 at 27899, 1 at 27900, 1 at 58499, 2 at 58500, 2 at 114299 and 3 at 114300",
+  );
+  it.todo(
+    "SCOUT(#220) windowCloseSecs is 27900, 58500, 114300 and 144900 for windows 0 to 3",
+  );
+  it.todo(
+    "SCOUT(#221) ethLockDeadline and windowCloseSecs return the values of the shared (window id, close, deadline) table",
+  );
+  it.todo(
+    "SCOUT(#221) auctionKey is keccak256(abi.encode(uint64 windowId, bytes32 pairHash))",
+  );
 });

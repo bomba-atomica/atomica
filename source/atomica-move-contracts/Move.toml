@@ -3,6 +3,8 @@ name = "AtomicaAuction"
 version = "0.0.0"
 
 [dependencies]
+# SCOUT(#228) EDIT: move `rev` to the fork commit that ships `ibe::decrypt_bid`, together with the APTOS_VERSION pins and the validator image. The bump also pulls in every fork change merged before that commit.
+# SCOUT(#243) EDIT: move `rev` to the fork commit that ships the timelock registrar and `register_timelock_with_id`.
 AptosFramework = { git = "https://github.com/bomba-atomica/atomica-aptos.git", subdir = "aptos-move/framework/aptos-framework", rev = "52beee31a6ec0a64f2471971d202e6b0e2392440" }
 
 [addresses]

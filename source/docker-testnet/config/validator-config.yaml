@@ -1,3 +1,4 @@
+# SCOUT(#239) REMOVE: whole file; nothing mounts or reads it (two READMEs and one doc name it).
 # Validator node configuration override for local testnet
 # Minimal config to ensure compatibility with aptoslabs/validator:devnet
 

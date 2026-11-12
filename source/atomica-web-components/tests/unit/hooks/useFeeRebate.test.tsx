@@ -1,3 +1,4 @@
+// SCOUT(#238) REMOVE: whole file.
 /**
  * Unit tests for useFeeRebate hook — issue #136.
  *

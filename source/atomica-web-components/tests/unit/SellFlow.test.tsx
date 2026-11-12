@@ -113,6 +113,8 @@ describe("SellFlow step rendering", () => {
     expect(screen.getAllByText(/proof/i).length).toBeGreaterThan(0);
   });
 
+  // SCOUT(#241) EDIT: minPrice leaves the mocked flow state here and in the next case.
+  // SCOUT(#217) EDIT: the minPrice fixture 2_000_000_000 is micro-dollars.
   it("shows Step7Auction at creating-auction step", () => {
     vi.mocked(useSellFlow).mockReturnValue({
       ...BASE_FLOW,
@@ -135,6 +137,7 @@ describe("SellFlow step rendering", () => {
     renderSellFlow();
     // Step8Monitor shows locked amount and min price
     expect(screen.getByText(/Locked amount/i)).toBeTruthy();
+    // SCOUT(#241) REMOVE: the Min price row assert.
     expect(screen.getByText(/Min price/i)).toBeTruthy();
   });
 
@@ -161,4 +164,6 @@ describe("SellFlow step rendering", () => {
     // "Auction" label appears in step indicator — should not be present without account
     expect(screen.queryByText("Auction")).toBeFalsy();
   });
+
+  it.todo("SCOUT(#236) the monitoring step passes windowId and pairBcs, so the settle and release steps render");
 });

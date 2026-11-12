@@ -90,6 +90,8 @@ Pre-funded accounts with 1000 ETH each:
 
 ## State Proof Verification
 
+<!-- SCOUT(#237) DOC: the flow below (beacon header signed by the sync committee, then the execution state root) is the off-chain beacon light client model that issue 237 deletes; Aptos reads validator-certified headers. The getLightClientBootstrap and getLightClientUpdates helpers named in this README have no caller. -->
+
 For cross-chain bridge verification, use this data flow:
 
 1. **Get Beacon Header**: `getBeaconHeader("finalized")` - signed by sync committee

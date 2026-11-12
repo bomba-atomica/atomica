@@ -12,6 +12,9 @@ React UI component library and custom hooks for the Atomica auction interface. P
 
 `src/index.ts` — re-exports everything below.
 
+<!-- SCOUT(#236) DOC: ClaimButton leaves this table; AuctionRevealer, SellFlow and ReleaseButton join it. -->
+<!-- SCOUT(#238) DOC: FeeRebateDisplay, useFeeRebate and the fee-rebate wording in Purpose go. -->
+
 ### Exported components
 
 | Export | File |
@@ -45,6 +48,8 @@ React UI component library and custom hooks for the Atomica auction interface. P
 | `ContractStatusProvider`, `useContractStatus` | `src/context/ContractStatusContext.tsx` |
 | `NetworkConfigProvider` | `src/network/network-config-context.tsx` |
 | `useNetworkConfig` | `src/network/network-config-state.ts` |
+
+<!-- SCOUT(#235) DOC: this table gains the bid opening functions. -->
 
 ### Exported storage helpers
 

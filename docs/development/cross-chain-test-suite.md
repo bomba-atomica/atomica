@@ -1,3 +1,5 @@
+<!-- SCOUT(#219) DOC: wholly superseded: the source/atomica-web suite it describes is deleted and it stops before release; archive it or rewrite it around the live round-trip test this issue adds. -->
+
 # Cross-Chain Test Suite
 
 This document describes the structure, responsibilities, and usage patterns of the Ethereum ↔ Aptos cross-chain test suite in `source/atomica-web/tests/meta/cross-chain/`.

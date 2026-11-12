@@ -23,7 +23,9 @@ import { Step7Auction } from "../../src/components/SellFlow/steps/Step7Auction";
 import { Step8Monitor } from "../../src/components/SellFlow/steps/Step8Monitor";
 import { AuctionBidder } from "../../src/components/AuctionBidder";
 import { SettleButton } from "../../src/components/SettleButton";
+// SCOUT(#236) REMOVE: the ClaimButton import and its two cases below.
 import { ClaimButton } from "../../src/components/ClaimButton";
+// SCOUT(#238) REMOVE: the FeeRebateDisplay import and its two cases below.
 import { FeeRebateDisplay } from "../../src/components/FeeRebateDisplay";
 import { BidHistory } from "../../src/components/BidHistory";
 import type { BidHistoryEntry } from "../../src/components/BidHistory";
@@ -96,6 +98,7 @@ describe("Selector contract — data-testid attributes", () => {
     ).toBeTruthy();
   });
 
+  // SCOUT(#241) REMOVE: this case.
   it("Step2Lock: min-price-input is present", () => {
     render(
       <Step2Lock onLock={async () => {}} loading={false} />,
@@ -293,6 +296,7 @@ describe("Selector contract — data-testid attributes", () => {
     ).toBeTruthy();
   });
 
+  // SCOUT(#236) REMOVE: both ClaimButton cases.
   it("ClaimButton: claim-button is present (v0 Beta — windowId + pairBcs props)", () => {
     render(
       <MinimalProviders>
@@ -315,6 +319,7 @@ describe("Selector contract — data-testid attributes", () => {
     ).toBeTruthy();
   });
 
+  // SCOUT(#238) REMOVE: both FeeRebateDisplay cases.
   it("FeeRebateDisplay: rebate-amount is present", () => {
     render(<FeeRebateDisplay rebateAmount={1000000n} feeAmount={500000n} />);
     expect(
@@ -340,6 +345,7 @@ describe("Selector contract — data-testid attributes", () => {
     const entries: BidHistoryEntry[] = [
       {
         auctionId: "0xabc",
+        // SCOUT(#217) EDIT: price fixture in micro-dollar style.
         clearingPrice: 100000000n,
         settledAt: Math.floor(Date.now() / 1000),
       },
@@ -358,6 +364,7 @@ describe("Selector contract — data-testid attributes", () => {
     expect(s.step1Connect.connectMetaMaskButton).toBe("connect-metamask-button");
     expect(s.step1Connect.connectedAddress).toBe("connected-address");
     expect(s.step2Lock.lockAmountInput).toBe("lock-amount-input");
+    // SCOUT(#241) REMOVE: this assert.
     expect(s.step2Lock.minPriceInput).toBe("min-price-input");
     expect(s.step2Lock.approveLockButton).toBe("approve-lock-button");
     expect(s.step2Lock.lockError).toBe("lock-error");
@@ -378,8 +385,10 @@ describe("Selector contract — data-testid attributes", () => {
     expect(s.auctionBidder.bidStatus).toBe("bid-status");
     expect(s.settleButton.settleButton).toBe("settle-button");
     expect(s.settleButton.settleStatus).toBe("settle-status");
+    // SCOUT(#236) REMOVE: both claimButton asserts.
     expect(s.claimButton.claimButton).toBe("claim-button");
     expect(s.claimButton.reclaimButton).toBe("reclaim-button");
+    // SCOUT(#238) REMOVE: both feeRebateDisplay asserts.
     expect(s.feeRebateDisplay.rebateAmount).toBe("rebate-amount");
     expect(s.feeRebateDisplay.feeAmount).toBe("fee-amount");
     expect(s.bidHistory.bidHistoryTable).toBe("bid-history-table");

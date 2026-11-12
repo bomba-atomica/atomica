@@ -229,6 +229,7 @@ async function deployAptosContracts(eth: {
 
   // Run initialization functions
   const initFunctions = [
+    // SCOUT(#238) REMOVE: the registry::initialize init function.
     {
       functionId: `${APTOS_DEPLOYER_ADDRESS}::registry::initialize`,
       args: [

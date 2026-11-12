@@ -1,3 +1,4 @@
+# SCOUT(#239) REMOVE: whole file; it runs only the old source/docker-testnet/typescript-sdk copy and is not in the Required Checks gate.
 name: Aptos Docker Testnet Tests
 
 on:
@@ -48,6 +49,8 @@ jobs:
         with:
           bun-version: latest
 
+      # SCOUT(#228) EDIT: hardcoded binary tag must move with APTOS_VERSION, unless the removal issue (239) deleted this file first.
+      # SCOUT(#243) EDIT: hardcoded binary tag must move with APTOS_VERSION, unless the removal issue (239) deleted this file first.
       - name: Install Aptos CLI
         run: |
           # Download aptos binary from atomica-aptos releases
@@ -98,6 +101,7 @@ jobs:
 
       # 4 validators, timelock DKG on at genesis: after epoch 2, ibe_config is_ready
       # and get_mpk is 96 bytes.
+      # SCOUT(#239) REMOVE: this step goes; the test moves to source/docker-testnet/aptos-testnet/test and runs in the Aptos Testnet SDK (docker) job of test-web.yaml.
       - name: Run timelock genesis tests
         working-directory: source/docker-testnet/typescript-sdk
         run: bun --env-file=../../.env.test test test/timelock-genesis.test.ts

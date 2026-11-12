@@ -1,3 +1,4 @@
+// SCOUT(#239) EDIT: import DockerTestnet from @atomica/aptos-docker-testnet; @atomica/docker-testnet is not a dependency of this package, so the script fails at import today.
 import { DockerTestnet } from "@atomica/docker-testnet";
 import { spawn, execSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
@@ -112,6 +113,7 @@ async function main() {
     deployerAddress: DEPLOYER_ADDR,
     namedAddresses: { atomica: DEPLOYER_ADDR },
     initFunctions: [
+      // SCOUT(#238) REMOVE: the registry::initialize init function.
       {
         functionId: `${DEPLOYER_ADDR}::registry::initialize`,
         args: ["hex:0123456789abcdef"],
@@ -197,6 +199,7 @@ async function main() {
   );
 
   // Init Registry
+  // SCOUT(#238) REMOVE: the registry::initialize run.
   console.log("⚙️  Initializing Registry...");
   await runCommand(
     aptosBin,

@@ -19,6 +19,7 @@ export type ChainConfig = {
     /** Deployed LockBox escrow contract address */
     lockBox: string;
   };
+  // SCOUT(#235) ADD: an optional list of extra Aptos fullnode URLs, read by the master public key comparison.
   aptos: {
     /** Deployed Atomica Move package address on Aptos */
     contractAddress: string;
@@ -39,6 +40,7 @@ export const DEFAULT_CHAIN_CONFIG: ChainConfig = {
     lockBox:
       env.VITE_LOCK_BOX_ADDRESS || "0x0000000000000000000000000000000000000000",
   },
+  // SCOUT(#235) ADD: fill the extra endpoints from a VITE_* variable here.
   aptos: {
     contractAddress:
       env.VITE_CONTRACT_ADDRESS ||

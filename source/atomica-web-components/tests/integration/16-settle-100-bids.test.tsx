@@ -56,7 +56,10 @@ import {
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
 
+// SCOUT(#218) EDIT: fill the same window to the seller cap as well (proposed 100 seller locks).
 const BID_COUNT = 100;
+// SCOUT(#241) EDIT: MIN_PRICE is also the base of the bid price ladder; only the createLiveWindow option goes.
+// SCOUT(#217) EDIT: price ladder in whole USD (for example 1000 plus 10 per bid).
 const MIN_PRICE = 1_000_000n;
 const PRICE_STEP = 10_000n;
 const BID_QUANTITY = ethers.parseEther("0.00002");
@@ -68,7 +71,11 @@ const SUPPLY = BID_QUANTITY * 50n;
  * `quoteForFill`): at most 0.00002 * 1_990_000 = 39.8 FakeUSD.
  */
 const COLLATERAL = 50n * 10n ** 6n;
+// SCOUT(#216) EDIT: COLLATERAL above: on main each bid needs quoteForFill(0.1 FakeETH, price), up to 199,000 FakeUSD, against 50 FakeUSD locked; pull request 213 already shrinks BID_QUANTITY to 0.00002 FakeETH (at most 39.8 FakeUSD), so after 213 every bid is valid.
+// SCOUT(#218) EDIT: COLLATERAL above (50 FakeUSD per bid) must stay at or above the minimum collateral.
+// SCOUT(#224) EDIT: use the launch pair.
 const PAIR_BCS = new TextEncoder().encode("16-settle-100-bids");
+// SCOUT(#243) EDIT: a 300 second deadline needs the test cap.
 const DEADLINE_AHEAD_US = 300_000_000n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
 const REVEAL_TIMEOUT_SECS = 300;
@@ -144,13 +151,16 @@ describe.sequential("16: Settle a 100-bid window", () => {
       pairBcs: PAIR_BCS,
       minPrice: MIN_PRICE,
       deadlineAheadUs: DEADLINE_AHEAD_US,
+      // SCOUT(#218) EDIT: pull request 213 sets SUPPLY to 0.001 FakeETH (50 x 0.00002), below the proposed 0.01 FakeETH minimum seller lock, so create_auction aborts.
       lockAmount: SUPPLY,
     });
 
     const payloads = [];
     for (let i = 0; i < BID_COUNT; i++) {
+      // SCOUT(#217) EDIT: price ladder; PRICE_STEP and its base move to whole USD.
       const price = MIN_PRICE + PRICE_STEP * BigInt(i);
       prices.push(price);
+      // SCOUT(#228) EDIT: five-argument getBidPayload with no commitment.
       const sealed = await sealBid(
         auction.windowId,
         PAIR_BCS,
@@ -185,6 +195,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
     await teardownIntegrationFixture();
   });
 
+  // SCOUT(#228) EDIT: open the 100 bids in batches with open_bids and log the gas of each batch.
   it(
     "opens and clears 100 bids in one call, settles them and logs gas_used",
     async () => {
@@ -204,6 +215,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
         accountAddress: operator.accountAddress,
         options: { offset: Number(openSequence), limit: 1 },
       });
+      // SCOUT(#228) EDIT: the entry function name that logGas checks becomes open_bids.
       const openTxResponse = await logGas(
         aptosClient,
         "submit_cleartext_and_clear",
@@ -214,6 +226,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
       // The opening call cleared the window: bid results exist before settle.
       const cleared = await getAuctionState(aptosClient, moduleAddr, auction);
       expect(cleared.settled).toBe(false);
+      // SCOUT(#216) EDIT: also assert the clearing price equals the lowest valid winning price.
       expect(cleared.clearingPrice).toBeGreaterThan(0n);
       expect(await getBidResults(auction.windowId, PAIR_BCS)).toHaveLength(
         BID_COUNT,
@@ -237,10 +250,14 @@ describe.sequential("16: Settle a 100-bid window", () => {
       expect(state.bidCount).toBe(BigInt(BID_COUNT));
       const results = await getBidResults(auction.windowId, PAIR_BCS);
       expect(results).toHaveLength(BID_COUNT);
+      // SCOUT(#216) EDIT: 50 winners only if every bid is valid; with main's quantities all 100 bids would be invalid, with pull request 213's quantities all are valid.
       const winners = results.filter((r) => r.isWinner);
       expect(winners).toHaveLength(BID_COUNT / 2);
       expect(winners.reduce((sum, r) => sum + r.fillAmount, 0n)).toBe(SUPPLY);
     },
     (Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS + 300) * 1000,
   );
+
+  it.todo("SCOUT(#218) a window with the maximum seller locks and 100 bids settles in one transaction and its gas used is below the maximum transaction gas");
+  it.todo("SCOUT(#228) 100 bids are opened in batches by an account that is not the bidder, and the window settles");
 });

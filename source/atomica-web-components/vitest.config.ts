@@ -32,6 +32,8 @@ export default defineConfig(async () => {
   } = await import("@atomica/aptos-docker-testnet/browser-commands");
 
   return {
+    // SCOUT(#233) EDIT: a browser test that locks and registers through AuctionBidder runs the proof generator in the page; its Node-only dependencies need polyfills here first.
+    // SCOUT(#236) EDIT: the same limit keeps SellFlow out of the browser suite (see 14-happy-path.test.tsx).
     plugins: [react()],
     // Point Vite at source/.env.test so VITE_* vars are available via
     // import.meta.env (used by e.g. src/lib/aptos/config.ts for CONTRACT_ADDR).

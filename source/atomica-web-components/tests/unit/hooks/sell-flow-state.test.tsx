@@ -26,6 +26,8 @@ vi.mock("@atomica/sdk/chain-config", () => ({
 }));
 
 // Mock blockchain action modules so no real I/O happens.
+// SCOUT(#220) EDIT: old-formula fixture pair 83075 and 1_794_700_800 (mock values only).
+// SCOUT(#221) EDIT: the lockBinding and lockFromReceipt mocks carry a deadline; the asserts on lockFakeEth, the proof input and reclaimLock below repeat it.
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeEth: vi.fn(),
   lockFakeEth: vi.fn(),
@@ -50,6 +52,7 @@ vi.mock("@atomica/sdk/ethereum", () => ({
 vi.mock("@atomica/sdk/ethereum/proofs", () => ({
   generateLockedBalanceProof: vi.fn(),
 }));
+// SCOUT(#243) REMOVE: the registerTimelock mock.
 vi.mock("@atomica/sdk/aptos", () => ({
   getRegisterLockPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
@@ -173,6 +176,8 @@ describe("useSellFlow state machine", () => {
     expect(result.current.lockBlock).toBe(42);
   });
 
+  // SCOUT(#241) EDIT: minPrice is ignored on resume.
+  // SCOUT(#217) EDIT: the minPrice fixture is micro-dollars.
   it("resumes bigint fields (minPrice, amount) from stringified localStorage", async () => {
     localStorage.setItem(
       STORAGE_KEY,
@@ -264,6 +269,7 @@ describe("useSellFlow state machine", () => {
       vi.restoreAllMocks();
     });
 
+    // SCOUT(#241) EDIT: lockEth takes the amount only (also in the two error cases below).
     it("lockEth: approves then locks, and moves lock → confirming with the receipt", async () => {
       // The confirming step polls the chain; report zero confirmations so it stays put.
       vi.spyOn(
@@ -405,6 +411,10 @@ describe("useSellFlow state machine", () => {
       });
     });
 
+    // SCOUT(#243) REMOVE: the timelock registration asserts and the local one hour end time.
+    // SCOUT(#241) EDIT: no minPrice in the persisted state or in the payload.
+    // SCOUT(#238) EDIT: no mpk argument.
+    // SCOUT(#224) EDIT: pairBcs equals the launch pair, not empty bytes.
     it("createAuction: registers the timelock first, then submits the 6-argument create_auction", async () => {
       vi.mocked(registerTimelock).mockResolvedValue(42n);
       vi.mocked(getCreateAuctionPayload).mockReturnValue({
@@ -447,6 +457,9 @@ describe("useSellFlow state machine", () => {
       expect(getCreateAuctionPayload).toHaveBeenCalledTimes(1);
       const args = vi.mocked(getCreateAuctionPayload).mock.calls[0];
       expect(args).toHaveLength(6);
+      // SCOUT(#241) EDIT: the payload loses minPrice.
+      // SCOUT(#243) EDIT: the payload loses timelockId.
+      // SCOUT(#238) EDIT: the payload loses mpk; three arguments remain.
       const [windowId, pairBcs, lockIdBytes, minPrice, timelockId, mpk] = args;
       expect(typeof windowId).toBe("bigint");
       expect(pairBcs).toEqual(new Uint8Array(0));
@@ -466,6 +479,7 @@ describe("useSellFlow state machine", () => {
       expect(stored().step).toBe("monitoring");
     });
 
+    // SCOUT(#243) REMOVE: this case.
     it("createAuction: does not submit create_auction when timelock registration fails", async () => {
       vi.mocked(registerTimelock).mockRejectedValue(
         new Error("E_IBE_NOT_READY"),
@@ -520,6 +534,7 @@ describe("useSellFlow state machine", () => {
       expect(stored()).toEqual({ step: "lock" });
     });
 
+    // SCOUT(#234) EDIT: this existing case already covers a rejected lock; extend it with the pin mismatch message (the issue names SellFlow.error.test.tsx instead).
     it("lockEth error: sets the error message and stays at lock", async () => {
       vi.mocked(approveFakeEth).mockResolvedValue(undefined as never);
       vi.mocked(lockFakeEth).mockRejectedValue(new Error("user rejected lock"));
@@ -565,4 +580,8 @@ describe("useSellFlow state machine", () => {
       expect(result.current.proof).toBe(PROOF);
     });
   });
+
+  it.todo("SCOUT(#243) createAuction submits exactly one transaction and never calls registerTimelock");
+  it.todo("SCOUT(#241) createAuction runs when the saved state has no minimum price");
+  it.todo("SCOUT(#234) lockEth shows the pinned address and stays at the lock step when the SDK rejects with the pin mismatch");
 });

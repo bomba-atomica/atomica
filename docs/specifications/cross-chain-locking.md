@@ -18,6 +18,10 @@ Implement the core cross-chain mechanism: users lock FAKETH/FAKEUSD on Ethereum,
 This planning spec predates the trust model below. Where they differ, this
 section and [v0 Architecture §3](../architecture/v0-architecture.md#3--cross-chain-settlement-v01-trustless-flow) win.
 
+<!-- SCOUT(#232) DOC: Ownership bullet: add that the SDK getDerivedAddress lowercases the Ethereum address, so every spelling of it derives the same receipt owner. -->
+<!-- SCOUT(#233) DOC: Registration bullet: add that a bidder registers its FakeUSD lock the same way, with the FakeUSD asset type, and that the receipt id is the LockBox lock id, never a transaction hash. -->
+<!-- SCOUT(#234) DOC: add a bullet: eth_proof pins the LockBox and token addresses, and the client reads that pin and refuses to approve or lock when its own addresses differ. -->
+
 - **State roots.** Aptos does not verify Ethereum header signatures itself,
   and no admin submits roots. Aptos validators observe Ethereum headers and
   certify them with a 2/3+ voting-power quorum into
@@ -123,6 +127,9 @@ section and [v0 Architecture §3](../architecture/v0-architecture.md#3--cross-ch
 ---
 
 ## Component 1: Ethereum LockBox Contract
+
+<!-- SCOUT(#221) DOC: current-contract note: lock takes no deadline argument. -->
+<!-- SCOUT(#222) DOC: current-contract note: add reclaimUnpayable and the remainder-to-depositor rule. -->
 
 > **Current contract (issue 203).** The design below is the original plan. The
 > shipped LockBox is proof-gated: `lock(token, amount, windowId, pairHash,

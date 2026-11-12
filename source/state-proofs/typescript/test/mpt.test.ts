@@ -5,6 +5,7 @@ import { ETHEREUM_DEPLOYER_ADDRESS } from "../../../shared/test-constants";
 
 describe("Merkle-Patricia Trie Core", () => {
     describe("verifyMerkleProof", () => {
+        // SCOUT(#239) REMOVE: placeholder; it asserts that the result is a boolean.
         test("should verify valid MPT proof", () => {
             // This will test with real proof data from integration
             const proof: Buffer[] = []; // RLP-encoded nodes
@@ -137,6 +138,7 @@ describe("Merkle-Patricia Trie Core", () => {
         });
     });
 
+    // SCOUT(#239) REMOVE: placeholder; it asserts two local constants (not in the issue text).
     describe("Key Path Encoding", () => {
         test("should handle nibble path encoding", () => {
             // MPT uses nibble (4-bit) path encoding
@@ -157,6 +159,7 @@ describe("Merkle-Patricia Trie Core", () => {
     });
 
     describe("Account Key Hashing", () => {
+        // SCOUT(#239) REMOVE: placeholder; it asserts the byte length of a constant address (not in the issue text).
         test("should hash Ethereum address to get trie key", () => {
             const address = ETHEREUM_DEPLOYER_ADDRESS;
 
@@ -179,6 +182,7 @@ describe("Merkle-Patricia Trie Core", () => {
     });
 });
 
+// SCOUT(#239) REMOVE: placeholders; the three cases assert that a Buffer is a Buffer (not in the issue text).
 describe("RLP Encoding/Decoding", () => {
     test("should decode RLP list", () => {
         // RLP list: [item1, item2, ...]

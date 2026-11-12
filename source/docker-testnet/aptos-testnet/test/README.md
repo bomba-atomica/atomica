@@ -390,6 +390,9 @@ npm run test:meta tests/meta/deploy-atomica-contracts.test.ts
 npm run test:meta tests/meta/secp256k1-account.test.ts
 ```
 
+<!-- SCOUT(#219) DOC: add an entry for auction-round-trip.test.ts; sections 9 and 10 below describe test files that do not exist, and lockbox-release.test.ts has no entry. -->
+<!-- SCOUT(#239) DOC: add an entry for the moved timelock-genesis.test.ts. -->
+
 ### 9. `cross-chain/lock-receipt-e2e.test.ts`
 
 **Purpose**: End-to-end cross-chain lock receipt verification

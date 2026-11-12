@@ -3,6 +3,7 @@ import { verifyAccountProof, verifyStorageProof } from "../src/verifier";
 import { ETHEREUM_DEPLOYER_ADDRESS } from "../../../shared/test-constants";
 
 describe("Account Proof Verification", () => {
+    // SCOUT(#239) REMOVE: placeholder; its asserts sit inside if (result.valid), which is false for the empty proof.
     test("should verify valid account proof against state root", async () => {
         // This will use real proof data from integration test
         // For now, define expected interface
@@ -52,6 +53,7 @@ describe("Account Proof Verification", () => {
         // expect(result.error).toContain("state root");
     });
 
+    // SCOUT(#239) REMOVE: placeholder; every assert sits inside if (result.valid && result.accountState) (not in the issue text).
     test("should decode account state from proof", async () => {
         // This will be tested with real data
         const accountProof: string[] = []; // Valid proof from integration
@@ -82,6 +84,7 @@ describe("Account Proof Verification", () => {
         }
     });
 
+    // SCOUT(#239) REMOVE: placeholder; every assert sits inside if (result.valid && result.accountState) (not in the issue text).
     test("should verify empty account (non-existence proof)", async () => {
         const emptyAddress = "0x1111111111111111111111111111111111111111";
         const accountProof: string[] = []; // Proof of non-existence
@@ -97,6 +100,7 @@ describe("Account Proof Verification", () => {
 });
 
 describe("Storage Proof Verification", () => {
+    // SCOUT(#239) REMOVE: placeholder; its assert sits inside if (result.valid).
     test("should verify valid storage proof", async () => {
         const storageProof: string[] = []; // Will be filled
         const storageRoot = "0x" + "0".repeat(64);
@@ -112,6 +116,7 @@ describe("Storage Proof Verification", () => {
         }
     });
 
+    // SCOUT(#239) EDIT: assert without the guard; the verifier returns valid with value "0x0" here, so the assert holds.
     test("should handle empty storage slots", async () => {
         const emptyStorageRoot =
             "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
@@ -139,6 +144,7 @@ describe("Storage Proof Verification", () => {
     });
 });
 
+// SCOUT(#239) REMOVE: placeholder; it asserts that an empty function does not throw (not in the issue text).
 describe("Account State Decoding", () => {
     test("should decode RLP-encoded account state", () => {
         // This will be tested with real RLP data

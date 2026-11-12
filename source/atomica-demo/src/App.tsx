@@ -1,3 +1,4 @@
+// SCOUT(#236) EDIT: import SellFlow, AuctionRevealer, SettleButton and ReleaseButton once the package index exports them.
 import {
   Faucet,
   SanityTest,
@@ -53,6 +54,7 @@ function AppShell() {
             <AppSettings />
             <Faucet />
             <SanityTest />
+            {/* SCOUT(#236) EDIT: mount SellFlow, AuctionBidder, the open step, SettleButton and ReleaseButton here. */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <AuctionCreator />
               <AuctionBidder />

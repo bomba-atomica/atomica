@@ -28,6 +28,7 @@ module atomica::lock_receipt {
     use std::vector;
     use std::signer;
     use aptos_std::table::{Self, Table};
+    // SCOUT(#238) REMOVE: the `simple_map` import, with `claimed_locks`.
     use aptos_std::simple_map::{Self, SimpleMap};
     use aptos_framework::event;
     use aptos_framework::timestamp;
@@ -47,6 +48,7 @@ module atomica::lock_receipt {
     const E_INVALID_ADDRESS_LENGTH: u64 = 8;
     /// Asset has no pinned Ethereum token
     const E_UNSUPPORTED_ASSET: u64 = 10;
+    // SCOUT(#221) REMOVE: `E_WRONG_DEADLINE`; the deadline is no longer an argument. The unwind pull request (213) takes codes 12 to 15 right after it.
     /// The lock deadline is not `auction::eth_lock_deadline(window_id)`
     const E_WRONG_DEADLINE: u64 = 11;
     /// The receipt's lock is bound to another auction window or pair
@@ -135,6 +137,7 @@ module atomica::lock_receipt {
         /// Map from lock_id -> receipt
         receipts: Table<vector<u8>, LockReceipt<Chain, Asset>>,
 
+        // SCOUT(#238) REMOVE: `claimed_locks`; the whole map is read and rewritten on every registration, and `receipts` answers the same question.
         /// Set of claimed lock IDs (for efficient replay checking)
         claimed_locks: SimpleMap<vector<u8>, bool>,
 
@@ -188,6 +191,7 @@ module atomica::lock_receipt {
         if (!exists<ReceiptRegistry<Chain, Asset>>(addr)) {
             move_to(account, ReceiptRegistry<Chain, Asset> {
                 receipts: table::new(),
+                // SCOUT(#238) REMOVE: the `claimed_locks` entry of a new registry.
                 claimed_locks: simple_map::create(),
                 total_locked: 0,
                 receipt_count: 0,
@@ -229,6 +233,7 @@ module atomica::lock_receipt {
     /// Ethereum-derivable Aptos account (eth_proof::ethereum_account_address).
     ///
     /// Type parameter Asset determines which asset is being locked (FakeETH, FakeUSD).
+    // SCOUT(#221) EDIT: `register_ethereum_lock` drops the `deadline` argument and the `E_WRONG_DEADLINE` check; `verify_lock` commits to `eth_proof::eth_lock_deadline(window_id)` itself. Fix step 2 of the doc above.
     public entry fun register_ethereum_lock<Asset>(
         _carrier: &signer,
         block_number: u64,
@@ -310,6 +315,7 @@ module atomica::lock_receipt {
         // Add to receipts table
         table::add(&mut registry.receipts, lock_id, receipt);
 
+        // SCOUT(#238) REMOVE: the `claimed_locks` write of `store_receipt`.
         // Mark as claimed in replay protection map
         simple_map::add(&mut registry.claimed_locks, lock_id, true);
 
@@ -496,6 +502,7 @@ module atomica::lock_receipt {
 
     #[view]
     /// Check if a lock has been claimed
+    // SCOUT(#238) EDIT: `is_lock_claimed` answers from `table::contains(&registry.receipts, lock_id)`. The name means "registered", not status CLAIMED.
     public fun is_lock_claimed<Chain, Asset>(lock_id: vector<u8>): bool acquires ReceiptRegistry {
         if (!exists<ReceiptRegistry<Chain, Asset>>(@atomica)) {
             return false

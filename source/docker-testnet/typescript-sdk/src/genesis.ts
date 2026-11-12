@@ -112,6 +112,8 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         const configDir = pathResolve(workspaceDir, "..", "config");
         const composeImage = extractImageFromCompose(configDir);
 
+        // SCOUT(#228) EDIT: the fallback digest below is one more copy of the validator image pin, unless the removal issue (239) deleted this SDK first.
+        // SCOUT(#243) EDIT: the fallback digest below is one more copy of the validator image pin, and this SDK also calls generate-genesis.sh, so it would need the registrar env too, unless the removal issue (239) deleted it first.
         const genesisImage =
             process.env.IMAGE_NAME ||
             composeImage ||

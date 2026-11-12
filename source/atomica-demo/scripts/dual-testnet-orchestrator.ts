@@ -13,6 +13,7 @@
 import { spawn, ChildProcess } from "child_process";
 import { ethers } from "ethers";
 import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
+// SCOUT(#239) EDIT: repoint to @atomica/aptos-docker-testnet; the script also imports ../tests/meta/ethereum/solidity-compiler.js and ../test-utils/localnet, which do not exist.
 import { DockerTestnet } from "@atomica/docker-testnet";
 import {
   compileContracts,
@@ -197,6 +198,7 @@ async function deployAptosContracts(
     deployerAddress: DEPLOYER_ADDR,
     namedAddresses: { atomica: DEPLOYER_ADDR },
     initFunctions: [
+      // SCOUT(#238) REMOVE: the registry::initialize init function.
       {
         functionId: `${DEPLOYER_ADDR}::registry::initialize`,
         args: [

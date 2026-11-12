@@ -17,11 +17,13 @@ beforeEach(() => {
   localStorage.clear();
 });
 
+// SCOUT(#235) EDIT: this file runs in no CI job (exemptions list); the new storage cases go in tests/unit/bidStorage.test.ts.
 describe("12a: bidStorage — localStorage persistence", () => {
   const seller = "0xAABB";
   const bidder = "0xCCDD";
 
   it("saves and loads a bid price", () => {
+    // SCOUT(#217) EDIT: stored prices in micro-dollar style.
     saveBidPrice(seller, bidder, 110_000_000n);
     const result = loadBidPrice(seller, bidder);
     expect(result).toBe(110_000_000n);

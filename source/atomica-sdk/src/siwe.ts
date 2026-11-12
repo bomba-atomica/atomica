@@ -64,6 +64,7 @@ export async function getDerivedAddress(
   serializer.serializeStr("authenticate");
   const funcInfoBcs = serializer.toUint8Array();
 
+  // SCOUT(#232) EDIT: encode ethAddress.toLowerCase(), so every spelling of one address derives one Aptos address.
   // FIXED: Move expects the UTF8 bytes of the Hex String (e.g. "0x123...")
   // not the raw bytes of the address.
   const ethBytes = new TextEncoder().encode(ethAddress);

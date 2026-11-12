@@ -1,3 +1,4 @@
+// SCOUT(#228) EDIT: copy fixtures/ibe_v2_golden_vectors.json again from the fork commit of the new framework pin (it gains the price bid cases of the decrypt native issue (227)), and fix the commit named in the header below.
 /**
  * V2 timelock bid encryption: golden-vector parity with the fork's Rust reference.
  *

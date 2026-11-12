@@ -127,6 +127,7 @@ import {
 import { Faucet } from "../../src/components/Faucet";
 import { AuctionRevealer } from "../../src/components/AuctionRevealer";
 import { SettleButton } from "../../src/components/SettleButton";
+// SCOUT(#236) REMOVE: import ReleaseButton instead.
 import { ClaimButton } from "../../src/components/ClaimButton";
 import { Step8Monitor } from "../../src/components/SellFlow/steps/Step8Monitor";
 import {
@@ -150,6 +151,7 @@ import {
   getBidPayload,
   getBidInfo,
   getBidCount,
+  // SCOUT(#228) REMOVE: getSubmitCleartextPayload leaves the SDK; import the open_bids payload builder.
   getSubmitCleartextPayload,
   isRevealed,
   isSettled,
@@ -165,9 +167,12 @@ import { ethers } from "ethers";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
+// SCOUT(#241) REMOVE: MIN_PRICE and the createAuctionDirect argument; this file is missing from the issue's touchpoints.
 const MIN_PRICE = 1_000_000n;
 const LOCK_AMOUNT = ethers.parseEther("10");
 const MINT_AMOUNT = ethers.parseEther("1000");
+// SCOUT(#217) EDIT: bid 2000 whole USD and expect $2000; size the collateral with quoteForFill.
+// SCOUT(#216) EDIT: on main 1 FakeETH at 2_000_000 needs 2,000,000 FakeUSD of collateral and 500 makes the bid invalid; pull request 213 already shrinks BID_QUANTITY to 0.0001 FakeETH (200 FakeUSD).
 /** Bid price in FakeUSD micro-units: 2.00 USD. */
 const BID_PRICE = 2_000_000n;
 /** How SettleButton and BidHistory display {@link BID_PRICE}. */
@@ -179,6 +184,9 @@ const BID_QUANTITY = ethers.parseEther("0.0001");
 /** FakeUSD collateral locked for the bid (6 decimals). */
 const COLLATERAL_AMOUNT = 500n * 10n ** 6n;
 const COLLATERAL_MINT = 10_000n * 10n ** 6n;
+// SCOUT(#216) EDIT: COLLATERAL_AMOUNT above must be at least quoteForFill(BID_QUANTITY, BID_PRICE), and the 10,000 FakeUSD mint cap limits it (marker sits here to avoid a merge conflict with pull request 213).
+// SCOUT(#243) EDIT: the test no longer sets the deadline; it needs the test cap.
+// SCOUT(#231) EDIT: this comment relies on a 24 hour docker epoch; UTC-anchored epoch ends change that.
 /**
  * How far ahead of the chain clock the timelock deadline is set. The bid must
  * land before it: create_auction, the Step8Monitor check and the sealed bid
@@ -253,6 +261,8 @@ function withProviders(account: string, children: React.ReactNode) {
   );
 }
 
+// SCOUT(#236) EDIT: the demo will mount SellFlow, but this browser suite cannot import it; the happy path keeps direct helpers unless vitest.config.ts gains polyfills.
+// SCOUT(#233) EDIT: AuctionBidder will import the proof generator too, which would break 09-submit-bid in the same way.
 // Note: SellFlow is NOT imported because useSellFlow pulls in
 // @ethereumjs/util EventEmitter which is incompatible with Vitest browser
 // mode. Steps 2-7 use direct helpers instead. Individual component tests
@@ -260,6 +270,8 @@ function withProviders(account: string, children: React.ReactNode) {
 
 // ── Test suite ────────────────────────────────────────────────────────────
 
+// SCOUT(#236) EDIT: the suite ends with release on Ethereum instead of the faucet claim; the header comment (steps 8b to 11) needs the same rewrite.
+// SCOUT(#228) EDIT: step 8b becomes an on-chain open_bids call from a third account.
 describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
   let fixture: IntegrationFixture;
   let aptosClient: Aptos;
@@ -407,6 +419,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       console.log("[14-happy-path] Steps 3-7: Lock proof + auction creation (direct helpers)");
 
       // Generate ETH lock proof via Node.js-side helper
+      // SCOUT(#224) EDIT: the seller lock and the collateral lock are bound to the empty pair; bind them to the launch pair.
       const proofResult = await generateEthLockProof(fixture, LOCK_AMOUNT, MINT_AMOUNT);
       lockId = proofResult.lockId;
 
@@ -433,6 +446,8 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         "FakeUSD",
       );
 
+      // SCOUT(#243) REMOVE: the manual timelock registration.
+      // SCOUT(#225) EDIT: it aborts with E_NOT_REGISTRAR on a validator image with the registrar check.
       // The timelock key exists only from epoch 2. Then register a real
       // timelock whose deadline closes the bidding.
       console.log("[14-happy-path] Waiting for the epoch timelock key (ibe_config::is_ready)...");
@@ -445,6 +460,8 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       // must succeed, so no catch.
       const auctionCreatedAt = Math.floor(Date.now() / 1000);
       windowId = await currentWindowId(aptosClient);
+      // SCOUT(#241) EDIT: drop MIN_PRICE.
+      // SCOUT(#243) EDIT: drop timelockId.
       await createAuctionDirect(
         aptosClient,
         fixture.eth.seller,
@@ -524,6 +541,8 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
 
       // sealBid reads timelock::get_mpk, timelock::get_timelock_identity and
       // auction::bid_associated_data from chain and encrypts price || salt.
+      // SCOUT(#228) EDIT: no salt and no commitment come back, and getBidPayload has five arguments.
+      // SCOUT(#235) EDIT: sealBid cross-checks the node's identity and associated data here, on live chains.
       const sealed = await sealBid(windowId, TEST_PAIR_BCS, bidder, BID_PRICE);
       expect(sealed.timelockId).toBe(timelockId);
       bidSalt = sealed.salt;
@@ -547,6 +566,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       const stored = await getBidInfo(windowId, TEST_PAIR_BCS, 0n);
       expect(stored.bidder.replace(/^0x0*/, "")).toBe(bidder.replace(/^0x0*/, ""));
       expect(stored.ciphertext).toEqual(sealed.ciphertext);
+      // SCOUT(#228) REMOVE: the bid view has no commitment.
       expect(stored.commitment).toEqual(sealed.commitment);
       expect(stored.opened).toBe(false);
       console.log(
@@ -558,6 +578,8 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
 
   // ── Step 8b: Reveal — decrypt the bid with the revealed key ──────────────
 
+  // SCOUT(#228) EDIT: replace the decrypt, cleartext and salt assertions and the relayed submit_cleartext_and_clear with one open_bids call.
+  // SCOUT(#236) EDIT: the open step is one click on the real component.
   it(
     "step 8b — reveal: AuctionRevealer decrypts the same bid with get_decryption_key and it opens on chain",
     async () => {
@@ -590,6 +612,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       );
       expect(screen.queryByTestId(auctionRevealer.decryptError)).toBeNull();
       const row = screen.getByTestId(auctionRevealer.decryptedBid);
+      // SCOUT(#217) EDIT: price text shown by AuctionRevealer.
       expect(row.textContent).toContain(`price ${BID_PRICE}`);
       expect(row.textContent).toContain("matches commitment");
 
@@ -607,10 +630,12 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       await submitDirect(
         aptosClient,
         deployerAccount,
+        // SCOUT(#228) REMOVE: relayed submit_cleartext_and_clear; replace with open_bids sent by a third account.
         getSubmitCleartextPayload(windowId, TEST_PAIR_BCS, [BigInt(cleartexts)], [
           ethers.getBytes(salts),
         ]),
       );
+      // SCOUT(#216) EDIT: assert that the opened bid reads valid.
       const opened = await getBidInfo(windowId, TEST_PAIR_BCS, 0n);
       expect(opened.opened).toBe(true);
       expect(opened.price).toBe(BID_PRICE);
@@ -669,6 +694,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         },
         { timeout: 60_000 },
       );
+      // SCOUT(#217) EDIT: this expects BID_PRICE_USD, which becomes $2000.
       expect(screen.getByTestId(settleButton.settleClearingPrice).textContent).toBe(
         BID_PRICE_USD,
       );
@@ -696,6 +722,8 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
     120_000,
   );
 
+  // SCOUT(#236) REMOVE: step 11, the faucet claim; replace it with the release action and ERC-20 balance asserts on Ethereum.
+  // SCOUT(#217) EDIT: line 737 compares a FakeETH balance change with a price.
   // ── Step 11: Claim via the real ClaimButton ──────────────────────────────
   //
   // ClaimButton reads the settlement and, in the Demo phase, the claim mints
@@ -716,6 +744,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
 
       withProviders(
         bidderEthAddress,
+        // SCOUT(#236) REMOVE: render ReleaseButton here instead.
         <ClaimButton windowId={windowId} pairBcs={TEST_PAIR_BCS} />,
       );
 
@@ -780,6 +809,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
           const rows = screen.getAllByTestId(bidHistory.bidHistoryRow);
           expect(rows).toHaveLength(1);
           expect(rows[0].textContent).toContain(windowId.toString());
+          // SCOUT(#217) EDIT: the bid history price becomes $2000.
           expect(rows[0].textContent).toContain(BID_PRICE_USD);
         },
         { timeout: 30_000 },
@@ -792,4 +822,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
     },
     60_000,
   );
+
+  it.todo("SCOUT(#236) release: the winner's FakeETH and the seller's FakeUSD ERC-20 balances rise by the outcome amounts and both locks read released");
+  it.todo("SCOUT(#234) an SDK approve and lock passes the pin check against the live eth_proof::get_config (no SDK lock runs in this suite today)");
 });

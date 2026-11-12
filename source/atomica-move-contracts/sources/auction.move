@@ -1,3 +1,5 @@
+// SCOUT(#217) DOC: state the price unit in this header: whole USD per whole base token, an unsigned integer with no decimal shift.
+// SCOUT(#228) DOC: rewrite "Bid lifecycle" steps 2, 4 and 5 and delete the "Cleartext" section: the chain opens bids with `ibe::decrypt_bid`, with no commitment, salt or opening window.
 /// Auction module: global-registry sealed-bid batch auction with V2 timelock bids.
 ///
 /// Design: `atomica/docs/decisions/aptos-upgrade-ibe-chunky-spec.md` (sections 6 to 8) and
@@ -64,28 +66,57 @@ module atomica::auction {
     // ===================== Error Codes =====================
 
     const E_AUCTION_NOT_FOUND: u64 = 1;
+    // SCOUT(#238) REMOVE: `E_AUCTION_ENDED` is never raised.
     const E_AUCTION_ENDED: u64 = 2;
     const E_AUCTION_NOT_ENDED: u64 = 3;
+    // SCOUT(#238) REMOVE: `E_BID_TOO_LOW` is never raised.
     const E_BID_TOO_LOW: u64 = 4;
+    // SCOUT(#238) REMOVE: `E_ALREADY_SETTLED` is never raised either (`E_WINDOW_ALREADY_SETTLED` is the live code); the issue text does not list it.
     const E_ALREADY_SETTLED: u64 = 5;
 
     /// Caller supplied a window_id that is strictly less than the current window.
     /// Only the current window and the immediately next window are accepted.
     const E_STALE_WINDOW_ID: u64 = 6;
 
+    // SCOUT(#228) REMOVE: `E_CLEARTEXT_COUNT_MISMATCH`; only `submit_cleartext_and_clear` raises it.
     /// The number of cleartext prices or salts does not match the number of sealed bids.
     /// The settler must supply exactly one entry per bid, index-aligned. An empty salt skips a bid.
     const E_CLEARTEXT_COUNT_MISMATCH: u64 = 9;
 
+    // SCOUT(#228) REMOVE: `E_INVALID_CLEARTEXT`; only `open_one` raises it.
     /// A cleartext `(price, salt)` does not match the bid's on-chain commitment.
     const E_INVALID_CLEARTEXT: u64 = 10;
 
     /// The window has already been settled.
     const E_WINDOW_ALREADY_SETTLED: u64 = 11;
 
+    // SCOUT(#238) REMOVE: `E_NOT_IMPLEMENTED`, but only after every SCOUT ADD stub of this module has a real body: the stubs abort with it.
     /// Scaffold stub sentinel — all Phase 3a entry function bodies abort with this
     /// code until their implementations land in #86b–#86f.
     const E_NOT_IMPLEMENTED: u64 = 99;
+
+    // New abort codes. The open unwind pull request (213) takes 32 to 36, so these start at 37.
+    // SCOUT(#216) ADD: `submit_bid` aborts with `E_ZERO_QUANTITY` when `quantity` is zero.
+    /// A bid quantity must be above zero.
+    const E_ZERO_QUANTITY: u64 = 37;
+    // SCOUT(#216) ADD: `submit_bid` aborts with `E_QUANTITY_ABOVE_SUPPLY` when `quantity` is above the window's `total_supply`.
+    /// A bid quantity must not be above the window's supply at submission.
+    const E_QUANTITY_ABOVE_SUPPLY: u64 = 38;
+    // SCOUT(#218) ADD: `create_auction` aborts with `E_SELLER_LOCKS_FULL` when the window holds `MAX_SELLER_LOCKS_PER_WINDOW` locks.
+    /// The window holds the maximum number of seller locks.
+    const E_SELLER_LOCKS_FULL: u64 = 39;
+    // SCOUT(#218) ADD: `create_auction` aborts with `E_SELLER_LOCK_TOO_SMALL` when the claimed lock is below `MIN_SELLER_LOCK_AMOUNT`.
+    /// The seller lock is below the minimum lock size.
+    const E_SELLER_LOCK_TOO_SMALL: u64 = 40;
+    // SCOUT(#218) ADD: `submit_bid` aborts with `E_COLLATERAL_TOO_SMALL` when the claimed collateral is below `MIN_BID_COLLATERAL`.
+    /// The bid collateral is below the minimum collateral size.
+    const E_COLLATERAL_TOO_SMALL: u64 = 41;
+    // SCOUT(#224) ADD: `create_auction` aborts with `E_PAIR_NOT_ALLOWED` when `pair_bcs` is not on the allowlist.
+    /// The pair is not on the allowlist.
+    const E_PAIR_NOT_ALLOWED: u64 = 42;
+    // SCOUT(#224) ADD: `allow_pair` aborts with `E_NOT_PACKAGE_ACCOUNT` for a signer other than `@atomica`.
+    /// Only the package account may add a pair.
+    const E_NOT_PACKAGE_ACCOUNT: u64 = 43;
 
     /// `ibe::verify_bid_ct` rejected the ciphertext for the associated data built on chain.
     const E_INVALID_CIPHERTEXT: u64 = 12;
@@ -97,16 +128,20 @@ module atomica::auction {
     const E_DUPLICATE_BID: u64 = 15;
     /// The registry status is not `Revealed`, so no bid can be opened yet.
     const E_TIMELOCK_NOT_REVEALED: u64 = 16;
+    // SCOUT(#228) REMOVE: `E_BID_ALREADY_OPENED`; only `open_one` raises it.
     /// The bid is already opened.
     const E_BID_ALREADY_OPENED: u64 = 17;
+    // SCOUT(#228) REMOVE: `E_INVALID_SALT`; only `open_one` raises it.
     /// A salt must be exactly 32 bytes.
     const E_INVALID_SALT: u64 = 18;
     /// The bid index is out of range.
     const E_BID_INDEX_OUT_OF_RANGE: u64 = 19;
+    // SCOUT(#228) EDIT: keep `E_REVEAL_FINAL` for `open_bids` on a window whose bids are all opened; reword the doc, `finalize_reveal` is gone.
     /// Openings are closed. `finalize_reveal` already ran for this window.
     const E_REVEAL_FINAL: u64 = 20;
     /// Clearing needs a finalized reveal when the window has bids.
     const E_REVEAL_NOT_FINAL: u64 = 21;
+    // SCOUT(#228) REMOVE: `E_OPENING_WINDOW_OPEN`; only `finalize_reveal` raises it.
     /// Openings are still open: some bids are unopened and the opening window has not elapsed.
     const E_OPENING_WINDOW_OPEN: u64 = 22;
     /// The timelock status is not `Expired`, so there is nothing to refund.
@@ -115,10 +150,12 @@ module atomica::auction {
     const E_WINDOW_REFUNDED: u64 = 24;
     /// The window holds the maximum number of bids.
     const E_WINDOW_FULL: u64 = 25;
+    // SCOUT(#228) REMOVE: `E_INVALID_COMMITMENT`; only the commitment check of `submit_bid` raises it.
     /// A bid commitment must be exactly 32 bytes.
     const E_INVALID_COMMITMENT: u64 = 26;
     /// The timelock is `Expired`: the key will never be released, so openings are impossible.
     const E_TIMELOCK_EXPIRED: u64 = 27;
+    // SCOUT(#243) REMOVE: `E_TIMELOCK_NOT_REGISTERED` cannot be raised once no caller supplies a timelock id; the issue text does not list it.
     /// `create_auction` got a `timelock_id` that `ibe_config::register_timelock` never issued.
     const E_TIMELOCK_NOT_REGISTERED: u64 = 28;
     /// `create_auction` got a timelock registered in an earlier epoch.
@@ -145,12 +182,26 @@ module atomica::auction {
 
     /// Domain tag of the V2 bid associated data (spec section 6).
     const BID_AD_TAG: vector<u8> = b"atomica/timelock-bid/v2";
+    // SCOUT(#228) REMOVE: `BID_COMMIT_TAG`; the price commitment goes away.
     /// Domain tag of the price commitment.
     const BID_COMMIT_TAG: vector<u8> = b"atomica/bid-commitment/v1";
     /// Bytes of the one-time Ed25519 verification key at the start of a V2 ciphertext.
     const CT_VK_LEN: u64 = 32;
     /// Per-window bid cap. The clearing sort is quadratic.
     const MAX_BIDS_PER_WINDOW: u64 = 100;
+    // SCOUT(#218) ADD: cap on seller locks per window. The value waits for the owner (proposed: 100).
+    /// Per-window seller lock cap. Settle, refund and unwind loop over every seller lock.
+    const MAX_SELLER_LOCKS_PER_WINDOW: u64 = 100;
+    // SCOUT(#218) ADD: minimum seller lock in FakeETH wei. The value waits for the owner (proposed: 0.01 FakeETH).
+    /// Minimum amount of one seller lock, in FakeETH wei (18 decimals).
+    const MIN_SELLER_LOCK_AMOUNT: u256 = 10_000_000_000_000_000;
+    // SCOUT(#218) ADD: minimum bid collateral in FakeUSD base units. The value waits for the owner (proposed: 10 FakeUSD).
+    /// Minimum collateral of one bid, in FakeUSD base units (6 decimals).
+    const MIN_BID_COLLATERAL: u256 = 10_000_000;
+    // SCOUT(#243) ADD: seed of the registrar's named object under `@atomica`. The SDK export and the genesis `timelock_registrar` field derive the same address from it.
+    /// Seed of the timelock registrar object.
+    const TIMELOCK_REGISTRAR_SEED: vector<u8> = b"atomica/timelock-registrar";
+    // SCOUT(#228) REMOVE: `OPENING_WINDOW_US`; the stuck deadline of the unwind pull request (213) drops this term.
     /// Time after the registry's `reveal_expiry_us` during which unopened bids can still be opened.
     const OPENING_WINDOW_US: u64 = 600_000_000;
     /// FakeUSD base units per whole FakeUSD (6 decimals).
@@ -160,6 +211,7 @@ module atomica::auction {
 
     // ===================== Fee/Rebate Constants =====================
 
+    // SCOUT(#238) REMOVE: this section and `REBATE_COEFFICIENT`.
     /// Distance-to-clearing rebate coefficient.
     /// Formula calibration is explicitly TBD in v0 — this placeholder will be
     /// replaced with a calibrated value in the Phase 3c implementation follow-up.
@@ -177,6 +229,20 @@ module atomica::auction {
         quote_token: vector<u8>,   // e.g. b"FakeUSD"
     }
 
+    // SCOUT(#224) ADD: the pair allowlist stored at `@atomica`: pair bytes to `Pair`. `init_module` seeds the launch pair.
+    /// Pairs a window may be created for. Key: the BCS bytes of the `Pair`.
+    struct PairAllowlist has key {
+        pairs: Table<vector<u8>, Pair>,
+    }
+
+    // SCOUT(#243) ADD: the package's timelock registrar: a named object under `@atomica` that only this module signs for.
+    /// The registrar object's `ExtendRef` and the timelock id registered for each window id.
+    struct TimelockRegistrar has key {
+        extend_ref:       aptos_framework::object::ExtendRef,
+        window_timelocks: Table<u64, u64>,
+    }
+
+    // SCOUT(#238) REMOVE: `Rebate`.
     /// Per-bidder rebate entry returned by `compute_rebates`.
     ///
     /// The rebate amount is proportional to the distance between the bidder's
@@ -189,6 +255,9 @@ module atomica::auction {
         amount: u64,
     }
 
+    // SCOUT(#216) EDIT: `SealedBid` gains the collateral amount claimed at submission and a validity flag set at opening. The receipt table already holds that amount (`lock_receipt::get_receipt`, read by `settle_locks` in the unwind pull request (213)), so only the flag strictly needs a new field.
+    // SCOUT(#217) DOC: state the unit of `SealedBid.price`: whole USD per whole base token, no decimal shift.
+    // SCOUT(#228) REMOVE: `SealedBid.commitment`; `open_bids` sets `opened` and `price` from the decrypted 8-byte plaintext.
     /// IBE sealed bid — plaintext price never stored on-chain during live window.
     /// @see docs/architecture/v0-architecture.md §2.5
     struct SealedBid has store {
@@ -207,6 +276,7 @@ module atomica::auction {
         price:              u64,
     }
 
+    // SCOUT(#217) DOC: state the unit of `BidResult.clearing_price`; the issue text does not list this struct.
     /// Per-bid fill result written by clear_uniform_price.
     ///
     /// After clearing, each bid in the window is assigned a BidResult recording
@@ -221,6 +291,10 @@ module atomica::auction {
         clearing_price: u64,    // uniform clearing price all winners pay
     }
 
+    // SCOUT(#217) DOC: state the unit of `WindowState.clearing_price`.
+    // SCOUT(#228) EDIT: `WindowState` gains the opening cursor of `open_bids`; `reveal_final` then means every bid is opened.
+    // SCOUT(#238) REMOVE: `WindowState.revealed_prices`; clearing reads `bids[i].price`.
+    // SCOUT(#241) REMOVE: `WindowState.min_prices` and the "index-aligned with min_prices" note on `lock_ids`.
     /// Per-window clearing state within the global registry.
     /// @see docs/architecture/v0-architecture.md §2.3
     struct WindowState has store {
@@ -262,6 +336,7 @@ module atomica::auction {
 
     // ===================== Events =====================
 
+    // SCOUT(#217) DOC: state the unit of `AuctionSettled.clearing_price`.
     // Emitted when settlement is complete for a window.
     // The Ethereum settlement contract (or off-chain relayer) reads this to
     // transfer assets on the cross-chain side.
@@ -277,6 +352,8 @@ module atomica::auction {
         lock_ids:       vector<vector<u8>>, // seller receipt IDs consumed
     }
 
+    // SCOUT(#217) DOC: state the unit of `BidOpened.price`.
+    // SCOUT(#228) REMOVE: `BidOpened`. The issue names no event for a bid that `open_bids` opens.
     // Emitted when a bid cleartext matching its commitment is accepted.
     #[event]
     struct BidOpened has drop, store {
@@ -286,6 +363,7 @@ module atomica::auction {
         price:      u64,
     }
 
+    // SCOUT(#228) REMOVE: `RevealFinalized`.
     // Emitted when openings close for a window.
     #[event]
     struct RevealFinalized has drop, store {
@@ -326,6 +404,7 @@ module atomica::auction {
     // and rebuilds the auction key `auction_key(window_id, pair_hash, eth_lock_deadline)`.
     // The field layout is pinned by the golden vectors of issue 201
     // (`0xcafe::auction::AuctionOutcome`); change it only together with those vectors.
+    // SCOUT(#221) DOC: the comment above names the old key. The key becomes `auction_key(window_id, pair_hash)`; LockBox reads `eth_lock_deadline` and ignores it.
     #[event]
     struct AuctionOutcome has drop, store {
         window_id:         u64,
@@ -333,6 +412,17 @@ module atomica::auction {
         eth_lock_deadline: u64,
         dispositions_root: vector<u8>,
         leaf_count:        u64,
+    }
+
+    // SCOUT(#216) ADD: emitted when a bid is judged invalid at opening. Reasons: 1 zero price, 2 collateral below the quote at the bid's own price. It carries the pair bytes like `AuctionRefunded` of the unwind pull request (213), because a window id alone does not name a window.
+    // SCOUT(#228) EDIT: `open_bids` adds a `BidInvalid` reason for a ciphertext that does not decrypt to exactly 8 bytes.
+    #[event]
+    struct BidInvalid has drop, store {
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+        bid_index: u64,
+        bidder:    address,
+        reason:    u8,
     }
 
     // ===================== Helpers =====================
@@ -348,6 +438,7 @@ module atomica::auction {
     #[view]
     /// The auction key LockBox binds a lock to:
     /// keccak256(abi.encode(window_id, pair_hash, eth_lock_deadline(window_id))).
+    // SCOUT(#221) EDIT: `auction_key` becomes keccak256(abi.encode(window_id, pair_hash)); the deadline leaves the key.
     public fun auction_key(window_id: u64, pair_hash: vector<u8>): vector<u8> {
         eth_proof::auction_key(window_id, pair_hash, eth_lock_deadline(window_id))
     }
@@ -383,6 +474,7 @@ module atomica::auction {
     /// Afternoon window fires at offset 58 500 s (16:15 UTC).
     ///
     /// @see docs/architecture/v0-architecture.md §2.2
+    // SCOUT(#220) EDIT: `current_window_id` becomes day * 2 + (t >= 27900) + (t >= 58500), with day = s / 86400 and t = s % 86400; fix the doc above (28 500 s is 07:55, and 58 500 s cannot fall inside a 43 200 s period).
     public fun current_window_id(): u64 {
         let s = timestamp::now_seconds();
         let epoch = s / 43200;
@@ -405,6 +497,7 @@ module atomica::auction {
     /// Timelock ids are issued sequentially from 0 and never removed, so an id below
     /// `get_next_timelock_id` is registered. A `Pending` timelock of an earlier epoch already
     /// reads as `Expired`; the explicit epoch check gives that case its own abort code.
+    // SCOUT(#243) EDIT: `assert_timelock_open` checks the window id's stored timelock for a joining seller; the "is registered" check goes away.
     fun assert_timelock_open(timelock_id: u64) {
         assert!(
             ibe_config::is_initialized() && timelock_id < ibe_config::get_next_timelock_id(),
@@ -422,6 +515,8 @@ module atomica::auction {
 
     /// Publish the global AuctionRegistry at @atomica when the package is
     /// published, so the first `create_auction` may come from any seller.
+    // SCOUT(#224) EDIT: `init_module` also publishes `PairAllowlist` with the launch pair.
+    // SCOUT(#243) EDIT: `init_module` also creates the registrar object and stores `TimelockRegistrar`.
     fun init_module(atomica: &signer) {
         move_to(atomica, AuctionRegistry { windows: table::new() });
     }
@@ -480,6 +575,11 @@ module atomica::auction {
     ///   → (window_id, pair_bcs, lock_id, min_price, timelock_id, mpk_bytes)
     ///
     /// @see docs/architecture/v0-architecture.md §2.3
+    // SCOUT(#218) EDIT: `create_auction` aborts when the window holds `MAX_SELLER_LOCKS_PER_WINDOW` locks, or when the claimed lock is below `MIN_SELLER_LOCK_AMOUNT`.
+    // SCOUT(#224) EDIT: `create_auction` aborts unless `pair_bcs` is on the allowlist; a new window stores the listed `Pair`.
+    // SCOUT(#238) REMOVE: the `_mpk_bytes` argument of `create_auction` and its doc lines above.
+    // SCOUT(#241) REMOVE: the `min_price` argument of `create_auction` and its doc lines above.
+    // SCOUT(#243) EDIT: `create_auction` drops `timelock_id`; the first call for a window id registers its timelock with deadline `eth_proof::window_close_secs(window_id)`, later calls join it.
     public entry fun create_auction(
         seller:      &signer,
         window_id:   u64,
@@ -519,6 +619,7 @@ module atomica::auction {
         //
         // init_module publishes it. Move unit tests that skip init_module
         // still bootstrap it here when @atomica is the first seller.
+        // SCOUT(#238) REMOVE: this registry bootstrap; abort `E_AUCTION_NOT_FOUND` when the registry is missing.
         if (!exists<AuctionRegistry>(@atomica)) {
             move_to(seller, AuctionRegistry {
                 windows: table::new(),
@@ -531,6 +632,7 @@ module atomica::auction {
 
         if (!table::contains(&registry.windows, key)) {
             // First seller for this (window_id, pair) — create a fresh WindowState.
+            // SCOUT(#224) EDIT: take the `Pair` from the allowlist instead of this hardcoded one (its `quote_chain` says "aptos", but bidders lock FakeUSD on Ethereum).
             let base_pair = Pair {
                 base_chain:  b"ethereum",
                 base_token:  b"FakeETH",
@@ -546,7 +648,9 @@ module atomica::auction {
                 settled:         false,
                 clearing_price:  0,
                 lock_ids:        vector::singleton(lock_id),
+                // SCOUT(#241) REMOVE: the `min_prices` entry of a new window.
                 min_prices:      vector::singleton(min_price),
+                // SCOUT(#238) REMOVE: the `revealed_prices` entry of a new window.
                 revealed_prices: vector::empty(),
                 reveal_final:    false,
                 refunded:        false,
@@ -556,9 +660,23 @@ module atomica::auction {
             // Subsequent seller — accumulate supply and append metadata.
             let state = table::borrow_mut(&mut registry.windows, key);
             state.total_supply = state.total_supply + (locked_amount as u256);
+            // SCOUT(#218) EDIT: check the seller lock cap before this push.
             vector::push_back(&mut state.lock_ids, lock_id);
+            // SCOUT(#241) REMOVE: the `min_prices` push of a joining seller.
             vector::push_back(&mut state.min_prices, min_price);
         };
+    }
+
+    // SCOUT(#224) ADD: the package account adds a pair from its four fields; the contract computes the BCS key itself.
+    /// Adds a pair to the allowlist. Only `@atomica` may call it.
+    public entry fun allow_pair(
+        _atomica:     &signer,
+        _base_chain:  vector<u8>,
+        _base_token:  vector<u8>,
+        _quote_chain: vector<u8>,
+        _quote_token: vector<u8>,
+    ) {
+        abort E_NOT_IMPLEMENTED
     }
 
     #[view]
@@ -588,6 +706,7 @@ module atomica::auction {
     /// The bid plaintext is `price_le8 || salt32`. The bidder computes this off chain and
     /// passes it to `submit_bid`. The associated data binds the commitment to one bidder,
     /// auction, epoch and timelock.
+    // SCOUT(#228) REMOVE: `compute_bid_commitment`.
     public fun compute_bid_commitment(
         price: u64,
         salt:  vector<u8>,
@@ -630,6 +749,9 @@ module atomica::auction {
     /// `quantity` is the bid quantity in wei (FakeETH base token).
     ///
     /// @see docs/architecture/v0-architecture.md §2.5
+    // SCOUT(#216) EDIT: `submit_bid` aborts on a zero quantity and on a quantity above `total_supply`, and stores the claimed collateral amount on the bid (today `_collateral_amount` is dropped; the unwind pull request (213) drops the return of `claim_for_window` at its step 6).
+    // SCOUT(#218) EDIT: `submit_bid` aborts when the claimed collateral is below `MIN_BID_COLLATERAL`.
+    // SCOUT(#228) EDIT: `submit_bid` drops the `commitment` argument, its 32-byte check and the stored field.
     public entry fun submit_bid(
         bidder:             &signer,
         window_id:          u64,
@@ -696,6 +818,7 @@ module atomica::auction {
     ///
     /// Openings need the registry status `Revealed`. An `Expired` timelock never releases a
     /// key, so an opening after expiry aborts with `E_TIMELOCK_EXPIRED`.
+    // SCOUT(#228) EDIT: `open_bids` becomes the only caller of `assert_openings_allowed`.
     fun assert_openings_allowed(state: &WindowState) {
         assert!(!state.settled, E_WINDOW_ALREADY_SETTLED);
         assert!(!state.refunded, E_WINDOW_REFUNDED);
@@ -706,6 +829,8 @@ module atomica::auction {
     }
 
     /// Checks `(price, salt)` against the commitment of bid `idx` and marks it opened.
+    // SCOUT(#216) EDIT: `open_one` marks the bid opened and invalid, without aborting, when the price is zero or `quote_for_fill(quantity, price)` is above the stored collateral, and emits `BidInvalid`. `quote_for_fill` exists only in the unwind pull request (213).
+    // SCOUT(#228) REMOVE: `open_one`; the decrypt step of `open_bids` replaces it and takes over the validity rule of the bid validity issue (216).
     fun open_one(state: &mut WindowState, idx: u64, price: u64, salt: vector<u8>) {
         assert!(idx < vector::length(&state.bids), E_BID_INDEX_OUT_OF_RANGE);
         assert!(vector::length(&salt) == 32, E_INVALID_SALT);
@@ -721,6 +846,7 @@ module atomica::auction {
         event::emit(BidOpened { window_id, bid_index: idx, bidder: bid.bidder, price });
     }
 
+    // SCOUT(#228) REMOVE: `count_opened`; the opening cursor replaces this scan.
     fun count_opened(state: &WindowState): u64 {
         let i = 0u64;
         let opened = 0u64;
@@ -738,6 +864,8 @@ module atomica::auction {
     /// therefore leaves the window ready for `settle`.
     ///
     /// @see docs/architecture/v0-architecture.md §2.6 and §2.7
+    // SCOUT(#228) EDIT: `open_bids` calls `finalize_internal` when the cursor passes the last bid; the `RevealFinalized` event goes away.
+    // SCOUT(#238) EDIT: `finalize_internal` stops copying prices into `revealed_prices`.
     fun finalize_internal(state: &mut WindowState) {
         let prices = vector::empty<u64>();
         let i = 0u64;
@@ -757,6 +885,7 @@ module atomica::auction {
     ///
     /// The registry status must be `Revealed`. The opening must match the commitment stored
     /// at submission. Each bid opens once. When the last bid opens, the reveal finalizes.
+    // SCOUT(#228) REMOVE: `open_bid`.
     public entry fun open_bid(
         _caller:   &signer,
         window_id: u64,
@@ -790,6 +919,7 @@ module atomica::auction {
     /// the registry status. A settler cannot change a price.
     ///
     /// @see docs/architecture/v0-architecture.md §2.6
+    // SCOUT(#228) REMOVE: `submit_cleartext_and_clear`.
     public entry fun submit_cleartext_and_clear(
         _settler:   &signer,
         window_id:  u64,
@@ -827,6 +957,7 @@ module atomica::auction {
     /// The opening window ends `OPENING_WINDOW_US` after the registry's `reveal_expiry_us`.
     /// Unopened bids become invalid: no fill, and `settle` does not release their collateral.
     /// The window clears at the uniform price in the same call.
+    // SCOUT(#228) REMOVE: `finalize_reveal`.
     public entry fun finalize_reveal(
         _caller:   &signer,
         window_id: u64,
@@ -844,6 +975,17 @@ module atomica::auction {
             >= timelock::get_reveal_expiry(state.timelock_id) + OPENING_WINDOW_US;
         assert!(all_opened || window_elapsed, E_OPENING_WINDOW_OPEN);
         finalize_internal(state);
+    }
+
+    // SCOUT(#228) ADD: any account opens up to `max_bids` bids in bid order from the stored cursor with `ibe::decrypt_bid`; the call that opens the last bid clears the window. The pinned framework has no `ibe::decrypt_bid` yet.
+    /// Opens the next `max_bids` bids of a window from their ciphertexts.
+    public entry fun open_bids(
+        _caller:    &signer,
+        _window_id: u64,
+        _pair_bcs:  vector<u8>,
+        _max_bids:  u64,
+    ) {
+        abort E_NOT_IMPLEMENTED
     }
 
     // ===================== Refund =====================
@@ -1048,6 +1190,8 @@ module atomica::auction {
     /// Callers: `finalize_internal` and `clear_uniform_price`.
     ///
     /// @see docs/architecture/v0-architecture.md §2.7
+    // SCOUT(#216) EDIT: `clear_internal` skips an invalid bid like an unopened one, and compares `qty <= supply - accumulated` so a huge quantity cannot overflow.
+    // SCOUT(#238) EDIT: `clear_internal` reads `bids[i].price` instead of `revealed_prices`, and loses `found_marginal`.
     fun clear_internal(state: &mut WindowState) {
         let bid_count = vector::length(&state.bids);
 
@@ -1075,6 +1219,7 @@ module atomica::auction {
             while (j > 0) {
                 let idx_j   = *vector::borrow(&sorted_idx, j);
                 let idx_j1  = *vector::borrow(&sorted_idx, j - 1);
+                // SCOUT(#238) EDIT: the sort reads `bids[idx].price`, not `revealed_prices`.
                 let price_j  = *vector::borrow(&state.revealed_prices, idx_j);
                 let price_j1 = *vector::borrow(&state.revealed_prices, idx_j1);
                 if (price_j > price_j1) {
@@ -1097,12 +1242,14 @@ module atomica::auction {
         // (the last bid that contributes to fill).
         let marginal_sorted_pos: u64 = 0;
         let marginal_fill: u256 = 0;  // partial fill for the marginal bid
+        // SCOUT(#238) REMOVE: `found_marginal` is computed and discarded.
         let found_marginal = false;
         let winner_found = false;
 
         let s = 0u64;
         while (s < bid_count) {
             let orig_idx = *vector::borrow(&sorted_idx, s);
+            // SCOUT(#216) EDIT: a bid marked invalid at opening is skipped here too.
             if (!vector::borrow(&state.bids, orig_idx).opened) {
                 // Invalid bid: never fills.
                 s = s + 1;
@@ -1110,8 +1257,10 @@ module atomica::auction {
             };
             winner_found = true;
             let qty = vector::borrow(&state.bids, orig_idx).quantity;
+            // SCOUT(#238) EDIT: the walk reads `bids[orig_idx].price`, not `revealed_prices`.
             let price = *vector::borrow(&state.revealed_prices, orig_idx);
 
+            // SCOUT(#216) EDIT: `accumulated + qty` aborts on overflow; compare `qty <= supply - accumulated`.
             if (accumulated + qty <= supply) {
                 // Full fill — this bid fits entirely.
                 accumulated = accumulated + qty;
@@ -1211,6 +1360,9 @@ module atomica::auction {
     ///   6. Mark the window settled.
     ///
     /// @see docs/architecture/v0-architecture.md §2.8 and §2.9
+    // SCOUT(#216) EDIT: in `settle` an invalid bid gets no fill and its whole collateral goes back to its depositor. After the unwind pull request (213) `settle_locks` already returns a non-winner's whole collateral, so only `clear_internal` changes, and its `E_UNPAYABLE_FILL` check can no longer fire on collateral.
+    // SCOUT(#228) EDIT: `settle` aborts until `open_bids` has opened every bid; no `finalize_reveal` is left to close a partly opened window.
+    // SCOUT(#238) REMOVE: the `REBATE_COEFFICIENT` read in the body of `settle`.
     public entry fun settle(
         _caller:   &signer,
         window_id: u64,
@@ -1400,6 +1552,8 @@ module atomica::auction {
     // Off-chain relayers read ciphertexts here, decrypt them with the revealed key and
     // open the bids. Aborts with E_AUCTION_NOT_FOUND or E_BID_INDEX_OUT_OF_RANGE.
     #[view]
+    // SCOUT(#216) EDIT: the `get_bid_info` tuple gains the validity flag; the SDK `getBidInfo` destructures the tuple by position.
+    // SCOUT(#228) EDIT: the `get_bid_info` tuple loses `commitment`, a second positional break for the same SDK reader.
     public fun get_bid_info(
         window_id: u64,
         pair_bcs:  vector<u8>,
@@ -1454,6 +1608,7 @@ module atomica::auction {
 
     // Return (timelock_id, reveal_final, refunded) of a window.
     #[view]
+    // SCOUT(#228) EDIT: clients need the opening cursor to drive `open_bids` batches; return it from `get_window_status` or add a view. The issue text names neither.
     public fun get_window_status(
         window_id: u64,
         pair_bcs:  vector<u8>,
@@ -1507,6 +1662,42 @@ module atomica::auction {
         table::contains(&registry.windows, key)
     }
 
+    // SCOUT(#218) ADD: one view of the four window limits: (max bids, max seller locks, min seller lock amount, min bid collateral).
+    #[view]
+    public fun get_window_limits(): (u64, u64, u256, u256) {
+        abort E_NOT_IMPLEMENTED
+    }
+
+    // SCOUT(#224) ADD: whether `pair_bcs` is on the allowlist.
+    #[view]
+    public fun is_pair_allowed(_pair_bcs: vector<u8>): bool {
+        abort E_NOT_IMPLEMENTED
+    }
+
+    // SCOUT(#224) ADD: the BCS bytes of the launch pair; the SDK exports the same bytes as a constant.
+    #[view]
+    public fun launch_pair_bcs(): vector<u8> {
+        abort E_NOT_IMPLEMENTED
+    }
+
+    // SCOUT(#243) ADD: the registrar's address, `object::create_object_address(&@atomica, TIMELOCK_REGISTRAR_SEED)`.
+    #[view]
+    public fun timelock_registrar_address(): address {
+        abort E_NOT_IMPLEMENTED
+    }
+
+    // SCOUT(#243) ADD: the timelock id registered for a window id.
+    #[view]
+    public fun window_timelock(_window_id: u64): u64 {
+        abort E_NOT_IMPLEMENTED
+    }
+
+    // SCOUT(#243) ADD: the timelock deadline of a window id, in microseconds.
+    #[view]
+    public fun window_deadline_us(_window_id: u64): u64 {
+        abort E_NOT_IMPLEMENTED
+    }
+
     // Compute per-bidder fee/rebate curve for a cleared auction window.
     //
     // The rebate amount for each winning bidder is proportional to the distance
@@ -1520,6 +1711,7 @@ module atomica::auction {
     //
     // @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
     #[view]
+    // SCOUT(#238) REMOVE: `compute_rebates` and its comment block above.
     public fun compute_rebates(
         window_id:      u64,
         pair_bcs:       vector<u8>,
@@ -1560,6 +1752,7 @@ module atomica::auction {
     // Aborts with E_AUCTION_NOT_FOUND if no entry exists.
     // Returns (0, 0) if not yet settled.
     #[view]
+    // SCOUT(#238) EDIT: `get_settlement` returns `(clearing_price, total_filled)` for a settled window and `(0, 0)` before. Today it returns `total_supply`, and the cleared price of a window that is not settled yet. `WindowState` stores no filled total.
     public fun get_settlement(
         window_id: u64,
         pair_bcs:  vector<u8>,
@@ -1609,6 +1802,8 @@ module atomica::auction {
 
     // Append a SealedBid with an explicit commitment (test-only).
     #[test_only]
+    // SCOUT(#216) EDIT: `test_insert_committed_bid` builds a `SealedBid`, so it must set the collateral and validity fields; the huge-quantity test inserts through it.
+    // SCOUT(#228) REMOVE: the `commitment` argument of `test_insert_committed_bid`; fold the helper into `test_insert_bid_with_qty`.
     public fun test_insert_committed_bid(
         atomica:            &signer,
         window_id:          u64,
@@ -1639,6 +1834,8 @@ module atomica::auction {
     // Use after inserting bids to set the prices that clear_uniform_price will read.
     // `prices` is index-aligned to the bids.
     #[test_only]
+    // SCOUT(#216) EDIT: decide whether `test_set_revealed_prices` applies the validity rule; 13 clearing and settle tests on `main` open bids through it, and so does the `E_UNPAYABLE_FILL` test of the unwind pull request (213).
+    // SCOUT(#238) EDIT: `test_set_revealed_prices` stops writing `revealed_prices`.
     public fun test_set_revealed_prices(
         atomica:   &signer,
         window_id: u64,
@@ -1729,6 +1926,10 @@ module atomica::auction {
     // Use this variant when testing submit_cleartext_and_clear to control
     // which timelock_id is associated with the window.
     #[test_only]
+    // SCOUT(#224) EDIT: the hardcoded `Pair` in `test_insert_window_with_timelock` bypasses the allowlist.
+    // SCOUT(#238) REMOVE: the `revealed_prices` entry in `test_insert_window_with_timelock`.
+    // SCOUT(#241) REMOVE: the `min_prices` entry in `test_insert_window_with_timelock`; the unwind pull request (213) also adds `test_add_seller_lock(.., min_price)`.
+    // SCOUT(#243) EDIT: `test_insert_window_with_timelock` must also record the window id's timelock in `TimelockRegistrar`, or a later `create_auction` registers a second one.
     public fun test_insert_window_with_timelock(
         atomica:        &signer,
         window_id:      u64,
@@ -1800,6 +2001,7 @@ module atomica::auction {
     // Destructure a Rebate into (bidder, amount).
     // Allows tests to inspect fields without a direct field accessor.
     #[test_only]
+    // SCOUT(#238) REMOVE: `test_rebate_fields`.
     public fun test_rebate_fields(r: &Rebate): (address, u64) {
         (r.bidder, r.amount)
     }
@@ -1807,6 +2009,7 @@ module atomica::auction {
     // Return the revealed_prices vector for a window.
     // Used by tests to verify submit_cleartext_and_clear stored prices correctly.
     #[test_only]
+    // SCOUT(#238) REMOVE: `test_get_revealed_prices`.
     public fun test_get_revealed_prices(
         window_id: u64,
         pair_bcs:  vector<u8>,

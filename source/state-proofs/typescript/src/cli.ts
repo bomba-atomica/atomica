@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SCOUT(#237) EDIT: remove the "Light Client Commands" lines from the header below.
 /**
  * CLI tool for Ethereum state proof verification
  *
@@ -27,6 +28,7 @@ import {
 
 import { type Block } from "./types";
 
+// SCOUT(#237) REMOVE: the beacon imports below.
 import {
     initLightClient,
     syncLightClient,
@@ -69,6 +71,7 @@ function parseArgs(argv: string[]): CliArgs {
     return { command, args, options };
 }
 
+// SCOUT(#237) EDIT: in the usage text, remove the three light-client commands, the --beacon-rpc, --chain, --state-path, --checkpoint and --light-client options, and the two light client examples.
 /**
  * Display usage information
  */
@@ -312,6 +315,7 @@ async function verifyStorageCommand(args: CliArgs) {
 async function verifyTransferCommand(args: CliArgs) {
     const [txHash] = args.args;
     const rpcUrl = args.options.rpc as string;
+    // SCOUT(#237) REMOVE: the --light-client flag and its verbose line below.
     const useLightClient = !!args.options["light-client"];
 
     if (!txHash || !rpcUrl) {
@@ -320,6 +324,7 @@ async function verifyTransferCommand(args: CliArgs) {
         process.exit(1);
     }
 
+    // SCOUT(#237) REMOVE: trustedRoots and lightClientVerified; every later use falls back to blockData.
     let trustedRoots: { stateRoot: string; transactionsRoot: string; receiptsRoot: string } | null =
         null;
     let lightClientVerified = false;
@@ -374,6 +379,7 @@ async function verifyTransferCommand(args: CliArgs) {
             console.log("  Receipts Root:   ", blockData.receiptsRoot);
         }
 
+        // SCOUT(#237) REMOVE: the whole light client verification block (step 3a).
         // 3a. Light Client Verification (if enabled)
         if (useLightClient) {
             if (args.options.verbose) {
@@ -427,6 +433,7 @@ async function verifyTransferCommand(args: CliArgs) {
 
         console.log(`Verifying transfer in block ${blockNumber}...`);
 
+        // SCOUT(#237) REMOVE: the "Light Client Verified (trustless)" mode line; only the RPC mode remains.
         if (lightClientVerified) {
             console.log("  Mode: Light Client Verified (trustless)");
         } else {
@@ -455,6 +462,7 @@ async function verifyTransferCommand(args: CliArgs) {
             process.exit(1);
         }
 
+        // SCOUT(#237) REMOVE: the trusted root override; verify against blockData.
         // Use light client transactions root if verified
         const txBlockData = trustedRoots
             ? { ...blockData, transactionsRoot: trustedRoots.transactionsRoot }
@@ -479,6 +487,7 @@ async function verifyTransferCommand(args: CliArgs) {
             process.exit(1);
         }
 
+        // SCOUT(#237) REMOVE: the trusted root override; verify against blockData.
         // Use light client receipts root if verified
         const rcptBlockData = trustedRoots
             ? { ...blockData, receiptsRoot: trustedRoots.receiptsRoot }
@@ -493,6 +502,7 @@ async function verifyTransferCommand(args: CliArgs) {
         if (args.options.verbose) console.log(`\nVerifying sender state: ${sender}`);
         const senderProof = await fetchProof(rpcUrl, sender, [], blockNumber);
 
+        // SCOUT(#237) REMOVE: the trusted root override; verify against blockData.
         // Use light client state root if verified
         const senderBlockData = trustedRoots
             ? { ...blockData, stateRoot: trustedRoots.stateRoot }
@@ -522,6 +532,7 @@ async function verifyTransferCommand(args: CliArgs) {
                             receiverResult.valid &&
                             txVerified &&
                             receiptVerified,
+                        // SCOUT(#237) REMOVE: this JSON field and trustedStateRoots below.
                         lightClientVerified,
                         transaction: {
                             hash: txHash,
@@ -561,6 +572,7 @@ async function verifyTransferCommand(args: CliArgs) {
             console.log(`Block:       ${blockNumber}`);
             console.log(`Value:       ${formatEth(tx.value)}`);
 
+            // SCOUT(#237) REMOVE: the "Light Client (Trustless)" branch of the report.
             if (lightClientVerified) {
                 console.log("--------------------------------------------");
                 console.log("VERIFICATION MODE: Light Client (Trustless) ✓");
@@ -615,6 +627,7 @@ async function verifyTransferCommand(args: CliArgs) {
     }
 }
 
+// SCOUT(#237) REMOVE: the light client config builder.
 /**
  * Build light client config from CLI args
  */
@@ -638,6 +651,7 @@ function getLightClientConfig(args: CliArgs): LightClientConfig {
     };
 }
 
+// SCOUT(#237) REMOVE: the light-client-init command.
 /**
  * Light client init command
  */
@@ -669,6 +683,7 @@ async function lightClientInitCommand(args: CliArgs) {
     }
 }
 
+// SCOUT(#237) REMOVE: the light-client-sync command.
 /**
  * Light client sync command
  */
@@ -703,6 +718,7 @@ async function lightClientSyncCommand(args: CliArgs) {
     }
 }
 
+// SCOUT(#237) REMOVE: the light-client-status command.
 /**
  * Light client status command
  */
@@ -767,6 +783,7 @@ async function main() {
         case "verify-transfer":
             await verifyTransferCommand(args);
             break;
+        // SCOUT(#237) REMOVE: the three light client cases.
         case "light-client-init":
             await lightClientInitCommand(args);
             break;

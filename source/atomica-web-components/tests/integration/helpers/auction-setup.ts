@@ -38,6 +38,8 @@ import {
   Account,
   type InputGenerateTransactionPayloadData,
 } from "@aptos-labs/ts-sdk";
+// SCOUT(#228) EDIT: getSubmitCleartextPayload and the OpenedBid opening flow go; import the SDK getOpenBidsPayload.
+// SCOUT(#243) EDIT: getRegisterTimelockPayload and timelockIdFromEvents leave the SDK; keep a local payload for the E_NOT_REGISTRAR case.
 import {
   decryptWindowBids,
   getBidPayload,
@@ -84,6 +86,7 @@ export interface LockedBalanceProof {
   amount: string;
   windowId: string;
   pairHash: string;
+  // SCOUT(#221) EDIT: the proof still carries the computed deadline, but register_ethereum_lock no longer takes it.
   deadline: string;
   /** Storage key of LockBox.commitments[lockId] */
   storageKey: string;
@@ -126,6 +129,8 @@ export interface EthLockProofResult {
  *                     {@link TEST_PAIR_BCS}). Aptos claims the lock only into
  *                     that pair's current window.
  */
+// SCOUT(#218) EDIT: the default 10 FakeETH lock must stay at or above the minimum seller lock.
+// SCOUT(#224) EDIT: the lock is bound to the empty pair (testLockBinding); bind it to the launch pair (pull request 213 adds a pairBcs parameter here).
 export async function generateEthLockProof(
   fixture: IntegrationFixture,
   lockAmount: bigint = ethers.parseEther("10"),
@@ -198,6 +203,7 @@ export interface EthSigner {
  * its lock receipts. The SIWE domain is `window.location.host`, which the
  * fixture pinned in `eth_proof`.
  */
+// SCOUT(#232) EDIT: no change needed: this helper lowercases by hand, which is why no browser test caught the checksum defect.
 export async function ethAccountAddress(signer: EthSigner): Promise<string> {
   const ethAddress = new ethers.Wallet(signer.privateKey).address;
   return (await getDerivedAddress(ethAddress.toLowerCase())).toString();
@@ -247,6 +253,8 @@ export async function submitAsEthAccount(
   }
 }
 
+// SCOUT(#233) REMOVE: build this payload with the SDK getRegisterLockPayload(proof, asset); the SDK uses its own CONTRACT_ADDR, not moduleAddr.
+// SCOUT(#221) EDIT: drop proof.deadline from the arguments.
 /** `lock_receipt::register_ethereum_lock<asset>` for `proof`. */
 function registerLockPayload(
   moduleAddr: string,
@@ -270,6 +278,7 @@ function registerLockPayload(
   };
 }
 
+// SCOUT(#224) EDIT: empty bytes are not on the allowlist; use the SDK launch pair constant (each test file starts its own chain, so one pair is enough).
 /** Default pair BCS bytes. Tests that need several windows pass distinct bytes. */
 export const TEST_PAIR_BCS = new Uint8Array(0);
 
@@ -281,6 +290,9 @@ export const TEST_PAIR_BCS = new Uint8Array(0);
  * bid small quantities: 0.0001 FakeETH at 2_000_000 costs 200 FakeUSD.
  */
 export const DEFAULT_COLLATERAL = 500n * 10n ** 6n;
+// SCOUT(#216) EDIT: DEFAULT_COLLATERAL above must cover quoteForFill(quantity, price) of the bid that uses it; 500 FakeUSD covers no bid of main's tests, and pull request 213 keeps 500 but shrinks every bid quantity so it does.
+// SCOUT(#217) EDIT: DEFAULT_COLLATERAL above: size it with quoteForFill at whole-USD prices; FakeUSD mint is capped at 10,000 per call and lockBidCollateral mints amount times 20, so 500 is also the ceiling.
+// SCOUT(#218) EDIT: DEFAULT_COLLATERAL above must stay at or above the minimum bid collateral.
 
 /**
  * `lock_receipt` status codes (`status_active`, `status_claimed`,
@@ -298,6 +310,7 @@ export const RECEIPT_FILLED = 3;
  * Mirrors `auction::current_window_id` (not a view function): two windows per
  * 43 200 s epoch, the second starting at offset 28 500 s.
  */
+// SCOUT(#220) EDIT: formula copy (43200 and 28500); switch to the 07:45 and 16:15 UTC formula or call the SDK currentWindowId with the chain clock; the comment above writes 28 500 with a space, which the issue's grep misses.
 export async function currentWindowId(aptosClient: Aptos): Promise<bigint> {
   const { ledger_timestamp } = await aptosClient.getLedgerInfo();
   const nowSec = BigInt(ledger_timestamp) / 1_000_000n;
@@ -362,6 +375,8 @@ export async function waitForChainTime(
   );
 }
 
+// SCOUT(#243) EDIT: this helper stays only for the case that expects E_NOT_REGISTRAR; createLiveWindow stops calling it.
+// SCOUT(#225) EDIT: it aborts with E_NOT_REGISTRAR for the operator once the validator image has the registrar check, which breaks every chunk that creates a window unless the product half (243) lands with the same pin bump.
 /**
  * Register a timelock for `deadlineUs` with `0x1::ibe_config::register_timelock`
  * and return its id from the `TimelockRegistrationEvent`.
@@ -493,6 +508,9 @@ export async function submitManyDirect(
  *
  * Throws if the transaction aborts. Returns the Aptos transaction hash.
  */
+// SCOUT(#241) EDIT: drop the minPrice parameter; every caller passes it by position, including 14-happy-path, which the issue does not list.
+// SCOUT(#243) EDIT: drop the timelockId parameter.
+// SCOUT(#238) EDIT: drop the mpk_bytes argument.
 export async function createAuctionDirect(
   aptosClient: Aptos,
   seller: EthSigner,
@@ -516,6 +534,7 @@ export async function createAuctionDirect(
   );
 }
 
+// SCOUT(#243) EDIT: timelockId and deadlineUs are read back from the chain, not chosen by the test.
 /** A window created on chain with its own timelock. */
 export interface LiveWindow {
   windowId: bigint;
@@ -538,6 +557,9 @@ export interface LiveWindow {
  * Throws unless `get_window_status` reads back the new timelock with
  * `reveal_final` and `refunded` both false.
  */
+// SCOUT(#243) EDIT: stop registering a timelock; deadlineAheadUs needs the owner's answer on a test cap (open question 1), since tests use 20 to 600 seconds.
+// SCOUT(#241) EDIT: drop options.minPrice.
+// SCOUT(#224) EDIT: options.pairBcs must be on the allowlist.
 export async function createLiveWindow(
   fixture: IntegrationFixture,
   aptosClient: Aptos,
@@ -561,6 +583,7 @@ export async function createLiveWindow(
   await registerLockOnAptos(aptosClient, operator, moduleAddr, proof);
 
   await waitForTimelockKey(aptosClient);
+  // SCOUT(#231) EDIT: registration needs the deadline 15 minutes before the epoch end; with UTC-anchored epoch ends a testnet started near a boundary fails here.
   const deadlineUs = (await chainNowUs(aptosClient)) + options.deadlineAheadUs;
   const timelockId = await registerTimelockDirect(
     aptosClient,
@@ -573,6 +596,7 @@ export async function createLiveWindow(
     aptosClient,
     fixture.eth.seller,
     lockId,
+    // SCOUT(#241) REMOVE: the minPrice argument to createAuctionDirect.
     options.minPrice,
     windowId,
     options.pairBcs,
@@ -608,6 +632,8 @@ export async function createLiveWindow(
   };
 }
 
+// SCOUT(#216) EDIT: callers must lock at least quoteForFill(quantity, price); the mint is amount times 20 and FakeUSD mint is capped at 10,000, so amount cannot exceed 500 without changing the multiplier.
+// SCOUT(#233) EDIT: this stays the Node-side path; the new bidder-screen case locks and registers through AuctionBidder.
 /**
  * Lock FakeUSD collateral on Ethereum as `bidder`, bound to the current
  * window of `pairBcs`, and register its receipt on Aptos (the operator
@@ -640,6 +666,7 @@ export async function lockBidCollateral(
   return lockId;
 }
 
+// SCOUT(#216) EDIT: mints amount times count in one call; 100 locks share the 10,000 FakeUSD mint cap, so each bid has at most 100 FakeUSD of collateral.
 /**
  * Lock FakeUSD collateral `count` times as `bidder` in a few Ethereum blocks,
  * bound to the current window of `pairBcs`, prove them all at one certified
@@ -679,6 +706,7 @@ export async function lockBidCollaterals(
   return results.map((r) => r.lockId);
 }
 
+// SCOUT(#228) EDIT: salt and commitment leave SubmittedBid.
 /** A bid submitted on chain. Keep `salt`: it opens the bid. */
 export interface SubmittedBid {
   hash: string;
@@ -701,6 +729,10 @@ export interface SubmittedBid {
  * The SDK's Aptos instance must point at the testnet (`setAptosInstance`).
  * Throws if the transaction aborts.
  */
+// SCOUT(#216) EDIT: quantity must be above zero and at most the window supply, and the collateral must cover price times quantity, or the bid is invalid at opening.
+// SCOUT(#217) EDIT: price is whole USD per whole FakeETH.
+// SCOUT(#228) EDIT: getBidPayload loses the commitment argument and sealBid returns no salt.
+// SCOUT(#235) EDIT: sealBid adds node cross-checks; one configured endpoint must keep working here.
 export async function submitBidDirect(
   aptosClient: Aptos,
   bidder: EthSigner,
@@ -746,6 +778,8 @@ export async function waitForReveal(
   );
 }
 
+// SCOUT(#228) REMOVE: replace with openBidsDirect (stub at the end of this file): any account calls open_bids in batches.
+// SCOUT(#216) EDIT: an under-collateralized or zero-price bid opens without abort and reads invalid; this helper checks only the commitment.
 /**
  * Decrypt every bid of a window with the revealed key (`decryptWindowBids`)
  * and open them all in one `submit_cleartext_and_clear`. Opening the last bid
@@ -768,6 +802,7 @@ export async function openWindowBidsDirect(
   await submitDirect(
     aptosClient,
     sender,
+    // SCOUT(#228) REMOVE: the cleartext payload; open_bids takes no prices and no salts.
     getSubmitCleartextPayload(
       window.windowId,
       window.pairBcs,
@@ -798,6 +833,8 @@ export async function settleAuctionDirect(
  * Read `auction::get_window_status(window_id, pair_bcs)`.
  * Aborts (throws) with E_AUCTION_NOT_FOUND when the window does not exist.
  */
+// SCOUT(#228) EDIT: reveal_final loses its meaning when finalize_reveal goes; the view tuple may change.
+// SCOUT(#243) EDIT: the timelock id read here is the one create_auction registered.
 export async function getWindowStatus(
   aptosClient: Aptos,
   moduleAddr: string,
@@ -821,6 +858,7 @@ export async function getWindowStatus(
  * Read `auction::get_auction(window_id, pair_bcs)`: supply, bid count, the
  * settled flag and the clearing price. Throws when the window does not exist.
  */
+// SCOUT(#217) EDIT: the clearing price read from get_auction is whole USD.
 export async function getAuctionState(
   aptosClient: Aptos,
   moduleAddr: string,
@@ -868,4 +906,44 @@ export async function getReceiptStatus(
     },
   });
   return Number(status);
+}
+
+// ---------------------------------------------------------------------------
+// Scout stubs: planned helpers. No test calls them yet.
+// ---------------------------------------------------------------------------
+
+// SCOUT(#224) ADD: add a test pair to the allowlist through a deployer-signed browser command (the command belongs to the docker testnet package and does not exist yet).
+export async function allowTestPair(_pairBcs: Uint8Array): Promise<void> {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#224) allowTestPair");
+}
+
+// SCOUT(#228) ADD: open up to maxBids bids of a window with auction::open_bids from any account; callers repeat it until the window is cleared.
+export async function openBidsDirect(
+  _aptosClient: Aptos,
+  _sender: Account,
+  _window: { windowId: bigint; pairBcs: Uint8Array },
+  _maxBids: number,
+): Promise<string> {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#228) openBidsDirect");
+}
+
+// SCOUT(#218) ADD: lock, register and join count more seller locks into an existing window, to fill it to the seller cap.
+export async function joinWindowAsSellers(
+  _fixture: IntegrationFixture,
+  _aptosClient: Aptos,
+  _operator: Account,
+  _window: LiveWindow,
+  _count: number,
+  _lockAmount: bigint,
+): Promise<string[]> {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#218) joinWindowAsSellers");
+}
+
+// SCOUT(#243) ADD: read auction::window_deadline_us, the timelock deadline that create_auction derives from the window id.
+export async function getWindowDeadlineUs(
+  _aptosClient: Aptos,
+  _moduleAddr: string,
+  _windowId: bigint,
+): Promise<bigint> {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#243) getWindowDeadlineUs");
 }

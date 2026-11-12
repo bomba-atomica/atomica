@@ -131,6 +131,8 @@ Atomica auctions require sealed bids to prevent:
 
 ### Benefit 2: Shared Liveness Assumptions
 
+<!-- SCOUT(#242) DOC: "Timelock decryption requires 2/3+ validators ... same threshold" (also Defense 1 and Offline Collusion): the fork secrecy threshold is one half of stake; only the reveal threshold is two thirds (owner decision 31). -->
+
 **Unified security model:**
 - Atomica consensus requires 2/3+ validators
 - Timelock decryption requires 2/3+ validators
@@ -301,6 +303,8 @@ struct DecryptionShare {
 
 **Attack:** Prevent decryption shares from being published
 
+<!-- SCOUT(#230) DOC: "Economically penalized (reduced rewards)" is not built; this issue only keeps and emits the list of validators that did submit, so abstainers can be named. -->
+
 **Defense:**
 - t-1 validators can withhold, but t-th validator publication suffices
 - Economically penalized (reduced rewards)
@@ -391,6 +395,8 @@ This falls under the same security threshold as a consensus takeover. If >2/3 va
 **Decision:** Hybrid approach (shares on-chain for availability, aggregation flexible)
 
 ### Challenge 4: Fallback for Missing Shares
+
+<!-- SCOUT(#226) DOC: "Timeout + refund" is the built path: once the reveal expiry passes, the timelock reads Expired at once (not when the 50-per-block queue reaches it) and refund_expired_window returns every receipt. -->
 
 **Problem:** What if <t validators publish shares?
 
@@ -508,6 +514,11 @@ This falls under the same security threshold as a consensus takeover. If >2/3 va
 ### Docker Testnet Epoch Policy
 
 **Status:** proposed
+
+<!-- SCOUT(#225) DOC: "ibe_config::register_timelock needs deadline <= epoch_end - 15 minutes": add that only the stored registrar may call it. -->
+<!-- SCOUT(#231) DOC: "Not decided here: the epoch policy of a production network" is the open questions 1 to 3 of this issue; record the answer here and in the timing spec. -->
+<!-- SCOUT(#239) DOC: "Proof in CI" names a workflow file and an SDK test path that are deleted; the test moves to aptos-testnet/test and runs in the Aptos Testnet SDK (docker) job. -->
+<!-- SCOUT(#243) DOC: the 24 h docker epoch holds the next window close, but tests cannot wait hours for it: record how tests reach a window close (open question 1 of this issue). -->
 
 **Choice:** the Docker testnet genesis (`source/docker-testnet/config/generate-genesis.sh`) uses `epoch_duration_secs: 86400` (24 hours) and sets the layout flag `timelock_dkg_enabled: true`. It replaces the upstream default of 7200 seconds.
 

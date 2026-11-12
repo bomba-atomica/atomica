@@ -18,6 +18,7 @@ function storageKey(walletAddress: string): string {
   return `bid-history-${walletAddress.toLowerCase()}`;
 }
 
+// SCOUT(#217) EDIT: clearingPrice is persisted in localStorage in the old unit; entries written before the change display a million times off unless they are migrated or cleared.
 /** Serialisable form — bigint cannot be JSON.stringified directly. */
 interface PersistedEntry {
   auctionId: string;

@@ -1,4 +1,5 @@
 #!/bin/bash
+# SCOUT(#239) REMOVE: whole file; only docker-compose-inline-genesis.yaml mounts it.
 set -e
 
 # Validator entrypoint with inline genesis generation

@@ -22,6 +22,9 @@ on:
 # The test suite runs in two tiers. Only ETH_BACKEND differs.
 # - anvil: fast JSON-RPC chain. Runs on draft PRs (feature-correctness).
 #   Beacon-only tests self-skip there.
+# SCOUT(#237) EDIT: the "Beacon-only tests self-skip" line above is stale once test/beacon is deleted.
+# SCOUT(#237) TEST: the two Run Tests steps below run every remaining state-proofs test with bun test; this workflow has path filters and is not in the Required Checks gate.
+# SCOUT(#239) TEST: the two Run Tests steps below are the only CI run of verifier.test.ts, mpt.test.ts and integration.test.ts, where the placeholder cases are deleted.
 # - docker: full Geth + Lighthouse PoS chain. Runs from ready-for-review
 #   onward and on main (system-correctness).
 

@@ -1,3 +1,4 @@
+// SCOUT(#237) REMOVE: whole file (beacon light client test).
 import { describe, expect, test } from "bun:test";
 import {
     fetchLightClientBootstrap,

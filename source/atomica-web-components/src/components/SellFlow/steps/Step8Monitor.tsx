@@ -1,14 +1,17 @@
 import { useState, useEffect } from "react";
 import { SettleButton } from "../../SettleButton";
+// SCOUT(#236) REMOVE: ClaimButton import; import the open step and ReleaseButton.
 import { ClaimButton } from "../../ClaimButton";
 import { BidHistory } from "../../BidHistory";
 import { useBidHistory } from "../../../hooks/useBidHistory";
+// SCOUT(#238) REMOVE: the FeeRebateDisplay and useFeeRebate imports.
 import { FeeRebateDisplay } from "../../FeeRebateDisplay";
 import { useFeeRebate } from "../../../hooks/useFeeRebate";
 import { useWallet } from "../../../context/WalletContext";
 
 interface Props {
   amount?: bigint;
+  // SCOUT(#241) REMOVE: minPrice prop.
   minPrice?: bigint;
   auctionEndTime?: number;
   unlockTime?: number;
@@ -94,16 +97,21 @@ export function Step8Monitor({
   const { account } = useWallet();
   const remaining = useCountdown(auctionEndTime);
   const canUnlock = useIsUnlocked(unlockTime);
+  // SCOUT(#243) EDIT: ended comes from a local one hour clock; read the window deadline view so the countdown matches the chain.
+  // SCOUT(#236) EDIT: the badge says Settled as soon as the local clock ends; drive open, settle and release from chain state.
   const ended = remaining === 0 && auctionEndTime !== undefined;
   const { entries: bidHistoryEntries, recordSettlement } = useBidHistory(
     sellerAddress ?? null,
   );
+  // SCOUT(#238) REMOVE: the useFeeRebate call.
   // v0 Beta: useFeeRebate now takes (windowId, pairBcs, bidderAddress)
   const feeRebate = useFeeRebate(windowId ?? null, pairBcs ?? null, account);
 
   const amountFormatted = amount
     ? (Number(amount) / 1e18).toFixed(4) + " FETH"
     : "—";
+  // SCOUT(#217) EDIT: price display divides by 1e6.
+  // SCOUT(#241) REMOVE: priceFormatted and the Min price row.
   const priceFormatted = minPrice
     ? "$" + (Number(minPrice) / 1e6).toFixed(2)
     : "—";
@@ -115,6 +123,7 @@ export function Step8Monitor({
           <span className="text-zinc-500">Locked amount</span>
           <span className="text-zinc-200 font-mono">{amountFormatted}</span>
         </div>
+        {/* SCOUT(#241) REMOVE: the Min price row. */}
         <div className="flex justify-between text-sm">
           <span className="text-zinc-500">Min price</span>
           <span className="text-zinc-200 font-mono">{priceFormatted}</span>
@@ -154,6 +163,7 @@ export function Step8Monitor({
         </div>
       </div>
 
+      {/* SCOUT(#236) EDIT: SellFlow passes no windowId and no pairBcs, so this never renders in the sell flow; add the open step before settle. */}
       {ended && windowId != null && pairBcs != null && (
         <SettleButton
           windowId={windowId}
@@ -163,6 +173,7 @@ export function Step8Monitor({
         />
       )}
 
+      {/* SCOUT(#236) REMOVE: ClaimButton; mount ReleaseButton here. */}
       {ended && windowId != null && pairBcs != null && (
         <ClaimButton
           windowId={windowId}
@@ -171,6 +182,7 @@ export function Step8Monitor({
         />
       )}
 
+      {/* SCOUT(#238) REMOVE: the FeeRebateDisplay block. */}
       {feeRebate.ready && feeRebate.isWinner && (
         <FeeRebateDisplay
           rebateAmount={feeRebate.rebateAmount}

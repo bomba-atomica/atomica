@@ -1,3 +1,4 @@
+// SCOUT(#222) DOC: the header sentence "Each leaf pays the lock's full amount" becomes "these payouts, and the remainder to the depositor"; hashes and vectors do not change.
 /// Outcome tree: the keccak Merkle tree an `auction::AuctionOutcome` commits to.
 ///
 /// One leaf per lock claimed into the auction window, sorted by lock id. Each

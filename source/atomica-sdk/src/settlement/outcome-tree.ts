@@ -24,6 +24,7 @@ export interface OutcomePayout {
   amount: bigint;
 }
 
+// SCOUT(#222) EDIT: payouts may sum below the lock amount, and the remainder goes to the depositor; a sum above it or a zero recipient makes the leaf unpayable.
 /** One lock's disposition: its payouts sum to the lock amount. */
 export interface OutcomeEntry {
   /** bytes32 lock id (LockBox.getLockId) */

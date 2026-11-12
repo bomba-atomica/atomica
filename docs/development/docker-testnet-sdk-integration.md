@@ -1,3 +1,5 @@
+<!-- SCOUT(#239) DOC: wholly superseded: a January 2026 guide for the pre-pivot EVM contracts with a test path under the deleted ZK scaffold; archive it. -->
+
 # Docker Testnet + State Proof SDK Integration Guide
 
 This guide explains how to use the existing Docker testnet infrastructure and State Proof SDK for testing Atomica EVM contracts.

@@ -29,11 +29,17 @@ export const FAKE_ETH_ABI = [
 // LockBox ABI - proof-gated escrow (source/evm-contracts/src/escrow/LockBox.sol).
 // A lock leaves only by releaseByOutcome (a proven Aptos AuctionOutcome) or by
 // reclaim to its depositor after its deadline. Anyone may call either.
+// SCOUT(#222) EDIT: the comment above names two ways out of LockBox; reclaimUnpayable is a third.
+// SCOUT(#236) EDIT: ReleaseButton needs a recordOutcome fragment in this list; the SDK unwind issue (195) adds it with the release bindings.
 export const LOCKBOX_ABI = [
+  // SCOUT(#221) EDIT: lock takes (token, amount, windowId, pairHash); drop the deadline argument.
   "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) returns (bytes32 lockId)",
+  // SCOUT(#221) EDIT: keep or drop the deadline of the Lock tuple as LockBox.sol decides, here and in releaseByOutcome.
+  // SCOUT(#222) ADD: a reclaimUnpayable(Lock l, Payout[] payouts, Leaf leaf) fragment next to this one, with its event and errors.
   "function reclaim((address depositor, address token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) l, (bytes32 lockId, bytes32 payoutsHash, uint256 index, bytes32[] proof)[] neighbours)",
   "function releaseByOutcome((address depositor, address token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) l, (address recipient, uint256 amount)[] payouts, (uint256 index, bytes32[] proof) leaf)",
   "function getLockId(address depositor, address token, uint256 nonce) pure returns (bytes32)",
+  // SCOUT(#221) EDIT: auctionKey takes (windowId, pairHash) only; add lockDeadline(uint64), windowClose(uint64) and currentWindowId() fragments.
   "function auctionKey(uint64 windowId, bytes32 pairHash, uint64 deadline) pure returns (bytes32)",
   "function commitmentStorageKey(bytes32 lockId) pure returns (bytes32)",
   "function commitments(bytes32 lockId) view returns (bytes32)",
@@ -42,11 +48,13 @@ export const LOCKBOX_ABI = [
   "function auctionReclaimed(bytes32 auctionKey) view returns (bool)",
   "function nextLockNonce() view returns (uint256)",
   "event Locked(bytes32 indexed lockId, address indexed depositor, address indexed token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)",
+  // SCOUT(#221) EDIT: match the final event; the auction key no longer covers the deadline.
   "event OutcomeRecorded(bytes32 indexed auctionKey, uint64 windowId, bytes32 pairHash, uint64 deadline, bytes32 root, uint64 leafCount, uint64 aptosVersion)",
   "event LockReleased(bytes32 indexed lockId, bytes32 indexed auctionKey)",
   "event LockReclaimed(bytes32 indexed lockId, address indexed depositor, uint256 amount)",
 ] as const;
 
+// SCOUT(#222) EDIT: confirm reclaimUnpayable ends a lock as Reclaimed (3); add a status here if LockBox adds one.
 /** `LockBox.Status`: a lock leaves Open once. */
 export const LOCK_STATUS = {
   None: 0,

@@ -112,6 +112,7 @@ export async function areContractsDeployed(): Promise<boolean> {
 }
 
 export async function areCoreContractsDeployed(): Promise<boolean> {
+  // SCOUT(#238) EDIT: drop "registry" from the required modules, because registry.move is deleted.
   const requiredModules = ["registry", "lock_receipt", "eth_proof"];
   try {
     const modules = await aptos.getAccountModules({
@@ -129,6 +130,21 @@ export async function areCoreContractsDeployed(): Promise<boolean> {
   }
 }
 
+// SCOUT(#224) ADD: export LAUNCH_PAIR_BCS here, the BCS of Pair { ethereum, FakeETH, aptos, FakeUSD } (0x08657468657265756d0746616b65455448056170746f730746616b65555344), as the default pairBcs of every client.
+// SCOUT(#224) ADD: reader for the allowlist view that tells whether pair bytes are allowed.
+export async function isPairAllowed(_pairBcs: Uint8Array): Promise<boolean> {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#224) isPairAllowed");
+}
+
+// SCOUT(#224) ADD: reader for the view that returns the launch pair bytes.
+export async function getLaunchPairBcs(): Promise<Uint8Array> {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#224) getLaunchPairBcs");
+}
+
+// SCOUT(#238) EDIT: drop the mpkBytes parameter and argument; create_auction has no _mpk_bytes.
+// SCOUT(#241) EDIT: drop the minPrice parameter and argument; create_auction has no min_price.
+// SCOUT(#243) EDIT: drop the timelockId parameter and argument; create_auction registers the window's timelock itself.
+// SCOUT(#217) EDIT: minPrice is a whole-USD price for as long as the reserve price exists.
 /**
  * Build payload for auction::create_auction (v0 Beta global-registry).
  *
@@ -163,6 +179,9 @@ export function getCreateAuctionPayload(
   };
 }
 
+// SCOUT(#238) EDIT: drop the mpkBytes parameter.
+// SCOUT(#241) EDIT: drop the minPrice parameter.
+// SCOUT(#243) EDIT: drop the timelockId parameter.
 export async function submitCreateAuction(
   ethAddress: string,
   windowId: bigint,
@@ -186,6 +205,8 @@ export async function submitCreateAuction(
   );
 }
 
+// SCOUT(#243) REMOVE: the SDK no longer builds a register_timelock payload; the integration helper registerTimelockDirect imports this one.
+// SCOUT(#225) EDIT: once the framework pin has the registrar check, this entry aborts with E_NOT_REGISTRAR for every wallet.
 /**
  * Build payload for the framework entry
  * `0x1::ibe_config::register_timelock(account, deadline_us)`.
@@ -202,6 +223,7 @@ export function getRegisterTimelockPayload(
   };
 }
 
+// SCOUT(#243) EDIT: decide whether this constant and timelockIdFromEvents stay for the live test that reads the registration event, or go with registerTimelock.
 /** Event type that `ibe_config::register_timelock` emits. */
 export const TIMELOCK_REGISTRATION_EVENT =
   "0x1::ibe_config::TimelockRegistrationEvent";
@@ -220,6 +242,8 @@ export function timelockIdFromEvents(
   return BigInt((event.data as { timelock_id: string }).timelock_id);
 }
 
+// SCOUT(#243) REMOVE: no client registers a timelock; AuctionCreator and useSellFlow call this today.
+// SCOUT(#225) EDIT: this call fails for every user wallet once the framework pin has the registrar check.
 /**
  * Register a timelock for `deadlineUs` and return its id. Call this before
  * `create_auction`, which records the id on the window.
@@ -237,6 +261,26 @@ export async function registerTimelock(
   return timelockIdFromEvents("events" in tx ? tx.events : []);
 }
 
+// SCOUT(#243) ADD: derives the package's timelock registrar address, object::create_object_address(@atomica, seed), from the module address.
+export function timelockRegistrarAddress(_moduleAddress?: string): string {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#243) timelockRegistrarAddress");
+}
+
+// SCOUT(#243) ADD: reader for the view that returns the timelock id of a window id.
+export async function getWindowTimelock(_windowId: bigint): Promise<bigint> {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#243) getWindowTimelock");
+}
+
+// SCOUT(#243) ADD: reader for the view that returns the timelock deadline of a window id, in microseconds.
+export async function getWindowDeadlineUs(_windowId: bigint): Promise<bigint> {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#243) getWindowDeadlineUs");
+}
+
+// SCOUT(#233) ADD: the asset of a lock receipt; getRegisterLockPayload takes it as its second parameter.
+export type RegisterLockAsset = "FakeETH" | "FakeUSD";
+
+// SCOUT(#233) EDIT: add an asset parameter (FakeETH by default) and set the receipt type argument from it.
+// SCOUT(#221) EDIT: drop the deadline argument; register_ethereum_lock computes it from the window id.
 /**
  * Build payload for lock_receipt::register_ethereum_lock<FakeETH>.
  *
@@ -261,6 +305,7 @@ export function getRegisterLockPayload(
 ): InputGenerateTransactionPayloadData {
   return {
     function: `${CONTRACT_ADDR}::lock_receipt::register_ethereum_lock`,
+    // SCOUT(#233) EDIT: the FakeETH receipt type is hardcoded here.
     typeArguments: [`${CONTRACT_ADDR}::lock_receipt::FakeETH`],
     functionArguments: [
       proof.blockNumber,
@@ -269,6 +314,7 @@ export function getRegisterLockPayload(
       proof.amount.toString(), // u256 as decimal string
       proof.windowId.toString(), // u64 as decimal string
       ethers.getBytes(proof.pairHash),
+      // SCOUT(#221) REMOVE: the deadline argument (index 6); the two proof arguments move up.
       proof.deadline.toString(), // u64 as decimal string
       proof.accountProof.map((node) => ethers.getBytes(node)),
       proof.storageProof.map((node) => ethers.getBytes(node)),
@@ -321,6 +367,27 @@ export async function waitForCertifiedBlock(
   );
 }
 
+// SCOUT(#234) ADD: the LockBox and token addresses pinned in eth_proof.
+export interface PinnedEthereumConfig {
+  lockBox: string;
+  fakeETH: string;
+  fakeUSD: string;
+}
+
+// SCOUT(#234) ADD: reads the eth_proof::get_config view.
+export async function getPinnedEthereumConfig(): Promise<PinnedEthereumConfig> {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#234) getPinnedEthereumConfig");
+}
+
+// SCOUT(#234) ADD: throws unless getChainConfig().ethereum equals the pin, ignoring letter case; the approve and lock functions of ethereum/lockbox.ts call it first.
+// SCOUT(#234) EDIT: today ethereum/lockbox.ts imports nothing from aptos/; calling this from there pulls the Aptos client into the @atomica/sdk/ethereum entry, so decide where the guard lives.
+export async function assertEthereumConfigMatchesPin(): Promise<void> {
+  throw new Error(
+    "NOT_IMPLEMENTED: SCOUT(#234) assertEthereumConfigMatchesPin",
+  );
+}
+
+// SCOUT(#228) EDIT: drop the commitment parameter; submit_bid takes five arguments.
 /**
  * Build payload for auction::submit_bid (V2 bid wrapper).
  *
@@ -357,6 +424,7 @@ export function getBidPayload(
   };
 }
 
+// SCOUT(#228) EDIT: drop the commitment parameter.
 export async function submitBid(
   ethAddress: string,
   windowId: bigint,
@@ -431,6 +499,8 @@ export async function isSettled(
   return result[0] as boolean;
 }
 
+// SCOUT(#238) EDIT: get_settlement returns the sum of the winners' fills, not total_supply; fix the doc and keep the field name.
+// SCOUT(#217) EDIT: clearingPrice is whole USD per whole base token; say so in the doc.
 /**
  * Query `auction::get_settlement` view function (v0 Beta window-keyed).
  *
@@ -520,6 +590,7 @@ export async function getBidResults(
       isWinner: is_winner,
     }));
   } catch (e: unknown) {
+    // SCOUT(#238) EDIT: stop matching E_NOT_IMPLEMENTED below; the abort code is deleted (the issue lists only the two UI matches).
     // Return empty array for not-yet-settled windows to allow callers to handle gracefully.
     const msg = e instanceof Error ? e.message : String(e);
     if (
@@ -533,6 +604,20 @@ export async function getBidResults(
   }
 }
 
+// SCOUT(#218) ADD: the four window limits the new auction view returns.
+export interface WindowLimits {
+  maxBidsPerWindow: bigint;
+  maxSellerLocksPerWindow: bigint;
+  minSellerLockAmount: bigint;
+  minBidCollateral: bigint;
+}
+
+// SCOUT(#218) ADD: reader for the window limits view.
+export async function getWindowLimits(): Promise<WindowLimits> {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#218) getWindowLimits");
+}
+
+// SCOUT(#238) REMOVE: the rebate entry type.
 /**
  * Per-bidder rebate entry returned by the `auction::compute_rebates` view function.
  *
@@ -545,6 +630,8 @@ export interface Rebate {
   amount: bigint;
 }
 
+// SCOUT(#238) REMOVE: fetchRebates and its read of auction::compute_rebates.
+// SCOUT(#217) EDIT: clearingPrice is a whole-USD price for as long as this reader exists.
 /**
  * Query `auction::compute_rebates` view function (Phase 3c scaffold).
  *
@@ -596,6 +683,7 @@ export async function fetchRebates(
   }
 }
 
+// SCOUT(#236) REMOVE: the faucet claim payload.
 /**
  * Build payload for fake_eth::mint (Demo-phase winner payout).
  *
@@ -613,6 +701,7 @@ export function getClaimMintPayload(
   };
 }
 
+// SCOUT(#236) REMOVE: the faucet claim.
 /**
  * Submit a Demo-phase claim: the winner self-mints FakeETH via SIWE.
  */
@@ -624,6 +713,7 @@ export async function submitClaim(ethAddress: string, amount: bigint) {
   );
 }
 
+// SCOUT(#236) EDIT: only ClaimButton and the claim tests read this Aptos-side balance; remove it with them or name its new reader.
 /**
  * Query `fake_eth::balance` view function.
  * Returns the FakeETH FA balance for the given Aptos address.
@@ -638,6 +728,7 @@ export async function getFakeEthBalance(ownerAddr: string): Promise<bigint> {
   return BigInt(result[0] as string);
 }
 
+// SCOUT(#238) EDIT: AuctionCreator is the only caller and stops fetching the key once create_auction has no mpk argument.
 /**
  * Query `timelock::get_mpk` view function.
  *
@@ -719,6 +810,8 @@ export async function getTimelockStatus(
   return { status: "expired", reason: reasons[Number(reasonResult[0]) - 1] };
 }
 
+// SCOUT(#228) REMOVE: submit_cleartext_and_clear is deleted.
+// SCOUT(#217) EDIT: cleartexts are whole-USD prices.
 /**
  * Build payload for `auction::submit_cleartext_and_clear`.
  *
@@ -742,6 +835,8 @@ export function getSubmitCleartextPayload(
   };
 }
 
+// SCOUT(#228) REMOVE: AuctionRevealer calls this today.
+// SCOUT(#236) EDIT: the single open action sends this one transaction until the commit and reveal removal (228) replaces it with openBids.
 export async function submitCleartextAndClear(
   ethAddress: string,
   windowId: bigint,
@@ -756,6 +851,8 @@ export async function submitCleartextAndClear(
   );
 }
 
+// SCOUT(#228) REMOVE: open_bid is deleted.
+// SCOUT(#217) EDIT: price is a whole-USD price.
 /** Build payload for `auction::open_bid` (one bid, any caller). */
 export function getOpenBidPayload(
   windowId: bigint,
@@ -770,6 +867,8 @@ export function getOpenBidPayload(
   };
 }
 
+// SCOUT(#228) REMOVE: no component calls it.
+// SCOUT(#236) EDIT: still has no caller after the single open action; delete it here or leave it to the commit and reveal removal (228).
 export async function openBid(
   ethAddress: string,
   windowId: bigint,
@@ -785,6 +884,7 @@ export async function openBid(
   );
 }
 
+// SCOUT(#228) REMOVE: finalize_reveal is deleted.
 /**
  * Build payload for `auction::finalize_reveal`: close openings once every bid
  * is open or the opening window ended. Unopened bids become invalid.
@@ -799,6 +899,8 @@ export function getFinalizeRevealPayload(
   };
 }
 
+// SCOUT(#228) REMOVE: no component calls it.
+// SCOUT(#236) EDIT: still has no caller after the single open action; delete it here or leave it to the commit and reveal removal (228).
 export async function finalizeReveal(
   ethAddress: string,
   windowId: bigint,
@@ -809,6 +911,25 @@ export async function finalizeReveal(
     ethAddress,
     getFinalizeRevealPayload(windowId, pairBcs),
   );
+}
+
+// SCOUT(#228) ADD: payload for auction::open_bids(window_id, pair_bcs, max_bids).
+export function getOpenBidsPayload(
+  _windowId: bigint,
+  _pairBcs: Uint8Array,
+  _maxBids: bigint,
+): InputGenerateTransactionPayloadData {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#228) getOpenBidsPayload");
+}
+
+// SCOUT(#228) ADD: sends open_bids; any account may call it once the timelock is revealed.
+export async function openBids(
+  _ethAddress: string,
+  _windowId: bigint,
+  _pairBcs: Uint8Array,
+  _maxBids: bigint,
+): Promise<{ hash: string }> {
+  throw new Error("NOT_IMPLEMENTED: SCOUT(#228) openBids");
 }
 
 /**

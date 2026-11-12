@@ -12,6 +12,7 @@
  */
 
 import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
+// SCOUT(#239) EDIT: repoint to @atomica/aptos-docker-testnet; the import above (@atomica/ethereum-docker-testnet) is not a dependency either, so the script still fails.
 import { DockerTestnet } from "@atomica/docker-testnet";
 
 const NUM_ETH_VALIDATORS = 4;

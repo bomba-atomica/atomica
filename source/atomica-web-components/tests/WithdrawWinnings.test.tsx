@@ -68,6 +68,7 @@ describe("WithdrawWinnings (read-only status display — Risk 3 Option B)", () =
     expect(content).toContain("1");
     // winnerCount
     expect(content).toContain("2");
+    // SCOUT(#217) EDIT: this asserts the raw 1000; it becomes $1000 through formatPrice.
     // clearing price
     expect(content).toContain("1000");
   });

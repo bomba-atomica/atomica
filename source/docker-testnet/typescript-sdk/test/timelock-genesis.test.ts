@@ -1,3 +1,4 @@
+// SCOUT(#239) REMOVE: whole file; it moves to source/docker-testnet/aptos-testnet/test/timelock-genesis.test.ts (vitest, aptos-testnet lifecycle helpers).
 /**
  * Timelock genesis test.
  *

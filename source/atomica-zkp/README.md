@@ -1,3 +1,4 @@
+<!-- SCOUT(#239) REMOVE: whole directory source/atomica-zkp; no workflow, package or Cargo workspace references it (five roadmap rows and four other docs name it). -->
 # atomica-zkp
 
 Status: `scaffold`

@@ -35,6 +35,7 @@ const AD =
 const BIDDER =
   "0x0101010101010101010101010101010101010101010101010101010101010101";
 const WINDOW = 5n;
+// SCOUT(#224) EDIT: use LAUNCH_PAIR_BCS; empty pair bytes name no window once the allowlist exists.
 const PAIR = new Uint8Array(0);
 const TIMELOCK = 11n;
 
@@ -47,6 +48,7 @@ function hex(b: Uint8Array): string {
   return "0x" + Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
+// SCOUT(#235) EDIT: this fake chain needs the get_timelock_epoch and get_deadline views, a chain id, and a second endpoint.
 /** A fake chain: view name -> result, with one stored bid. */
 function mockChain(
   stored: { ciphertext: Uint8Array; commitment: Uint8Array } | null,
@@ -75,6 +77,8 @@ function mockChain(
         return [dk];
       case "auction::get_bid_count":
         return [stored ? "1" : "0"];
+      // SCOUT(#216) EDIT: the mocked tuple gains the validity flag.
+      // SCOUT(#228) EDIT: the mocked tuple loses the commitment.
       case "auction::get_bid_info":
         return [
           BIDDER,
@@ -90,6 +94,7 @@ function mockChain(
   return calls;
 }
 
+// SCOUT(#228) EDIT: no salt and no commitment; the ciphertext body is 8 + 16 bytes, not 40 + 16.
 describe("sealBid", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -127,6 +132,7 @@ describe("sealBid", () => {
   });
 });
 
+// SCOUT(#228) EDIT: drop the salt and commitment expectations and the commitment mismatch case.
 describe("decryptWindowBids", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -163,4 +169,25 @@ describe("decryptWindowBids", () => {
     expect(bid.price).toBe(5n);
     expect(bid.matchesCommitment).toBe(false);
   });
+});
+
+describe("planned tests (SCOUT)", () => {
+  it.todo(
+    "SCOUT(#216) getBidInfo returns the validity flag of the bid view tuple",
+  );
+  it.todo(
+    "SCOUT(#235) sealBid builds the golden identity and associated data locally, and the golden key opens the bid",
+  );
+  it.todo(
+    "SCOUT(#235) sealBid throws and never encrypts when the node returns a different timelock identity",
+  );
+  it.todo(
+    "SCOUT(#235) sealBid throws and never encrypts when the node returns different bid associated data",
+  );
+  it.todo(
+    "SCOUT(#235) sealBid throws when two endpoints return different master public keys, and seals when they agree",
+  );
+  it.todo(
+    "SCOUT(#228) sealBid output decrypts with the golden key to exactly 8 bytes, the little-endian price",
+  );
 });

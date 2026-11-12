@@ -1,3 +1,4 @@
+# SCOUT(#239) REMOVE: whole directory source/docker-testnet/rust-sdk; no workspace, workflow or script references it.
 [package]
 name = "atomica-docker-testnet"
 version = "0.1.0"

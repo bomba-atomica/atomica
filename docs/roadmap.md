@@ -1,5 +1,7 @@
 # Atomica Roadmap
 
+<!-- SCOUT(#242) DOC: the April 2026 drift inventory file named here is not in the repo. -->
+
 Canonical capability roadmap for v0.1 Beta, v1.0, and v2.0.
 Derived from [`docs/specifications/prd.md`](specifications/prd.md) and the
 April 2026 drift inventory (`progress-review-2026-04-06.md` on main).
@@ -13,13 +15,41 @@ April 2026 drift inventory (`progress-review-2026-04-06.md` on main).
 | `archived` | Code or doc present but superseded; kept for reference only |
 | `missing` | No implementation yet |
 
+<!-- SCOUT(#242) DOC: "authored in issue #83": v0-architecture.md exists; zk-verification.md (linked under v1.0) still does not. -->
+
 Forward links to `docs/architecture/` files are permitted to be unresolved at merge time (those files are authored in issue #83).
 
 ---
 
 ## v0.1 Beta — Trustless single-chain auction with verified BLS settlement
 
+<!-- SCOUT(#242) DOC: goal sentence: "trusts only the 2/3 validator threshold" omits the package upgrade-key (owner decision 30) and the one-half secrecy bound (owner decision 31); "any user can unwind" is true on Ethereum only until the Aptos unwind (194) merges. -->
+
 Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ethereum, settled back to Ethereum by a verified BLS outcome proof. v0.1 trusts only the 2/3 validator threshold. No relayer is trusted, and any user can unwind a finished or stuck auction. See the [trustless v0.1 unwinding ADR](decisions/trustless-v0-1-unwinding.md).
+
+<!-- SCOUT(#242) DOC: every atomica-web-ui/ and atomica-web/ path in this table is stale: the packages are atomica-sdk, atomica-web-components and atomica-demo (SIWE, IBE client, sealed bids, UI rows, orchestrator, browser tests). -->
+<!-- SCOUT(#242) DOC: state-proof row: the reason text is stale: validator-attested headers are merged (issues 196, 197) and no admin writes roots. -->
+<!-- SCOUT(#242) DOC: "IBE timelock on-chain Move scaffolding" row: scaffold is stale: the registry is 0x1::ibe_config in the fork, timelock.move is a thin wrapper and timelock_config.move holds values nothing reads. -->
+<!-- SCOUT(#242) DOC: auction row: the status text is stale: clear_internal clears at a uniform price with partial fill; the open gaps are bid validity (216), caps (218) and the unused reserve (241). -->
+<!-- SCOUT(#242) DOC: windows row: the status text is stale: windows are global per (window_id, pair) with ids from the clock; the gaps are the formula (220) and the seller-picked timelock deadline (243). -->
+<!-- SCOUT(#242) DOC: collateral row: the status text is stale: submit_bid claims a FakeUSD receipt and drops its amount. -->
+<!-- SCOUT(#242) DOC: settlement row: stale: the Aptos light client (202) and proof-gated LockBox (203) are merged and BLSVerifier.sol is retired; missing are the Aptos outcome (194), the carrier (195) and a live round trip (219). -->
+<!-- SCOUT(#242) DOC: unwind row: LockBox reclaim is live (203); the Aptos unwind is open pull request 213 (194); the SDK and UI half (195) is open. -->
+<!-- SCOUT(#216) DOC: collateral row: becomes live when collateral must cover price times quantity. -->
+<!-- SCOUT(#219) DOC: settlement row: it can read live only once a CI test runs lock, auction, recordOutcome and releaseByOutcome across both chains; name that test here. -->
+<!-- SCOUT(#220) DOC: windows row: after this issue the ids change exactly at 07:45 and 16:15 UTC. -->
+<!-- SCOUT(#221) DOC: LockBox row: lock takes no deadline and the auction key drops it; LockBox redeploys. -->
+<!-- SCOUT(#222) DOC: LockBox row: add reclaimUnpayable and the remainder-to-depositor leaf rule. -->
+<!-- SCOUT(#224) DOC: multi-pair row: "single pair hard-coded" becomes an allowlist seeded with one launch pair. -->
+<!-- SCOUT(#228) DOC: sealed-bids row: describes submit_cleartext_and_clear and finalize_reveal with a price hash; on-chain opening replaces them with open_bids. -->
+<!-- SCOUT(#233) DOC: bid submission UI row: live is wrong today: the screen fills the lock id with a transaction hash and cannot register a FakeUSD lock. -->
+<!-- SCOUT(#236) DOC: settle and claim row: ClaimButton (a faucet mint) is removed for a release action; AuctionRevealer and SellFlow get exported. -->
+<!-- SCOUT(#237) DOC: state-proof SDK row: the package loses its beacon light client. -->
+<!-- SCOUT(#238) DOC: rebate rows (on-chain and UI): the "no uniform-price anchor" reason is stale and the scaffolding, hook and FeeRebateDisplay are deleted; drop or reword both rows. -->
+<!-- SCOUT(#239) DOC: orchestrator row: the script lives in atomica-demo/scripts and its Aptos testnet import is repointed. -->
+<!-- SCOUT(#239) DOC: ZK row: the ZK scaffold crate is deleted; the acceptance grep also hits three v1.0 rows and one v2.0 row below. -->
+<!-- SCOUT(#241) DOC: auction creation UI row: loses the minimum price field. -->
+<!-- SCOUT(#243) DOC: windows row: after this issue the window timelock closes at the window close, not at a seller-picked time; the auction creation UI row loses the register-timelock step. -->
 
 | Capability | Owning module(s) under `source/` | Status |
 |---|---|---|
@@ -60,6 +90,9 @@ See [`docs/architecture/v0-architecture.md`](architecture/v0-architecture.md) (a
 
 Goal: same validator honesty assumption as v0.1; add an independent ZK circuit that re-verifies auction clearing so validators cannot manipulate outcomes without detection. ZK double verification is the only v1.0 addition: v0.1 already has no trusted relayer to replace.
 
+<!-- SCOUT(#239) DOC: three rows name the ZK scaffold crate path, which is deleted; reword to a planned location. -->
+<!-- SCOUT(#242) DOC: "Dual-gate settlement" row names Settlement.sol, a retired contract; the gate belongs on LockBox. -->
+
 | Capability | Owning module(s) under `source/` | Status |
 |---|---|---|
 | **ZK auction-clearing circuit** | `atomica-zkp/src/` | `missing` |
@@ -76,6 +109,8 @@ See [`docs/architecture/zk-verification.md`](architecture/zk-verification.md) (a
 
 Goal: Bitcoin support via BitVM + STARK proofs; multi-step ratchet for atomic cross-chain releases; extension to additional chains (Solana, etc.).
 
+<!-- SCOUT(#239) DOC: STARK row names the ZK scaffold crate path, which is deleted. -->
+
 | Capability | Owning module(s) under `source/` | Status |
 |---|---|---|
 | **Bitcoin integration (BitVM)** | TBD | `missing` |
@@ -90,6 +125,8 @@ Goal: Bitcoin support via BitVM + STARK proofs; multi-step ratchet for atomic cr
 
 These items exist in the codebase but are not part of the live flow.
 Resolving them before adding more features reduces confusion.
+
+<!-- SCOUT(#242) DOC: this table is stale: auction.move.broken, atomica-web/, atomica-web-demo/, the atomica-web-ui payloads and the .skip test files no longer exist; the pre-pivot Solidity row is owned by the SDK and UI unwind (195). -->
 
 | Item | Location | Recommended action |
 |---|---|---|

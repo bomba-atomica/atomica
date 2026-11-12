@@ -1,3 +1,5 @@
+<!-- SCOUT(#236) DOC: wholly superseded: describes a deleted Alpine.js simulator under source/web, yet issues 217, 236 and 241 cite it as canonical; archive it and point those issues at v0-architecture section 1. -->
+
 # Web Simulator Architecture
 
 ## File Structure

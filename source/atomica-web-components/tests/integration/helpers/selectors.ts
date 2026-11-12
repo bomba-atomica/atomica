@@ -24,6 +24,7 @@ export const SELECTORS = {
   // Step2Lock
   step2Lock: {
     lockAmountInput: "lock-amount-input",
+    // SCOUT(#241) REMOVE: minPriceInput.
     minPriceInput: "min-price-input",
     approveLockButton: "approve-lock-button",
     lockError: "lock-error",
@@ -76,6 +77,8 @@ export const SELECTORS = {
     bidStatus: "bid-status",
   },
 
+  // SCOUT(#228) EDIT: the decrypt, cleartext and salt selectors go; add the Open bids button.
+  // SCOUT(#236) EDIT: the same block changes for the single open action.
   // AuctionRevealer
   auctionRevealer: {
     windowIdInput: "revealer-window-id-input",
@@ -97,6 +100,7 @@ export const SELECTORS = {
     settleClearingPrice: "settle-clearing-price",
   },
 
+  // SCOUT(#236) REMOVE: the claimButton block; add a releaseButton block.
   // ClaimButton
   claimButton: {
     claimButton: "claim-button",
@@ -106,6 +110,7 @@ export const SELECTORS = {
     claimAmount: "claim-amount",
   },
 
+  // SCOUT(#238) REMOVE: the feeRebateDisplay block.
   // FeeRebateDisplay
   feeRebateDisplay: {
     rebateAmount: "rebate-amount",
@@ -132,7 +137,9 @@ export const {
   auctionBidder,
   auctionRevealer,
   settleButton,
+  // SCOUT(#236) REMOVE: flat export.
   claimButton,
+  // SCOUT(#238) REMOVE: flat export.
   feeRebateDisplay,
   bidHistory,
 } = SELECTORS;

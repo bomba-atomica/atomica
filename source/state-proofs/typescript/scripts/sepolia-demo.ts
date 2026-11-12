@@ -1,3 +1,4 @@
+// SCOUT(#237) REMOVE: whole file; it only drives the beacon light client.
 
 import { createWalletClient, createPublicClient, http, formatEther, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
