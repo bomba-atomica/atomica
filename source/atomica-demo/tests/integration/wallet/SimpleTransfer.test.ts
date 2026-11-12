@@ -100,7 +100,6 @@ describe.sequential(
       // STEP 1: Derive the Aptos address from the Ethereum address
       // This uses a deterministic derivation function:
       // derivedAddress = sha3_256(ethereumAddress + domain_separator)
-      // SCOUT(#232) EDIT: no change needed: TEST_ACCOUNT defaults to lowercase, and getDerivedAddress will lowercase a checksummed override (this file runs in no CI job).
       const derivedAddr = await getDerivedAddress(TEST_ACCOUNT);
       const derivedAddrStr = derivedAddr.toString();
       console.log(

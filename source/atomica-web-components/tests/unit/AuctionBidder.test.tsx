@@ -40,7 +40,8 @@ vi.mock("@atomica/sdk/aptos", () => ({
   }),
 }));
 
-// SCOUT(#232) EDIT: this mock hides the checksum defect; the new case needs the real getDerivedAddress (importActual) or a file of its own.
+// getDerivedAddress is stubbed by default. The checksummed account case swaps
+// in the real implementation (vi.importActual) for one call.
 vi.mock("@atomica/sdk", () => ({
   getDerivedAddress: vi
     .fn()
@@ -178,6 +179,31 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     expect(args[6]).toBe(7n);
   });
 
+  it("with a checksummed account and the real getDerivedAddress, sealBid receives the address derived from the lowercase account", async () => {
+    const { sealBid } = await import("@atomica/sdk/aptos");
+    const sdk = await import("@atomica/sdk");
+    const actual =
+      await vi.importActual<typeof import("@atomica/sdk")>("@atomica/sdk");
+    vi.mocked(sdk.getDerivedAddress).mockImplementationOnce(
+      actual.getDerivedAddress,
+    );
+    const checksummed = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+    const expected = (
+      await actual.getDerivedAddress(checksummed.toLowerCase())
+    ).toString();
+
+    renderBidder(checksummed);
+    fireEvent.click(screen.getByTestId("skip-to-bid-button"));
+    fireEvent.change(screen.getByTestId("bid-amount-input"), {
+      target: { value: "200" },
+    });
+    fireEvent.click(screen.getByTestId("submit-bid-button"));
+    await screen.findByText(/Bid Submitted/);
+
+    expect(sealBid).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sealBid).mock.calls[0][2]).toBe(expected);
+  });
+
   it("shows Step 2 as active in step indicator after skipping to bid", () => {
     renderBidder();
     fireEvent.click(screen.getByTestId("skip-to-bid-button"));
@@ -212,15 +238,30 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     expect(bidButton.textContent).toContain("Submit Encrypted Bid");
   });
 
-  it.todo("SCOUT(#217) typing 2000 in the price field makes sealBid receive 2000n");
-  it.todo("SCOUT(#217) a price of 2000.5, -1 or an empty field shows an error and neither seals nor submits");
-  it.todo("SCOUT(#232) with a checksummed account and the real getDerivedAddress, sealBid receives the address derived from the lowercase account");
-  it.todo("SCOUT(#233) after the lock, the collateral lock id field equals the lockId of the Locked event and never the transaction hash");
-  it.todo("SCOUT(#233) the lock step calls approve, lock, the certified block wait, the proof generator with the FakeUSD token and the register transaction with asset FakeUSD, in that order");
-  it.todo("SCOUT(#233) the pair bytes passed to lockBinding equal the pair bytes passed to sealBid and submitBid");
-  it.todo("SCOUT(#233) when the register transaction rejects, the error shows, the step stays on the lock step, and a retry sends no second approve or lock");
-  it.todo("SCOUT(#234) when the SDK lock rejects with the pin mismatch error, the lock step shows the expected address and does not advance");
-  it.todo("SCOUT(#235) after a successful bid, loadBidOpening returns the price, salt and commitment that sealBid returned");
+  it.todo(
+    "SCOUT(#217) typing 2000 in the price field makes sealBid receive 2000n",
+  );
+  it.todo(
+    "SCOUT(#217) a price of 2000.5, -1 or an empty field shows an error and neither seals nor submits",
+  );
+  it.todo(
+    "SCOUT(#233) after the lock, the collateral lock id field equals the lockId of the Locked event and never the transaction hash",
+  );
+  it.todo(
+    "SCOUT(#233) the lock step calls approve, lock, the certified block wait, the proof generator with the FakeUSD token and the register transaction with asset FakeUSD, in that order",
+  );
+  it.todo(
+    "SCOUT(#233) the pair bytes passed to lockBinding equal the pair bytes passed to sealBid and submitBid",
+  );
+  it.todo(
+    "SCOUT(#233) when the register transaction rejects, the error shows, the step stays on the lock step, and a retry sends no second approve or lock",
+  );
+  it.todo(
+    "SCOUT(#234) when the SDK lock rejects with the pin mismatch error, the lock step shows the expected address and does not advance",
+  );
+  it.todo(
+    "SCOUT(#235) after a successful bid, loadBidOpening returns the price, salt and commitment that sealBid returned",
+  );
   it.todo("SCOUT(#235) nothing is stored when submitBid rejects");
   it.todo("SCOUT(#228) submitBid is called with no commitment");
   it("refuses the FakeUSD lock on another host and shows the expected SIWE domain", async () => {

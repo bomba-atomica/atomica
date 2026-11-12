@@ -179,7 +179,6 @@ export function AuctionBidder() {
       // Encrypt the bid to the window's timelock. The ciphertext is bound to
       // the sender, so seal it for this wallet's derived Aptos address.
       setStatus("Encrypting bid to the timelock key...");
-      // SCOUT(#232) EDIT: no code change: the SDK lowercases inside getDerivedAddress; this is the one caller that passes a checksummed address.
       const bidder = (await getDerivedAddress(account)).toString();
       // SCOUT(#235) EDIT: sealBid may now throw when a node lies about the identity, the associated data or the key; keep the salt it returns.
       // SCOUT(#228) EDIT: sealBid returns no commitment and no salt.

@@ -203,7 +203,6 @@ export interface EthSigner {
  * its lock receipts. The SIWE domain is `window.location.host`, which the
  * fixture pinned in `eth_proof`.
  */
-// SCOUT(#232) EDIT: no change needed: this helper lowercases by hand, which is why no browser test caught the checksum defect.
 export async function ethAccountAddress(signer: EthSigner): Promise<string> {
   const ethAddress = new ethers.Wallet(signer.privateKey).address;
   return (await getDerivedAddress(ethAddress.toLowerCase())).toString();
