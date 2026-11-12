@@ -276,13 +276,16 @@ export async function getWindowDeadlineUs(_windowId: bigint): Promise<bigint> {
   throw new Error("NOT_IMPLEMENTED: SCOUT(#243) getWindowDeadlineUs");
 }
 
-// SCOUT(#233) ADD: the asset of a lock receipt; getRegisterLockPayload takes it as its second parameter.
+/** The asset of a lock receipt: the `lock_receipt` type argument. */
 export type RegisterLockAsset = "FakeETH" | "FakeUSD";
 
-// SCOUT(#233) EDIT: add an asset parameter (FakeETH by default) and set the receipt type argument from it.
 // SCOUT(#221) EDIT: drop the deadline argument; register_ethereum_lock computes it from the window id.
 /**
- * Build payload for lock_receipt::register_ethereum_lock<FakeETH>.
+ * Build payload for lock_receipt::register_ethereum_lock<Asset>.
+ *
+ * `asset` sets the receipt type: `FakeETH` (the default) for a seller lock,
+ * `FakeUSD` for a bidder's collateral lock. It must name the token the proof
+ * covers, or Aptos rejects the registration.
  *
  * Serialises directly from LockedBalanceProof, matching the Move entry function:
  *   register_ethereum_lock<Asset>(carrier, block_number, user_address,
@@ -302,11 +305,11 @@ export type RegisterLockAsset = "FakeETH" | "FakeUSD";
  */
 export function getRegisterLockPayload(
   proof: LockedBalanceProof,
+  asset: RegisterLockAsset = "FakeETH",
 ): InputGenerateTransactionPayloadData {
   return {
     function: `${CONTRACT_ADDR}::lock_receipt::register_ethereum_lock`,
-    // SCOUT(#233) EDIT: the FakeETH receipt type is hardcoded here.
-    typeArguments: [`${CONTRACT_ADDR}::lock_receipt::FakeETH`],
+    typeArguments: [`${CONTRACT_ADDR}::lock_receipt::${asset}`],
     functionArguments: [
       proof.blockNumber,
       ethers.getBytes(proof.userAddress),

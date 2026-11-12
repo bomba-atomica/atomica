@@ -410,7 +410,11 @@ A lock proof is checked on Aptos against trusted inputs only (issues 171, 196,
   wrong amount or binding does not verify, and it accepts only
   `deadline == auction::eth_lock_deadline(window_id)`.
 
-<!-- SCOUT(#233) DOC: add that a bidder FakeUSD lock registers the same way with the FakeUSD asset type, and that its receipt id is the LockBox lock id. -->
+A bidder's FakeUSD collateral lock registers the same way, with the
+`FakeUSD` asset type (`getRegisterLockPayload(proof, "FakeUSD")` in the SDK).
+The bidder screen reads the lock from the `Locked` event, waits for a
+certified block, proves and registers the lock, and bids with its receipt id,
+which is the LockBox lock id.
 
 Any account may send `register_ethereum_lock`. The proof names the
 depositor. The receipt stores that Ethereum address as `eth_owner`, and its

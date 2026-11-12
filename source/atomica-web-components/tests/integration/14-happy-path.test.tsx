@@ -262,11 +262,10 @@ function withProviders(account: string, children: React.ReactNode) {
 }
 
 // SCOUT(#236) EDIT: the demo will mount SellFlow, but this browser suite cannot import it; the happy path keeps direct helpers unless vitest.config.ts gains polyfills.
-// SCOUT(#233) EDIT: AuctionBidder will import the proof generator too, which would break 09-submit-bid in the same way.
-// Note: SellFlow is NOT imported because useSellFlow pulls in
-// @ethereumjs/util EventEmitter which is incompatible with Vitest browser
-// mode. Steps 2-7 use direct helpers instead. Individual component tests
-// (03-07) cover the UI for each step.
+// Note: SellFlow is NOT imported. Steps 2-7 use direct helpers instead, and
+// individual component tests (03-07) cover the UI for each step. The proof
+// generator itself loads in this suite without Node polyfills: AuctionBidder
+// imports it (through hooks/proveLock), and 09-submit-bid drives it.
 
 // ── Test suite ────────────────────────────────────────────────────────────
 

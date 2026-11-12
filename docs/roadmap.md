@@ -41,7 +41,6 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 <!-- SCOUT(#222) DOC: LockBox row: add reclaimUnpayable and the remainder-to-depositor leaf rule. -->
 <!-- SCOUT(#224) DOC: multi-pair row: "single pair hard-coded" becomes an allowlist seeded with one launch pair. -->
 <!-- SCOUT(#228) DOC: sealed-bids row: describes submit_cleartext_and_clear and finalize_reveal with a price hash; on-chain opening replaces them with open_bids. -->
-<!-- SCOUT(#233) DOC: bid submission UI row: live is wrong today: the screen fills the lock id with a transaction hash and cannot register a FakeUSD lock. -->
 <!-- SCOUT(#236) DOC: settle and claim row: ClaimButton (a faucet mint) is removed for a release action; AuctionRevealer and SellFlow get exported. -->
 <!-- SCOUT(#237) DOC: state-proof SDK row: the package loses its beacon light client. -->
 <!-- SCOUT(#238) DOC: rebate rows (on-chain and UI): the "no uniform-price anchor" reason is stale and the scaffolding, hook and FeeRebateDisplay are deleted; drop or reword both rows. -->
@@ -70,7 +69,7 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 | **Distance-to-clearing fee rebates (on-chain)** | `atomica-move-contracts/sources/auction.move` | `missing` — no uniform-price anchor to compute rebates against |
 | **Fee-rebate UI display** | `atomica-web-ui/src/components/FeeRebateDisplay.tsx` | `scaffold` — component present but driven by stubbed input |
 | **Sell flow wizard (8-step UI)** | `atomica-web-ui/src/components/SellFlow/` | `live` |
-| **Bid submission UI** | `atomica-web-ui/src/components/AuctionBidder.tsx` | `live` |
+| **Bid submission UI** | `atomica-web-components/src/components/AuctionBidder.tsx` | `live` |
 | **Auction creation UI** | `atomica-web-ui/src/components/AuctionCreator.tsx` | `live` |
 | **Bid history UI** | `atomica-web-ui/src/components/BidHistory.tsx` | `live` |
 | **Settle / Claim UI** | `atomica-web-ui/src/components/SettleButton.tsx`, `ClaimButton.tsx` | `live` — Demo-phase payout; lifetime bounded by real cross-chain settlement |

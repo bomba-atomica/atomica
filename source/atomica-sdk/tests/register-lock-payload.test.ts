@@ -83,13 +83,31 @@ describe("getRegisterLockPayload", () => {
     );
   });
 
-  // SCOUT(#233) EDIT: FakeETH stays the default; add the FakeUSD case.
   it("includes FakeETH as the type argument", () => {
     const payload = getRegisterLockPayload(
       makeMockProof(),
     ) as InputEntryFunctionData;
     expect(payload.typeArguments).toBeDefined();
     expect(payload.typeArguments![0]).toContain("::lock_receipt::FakeETH");
+  });
+
+  it("getRegisterLockPayload with asset FakeUSD has the lock_receipt::FakeUSD type argument, and FakeETH with no asset", () => {
+    const usd = getRegisterLockPayload(
+      makeMockProof(),
+      "FakeUSD",
+    ) as InputEntryFunctionData;
+    expect(usd.typeArguments).toEqual([
+      expect.stringMatching(/::lock_receipt::FakeUSD$/),
+    ]);
+    const eth = getRegisterLockPayload(
+      makeMockProof(),
+    ) as InputEntryFunctionData;
+    expect(eth.typeArguments).toEqual([
+      expect.stringMatching(/::lock_receipt::FakeETH$/),
+    ]);
+    // Only the type argument differs.
+    expect(usd.function).toBe(eth.function);
+    expect(usd.functionArguments).toEqual(eth.functionArguments);
   });
 
   // SCOUT(#221) EDIT: eight arguments once the deadline goes; the proof indexes 7 and 8 below become 6 and 7.
@@ -302,9 +320,6 @@ describe("timelockIdFromEvents", () => {
 });
 
 describe("planned tests (SCOUT)", () => {
-  it.todo(
-    "SCOUT(#233) getRegisterLockPayload with asset FakeUSD has the lock_receipt::FakeUSD type argument, and FakeETH with no asset",
-  );
   it.todo(
     "SCOUT(#221) getRegisterLockPayload sends eight arguments and no deadline",
   );

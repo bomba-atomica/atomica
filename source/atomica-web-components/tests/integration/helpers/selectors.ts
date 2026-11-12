@@ -70,9 +70,16 @@ export const SELECTORS = {
     sellerAddressInput: "seller-address-input",
     /** Step 1 — skip the FakeUSD lock and go straight to the bid form. */
     skipToBidButton: "skip-to-bid-button",
+    /** Step 1 — pair BCS the lock is bound to (the bid names the same pair). */
+    pairBcsInput: "pair-bcs-input",
+    /** Step 1 — approve, lock, prove and register FakeUSD. */
+    approveLockUsdButton: "approve-lock-usd-button",
+    lockStatus: "lock-status",
+    submitBidStep: "submit-bid-step",
     windowIdInput: "window-id-input",
     collateralLockIdInput: "collateral-lock-id-input",
     bidAmountInput: "bid-amount-input",
+    bidQuantityInput: "bid-quantity-input",
     submitBidButton: "submit-bid-button",
     bidStatus: "bid-status",
   },
