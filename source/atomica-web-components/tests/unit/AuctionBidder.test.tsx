@@ -56,7 +56,6 @@ vi.mock("@atomica/sdk", () => ({
 }));
 
 // SCOUT(#221) EDIT: the lockBinding mock returns a deadline.
-// SCOUT(#234) EDIT: make approveFakeUsd or lockFakeUsd reject with the pin mismatch error.
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeUsd: vi.fn().mockResolvedValue({ hash: "0xapprove" }),
   lockFakeUsd: vi
@@ -280,9 +279,6 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     "SCOUT(#217) a price of 2000.5, -1 or an empty field shows an error and neither seals nor submits",
   );
   it.todo(
-    "SCOUT(#234) when the SDK lock rejects with the pin mismatch error, the lock step shows the expected address and does not advance",
-  );
-  it.todo(
     "SCOUT(#235) after a successful bid, loadBidOpening returns the price, salt and commitment that sealBid returned",
   );
   it.todo("SCOUT(#235) nothing is stored when submitBid rejects");
@@ -408,6 +404,24 @@ describe("AuctionBidder — FakeUSD lock registration", () => {
     expect(
       Array.from(vi.mocked(submitBid).mock.calls[0][5] as Uint8Array),
     ).toEqual(Array(32).fill(0x1d));
+  });
+
+  it("when the SDK lock rejects with the pin mismatch error, the lock step shows the expected address and does not advance", async () => {
+    const pinned = "0x" + "77".repeat(20);
+    vi.mocked(approveFakeUsd).mockRejectedValueOnce(
+      new Error(
+        `LockBox address mismatch: Aptos pins ${pinned}, but this client is configured with ${"0x" + "11".repeat(20)}. Aptos accepts locks only in ${pinned}. Refusing to approve or lock.`,
+      ),
+    );
+    renderBidder();
+    fireEvent.click(screen.getByTestId("approve-lock-usd-button"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("lock-status").textContent).toContain(pinned),
+    );
+    expect(lockFakeUsd).not.toHaveBeenCalled();
+    expect(screen.getByTestId("lock-collateral-step")).toBeTruthy();
+    expect(screen.queryByTestId("submit-bid-step")).toBeNull();
   });
 
   it("when the register transaction rejects, the error shows, the step stays on the lock step, and a retry sends no second approve or lock", async () => {

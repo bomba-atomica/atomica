@@ -35,7 +35,9 @@ export const ETH_BEACON_URL =
   ENV_ETH_BEACON_URL || `http://${fallbackHost}:5052`;
 
 // Contract addresses (set after deployment)
-// SCOUT(#234) EDIT: these two addresses are read once at import, while lockbox.ts reads getChainConfig() on every call; the pin check must cover both sources.
+// Read once at import, for reads and mints (contracts.ts). The SDK approve and
+// lock functions (lockbox.ts) read getChainConfig() on every call, and the pin
+// check (ethereum-pin.ts) compares those call-time addresses with eth_proof.
 export const FAKE_ETH_ADDRESS = ethereum.fakeETH;
 export const FAKE_USD_ADDRESS = ethereum.fakeUSD;
 

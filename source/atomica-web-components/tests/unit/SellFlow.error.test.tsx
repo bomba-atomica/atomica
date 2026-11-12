@@ -34,6 +34,13 @@ describe("SellFlow error display", () => {
       expect(screen.getByText("Insufficient FakeETH balance")).toBeTruthy();
     });
 
+    it("the Step2Lock error line shows the pinned address of the mismatch error", () => {
+      const pinned = "0x" + "77".repeat(20);
+      const message = `LockBox address mismatch: Aptos pins ${pinned}, but this client is configured with ${"0x" + "11".repeat(20)}. Aptos accepts locks only in ${pinned}. Refusing to approve or lock.`;
+      render(<Step2Lock onLock={vi.fn()} loading={false} error={message} />);
+      expect(screen.getByText(message).textContent).toContain(pinned);
+    });
+
     it("disables button while loading", () => {
       render(<Step2Lock onLock={vi.fn()} loading={true} />);
       const btn = screen.getByRole("button");
@@ -175,5 +182,4 @@ describe("SellFlow error display", () => {
   });
 
   it.todo("SCOUT(#241) Step2Lock renders no element with test id min-price-input and calls onLock with the amount only");
-  it.todo("SCOUT(#234) the Step2Lock error line shows the pinned address of the mismatch error");
 });

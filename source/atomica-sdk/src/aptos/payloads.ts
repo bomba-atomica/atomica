@@ -7,6 +7,15 @@ import { CONTRACT_ADDR, aptos } from "./config.js";
 import { getDerivedAddress } from "../siwe.js";
 import { submitNativeTransaction } from "../transaction.js";
 import type { LockedBalanceProof } from "../ethereum/proofs/generator.js";
+import {
+  setPinnedEthereumConfigReader,
+  type PinnedEthereumConfig,
+} from "../ethereum-pin.js";
+
+export {
+  assertEthereumConfigMatchesPin,
+  type PinnedEthereumConfig,
+} from "../ethereum-pin.js";
 
 /**
  * Sanity Test: Simple APT transfer using MetaMask signature
@@ -367,26 +376,6 @@ export async function waitForCertifiedBlock(
   }
   throw new Error(
     `No certified Ethereum block at or after ${minBlock} within ${timeoutMs} ms (latest certified: ${latest ?? "none"})`,
-  );
-}
-
-// SCOUT(#234) ADD: the LockBox and token addresses pinned in eth_proof.
-export interface PinnedEthereumConfig {
-  lockBox: string;
-  fakeETH: string;
-  fakeUSD: string;
-}
-
-// SCOUT(#234) ADD: reads the eth_proof::get_config view.
-export async function getPinnedEthereumConfig(): Promise<PinnedEthereumConfig> {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#234) getPinnedEthereumConfig");
-}
-
-// SCOUT(#234) ADD: throws unless getChainConfig().ethereum equals the pin, ignoring letter case; the approve and lock functions of ethereum/lockbox.ts call it first.
-// SCOUT(#234) EDIT: today ethereum/lockbox.ts imports nothing from aptos/; calling this from there pulls the Aptos client into the @atomica/sdk/ethereum entry, so decide where the guard lives.
-export async function assertEthereumConfigMatchesPin(): Promise<void> {
-  throw new Error(
-    "NOT_IMPLEMENTED: SCOUT(#234) assertEthereumConfigMatchesPin",
   );
 }
 
@@ -1217,3 +1206,29 @@ export async function assertSiweDomain(
   const expected = await getSiweDomain();
   if (expected !== host) throw new SiweDomainMismatchError(expected, host);
 }
+
+// ── LockBox and token pin (issue 234) ─────────────────────────────────────────
+
+/**
+ * `eth_proof::get_config`: the LockBox, FakeETH and FakeUSD addresses that
+ * Aptos accepts lock proofs for. Rejects when the view aborts
+ * (`E_CONFIG_NOT_SET`) or the node cannot be reached.
+ */
+export async function getPinnedEthereumConfig(): Promise<PinnedEthereumConfig> {
+  const [lockBox, fakeETH, fakeUSD] = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::eth_proof::get_config`,
+      functionArguments: [],
+    },
+  });
+  return {
+    lockBox: String(lockBox),
+    fakeETH: String(fakeETH),
+    fakeUSD: String(fakeUSD),
+  };
+}
+
+// The SDK approve and lock functions (ethereum/lockbox.ts) check the pin
+// through this reader. Registering it here keeps the Aptos client out of the
+// @atomica/sdk/ethereum entry.
+setPinnedEthereumConfigReader(getPinnedEthereumConfig);

@@ -387,7 +387,6 @@ export async function setupDualChainTestnet(
             },
             { functionId: `${aptosModuleAddress}::fake_eth::initialize`, args: [] },
             { functionId: `${aptosModuleAddress}::fake_usd::initialize`, args: [] },
-            // SCOUT(#234) TEST: the pin that the client guard reads through eth_proof::get_config is written here; a fixture that leaves the client chain config at the zero addresses of source/.env.test, or runs with no Aptos chain, will be refused.
             // Pin the LockBox, the token behind each asset (issue 171) and
             // the SIWE domain of receipt owners (issue 197).
             {
