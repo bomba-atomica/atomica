@@ -401,7 +401,6 @@ A lock proof is checked on Aptos against trusted inputs only (issues 171, 196,
   wrong amount or binding does not verify, and it accepts only
   `deadline == auction::eth_lock_deadline(window_id)`.
 
-<!-- SCOUT(#232) DOC: getDerivedAddress lowercases the Ethereum address itself, so every spelling derives one account. -->
 <!-- SCOUT(#233) DOC: add that a bidder FakeUSD lock registers the same way with the FakeUSD asset type, and that its receipt id is the LockBox lock id. -->
 
 Any account may send `register_ethereum_lock`. The proof names the
@@ -409,8 +408,10 @@ depositor. The receipt stores that Ethereum address as `eth_owner`, and its
 owner (`user`) is the depositor's Ethereum-derivable Aptos account:
 `eth_proof::ethereum_account_address` derives it on chain from the address and
 the pinned SIWE domain, as `0x1::ethereum_derivable_account` and the SDK's
-`getDerivedAddress` do. Only that account can claim the receipt into an
-auction (`create_auction`, `submit_bid`). The `@atomica` account has no
+`getDerivedAddress` do. `getDerivedAddress` lowercases the Ethereum address
+before it derives, so every spelling of one address derives one account. Only
+that account can claim the receipt into an auction (`create_auction`,
+`submit_bid`). The `@atomica` account has no
 header, registration or claim privilege.
 
 A client waits until the validators certify a block that covers its lock
