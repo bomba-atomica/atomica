@@ -244,6 +244,10 @@ describe.sequential("09: Submit Bid on Auction", () => {
     fireEvent.change(screen.getByTestId(auctionBidder.windowIdInput), {
       target: { value: MISSING_WINDOW_ID.toString() },
     });
+    // The bid step needs a lock id; sealBid aborts on the missing window first.
+    fireEvent.change(screen.getByTestId(auctionBidder.collateralLockIdInput), {
+      target: { value: firstCollateral },
+    });
     // SCOUT(#217) EDIT: this types the price into the bidder screen.
     fireEvent.change(screen.getByTestId(auctionBidder.bidAmountInput), {
       target: { value: BID_PRICE.toString() },
