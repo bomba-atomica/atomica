@@ -136,6 +136,8 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
     }
 
     function test_realClientRejectsGoldenBelowQuorumOutcome() public {
+        // Near the golden LedgerInfo times, so the client is fresh on any clock.
+        vm.warp(1_700_000_200);
         AptosLightClient client = new AptosLightClient(
             _hex(".genesis.ledger_info_with_signatures"),
             uint64(vm.parseJsonUint(vectors, ".genesis.waypoint_version")),

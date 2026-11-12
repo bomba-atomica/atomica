@@ -24,6 +24,12 @@ contract AptosLightClientTest is AptosVectors, AptosTestChain {
 
     bytes internal auctionOutcomeTag = structTag(bytes32(uint256(0xcafe)), "auction", "AuctionOutcome");
 
+    /// Pin the clock near the golden LedgerInfo times. The CI e2e job runs this suite against a
+    /// live anvil (--rpc-url), whose clock would otherwise make every golden client stale.
+    function setUp() public {
+        vm.warp(1_700_000_000);
+    }
+
     // ---------------------------------------------------------------- constructor
 
     function test_constructorAcceptsGoldenGenesis() public {
@@ -220,6 +226,7 @@ contract AptosLightClientTest is AptosVectors, AptosTestChain {
         f.round = 10;
         f.executedStateId = keccak256("epoch 1 end");
         f.version = 20;
+        f.timestampUsecs = 1_700_000_050_000_000;
         f.nextEpochState = set2.epochState;
         client.advanceEpoch(signLedgerInfo(set1, firstSigners(4, 3), f));
         assertEq(client.latestEpoch(), 2);
