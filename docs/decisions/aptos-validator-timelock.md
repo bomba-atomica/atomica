@@ -303,11 +303,9 @@ struct DecryptionShare {
 
 **Attack:** Prevent decryption shares from being published
 
-<!-- SCOUT(#230) DOC: "Economically penalized (reduced rewards)" is not built; this issue only keeps and emits the list of validators that did submit, so abstainers can be named. -->
-
 **Defense:**
 - t-1 validators can withhold, but t-th validator publication suffices
-- Economically penalized (reduced rewards)
+- No penalty for abstaining is built. The chain keeps the list of validators whose shares were accepted (`ibe_config::get_submitters`, and `TimelockExpiredEvent.submitters` on expiry), so anyone can compare it with the epoch validator set to name the validators that did not submit.
 - If <t validators online, Atomica consensus also halted
 
 **Property:** Griefing auction ≈ halting Atomica (both require >1/3 Byzantine validators)
