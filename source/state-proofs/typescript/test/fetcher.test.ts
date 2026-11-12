@@ -6,10 +6,10 @@ import {
     getRpcUrl,
     getTestAccounts,
     waitForBlocks,
+    testChain,
 } from "./helpers/testnet";
 import { createWalletClient, http, parseEther, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { mainnet } from "viem/chains";
 
 describe("Proof Fetching", () => {
     let testRpcUrl: string;
@@ -27,7 +27,7 @@ describe("Proof Fetching", () => {
         if (privateKey) {
             // Send a transaction to verify fetchTransaction logic later
             const walletClient = createWalletClient({
-                chain: mainnet,
+                chain: testChain,
                 transport: http(testRpcUrl),
             });
             const account = privateKeyToAccount(privateKey as Hex);
@@ -35,7 +35,7 @@ describe("Proof Fetching", () => {
                 account,
                 to: accounts[1].address as Hex,
                 value: parseEther("0.1"),
-                chain: mainnet,
+                chain: testChain,
             });
             // Wait for it to be mined
             await waitForBlocks(1);

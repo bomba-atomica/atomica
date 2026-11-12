@@ -6,10 +6,26 @@
  */
 
 import type { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
+import { defineChain, type Chain } from "viem";
+import { mainnet } from "viem/chains";
 import {
     ETHEREUM_DEPLOYER_ADDRESS,
     ETHEREUM_DEPLOYER_PRIVATE_KEY,
 } from "../../../../shared/test-constants";
+
+/**
+ * Chain id of the local testnet on both backends (anvil and Docker PoS).
+ * viem checks a wallet's chain against the node before it sends a
+ * transaction, so tests must not sign with `mainnet` (id 1).
+ */
+export const TESTNET_CHAIN_ID = 32382;
+
+/** viem chain for the local testnet: mainnet rules with the testnet's chain id. */
+export const testChain: Chain = defineChain({
+    ...mainnet,
+    id: TESTNET_CHAIN_ID,
+    name: "Atomica local testnet",
+});
 
 let testnet: EthereumDockerTestnet | undefined;
 

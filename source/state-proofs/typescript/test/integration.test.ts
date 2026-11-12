@@ -3,7 +3,13 @@ import { fetchProof, fetchBlock, fetchBlockTransactions, fetchBlockReceipts } fr
 import { verifyAccountProof, verifyStorageProof } from "../src/verifier";
 import { verifyTransactionProof as verifyTxProof } from "../src/transaction";
 import { verifyReceiptProof as verifyRcptProof } from "../src/receipt";
-import { startTestnet, stopTestnet, getRpcUrl, getTestAccounts } from "./helpers/testnet";
+import {
+    startTestnet,
+    stopTestnet,
+    getRpcUrl,
+    getTestAccounts,
+    testChain,
+} from "./helpers/testnet";
 import {
     createWalletClient,
     createPublicClient,
@@ -14,7 +20,6 @@ import {
     pad,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { mainnet } from "viem/chains";
 
 describe("End-to-End Verification", () => {
     let rpcUrl: string;
@@ -77,12 +82,12 @@ describe("End-to-End Verification", () => {
 
         // 2. Setup wallet client to send transaction
         const walletClient = createWalletClient({
-            chain: mainnet,
+            chain: testChain,
             transport: http(rpcUrl),
         });
 
         const publicClient = createPublicClient({
-            chain: mainnet,
+            chain: testChain,
             transport: http(rpcUrl),
         });
 
@@ -97,7 +102,7 @@ describe("End-to-End Verification", () => {
             account: senderAccount,
             to: recipientAddress,
             value: parseEther("1"),
-            chain: mainnet,
+            chain: testChain,
         });
 
         console.log("Transaction sent:", hash);
@@ -253,12 +258,12 @@ describe("Transaction & Receipt Verification", () => {
 
         // 2. Setup wallet client to send transaction
         const walletClient = createWalletClient({
-            chain: mainnet,
+            chain: testChain,
             transport: http(rpcUrl),
         });
 
         const publicClient = createPublicClient({
-            chain: mainnet,
+            chain: testChain,
             transport: http(rpcUrl),
         });
 
@@ -270,7 +275,7 @@ describe("Transaction & Receipt Verification", () => {
             account: senderAccount,
             to: recipientAddress,
             value: parseEther("1"),
-            chain: mainnet,
+            chain: testChain,
         });
 
         console.log("Transaction sent:", hash);
@@ -371,12 +376,12 @@ describe("Storage Proof End-to-End", () => {
 
     test("should verify storage proof for contract", async () => {
         const client = createWalletClient({
-            chain: mainnet,
+            chain: testChain,
             transport: http(rpcUrl),
         });
 
         const publicClient = createPublicClient({
-            chain: mainnet,
+            chain: testChain,
             transport: http(rpcUrl),
         });
 
@@ -407,7 +412,7 @@ describe("Storage Proof End-to-End", () => {
             abi: [],
             bytecode: bytecode as Hex,
             account,
-            chain: mainnet,
+            chain: testChain,
         });
 
         const receipt = await waitForReceipt(deployHash);
@@ -423,7 +428,7 @@ describe("Storage Proof End-to-End", () => {
             account,
             to: contractAddress,
             data: callData,
-            chain: mainnet,
+            chain: testChain,
         });
 
         const setReceipt = await waitForReceipt(setHash);
