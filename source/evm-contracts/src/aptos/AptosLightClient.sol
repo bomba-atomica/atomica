@@ -6,7 +6,7 @@ import {AptosTypes} from "./AptosTypes.sol";
 import {AptosHash} from "./AptosHash.sol";
 import {Bls12381} from "./Bls12381.sol";
 import {Bcs} from "./Bcs.sol";
-import {Sha3_256} from "./Sha3_256.sol";
+import {AptosWaypoint} from "./AptosWaypoint.sol";
 
 /**
  * @title AptosLightClient
@@ -17,7 +17,17 @@ import {Sha3_256} from "./Sha3_256.sol";
  *
  *      Rotation: `advanceEpoch` stores keccak256(BCS(next_epoch_state)) for epoch + 1 from an
  *      epoch-ending LedgerInfo signed by a quorum of the latest known epoch. There is no owner,
- *      pause, proxy or expiry.
+ *      pause or proxy.
+ *
+ *      Stale limit: the client stores the LedgerInfo `timestamp_usecs` (in seconds) of the epoch
+ *      change that made the latest epoch known. Once `block.timestamp` passes that time plus the
+ *      immutable `maxEpochAge`, both `advanceEpoch` and `verifyEvent` revert `StaleLightClient`
+ *      for good. `maxEpochAge` is shorter than the Aptos stake lockup, so a validator set that
+ *      has unbonded can never sign an epoch-change chain this client accepts. A dead client
+ *      records no outcome, so every LockBox lock goes home by `reclaim` after its deadline.
+ *      Carriers keep the client fresh by calling `advanceEpoch` at each epoch change.
+ *      Aptos genesis LedgerInfos carry timestamp 0, so the constructor anchors the genesis epoch
+ *      at `block.timestamp`: the genesis waypoint pinned at deploy is the trust root.
  *
  *      Freshness: verifyEvent accepts only a LedgerInfo signed by the latest known epoch's set.
  *      A retired set is no longer bonded, so its quorum could sign a fake outcome at no cost.
@@ -37,30 +47,39 @@ contract AptosLightClient is IAptosLightClient {
     mapping(uint64 => bytes32) public epochStateHash;
     /// @inheritdoc IAptosLightClient
     uint64 public latestEpoch;
+    /// @inheritdoc IAptosLightClient
+    uint64 public latestEpochTimestamp;
+    /// @inheritdoc IAptosLightClient
+    uint64 public immutable maxEpochAge;
 
     /**
      * @param genesisLedgerInfoWithSignatures BCS of the genesis epoch-ending LedgerInfoWithSignatures.
      * @param waypointVersion The genesis waypoint version.
      * @param waypointHash The genesis waypoint hash.
+     * @param _maxEpochAge Seconds after the latest epoch change at which the client goes stale.
+     *        Must be shorter than the Aptos validator stake lockup.
      */
-    constructor(bytes memory genesisLedgerInfoWithSignatures, uint64 waypointVersion, bytes32 waypointHash) {
+    constructor(
+        bytes memory genesisLedgerInfoWithSignatures,
+        uint64 waypointVersion,
+        bytes32 waypointHash,
+        uint64 _maxEpochAge
+    ) {
+        if (_maxEpochAge == 0) revert ZeroMaxEpochAge();
+        maxEpochAge = _maxEpochAge;
         bytes memory b = genesisLedgerInfoWithSignatures;
         AptosTypes.LedgerInfo memory li = AptosTypes.parseLedgerInfoWithSignatures(b);
         if (!li.hasNextEpochState) revert NotEpochEnding();
-        // Ledger2WaypointConverter BCS = epoch || executed_state_id || version || timestamp_usecs
-        // || Some(next_epoch_state). In the LedgerInfo these are bytes [1, 9) and
-        // [49, end of next_epoch_state), with round and id between them.
-        uint256 tail = AptosTypes.EXECUTED_STATE_ID_OFFSET;
-        uint256 end = li.nextEpochStateStart + li.nextEpochStateLen;
-        bytes memory converter = abi.encodePacked(
-            AptosHash.WAYPOINT_SEED, Bcs.slice(b, AptosTypes.EPOCH_OFFSET, 8), Bcs.slice(b, tail, end - tail)
-        );
-        if (li.version != waypointVersion || Sha3_256.hash(converter) != waypointHash) revert WaypointMismatch();
+        (uint64 version, bytes32 hash) = AptosWaypoint.compute(b, li);
+        if (version != waypointVersion || hash != waypointHash) revert WaypointMismatch();
         _storeNextEpoch(b, li);
+        // Aptos genesis carries timestamp 0: anchor the genesis epoch at deploy time.
+        if (li.timestampUsecs == 0) latestEpochTimestamp = uint64(block.timestamp);
     }
 
     /// @inheritdoc IAptosLightClient
     function advanceEpoch(SignedLedgerInfo calldata ledgerInfo) external {
+        _requireFresh();
         bytes memory b = ledgerInfo.ledgerInfoWithSignatures;
         AptosTypes.LedgerInfo memory li = AptosTypes.parseLedgerInfoWithSignatures(b);
         if (li.epoch < latestEpoch) revert EpochAlreadyAdvanced(li.epoch);
@@ -76,6 +95,7 @@ contract AptosLightClient is IAptosLightClient {
         view
         returns (uint64 version, bytes memory eventData)
     {
+        _requireFresh();
         bytes memory b = proof.ledgerInfo.ledgerInfoWithSignatures;
         AptosTypes.LedgerInfo memory li = AptosTypes.parseLedgerInfoWithSignatures(b);
         if (li.epoch > latestEpoch) revert UnknownEpoch(li.epoch);
@@ -105,6 +125,14 @@ contract AptosLightClient is IAptosLightClient {
             AptosTypes.accumulatorSiblings(proof.eventAccumulatorProof)
         );
         eventData = AptosTypes.eventData(evt, typeTag);
+    }
+
+    /// @dev Reverts `StaleLightClient` once `maxEpochAge` has passed since the latest epoch change.
+    function _requireFresh() private view {
+        uint64 at = latestEpochTimestamp;
+        if (block.timestamp > uint256(at) + maxEpochAge) {
+            revert StaleLightClient(latestEpoch, block.timestamp - at);
+        }
     }
 
     /// @dev Steps 1 to 5 of the contract comment. Reverts unless a quorum of the LedgerInfo's
@@ -157,13 +185,14 @@ contract AptosLightClient is IAptosLightClient {
         );
     }
 
-    /// @dev Stores the hash of `next_epoch_state` for epoch + 1.
+    /// @dev Stores the hash of `next_epoch_state` for epoch + 1 and the LedgerInfo time in seconds.
     function _storeNextEpoch(bytes memory b, AptosTypes.LedgerInfo memory li) private {
         uint64 next = AptosTypes.epochStateEpoch(b, li.nextEpochStateStart);
         if (next != li.epoch + 1) revert BadNextEpoch(li.epoch, next);
         bytes32 h = Bcs.keccakRange(b, li.nextEpochStateStart, li.nextEpochStateLen);
         epochStateHash[next] = h;
         latestEpoch = next;
+        latestEpochTimestamp = uint64(li.timestampUsecs / 1_000_000);
         emit EpochAdvanced(next, h);
     }
 }

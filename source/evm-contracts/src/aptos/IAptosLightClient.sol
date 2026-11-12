@@ -5,7 +5,8 @@ pragma solidity ^0.8.20;
  * @title IAptosLightClient
  * @notice Proves to Ethereum that an Aptos event is final. Trusts only the genesis waypoint and
  *         the 2/3 voting-power quorum of each Aptos epoch's validator set. No admin, relayer or
- *         upgrade key: anyone may advance epochs and anyone may verify an event.
+ *         upgrade key: anyone may advance epochs and anyone may verify an event. The client goes
+ *         stale for good `maxEpochAge` seconds after its latest epoch change (StaleLightClient).
  * @dev Byte fields are the hex BCS that an Atomica node serves at
  *      `/v1/atomica/event_proof/{version}/{event_index}` and `/v1/atomica/epoch_change_proof`.
  *      Keys and the signature also come uncompressed, because the EVM cannot decompress points.
@@ -65,9 +66,20 @@ interface IAptosLightClient {
     error MissingSignature();
     /// @notice The transaction version is above the LedgerInfo's version.
     error VersionAfterLedgerInfo(uint64 version, uint64 ledgerVersion);
+    /// @notice `maxEpochAge` seconds have passed since the latest epoch change (`age` seconds ago).
+    ///         The client is dead for good: no epoch advances and no event verifies.
+    error StaleLightClient(uint64 latestEpoch, uint256 age);
+    /// @notice The constructor got a `maxEpochAge` of zero.
+    error ZeroMaxEpochAge();
 
     /// @notice The last epoch whose validator set is known.
     function latestEpoch() external view returns (uint64);
+
+    /// @notice Unix seconds of the LedgerInfo that made `latestEpoch` known (deploy time for genesis).
+    function latestEpochTimestamp() external view returns (uint64);
+
+    /// @notice Seconds after `latestEpochTimestamp` at which the client goes stale for good.
+    function maxEpochAge() external view returns (uint64);
 
     /// @notice keccak256 of the BCS EpochState for `epoch`, or zero if unknown.
     function epochStateHash(uint64 epoch) external view returns (bytes32);
@@ -75,12 +87,14 @@ interface IAptosLightClient {
     /**
      * @notice Stores the next validator set from an epoch-ending LedgerInfo signed by a quorum
      *         of the latest known epoch. Permissionless. Epochs advance one at a time.
+     *         Reverts `StaleLightClient` once the client is stale.
      */
     function advanceEpoch(SignedLedgerInfo calldata ledgerInfo) external;
 
     /**
      * @notice Checks that an event of type `typeTag` is final on Aptos and returns it.
-     * @dev The LedgerInfo must be signed in the latest known epoch (see StaleEpoch).
+     * @dev The LedgerInfo must be signed in the latest known epoch (see StaleEpoch). Reverts
+     *      `StaleLightClient` once the client is stale.
      * @param typeTag BCS of the expected `TypeTag`.
      * @return version Ledger version of the transaction that emitted the event.
      * @return eventData BCS of the event payload.

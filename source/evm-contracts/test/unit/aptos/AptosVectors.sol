@@ -5,6 +5,9 @@ import {Test} from "forge-std/Test.sol";
 
 /// @notice Reads the Aptos outcome proof golden vectors copied from atomica-aptos.
 abstract contract AptosVectors is Test {
+    /// Light client stale limit used by the tests: half of the Docker testnet stake lockup (24 h).
+    uint64 internal constant MAX_EPOCH_AGE = 12 hours;
+
     string internal vectors =
         vm.readFile(string.concat(vm.projectRoot(), "/test/fixtures/aptos/aptos_outcome_proof_vectors.json"));
 

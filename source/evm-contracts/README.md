@@ -1,107 +1,44 @@
 # evm-contracts
 
-Status: `live` (core escrow and tokens live; `Settlement.sol` and `BLSVerifier.sol` scaffold — not wired to a relayer)
+Status: `live` (proof-gated LockBox, Aptos light client and test tokens)
 
 ## Overview
 
-Ethereum smart contracts for Atomica's cross-chain atomic deposit system.
+Ethereum contracts for Atomica auctions. Funds sit in LockBox until a proven Aptos outcome pays
+them out, or until their deadline sends them home. There is no relayer, admin or upgrade key
+(`docs/decisions/trustless-v0-1-unwinding.md`).
 
-## Design Principle: Fail-Only
-
-**Simple and obvious:**
-
-1. `scuttle = true` by default
-2. `scuttle = false` requires all checks to pass
-3. Miss any deadline → `scuttle = true` (automatic)
-4. No recovery, no save attempts
-
-```
-┌────────────────────────────────────────────────────────────┐
-│                                                            │
-│  NEW AUCTION:  scuttle = true  (DEFAULT - WILL FAIL)      │
-│                                                            │
-│                      │                                    │
-│                      ▼                                    │
-│         ┌────────────────────────┐                        │
-│         │  ALL CHECKS PASS?      │                        │
-│         │  - BLS verified        │                        │
-│         │  - State proof valid   │                        │
-│         │  - Merkle proof valid  │                        │
-│         │  - Deadlines met       │                        │
-│         └──────────┬─────────────┘                        │
-│                    │                                      │
-│           YES ─────┴───── NO                              │
-│            │               │                              │
-│            ▼               ▼                              │
-│     scuttle = false   scuttle = true                      │
-│     SUCCESS           REFUND ALL                          │
-│                                                            │
-└────────────────────────────────────────────────────────────┘
-```
-
-## Contract Architecture
-
-### Core Contracts
+## Contracts
 
 | Contract | Purpose |
 |----------|---------|
-| `AuctionManager` | Fail-only auction management (scuttle=true default) |
-| `DepositBox` | ETH/USDC deposits with commitment tracking |
-| `BLSVerifier` | EIP-2537 BLS verification for state proofs |
-| `Settlement` | Trade execution from verified proofs |
-| `Governance` | Emergency fail-safe (genesis/brick) |
-| `IncrementalMerkleTree` | Merkle tree for commitments |
+| `src/escrow/LockBox.sol` | Escrow. `lock`, then `releaseByOutcome` (a proven Aptos `AuctionOutcome`) or `reclaim` after the deadline. Anyone may call either. |
+| `src/escrow/OutcomeTree.sol` | The Merkle tree an `AuctionOutcome` commits to |
+| `src/aptos/AptosLightClient.sol` | Verifies Aptos events against the validator quorum, from the genesis waypoint. Goes stale for good `maxEpochAge` seconds after its latest epoch change. |
+| `src/tokens/FakeETH.sol`, `src/tokens/FakeUSD.sol` | Test tokens |
 
-### Trust Model
+## Deploy
 
-**v0.1 Beta (Current)**
-- Validators receive bids ✓
-- Validators provide timelock decryption key ✓
-- Validators decrypt bids ✓
-- **Validators calculate clearing price → Single verification (trusted)**
+1. `script/DeployAptosLightClient.s.sol` with `EXPECTED_GENESIS_WAYPOINT` (the genesis waypoint you
+   trust) and optionally `MAX_EPOCH_AGE` (default half the Aptos stake lockup).
+2. `script/DeployLockBox.s.sol` with `LIGHT_CLIENT` from step 1. A new light client needs a new
+   LockBox, because LockBox takes the client address in its constructor.
 
-**v1.0 & v2.0 (Future)**
-- Validators calculate clearing price and transfers
-- ZK circuit independently calculates the same
-- **Double verification - results must match**
-
-## Quick Start
+## Build and test
 
 ```bash
 forge install
-npm install
-```
-
-### Build
-
-```bash
 forge build
-```
-
-### Test
-
-```bash
 forge test
 ```
 
-### Gas Report
+The EVM Contract Tests (forge) CI job runs the light client and LockBox suites.
 
-```bash
-forge test --gas-report
-```
+## Notes
 
-## Important Notes
-
-- Contracts are NOT upgradeable (no proxy patterns)
-- BLSVerifier uses EIP-2537 precompiles (0x09 for G1 multiexponent, 0x0c for pairing)
-- BLSVerifier has NO knowledge of governance
-- Governance is ORTHOGONAL to core contracts
-- Only `genesis()` and `brick()` functions exist in Governance
+- Contracts are not upgradeable (no proxy patterns).
+- The light client uses the EIP-2537 BLS12-381 precompiles (Prague).
 
 ## Security
 
-This is research/development code. Before production:
-- Complete security audit
-- Formal verification of circuits
-- Multi-party trusted setup
-- Bug bounty program
+This is research and development code. It needs an audit before production.

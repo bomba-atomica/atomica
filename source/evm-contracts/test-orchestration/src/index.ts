@@ -3,8 +3,8 @@
  *
  * Orchestrates testing of EVM contracts using the Docker testnet:
  * 1. Starts/stops the Docker testnet
- * 2. Deploys contracts to the testnet
- * 3. Runs Foundry tests (unit, integration, e2e)
+ * 2. Deploys the tokens and LockBox (script/DeployLockBox.s.sol) to the testnet
+ * 3. Runs Foundry tests (unit, integration)
  * 4. Collects and reports results
  *
  * Success Criteria:
@@ -12,8 +12,7 @@
  *   2. All contracts deploy without reverts
  *   3. Unit tests pass (pure Solidity logic tests)
  *   4. Integration tests pass (multi-contract flows)
- *   5. E2E tests pass (deployment verification)
- *   6. Results saved to test-results/
+ *   5. Results saved to test-results/
  *
  * Exit Codes:
  *   0 - All tests passed
@@ -23,8 +22,6 @@
  *   bun run src/index.ts                    # Run all tests
  *   bun run src/index.ts --test unit        # Unit tests only
  *   bun run src/index.ts --test integration # Integration tests
- *   bun run src/index.ts --test e2e         # E2E tests
- *   bun run src/index.ts --test smoke       # Smoke tests
  *   bun run src/index.ts --deploy-only      # Only deploy contracts
  *   bun run src/index.ts --keep-alive       # Don't tear down testnet
  */
@@ -54,6 +51,10 @@ interface Config {
 const CONTRACTS_DIR = pathResolve(import.meta.dir, "../..");
 const OUTPUT_DIR = pathResolve(import.meta.dir, "../test-results");
 const FOUNDRY_PROFILE = "test";
+/** Stand-in light client: this testnet has no Aptos light client on Ethereum. */
+const STAND_IN_LIGHT_CLIENT = "0x000000000000000000000000000000000000dEaD";
+/** Stand-in Aptos package address for the LockBox outcome type tag. */
+const STAND_IN_ATOMICA_ADDRESS = "0x" + "00".repeat(31) + "01";
 
 /**
  * Main orchestrator class
@@ -89,7 +90,6 @@ export class TestOrchestrator {
         console.log("  [2] All contracts deploy without reverts");
         console.log("  [3] Unit tests pass");
         console.log("  [4] Integration tests pass");
-        console.log("  [5] E2E deployment verification passes");
         console.log("");
 
         let success = true;
@@ -111,10 +111,6 @@ export class TestOrchestrator {
             // Step 4: Integration tests
             step = 4;
             await this.runIntegrationTests();
-
-            // Step 5: E2E tests
-            step = 5;
-            await this.runE2ETests();
 
             this.printSummary();
             await this.saveResults();
@@ -164,7 +160,10 @@ export class TestOrchestrator {
     }
 
     /**
-     * Deploy contracts to the testnet
+     * Deploy FakeETH, FakeUSD and LockBox with script/DeployLockBox.s.sol.
+     *
+     * This testnet has no Aptos light client, so LockBox gets a stand-in client address:
+     * outcome recording reverts and every lock goes home by reclaim.
      */
     async deployContracts(): Promise<void> {
         console.log("\n🚀 Deploying contracts...");
@@ -175,13 +174,21 @@ export class TestOrchestrator {
         const env = {
             ...process.env,
             ETH_RPC_URL: rpcUrl,
-            ETH_PRIVATE_KEY: ETHEREUM_DEPLOYER_PRIVATE_KEY,
+            PRIVATE_KEY: ETHEREUM_DEPLOYER_PRIVATE_KEY,
+            LIGHT_CLIENT: STAND_IN_LIGHT_CLIENT,
+            ATOMICA_ADDRESS: STAND_IN_ATOMICA_ADDRESS,
             FOUNDRY_PROFILE,
         };
 
         await this.runCommand(
             "forge",
-            ["script", "src/script/Deploy.s.sol:Deploy", "--rpc-url", rpcUrl, "--broadcast"],
+            [
+                "script",
+                "script/DeployLockBox.s.sol:DeployLockBox",
+                "--rpc-url",
+                rpcUrl,
+                "--broadcast",
+            ],
             {
                 cwd: this.config.contractsDir,
                 env,
@@ -233,58 +240,6 @@ export class TestOrchestrator {
         const result = await this.runCommand(
             "forge",
             ["test", "--match-path", "test/integration/*.sol", "--rpc-url", rpcUrl, "--summary"],
-            {
-                cwd: this.config.contractsDir,
-                env,
-            },
-        );
-
-        console.log(result);
-    }
-
-    /**
-     * Run E2E tests (full Docker stack tests)
-     */
-    async runE2ETests(): Promise<void> {
-        console.log("\n🌐 Running E2E tests...");
-
-        const rpcUrl = this.testnet!.getExecutionRpcUrl();
-        const env = { ...process.env, ETH_RPC_URL: rpcUrl };
-
-        // Run tests and tolerate skipped tests (exit code can be 0 or 1 with --summary)
-        const result = await this.runCommand(
-            "forge",
-            ["test", "--match-path", "test/e2e/*.sol", "--rpc-url", rpcUrl],
-            {
-                cwd: this.config.contractsDir,
-                env,
-            },
-        );
-
-        console.log(result);
-    }
-
-    /**
-     * Run smoke tests (quick sanity check)
-     */
-    async runSmokeTests(): Promise<void> {
-        console.log("\n💨 Running smoke tests...");
-
-        const rpcUrl = this.testnet!.getExecutionRpcUrl();
-        const env = { ...process.env, ETH_RPC_URL: rpcUrl };
-
-        // Quick test to verify deployment
-        const result = await this.runCommand(
-            "forge",
-            [
-                "test",
-                "--match-test",
-                "testDeposit|testWithdraw",
-                "--match-contract",
-                "DepositBoxTest",
-                "--rpc-url",
-                rpcUrl,
-            ],
             {
                 cwd: this.config.contractsDir,
                 env,
@@ -354,7 +309,7 @@ export class TestOrchestrator {
         const deployments: Record<string, string> = {};
         const deploymentsPath = pathResolve(
             this.config.contractsDir,
-            "broadcast/Deploy.s.sol/latest/run-latest.json",
+            "broadcast/DeployLockBox.s.sol/latest/run-latest.json",
         );
 
         if (existsSync(deploymentsPath)) {
@@ -436,7 +391,7 @@ export class TestOrchestrator {
 export async function getDeploymentInfo(_rpcUrl: string): Promise<Record<string, string>> {
     const deploymentsPath = pathResolve(
         CONTRACTS_DIR,
-        "broadcast/Deploy.s.sol/latest/run-latest.json",
+        "broadcast/DeployLockBox.s.sol/latest/run-latest.json",
     );
 
     if (!existsSync(deploymentsPath)) {
@@ -487,14 +442,6 @@ if (import.meta.main) {
                 case "integration":
                     await orchestrator.deployContracts();
                     await orchestrator.runIntegrationTests();
-                    break;
-                case "e2e":
-                    await orchestrator.deployContracts();
-                    await orchestrator.runE2ETests();
-                    break;
-                case "smoke":
-                    await orchestrator.deployContracts();
-                    await orchestrator.runSmokeTests();
                     break;
                 case "all":
                 default:

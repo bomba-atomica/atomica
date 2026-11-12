@@ -12,7 +12,10 @@ import {FakeUSD} from "../src/tokens/FakeUSD.sol";
 /**
  * @title DeployLockBox
  * @notice Deploys the fake tokens and the proof-gated LockBox.
- * @dev LockBox has no admin and no upgrade path, so each release ships at a new address.
+ * @dev LockBox has no admin and no upgrade path, so each release ships at a new address. It takes
+ *      the light client address in its constructor, so a new AptosLightClient (for example one
+ *      with the stale limit, `maxEpochAge`) always ships with a new LockBox. Point clients only at
+ *      the new LockBox; the old one takes no new locks and its open locks go home by `reclaim`.
  *      Usage:
  *        PRIVATE_KEY=<key> LIGHT_CLIENT=<AptosLightClient address> ATOMICA_ADDRESS=<0x… 32 bytes> \
  *        forge script script/DeployLockBox.s.sol:DeployLockBox \

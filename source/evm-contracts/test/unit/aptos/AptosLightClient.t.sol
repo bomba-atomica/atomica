@@ -38,7 +38,7 @@ contract AptosLightClientTest is AptosVectors, AptosTestChain {
         bytes memory genesisLi = _hex(".genesis.ledger_info_with_signatures");
         genesisLi[AptosTypes.EXECUTED_STATE_ID_OFFSET] ^= 0x01;
         vm.expectRevert(IAptosLightClient.WaypointMismatch.selector);
-        new AptosLightClient(genesisLi, 0, _b32(".genesis.waypoint_value"));
+        new AptosLightClient(genesisLi, 0, _b32(".genesis.waypoint_value"), MAX_EPOCH_AGE);
     }
 
     /// A one-byte change in the genesis validator set breaks the waypoint too.
@@ -46,13 +46,13 @@ contract AptosLightClientTest is AptosVectors, AptosTestChain {
         bytes memory genesisLi = _hex(".genesis.ledger_info_with_signatures");
         genesisLi[200] ^= 0x01;
         vm.expectRevert(IAptosLightClient.WaypointMismatch.selector);
-        new AptosLightClient(genesisLi, 0, _b32(".genesis.waypoint_value"));
+        new AptosLightClient(genesisLi, 0, _b32(".genesis.waypoint_value"), MAX_EPOCH_AGE);
     }
 
     function test_constructorRevertsOnWrongWaypointVersion() public {
         bytes memory genesisLi = _hex(".genesis.ledger_info_with_signatures");
         vm.expectRevert(IAptosLightClient.WaypointMismatch.selector);
-        new AptosLightClient(genesisLi, 1, _b32(".genesis.waypoint_value"));
+        new AptosLightClient(genesisLi, 1, _b32(".genesis.waypoint_value"), MAX_EPOCH_AGE);
     }
 
     // ---------------------------------------------------------------- advanceEpoch
@@ -237,6 +237,73 @@ contract AptosLightClientTest is AptosVectors, AptosTestChain {
         assertEq(data, bytes("outcome"));
     }
 
+    // ---------------------------------------------------------------- stale limit
+
+    function test_constructorRejectsZeroMaxEpochAge() public {
+        vm.expectRevert(IAptosLightClient.ZeroMaxEpochAge.selector);
+        new AptosLightClient(_hex(".genesis.ledger_info_with_signatures"), 0, _b32(".genesis.waypoint_value"), 0);
+    }
+
+    /// The genesis LedgerInfo has timestamp 0, so the client anchors at deploy time.
+    function test_genesisAnchorsAtDeployTime() public {
+        vm.warp(1_699_999_000);
+        AptosLightClient client = _genesisClient();
+        assertEq(client.latestEpochTimestamp(), 1_699_999_000);
+        assertEq(client.maxEpochAge(), MAX_EPOCH_AGE);
+    }
+
+    /// advanceEpoch stores the epoch-change LedgerInfo time (1_700_000_100 s).
+    function test_advanceEpochStoresLedgerInfoTimestamp() public {
+        vm.warp(1_700_000_000);
+        AptosLightClient client = _goldenClientAtEpoch2();
+        assertEq(client.latestEpochTimestamp(), 1_700_000_100);
+    }
+
+    function test_verifyEventWorksUpToMaxEpochAge() public {
+        vm.warp(1_700_000_000);
+        AptosLightClient client = _goldenClientAtEpoch2();
+        vm.warp(1_700_000_100 + MAX_EPOCH_AGE);
+        (uint64 version,) = client.verifyEvent(_goldenEventProof(), auctionOutcomeTag);
+        assertEq(version, 1337);
+    }
+
+    function test_verifyEventRevertsWhenStale() public {
+        vm.warp(1_700_000_000);
+        AptosLightClient client = _goldenClientAtEpoch2();
+        vm.warp(1_700_000_100 + MAX_EPOCH_AGE + 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAptosLightClient.StaleLightClient.selector, 2, uint256(MAX_EPOCH_AGE) + 1)
+        );
+        client.verifyEvent(_goldenEventProof(), auctionOutcomeTag);
+    }
+
+    function test_advanceEpochWorksUpToMaxEpochAge() public {
+        vm.warp(1_700_000_000);
+        AptosLightClient client = _genesisClient();
+        vm.warp(1_700_000_000 + MAX_EPOCH_AGE);
+        client.advanceEpoch(_goldenEpochChange());
+        assertEq(client.latestEpoch(), 2);
+    }
+
+    function test_advanceEpochRevertsWhenStale() public {
+        vm.warp(1_700_000_000);
+        AptosLightClient client = _genesisClient();
+        vm.warp(1_700_000_000 + MAX_EPOCH_AGE + 5);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAptosLightClient.StaleLightClient.selector, 1, uint256(MAX_EPOCH_AGE) + 5)
+        );
+        client.advanceEpoch(_goldenEpochChange());
+    }
+
+    /// A stale client stays dead: a later valid proof never revives it.
+    function test_staleClientStaysDead() public {
+        vm.warp(1_700_000_000);
+        AptosLightClient client = _goldenClientAtEpoch2();
+        vm.warp(1_700_000_100 + 30 days);
+        vm.expectRevert(abi.encodeWithSelector(IAptosLightClient.StaleLightClient.selector, 2, uint256(30 days)));
+        client.verifyEvent(_goldenEventProof(), auctionOutcomeTag);
+    }
+
     // ---------------------------------------------------------------- gas ceilings
 
     /// verifyEvent with a 4-validator set and a 2^20-leaf transaction accumulator.
@@ -284,7 +351,7 @@ contract AptosLightClientTest is AptosVectors, AptosTestChain {
         (bool ok, bytes memory ret) = target.call(callData);
         uint256 execution = before - gasleft();
         if (!ok) {
-            assembly {
+            assembly ("memory-safe") {
                 revert(add(ret, 0x20), mload(ret))
             }
         }
@@ -297,7 +364,8 @@ contract AptosLightClientTest is AptosVectors, AptosTestChain {
         return new AptosLightClient(
             _hex(".genesis.ledger_info_with_signatures"),
             uint64(vm.parseJsonUint(vectors, ".genesis.waypoint_version")),
-            _b32(".genesis.waypoint_value")
+            _b32(".genesis.waypoint_value"),
+            MAX_EPOCH_AGE
         );
     }
 
@@ -343,7 +411,7 @@ contract AptosLightClientTest is AptosVectors, AptosTestChain {
 
     function _syntheticClient(ValidatorSet memory first) internal returns (AptosLightClient) {
         (bytes memory liws, uint64 wpVersion, bytes32 wpHash) = genesis(first);
-        return new AptosLightClient(liws, wpVersion, wpHash);
+        return new AptosLightClient(liws, wpVersion, wpHash, MAX_EPOCH_AGE);
     }
 
     /// An AuctionOutcome event (index 1 of 3) in the transaction at `version`, under an epoch 1

@@ -69,7 +69,8 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
         AptosLightClient client = new AptosLightClient(
             _hex(".genesis.ledger_info_with_signatures"),
             uint64(vm.parseJsonUint(vectors, ".genesis.waypoint_version")),
-            _b32(".genesis.waypoint_value")
+            _b32(".genesis.waypoint_value"),
+            MAX_EPOCH_AGE
         );
         client.advanceEpoch(_goldenEpochChange());
         assertEq(
@@ -99,6 +100,9 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
         vm.warp(deadline - 1 days);
         LockBox.Lock memory l = _lock(lockBox, seller, address(fakeETH), 1 ether, windowId, pairHash, deadline);
 
+        // Carry the proof while the light client is fresh: within MAX_EPOCH_AGE of the golden
+        // epoch change (LedgerInfo time 1_700_000_100). The lock above needed a later clock.
+        vm.warp(1_700_000_200);
         bytes32 key = lockBox.auctionKey(windowId, pairHash, deadline);
         vm.expectEmit(address(lockBox));
         emit LockBox.OutcomeRecorded(
@@ -135,7 +139,8 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
         AptosLightClient client = new AptosLightClient(
             _hex(".genesis.ledger_info_with_signatures"),
             uint64(vm.parseJsonUint(vectors, ".genesis.waypoint_version")),
-            _b32(".genesis.waypoint_value")
+            _b32(".genesis.waypoint_value"),
+            MAX_EPOCH_AGE
         );
         client.advanceEpoch(_goldenEpochChange());
         LockBox lockBox = new LockBox(address(fakeETH), address(fakeUSD), client, tag);
@@ -154,16 +159,57 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
         assertEq(root, bytes32(0));
     }
 
+    // ---------------------------------------------------------------- outcome carrier vectors
+
+    /// The SDK outcome carrier's golden calldata (atomica-sdk/tests/fixtures/outcome_carrier_vectors.json)
+    /// equals Solidity's own encoding of the golden epoch change and event proof.
+    function test_outcomeCarrierVectorsMatchAbiEncoding() public view {
+        string memory c =
+            vm.readFile(string.concat(vm.projectRoot(), "/../atomica-sdk/tests/fixtures/outcome_carrier_vectors.json"));
+        IAptosLightClient.SignedLedgerInfo memory e = _goldenEpochChange();
+        IAptosLightClient.EventProof memory p = _goldenEventProof();
+
+        // The node-style inputs are the atomica-aptos golden vectors.
+        assertEq(
+            vm.parseJsonBytes(c, ".genesis_ledger_info_with_signatures"), _hex(".genesis.ledger_info_with_signatures")
+        );
+        assertEq(vm.parseJsonBytes(c, ".epoch_change_ledger_info_with_signatures"), e.ledgerInfoWithSignatures);
+        assertEq(
+            vm.parseJsonBytes(c, ".event_proof.ledger_info_with_signatures"), p.ledgerInfo.ledgerInfoWithSignatures
+        );
+        assertEq(vm.parseUint(vm.parseJsonString(c, ".event_proof.version")), p.version);
+        assertEq(vm.parseJsonBytes(c, ".event_proof.transaction_info"), p.transactionInfo);
+        assertEq(vm.parseJsonBytes(c, ".event_proof.transaction_accumulator_proof"), p.transactionAccumulatorProof);
+        assertEq(vm.parseUint(vm.parseJsonString(c, ".event_proof.event_index")), p.eventIndex);
+        assertEq(vm.parseJsonBytes(c, ".event_proof.event"), p.contractEvent);
+        assertEq(vm.parseJsonBytes(c, ".event_proof.event_accumulator_proof"), p.eventAccumulatorProof);
+
+        // The struct fields the carrier derives from them.
+        assertEq(vm.parseJsonBytes(c, ".advance_epoch_args.epochState"), e.epochState);
+        assertEq(vm.parseJsonBytes(c, ".advance_epoch_args.signerPublicKeys"), e.signerPublicKeys);
+        assertEq(vm.parseJsonBytes(c, ".advance_epoch_args.signature"), e.signature);
+        assertEq(vm.parseJsonBytes(c, ".record_outcome_args.ledgerInfo.epochState"), p.ledgerInfo.epochState);
+        assertEq(
+            vm.parseJsonBytes(c, ".record_outcome_args.ledgerInfo.signerPublicKeys"), p.ledgerInfo.signerPublicKeys
+        );
+        assertEq(vm.parseJsonBytes(c, ".record_outcome_args.ledgerInfo.signature"), p.ledgerInfo.signature);
+
+        // The calldata.
+        assertEq(vm.parseJsonBytes(c, ".advance_epoch_calldata"), abi.encodeCall(IAptosLightClient.advanceEpoch, (e)));
+        assertEq(vm.parseJsonBytes(c, ".record_outcome_calldata"), abi.encodeCall(LockBox.recordOutcome, (p)));
+    }
+
     // ---------------------------------------------------------------- signed synthetic outcome
 
     function test_releaseByOutcomePaysPerSignedRoot() public {
         ValidatorSet memory set1 = makeSet(1, 4, 1, 1);
         (bytes memory liws, uint64 wpVersion, bytes32 wpHash) = genesis(set1);
-        AptosLightClient client = new AptosLightClient(liws, wpVersion, wpHash);
+        // The client anchors its genesis epoch at deploy time, so deploy at the test's clock.
+        vm.warp(1_700_000_000);
+        AptosLightClient client = new AptosLightClient(liws, wpVersion, wpHash, MAX_EPOCH_AGE);
         LockBox lockBox = new LockBox(address(fakeETH), address(fakeUSD), client, tag);
         _approveAll(lockBox);
 
-        vm.warp(1_700_000_000);
         // SCOUT(#221) EDIT: window 7 is closed at the warped time; take `lockBox.currentWindowId()` and `lockBox.lockDeadline(windowId)`, and keep that deadline in the signed event.
         uint64 windowId = 7;
         bytes32 pairHash = keccak256("pair bcs");
