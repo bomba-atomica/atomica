@@ -8,7 +8,9 @@
  *      receipt status change, the window status does not
  *   2. A second bid on an already claimed collateral receipt aborts
  *   3. AuctionBidder on a window that does not exist shows E_AUCTION_NOT_FOUND
- *   4. A bid after the timelock deadline aborts and leaves its receipt active
+ *   4. A bidder approves, locks and registers FakeUSD through AuctionBidder,
+ *      then bids against the registered lock id
+ *   5. A bid after the timelock deadline aborts and leaves its receipt active
  *
  * Setup:
  *   - Dual-chain testnet started in beforeAll
@@ -84,9 +86,12 @@ const BID_PRICE = 2_000_000n;
 const BID_QUANTITY = ethers.parseEther("1");
 // SCOUT(#224) EDIT: use the launch pair.
 const PAIR_BCS = new TextEncoder().encode("09-submit-bid");
-// SCOUT(#243) EDIT: a 180 second deadline needs the test cap.
-/** Bids close 180 s after the window is created: tests 1-3 run before that. */
-const DEADLINE_AHEAD_US = 180_000_000n;
+// SCOUT(#243) EDIT: a 360 second deadline needs the test cap.
+/**
+ * Bids close 360 s after the window is created: tests 1-4 run before that.
+ * Test 4 waits for a certified Ethereum block before it registers its lock.
+ */
+const DEADLINE_AHEAD_US = 360_000_000n;
 const MISSING_WINDOW_ID = 999_999n;
 
 // ---------------------------------------------------------------------------
@@ -239,6 +244,10 @@ describe.sequential("09: Submit Bid on Auction", () => {
     fireEvent.change(screen.getByTestId(auctionBidder.windowIdInput), {
       target: { value: MISSING_WINDOW_ID.toString() },
     });
+    // The bid step needs a lock id; sealBid aborts on the missing window first.
+    fireEvent.change(screen.getByTestId(auctionBidder.collateralLockIdInput), {
+      target: { value: firstCollateral },
+    });
     // SCOUT(#217) EDIT: this types the price into the bidder screen.
     fireEvent.change(screen.getByTestId(auctionBidder.bidAmountInput), {
       target: { value: BID_PRICE.toString() },
@@ -259,7 +268,74 @@ describe.sequential("09: Submit Bid on Auction", () => {
     expect(await getBidCount(auction.windowId, PAIR_BCS)).toBe(1n);
   }, 90_000);
 
-  // ── Test 4: bids close at the timelock deadline ───────────────────────────
+  // ── Test 4: AuctionBidder locks, registers and bids ───────────────────────
+
+  it("a bidder approves, locks and registers FakeUSD through AuctionBidder, bids, get_bid_count rises by one and the receipt of that lock id reads claimed", async () => {
+    const countBefore = await getBidCount(auction.windowId, PAIR_BCS);
+
+    render(
+      <BidderProviders account={bidderAddress}>
+        <AuctionBidder />
+      </BidderProviders>,
+    );
+
+    // Step 1: the lock is bound to the pair the bid names.
+    fireEvent.change(screen.getByTestId(auctionBidder.pairBcsInput), {
+      target: { value: ethers.hexlify(PAIR_BCS) },
+    });
+    fireEvent.click(screen.getByTestId(auctionBidder.approveLockUsdButton));
+
+    // Approve, lock, certified block wait, proof and FakeUSD registration.
+    await waitFor(
+      () => {
+        const lockStatus = screen.queryByTestId(auctionBidder.lockStatus);
+        if (lockStatus?.textContent?.startsWith("Error")) {
+          throw new Error(lockStatus.textContent);
+        }
+        expect(screen.getByTestId(auctionBidder.submitBidStep)).toBeTruthy();
+      },
+      { timeout: 180_000, interval: 1_000 },
+    );
+
+    const lockId = (
+      screen.getByTestId(auctionBidder.collateralLockIdInput) as HTMLInputElement
+    ).value;
+    expect(lockId).toMatch(/^0x[0-9a-f]{64}$/i);
+    expect(
+      (screen.getByTestId(auctionBidder.windowIdInput) as HTMLInputElement).value,
+    ).toBe(auction.windowId.toString());
+    expect(
+      await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", lockId),
+    ).toBe(RECEIPT_ACTIVE);
+
+    // Step 2: bid against the registered lock.
+    // SCOUT(#217) EDIT: this types the price into the bidder screen.
+    fireEvent.change(screen.getByTestId(auctionBidder.bidAmountInput), {
+      target: { value: BID_PRICE.toString() },
+    });
+    fireEvent.change(screen.getByTestId(auctionBidder.bidQuantityInput), {
+      target: { value: BID_QUANTITY.toString() },
+    });
+    fireEvent.click(screen.getByTestId(auctionBidder.submitBidButton));
+
+    await waitFor(
+      () => {
+        const statusEl = screen.getByTestId(auctionBidder.bidStatus);
+        if (statusEl.textContent?.startsWith("Error")) {
+          throw new Error(statusEl.textContent);
+        }
+        expect(statusEl.textContent).toMatch(/Bid Submitted/);
+      },
+      { timeout: 60_000, interval: 1_000 },
+    );
+
+    expect(await getBidCount(auction.windowId, PAIR_BCS)).toBe(countBefore + 1n);
+    expect(
+      await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", lockId),
+    ).toBe(RECEIPT_CLAIMED);
+  }, 300_000);
+
+  // ── Test 5: bids close at the timelock deadline ───────────────────────────
 
   // SCOUT(#243) EDIT: this waits for auction.deadlineUs, which becomes the window close or the test cap.
   it("rejects a bid after the timelock deadline and leaves its receipt active", async () => {
@@ -284,11 +360,11 @@ describe.sequential("09: Submit Bid on Auction", () => {
       await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", lateCollateral),
     ).toBe(RECEIPT_ACTIVE);
     const state = await getAuctionState(aptosClient, moduleAddr, auction);
-    expect(state.bidCount).toBe(1n);
+    // The direct bid of test 1 and the screen bid of test 4.
+    expect(state.bidCount).toBe(2n);
     expect(state.settled).toBe(false);
   }, 900_000);
 
   it.todo("SCOUT(#216) submit_bid with quantity zero aborts with the new zero-quantity code");
   it.todo("SCOUT(#216) submit_bid with quantity above the window supply aborts with the new over-supply code");
-  it.todo("SCOUT(#233) a bidder approves, locks and registers FakeUSD through AuctionBidder, bids, get_bid_count rises by one and the receipt of that lock id reads claimed");
 });

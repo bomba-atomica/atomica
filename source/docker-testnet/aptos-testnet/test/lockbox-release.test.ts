@@ -92,7 +92,6 @@ async function submitAsDeployer(data: InputGenerateTransactionPayloadData): Prom
 }
 
 // SCOUT(#221) EDIT: register() below drops proof.deadline from the register_ethereum_lock arguments.
-// SCOUT(#233) EDIT: register() below hand-builds the register payload, a third copy of that ABI; it can call the SDK getRegisterLockPayload once it takes the asset.
 /**
  * Register the lock proven at the certified block `proof.blockNumber`. Aptos
  * derives the storage key, recomputes the commitment from the lock fields and

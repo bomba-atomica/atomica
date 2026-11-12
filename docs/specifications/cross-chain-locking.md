@@ -18,7 +18,6 @@ Implement the core cross-chain mechanism: users lock FAKETH/FAKEUSD on Ethereum,
 This planning spec predates the trust model below. Where they differ, this
 section and [v0 Architecture §3](../architecture/v0-architecture.md#3--cross-chain-settlement-v01-trustless-flow) win.
 
-<!-- SCOUT(#233) DOC: Registration bullet: add that a bidder registers its FakeUSD lock the same way, with the FakeUSD asset type, and that the receipt id is the LockBox lock id, never a transaction hash. -->
 <!-- SCOUT(#234) DOC: add a bullet: eth_proof pins the LockBox and token addresses, and the client reads that pin and refuses to approve or lock when its own addresses differ. -->
 
 - **State roots.** Aptos does not verify Ethereum header signatures itself,
@@ -32,7 +31,9 @@ section and [v0 Architecture §3](../architecture/v0-architecture.md#3--cross-ch
   then proves the lock at that block.
 - **Registration.** Any account may submit `register_ethereum_lock`. The
   proof names the depositor. The receipt stores that Ethereum address as
-  `eth_owner`.
+  `eth_owner`. A bidder registers its FakeUSD collateral lock the same way,
+  with the `FakeUSD` asset type. The receipt id, and the collateral lock id
+  of the bid, is the LockBox lock id, never a transaction hash.
 - **Ownership.** The receipt belongs to the depositor's Ethereum-derivable
   Aptos account, derived on chain from the address and the SIWE domain pinned
   in `eth_proof::initialize`. Only that account can claim the receipt into an

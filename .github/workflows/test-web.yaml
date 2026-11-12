@@ -619,7 +619,6 @@ jobs:
             test_files: >-
               tests/integration/07-create-auction.test.tsx
               tests/integration/08-auction-monitor.test.tsx
-          # SCOUT(#233) TEST: this chunk runs the new bidder-screen case in 09-submit-bid.
           # SCOUT(#216) TEST: this chunk runs 09-submit-bid and 10-settle against the bid validity rules; helper bids must carry valid quantity, price and collateral.
           # SCOUT(#217) TEST: this chunk runs 09 and 10 with whole-USD prices.
           # SCOUT(#228) TEST: this chunk runs open_bids in 09 and 10 against the live validators.

@@ -1,18 +1,27 @@
 import { useState } from "react";
 import { ethers } from "ethers";
-import { assertSiweDomain, sealBid, submitBid } from "@atomica/sdk/aptos";
+import {
+  aptos,
+  assertSiweDomain,
+  getRegisterLockPayload,
+  sealBid,
+  submitBid,
+} from "@atomica/sdk/aptos";
 import {
   approveFakeUsd,
   currentWindowId,
   lockBinding,
   lockFakeUsd,
+  lockFromReceipt,
+  type LockFields,
 } from "@atomica/sdk/ethereum";
-import { getDerivedAddress } from "@atomica/sdk";
+import { getChainConfig } from "@atomica/sdk/chain-config";
+import { getDerivedAddress, submitNativeTransaction } from "@atomica/sdk";
 import { useWallet } from "../context/WalletContext";
+import { proveLock } from "../hooks/proveLock";
 import { saveBidPrice } from "../storage/bidStorage";
 
 // SCOUT(#228) EDIT: this header describes the commitment and the price_le8 || salt32 plaintext; rewrite it for the 8-byte price and the five-argument submit_bid.
-// SCOUT(#233) EDIT: this header says the lock id is a placeholder typed by hand; rewrite it for the real proof and registration.
 // SCOUT(#238) EDIT: this header says the stored price feeds useFeeRebate; that hook is removed.
 /**
  * UI panel for submitting a sealed bid on an active auction (v0 Beta).
@@ -30,16 +39,16 @@ import { saveBidPrice } from "../storage/bidStorage";
  * Phase 3b adds a two-step flow that mirrors the seller's Step2Lock:
  *
  *   Step 1 — Lock FakeUSD:
- *     Bidder approves and locks FakeUSD collateral in the Ethereum LockBox.
- *     The resulting `collateral_lock_id` (entered manually in this scaffold)
- *     identifies the `LockReceipt<Ethereum, FakeUSD>` that will be consumed
- *     on the Aptos side by `auction::submit_bid`.
- *
- *     In the production flow the lock ID is derived from the `Locked`
- *     event on the lock transaction receipt and a state-proof is generated
- *     off-chain.  Full proof generation for FakeUSD is deferred to the same
- *     pipeline as FakeETH (already implemented for the seller path); here the
- *     lock ID field is pre-filled with a placeholder after a successful lock.
+ *     Bidder approves and locks FakeUSD collateral in the Ethereum LockBox,
+ *     bound to the current window and to the pair the bid will name. The
+ *     lock is read from the `Locked` event. The screen waits for a certified
+ *     Ethereum block, proves the lock ({@link proveLock}, shared with the
+ *     seller flow) and registers it on Aptos with
+ *     `getRegisterLockPayload(proof, "FakeUSD")`. That creates the
+ *     `LockReceipt<Ethereum, FakeUSD>` that `auction::submit_bid` consumes.
+ *     The collateral lock id is the LockBox lock id, never a transaction
+ *     hash. If the proof or the registration fails, the lock is kept, so a
+ *     retry registers it without a second approve or lock.
  *
  *   Step 2 — Submit Encrypted Bid:
  *     Calls `auction::submit_bid` via the SIWE-authenticated Aptos transaction
@@ -59,6 +68,20 @@ import { saveBidPrice } from "../storage/bidStorage";
 /** Bidder flow step — lock FakeUSD before submitting the sealed bid. */
 type BidStep = "lock-collateral" | "submit-bid";
 
+/** A FakeUSD lock made on Ethereum and not yet registered on Aptos. */
+interface UnregisteredLock {
+  lock: LockFields;
+  /** Ethereum block of the lock transaction */
+  block: number;
+}
+
+/** Bytes of a 0x hex field; an empty field is empty bytes. */
+function hexBytes(hex: string): Uint8Array {
+  return new Uint8Array(
+    (hex.replace(/^0x/, "").match(/.{1,2}/g) ?? []).map((b) => parseInt(b, 16)),
+  );
+}
+
 export function AuctionBidder() {
   const { account } = useWallet();
 
@@ -69,13 +92,17 @@ export function AuctionBidder() {
   const [collateralAmount, setCollateralAmount] = useState("500");
   const [lockLoading, setLockLoading] = useState(false);
   const [lockStatus, setLockStatus] = useState<string | null>(null);
+  // Kept after a failed proof or registration, so a retry does not lock again.
+  const [unregistered, setUnregistered] = useState<UnregisteredLock | null>(
+    null,
+  );
 
   // ── Step 2: Submit encrypted bid ──────────────────────────────────────────
   const [windowId, setWindowId] = useState("0");
   // SCOUT(#216) EDIT: quantity zero and quantity above the window supply now abort submit_bid; this field takes wei, defaults to 1 and has no check.
   const [quantity, setQuantity] = useState("1");
   // SCOUT(#224) EDIT: default to the SDK launch pair constant instead of empty bytes.
-  // SCOUT(#233) EDIT: the pair input moves to the lock step, and the same bytes feed lockBinding, sealBid and submitBid.
+  // Set on the lock step: the same bytes feed lockBinding, sealBid and submitBid.
   const [pairBcsHex, setPairBcsHex] = useState("");
   const [collateralLockIdHex, setCollateralLockIdHex] = useState("");
   // SCOUT(#217) EDIT: price input state; the text goes through the SDK parsePrice (whole USD per whole base token).
@@ -83,8 +110,7 @@ export function AuctionBidder() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
-  // ── Step 1 handler: approve + lock FakeUSD ────────────────────────────────
-  // SCOUT(#233) EDIT: after the lock, read the Locked event (lockFromReceipt), wait for a certified block, build the FakeUSD proof, register it (getRegisterLockPayload with asset FakeUSD) and keep the lock nonce for a retry.
+  // ── Step 1 handler: approve + lock + prove + register FakeUSD ─────────────
   // SCOUT(#234) EDIT: no code change expected: the SDK approve and lock reject on a pin mismatch and the catch below shows the message; add the unit test.
   // SCOUT(#218) EDIT: a collateral below the new minimum locks on Ethereum and then aborts on Aptos, so the lock waits for reclaim; read the SDK limits view reader before the lock.
   const handleLockCollateral = async () => {
@@ -95,40 +121,65 @@ export function AuctionBidder() {
       // domain. Refuse to lock from any other host: Aptos would never let
       // this wallet claim the lock.
       await assertSiweDomain(window.location.host);
-      setLockStatus("Waiting for MetaMask — Approve FakeUSD...");
-      const provider = new ethers.BrowserProvider(
-        (window as unknown as { ethereum: ethers.Eip1193Provider }).ethereum,
-      );
-      const amountWei = ethers.parseUnits(collateralAmount || "0", 6); // FakeUSD uses 6 decimals
+      let pending = unregistered;
+      if (!pending) {
+        setLockStatus("Waiting for MetaMask — Approve FakeUSD...");
+        const provider = new ethers.BrowserProvider(
+          (window as unknown as { ethereum: ethers.Eip1193Provider }).ethereum,
+        );
+        const amountWei = ethers.parseUnits(collateralAmount || "0", 6); // FakeUSD uses 6 decimals
 
-      // 1. Approve LockBox to spend FakeUSD.
-      await approveFakeUsd(provider, amountWei);
-      setLockStatus("Approved. Waiting for MetaMask — Lock FakeUSD...");
+        // 1. Approve LockBox to spend FakeUSD.
+        await approveFakeUsd(provider, amountWei);
+        setLockStatus("Approved. Waiting for MetaMask — Lock FakeUSD...");
 
-      // 2. Lock FakeUSD in LockBox as collateral margin, bound to the
-      //    current window and the scaffold pair (empty pair BCS). Step 2
-      //    starts on that window.
-      // SCOUT(#221) EDIT: lockBinding and lockFakeUsd lose the caller deadline; a window id from a wrong client clock now reverts in LockBox.lock.
-      // SCOUT(#224) EDIT: bind the lock to the launch pair bytes, not to new Uint8Array(0).
-      // SCOUT(#233) EDIT: bind the lock to the pair the bidder will bid on.
-      const binding = lockBinding(
-        currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
-        new Uint8Array(0),
-      );
-      const lockReceipt = await lockFakeUsd(provider, amountWei, binding);
-      setWindowId(binding.windowId.toString());
+        // 2. Lock FakeUSD in LockBox as collateral margin, bound to the
+        //    current window and the pair the bid names. Step 2 starts on
+        //    that window.
+        // SCOUT(#221) EDIT: lockBinding and lockFakeUsd lose the caller deadline; a window id from a wrong client clock now reverts in LockBox.lock.
+        // SCOUT(#224) EDIT: bind the lock to the launch pair bytes, not to new Uint8Array(0).
+        const binding = lockBinding(
+          currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
+          hexBytes(pairBcsHex),
+        );
+        const lockReceipt = await lockFakeUsd(provider, amountWei, binding);
+        // 3. The lock id and nonce come from the Locked event.
+        pending = {
+          lock: lockFromReceipt(lockReceipt),
+          block: lockReceipt.blockNumber,
+        };
+        setUnregistered(pending);
+        setWindowId(pending.lock.windowId.toString());
+      }
 
-      // In the full proof-generation flow the lock ID is derived from the
-      // Locked event via a state proof (same as the FakeETH seller path).
-      // For this Phase 3b scaffold we pre-fill the field with the transaction
-      // hash as a placeholder so the flow compiles end-to-end.  The user can
-      // override the field before submitting the bid.
-      // SCOUT(#233) REMOVE: a transaction hash is not a lock id; use the lockId of the Locked event.
-      const placeholder = lockReceipt.hash ?? lockReceipt.blockHash ?? "";
-      setCollateralLockIdHex(placeholder);
-
+      // 4. Prove the lock at a certified Ethereum block.
+      const { lock, block } = pending;
       setLockStatus(
-        `FakeUSD locked! Tx: ${lockReceipt.hash ?? "confirmed"}. Proceed to submit bid.`,
+        `FakeUSD locked (nonce ${lock.nonce}). Waiting for a certified Ethereum block...`,
+      );
+      const proof = await proveLock(
+        {
+          ...lock,
+          depositor: account,
+          token: getChainConfig().ethereum.fakeUSD,
+        },
+        block,
+        (proofBlock) =>
+          setLockStatus(`Building the lock proof at block ${proofBlock}...`),
+      );
+
+      // 5. Register the lock on Aptos as a FakeUSD receipt.
+      setLockStatus("Please sign — register the FakeUSD lock on Aptos...");
+      await submitNativeTransaction(
+        aptos,
+        account,
+        getRegisterLockPayload(proof, "FakeUSD"),
+      );
+
+      setCollateralLockIdHex(lock.lockId);
+      setUnregistered(null);
+      setLockStatus(
+        `FakeUSD lock registered. Lock ID: ${lock.lockId}. Proceed to submit bid.`,
       );
       setBidStep("submit-bid");
     } catch (error: unknown) {
@@ -156,24 +207,17 @@ export function AuctionBidder() {
         throw new Error("The bid price must be a positive whole number.");
       }
 
-      // Prepare sealed-bid arguments
+      // Prepare sealed-bid arguments: the pair the lock is bound to.
       // SCOUT(#224) EDIT: fall back to the launch pair, not to empty bytes.
-      const pairBcs = pairBcsHex
-        ? new Uint8Array(
-            (pairBcsHex.replace(/^0x/, "").match(/.{1,2}/g) ?? []).map((b) =>
-              parseInt(b, 16),
-            ),
-          )
-        : new Uint8Array(0);
+      const pairBcs = hexBytes(pairBcsHex);
 
-      // SCOUT(#233) EDIT: the 32 zero byte fallback goes; the lock step always supplies the real lock id.
-      const collateralLockId = collateralLockIdHex
-        ? new Uint8Array(
-            (collateralLockIdHex.replace(/^0x/, "").match(/.{1,2}/g) ?? []).map(
-              (b) => parseInt(b, 16),
-            ),
-          )
-        : new Uint8Array(32); // placeholder: 32 zero bytes
+      // The LockBox lock id the lock step registered (or typed after Skip).
+      if (!collateralLockIdHex) {
+        throw new Error(
+          "Lock FakeUSD first, or enter the collateral lock id of a registered lock.",
+        );
+      }
+      const collateralLockId = hexBytes(collateralLockIdHex);
 
       // Encrypt the bid to the window's timelock. The ciphertext is bound to
       // the sender, so seal it for this wallet's derived Aptos address.
@@ -250,8 +294,9 @@ export function AuctionBidder() {
       {bidStep === "lock-collateral" && (
         <div data-testid="lock-collateral-step" className="space-y-4">
           <p className="text-sm text-zinc-400">
-            Lock FakeUSD in the Ethereum LockBox as collateral margin. You'll
-            need to confirm two MetaMask transactions: approve and lock.
+            Lock FakeUSD in the Ethereum LockBox as collateral margin, then
+            register the lock on Aptos. You'll confirm the approve and the lock
+            in MetaMask, then sign the registration.
           </p>
           <div>
             <label className="block text-zinc-500 text-sm mb-1">
@@ -262,9 +307,26 @@ export function AuctionBidder() {
               type="number"
               value={collateralAmount}
               onChange={(e) => setCollateralAmount(e.target.value)}
+              disabled={unregistered !== null}
               min="0"
               step="10"
               className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
+            />
+          </div>
+
+          {/* SCOUT(#224) EDIT: the placeholder says leave empty for default; the default becomes the launch pair. */}
+          <div>
+            <label className="block text-zinc-500 text-sm mb-1">
+              Pair BCS (0x hex, optional)
+            </label>
+            <input
+              data-testid="pair-bcs-input"
+              type="text"
+              value={pairBcsHex}
+              onChange={(e) => setPairBcsHex(e.target.value)}
+              disabled={unregistered !== null}
+              placeholder="0x... (leave empty for default)"
+              className="w-full bg-zinc-800 text-zinc-200 rounded p-2 text-xs font-mono border border-zinc-700 focus:outline-none focus:border-zinc-500"
             />
           </div>
 
@@ -278,7 +340,11 @@ export function AuctionBidder() {
                 : "bg-zinc-100 hover:bg-white text-zinc-900"
             }`}
           >
-            {lockLoading ? "Waiting for MetaMask..." : "Approve & Lock FakeUSD"}
+            {lockLoading
+              ? "Working..."
+              : unregistered
+                ? "Retry Proof & Registration"
+                : "Approve & Lock FakeUSD"}
           </button>
 
           {lockStatus && (
@@ -325,20 +391,6 @@ export function AuctionBidder() {
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
               className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
-            />
-          </div>
-          {/* SCOUT(#233) EDIT: move this pair input to the lock step. */}
-          {/* SCOUT(#224) EDIT: the placeholder says leave empty for default; the default becomes the launch pair. */}
-          <div>
-            <label className="block text-zinc-500 text-sm mb-1">
-              Pair BCS (0x hex, optional)
-            </label>
-            <input
-              type="text"
-              value={pairBcsHex}
-              onChange={(e) => setPairBcsHex(e.target.value)}
-              placeholder="0x... (leave empty for default)"
-              className="w-full bg-zinc-800 text-zinc-200 rounded p-2 text-xs font-mono border border-zinc-700 focus:outline-none focus:border-zinc-500"
             />
           </div>
           <div>

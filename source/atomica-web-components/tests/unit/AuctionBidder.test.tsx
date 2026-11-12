@@ -38,6 +38,12 @@ vi.mock("@atomica/sdk/aptos", () => ({
     commitment: new Uint8Array(32).fill(0xab),
     salt: new Uint8Array(32).fill(1),
   }),
+  getRegisterLockPayload: vi.fn((_proof: unknown, asset: string) => ({
+    function: "0xa::lock_receipt::register_ethereum_lock",
+    typeArguments: [`0xa::lock_receipt::${asset}`],
+  })),
+  waitForCertifiedBlock: vi.fn(async (minBlock: number) => minBlock + 2),
+  aptos: { mock: "aptos-client" },
 }));
 
 // getDerivedAddress is stubbed by default. The checksummed account case swaps
@@ -46,19 +52,45 @@ vi.mock("@atomica/sdk", () => ({
   getDerivedAddress: vi
     .fn()
     .mockResolvedValue({ toString: () => "0x" + "0d".repeat(32) }),
+  submitNativeTransaction: vi.fn().mockResolvedValue({ hash: "0xregister" }),
 }));
 
 // SCOUT(#221) EDIT: the lockBinding mock returns a deadline.
-// SCOUT(#233) EDIT: add lockFromReceipt, and mock the proof generator, waitForCertifiedBlock and getRegisterLockPayload.
 // SCOUT(#234) EDIT: make approveFakeUsd or lockFakeUsd reject with the pin mismatch error.
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeUsd: vi.fn().mockResolvedValue({ hash: "0xapprove" }),
-  lockFakeUsd: vi.fn().mockResolvedValue({ hash: "0xlock123" }),
+  lockFakeUsd: vi
+    .fn()
+    .mockResolvedValue({ hash: "0xlock123", blockNumber: 40 }),
+  lockFromReceipt: vi.fn(() => ({
+    lockId: "0x" + "1d".repeat(32),
+    depositor: "0x1234567890123456789012345678901234567890",
+    token: "0x" + "55".repeat(20),
+    nonce: 3n,
+    amount: 10_000_000n,
+    windowId: 7n,
+    pairHash: "0x" + "00".repeat(32),
+    deadline: 1_800_000_000n,
+  })),
   currentWindowId: vi.fn(() => 7n),
   lockBinding: vi.fn((windowId: bigint) => ({
     windowId,
     pairHash: "0x" + "00".repeat(32),
     deadline: 1_800_000_000n,
+  })),
+}));
+
+vi.mock("@atomica/sdk/ethereum/proofs", () => ({
+  generateLockedBalanceProof: vi.fn().mockResolvedValue({ lockId: "proof" }),
+}));
+
+vi.mock("@atomica/sdk/chain-config", () => ({
+  getChainConfig: vi.fn(() => ({
+    ethereum: {
+      rpcUrl: "http://localhost:9999",
+      lockBox: "0x" + "11".repeat(20),
+      fakeUSD: "0x" + "55".repeat(20),
+    },
   })),
 }));
 
@@ -197,6 +229,9 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     fireEvent.change(screen.getByTestId("bid-amount-input"), {
       target: { value: "200" },
     });
+    fireEvent.change(screen.getByTestId("collateral-lock-id-input"), {
+      target: { value: "0x" + "cd".repeat(32) },
+    });
     fireEvent.click(screen.getByTestId("submit-bid-button"));
     await screen.findByText(/Bid Submitted/);
 
@@ -245,18 +280,6 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     "SCOUT(#217) a price of 2000.5, -1 or an empty field shows an error and neither seals nor submits",
   );
   it.todo(
-    "SCOUT(#233) after the lock, the collateral lock id field equals the lockId of the Locked event and never the transaction hash",
-  );
-  it.todo(
-    "SCOUT(#233) the lock step calls approve, lock, the certified block wait, the proof generator with the FakeUSD token and the register transaction with asset FakeUSD, in that order",
-  );
-  it.todo(
-    "SCOUT(#233) the pair bytes passed to lockBinding equal the pair bytes passed to sealBid and submitBid",
-  );
-  it.todo(
-    "SCOUT(#233) when the register transaction rejects, the error shows, the step stays on the lock step, and a retry sends no second approve or lock",
-  );
-  it.todo(
     "SCOUT(#234) when the SDK lock rejects with the pin mismatch error, the lock step shows the expected address and does not advance",
   );
   it.todo(
@@ -287,5 +310,135 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     expect(lockFakeUsd).not.toHaveBeenCalled();
     expect(screen.getByTestId("lock-collateral-step")).toBeTruthy();
     delete (window as unknown as { ethereum?: object }).ethereum;
+  });
+});
+
+describe("AuctionBidder — FakeUSD lock registration", () => {
+  const LOCK_ID = "0x" + "1d".repeat(32);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (window as unknown as { ethereum: object }).ethereum = { request: vi.fn() };
+  });
+
+  afterEach(() => {
+    cleanup();
+    delete (window as unknown as { ethereum?: object }).ethereum;
+  });
+
+  async function lockAndRegister() {
+    fireEvent.click(screen.getByTestId("approve-lock-usd-button"));
+    await screen.findByTestId("submit-bid-step");
+  }
+
+  it("after the lock, the collateral lock id field equals the lockId of the Locked event and never the transaction hash", async () => {
+    renderBidder();
+    await lockAndRegister();
+    const field = screen.getByTestId(
+      "collateral-lock-id-input",
+    ) as HTMLInputElement;
+    expect(field.value).toBe(LOCK_ID);
+    expect(field.value).not.toBe("0xlock123");
+  });
+
+  it("the lock step calls approve, lock, the certified block wait, the proof generator with the FakeUSD token and the register transaction with asset FakeUSD, in that order", async () => {
+    const { waitForCertifiedBlock, getRegisterLockPayload } =
+      await import("@atomica/sdk/aptos");
+    const { generateLockedBalanceProof } =
+      await import("@atomica/sdk/ethereum/proofs");
+    const { submitNativeTransaction } = await import("@atomica/sdk");
+    renderBidder();
+    await lockAndRegister();
+
+    const order = [
+      approveFakeUsd,
+      lockFakeUsd,
+      waitForCertifiedBlock,
+      generateLockedBalanceProof,
+      getRegisterLockPayload,
+      submitNativeTransaction,
+    ].map((fn) => {
+      expect(fn).toHaveBeenCalledTimes(1);
+      return vi.mocked(fn).mock.invocationCallOrder[0];
+    });
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+
+    // Proven at a certified block that covers the lock block.
+    expect(waitForCertifiedBlock).toHaveBeenCalledWith(40);
+    const proofArgs = vi.mocked(generateLockedBalanceProof).mock.calls[0];
+    expect(proofArgs[1]).toBe("0x" + "11".repeat(20)); // LockBox
+    expect(proofArgs[2]).toBe(ACCOUNT);
+    expect(proofArgs[3]).toBe("0x" + "55".repeat(20)); // FakeUSD
+    expect(proofArgs[4]).toBe(3n); // nonce of the Locked event
+    expect(proofArgs[5]).toEqual({
+      amount: 10_000_000n,
+      windowId: 7n,
+      pairHash: "0x" + "00".repeat(32),
+      deadline: 1_800_000_000n,
+    });
+    expect(proofArgs[6]).toBe(42);
+
+    expect(getRegisterLockPayload).toHaveBeenCalledWith(
+      { lockId: "proof" },
+      "FakeUSD",
+    );
+    const sent = vi.mocked(submitNativeTransaction).mock.calls[0];
+    expect(sent[1]).toBe(ACCOUNT);
+    expect(sent[2]).toEqual(
+      vi.mocked(getRegisterLockPayload).mock.results[0].value,
+    );
+  });
+
+  it("the pair bytes passed to lockBinding equal the pair bytes passed to sealBid and submitBid", async () => {
+    const { sealBid, submitBid } = await import("@atomica/sdk/aptos");
+    const { lockBinding } = await import("@atomica/sdk/ethereum");
+    renderBidder();
+    fireEvent.change(screen.getByTestId("pair-bcs-input"), {
+      target: { value: "0x0a0b0c" },
+    });
+    await lockAndRegister();
+    fireEvent.click(screen.getByTestId("submit-bid-button"));
+    await screen.findByText(/Bid Submitted/);
+
+    const locked = vi.mocked(lockBinding).mock.calls[0][1];
+    expect(Array.from(locked)).toEqual([0x0a, 0x0b, 0x0c]);
+    expect(vi.mocked(sealBid).mock.calls[0][1]).toEqual(locked);
+    expect(vi.mocked(submitBid).mock.calls[0][2]).toEqual(locked);
+    // The bid consumes the registered lock.
+    expect(
+      Array.from(vi.mocked(submitBid).mock.calls[0][5] as Uint8Array),
+    ).toEqual(Array(32).fill(0x1d));
+  });
+
+  it("when the register transaction rejects, the error shows, the step stays on the lock step, and a retry sends no second approve or lock", async () => {
+    const { submitNativeTransaction } = await import("@atomica/sdk");
+    const { generateLockedBalanceProof } =
+      await import("@atomica/sdk/ethereum/proofs");
+    vi.mocked(submitNativeTransaction).mockRejectedValueOnce(
+      new Error("register_ethereum_lock aborted"),
+    );
+    renderBidder();
+    fireEvent.click(screen.getByTestId("approve-lock-usd-button"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("lock-status").textContent).toContain(
+        "register_ethereum_lock aborted",
+      ),
+    );
+    expect(screen.getByTestId("lock-collateral-step")).toBeTruthy();
+    expect(screen.queryByTestId("submit-bid-step")).toBeNull();
+    const retry = screen.getByTestId("approve-lock-usd-button");
+    expect(retry.textContent).toContain("Retry");
+
+    fireEvent.click(retry);
+    await screen.findByTestId("submit-bid-step");
+    expect(approveFakeUsd).toHaveBeenCalledTimes(1);
+    expect(lockFakeUsd).toHaveBeenCalledTimes(1);
+    expect(generateLockedBalanceProof).toHaveBeenCalledTimes(2);
+    expect(submitNativeTransaction).toHaveBeenCalledTimes(2);
+    expect(
+      (screen.getByTestId("collateral-lock-id-input") as HTMLInputElement)
+        .value,
+    ).toBe(LOCK_ID);
   });
 });

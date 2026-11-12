@@ -21,7 +21,7 @@ import path from "path";
 
 export default defineConfig({
   // SCOUT(#236) EDIT: App will import SellFlow, whose proof code needs the Node polyfills that vite.config.ts has and this config lacks; without them the app test of Web Tests (meta) may fail to load.
-  // SCOUT(#233) EDIT: the same hazard starts when AuctionBidder imports the proof generator.
+  // AuctionBidder imports the proof generator; the app tests load it without polyfills.
   plugins: [react()],
   resolve: {
     alias: {

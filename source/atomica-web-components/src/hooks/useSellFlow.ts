@@ -11,7 +11,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ethers } from "ethers";
-import { generateLockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
 import type { LockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
 import {
   approveFakeEth,
@@ -28,10 +27,10 @@ import {
   getRegisterLockPayload,
   getCreateAuctionPayload,
   registerTimelock,
-  waitForCertifiedBlock,
 } from "@atomica/sdk/aptos";
 import { submitNativeTransaction } from "@atomica/sdk";
 import { aptos } from "@atomica/sdk/aptos";
+import { proveLock } from "./proveLock";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type SellFlowStep =
@@ -352,27 +351,20 @@ export function useSellFlow(
     }));
 
     try {
-      const config = getChainConfig();
-      const provider = new ethers.JsonRpcProvider(config.ethereum.rpcUrl);
-
-      // Aptos checks the proof against the root the validators certified, so
-      // prove at a certified block that covers the lock.
-      const proofBlock = await waitForCertifiedBlock(state.lockBlock);
+      // Prove at a certified block that covers the lock (shared with the
+      // bidder's FakeUSD lock step).
       // SCOUT(#221) EDIT: lockBinding spreads a deadline into the proof input; follow the SDK shape.
-      // SCOUT(#233) EDIT: the bidder reuses this proof step with the FakeUSD token; extract it so both flows share it.
-      const proof = await generateLockedBalanceProof(
-        provider,
-        config.ethereum.lockBox,
-        account,
-        config.ethereum.fakeETH,
-        state.lockNonce,
+      const proof = await proveLock(
         {
+          depositor: account,
+          token: getChainConfig().ethereum.fakeETH,
+          nonce: state.lockNonce,
           amount: state.amount,
           // SCOUT(#221) EDIT: the proof input takes the lock fields; follow the SDK lockBinding shape once the caller deadline goes.
           // SCOUT(#224) EDIT: SELL_PAIR_BCS becomes the launch pair, so this binding and the lock stay equal.
           ...lockBinding(state.windowId, SELL_PAIR_BCS),
         },
-        proofBlock,
+        state.lockBlock,
       );
 
       proofRef.current = proof;
@@ -406,7 +398,7 @@ export function useSellFlow(
 
     try {
       const proof = proofRef.current;
-      // SCOUT(#233) EDIT: getRegisterLockPayload gains an asset parameter; FakeETH stays the default here.
+      // The asset defaults to FakeETH: the seller's receipt type.
       // SCOUT(#221) EDIT: the payload drops the deadline argument inside the SDK; no change here.
       const payload = getRegisterLockPayload(proof);
       await submitNativeTransaction(aptos, account, payload);

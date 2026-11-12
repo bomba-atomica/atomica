@@ -36,6 +36,7 @@ import { ethers } from "ethers";
 import {
   Aptos,
   Account,
+  AccountAddress,
   type InputGenerateTransactionPayloadData,
 } from "@aptos-labs/ts-sdk";
 // SCOUT(#228) EDIT: getSubmitCleartextPayload and the OpenedBid opening flow go; import the SDK getOpenBidsPayload.
@@ -44,6 +45,7 @@ import {
   decryptWindowBids,
   getBidPayload,
   getCreateAuctionPayload,
+  getRegisterLockPayload,
   getRegisterTimelockPayload,
   getSettlePayload,
   getSubmitCleartextPayload,
@@ -253,29 +255,37 @@ export async function submitAsEthAccount(
   }
 }
 
-// SCOUT(#233) REMOVE: build this payload with the SDK getRegisterLockPayload(proof, asset); the SDK uses its own CONTRACT_ADDR, not moduleAddr.
 // SCOUT(#221) EDIT: drop proof.deadline from the arguments.
-/** `lock_receipt::register_ethereum_lock<asset>` for `proof`. */
+/**
+ * `lock_receipt::register_ethereum_lock<asset>` for `proof`, built by the SDK
+ * `getRegisterLockPayload` (the app's own builder). The SDK addresses its
+ * `CONTRACT_ADDR`, so this throws if that is not `moduleAddr`.
+ */
 function registerLockPayload(
   moduleAddr: string,
   proof: LockedBalanceProof,
   asset: "FakeETH" | "FakeUSD",
 ): InputGenerateTransactionPayloadData {
-  return {
-    function: `${moduleAddr}::lock_receipt::register_ethereum_lock`,
-    typeArguments: [`${moduleAddr}::lock_receipt::${asset}`],
-    functionArguments: [
-      proof.blockNumber,
-      ethers.getBytes(proof.userAddress),
-      proof.lockNonce,
-      proof.amount,
-      proof.windowId,
-      ethers.getBytes(proof.pairHash),
-      proof.deadline,
-      proof.accountProof.map((p: string) => ethers.getBytes(p)),
-      proof.storageProof.map((p: string) => ethers.getBytes(p)),
-    ],
-  };
+  const payload = getRegisterLockPayload(
+    {
+      ...proof,
+      lockNonce: BigInt(proof.lockNonce),
+      amount: BigInt(proof.amount),
+      windowId: BigInt(proof.windowId),
+      deadline: BigInt(proof.deadline),
+    },
+    asset,
+  ) as InputGenerateTransactionPayloadData & { function: string };
+  const sdkModule = payload.function.split("::")[0];
+  if (
+    AccountAddress.from(sdkModule).toString() !==
+    AccountAddress.from(moduleAddr).toString()
+  ) {
+    throw new Error(
+      `SDK CONTRACT_ADDR ${sdkModule} is not the test module ${moduleAddr}`,
+    );
+  }
+  return payload;
 }
 
 // SCOUT(#224) EDIT: empty bytes are not on the allowlist; use the SDK launch pair constant (each test file starts its own chain, so one pair is enough).
@@ -630,7 +640,7 @@ export async function createLiveWindow(
 }
 
 // SCOUT(#216) EDIT: callers must lock at least quoteForFill(quantity, price); the mint is amount times 20 and FakeUSD mint is capped at 10,000, so amount cannot exceed 500 without changing the multiplier.
-// SCOUT(#233) EDIT: this stays the Node-side path; the new bidder-screen case locks and registers through AuctionBidder.
+// The Node-side path: 09-submit-bid also locks and registers one bid through AuctionBidder.
 /**
  * Lock FakeUSD collateral on Ethereum as `bidder`, bound to the current
  * window of `pairBcs`, and register its receipt on Aptos (the operator
