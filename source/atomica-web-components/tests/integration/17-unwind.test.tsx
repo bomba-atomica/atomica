@@ -66,6 +66,12 @@ import { UnwindButton } from "../../src/components/UnwindButton";
 import { ReclaimLockButton } from "../../src/components/ReclaimLockButton";
 
 const PAIR_BCS = new TextEncoder().encode("17-unwind");
+/**
+ * The reclaim case binds its lock to another pair: 17-1 records an outcome
+ * for (window, PAIR_BCS), and a lock of an auction with a recorded outcome
+ * goes home by release, not by reclaim.
+ */
+const RECLAIM_PAIR_BCS = new TextEncoder().encode("17-reclaim");
 const DEADLINE_AHEAD_US = 120_000_000n;
 /** The testnet's shortened unwind grace, microseconds. */
 const UNWIND_GRACE_US = 60_000_000n;
@@ -242,7 +248,7 @@ describe.sequential("17: permissionless unwind and reclaim", () => {
     const head = await rpc.getBlock("latest");
     const binding = lockBinding(
       hostWindowId(BigInt(head!.timestamp)),
-      PAIR_BCS,
+      RECLAIM_PAIR_BCS,
     );
     const lock: LockFields = lockFromReceipt(
       await lockFakeEth(sellerProvider, LOCK_AMOUNT, binding),
