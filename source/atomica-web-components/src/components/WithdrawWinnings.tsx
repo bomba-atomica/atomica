@@ -1,15 +1,14 @@
 /**
- * WithdrawWinnings — Settlement payout status for winning bids.
+ * WithdrawWinnings — Settlement payout status for settled windows.
  *
- * Displays the settlement state for the provided events.  The push path is
- * handled by the trusted relayer via `BLSVerifierTestnet::authorizeSettlement`
- * (see bridge.ts).  Settlement.sol does not implement a winner-initiated pull
- * path — winners see their balance increase after the relayer settles.
- *
- * Risk 3 decision (from scout #111): Option B — read-only status display.
+ * Read-only. Nothing pushes payouts: after a window settles, any wallet
+ * carries its validator-signed `AuctionOutcome` to the LockBox and releases
+ * each lock per its leaf (UnwindButton, "Carry Outcome and Release Locks").
+ * A lock whose outcome is never proven goes home by reclaim after its
+ * deadline (ReclaimLockButton). There is no relayer.
  *
  * @see docs/architecture/v0-architecture.md §3 — Cross-Chain Settlement
- * @see atomica-sdk/src/settlement/bridge.ts — submitSettlement (relayer-side)
+ * @see atomica-sdk/src/settlement/outcome-carrier.ts
  */
 
 import type { AuctionSettledEvent } from "@atomica/sdk/settlement/bridge";
@@ -17,18 +16,15 @@ import type { AuctionSettledEvent } from "@atomica/sdk/settlement/bridge";
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface WithdrawWinningsProps {
-  /** Settled events from the BLS relayer for display. */
+  /** AuctionSettled events read from Aptos (see SettlementStatus). */
   events: AuctionSettledEvent[];
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 /**
- * WithdrawWinnings displays payout status after the relayer settles the auction.
- *
- * Settlement follows a push path: the relayer calls `authorizeSettlement` on
- * BLSVerifierTestnet and winners receive their payout automatically.
- * No user-initiated action is required.
+ * WithdrawWinnings lists settled windows and says how their payouts reach
+ * Ethereum: by an outcome proof that anyone carries, never by a relayer.
  */
 export function WithdrawWinnings({ events }: WithdrawWinningsProps) {
   return (
@@ -63,7 +59,8 @@ export function WithdrawWinnings({ events }: WithdrawWinningsProps) {
                 winner(s), clearing price {ev.clearingPrice.toString()}
               </span>
               <p className="mt-1 text-emerald-600">
-                Settlement pushed by relayer — payout complete.
+                Settled on Aptos. Carry the outcome to Ethereum to release the
+                locks.
               </p>
             </div>
           ))}
@@ -74,8 +71,9 @@ export function WithdrawWinnings({ events }: WithdrawWinningsProps) {
         data-testid="withdraw-winnings-push-notice"
         className="text-xs text-zinc-600"
       >
-        Winnings are distributed automatically by the relayer. No action
-        required.
+        Payouts reach Ethereum when any wallet carries the validator-signed
+        outcome proof to the LockBox. A lock with no proven outcome returns to
+        its depositor after its deadline.
       </p>
     </div>
   );

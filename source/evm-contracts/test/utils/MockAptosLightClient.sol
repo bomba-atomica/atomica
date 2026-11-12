@@ -10,9 +10,12 @@ import {IAptosLightClient} from "../../src/aptos/IAptosLightClient.sol";
  *      version. The proof's epoch is `abi.decode(ledgerInfoWithSignatures, (uint64))`, or the
  *      latest epoch when that field is empty. Like the real client, it reverts with
  *      `StaleEpoch(epoch, latestEpoch)` for an older epoch and with `UnknownEpoch` for a later one.
+ *      It never goes stale (`maxEpochAge` is the uint64 maximum).
  */
 contract MockAptosLightClient is IAptosLightClient {
     uint64 public latestEpoch = 1;
+    uint64 public latestEpochTimestamp;
+    uint64 public maxEpochAge = type(uint64).max;
     bytes public expectedTypeTag;
 
     error WrongTypeTag();

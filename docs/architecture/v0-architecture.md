@@ -330,8 +330,9 @@ records the three owner axioms behind this section:
 2. No relayer is trusted.
 3. Any user can send a transaction to a finished or stuck auction to unwind it.
 
-The code is moving to this model through issues 194 to 203. Where the code
-still has a relayer-only path, that path is legacy and the ADR wins.
+Issues 194 to 203 and 195 moved the code to this model. The settlement
+relayer, its `Settlement`, `DepositBox` and `BLSVerifier` contracts and its
+SDK release path are retired (issue 195).
 
 ### 3.1 End-to-end flow
 
@@ -369,9 +370,11 @@ Validators attest the header ─────► ethereum_headers stores
                                                                       (or reclaim after deadline)
 ```
 
-Every step is a permissionless call. A relayer may carry data as a
-convenience, but every byte it carries is checked on chain, and any user can
-make the same call.
+Every step is a permissionless call. Any wallet carries the data: the SDK
+outcome carrier (`source/atomica-sdk/src/settlement/outcome-carrier.ts`) and
+the UI Unwind and Reclaim actions (`UnwindButton`, `ReclaimLockButton`) send
+ordinary transactions from the user's own wallet. Every byte a carrier brings
+is checked on chain, so a carrier holds no special authority.
 
 <!-- SCOUT(#221) DOC: last bullet: register_ethereum_lock takes no deadline; verify_lock recomputes the commitment with eth_lock_deadline(window_id) and E_WRONG_DEADLINE goes. -->
 <!-- SCOUT(#234) DOC: second bullet (the pin): add that the client reads this pin and refuses to approve or lock when its LockBox or token address differs. -->
@@ -412,9 +415,12 @@ header, registration or claim privilege.
 
 A client waits until the validators certify a block that covers its lock
 (`0x1::ethereum_headers::latest_block_number`, SDK `waitForCertifiedBlock`),
-then proves the lock at that block. The docker testnet turns attestation on at
-genesis (`eth_chain_id`) and points every validator at the host's Ethereum RPC
-with `block_tag: latest` (`source/docker-testnet/config/generate-genesis.sh`).
+then proves the lock at that block. Production validators observe Ethereum
+with `block_tag: finalized`, the node default (issue 196), so a certified
+header can never be reorganized away. Only the anvil and docker testnets use
+`latest`: the docker testnet turns attestation on at genesis (`eth_chain_id`)
+and points every validator at the host's Ethereum RPC with `block_tag: latest`
+(`source/docker-testnet/config/generate-genesis.sh`).
 Each network attests one Ethereum chain id, and headers are keyed by block
 number only.
 
@@ -432,7 +438,11 @@ expiry plus the 10-minute opening window plus the 24 h unwind grace,
 may call `unwind`. On a window that never settled, whatever its reveal state,
 it returns every lock to its depositor and emits an all-refund outcome. On a
 finalized window it returns only receipts still held and emits no second
-outcome. With nothing left it aborts `E_WINDOW_FINAL`. Winning fills go to
+outcome. With nothing left it aborts `E_WINDOW_FINAL`. The 24 h grace is
+fixed on every deployed network. Only the local testing chain (chain id 4)
+lets the `@atomica` account shorten it
+(`timelock_config::set_unwind_grace_us_on_test_chain`), so a live test can
+stall a window past its stuck deadline in minutes. Winning fills go to
 buyers at the clearing price. Unopened bids, losing bids, winner excess
 collateral, unsold seller supply and refunded windows go back to their
 depositors (§2.8). A receipt that never reached an auction can be cancelled by
@@ -460,8 +470,34 @@ Payouts go to the Ethereum owner of each lock (the depositor the storage proof
 names), not to the bidder's Aptos signer address. A lock leaves the open
 status once, so a retried release never pays twice.
 
-There is no `settlementAuthority`. LockBox releases a lock only on a verified
+There is no settlement authority. LockBox releases a lock only on a verified
 Aptos outcome or a passed deadline.
+
+**Client flow (issue 195).** The SDK builds every step from the user's own
+wallet:
+
+- `getUnwindPayload(window_id, pair_bcs)` sends `auction::unwind`, and
+  `getUnwindEligibility` mirrors its checks (stuck deadline passed; window
+  unfinished, or finished with receipts still held). The UI `UnwindButton`
+  is enabled only then.
+- `getCancelUnauctionedPayload(asset, lock_id)` sends
+  `lock_receipt::cancel_unauctioned` for a receipt no window claimed.
+- `carryOutcome` fetches the event proof from
+  `/v1/atomica/event_proof/{version}/{event_index}`, asking each configured
+  node in turn (a 404 `version_pruned` moves to the next node). It advances
+  the light client with `advanceEpoch` from `latestEpoch()` to the proof's
+  epoch, then calls `LockBox.recordOutcome`. On `StaleEpoch` it fetches a fresh
+  proof once and retries. When no node serves the proof, or the light client
+  is stale, the outcome is unprovable and every lock goes home by `reclaim`.
+- `carryAndReleaseWindow` then rebuilds the outcome tree from the per-lock
+  outcomes on Aptos (`lock_receipt::get_lock_outcome`), checks its root against
+  the recorded one, and sends `releaseByOutcome` for each open lock.
+- `reclaimLock` returns a lock after its deadline when no outcome is proven.
+  The UI `ReclaimLockButton` is enabled only for such a lock.
+- Before any lock, the sell flow and the bidder call `assertSiweDomain`: the
+  page host must equal `eth_proof::siwe_domain`, or the lock is refused and the
+  expected domain is shown. A receipt locked from another host could never be
+  claimed on Aptos.
 
 ### 3.2 Aptos outcome verification on Ethereum (real BLS in v0.1)
 
@@ -479,12 +515,29 @@ verifies them:
 - The event must sit in the signed ledger through its accumulator proofs.
 - Only the latest known epoch's validator set can verify an event. A retired
   set is no longer bonded, so a proof signed by it reverts with `StaleEpoch`.
+- Age limit (issue 195). The light client stores the LedgerInfo timestamp of
+  the latest epoch it accepts and takes a constructor value `maxEpochAge`,
+  shorter than the Aptos validator stake lockup. Once Ethereum time passes that
+  timestamp plus `maxEpochAge`, `advanceEpoch` and `verifyEvent` revert
+  `StaleLightClient`, and the client stays dead. No outcome can be recorded,
+  so every lock goes home by `reclaim` after its deadline. A validator set that
+  has lost its stake therefore cannot forge an epoch change chain. Carriers
+  keep the client fresh with `advanceEpoch`. The Aptos genesis LedgerInfo has
+  timestamp 0, so the constructor anchors the genesis epoch at deploy time,
+  and a client must be deployed while the genesis set is still bonded.
+- Genesis pin at deploy. `script/DeployAptosLightClient.s.sol` requires
+  `EXPECTED_GENESIS_WAYPOINT` and reverts before broadcasting when it is
+  missing, or differs from the waypoint the node serves at
+  `/v1/atomica/genesis_waypoint`, or from the one recomputed from the genesis
+  LedgerInfo. `MAX_EPOCH_AGE` defaults to half the chain's
+  `recurring_lockup_duration_secs`. LockBox takes the light client address in
+  its constructor, so both redeploy together.
 - Trust assumption: the `@atomica` package upgrade key can emit any
   `AuctionOutcome`, so lock safety at v0.1 also trusts that key (see the ADR).
 
 The verifier has no owner, pause, proxy or trusted caller. The old
 `BLSVerifierTestnet` stub, which accepted one deploy-time caller in place of a
-signature check, is retired by the ADR.
+signature check, is deleted (issue 195).
 
 ### 3.3 Real BLS ships in v0.1
 
@@ -492,9 +545,12 @@ signature check, is retired by the ADR.
 
 Real BLS verification is a v0.1 requirement, not a v1 upgrade. The target
 Ethereum networks, including the docker testnet, must enable EIP-2537
-(Pectra / Electra). The existing `BLSVerifier.sol` signs Ethereum block hashes
-with the wrong key and signature sizes for Aptos, so issue 202 replaces it with
-an Aptos LedgerInfo verifier.
+(Pectra / Electra). The old `BLSVerifier.sol` checked Ethereum block hashes
+with the wrong key and signature sizes for Aptos. Issue 202 replaced it with
+the Aptos LedgerInfo verifier, and issue 195 deleted it. The browser test
+tiers run Cancun, except the unwind chunk, which runs anvil with Prague
+(`ETH_ANVIL_HARDFORK=prague`) and carries a real outcome through the light
+client. The Aptos Light Client Live job also runs anvil with Prague.
 
 ### 3.4 ZK seam (v1 path)
 
@@ -542,6 +598,12 @@ sorted by lock id: `keccak256(0x00 || lock_id || payouts_hash)`, where
 `payouts_hash` packs the (Ethereum recipient, amount) payouts. Recipients are
 receipt `eth_owner` addresses, never the Aptos `user`. The relayer-only
 `refund`, `settleFill` and `withdrawWinnings` are gone.
+
+**Migration from the old LockBox (issue 195).** The SDK and UI point only at
+the new LockBox address. The old relayer-gated deployment takes no new
+locks. Before the relayer key is retired, the old deployment's
+`settlementAuthority` refunds every remaining open lock to its depositor with
+`refund`. After that the key has nothing left to act on.
 
 ---
 

@@ -50,6 +50,7 @@ vi.mock("@atomica/sdk/ethereum/proofs", () => ({
 }));
 // SCOUT(#243) REMOVE: the registerTimelock mock.
 vi.mock("@atomica/sdk/aptos", () => ({
+  assertSiweDomain: vi.fn().mockResolvedValue(undefined),
   getRegisterLockPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
   registerTimelock: vi.fn(),

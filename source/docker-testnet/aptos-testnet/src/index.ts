@@ -278,6 +278,20 @@ export class DockerTestnet {
         return [...this.validatorUrls];
     }
 
+    /**
+     * The genesis waypoint ("version:hash") this testnet's genesis step wrote
+     * (genesis-artifacts/waypoint.txt). It comes from the genesis files, not
+     * from a node, so a deploy can pin it against what the node serves.
+     */
+    genesisWaypoint(): string {
+        const path = pathResolve(this.composeDir, "genesis-artifacts", "waypoint.txt");
+        const waypoint = readFileSync(path, "utf-8").trim();
+        if (!/^\d+:[0-9a-fA-F]{64}$/.test(waypoint)) {
+            throw new Error(`${path} holds no waypoint: "${waypoint}"`);
+        }
+        return waypoint;
+    }
+
     getNumValidators(): number {
         return this.numValidators;
     }

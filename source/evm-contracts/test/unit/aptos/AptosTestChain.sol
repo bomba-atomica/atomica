@@ -222,7 +222,7 @@ abstract contract AptosTestChain {
     }
 
     function _words(bytes memory p, uint256 off) private pure returns (uint256 a, uint256 b, uint256 c, uint256 d) {
-        assembly {
+        assembly ("memory-safe") {
             let s := add(add(p, 0x20), off)
             a := mload(s)
             b := mload(add(s, 0x20))

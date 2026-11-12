@@ -1,10 +1,10 @@
 /**
- * SettlementStatus — Cross-chain settlement state for a given auction window.
+ * SettlementStatus — Aptos settlement state for a given auction window.
  *
  * Polls `queryAuctionSettledEvents` from bridge.ts on a configurable interval
  * and displays settled / pending state for the provided windowId and pair.
- *
- * Wired to live on-chain data via bridge.ts (issue #113).
+ * Read-only: nothing here signs or releases. Ethereum locks leave LockBox by
+ * a carried outcome proof (UnwindButton) or by reclaim (ReclaimLockButton).
  *
  * @see docs/architecture/v0-architecture.md §3 — Cross-Chain Settlement
  * @see atomica-sdk/src/settlement/bridge.ts
@@ -17,29 +17,16 @@ import {
   type BridgeConfig,
   type Pair,
 } from "@atomica/sdk/settlement/bridge";
+import { getChainConfig } from "@atomica/sdk/chain-config";
+import { defaultAptosNodes } from "@atomica/sdk/settlement/window-release";
 
-// Safe env access: works in Vite browser builds and Node tests.
-const _env =
-  (import.meta as { env?: Record<string, string> }).env || process.env || {};
-
-/**
- * Default bridge config derived from Vite environment variables.
- * In production the relayer handles settlement; this is used for read-only
- * event polling in the UI (issue #113 will wire full read path).
- */
-const DEFAULT_UI_BRIDGE_CONFIG: BridgeConfig = {
-  aptosRpcUrl: _env.VITE_APTOS_RPC_URL ?? "http://localhost:8080/v1",
-  contractAddress:
-    _env.VITE_CONTRACT_ADDRESS ??
-    "0x0000000000000000000000000000000000000000000000000000000000000000",
-  ethRpcUrl: _env.VITE_ETH_RPC_URL ?? "http://localhost:8545",
-  // SCOUT(#234) EDIT: a second LockBox address source (VITE_LOCK_BOX_ADDRESS, not getChainConfig); read-only, so no pin check is needed, but the SDK unwind issue (195) should read getChainConfig here.
-  lockBoxAddress:
-    _env.VITE_LOCK_BOX_ADDRESS ?? "0x0000000000000000000000000000000000000000",
-  // The UI does not have a relayer private key — settlement is relayer-driven.
-  // Only the relayer key (the LockBox settlementAuthority) can release locks.
-  relayerPrivateKey: "",
-};
+/** The SDK's Aptos node and the configured Atomica package. */
+function uiBridgeConfig(): BridgeConfig {
+  return {
+    aptosRpcUrl: defaultAptosNodes()[0],
+    contractAddress: getChainConfig().aptos.contractAddress,
+  };
+}
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -82,7 +69,7 @@ export function SettlementStatus({
         const events = await queryAuctionSettledEvents(
           windowId,
           pair,
-          DEFAULT_UI_BRIDGE_CONFIG,
+          uiBridgeConfig(),
         );
         if (!cancelled) {
           setState({ status: "settled", events });

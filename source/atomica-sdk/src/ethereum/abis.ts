@@ -26,14 +26,38 @@ export const FAKE_ETH_ABI = [
   "function MAX_MINT_AMOUNT() view returns (uint256)",
 ] as const;
 
+/** `IAptosLightClient.SignedLedgerInfo` as an ABI tuple. */
+const SIGNED_LEDGER_INFO_TUPLE =
+  "(bytes ledgerInfoWithSignatures, bytes epochState, bytes signerPublicKeys, bytes signature)";
+
+/** `IAptosLightClient.EventProof` as an ABI tuple. */
+const EVENT_PROOF_TUPLE = `(${SIGNED_LEDGER_INFO_TUPLE} ledgerInfo, uint64 version, bytes transactionInfo, bytes transactionAccumulatorProof, uint64 eventIndex, bytes contractEvent, bytes eventAccumulatorProof)`;
+
+// Aptos light client ABI (source/evm-contracts/src/aptos/IAptosLightClient.sol).
+// Permissionless: anyone advances epochs and anyone verifies an event.
+export const APTOS_LIGHT_CLIENT_ABI = [
+  "function latestEpoch() view returns (uint64)",
+  "function epochStateHash(uint64 epoch) view returns (bytes32)",
+  "function maxEpochAge() view returns (uint64)",
+  "function latestEpochTimestamp() view returns (uint64)",
+  `function advanceEpoch(${SIGNED_LEDGER_INFO_TUPLE} ledgerInfo)`,
+  `function verifyEvent(${EVENT_PROOF_TUPLE} proof, bytes typeTag) view returns (uint64 version, bytes eventData)`,
+  "event EpochAdvanced(uint64 indexed epoch, bytes32 epochStateHash)",
+  "error UnknownEpoch(uint64 epoch)",
+  "error StaleEpoch(uint64 epoch, uint64 latestEpoch)",
+  "error EpochAlreadyAdvanced(uint64 epoch)",
+  "error StaleLightClient(uint64 latestEpoch, uint256 age)",
+] as const;
+
 // LockBox ABI - proof-gated escrow (source/evm-contracts/src/escrow/LockBox.sol).
 // A lock leaves only by releaseByOutcome (a proven Aptos AuctionOutcome) or by
-// reclaim to its depositor after its deadline. Anyone may call either.
+// reclaim to its depositor after its deadline. Anyone may call either, and
+// anyone may carry an outcome with recordOutcome. There is no relayer.
 // SCOUT(#222) EDIT: the comment above names two ways out of LockBox; reclaimUnpayable is a third.
-// SCOUT(#236) EDIT: ReleaseButton needs a recordOutcome fragment in this list; the SDK unwind issue (195) adds it with the release bindings.
 export const LOCKBOX_ABI = [
   // SCOUT(#221) EDIT: lock takes (token, amount, windowId, pairHash); drop the deadline argument.
   "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) returns (bytes32 lockId)",
+  `function recordOutcome(${EVENT_PROOF_TUPLE} proof) returns (bytes32 key)`,
   // SCOUT(#221) EDIT: keep or drop the deadline of the Lock tuple as LockBox.sol decides, here and in releaseByOutcome.
   // SCOUT(#222) ADD: a reclaimUnpayable(Lock l, Payout[] payouts, Leaf leaf) fragment next to this one, with its event and errors.
   "function reclaim((address depositor, address token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) l, (bytes32 lockId, bytes32 payoutsHash, uint256 index, bytes32[] proof)[] neighbours)",
@@ -47,11 +71,20 @@ export const LOCKBOX_ABI = [
   "function outcomes(bytes32 auctionKey) view returns (bytes32 root, uint64 leafCount)",
   "function auctionReclaimed(bytes32 auctionKey) view returns (bool)",
   "function nextLockNonce() view returns (uint256)",
+  "function lightClient() view returns (address)",
   "event Locked(bytes32 indexed lockId, address indexed depositor, address indexed token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)",
   // SCOUT(#221) EDIT: match the final event; the auction key no longer covers the deadline.
   "event OutcomeRecorded(bytes32 indexed auctionKey, uint64 windowId, bytes32 pairHash, uint64 deadline, bytes32 root, uint64 leafCount, uint64 aptosVersion)",
   "event LockReleased(bytes32 indexed lockId, bytes32 indexed auctionKey)",
   "event LockReclaimed(bytes32 indexed lockId, address indexed depositor, uint256 amount)",
+  "error LockNotOpen(bytes32 lockId, uint8 status)",
+  "error OutcomeAlreadyRecorded(bytes32 auctionKey)",
+  "error AuctionWasReclaimed(bytes32 auctionKey)",
+  "error NoOutcome(bytes32 auctionKey)",
+  "error DeadlineNotReached(uint64 deadline)",
+  "error LockInTree(bytes32 lockId)",
+  "error StaleEpoch(uint64 epoch, uint64 latestEpoch)",
+  "error StaleLightClient(uint64 latestEpoch, uint256 age)",
 ] as const;
 
 // SCOUT(#222) EDIT: confirm reclaimUnpayable ends a lock as Reclaimed (3); add a status here if LockBox adds one.
@@ -88,128 +121,3 @@ export const FAKE_USD_ABI = [
 // Type exports for TypeScript
 export type FakeETHABI = typeof FAKE_ETH_ABI;
 export type FakeUSDABI = typeof FAKE_USD_ABI;
-
-// ============================================================
-// Settlement bridge ABIs — scout stubs for issue #111
-// ============================================================
-//
-// These ABI definitions are compile-clean stubs added by the
-// v0 Beta Settlement Bridge integration scout (issue #111).
-// They expose the exact call surfaces that bridge.ts (issue #112)
-// must wire against.
-//
-// INTEGRATION RISK (scout #111):
-//   Settlement.sol currently imports BLSVerifier (full BLS) but
-//   testnet deployments inject BLSVerifierTestnet at the same
-//   address via the constructor.  The call in Settlement.sol line
-//   ~172 is:
-//
-//     blsVerifier.verifyBlockHash(blockHash, blsSignature, validatorIndices)
-//
-//   BLSVerifierTestnet.verifyBlockHash only accepts (blockHash, sig)
-//   — the `validatorIndices` array is NOT in BLSVerifierTestnet's
-//   interface.  This is a call-signature mismatch that will revert
-//   at runtime unless Settlement.sol is also updated to match the
-//   two-argument form, OR bridge.ts passes an empty array for
-//   validatorIndices so the call routes through the trusted-relayer
-//   path.  Issue #112 must resolve this before wiring is complete.
-//
-// @see source/evm-contracts/src/settlement/BLSVerifierTestnet.sol
-// @see source/evm-contracts/src/Settlement.sol
-// @see docs/architecture/v0-architecture.md §3.2
-
-/**
- * ABI for BLSVerifierTestnet.sol — trusted-relayer stub.
- *
- * Extracted from source/evm-contracts/src/settlement/BLSVerifierTestnet.sol.
- * Used by bridge.ts::submitSettlement to call authorizeSettlement.
- *
- * Scout note (#111): bridge.ts calls authorizeSettlement directly on
- * BLSVerifierTestnet (not through Settlement.sol).  The Settlement.sol
- * `settle()` call-path is separate and requires resolving the
- * verifyBlockHash signature mismatch noted above.
- *
- * @see docs/architecture/v0-architecture.md §3.2 — BLS Relayer Flow
- * @see issue #112 — BLS relayer service implementation
- */
-export const BLS_VERIFIER_TESTNET_ABI = [
-  // ─── State views ─────────────────────────────────────────────
-  "function trustedRelayer() view returns (address)",
-
-  // ─── Verification ─────────────────────────────────────────────
-  /** Trusted-relayer block-hash check.  Returns true iff msg.sender == trustedRelayer. */
-  "function verifyBlockHash(bytes32 blockHash, bytes calldata sig) view returns (bool)",
-
-  // ─── Settlement authorization ─────────────────────────────────
-  /**
-   * Authorize a settlement batch.  Only callable by trustedRelayer.
-   *
-   * AuctionSettled → authorizeSettlement field mapping (scout #111):
-   *   AuctionSettled.window_id      → windowId    (u64  → uint64)
-   *   keccak256(BCS(pair))          → pairHash    (bytes32)
-   *   AuctionSettled.clearing_price → clearingPrice (u64 → uint64)
-   *   derived from bid_results      → winners     (address[])
-   *   AuctionSettled per-winner fill→ fills        (uint256[])
-   *
-   * OPEN QUESTION (#112): AuctionSettled does NOT include per-winner
-   * Ethereum addresses or per-winner fill amounts directly.  The relayer
-   * must join AuctionSettled with the bid_results (winner Aptos addresses
-   * converted to Ethereum via zero-pad) to derive `winners` and `fills`.
-   * This join requires an additional Aptos view call to
-   * `auction::get_bid_results(windowId, pairBcs)` which is not yet exposed.
-   */
-  "function authorizeSettlement(uint64 windowId, bytes32 pairHash, uint64 clearingPrice, address[] calldata winners, uint256[] calldata fills) external",
-
-  // ─── Events ───────────────────────────────────────────────────
-  "event SettlementAuthorized(uint64 indexed windowId, bytes32 indexed pairHash, uint64 clearingPrice, address[] winners, uint256[] fills)",
-
-  // ─── Errors ───────────────────────────────────────────────────
-  "error NotTrustedRelayer(address caller)",
-  "error WinnersFillesMismatch(uint256 winnersLen, uint256 fillsLen)",
-] as const;
-
-/**
- * ABI for Settlement.sol — atomic trade execution contract.
- *
- * Extracted from source/evm-contracts/src/Settlement.sol.
- *
- * Scout note (#111): Settlement.sol does NOT have a `withdrawWinnings`
- * function.  The WithdrawWinnings UI component calls bridge.ts
- * `submitSettlement`, which is intended to call authorizeSettlement on
- * BLSVerifierTestnet and then trigger Settlement.sol::settle().
- * Issue #113 must decide whether settlement is push (relayer calls settle)
- * or pull (winner calls a not-yet-implemented withdrawWinnings).  The
- * current Settlement.sol only implements the push path via `settle()`.
- *
- * @see docs/architecture/v0-architecture.md §3 — Cross-Chain Settlement
- * @see issue #112 — BLS relayer service implementation
- * @see issue #113 — wire settlement UI to live on-chain data
- */
-export const SETTLEMENT_ABI = [
-  // ─── State views ─────────────────────────────────────────────
-  "function latestVerifiedBlockHash() view returns (bytes32)",
-  "function lastSettlementBlock() view returns (uint256)",
-  "function processedTrades(bytes32 tradeId) view returns (bool)",
-  "function isTradeProcessed(bytes32 blockHash, bytes32 stateRoot, uint256 clearingPrice) view returns (bool)",
-  "function getContractBalances() view returns (uint256 ethBalance, uint256 usdcBalance)",
-
-  // ─── Settlement execution ─────────────────────────────────────
-  /**
-   * Execute settlement for an auction using native state proofs.
-   *
-   * INTEGRATION RISK (#111): This function's blsVerifier reference points
-   * to BLSVerifier.sol (three-arg verifyBlockHash).  Testnet deployments
-   * inject BLSVerifierTestnet (two-arg verifyBlockHash).  Calls from
-   * bridge.ts must pass a dummy validatorIndices array until Settlement.sol
-   * is updated or replaced for v0.1 Beta.  Track in issue #112.
-   */
-  "function settle(bytes32 blockHash, bytes32 stateRoot, tuple(uint256 clearingPrice, bytes32 ethStateRoot, uint256 minNonce, uint256 maxNonce) tradeResult, bytes calldata blsSignature, uint256[] calldata validatorIndices, uint64[] calldata auctionIds, address[] calldata winners, address[] calldata depositors, uint256[] calldata nonces, uint256[] calldata ethAmounts, uint256[] calldata usdcAmounts) external returns (bool)",
-
-  // ─── Events ───────────────────────────────────────────────────
-  "event SettlementVerified(bytes32 indexed blockHash, bytes32 indexed stateRoot, uint256 clearingPrice)",
-  "event VerificationFailed(string reason)",
-] as const;
-
-/** Type exports for settlement bridge ABIs */
-export type BLSVerifierTestnetABI = typeof BLS_VERIFIER_TESTNET_ABI;
-export type SettlementABI = typeof SETTLEMENT_ABI;

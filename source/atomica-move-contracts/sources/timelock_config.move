@@ -21,7 +21,7 @@
 /// | `max_timelock_duration_us` | 30 days | Maximum allowed timelock duration |
 /// | `reveal_threshold_numerator` | 67 | Numerator of threshold fraction |
 /// | `reveal_threshold_denominator` | 100 | Denominator of threshold fraction |
-/// | `unwind_grace_us` | 24 hours | Stuck deadline: reveal expiry + opening window + this grace |
+/// | `unwind_grace_us` | 24 hours | Stuck deadline: reveal expiry + opening window + this grace. Only the local testing chain (chain id 4) may shorten it, for live unwind tests |
 /// | `carrier_margin_us` | 24 hours | Time to carry an `AuctionOutcome` to Ethereum after the stuck deadline |
 /// | `receipt_cancel_delay_us` | 24 hours | Age after which anyone may cancel a never-auctioned receipt |
 ///
@@ -39,6 +39,23 @@
 /// - See `docs/development/timelock-scout-findings.md` § 3a for details.
 module atomica::timelock_config {
     use aptos_framework::ibe_config;
+    use aptos_framework::chain_id;
+    use std::signer;
+
+    // ---------------------------------------------------------------------------
+    // Errors
+    // ---------------------------------------------------------------------------
+
+    /// Only the `atomica` account may set the test-chain unwind grace.
+    const E_NOT_ATOMICA: u64 = 1;
+    /// The unwind grace override exists only on the local testing chain.
+    const E_NOT_TEST_CHAIN: u64 = 2;
+    /// The override may only shorten the grace, never lengthen it.
+    const E_GRACE_TOO_LONG: u64 = 3;
+
+    /// Chain id of the local testing chain (`ChainId::test()`), which the docker
+    /// testnet runs. Mainnet is 1 and testnet is 2.
+    const TEST_CHAIN_ID: u8 = 4;
 
     // ---------------------------------------------------------------------------
     // Default constants
@@ -135,8 +152,29 @@ module atomica::timelock_config {
     #[view]
     /// Returns the unwind grace in microseconds. A window's stuck deadline is its
     /// reveal expiry plus the opening window plus this grace (`auction::unwind`).
-    public fun get_unwind_grace_us(): u64 {
-        DEFAULT_UNWIND_GRACE_US
+    /// It is the 24 h default, except on the local testing chain after
+    /// `set_unwind_grace_us_on_test_chain`.
+    public fun get_unwind_grace_us(): u64 acquires TimelockConfig {
+        if (exists<TimelockConfig>(@atomica)) {
+            borrow_global<TimelockConfig>(@atomica).unwind_grace_us
+        } else {
+            DEFAULT_UNWIND_GRACE_US
+        }
+    }
+
+    /// Shorten the unwind grace on the local testing chain (chain id 4) only, so a
+    /// live test can stall a window past its stuck deadline in minutes. Aborts
+    /// `E_NOT_TEST_CHAIN` on any other chain, so no deployed network can change its
+    /// grace. Only the `atomica` account may call it, and only to shorten it.
+    public entry fun set_unwind_grace_us_on_test_chain(
+        atomica: &signer,
+        grace_us: u64,
+    ) acquires TimelockConfig {
+        assert!(signer::address_of(atomica) == @atomica, E_NOT_ATOMICA);
+        assert!(chain_id::get() == TEST_CHAIN_ID, E_NOT_TEST_CHAIN);
+        assert!(grace_us <= DEFAULT_UNWIND_GRACE_US, E_GRACE_TOO_LONG);
+        initialize(atomica);
+        borrow_global_mut<TimelockConfig>(@atomica).unwind_grace_us = grace_us;
     }
 
     #[view]
@@ -207,9 +245,6 @@ module atomica::timelock_config {
     // Tests
     // ---------------------------------------------------------------------------
 
-    #[test_only]
-    use std::signer;
-
     #[test(atomica = @atomica)]
     /// initialize creates config with default values.
     fun test_initialize_defaults(atomica: signer) acquires TimelockConfig {
@@ -224,9 +259,41 @@ module atomica::timelock_config {
         assert!(cfg.receipt_cancel_delay_us == DEFAULT_RECEIPT_CANCEL_DELAY_US, 7);
     }
 
+    #[test(framework = @aptos_framework, atomica = @atomica)]
+    /// On the local testing chain the atomica account can shorten the grace.
+    fun test_unwind_grace_override_on_test_chain(framework: signer, atomica: signer) acquires TimelockConfig {
+        chain_id::initialize_for_test(&framework, TEST_CHAIN_ID);
+        set_unwind_grace_us_on_test_chain(&atomica, 60_000_000);
+        assert!(get_unwind_grace_us() == 60_000_000, 1);
+    }
+
+    #[test(framework = @aptos_framework, atomica = @atomica)]
+    #[expected_failure(abort_code = E_NOT_TEST_CHAIN, location = Self)]
+    /// Mainnet (chain id 1) cannot change its grace.
+    fun test_unwind_grace_override_rejected_on_mainnet(framework: signer, atomica: signer) acquires TimelockConfig {
+        chain_id::initialize_for_test(&framework, 1);
+        set_unwind_grace_us_on_test_chain(&atomica, 60_000_000);
+    }
+
+    #[test(framework = @aptos_framework, other = @0xbad)]
+    #[expected_failure(abort_code = E_NOT_ATOMICA, location = Self)]
+    /// No other account may set it, even on the testing chain.
+    fun test_unwind_grace_override_rejects_other_account(framework: signer, other: signer) acquires TimelockConfig {
+        chain_id::initialize_for_test(&framework, TEST_CHAIN_ID);
+        set_unwind_grace_us_on_test_chain(&other, 60_000_000);
+    }
+
+    #[test(framework = @aptos_framework, atomica = @atomica)]
+    #[expected_failure(abort_code = E_GRACE_TOO_LONG, location = Self)]
+    /// The override cannot lengthen the grace past the lock-delay budget.
+    fun test_unwind_grace_override_cannot_lengthen(framework: signer, atomica: signer) acquires TimelockConfig {
+        chain_id::initialize_for_test(&framework, TEST_CHAIN_ID);
+        set_unwind_grace_us_on_test_chain(&atomica, DEFAULT_UNWIND_GRACE_US + 1);
+    }
+
     #[test]
     /// View functions return default constant values.
-    fun test_view_functions_return_defaults() {
+    fun test_view_functions_return_defaults() acquires TimelockConfig {
         assert!(get_min_duration_us() == DEFAULT_MIN_DURATION_US, 1);
         assert!(get_max_duration_us() == DEFAULT_MAX_DURATION_US, 2);
         assert!(get_threshold_numerator() == DEFAULT_THRESHOLD_NUMERATOR, 3);
@@ -240,7 +307,7 @@ module atomica::timelock_config {
     /// The 72-hour Ethereum lock delay covers at most 23 h 50 min to the reveal
     /// deadline, the 10-minute opening window, the unwind grace and the carrier
     /// margin (docs/specifications/auction-timing.md).
-    fun test_grace_and_margin_fit_the_lock_delay() {
+    fun test_grace_and_margin_fit_the_lock_delay() acquires TimelockConfig {
         let budget_us = 259_200_000_000; // eth_proof::ETH_RECLAIM_DELAY_SECS
         let to_reveal_us = 85_800_000_000; // 23 h 50 min
         let opening_us = 600_000_000;

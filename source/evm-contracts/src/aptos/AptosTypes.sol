@@ -41,6 +41,7 @@ library AptosTypes {
         uint64 epoch;
         bytes32 executedStateId;
         uint64 version;
+        uint64 timestampUsecs;
         // BCS of the LedgerInfo inside the LedgerInfoWithSignatures (the signed part).
         uint256 ledgerInfoStart;
         uint256 ledgerInfoLen;
@@ -77,7 +78,7 @@ library AptosTypes {
         off += 8 + 32; // round, id
         (li.executedStateId, off) = b.readBytes32(off);
         (li.version, off) = b.readU64(off);
-        off += 8; // timestamp_usecs
+        (li.timestampUsecs, off) = b.readU64(off);
         (li.hasNextEpochState, off) = b.readOptionTag(off);
         if (li.hasNextEpochState) {
             li.nextEpochStateStart = off;

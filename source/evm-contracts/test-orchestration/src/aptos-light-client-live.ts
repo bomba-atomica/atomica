@@ -3,7 +3,8 @@
  *
  * Starts a 4-validator Aptos Docker testnet from the Atomica validator image (IMAGE_NAME) and
  * anvil with the Prague hardfork. Deploys AptosLightClient with DeployAptosLightClient.s.sol from
- * the node's /v1/atomica endpoints, advances it to the current epoch, then:
+ * the node's /v1/atomica endpoints, pinned to the genesis waypoint from the testnet's genesis
+ * files (EXPECTED_GENESIS_WAYPOINT), advances it to the current epoch, then:
  *   1. verifyEvent accepts a live event proof (the FeeStatement event of a faucet transfer);
  *   2. verifyEvent rejects the same proof with one signature byte changed;
  *   3. verifyEvent rejects a valid G2 point that is not the signature (the pairing check).
@@ -246,7 +247,11 @@ function loadAbi(): Abi {
 }
 
 // SCOUT(#219) EDIT: the dual-chain testnet setup needs this deploy step; share it, and note that it rewrites the tracked file test-results/deployment.json.
-function deployLightClient(nodeUrl: string): Hex {
+/**
+ * Deploys with EXPECTED_GENESIS_WAYPOINT from the testnet's genesis files, so the script checks
+ * the node's waypoint against a value the node did not supply.
+ */
+function deployLightClient(nodeUrl: string, expectedWaypoint: string): Hex {
     const res = spawnSync(
         "forge",
         [
@@ -259,7 +264,12 @@ function deployLightClient(nodeUrl: string): Hex {
         {
             cwd: CONTRACTS_DIR,
             stdio: "inherit",
-            env: { ...process.env, PRIVATE_KEY: DEPLOYER_KEY, APTOS_NODE_URL: nodeUrl },
+            env: {
+                ...process.env,
+                PRIVATE_KEY: DEPLOYER_KEY,
+                APTOS_NODE_URL: nodeUrl,
+                EXPECTED_GENESIS_WAYPOINT: expectedWaypoint,
+            },
         },
     );
     if (res.status !== 0) throw new Error("DeployAptosLightClient failed");
@@ -325,7 +335,9 @@ async function main(): Promise<void> {
         check(eventIndex >= 0, `transaction ${txn.version} emitted ${FEE_STATEMENT_TYPE}`);
 
         // Deploy from the node's genesis LedgerInfo and waypoint.
-        const address = deployLightClient(node);
+        const waypoint = testnet.genesisWaypoint();
+        console.log(`Genesis waypoint from the testnet genesis files: ${waypoint}`);
+        const address = deployLightClient(node, waypoint);
         console.log(`AptosLightClient at ${address}`);
         const abi = loadAbi();
         const publicClient = createPublicClient({ chain: foundry, transport: http(ETH_RPC_URL) });

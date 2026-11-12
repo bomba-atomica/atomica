@@ -54,6 +54,7 @@ vi.mock("@atomica/sdk/ethereum/proofs", () => ({
 }));
 // SCOUT(#243) REMOVE: the registerTimelock mock.
 vi.mock("@atomica/sdk/aptos", () => ({
+  assertSiweDomain: vi.fn().mockResolvedValue(undefined),
   getRegisterLockPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
   registerTimelock: vi.fn(),
@@ -75,6 +76,7 @@ import { generateLockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
 import type { LockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
 import {
   aptos,
+  assertSiweDomain,
   getRegisterLockPayload,
   getCreateAuctionPayload,
   registerTimelock,
@@ -551,6 +553,27 @@ describe("useSellFlow state machine", () => {
       expect(result.current.txHash).toBeUndefined();
       expect(lockFromReceipt).not.toHaveBeenCalled();
       expect(stored().step).toBe("lock");
+    });
+
+    it("lockEth on another host: sends no approve or lock and shows the expected SIWE domain", async () => {
+      vi.mocked(assertSiweDomain).mockRejectedValueOnce(
+        new Error(
+          "This page runs on evil.example, but lock receipts belong to accounts of localhost:3000. Open the app on localhost:3000 before you lock tokens.",
+        ),
+      );
+
+      const { result } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      await act(async () => {
+        await result.current.lockEth(10n ** 18n, 2_000_000_000n);
+      });
+
+      expect(assertSiweDomain).toHaveBeenCalledWith(window.location.host);
+      expect(approveFakeEth).not.toHaveBeenCalled();
+      expect(lockFakeEth).not.toHaveBeenCalled();
+      expect(result.current.step).toBe("lock");
+      expect(result.current.error).toContain("localhost:3000");
+      expect(result.current.loading).toBe(false);
     });
 
     it("submitProof error: sets the error message and stays at submitting-proof", async () => {

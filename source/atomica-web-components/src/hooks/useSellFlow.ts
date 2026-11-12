@@ -24,6 +24,7 @@ import {
 import { getChainConfig } from "@atomica/sdk/chain-config";
 // SCOUT(#243) REMOVE: drop the registerTimelock import.
 import {
+  assertSiweDomain,
   getRegisterLockPayload,
   getCreateAuctionPayload,
   registerTimelock,
@@ -290,6 +291,10 @@ export function useSellFlow(
       setState((s) => ({ ...s, loading: true, error: undefined }));
 
       try {
+        // A receipt belongs to the seller's account of the pinned SIWE
+        // domain. Refuse to lock from any other host: Aptos would never let
+        // this wallet claim the lock.
+        await assertSiweDomain(window.location.host);
         const provider = new ethers.BrowserProvider(window.ethereum);
 
         // Step 1: Approve

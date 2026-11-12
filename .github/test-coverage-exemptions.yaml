@@ -14,11 +14,7 @@ exemptions:
     files:
       - source/atomica-web-components/tests/AccountStatus.test.tsx
       - source/atomica-web-components/tests/FakeEthMint.test.tsx
-      # SCOUT(#217) TEST: no CI job runs this browser-mode file, so the SettlementStatus price assert must go in a new tests/unit file to run in the Unit Tests job.
-      - source/atomica-web-components/tests/SettlementStatus.test.tsx
       - source/atomica-web-components/tests/TxButton.skip-submit.test.tsx
-      # SCOUT(#217) TEST: no CI job runs this browser-mode file, so the WithdrawWinnings price assert must go in a new tests/unit file to run in the Unit Tests job.
-      - source/atomica-web-components/tests/WithdrawWinnings.test.tsx
       - source/atomica-web-components/tests/app-config.test.ts
       - source/atomica-web-components/tests/app-state.test.tsx
       - source/atomica-web-components/tests/useBidHistory.test.tsx
@@ -29,7 +25,7 @@ exemptions:
   - reason: >-
       Live-chain browser integration steps (Docker Aptos testnet plus anvil or
       the Docker PoS chain). CI runs only 14-happy-path.test.tsx today.
-      test-web.yaml runs 01, 02, 07-14 and 16 through its browser matrix
+      test-web.yaml runs 01, 02, 07-14, 16 and 17 through its browser matrix
       test_files, which scripts/check-test-coverage.js does not expand.
     files:
       - source/atomica-web-components/tests/integration/01-faucet.test.tsx
@@ -54,6 +50,7 @@ exemptions:
       - source/atomica-web-components/tests/integration/13-bid-history.test.tsx
       - source/atomica-web-components/tests/integration/15-pool-events.test.tsx
       - source/atomica-web-components/tests/integration/16-settle-100-bids.test.tsx
+      - source/atomica-web-components/tests/integration/17-unwind.test.tsx
       # SCOUT(#236) TEST: this file is exempt and in no browser chunk, so its claim and release selector asserts never run in CI.
       # SCOUT(#238) TEST: this file is exempt and in no browser chunk, so its fee-rebate selector edits never run in CI.
       # SCOUT(#241) TEST: this file is exempt and in no browser chunk, so its minimum price selector edits never run in CI.
