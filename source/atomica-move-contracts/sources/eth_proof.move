@@ -69,12 +69,9 @@ module atomica::eth_proof {
     /// Storage slot of `LockBox.commitments` (LockBox.sol storage layout).
     const LOCK_COMMITMENTS_SLOT: u8 = 0;
 
-    // SCOUT(#220) REMOVE: `WINDOW_EPOCH_SECS` and `WINDOW_SPLIT_SECS`; the three constants below replace them.
-    /// Seconds per auction epoch (`auction::current_window_id`).
-    const WINDOW_EPOCH_SECS: u64 = 43200;
-    /// Offset of the second window within an epoch (`auction::current_window_id`).
-    const WINDOW_SPLIT_SECS: u64 = 28500;
-    // SCOUT(#220) ADD: named constants of the two-closes-a-day formula. `auction::current_window_id` needs the same three numbers, and a Move constant is private to its module.
+    // Window id formula: two closes a day, at 07:45 and 16:15 UTC
+    // (docs/specifications/auction-timing.md). `auction::current_window_id`
+    // reads it through `window_id_at`, because a Move constant is private.
     /// Seconds per day.
     const WINDOW_DAY_SECS: u64 = 86400;
     /// Second of the day of the morning close, 07:45:00 UTC.
@@ -237,11 +234,28 @@ module atomica::eth_proof {
         keccak256(data)
     }
 
-    /// Unix second at which `window_id` stops being `auction::current_window_id`.
-    // SCOUT(#220) EDIT: `window_close_secs` becomes (w / 2) * 86400 + (27900 for an even w, 58500 for an odd w).
+    /// Window id at unix second `secs`. It changes exactly at 07:45:00 and
+    /// 16:15:00 UTC:
+    ///
+    ///   day = secs / 86400, t = secs % 86400
+    ///   id  = day * 2 + (t >= 27900 ? 1 : 0) + (t >= 58500 ? 1 : 0)
+    ///
+    /// @see docs/architecture/v0-architecture.md §2.2
+    public fun window_id_at(secs: u64): u64 {
+        let day = secs / WINDOW_DAY_SECS;
+        let t = secs % WINDOW_DAY_SECS;
+        let id = day * 2;
+        if (t >= WINDOW_MORNING_CLOSE_SECS) { id = id + 1 };
+        if (t >= WINDOW_AFTERNOON_CLOSE_SECS) { id = id + 1 };
+        id
+    }
+
+    /// Unix second at which `window_id` stops being `auction::current_window_id`:
+    /// (w / 2) * 86400 + (w even ? 27900 : 58500). An even window closes at
+    /// 07:45 UTC, an odd window at 16:15 UTC. It is the first second of `w + 1`.
     public fun window_close_secs(window_id: u64): u64 {
-        let epoch_start = (window_id / 2) * WINDOW_EPOCH_SECS;
-        if (window_id % 2 == 0) { epoch_start + WINDOW_SPLIT_SECS } else { epoch_start + WINDOW_EPOCH_SECS }
+        let day_start = (window_id / 2) * WINDOW_DAY_SECS;
+        if (window_id % 2 == 0) { day_start + WINDOW_MORNING_CLOSE_SECS } else { day_start + WINDOW_AFTERNOON_CLOSE_SECS }
     }
 
     /// The Ethereum lock deadline of every lock of window `window_id`: window

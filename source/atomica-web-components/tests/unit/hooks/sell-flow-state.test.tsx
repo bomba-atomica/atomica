@@ -26,16 +26,15 @@ vi.mock("@atomica/sdk/chain-config", () => ({
 }));
 
 // Mock blockchain action modules so no real I/O happens.
-// SCOUT(#220) EDIT: old-formula fixture pair 83075 and 1_794_700_800 (mock values only).
 // SCOUT(#221) EDIT: the lockBinding and lockFromReceipt mocks carry a deadline; the asserts on lockFakeEth, the proof input and reclaimLock below repeat it.
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeEth: vi.fn(),
   lockFakeEth: vi.fn(),
-  currentWindowId: vi.fn(() => 83075n),
+  currentWindowId: vi.fn(() => 41538n),
   lockBinding: vi.fn((windowId: bigint) => ({
     windowId,
     pairHash: "0x" + "ee".repeat(32),
-    deadline: 1_794_700_800n,
+    deadline: 1_794_728_700n,
   })),
   lockFromReceipt: vi.fn(() => ({
     lockId: "0x" + "dd".repeat(32),
@@ -43,9 +42,9 @@ vi.mock("@atomica/sdk/ethereum", () => ({
     token: "0x" + "22".repeat(20),
     nonce: 3n,
     amount: 10n ** 18n,
-    windowId: 83075n,
+    windowId: 41538n,
     pairHash: "0x" + "ee".repeat(32),
-    deadline: 1_794_700_800n,
+    deadline: 1_794_728_700n,
   })),
   reclaimLock: vi.fn(),
 }));
@@ -109,7 +108,7 @@ const LOCKED = {
   step: "generating-proof",
   lockBlock: 100,
   lockNonce: "3",
-  windowId: "83075",
+  windowId: "41538",
   amount: "1000000000000000000",
 };
 
@@ -298,9 +297,9 @@ describe("useSellFlow state machine", () => {
       );
       // The lock is bound to the current window, with its eth_lock_deadline.
       expect(lockFakeEth).toHaveBeenCalledWith(expect.anything(), 10n ** 18n, {
-        windowId: 83075n,
+        windowId: 41538n,
         pairHash: "0x" + "ee".repeat(32),
-        deadline: 1_794_700_800n,
+        deadline: 1_794_728_700n,
       });
       expect(
         vi.mocked(approveFakeEth).mock.invocationCallOrder[0],
@@ -315,9 +314,9 @@ describe("useSellFlow state machine", () => {
       expect(result.current.lockNonce).toBe(3n);
       expect(result.current.amount).toBe(10n ** 18n);
       expect(result.current.minPrice).toBe(2_000_000_000n);
-      expect(result.current.windowId).toBe(83075n);
+      expect(result.current.windowId).toBe(41538n);
       // unlockTime is the lock deadline: after it anyone may reclaim the lock.
-      expect(result.current.unlockTime).toBe(1_794_700_800);
+      expect(result.current.unlockTime).toBe(1_794_728_700);
       expect(result.current.loading).toBe(false);
       expect(result.current.error).toBeUndefined();
       expect(stored()).toMatchObject({
@@ -325,7 +324,7 @@ describe("useSellFlow state machine", () => {
         txHash: "0xlocktx",
         lockBlock: 77,
         lockNonce: "3",
-        windowId: "83075",
+        windowId: "41538",
         amount: "1000000000000000000",
         minPrice: "2000000000",
       });
@@ -369,9 +368,9 @@ describe("useSellFlow state machine", () => {
         3n,
         {
           amount: 10n ** 18n,
-          windowId: 83075n,
+          windowId: 41538n,
           pairHash: "0x" + "ee".repeat(32),
-          deadline: 1_794_700_800n,
+          deadline: 1_794_728_700n,
         },
         104,
       );
@@ -510,7 +509,7 @@ describe("useSellFlow state machine", () => {
         step: "creating-auction",
         lockId: EXPECTED_LOCK_ID,
         lockNonce: "3",
-        windowId: "83075",
+        windowId: "41538",
         amount: "1000000000000000000",
         unlockTime: 1,
       });
@@ -526,9 +525,9 @@ describe("useSellFlow state machine", () => {
         token: FAKE_ETH,
         nonce: 3n,
         amount: 10n ** 18n,
-        windowId: 83075n,
+        windowId: 41538n,
         pairHash: "0x" + "ee".repeat(32),
-        deadline: 1_794_700_800n,
+        deadline: 1_794_728_700n,
       });
       expect(result.current.step).toBe("lock");
       expect(result.current.lockId).toBeUndefined();

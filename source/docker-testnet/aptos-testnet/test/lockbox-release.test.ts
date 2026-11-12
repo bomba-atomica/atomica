@@ -217,7 +217,6 @@ describe.sequential("Proof-gated LockBox with Aptos lock registration (live dual
         expect(BigInt(proof.storageValue)).toBe(BigInt(commitment));
         expect(await lockBox.statuses(proof.lockId)).toBe(STATUS_OPEN);
 
-        // SCOUT(#220) EDIT: the deadline this case reads back follows the new window close formula on both sides; no constant here changes.
         // Aptos keeps the binding and accepts only eth_lock_deadline(window id).
         const moduleAddr = info.aptos.moduleAddress;
         const [windowId, pairHash] = await aptos.view({

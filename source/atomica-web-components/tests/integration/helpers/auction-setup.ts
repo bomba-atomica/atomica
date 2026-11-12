@@ -57,6 +57,7 @@ import {
   simulateMaxGasAmount,
   submitNativeTransaction,
 } from "@atomica/sdk";
+import { currentWindowId as windowIdAt } from "@atomica/sdk/ethereum";
 import { commands } from "vitest/browser";
 import type { EthLockProofResult as CommandEthLockProofResult } from "@atomica/aptos-docker-testnet/browser-commands";
 import type { IntegrationFixture } from "../fixtures/dual-chain";
@@ -306,15 +307,12 @@ export const RECEIPT_FILLED = 3;
 /**
  * The window `create_auction` accepts right now, from the chain clock.
  *
- * Mirrors `auction::current_window_id` (not a view function): two windows per
- * 43 200 s epoch, the second starting at offset 28 500 s.
+ * `auction::current_window_id` is not a view function, so this applies the SDK
+ * mirror (the id changes at 07:45 and 16:15 UTC) to the chain clock.
  */
-// SCOUT(#220) EDIT: formula copy (43200 and 28500); switch to the 07:45 and 16:15 UTC formula or call the SDK currentWindowId with the chain clock; the comment above writes 28 500 with a space, which the issue's grep misses.
 export async function currentWindowId(aptosClient: Aptos): Promise<bigint> {
   const { ledger_timestamp } = await aptosClient.getLedgerInfo();
-  const nowSec = BigInt(ledger_timestamp) / 1_000_000n;
-  const epoch = nowSec / 43200n;
-  return epoch * 2n + (nowSec % 43200n >= 28500n ? 1n : 0n);
+  return windowIdAt(BigInt(ledger_timestamp) / 1_000_000n);
 }
 
 /** Poll `probe` every 2 s until it returns a value, or throw after `timeoutSecs`. */

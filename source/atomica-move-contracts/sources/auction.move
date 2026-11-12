@@ -465,21 +465,17 @@ module atomica::auction {
 
     /// Compute `auction_window_id` from on-chain clock.
     ///
-    ///   epoch_index   = unix_seconds / 43200
-    ///   time_in_epoch = unix_seconds % 43200
-    ///   window_offset = (time_in_epoch >= 28500) ? 1 : 0
-    ///   window_id     = epoch_index * 2 + window_offset
+    ///   day       = unix_seconds / 86400
+    ///   t         = unix_seconds % 86400
+    ///   window_id = day * 2 + (t >= 27900 ? 1 : 0) + (t >= 58500 ? 1 : 0)
     ///
-    /// Morning window fires at offset 28 500 s (07:45 UTC).
-    /// Afternoon window fires at offset 58 500 s (16:15 UTC).
+    /// The id changes at the morning close, 27 900 s (07:45 UTC), and at the
+    /// afternoon close, 58 500 s (16:15 UTC). `eth_proof::window_id_at` owns
+    /// the formula.
     ///
     /// @see docs/architecture/v0-architecture.md §2.2
-    // SCOUT(#220) EDIT: `current_window_id` becomes day * 2 + (t >= 27900) + (t >= 58500), with day = s / 86400 and t = s % 86400; fix the doc above (28 500 s is 07:55, and 58 500 s cannot fall inside a 43 200 s period).
     public fun current_window_id(): u64 {
-        let s = timestamp::now_seconds();
-        let epoch = s / 43200;
-        let tmod  = s % 43200;
-        epoch * 2 + if (tmod >= 28500) { 1 } else { 0 }
+        eth_proof::window_id_at(timestamp::now_seconds())
     }
 
     /// Build the BCS-encoded registry key for (window_id, pair_bcs).

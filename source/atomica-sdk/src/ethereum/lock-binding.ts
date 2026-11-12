@@ -10,12 +10,12 @@
 
 import { ethers } from "ethers";
 
-// SCOUT(#220) EDIT: replace with the day length 86_400n; windows no longer split a 43 200 s period.
-/** Seconds per Aptos auction epoch (`auction::current_window_id`). */
-export const WINDOW_EPOCH_SECS = 43_200n;
-// SCOUT(#220) EDIT: replace with the two closes, 27_900n (07:45 UTC) and 58_500n (16:15 UTC).
-/** Offset of the second window within an epoch (`auction::current_window_id`). */
-export const WINDOW_SPLIT_SECS = 28_500n;
+/** Seconds per day (`eth_proof::WINDOW_DAY_SECS`). */
+export const WINDOW_DAY_SECS = 86_400n;
+/** Second of the day of the morning close, 07:45:00 UTC (`eth_proof::WINDOW_MORNING_CLOSE_SECS`). */
+export const WINDOW_MORNING_CLOSE_SECS = 27_900n;
+/** Second of the day of the afternoon close, 16:15:00 UTC (`eth_proof::WINDOW_AFTERNOON_CLOSE_SECS`). */
+export const WINDOW_AFTERNOON_CLOSE_SECS = 58_500n;
 // SCOUT(#221) EDIT: LockBox freezes this value; change this mirror with the Move and Solidity constants if the owner picks another reclaim delay.
 /**
  * Delay from a window's close to its Ethereum lock deadline
@@ -33,21 +33,33 @@ export interface LockBinding {
   deadline: bigint;
 }
 
-// SCOUT(#220) EDIT: new formula: day * 2 + (t >= 27900 ? 1 : 0) + (t >= 58500 ? 1 : 0), with day = nowSecs / 86400 and t = nowSecs % 86400.
-/** `auction::current_window_id` at `nowSecs`. */
+/**
+ * `auction::current_window_id` (`eth_proof::window_id_at`) at `nowSecs`. The
+ * id changes exactly at 07:45:00 and 16:15:00 UTC:
+ * `day * 2 + (t >= 27900 ? 1 : 0) + (t >= 58500 ? 1 : 0)`, with
+ * `day = nowSecs / 86400` and `t = nowSecs % 86400`.
+ */
 export function currentWindowId(nowSecs: bigint): bigint {
-  const epoch = nowSecs / WINDOW_EPOCH_SECS;
+  const t = nowSecs % WINDOW_DAY_SECS;
   return (
-    epoch * 2n + (nowSecs % WINDOW_EPOCH_SECS >= WINDOW_SPLIT_SECS ? 1n : 0n)
+    (nowSecs / WINDOW_DAY_SECS) * 2n +
+    (t >= WINDOW_MORNING_CLOSE_SECS ? 1n : 0n) +
+    (t >= WINDOW_AFTERNOON_CLOSE_SECS ? 1n : 0n)
   );
 }
 
-// SCOUT(#220) EDIT: new formula: (windowId / 2) * 86400 + (windowId even ? 27900 : 58500).
-/** Unix second at which `windowId` stops being the current window. */
+/**
+ * Unix second at which `windowId` stops being the current window
+ * (`eth_proof::window_close_secs`): `(windowId / 2) * 86400 + (even ? 27900 : 58500)`.
+ * An even window closes at 07:45 UTC, an odd window at 16:15 UTC.
+ */
 export function windowCloseSecs(windowId: bigint): bigint {
-  const epochStart = (windowId / 2n) * WINDOW_EPOCH_SECS;
+  const dayStart = (windowId / 2n) * WINDOW_DAY_SECS;
   return (
-    epochStart + (windowId % 2n === 0n ? WINDOW_SPLIT_SECS : WINDOW_EPOCH_SECS)
+    dayStart +
+    (windowId % 2n === 0n
+      ? WINDOW_MORNING_CLOSE_SECS
+      : WINDOW_AFTERNOON_CLOSE_SECS)
   );
 }
 

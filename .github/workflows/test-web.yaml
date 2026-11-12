@@ -615,7 +615,6 @@ jobs:
           # SCOUT(#224) TEST: this chunk runs 07-create-auction with the listed and unlisted pair cases.
           # SCOUT(#243) TEST: this chunk runs 07-create-auction, which registers the timelock through create_auction and checks the rejected direct registration.
           # SCOUT(#241) TEST: this chunk runs 07-create-auction and 08-auction-monitor with the reserve price argument gone.
-          # SCOUT(#220) TEST: this chunk exercises the window id formula copy in helpers/auction-setup.ts against the live current_window_id.
           - chunk: auction
             test_files: >-
               tests/integration/07-create-auction.test.tsx

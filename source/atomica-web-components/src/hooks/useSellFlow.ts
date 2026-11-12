@@ -301,7 +301,6 @@ export function useSellFlow(
         setState((s) => ({ ...s, loading: true }));
         await approveFakeEth(provider, amount);
 
-        // SCOUT(#220) EDIT: no code change: the window id follows the SDK currentWindowId on the client clock.
         // SCOUT(#221) EDIT: the binding loses the caller deadline; LockBox.lock reverts for a closed window or one more than one ahead, so a wrong client clock fails here.
         // Step 2: Lock into the current window. Its deadline is
         // auction::eth_lock_deadline(windowId): after it, anyone may
@@ -440,7 +439,6 @@ export function useSellFlow(
 
     try {
       const lockIdBytes = ethers.getBytes(state.lockId);
-      // SCOUT(#220) EDIT: the fallback window id from the client clock follows the SDK formula.
       // The window the lock is bound to. Older persisted state has none:
       // fall back to the current_window_id formula on the client clock.
       const windowId =

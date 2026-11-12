@@ -37,7 +37,6 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 <!-- SCOUT(#242) DOC: unwind row: LockBox reclaim is live (203); the Aptos unwind is open pull request 213 (194); the SDK and UI half (195) is open. -->
 <!-- SCOUT(#216) DOC: collateral row: becomes live when collateral must cover price times quantity. -->
 <!-- SCOUT(#219) DOC: settlement row: it can read live only once a CI test runs lock, auction, recordOutcome and releaseByOutcome across both chains; name that test here. -->
-<!-- SCOUT(#220) DOC: windows row: after this issue the ids change exactly at 07:45 and 16:15 UTC. -->
 <!-- SCOUT(#221) DOC: LockBox row: lock takes no deadline and the auction key drops it; LockBox redeploys. -->
 <!-- SCOUT(#222) DOC: LockBox row: add reclaimUnpayable and the remainder-to-depositor leaf rule. -->
 <!-- SCOUT(#224) DOC: multi-pair row: "single pair hard-coded" becomes an allowlist seeded with one launch pair. -->
@@ -63,7 +62,7 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 | **IBE timelock — on-chain Move scaffolding** | `atomica-move-contracts/sources/timelock.move`, `timelock_config.move` | `scaffold` |
 | **Uniform-price batch auction (`auction.move`)** | `atomica-move-contracts/sources/auction.move` | `scaffold` — current `settle()` picks single highest bid; uniform-price clearing unimplemented |
 | **Sealed bids end-to-end (encrypted on-chain, plaintext-reveal path)** | `atomica-move-contracts/sources/auction.move`, `atomica-web-ui/src/lib/ibe.ts` | `live` — bids are stored as IBE ciphertext with a price commitment; `submit_cleartext_and_clear` opens them and, once every bid is open, clears the window in the same transaction; `finalize_reveal` closes and clears a partly opened window after the opening window |
-| **Twice-daily global auction windows (07:45 / 16:15 UTC)** | `atomica-move-contracts/sources/auction.move` | `missing` — auctions are per-seller with caller-supplied duration |
+| **Twice-daily global auction windows (07:45 / 16:15 UTC)** | `atomica-move-contracts/sources/auction.move`, `atomica-move-contracts/sources/eth_proof.move` | `missing` — window ids come from the chain clock and change exactly at 07:45 and 16:15 UTC (`eth_proof::window_id_at`); the window timelock deadline is still picked by the first seller |
 | **Multi-asset / multi-pair clearing** | `atomica-move-contracts/sources/auction.move` | `missing` — single pair hard-coded |
 | **Bidder collateral on Aptos** | `atomica-move-contracts/sources/auction.move` | `missing` — Demo explicitly skips collateral |
 | **Cross-chain settlement back to Ethereum (verified BLS outcome proof)** | `evm-contracts/src/escrow/LockBox.sol`, `BLSVerifier.sol` | `missing` — real BLS verification of Aptos outcomes ships in v0.1; the Aptos light client verifier and proof-gated LockBox are issues 201, 202, 203 |

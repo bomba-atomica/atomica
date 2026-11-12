@@ -50,13 +50,15 @@ lock deadline (issue 203). After the deadline, anyone may `reclaim` an open
 lock to its depositor on Ethereum. Before it, only a proven Aptos
 `AuctionOutcome` releases the lock.
 
-<!-- SCOUT(#220) DOC: window close bullet contradicts the Canonical Schedule above: 28 500 s is 07:55 UTC and odd windows close at 00:00 and 12:00; new close(w) = (w / 2) * 86400 + (w even ? 27900 : 58500). -->
 <!-- SCOUT(#221) DOC: reclaim delay bullet: the value is frozen into the immutable LockBox, so the owner fixes it first (review decision 36); third bullet: "Aptos registers a lock only with this deadline" becomes "LockBox computes it". -->
 
-- **Window close.** `auction::current_window_id` splits each 43 200 s epoch at
-  offset 28 500 s. Window `w` closes at
-  `close(w) = (w / 2) * 43200 + (w even ? 28500 : 43200)` (unix seconds), the
-  first second of window `w + 1` (`eth_proof::window_close_secs`).
+- **Window close.** `auction::current_window_id` changes exactly at the two
+  canonical closes, 07:45 UTC (27 900 s into the UTC day) and 16:15 UTC
+  (58 500 s): `day * 2 + (t >= 27900 ? 1 : 0) + (t >= 58500 ? 1 : 0)`, with
+  `day = s / 86400` and `t = s % 86400`. Window `w` closes at
+  `close(w) = (w / 2) * 86400 + (w even ? 27900 : 58500)` (unix seconds), the
+  first second of window `w + 1` (`eth_proof::window_close_secs`). An even
+  window closes at 07:45 UTC, an odd window at 16:15 UTC.
 - **`ETH_RECLAIM_DELAY_SECS = 259200` (72 hours)**
   (`eth_proof::ETH_RECLAIM_DELAY_SECS`, SDK `ETH_RECLAIM_DELAY_SECS`).
 - **`eth_lock_deadline(w) = close(w) + ETH_RECLAIM_DELAY_SECS`**

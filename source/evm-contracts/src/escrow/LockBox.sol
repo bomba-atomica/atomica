@@ -99,7 +99,6 @@ contract LockBox {
     uint256 private constant OUTCOME_BCS_LEN = 8 + 1 + 32 + 8 + 1 + 32 + 8;
 
     // SCOUT(#221) ADD: the window clock this contract freezes at deploy; it must equal `eth_proof.move` and the SDK `lock-binding.ts`; the three constants become public.
-    // SCOUT(#220) EDIT: these are the 07:45 and 16:15 UTC closes of the window id formula; if that issue ships other numbers, change them here before any deploy.
     uint64 internal constant WINDOW_DAY_SECS = 86_400;
     uint64 internal constant MORNING_CLOSE_SECS = 27_900;
     uint64 internal constant AFTERNOON_CLOSE_SECS = 58_500;
