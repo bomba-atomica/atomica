@@ -65,9 +65,13 @@ export interface DualChainTestnetInfo {
         bidderPrivateKey: string;
         bidderAddress: string;
         // SCOUT(#219) EDIT: the comment below is stale (LockBox has no settlementAuthority); this account is the natural outcome carrier, neither a depositor nor the Aptos deployer, and a second bidder (test account 3) must be added beside it.
-        /** Relayer account (testnet account 2): the LockBox settlementAuthority */
-        relayerPrivateKey: string;
-        relayerAddress: string;
+        /**
+         * Carrier account (testnet account 2). It holds no special rights:
+         * LockBox has no settlement authority, so it carries outcome proofs
+         * and reclaims locks exactly as any user could.
+         */
+        carrierPrivateKey: string;
+        carrierAddress: string;
     };
     aptos: {
         // SCOUT(#235) EDIT: expose every validator API URL here (the testnet runs four), so tests can give sealBid extra endpoints for the master public key comparison.
@@ -235,8 +239,8 @@ export async function setupDualChainTestnet(
     // each address from its key. The deployer funds them with ETH below.
     const bidderPrivateKey = accounts[1].privateKey;
     const bidderAddress = new ethers.Wallet(bidderPrivateKey).address;
-    const relayerPrivateKey = accounts[2].privateKey;
-    const relayerAddress = new ethers.Wallet(relayerPrivateKey).address;
+    const carrierPrivateKey = accounts[2].privateKey;
+    const carrierAddress = new ethers.Wallet(carrierPrivateKey).address;
 
     // ethers caches eth_getTransactionCount for 250 ms by default. Anvil mines
     // instantly, so back-to-back deploys would reuse a stale nonce.
@@ -257,12 +261,12 @@ export async function setupDualChainTestnet(
     ensureCompiled();
 
     // SCOUT(#219) EDIT: also fund a second bidder (test account 3) with gas ETH here; the round trip needs a seller, a winner, a loser and a carrier.
-    // Gas for the bidder and the relayer (they sign their own transactions).
-    for (const to of [bidderAddress, relayerAddress]) {
+    // Gas for the bidder and the carrier (they sign their own transactions).
+    for (const to of [bidderAddress, carrierAddress]) {
         const tx = await deployer.sendTransaction({ to, value: ethers.parseEther("10") });
         await provider.waitForTransaction(tx.hash, 1);
     }
-    console.log(`[Dual-Chain] ✓ Funded bidder and relayer with ETH`);
+    console.log(`[Dual-Chain] ✓ Funded bidder and carrier with ETH`);
 
     // FakeETH and FakeUSD share the same deployer signer, so they must be
     // deployed sequentially to avoid nonce collisions.
@@ -375,8 +379,8 @@ export async function setupDualChainTestnet(
             deployerAddress,
             bidderPrivateKey,
             bidderAddress,
-            relayerPrivateKey,
-            relayerAddress,
+            carrierPrivateKey,
+            carrierAddress,
         },
         aptos: {
             nodeUrl,

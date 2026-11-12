@@ -534,7 +534,6 @@ export async function getSettlement(
  * events with per-winner Ethereum addresses and fill amounts.
  *
  * @see docs/architecture/v0-architecture.md §2.9 — AuctionSettled event
- * @see bridge.ts RISK 1 — winners/fills join gap
  */
 export interface BidResult {
   /** Aptos address (32-byte hex) of the bidder. */
@@ -548,14 +547,9 @@ export interface BidResult {
 /**
  * Query `auction::get_bid_results` view function (issue #112).
  *
- * Returns the full list of bid results for a settled auction window.
- * Used by the settlement relayer to derive per-winner Ethereum addresses
- * and fill amounts for `BLSVerifierTestnet::authorizeSettlement`.
- *
- * The relayer must:
- *   1. Filter results where `is_winner == true`.
- *   2. Convert each winner's Aptos address to Ethereum via `aptosToEthereumAddress`.
- *   3. Use `fill_amount` from each winning BidResult as the `fills` entry.
+ * Returns the full list of bid results for a settled auction window, for
+ * display. Payouts on Ethereum come from the per-lock outcomes Aptos records
+ * (`getLockOutcome`), carried by settlement/outcome-carrier.ts.
  *
  * NOTE: This function will return an empty array if called before settlement
  * is finalized for the given window/pair combination.
@@ -565,7 +559,6 @@ export interface BidResult {
  * @returns Array of {@link BidResult} entries (empty if not yet settled).
  *
  * @see docs/architecture/v0-architecture.md §2.9
- * @see bridge.ts — submitSettlement join step
  */
 export async function getBidResults(
   windowId: bigint,
@@ -956,4 +949,268 @@ export async function refundExpiredWindow(
     ethAddress,
     getRefundExpiredWindowPayload(windowId, pairBcs),
   );
+}
+
+// ── Permissionless unwind (issue 195) ─────────────────────────────────────────
+//
+// Owner axioms: any user can unwind a finished or stuck auction, and every
+// lock goes home unless the auction executed flawlessly. These builders need
+// no special signer. See docs/specifications/auction-timing.md (stuck
+// deadline) and docs/decisions/trustless-v0-1-unwinding.md.
+
+/** Asset of a lock receipt: `lock_receipt::FakeETH` or `lock_receipt::FakeUSD`. */
+export type ReceiptAsset = "FakeETH" | "FakeUSD";
+
+/** `lock_receipt` status codes (`STATUS_*` in lock_receipt.move). */
+export const RECEIPT_STATUS = {
+  Active: 0,
+  Claimed: 1,
+  Revoked: 2,
+  Filled: 3,
+} as const;
+
+function receiptTypeArgs(asset: ReceiptAsset): string[] {
+  return [
+    `${CONTRACT_ADDR}::lock_receipt::Ethereum`,
+    `${CONTRACT_ADDR}::lock_receipt::${asset}`,
+  ];
+}
+
+/**
+ * Build payload for `auction::unwind(window_id, pair_bcs)`. Anyone may send it
+ * at or after the window's stuck deadline. An unsettled window gets its
+ * all-refund `AuctionOutcome`. A finalized window returns the receipts it
+ * still holds.
+ */
+export function getUnwindPayload(
+  windowId: bigint,
+  pairBcs: Uint8Array,
+): InputGenerateTransactionPayloadData {
+  return {
+    function: `${CONTRACT_ADDR}::auction::unwind`,
+    functionArguments: [windowId, pairBcs],
+  };
+}
+
+export async function submitUnwind(
+  ethAddress: string,
+  windowId: bigint,
+  pairBcs: Uint8Array,
+) {
+  return await submitNativeTransaction(
+    aptos,
+    ethAddress,
+    getUnwindPayload(windowId, pairBcs),
+  );
+}
+
+/**
+ * Build payload for `lock_receipt::cancel_unauctioned<Ethereum, Asset>(lock_id)`:
+ * revoke a receipt no window claimed, once it is older than the cancel delay.
+ * Its lock is in no outcome tree, so it goes home by `LockBox.reclaim`.
+ */
+export function getCancelUnauctionedPayload(
+  asset: ReceiptAsset,
+  lockId: Uint8Array,
+): InputGenerateTransactionPayloadData {
+  return {
+    function: `${CONTRACT_ADDR}::lock_receipt::cancel_unauctioned`,
+    typeArguments: receiptTypeArgs(asset),
+    functionArguments: [lockId],
+  };
+}
+
+export async function submitCancelUnauctioned(
+  ethAddress: string,
+  asset: ReceiptAsset,
+  lockId: Uint8Array,
+) {
+  return await submitNativeTransaction(
+    aptos,
+    ethAddress,
+    getCancelUnauctionedPayload(asset, lockId),
+  );
+}
+
+/** `auction::get_stuck_deadline_us`: from it on anyone may unwind the window. */
+export async function getStuckDeadlineUs(
+  windowId: bigint,
+  pairBcs: Uint8Array,
+): Promise<bigint> {
+  const [deadline] = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::auction::get_stuck_deadline_us`,
+      functionArguments: [windowId, pairBcs],
+    },
+  });
+  return BigInt(String(deadline));
+}
+
+/** `auction::get_window_lock_ids`: seller (FakeETH) and collateral (FakeUSD) lock ids. */
+export async function getWindowLockIds(
+  windowId: bigint,
+  pairBcs: Uint8Array,
+): Promise<{ sellers: string[]; collateral: string[] }> {
+  const [sellers, collateral] = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::auction::get_window_lock_ids`,
+      functionArguments: [windowId, pairBcs],
+    },
+  });
+  return {
+    sellers: (sellers as unknown[]).map(String),
+    collateral: (collateral as unknown[]).map(String),
+  };
+}
+
+/** `lock_receipt::get_receipt` status of one receipt (`RECEIPT_STATUS`). */
+export async function getReceiptStatus(
+  asset: ReceiptAsset,
+  lockId: string,
+): Promise<number> {
+  const result = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::lock_receipt::get_receipt`,
+      typeArguments: receiptTypeArgs(asset),
+      functionArguments: [ethers.getBytes(lockId)],
+    },
+  });
+  return Number(result[3]);
+}
+
+/** The terminal outcome Aptos recorded for one lock (`lock_receipt::get_lock_outcome`). */
+export interface LockOutcome {
+  /** `RECEIPT_STATUS.Revoked` (all to the depositor) or `RECEIPT_STATUS.Filled` */
+  kind: number;
+  windowId: bigint;
+  /** 20-byte Ethereum recipients, checksummed */
+  recipients: string[];
+  amounts: bigint[];
+}
+
+/**
+ * `lock_receipt::get_lock_outcome<Ethereum, Asset>`: the payouts of a lock's
+ * leaf in its window's outcome tree. Aborts (E_NO_OUTCOME) while it has none.
+ */
+export async function getLockOutcome(
+  asset: ReceiptAsset,
+  lockId: string,
+): Promise<LockOutcome> {
+  const [kind, windowId, recipients, amounts] = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::lock_receipt::get_lock_outcome`,
+      typeArguments: receiptTypeArgs(asset),
+      functionArguments: [ethers.getBytes(lockId)],
+    },
+  });
+  return {
+    kind: Number(kind),
+    windowId: BigInt(String(windowId)),
+    recipients: (recipients as unknown[]).map((r) =>
+      ethers.getAddress(String(r)),
+    ),
+    amounts: (amounts as unknown[]).map((a) => BigInt(String(a))),
+  };
+}
+
+/** Whether `auction::unwind` would succeed now, and why not. */
+export interface UnwindEligibility {
+  eligible: boolean;
+  /** Chain time of the stuck deadline, microseconds */
+  stuckDeadlineUs: bigint;
+  /** Chain time the check used, microseconds */
+  nowUs: bigint;
+  /** The window settled or refunded: its AuctionOutcome is already out */
+  final: boolean;
+  /** Receipts the window still holds (status CLAIMED) */
+  heldLocks: number;
+  reason: "eligible" | "before-stuck-deadline" | "nothing-to-return";
+}
+
+/**
+ * Read whether a window can be unwound: its stuck deadline has passed, and it
+ * is either unfinished (unwind emits the all-refund outcome) or finished with
+ * receipts still held (unwind returns them). Mirrors the checks of
+ * `auction::unwind` (E_NOT_STUCK, E_WINDOW_FINAL). Uses the Aptos ledger
+ * clock.
+ */
+export async function getUnwindEligibility(
+  windowId: bigint,
+  pairBcs: Uint8Array,
+): Promise<UnwindEligibility> {
+  const [stuckDeadlineUs, ledger, settled, status] = await Promise.all([
+    getStuckDeadlineUs(windowId, pairBcs),
+    aptos.getLedgerInfo(),
+    isSettled(windowId, pairBcs),
+    aptos.view({
+      payload: {
+        function: `${CONTRACT_ADDR}::auction::get_window_status`,
+        functionArguments: [windowId, pairBcs],
+      },
+    }),
+  ]);
+  const nowUs = BigInt(String(ledger.ledger_timestamp));
+  const final = settled || status[2] === true;
+  let heldLocks = 0;
+  if (final) {
+    const ids = await getWindowLockIds(windowId, pairBcs);
+    const statuses = await Promise.all([
+      ...ids.sellers.map((id) => getReceiptStatus("FakeETH", id)),
+      ...ids.collateral.map((id) => getReceiptStatus("FakeUSD", id)),
+    ]);
+    heldLocks = statuses.filter((s) => s === RECEIPT_STATUS.Claimed).length;
+  }
+  const reason =
+    nowUs < stuckDeadlineUs
+      ? "before-stuck-deadline"
+      : final && heldLocks === 0
+        ? "nothing-to-return"
+        : "eligible";
+  return {
+    eligible: reason === "eligible",
+    stuckDeadlineUs,
+    nowUs,
+    final,
+    heldLocks,
+    reason,
+  };
+}
+
+// ── SIWE domain guard (issue 195) ─────────────────────────────────────────────
+
+/** `eth_proof::siwe_domain`: the SIWE domain whose accounts own lock receipts. */
+export async function getSiweDomain(): Promise<string> {
+  const [domain] = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::eth_proof::siwe_domain`,
+      functionArguments: [],
+    },
+  });
+  return ethers.toUtf8String(String(domain));
+}
+
+/** Thrown when this page's host is not the pinned SIWE domain. */
+export class SiweDomainMismatchError extends Error {
+  constructor(
+    readonly expected: string,
+    readonly actual: string,
+  ) {
+    super(
+      `This page runs on ${actual}, but lock receipts belong to accounts of ${expected}. Open the app on ${expected} before you lock tokens.`,
+    );
+    this.name = "SiweDomainMismatchError";
+  }
+}
+
+/**
+ * Throw {@link SiweDomainMismatchError} unless `host` equals the pinned SIWE
+ * domain. Call it before every lock: a receipt belongs to the depositor's
+ * Ethereum-derivable account of the pinned domain, so tokens locked from
+ * another host could never be claimed on Aptos.
+ */
+export async function assertSiweDomain(
+  host: string = window.location.host,
+): Promise<void> {
+  const expected = await getSiweDomain();
+  if (expected !== host) throw new SiweDomainMismatchError(expected, host);
 }

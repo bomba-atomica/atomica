@@ -46,6 +46,14 @@
       "import": "./dist/settlement/outcome-tree.js",
       "types": "./dist/settlement/outcome-tree.d.ts"
     },
+    "./settlement/outcome-carrier": {
+      "import": "./dist/settlement/outcome-carrier.js",
+      "types": "./dist/settlement/outcome-carrier.d.ts"
+    },
+    "./settlement/window-release": {
+      "import": "./dist/settlement/window-release.js",
+      "types": "./dist/settlement/window-release.d.ts"
+    },
     "./ibe": {
       "import": "./dist/ibe/index.js",
       "types": "./dist/ibe/index.d.ts"
@@ -62,6 +70,7 @@
   "dependencies": {
     "@aptos-labs/ts-sdk": "^5.2.0",
     "@atomica/state-proof-verifier": "file:../state-proofs/typescript",
+    "@noble/curves": "^1.9.1",
     "@noble/hashes": "^1.3.3",
     "ethers": "^6.16.0"
   },

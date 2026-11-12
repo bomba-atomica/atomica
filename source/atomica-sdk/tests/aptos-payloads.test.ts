@@ -10,13 +10,25 @@
  *   - getSettlePayload       → auction::settle
  *   - getSubmitCleartextPayload → auction::submit_cleartext_and_clear
  *   - getOpenBidPayload / getFinalizeRevealPayload / getRefundExpiredWindowPayload
+ *   - getUnwindPayload            → auction::unwind
+ *   - getCancelUnauctionedPayload → lock_receipt::cancel_unauctioned<Ethereum, Asset>
+ *   - getSiweDomain / assertSiweDomain → eth_proof::siwe_domain
  *
  * @see source/atomica-sdk/src/aptos/payloads.ts
  * @see docs/architecture/v0-architecture.md §2.5, §2.6, §2.7
  */
 
 import { describe, it, expect, vi } from "vitest";
-import type { InputEntryFunctionData } from "@aptos-labs/ts-sdk";
+import {
+  generateTransactionPayloadWithABI,
+  parseTypeTag,
+  TypeTagU64,
+  TypeTagVector,
+  type EntryFunctionABI,
+  type InputEntryFunctionData,
+  type TransactionPayloadEntryFunction,
+} from "@aptos-labs/ts-sdk";
+import { ethers } from "ethers";
 
 // ─── Mocks (hoisted before imports) ───────────────────────────────────────────
 
@@ -41,7 +53,13 @@ vi.mock("../src/transaction.js", () => ({
 
 // ─── Import after mocks ────────────────────────────────────────────────────────
 
+import { aptos } from "../src/aptos/config.js";
 import {
+  assertSiweDomain,
+  getCancelUnauctionedPayload,
+  getSiweDomain,
+  getUnwindPayload,
+  SiweDomainMismatchError,
   getBidPayload,
   getFinalizeRevealPayload,
   getOpenBidPayload,
@@ -262,4 +280,122 @@ describe("planned tests (SCOUT)", () => {
   it.todo(
     "SCOUT(#224) LAUNCH_PAIR_BCS equals the BCS of the launch Pair (ethereum, FakeETH, aptos, FakeUSD)",
   );
+});
+
+// ─── Permissionless unwind payloads (issue 195) ───────────────────────────────
+
+/** The mocked CONTRACT_ADDR padded to 32 bytes, as the strict parser wants it. */
+const FULL_ADDR = "0x" + "00".repeat(28) + "deadbeef";
+
+/**
+ * Encode a payload as Aptos does, against the Move signature of the entry.
+ * Returns the type arguments (with the short address again) and the BCS of
+ * each argument.
+ */
+function entryBcs(
+  payload: InputEntryFunctionData,
+  abi: EntryFunctionABI,
+): { typeArgs: string[]; args: string[] } {
+  const full = (t: string) => t.replaceAll("0xdeadbeef", FULL_ADDR);
+  const built = generateTransactionPayloadWithABI({
+    function: full(payload.function) as `${string}::${string}::${string}`,
+    typeArguments: (payload.typeArguments ?? []).map((t) => full(String(t))),
+    functionArguments: payload.functionArguments,
+    abi,
+  }) as TransactionPayloadEntryFunction;
+  return {
+    typeArgs: built.entryFunction.type_args.map((t) =>
+      t.toString().replaceAll(FULL_ADDR, "0xdeadbeef"),
+    ),
+    args: built.entryFunction.args.map((a) => ethers.hexlify(a.bcsToBytes())),
+  };
+}
+
+describe("getUnwindPayload", () => {
+  const payload = getUnwindPayload(
+    WINDOW_ID,
+    PAIR_BCS,
+  ) as InputEntryFunctionData;
+
+  it("targets auction::unwind with no type arguments", () => {
+    expect(payload.function).toBe("0xdeadbeef::auction::unwind");
+    expect(payload.typeArguments).toBeUndefined();
+  });
+
+  it("encodes (window_id: u64, pair_bcs: vector<u8>) as Move BCS", () => {
+    const bcs = entryBcs(payload, {
+      typeParameters: [],
+      parameters: [new TypeTagU64(), new TypeTagVector(parseTypeTag("u8"))],
+    });
+    expect(bcs.typeArgs).toEqual([]);
+    expect(bcs.args).toEqual([
+      "0x0700000000000000", // u64 7, little-endian
+      "0x0401020304", // ULEB128 length 4, then the bytes
+    ]);
+  });
+});
+
+describe("getCancelUnauctionedPayload", () => {
+  it("targets lock_receipt::cancel_unauctioned<Ethereum, FakeETH>", () => {
+    const payload = getCancelUnauctionedPayload(
+      "FakeETH",
+      COLLATERAL_LOCK_ID,
+    ) as InputEntryFunctionData;
+    expect(payload.function).toBe(
+      "0xdeadbeef::lock_receipt::cancel_unauctioned",
+    );
+    const bcs = entryBcs(payload, {
+      typeParameters: [{ constraints: [] }, { constraints: [] }],
+      parameters: [new TypeTagVector(parseTypeTag("u8"))],
+    });
+    expect(bcs.typeArgs).toEqual([
+      "0xdeadbeef::lock_receipt::Ethereum",
+      "0xdeadbeef::lock_receipt::FakeETH",
+    ]);
+    expect(bcs.args).toEqual(["0x20" + "cc".repeat(32)]);
+  });
+
+  it("names the FakeUSD receipt registry for a collateral lock", () => {
+    const payload = getCancelUnauctionedPayload(
+      "FakeUSD",
+      COLLATERAL_LOCK_ID,
+    ) as InputEntryFunctionData;
+    expect(payload.typeArguments).toEqual([
+      "0xdeadbeef::lock_receipt::Ethereum",
+      "0xdeadbeef::lock_receipt::FakeUSD",
+    ]);
+  });
+});
+
+// ─── SIWE domain guard (issue 195) ────────────────────────────────────────────
+
+describe("assertSiweDomain", () => {
+  const view = aptos.view as unknown as ReturnType<typeof vi.fn>;
+
+  it("reads eth_proof::siwe_domain as UTF-8", async () => {
+    view.mockResolvedValueOnce([
+      ethers.hexlify(ethers.toUtf8Bytes("app.example:443")),
+    ]);
+    expect(await getSiweDomain()).toBe("app.example:443");
+    expect(view.mock.calls.at(-1)?.[0].payload.function).toBe(
+      "0xdeadbeef::eth_proof::siwe_domain",
+    );
+  });
+
+  it("passes when the host equals the pinned domain", async () => {
+    view.mockResolvedValueOnce([
+      ethers.hexlify(ethers.toUtf8Bytes("localhost:3000")),
+    ]);
+    await expect(assertSiweDomain("localhost:3000")).resolves.toBeUndefined();
+  });
+
+  it("throws and names the expected domain on another host", async () => {
+    view.mockResolvedValueOnce([
+      ethers.hexlify(ethers.toUtf8Bytes("localhost:3000")),
+    ]);
+    const err = await assertSiweDomain("evil.example").catch((e) => e);
+    expect(err).toBeInstanceOf(SiweDomainMismatchError);
+    expect((err as SiweDomainMismatchError).expected).toBe("localhost:3000");
+    expect((err as Error).message).toContain("localhost:3000");
+  });
 });
