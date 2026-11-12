@@ -6,7 +6,10 @@ import {
   submitUnwind,
   type UnwindEligibility,
 } from "@atomica/sdk/aptos";
-import { outcomeEventOfTransaction } from "@atomica/sdk/settlement/outcome-carrier";
+import {
+  outcomeEventOfTransaction,
+  type OutcomeEventLocation,
+} from "@atomica/sdk/settlement/outcome-carrier";
 import {
   carryAndReleaseWindow,
   defaultAptosNodes,
@@ -48,7 +51,7 @@ function describeRelease(result: WindowReleaseResult): string {
  * - **Unwind** sends `auction::unwind`. It is enabled only when Aptos would
  *   accept it: the window's stuck deadline has passed, and the window is
  *   either unfinished or finished with receipts it still holds
- *   (`getUnwindEligibility`). After the unwind it carries the outcome.
+ *   (`getUnwindEligibility`). It remembers where its AuctionOutcome event is.
  * - **Carry outcome** brings the window's validator-signed `AuctionOutcome`
  *   to the LockBox and releases each open lock per its leaf
  *   (`carryAndReleaseWindow`). It is enabled once the window has an outcome
@@ -70,6 +73,9 @@ export function UnwindButton({
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [outcomeAt, setOutcomeAt] = useState<OutcomeEventLocation | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -93,60 +99,55 @@ export function UnwindButton({
     };
   }, [windowId, pairBcs, pollIntervalMs, refresh]);
 
-  const carry = useCallback(
-    async (unwindHash?: string) => {
-      const provider = new ethers.BrowserProvider(
-        (window as unknown as { ethereum: ethers.Eip1193Provider }).ethereum,
-      );
-      const nodes = defaultAptosNodes();
-      const outcomeAt = unwindHash
-        ? ((await outcomeEventOfTransaction(
-            nodes[0],
-            CONTRACT_ADDR,
-            unwindHash,
-          )) ?? undefined)
-        : undefined;
-      setStatus("Carrying the outcome proof to Ethereum…");
-      const result = await carryAndReleaseWindow({
-        signer: await provider.getSigner(),
-        provider,
-        windowId,
-        pairBcs,
-        outcomeAt,
-        nodes,
-      });
-      setStatus(describeRelease(result));
-    },
-    [windowId, pairBcs],
-  );
-
   const handleUnwind = useCallback(async () => {
     if (!account) return;
     setBusy(true);
     setStatus("Unwinding the auction on Aptos…");
     try {
       const tx = await submitUnwind(account, windowId, pairBcs);
-      await carry(tx.hash);
+      // The unwind of an unfinished window emits its AuctionOutcome: keep
+      // where it is, so the carrier needs no ledger scan.
+      const outcome = await outcomeEventOfTransaction(
+        defaultAptosNodes()[0],
+        CONTRACT_ADDR,
+        tx.hash,
+      );
+      if (outcome) setOutcomeAt(outcome);
+      setStatus(
+        "Unwound on Aptos. Carry the outcome to Ethereum to release the locks.",
+      );
     } catch (e) {
       setStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(false);
       setRefresh((n) => n + 1);
     }
-  }, [account, windowId, pairBcs, carry]);
+  }, [account, windowId, pairBcs]);
 
   const handleCarry = useCallback(async () => {
     if (!account) return;
     setBusy(true);
+    setStatus("Carrying the outcome proof to Ethereum…");
     try {
-      await carry();
+      const provider = new ethers.BrowserProvider(
+        (window as unknown as { ethereum: ethers.Eip1193Provider }).ethereum,
+      );
+      const result = await carryAndReleaseWindow({
+        signer: await provider.getSigner(),
+        provider,
+        windowId,
+        pairBcs,
+        outcomeAt,
+        nodes: defaultAptosNodes(),
+      });
+      setStatus(describeRelease(result));
     } catch (e) {
       setStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(false);
       setRefresh((n) => n + 1);
     }
-  }, [account, carry]);
+  }, [account, windowId, pairBcs, outcomeAt]);
 
   const canUnwind = !!account && !busy && eligibility?.eligible === true;
   const canCarry = !!account && !busy && eligibility?.final === true;

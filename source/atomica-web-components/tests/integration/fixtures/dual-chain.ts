@@ -64,6 +64,8 @@ export interface EthFixture {
     fakeETH: string;
     fakeUSD: string;
     lockBox: string;
+    /** AptosLightClient the LockBox verifies Aptos outcomes with. */
+    lightClient: string;
   };
   /** Seller (deployer) — holds FakeETH, creates locks. */
   seller: {
@@ -104,13 +106,21 @@ export interface IntegrationFixture {
  *
  * Designed for use in beforeAll(); set a timeout of at least 600 000 ms.
  */
-export async function setupIntegrationFixture(): Promise<IntegrationFixture> {
+export async function setupIntegrationFixture(
+  options: {
+    /** Shorten the Aptos unwind grace (microseconds) on this testing chain. */
+    unwindGraceUs?: bigint;
+  } = {},
+): Promise<IntegrationFixture> {
   console.log("[IntegrationFixture] Starting dual-chain testnet...");
 
   // Pin this page's host as the SIWE domain: lock receipts belong to the
   // Ethereum-derivable accounts the SDK derives here (getDerivedAddress).
   const info: DualChainTestnetInfo = await commands.setupDualChainTestnet(
     window.location.host,
+    options.unwindGraceUs !== undefined
+      ? { unwindGraceUs: options.unwindGraceUs.toString() }
+      : undefined,
   );
 
   const fixture: IntegrationFixture = {
@@ -121,6 +131,7 @@ export async function setupIntegrationFixture(): Promise<IntegrationFixture> {
         fakeETH: info.eth.contracts.fakeETH,
         fakeUSD: info.eth.contracts.fakeUSD,
         lockBox: info.eth.contracts.lockBox,
+        lightClient: info.eth.contracts.lightClient,
       },
       seller: {
         address: info.eth.deployerAddress,

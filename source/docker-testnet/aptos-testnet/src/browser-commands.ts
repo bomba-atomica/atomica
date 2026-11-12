@@ -177,7 +177,10 @@ declare module "vitest/browser" {
             amount?: number,
         ): Promise<{ success: boolean; txHash: string }>;
         // SCOUT(#224) ADD: declare allowTestPair here once source/atomica-web-components/vitest.config.ts registers allowTestPairCommand (a file the issue text does not name).
-        setupDualChainTestnet(siweDomain?: string): Promise<DualChainTestnetInfo>;
+        setupDualChainTestnet(
+            siweDomain?: string,
+            options?: { unwindGraceUs?: string },
+        ): Promise<DualChainTestnetInfo>;
         teardownDualChainTestnet(): Promise<{ success: boolean }>;
         setupEthereumTestnet(): Promise<EthereumTestnetInfo>;
         teardownEthereumTestnet(): Promise<void>;
@@ -340,18 +343,22 @@ export const teardownEthereumTestnetCommand: BrowserCommand<[]> = async () => {
 
 /**
  * Start both Ethereum and Aptos Docker testnets, deploy all contracts, and
- * fund the seller and bidder test accounts.
+ * fund the seller and bidder test accounts. `options.unwindGraceUs` (decimal
+ * microseconds) shortens the Aptos unwind grace on this testing chain.
  *
  * Returns JSON-serialisable connection info so the browser-side fixture can
  * create wallet mocks and call contracts via RPC.
  *
  * EXECUTION: Node.js (browser can't start Docker containers)
  */
-export const setupDualChainTestnetCommand: BrowserCommand<[siweDomain?: string]> = async (
-    _ctx,
-    siweDomain?: string,
-) => {
-    return await setupDualChainTestnet(siweDomain);
+export const setupDualChainTestnetCommand: BrowserCommand<
+    [siweDomain?: string, options?: { unwindGraceUs?: string }]
+> = async (_ctx, siweDomain?: string, options?: { unwindGraceUs?: string }) => {
+    // bigint does not cross the command boundary, so the grace comes as a string.
+    return await setupDualChainTestnet(siweDomain, {
+        unwindGraceUs:
+            options?.unwindGraceUs !== undefined ? BigInt(options.unwindGraceUs) : undefined,
+    });
 };
 
 /**

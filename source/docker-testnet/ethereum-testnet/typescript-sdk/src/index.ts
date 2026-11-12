@@ -79,6 +79,18 @@ export class BeaconUnavailableError extends Error {
   }
 }
 
+/**
+ * Hardfork the anvil backend runs: `ETH_ANVIL_HARDFORK`, default `cancun`
+ * (parity with the Docker chain). Only `cancun` and `prague` are accepted.
+ */
+export function anvilHardfork(): "cancun" | "prague" {
+  const v = process.env.ETH_ANVIL_HARDFORK?.trim() || "cancun";
+  if (v === "cancun" || v === "prague") return v;
+  throw new Error(
+    `Unknown ETH_ANVIL_HARDFORK "${v}": expected "cancun" or "prague"`,
+  );
+}
+
 /** Seconds per slot on the Docker chain; anvil mined blocks advance time by this much. */
 const SLOT_SECONDS = 12;
 
@@ -216,8 +228,10 @@ export class EthereumDockerTestnet {
       // SCOUT(#219) EDIT: the comment below is stale (the Docker genesis has ELECTRA_FORK_EPOCH=0, Prague on the EL); anvil must start on prague for the EIP-2537 precompiles that AptosLightClient needs.
       // SCOUT(#236) EDIT: the happy-path release step on the anvil tier needs anvil on prague; neither issue text names this file.
       // The Docker chain runs Deneb with Electra disabled, which is Cancun on the EL.
+      // ETH_ANVIL_HARDFORK=prague turns on the EIP-2537 BLS12-381 precompiles
+      // that the Aptos light client needs (the browser unwind chunk sets it).
       "--hardfork",
-      "cancun",
+      anvilHardfork(),
     ];
     const blockTime = process.env.ETH_ANVIL_BLOCK_TIME?.trim();
     if (blockTime) args.push("--block-time", blockTime);

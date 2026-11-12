@@ -588,10 +588,15 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # The unwind chunk waits about 25 minutes for a window to pass its stuck
+    # deadline (reveal window, opening window and the shortened grace).
+    timeout-minutes: ${{ matrix.chunk == 'unwind' && 75 || 45 }}
     env:
       CI_CLASS: feature-correctness
       ETH_BACKEND: anvil
+      # Prague gives the unwind chunk the EIP-2537 precompiles the Aptos light
+      # client verifies with. The other chunks keep Cancun, like the Docker EL.
+      ETH_ANVIL_HARDFORK: ${{ matrix.chunk == 'unwind' && 'prague' || 'cancun' }}
     permissions:
       packages: read
       contents: read
@@ -643,7 +648,7 @@ jobs:
           - chunk: happy-path
             test_files: >-
               tests/integration/14-happy-path.test.tsx
-          # Warps the anvil clock past a lock deadline, so anvil only.
+          # Warps the anvil clock past a lock deadline and needs Prague, so anvil only.
           - chunk: unwind
             test_files: >-
               tests/integration/17-unwind.test.tsx

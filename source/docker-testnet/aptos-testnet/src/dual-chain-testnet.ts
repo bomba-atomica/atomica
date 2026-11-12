@@ -57,6 +57,8 @@ export interface DualChainTestnetInfo {
             fakeETH: string;
             fakeUSD: string;
             lockBox: string;
+            /** AptosLightClient the LockBox verifies outcomes with */
+            lightClient: string;
         };
         /** Deployer / seller private key */
         deployerPrivateKey: string;
@@ -141,8 +143,50 @@ function readArtifact(contractName: string): {
  * progress" for a short window after startup). On anvil it mines block 1.
  */
 // SCOUT(#219) REMOVE: NO_LIGHT_CLIENT goes when setup deploys a real AptosLightClient.
-/** Stand-in light client address: this testnet has no Aptos light client on Ethereum. */
-const NO_LIGHT_CLIENT = "0x000000000000000000000000000000000000dEaD";
+/**
+ * `maxEpochAge` of the testnet light client: half the docker testnet's 24 h
+ * stake lockup (`recurring_lockup_duration_secs`), the deploy script default.
+ */
+const LIGHT_CLIENT_MAX_EPOCH_AGE = 43_200;
+
+/** Options of {@link setupDualChainTestnet}. */
+export interface DualChainTestnetOptions {
+    /**
+     * Shorten the Aptos unwind grace to this many microseconds
+     * (`timelock_config::set_unwind_grace_us_on_test_chain`, testing chain
+     * only), so a live test can stall a window past its stuck deadline.
+     */
+    unwindGraceUs?: bigint;
+}
+
+/**
+ * Deploy the Aptos light client from the node's genesis LedgerInfo. The
+ * waypoint the node serves must equal the one the testnet's genesis wrote
+ * (`genesis-artifacts/waypoint.txt`), as `DeployAptosLightClient.s.sol`
+ * requires. The constructor recomputes it from the LedgerInfo as well.
+ */
+async function deployLightClient(signer: ethers.Signer, aptos: DockerTestnet): Promise<string> {
+    const url = `${aptos.validatorApiUrl(0)}/v1/atomica/genesis_waypoint`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`GET ${url}: HTTP ${res.status} ${await res.text()}`);
+    const genesis = (await res.json()) as {
+        version: string;
+        value: string;
+        waypoint: string;
+        ledger_info_with_signatures: string;
+    };
+    const expected = aptos.genesisWaypoint().toLowerCase();
+    if (genesis.waypoint.toLowerCase().replace(/:0x/, ":") !== expected) {
+        throw new Error(`node waypoint ${genesis.waypoint} differs from genesis ${expected}`);
+    }
+    const hex = (h: string) => (h.startsWith("0x") ? h : `0x${h}`);
+    return deployContract(signer, readArtifact("AptosLightClient"), [
+        hex(genesis.ledger_info_with_signatures),
+        BigInt(genesis.version),
+        hex(genesis.value),
+        LIGHT_CLIENT_MAX_EPOCH_AGE,
+    ]);
+}
 
 /** BCS TypeTag of `<atomica>::auction::AuctionOutcome` (LockBox constructor). */
 export function auctionOutcomeTypeTag(atomicaAddress: string): string {
@@ -220,6 +264,7 @@ async function mintFakeETH(
  */
 export async function setupDualChainTestnet(
     siweDomain = "localhost:3000",
+    options: DualChainTestnetOptions = {},
 ): Promise<DualChainTestnetInfo> {
     console.log("[Dual-Chain] Starting dual-chain testnet...");
 
@@ -277,17 +322,6 @@ export async function setupDualChainTestnet(
     console.log(`[Dual-Chain] ✓ FakeUSD: ${fakeUSD}`);
 
     // SCOUT(#219) EDIT: deploy AptosLightClient and pass its address in place of NO_LIGHT_CLIENT; that needs the Aptos genesis, so the Aptos testnet start below must move above this deploy (the validators still need the Ethereum RPC up first).
-    // The proof-gated LockBox: a lock leaves on a proven Aptos AuctionOutcome
-    // or by reclaim after its deadline. This testnet deploys no Aptos light
-    // client, so outcome recording is off here (it reverts) and every lock
-    // still goes home by reclaim. The type tag names the Atomica package below.
-    const lockBox = await deployContract(deployer, readArtifact("LockBox"), [
-        fakeETH,
-        fakeUSD,
-        NO_LIGHT_CLIENT,
-        auctionOutcomeTypeTag(aptosModuleAddress),
-    ]);
-    console.log(`[Dual-Chain] ✓ LockBox: ${lockBox}`);
 
     // Fund seller and bidder with FakeETH so tests can lock tokens immediately.
     const fakeETHArtifact = readArtifact("FakeETH");
@@ -314,6 +348,22 @@ export async function setupDualChainTestnet(
     aptosTestnet = await DockerTestnet.new(4);
     setTestnet(aptosTestnet);
     const nodeUrl = `${aptosTestnet.validatorApiUrl(0)}/v1`;
+
+    // The Aptos light client, from this testnet's genesis, then the proof-gated
+    // LockBox that verifies outcomes with it: a lock leaves on a proven Aptos
+    // AuctionOutcome or by reclaim after its deadline. Verifying needs the
+    // EIP-2537 precompiles (anvil with ETH_ANVIL_HARDFORK=prague); on a Cancun
+    // chain recordOutcome reverts and every lock still goes home by reclaim.
+    // The type tag names the Atomica package below.
+    const lightClient = await deployLightClient(deployer, aptosTestnet);
+    console.log(`[Dual-Chain] ✓ AptosLightClient: ${lightClient}`);
+    const lockBox = await deployContract(deployer, readArtifact("LockBox"), [
+        fakeETH,
+        fakeUSD,
+        lightClient,
+        auctionOutcomeTypeTag(aptosModuleAddress),
+    ]);
+    console.log(`[Dual-Chain] ✓ LockBox: ${lockBox}`);
 
     const aptosDeployerPrivateKey =
         process.env.APTOS_DEPLOYER_PRIVATE_KEY ||
@@ -363,6 +413,14 @@ export async function setupDualChainTestnet(
                 ],
                 args: [],
             },
+            ...(options.unwindGraceUs !== undefined
+                ? [
+                      {
+                          functionId: `${aptosModuleAddress}::timelock_config::set_unwind_grace_us_on_test_chain`,
+                          args: [`u64:${options.unwindGraceUs}`],
+                      },
+                  ]
+                : []),
         ],
         fundAmount: 10_000_000_000n,
     });
@@ -374,7 +432,7 @@ export async function setupDualChainTestnet(
         eth: {
             rpcUrl,
             chainId,
-            contracts: { fakeETH, fakeUSD, lockBox },
+            contracts: { fakeETH, fakeUSD, lockBox, lightClient },
             deployerPrivateKey,
             deployerAddress,
             bidderPrivateKey,

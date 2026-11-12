@@ -8,8 +8,8 @@
  *      with locks it still holds.
  *   2. It stays disabled before the stuck deadline, on a final window that
  *      holds nothing, and with no wallet.
- *   3. Clicking it sends the unwind, then carries the outcome from that very
- *      transaction and releases the window's locks.
+ *   3. Clicking it sends the unwind. Carry then brings the outcome of that
+ *      very transaction to Ethereum and releases the window's locks.
  *   4. Carry is enabled once the window is final.
  *
  * All SDK calls are mocked; no chain is needed.
@@ -145,8 +145,10 @@ describe("UnwindButton", () => {
     expect(screen.getByTestId("unwind-button")).toBeDisabled();
   });
 
-  it("unwinds, then carries the outcome of its own transaction and releases the locks", async () => {
-    mocks.eligibility.mockResolvedValue(eligibility("eligible", false));
+  it("unwinds, then carry brings the outcome of that transaction and releases the locks", async () => {
+    mocks.eligibility
+      .mockResolvedValueOnce(eligibility("eligible", false))
+      .mockResolvedValue(eligibility("nothing-to-return", true));
     mocks.submitUnwind.mockResolvedValue({ hash: "0xunwind" });
     mocks.outcomeEventOfTransaction.mockResolvedValue({
       version: 900n,
@@ -159,7 +161,15 @@ describe("UnwindButton", () => {
     renderButton();
     await settled("eligible");
     fireEvent.click(screen.getByTestId("unwind-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("unwind-status").textContent).toContain(
+        "Unwound on Aptos",
+      ),
+    );
+    expect(mocks.carryAndReleaseWindow).not.toHaveBeenCalled();
 
+    await settled("nothing-to-return");
+    fireEvent.click(screen.getByTestId("carry-outcome-button"));
     await waitFor(() =>
       expect(screen.getByTestId("unwind-status").textContent).toContain(
         "Released 2 lock(s)",

@@ -438,7 +438,11 @@ expiry plus the 10-minute opening window plus the 24 h unwind grace,
 may call `unwind`. On a window that never settled, whatever its reveal state,
 it returns every lock to its depositor and emits an all-refund outcome. On a
 finalized window it returns only receipts still held and emits no second
-outcome. With nothing left it aborts `E_WINDOW_FINAL`. Winning fills go to
+outcome. With nothing left it aborts `E_WINDOW_FINAL`. The 24 h grace is
+fixed on every deployed network. Only the local testing chain (chain id 4)
+lets the `@atomica` account shorten it
+(`timelock_config::set_unwind_grace_us_on_test_chain`), so a live test can
+stall a window past its stuck deadline in minutes. Winning fills go to
 buyers at the clearing price. Unopened bids, losing bids, winner excess
 collateral, unsold seller supply and refunded windows go back to their
 depositors (§2.8). A receipt that never reached an auction can be cancelled by
@@ -543,9 +547,10 @@ Real BLS verification is a v0.1 requirement, not a v1 upgrade. The target
 Ethereum networks, including the docker testnet, must enable EIP-2537
 (Pectra / Electra). The old `BLSVerifier.sol` checked Ethereum block hashes
 with the wrong key and signature sizes for Aptos. Issue 202 replaced it with
-the Aptos LedgerInfo verifier, and issue 195 deleted it. The anvil and docker
-browser test tiers still run Cancun, so the light client verifies only where
-Prague is on (the Aptos Light Client Live job runs anvil with Prague).
+the Aptos LedgerInfo verifier, and issue 195 deleted it. The browser test
+tiers run Cancun, except the unwind chunk, which runs anvil with Prague
+(`ETH_ANVIL_HARDFORK=prague`) and carries a real outcome through the light
+client. The Aptos Light Client Live job also runs anvil with Prague.
 
 ### 3.4 ZK seam (v1 path)
 
