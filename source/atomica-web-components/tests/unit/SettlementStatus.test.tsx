@@ -1,11 +1,12 @@
 /**
- * Unit tests for SettlementStatus component — issue #113.
+ * Unit tests for SettlementStatus component — issues #113 and #195.
  *
  * Verifies:
  *   1. Component renders in pending state before the first poll completes.
  *   2. Component shows a live error message when queryAuctionSettledEvents rejects.
  *   3. Component shows settled events when the mock returns data.
  *   4. Component shows empty message when the mock returns zero events.
+ *   5. It reads Aptos with no relayer key: only the node URL and package.
  *
  * Uses vi.mock to stub @atomica/sdk/settlement/bridge so no network is required.
  *
@@ -26,8 +27,19 @@ vi.mock("@atomica/sdk/settlement/bridge", () => ({
     mockQueryAuctionSettledEvents(...args),
 }));
 
+vi.mock("@atomica/sdk/settlement/window-release", () => ({
+  defaultAptosNodes: () => ["http://aptos.test/v1"],
+}));
+
+vi.mock("@atomica/sdk/chain-config", () => ({
+  getChainConfig: () => ({
+    ethereum: {},
+    aptos: { contractAddress: "0x" + "ab".repeat(32) },
+  }),
+}));
+
 // Import AFTER vi.mock so the hoisted mock is in place.
-import { SettlementStatus } from "../src/components/SettlementStatus";
+import { SettlementStatus } from "../../src/components/SettlementStatus";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -102,6 +114,17 @@ describe("SettlementStatus", () => {
 
     const settled = screen.getByTestId("settlement-status-settled");
     expect(settled.textContent).toContain("2");
+  });
+
+  it("queries Aptos with the SDK node and package, and no relayer key", async () => {
+    render(<SettlementStatus windowId={WINDOW_ID} pair={PAIR} />);
+    await waitFor(() =>
+      expect(mockQueryAuctionSettledEvents).toHaveBeenCalled(),
+    );
+    expect(mockQueryAuctionSettledEvents.mock.calls[0][2]).toEqual({
+      aptosRpcUrl: "http://aptos.test/v1",
+      contractAddress: "0x" + "ab".repeat(32),
+    });
   });
 
   it("shows empty message when the query succeeds with zero events", async () => {

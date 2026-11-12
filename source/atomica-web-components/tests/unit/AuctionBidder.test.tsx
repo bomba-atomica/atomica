@@ -17,13 +17,20 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  waitFor,
+} from "@testing-library/react";
 import { WalletContext } from "../../src/context/WalletContext";
 
 // Stub SDK modules so no blockchain calls are made.
 // SCOUT(#228) EDIT: the sealBid mock returns no commitment and no salt.
 // SCOUT(#235) EDIT: the stored opening must equal this mocked salt and commitment.
 vi.mock("@atomica/sdk/aptos", () => ({
+  assertSiweDomain: vi.fn().mockResolvedValue(undefined),
   submitBid: vi.fn().mockResolvedValue({ hash: "0xabc123" }),
   sealBid: vi.fn().mockResolvedValue({
     timelockId: 11n,
@@ -60,6 +67,8 @@ vi.mock("../../src/storage/bidStorage", () => ({
 }));
 
 import { AuctionBidder } from "../../src/components/AuctionBidder";
+import { assertSiweDomain } from "@atomica/sdk/aptos";
+import { approveFakeUsd, lockFakeUsd } from "@atomica/sdk/ethereum";
 
 const ACCOUNT = "0x1234567890123456789012345678901234567890";
 
@@ -214,4 +223,28 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
   it.todo("SCOUT(#235) after a successful bid, loadBidOpening returns the price, salt and commitment that sealBid returned");
   it.todo("SCOUT(#235) nothing is stored when submitBid rejects");
   it.todo("SCOUT(#228) submitBid is called with no commitment");
+  it("refuses the FakeUSD lock on another host and shows the expected SIWE domain", async () => {
+    (window as unknown as { ethereum: object }).ethereum = {};
+    vi.mocked(assertSiweDomain).mockRejectedValueOnce(
+      new Error(
+        "This page runs on evil.example, but lock receipts belong to accounts of localhost:3000. Open the app on localhost:3000 before you lock tokens.",
+      ),
+    );
+    renderBidder();
+    fireEvent.change(screen.getByTestId("collateral-amount-input"), {
+      target: { value: "10" },
+    });
+    fireEvent.click(screen.getByTestId("approve-lock-usd-button"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("lock-status").textContent).toContain(
+        "localhost:3000",
+      ),
+    );
+    expect(assertSiweDomain).toHaveBeenCalledWith(window.location.host);
+    expect(approveFakeUsd).not.toHaveBeenCalled();
+    expect(lockFakeUsd).not.toHaveBeenCalled();
+    expect(screen.getByTestId("lock-collateral-step")).toBeTruthy();
+    delete (window as unknown as { ethereum?: object }).ethereum;
+  });
 });

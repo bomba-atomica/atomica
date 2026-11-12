@@ -1,16 +1,15 @@
 /**
- * Unit tests for WithdrawWinnings component — issue #113.
+ * Unit tests for WithdrawWinnings component — issues #113 and #195.
  *
  * WithdrawWinnings is a read-only status display that shows settlement payout
- * state.  Settlement follows a push path: the BLS relayer calls
- * `authorizeSettlement` on BLSVerifierTestnet; winners receive their payout
- * automatically (Risk 3 decision — Option B, scout #111).
+ * state. No relayer pushes payouts: any wallet carries the validator-signed
+ * outcome proof to the LockBox, and an unproven lock goes home by reclaim.
  *
  * Verifies:
  *   1. Component renders with correct testid.
  *   2. Shows "no events" message when events=[].
  *   3. Displays settled event details when events are provided.
- *   4. Always shows the push-notice footer.
+ *   4. Always shows the payout notice, which names no relayer.
  *
  * @see docs/architecture/v0-architecture.md §3 — Cross-Chain Settlement
  * @see source/atomica-sdk/src/settlement/bridge.ts
@@ -20,7 +19,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import type { AuctionSettledEvent, Pair } from "@atomica/sdk/settlement/bridge";
 
-import { WithdrawWinnings } from "../src/components/WithdrawWinnings";
+import { WithdrawWinnings } from "../../src/components/WithdrawWinnings";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -42,7 +41,7 @@ const MOCK_EVENT: AuctionSettledEvent = {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe("WithdrawWinnings (read-only status display — Risk 3 Option B)", () => {
+describe("WithdrawWinnings (read-only status display)", () => {
   afterEach(() => {
     cleanup();
   });
@@ -73,12 +72,13 @@ describe("WithdrawWinnings (read-only status display — Risk 3 Option B)", () =
     expect(content).toContain("1000");
   });
 
-  it("always shows push-notice footer", () => {
+  it("always shows the payout notice: a carried proof, never a relayer", () => {
     render(<WithdrawWinnings events={[]} />);
-    expect(screen.getByTestId("withdraw-winnings-push-notice")).toBeTruthy();
-    expect(
-      screen.getByTestId("withdraw-winnings-push-notice").textContent,
-    ).toContain("relayer");
+    const notice = screen.getByTestId(
+      "withdraw-winnings-push-notice",
+    ).textContent;
+    expect(notice).toContain("outcome proof");
+    expect(notice).not.toMatch(/relayer/i);
   });
 
   it("shows push-notice even when events are present", () => {

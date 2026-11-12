@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ethers } from "ethers";
-import { sealBid, submitBid } from "@atomica/sdk/aptos";
+import { assertSiweDomain, sealBid, submitBid } from "@atomica/sdk/aptos";
 import {
   approveFakeUsd,
   currentWindowId,
@@ -90,8 +90,12 @@ export function AuctionBidder() {
   const handleLockCollateral = async () => {
     if (!account) return;
     setLockLoading(true);
-    setLockStatus("Waiting for MetaMask — Approve FakeUSD...");
     try {
+      // A receipt belongs to the depositor's account of the pinned SIWE
+      // domain. Refuse to lock from any other host: Aptos would never let
+      // this wallet claim the lock.
+      await assertSiweDomain(window.location.host);
+      setLockStatus("Waiting for MetaMask — Approve FakeUSD...");
       const provider = new ethers.BrowserProvider(
         (window as unknown as { ethereum: ethers.Eip1193Provider }).ethereum,
       );

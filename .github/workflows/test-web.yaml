@@ -643,6 +643,10 @@ jobs:
           - chunk: happy-path
             test_files: >-
               tests/integration/14-happy-path.test.tsx
+          # Warps the anvil clock past a lock deadline, so anvil only.
+          - chunk: unwind
+            test_files: >-
+              tests/integration/17-unwind.test.tsx
 
     steps:
       - name: Checkout repository
@@ -699,7 +703,7 @@ jobs:
       # SCOUT(#243) EDIT: the binary tag in this step is hardcoded and must move with APTOS_VERSION.
       # SCOUT(#236) EDIT: a new or renamed chunk must also be added to the two chunk lists in the `if:` lines of this step and the next, and to the gate list in required-checks.
       - name: Install Aptos CLI
-        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path'
+        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path' || matrix.chunk == 'unwind'
         run: |
           APTOS_VERSION="binary-52beee31a6"
           APTOS_HASH="${APTOS_VERSION#binary-}"
@@ -718,7 +722,7 @@ jobs:
           which aptos
 
       - name: Pre-warm Move git dependency cache
-        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path'
+        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path' || matrix.chunk == 'unwind'
         run: |
           # Step 1: Fetch the atomica-aptos git dependency by compiling atomica-move-contracts.
           # This clones the repo and generates Move.lock for atomica-move-contracts.
@@ -1229,7 +1233,7 @@ jobs:
             "base;;Move Framework Pin"
             "base;;Move Unit Tests"
             "base;;Move Lint Warnings"
-            "base;Browser Tests (${D}{{ matrix.chunk }}, anvil);Browser Tests (component, anvil);Browser Tests (faucet-wallet, anvil);Browser Tests (auction, anvil);Browser Tests (bid-settle, anvil);Browser Tests (settle-100-bids, anvil);Browser Tests (claim-reclaim-fees, anvil);Browser Tests (happy-path, anvil)"
+            "base;Browser Tests (${D}{{ matrix.chunk }}, anvil);Browser Tests (component, anvil);Browser Tests (faucet-wallet, anvil);Browser Tests (auction, anvil);Browser Tests (bid-settle, anvil);Browser Tests (settle-100-bids, anvil);Browser Tests (claim-reclaim-fees, anvil);Browser Tests (happy-path, anvil);Browser Tests (unwind, anvil)"
             "docker;Browser Tests (${D}{{ matrix.chunk }}, docker);Browser Tests (faucet-wallet, docker);Browser Tests (auction, docker);Browser Tests (bid-settle, docker);Browser Tests (settle-100-bids, docker);Browser Tests (claim-reclaim-fees, docker);Browser Tests (happy-path, docker)"
             "base;;EVM e2e tests (anvil)"
             "docker;;EVM e2e tests (docker)"

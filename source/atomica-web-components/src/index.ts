@@ -70,6 +70,12 @@ export {
 export type { AppConfig } from "./state/app-config";
 export { AppSettings } from "./components/AppSettings";
 
+// ── Permissionless unwind and reclaim (#195) ─────────────────────────────────
+export { UnwindButton } from "./components/UnwindButton";
+export type { UnwindButtonProps } from "./components/UnwindButton";
+export { ReclaimLockButton } from "./components/ReclaimLockButton";
+export type { ReclaimLockButtonProps } from "./components/ReclaimLockButton";
+
 // ── Phase 3d — cross-chain settlement scaffold (#89) ─────────────────────────
 export { SettlementStatus } from "./components/SettlementStatus";
 export type { SettlementStatusProps } from "./components/SettlementStatus";
