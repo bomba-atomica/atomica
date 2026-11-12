@@ -65,46 +65,55 @@ Phase 3a.
 
 ### 2.1 Auction windows
 
-<!-- SCOUT(#220) DOC: table: 07:45 and 16:15 UTC are the closes, not the opens; a window runs from the previous close, and the 08:15 and 16:45 closes exist nowhere. -->
-<!-- SCOUT(#220) DOC: paragraph below the table: 28 500 s is 07:55 UTC, not 07:45 (which is 27 900 s), and 58 500 s cannot fall inside a 43 200 s period; the period becomes 86 400 s. -->
 <!-- SCOUT(#231) DOC: "A single epoch lasts 12 hours" is the window period, not the chain epoch; pick another word once the chain epoch ends are fixed. -->
 
-Two global windows open per day, anchored to UTC:
+Two global windows close per day, anchored to UTC. A window runs from the
+previous close up to its own close:
 
-| Window | Open | Close |
+| Window | Opens | Closes |
 |---|---|---|
-| Morning | 07:45 UTC | 08:15 UTC |
-| Afternoon | 16:15 UTC | 16:45 UTC |
+| Morning (even id) | 16:15 UTC the day before | 07:45 UTC |
+| Afternoon (odd id) | 07:45 UTC | 16:15 UTC |
 
-All auctions within a window share the same `auction_window_id`. A single
-epoch lasts 12 hours (43 200 seconds). The morning window fires at offset
-28 500 s into the epoch (07:45 = 7×3600 + 45×60); the afternoon window fires
-at offset 58 500 s (16:15 = 16×3600 + 15×60).
+All auctions within a window share the same `auction_window_id`. A day lasts
+86 400 seconds. The morning close is 27 900 s into the UTC day
+(07:45 = 7×3600 + 45×60); the afternoon close is 58 500 s into it
+(16:15 = 16×3600 + 15×60). Midnight is not a boundary.
 
 ### 2.2 Window ID formula
 
-<!-- SCOUT(#220) DOC: both code blocks of 2.2 change to: day = s / 86400, t = s % 86400, id = day * 2 + (t >= 27900) + (t >= 58500). -->
 <!-- SCOUT(#242) DOC: last sentence of 2.2 is false: submit_bid never reads the clock window id; it checks the window timelock status and deadline, and create_auction accepts the current and the next window id. -->
 <!-- SCOUT(#243) DOC: say here that the window timelock deadline is the window close, which is what binds a bid to the window clock. -->
 
 ```
-epoch_index      = unix_seconds / 43200          // integer division
-time_in_epoch    = unix_seconds % 43200
-window_offset    = (time_in_epoch >= 28500) ? 1 : 0
+day               = unix_seconds / 86400          // integer division
+t                 = unix_seconds % 86400
+auction_window_id = day * 2 + (t >= 27900 ? 1 : 0) + (t >= 58500 ? 1 : 0)
 
-auction_window_id = epoch_index * 2 + window_offset
+close(w)          = (w / 2) * 86400 + (w even ? 27900 : 58500)
 ```
 
-Implemented on-chain using `timestamp::now_seconds()`:
+`close(w)` is the first second of window `w + 1`. Implemented on-chain in
+`eth_proof::window_id_at` and `eth_proof::window_close_secs`, and read with
+`timestamp::now_seconds()`:
 
 ```move
-fun current_window_id(): u64 {
-    let s = timestamp::now_seconds();
-    let epoch = s / 43200;
-    let tmod  = s % 43200;
-    epoch * 2 + if (tmod >= 28500) { 1 } else { 0 }
+public fun current_window_id(): u64 {
+    eth_proof::window_id_at(timestamp::now_seconds())
+}
+
+public fun window_id_at(secs: u64): u64 {
+    let day = secs / 86400;
+    let t = secs % 86400;
+    let id = day * 2;
+    if (t >= 27900) { id = id + 1 };
+    if (t >= 58500) { id = id + 1 };
+    id
 }
 ```
+
+The SDK mirror is `currentWindowId` and `windowCloseSecs` in
+`source/atomica-sdk/src/ethereum/lock-binding.ts`.
 
 The window ID monotonically increases. A bid is only accepted when the current
 window ID matches the auction's registered window ID.
@@ -449,7 +458,6 @@ collateral, unsold seller supply and refunded windows go back to their
 depositors (§2.8). A receipt that never reached an auction can be cancelled by
 anyone after a delay, and it goes back to its depositor.
 
-<!-- SCOUT(#220) DOC: the deadline derives from the window close, whose formula changes. -->
 <!-- SCOUT(#221) DOC: the auction key becomes keccak256(window_id, pair_hash); LockBox computes the deadline, so "Aptos registers a lock only when its deadline equals" goes. -->
 <!-- SCOUT(#222) DOC: add: a short leaf pays its remainder to the depositor, and a covered lock whose leaf is unpayable goes home through reclaimUnpayable with no deadline wait. -->
 
@@ -457,7 +465,7 @@ anyone after a delay, and it goes back to its depositor.
 its auction: the auction key is `keccak256(window_id, pair_hash, deadline)`.
 All locks of an auction share one deadline, because Aptos registers a lock
 only when its deadline equals `auction::eth_lock_deadline(window_id)` (the
-window close plus `ETH_RECLAIM_DELAY_SECS`, see
+window close, 07:45 or 16:15 UTC, plus `ETH_RECLAIM_DELAY_SECS`, see
 [auction timing](../specifications/auction-timing.md)). A recorded outcome
 pays a lock out at any time. After the deadline, anyone may `reclaim` an open
 lock, and the whole amount returns to the depositor unless the auction's

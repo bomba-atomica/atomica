@@ -31,16 +31,15 @@ vi.mock("@atomica/sdk/chain-config", () => ({
     aptos: {},
   }),
 }));
-// SCOUT(#220) EDIT: 83075 and 1_794_700_800 are a window id and a deadline of the old formula; the mock keeps this green, but pick a pair that is consistent under the new formula.
 // SCOUT(#221) EDIT: the lockBinding mock returns a deadline.
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeEth: vi.fn(),
   lockFakeEth: vi.fn(),
-  currentWindowId: vi.fn(() => 83075n),
+  currentWindowId: vi.fn(() => 41538n),
   lockBinding: vi.fn((windowId: bigint) => ({
     windowId,
     pairHash: "0x" + "ee".repeat(32),
-    deadline: 1_794_700_800n,
+    deadline: 1_794_728_700n,
   })),
   lockFromReceipt: vi.fn(),
   reclaimLock: vi.fn(),
@@ -218,7 +217,7 @@ describe("SellFlow localStorage resume", () => {
         txHash: "0xdeadbeef",
         lockBlock: 100,
         lockNonce: "5",
-        windowId: "83075",
+        windowId: "41538",
         amount: "1000000000000000000",
       }),
     );
@@ -240,9 +239,9 @@ describe("SellFlow localStorage resume", () => {
       5n,
       {
         amount: 10n ** 18n,
-        windowId: 83075n,
+        windowId: 41538n,
         pairHash: "0x" + "ee".repeat(32),
-        deadline: 1_794_700_800n,
+        deadline: 1_794_728_700n,
       },
       100,
     );
@@ -274,7 +273,7 @@ describe("SellFlow localStorage resume", () => {
         step: "generating-proof",
         lockBlock: 100,
         lockNonce: "5",
-        windowId: "83075",
+        windowId: "41538",
         amount: "1000000000000000000",
         minPrice: "2000000000",
       }),

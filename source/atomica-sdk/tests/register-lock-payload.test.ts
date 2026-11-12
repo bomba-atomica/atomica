@@ -47,7 +47,6 @@ import type { Aptos } from "@aptos-labs/ts-sdk";
 
 // ── Fixture ──────────────────────────────────────────────────────────────────
 
-// SCOUT(#220) EDIT: window 83075 and deadline 1794700800 follow the old window formula; use a window id and deadline of the new one.
 // SCOUT(#221) EDIT: the proof's deadline is no longer a payload argument.
 function makeMockProof(): LockedBalanceProof {
   return {
@@ -60,9 +59,9 @@ function makeMockProof(): LockedBalanceProof {
     lockNonce: 7n,
     lockId: "0x" + "77".repeat(32),
     amount: 1_000_000_000_000_000_000n, // 1 FETH in wei
-    windowId: 83075n,
+    windowId: 41538n,
     pairHash: "0x" + "88".repeat(32),
-    deadline: 1794700800n,
+    deadline: 1794728700n, // ethLockDeadline(41538n)
     storageKey: "0x" + "44".repeat(32),
     storageValue: 0x99n, // the proven commitment
     accountProof: ["0x" + "55".repeat(20)],
@@ -111,15 +110,14 @@ describe("getRegisterLockPayload", () => {
   });
 
   // SCOUT(#221) EDIT: the deadline at index 6 is no longer sent.
-  // SCOUT(#220) EDIT: the pinned "83075" and "1794700800" change with the fixture.
   it("sends the lock fields Aptos hashes into the commitment (indexes 3 to 6)", () => {
     const args = getRegisterLockPayload(makeMockProof()).functionArguments!;
     expect(args[3]).toBe("1000000000000000000");
-    expect(args[4]).toBe("83075");
+    expect(args[4]).toBe("41538");
     const pairHash = args[5] as Uint8Array;
     expect(pairHash).toBeInstanceOf(Uint8Array);
     expect(ethers.hexlify(pairHash)).toBe("0x" + "88".repeat(32));
-    expect(args[6]).toBe("1794700800");
+    expect(args[6]).toBe("1794728700");
   });
 
   it("never sends the proven commitment itself", () => {

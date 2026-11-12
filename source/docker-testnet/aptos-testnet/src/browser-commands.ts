@@ -400,15 +400,16 @@ const LOCKBOX_LOCK_ABI = [
     "event Locked(bytes32 indexed lockId, address indexed depositor, address indexed token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)",
 ];
 
-// SCOUT(#220) EDIT: the window id comes from the SDK currentWindowId mirror and the host clock; the doc comment's window and close wording follows the new formula.
 // SCOUT(#221) EDIT: binding.deadline stops being a lock() argument, and LockBox then rejects a window id that is closed at block.timestamp, so the host clock, the Ethereum block time and the Aptos clock must agree on the window.
 // SCOUT(#224) EDIT: the empty pair BCS default is not on the allowlist; default to the SDK launch pair constant.
 /**
- * The binding of a test lock: the current window by the wall clock (the
- * `auction::current_window_id` formula) and the pair BCS of the window the
+ * The binding of a test lock: the current window by the host clock (the SDK
+ * `currentWindowId` mirror of `auction::current_window_id`, whose id changes
+ * at 07:45 and 16:15 UTC) and the pair BCS of the window the
  * test claims the lock into (`pairBcsHex`, empty by default). Aptos claims a
  * lock only into the window and pair it is bound to (issue 194). Its deadline
- * is `auction::eth_lock_deadline(windowId)`, 72 hours past the window close,
+ * is `auction::eth_lock_deadline(windowId)`, 72 hours past the window close
+ * (the next 07:45 or 16:15 UTC),
  * so Aptos registers it and it cannot be reclaimed during a test.
  */
 export function testLockBinding(pairBcsHex: string = "0x"): LockBinding {

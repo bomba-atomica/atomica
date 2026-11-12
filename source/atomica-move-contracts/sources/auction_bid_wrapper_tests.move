@@ -27,9 +27,9 @@ module atomica::auction_bid_wrapper_tests {
 
     const MIN: u64 = 60_000_000;
     const DEADLINE_US: u64 = 1_700_000_000_000_000;
-    // SCOUT(#220) EDIT: under the new formula 120 000 s is window 3, so AUCTION_ID 5 is neither current nor next and `create_auction` aborts; move BID_TIME_US into [200 700, 231 300) s. The issue text does not list this file.
-    // 120_000 s falls in window 5 (2 * 2 + 1).
-    const BID_TIME_US: u64 = 120_000_000_000;
+    // 216_000 s (day 2, 12:00 UTC) falls in window 5 (2 * 2 + 1), which runs from
+    // 200_700 s to 231_300 s. AUCTION_ID 5 is bound into the golden ciphertext.
+    const BID_TIME_US: u64 = 216_000_000_000;
     const EPOCH_INTERVAL_US: u64 = 2_000_000_000_000_000;
     const TIMELOCK_ID: u64 = 11;
     const AUCTION_ID: u64 = 5;

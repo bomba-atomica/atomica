@@ -19,6 +19,7 @@ module atomica::auction_tests {
     use aptos_framework::event;
     use aptos_framework::timestamp;
     use atomica::auction::{Self};
+    use atomica::eth_proof;
     use atomica::outcome_tree;
     use atomica::auction_bid_wrapper_tests;
     use atomica::lock_receipt::{Self, Ethereum, FakeETH, FakeUSD};
@@ -67,13 +68,13 @@ module atomica::auction_tests {
 
     // ===================== Window ID math =====================
 
-    // SCOUT(#220) EDIT: the five `test_window_id_*` tests below pin the old formula. Under the new one, 43 200 s is window 1 and 71 700 s is window 2, so two of them fail.
     // Window ID formula from docs/architecture/v0-architecture.md §2.2:
-    //   epoch = unix_seconds / 43200
-    //   tmod  = unix_seconds % 43200
-    //   id    = epoch * 2 + (tmod >= 28500 ? 1 : 0)
+    //   day = unix_seconds / 86400
+    //   t   = unix_seconds % 86400
+    //   id  = day * 2 + (t >= 27900 ? 1 : 0) + (t >= 58500 ? 1 : 0)
+    // The id changes at 07:45 UTC (27 900 s) and 16:15 UTC (58 500 s).
     //
-    // Known vector: unix_seconds = 0 → epoch = 0, tmod = 0 → window_id = 0.
+    // Known vector: unix_seconds = 0 → day = 0, t = 0 → window_id = 0.
     #[test(framework = @0x1)]
     fun test_window_id_epoch_zero(framework: &signer) {
         setup(framework);
@@ -82,31 +83,31 @@ module atomica::auction_tests {
         assert!(wid == 0, 1);
     }
 
-    // unix_seconds = 28500 → tmod = 28500 >= 28500 → offset = 1 → window_id = 1
+    // unix_seconds = 43200 (12:00 UTC) → between the two closes → window_id = 1
     #[test(framework = @0x1)]
-    fun test_window_id_morning_offset(framework: &signer) {
+    fun test_window_id_midday(framework: &signer) {
         setup(framework);
-        timestamp::fast_forward_seconds(28500);
+        timestamp::fast_forward_seconds(43200);
         let wid = auction::current_window_id();
         assert!(wid == 1, 1);
     }
 
-    // unix_seconds = 43200 → epoch = 1, tmod = 0 → offset = 0 → window_id = 2
+    // unix_seconds = 86399 (23:59:59 UTC) → after the afternoon close → window_id = 2
     #[test(framework = @0x1)]
-    fun test_window_id_epoch_one_start(framework: &signer) {
+    fun test_window_id_end_of_day(framework: &signer) {
         setup(framework);
-        timestamp::fast_forward_seconds(43200);
+        timestamp::fast_forward_seconds(86399);
         let wid = auction::current_window_id();
         assert!(wid == 2, 1);
     }
 
-    // unix_seconds = 43200 + 28500 = 71700 → epoch = 1, tmod = 28500 → offset = 1 → window_id = 3
+    // unix_seconds = 86400 (00:00 UTC of day 1) → no boundary at midnight → window_id = 2
     #[test(framework = @0x1)]
-    fun test_window_id_epoch_one_second_window(framework: &signer) {
+    fun test_window_id_midnight_is_no_boundary(framework: &signer) {
         setup(framework);
-        timestamp::fast_forward_seconds(71700);
+        timestamp::fast_forward_seconds(86400);
         let wid = auction::current_window_id();
-        assert!(wid == 3, 1);
+        assert!(wid == 2, 1);
     }
 
     // Window ID is strictly monotone — later timestamp always >= earlier.
@@ -114,15 +115,61 @@ module atomica::auction_tests {
     fun test_window_id_monotone(framework: &signer) {
         setup(framework);
         let w0 = auction::current_window_id();
-        timestamp::fast_forward_seconds(43200 * 5 + 28500);
+        timestamp::fast_forward_seconds(86400 * 5 + 58500);
         let w1 = auction::current_window_id();
-        assert!(w1 > w0, 1);
+        assert!(w0 == 0 && w1 == 12, 1);
+        assert!(w1 > w0, 2);
     }
 
-    // SCOUT(#220) TEST: test_window_id_changes_at_0745_utc (27 899 s is window 0, 27 900 s is window 1)
-    // SCOUT(#220) TEST: test_window_id_changes_at_1615_utc (58 499 s is window 1, 58 500 s is window 2)
-    // SCOUT(#220) TEST: test_window_id_second_day (86 400 + 27 899 s is window 2, 86 400 + 27 900 s is window 3)
-    // SCOUT(#220) TEST: test_window_id_round_trips_window_close_secs (at close(w) - 1 the id is w, at close(w) it is w + 1)
+    // The id changes exactly at 07:45:00 UTC.
+    #[test(framework = @0x1)]
+    fun test_window_id_changes_at_0745_utc(framework: &signer) {
+        setup(framework);
+        timestamp::update_global_time_for_test_secs(27899);
+        assert!(auction::current_window_id() == 0, 1);
+        timestamp::update_global_time_for_test_secs(27900);
+        assert!(auction::current_window_id() == 1, 2);
+    }
+
+    // The id changes exactly at 16:15:00 UTC.
+    #[test(framework = @0x1)]
+    fun test_window_id_changes_at_1615_utc(framework: &signer) {
+        setup(framework);
+        timestamp::update_global_time_for_test_secs(58499);
+        assert!(auction::current_window_id() == 1, 1);
+        timestamp::update_global_time_for_test_secs(58500);
+        assert!(auction::current_window_id() == 2, 2);
+    }
+
+    // The second day's morning close moves the id from 2 to 3.
+    #[test(framework = @0x1)]
+    fun test_window_id_second_day(framework: &signer) {
+        setup(framework);
+        timestamp::update_global_time_for_test_secs(86400 + 27899);
+        assert!(auction::current_window_id() == 2, 1);
+        timestamp::update_global_time_for_test_secs(86400 + 27900);
+        assert!(auction::current_window_id() == 3, 2);
+    }
+
+    // `window_close_secs(w)` is the first second of window w + 1.
+    #[test(framework = @0x1)]
+    fun test_window_id_round_trips_window_close_secs(framework: &signer) {
+        setup(framework);
+        let w = 0;
+        while (w < 20) {
+            let close = eth_proof::window_close_secs(w);
+            timestamp::update_global_time_for_test_secs(close - 1);
+            assert!(auction::current_window_id() == w, w);
+            timestamp::update_global_time_for_test_secs(close);
+            assert!(auction::current_window_id() == w + 1, 100 + w);
+            w = w + 1;
+        };
+        // A window id of today's chain clock (about 41 538 in November 2026).
+        let w = 41538;
+        let close = eth_proof::window_close_secs(w);
+        assert!(eth_proof::window_id_at(close - 1) == w, 200);
+        assert!(eth_proof::window_id_at(close) == w + 1, 201);
+    }
 
     // ===================== View functions on test-inserted WindowState =====================
 
@@ -352,9 +399,8 @@ module atomica::auction_tests {
     #[expected_failure(abort_code = 6, location = atomica::auction)] // E_STALE_WINDOW_ID
     fun test_create_auction_stale_window_id_aborts(framework: &signer, atomica: &signer) {
         setup(framework);
-        // SCOUT(#220) EDIT: under the new formula 43 200 s is window 1, not 2; the test still passes, the comment below does not hold.
         // Advance time so current_window_id() > 0; then supply window_id = 0 (stale).
-        timestamp::fast_forward_seconds(43200); // epoch 1, window_id = 2
+        timestamp::fast_forward_seconds(86400); // day 1, window_id = 2
         let pair_bcs    = default_pair_bcs();
         let lock_id     = vector::empty<u8>();
         let mpk_bytes   = vector::empty<u8>();

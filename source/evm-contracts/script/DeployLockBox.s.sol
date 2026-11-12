@@ -8,7 +8,6 @@ import {IAptosLightClient} from "../src/aptos/IAptosLightClient.sol";
 import {FakeETH} from "../src/tokens/FakeETH.sol";
 import {FakeUSD} from "../src/tokens/FakeUSD.sol";
 
-// SCOUT(#220) ADD: no tool regenerates the anvil lock proof fixture of eth_lock_registration_tests.move; add a script beside this one that deploys from anvil account 0, locks 10 FakeETH at nonce 0 into the fixture window and prints eth_getProof of the commitment slot.
 /**
  * @title DeployLockBox
  * @notice Deploys the fake tokens and the proof-gated LockBox.

@@ -108,7 +108,6 @@ export function AuctionBidder() {
       // 2. Lock FakeUSD in LockBox as collateral margin, bound to the
       //    current window and the scaffold pair (empty pair BCS). Step 2
       //    starts on that window.
-      // SCOUT(#220) EDIT: no code change: the window id follows the SDK currentWindowId, taken from the client clock.
       // SCOUT(#221) EDIT: lockBinding and lockFakeUsd lose the caller deadline; a window id from a wrong client clock now reverts in LockBox.lock.
       // SCOUT(#224) EDIT: bind the lock to the launch pair bytes, not to new Uint8Array(0).
       // SCOUT(#233) EDIT: bind the lock to the pair the bidder will bid on.
