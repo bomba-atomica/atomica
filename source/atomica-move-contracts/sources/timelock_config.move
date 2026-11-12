@@ -19,6 +19,15 @@
 /// | `max_timelock_duration_us` | 30 days | Maximum allowed timelock duration |
 /// | `reveal_threshold_numerator` | 67 | Numerator of threshold fraction |
 /// | `reveal_threshold_denominator` | 100 | Denominator of threshold fraction |
+/// | `unwind_grace_us` | 24 hours | Stuck deadline: reveal expiry + opening window + this grace |
+/// | `carrier_margin_us` | 24 hours | Time to carry an `AuctionOutcome` to Ethereum after the stuck deadline |
+/// | `receipt_cancel_delay_us` | 24 hours | Age after which anyone may cancel a never-auctioned receipt |
+///
+/// The unwind grace and the carrier margin must fit in the Ethereum lock
+/// delay (`eth_proof::ETH_RECLAIM_DELAY_SECS`, 72 hours) together with the
+/// time to the reveal and the opening window. `auction::create_auction`
+/// enforces `stuck deadline + carrier margin < eth_lock_deadline(window_id)`
+/// (docs/specifications/auction-timing.md).
 ///
 /// ## Seam Notes (Phase 1)
 ///
@@ -45,6 +54,15 @@ module atomica::timelock_config {
     /// Default reveal threshold denominator (100).
     const DEFAULT_THRESHOLD_DENOMINATOR: u64 = 100;
 
+    /// Unwind grace after the opening window: 24 hours in microseconds.
+    const DEFAULT_UNWIND_GRACE_US: u64 = 86_400_000_000;
+
+    /// Carrier margin after the stuck deadline: 24 hours in microseconds.
+    const DEFAULT_CARRIER_MARGIN_US: u64 = 86_400_000_000;
+
+    /// Age of an ACTIVE receipt after which anyone may cancel it: 24 hours in microseconds.
+    const DEFAULT_RECEIPT_CANCEL_DELAY_US: u64 = 86_400_000_000;
+
     // ---------------------------------------------------------------------------
     // Config resource
     // ---------------------------------------------------------------------------
@@ -57,6 +75,9 @@ module atomica::timelock_config {
         max_duration_us: u64,
         threshold_numerator: u64,
         threshold_denominator: u64,
+        unwind_grace_us: u64,
+        carrier_margin_us: u64,
+        receipt_cancel_delay_us: u64,
     }
 
     // ---------------------------------------------------------------------------
@@ -74,6 +95,9 @@ module atomica::timelock_config {
                 max_duration_us: DEFAULT_MAX_DURATION_US,
                 threshold_numerator: DEFAULT_THRESHOLD_NUMERATOR,
                 threshold_denominator: DEFAULT_THRESHOLD_DENOMINATOR,
+                unwind_grace_us: DEFAULT_UNWIND_GRACE_US,
+                carrier_margin_us: DEFAULT_CARRIER_MARGIN_US,
+                receipt_cancel_delay_us: DEFAULT_RECEIPT_CANCEL_DELAY_US,
             });
         }
     }
@@ -104,6 +128,27 @@ module atomica::timelock_config {
     /// Returns the reveal threshold denominator (default 100).
     public fun get_threshold_denominator(): u64 {
         DEFAULT_THRESHOLD_DENOMINATOR
+    }
+
+    #[view]
+    /// Returns the unwind grace in microseconds. A window's stuck deadline is its
+    /// reveal expiry plus the opening window plus this grace (`auction::unwind`).
+    public fun get_unwind_grace_us(): u64 {
+        DEFAULT_UNWIND_GRACE_US
+    }
+
+    #[view]
+    /// Returns the carrier margin in microseconds: the time any user has after the
+    /// stuck deadline to carry the `AuctionOutcome` to Ethereum before reclaim opens.
+    public fun get_carrier_margin_us(): u64 {
+        DEFAULT_CARRIER_MARGIN_US
+    }
+
+    #[view]
+    /// Returns the receipt cancel delay in microseconds: an ACTIVE receipt at least
+    /// this old may be cancelled by anyone (`lock_receipt::cancel_unauctioned`).
+    public fun get_receipt_cancel_delay_us(): u64 {
+        DEFAULT_RECEIPT_CANCEL_DELAY_US
     }
 
     #[view]
@@ -172,6 +217,9 @@ module atomica::timelock_config {
         assert!(cfg.max_duration_us == DEFAULT_MAX_DURATION_US, 2);
         assert!(cfg.threshold_numerator == DEFAULT_THRESHOLD_NUMERATOR, 3);
         assert!(cfg.threshold_denominator == DEFAULT_THRESHOLD_DENOMINATOR, 4);
+        assert!(cfg.unwind_grace_us == DEFAULT_UNWIND_GRACE_US, 5);
+        assert!(cfg.carrier_margin_us == DEFAULT_CARRIER_MARGIN_US, 6);
+        assert!(cfg.receipt_cancel_delay_us == DEFAULT_RECEIPT_CANCEL_DELAY_US, 7);
     }
 
     #[test]
@@ -181,6 +229,20 @@ module atomica::timelock_config {
         assert!(get_max_duration_us() == DEFAULT_MAX_DURATION_US, 2);
         assert!(get_threshold_numerator() == DEFAULT_THRESHOLD_NUMERATOR, 3);
         assert!(get_threshold_denominator() == DEFAULT_THRESHOLD_DENOMINATOR, 4);
+        assert!(get_unwind_grace_us() == DEFAULT_UNWIND_GRACE_US, 5);
+        assert!(get_carrier_margin_us() == DEFAULT_CARRIER_MARGIN_US, 6);
+        assert!(get_receipt_cancel_delay_us() == DEFAULT_RECEIPT_CANCEL_DELAY_US, 7);
+    }
+
+    #[test]
+    /// The 72-hour Ethereum lock delay covers at most 23 h 50 min to the reveal
+    /// deadline, the 10-minute opening window, the unwind grace and the carrier
+    /// margin (docs/specifications/auction-timing.md).
+    fun test_grace_and_margin_fit_the_lock_delay() {
+        let budget_us = 259_200_000_000; // eth_proof::ETH_RECLAIM_DELAY_SECS
+        let to_reveal_us = 85_800_000_000; // 23 h 50 min
+        let opening_us = 600_000_000;
+        assert!(to_reveal_us + opening_us + get_unwind_grace_us() + get_carrier_margin_us() <= budget_us, 1);
     }
 
     #[test]

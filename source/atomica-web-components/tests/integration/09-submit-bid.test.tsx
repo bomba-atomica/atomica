@@ -145,7 +145,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
     await commands.fundAccount(bidderAptosAddress, 500_000_000);
 
     // Collateral first: the timelock deadline starts counting at createLiveWindow.
-    firstCollateral = await lockBidCollateral(fixture, aptosClient, operator);
+    firstCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
       minPrice: MIN_PRICE,
@@ -254,7 +254,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
   // ── Test 4: bids close at the timelock deadline ───────────────────────────
 
   it("rejects a bid after the timelock deadline and leaves its receipt active", async () => {
-    const lateCollateral = await lockBidCollateral(fixture, aptosClient, operator);
+    const lateCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
     await waitForChainTime(aptosClient, auction.deadlineUs);
 
     // Right after the deadline the timelock is still Pending (E_BID_AFTER_DEADLINE).

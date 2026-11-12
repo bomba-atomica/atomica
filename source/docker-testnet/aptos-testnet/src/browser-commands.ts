@@ -187,6 +187,7 @@ declare module "vitest/browser" {
             lockBoxAddress: string,
             lockAmountWei?: string,
             mintAmountWei?: string,
+            pairBcsHex?: string,
         ): Promise<EthLockProofResult>;
         generateEthLockProofs(
             rpcUrl: string,
@@ -196,6 +197,7 @@ declare module "vitest/browser" {
             lockBoxAddress: string,
             lockAmountWei: string,
             count: number,
+            pairBcsHex?: string,
         ): Promise<EthLockProofResult[]>;
     }
 }
@@ -375,12 +377,17 @@ const LOCKBOX_LOCK_ABI = [
 
 /**
  * The binding of a test lock: the current window by the wall clock (the
- * `auction::current_window_id` formula) and the empty pair BCS the tests use.
- * Its deadline is `auction::eth_lock_deadline(windowId)`, 72 hours past the
- * window close, so Aptos registers it and it cannot be reclaimed during a test.
+ * `auction::current_window_id` formula) and the pair BCS of the window the
+ * test claims the lock into (`pairBcsHex`, empty by default). Aptos claims a
+ * lock only into the window and pair it is bound to (issue 194). Its deadline
+ * is `auction::eth_lock_deadline(windowId)`, 72 hours past the window close,
+ * so Aptos registers it and it cannot be reclaimed during a test.
  */
-export function testLockBinding(): LockBinding {
-    return lockBinding(currentWindowId(BigInt(Math.floor(Date.now() / 1000))), new Uint8Array(0));
+export function testLockBinding(pairBcsHex: string = "0x"): LockBinding {
+    return lockBinding(
+        currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
+        ethers.getBytes(pairBcsHex),
+    );
 }
 
 /**
@@ -411,6 +418,7 @@ async function lockAndProve(
     lockAmount: bigint,
     mintAmount: bigint,
     count: number,
+    pairBcsHex: string = "0x",
 ): Promise<EthLockProofResult[]> {
     const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
     const seller = new ethers.Wallet(sellerPrivateKey, provider);
@@ -434,7 +442,7 @@ async function lockAndProve(
     )(lockBoxAddress, lockAmount * BigInt(count), { nonce: nonce++ });
     await provider.waitForTransaction(approveTx.hash, 1);
 
-    const binding = testLockBinding();
+    const binding = testLockBinding(pairBcsHex);
     const lockHashes: string[] = [];
     for (let i = 0; i < count; i++) {
         const lockTx = await (
@@ -560,6 +568,7 @@ export const generateEthLockProofCommand: BrowserCommand<
         lockBoxAddress: string,
         lockAmountWei?: string,
         mintAmountWei?: string,
+        pairBcsHex?: string,
     ]
 > = async (
     _ctx,
@@ -570,6 +579,7 @@ export const generateEthLockProofCommand: BrowserCommand<
     lockBoxAddress: string,
     lockAmountWei: string = ethers.parseEther("10").toString(),
     mintAmountWei: string = ethers.parseEther("1000").toString(),
+    pairBcsHex: string = "0x",
 ): Promise<EthLockProofResult> => {
     const [result] = await lockAndProve(
         rpcUrl,
@@ -580,6 +590,7 @@ export const generateEthLockProofCommand: BrowserCommand<
         BigInt(lockAmountWei),
         BigInt(mintAmountWei),
         1,
+        pairBcsHex,
     );
     return result;
 };
@@ -602,6 +613,7 @@ export const generateEthLockProofsCommand: BrowserCommand<
         lockBoxAddress: string,
         lockAmountWei: string,
         count: number,
+        pairBcsHex?: string,
     ]
 > = async (
     _ctx,
@@ -612,6 +624,7 @@ export const generateEthLockProofsCommand: BrowserCommand<
     lockBoxAddress: string,
     lockAmountWei: string,
     count: number,
+    pairBcsHex: string = "0x",
 ): Promise<EthLockProofResult[]> => {
     const lockAmount = BigInt(lockAmountWei);
     return lockAndProve(
@@ -623,5 +636,6 @@ export const generateEthLockProofsCommand: BrowserCommand<
         lockAmount,
         lockAmount * BigInt(count),
         count,
+        pairBcsHex,
     );
 };

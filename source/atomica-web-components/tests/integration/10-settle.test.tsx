@@ -49,7 +49,7 @@ import {
   getWindowStatus,
   getAuctionState,
   getReceiptStatus,
-  RECEIPT_CLAIMED,
+  RECEIPT_FILLED,
   RECEIPT_REVOKED,
   type LiveWindow,
 } from "./helpers/auction-setup";
@@ -75,7 +75,10 @@ import { ethers } from "ethers";
 const MIN_PRICE = 1_000_000n;
 const WIN_PRICE = 2_000_000n;
 const LOSE_PRICE = 1_500_000n;
-const SUPPLY = ethers.parseEther("10");
+// The winner bids the whole supply. Its quote must fit the 500 FakeUSD
+// collateral: 0.0001 FakeETH at WIN_PRICE (USD per whole FakeETH,
+// `quoteForFill`) = 200.
+const SUPPLY = ethers.parseEther("0.0001");
 const LOSE_QUANTITY = ethers.parseEther("1");
 const PAIR_BCS = new TextEncoder().encode("10-settle");
 const DEADLINE_AHEAD_US = 120_000_000n;
@@ -129,8 +132,8 @@ describe.sequential("10: Settle Auction", () => {
     settlerAptosAddress = (await getDerivedAddress(settlerEthAddress.toLowerCase())).toString();
     await commands.fundAccount(settlerAptosAddress, 500_000_000);
 
-    winCollateral = await lockBidCollateral(fixture, aptosClient, operator);
-    loseCollateral = await lockBidCollateral(fixture, aptosClient, operator);
+    winCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
+    loseCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
 
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
@@ -254,17 +257,17 @@ describe.sequential("10: Settle Auction", () => {
       expect(state.clearingPrice).toBe(WIN_PRICE);
       expect(await isSettled(auction.windowId, PAIR_BCS)).toBe(true);
 
-      // Winner collateral stays claimed, loser collateral is released for the
-      // relayer, and the filled seller lock stays claimed.
+      // Winner collateral pays the seller (filled), loser collateral goes back
+      // to the bidder (revoked), and the seller lock pays the winner (filled).
       expect(
         await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", winCollateral),
-      ).toBe(RECEIPT_CLAIMED);
+      ).toBe(RECEIPT_FILLED);
       expect(
         await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", loseCollateral),
       ).toBe(RECEIPT_REVOKED);
       expect(
         await getReceiptStatus(aptosClient, moduleAddr, "FakeETH", auction.sellerLockId),
-      ).toBe(RECEIPT_CLAIMED);
+      ).toBe(RECEIPT_FILLED);
     },
     (Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS + 180) * 1000,
   );

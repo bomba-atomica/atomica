@@ -15,8 +15,11 @@
 #[test_only]
 module atomica::auction_tests {
     use std::vector;
+    use aptos_framework::account;
+    use aptos_framework::event;
     use aptos_framework::timestamp;
     use atomica::auction::{Self};
+    use atomica::outcome_tree;
     use atomica::auction_bid_wrapper_tests;
     use atomica::lock_receipt::{Self, Ethereum, FakeETH, FakeUSD};
 
@@ -24,6 +27,7 @@ module atomica::auction_tests {
 
     const WINDOW_ID: u64 = 100;
     const TOTAL_SUPPLY: u256 = 10_000_000_000_000_000_000u256; // 10 ETH in wei
+    const ETH: u256 = 1_000_000_000_000_000_000; // 1 ETH in wei
     // The registered timelock of `auction_bid_wrapper_tests::setup`.
     const TIMELOCK_ID: u64 = 11;
 
@@ -40,14 +44,24 @@ module atomica::auction_tests {
         timestamp::set_time_has_started_for_testing(framework);
     }
 
+    // The seller lock of `revealed_window`, owned by SELLER.
+    const SELLER_LOCK: vector<u8> = b"revealed_window_seller_lock_32__";
+    const SELLER: address = @0x5E11E5;
+
     // A window bound to timelock 11, whose key is revealed after its deadline. `settle`
-    // needs this state: deadline passed and status `Revealed`.
+    // needs this state: deadline passed and status `Revealed`. The window holds one claimed
+    // seller lock of `total_supply`.
     fun revealed_window(atomica: &signer, total_supply: u256) {
         auction_bid_wrapper_tests::setup();
         auction_bid_wrapper_tests::reveal_timelock();
         auction::test_insert_window_with_timelock(
             atomica, WINDOW_ID, default_pair_bcs(), total_supply, false, 0, TIMELOCK_ID,
         );
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+        lock_receipt::insert_test_receipt<Ethereum, FakeETH>(SELLER_LOCK, SELLER, total_supply, 1);
+        lock_receipt::claim<Ethereum, FakeETH>(SELLER, SELLER_LOCK);
+        auction::test_add_seller_lock(atomica, WINDOW_ID, default_pair_bcs(), SELLER_LOCK, 2000);
     }
 
     // ===================== Window ID math =====================
@@ -203,19 +217,27 @@ module atomica::auction_tests {
     // On chain, init_module publishes it, so any seller may be first. A pre-inserted FakeETH LockReceipt is required for each call so
     // that lock_receipt::claim can succeed without proof verification.
 
-    // Helper: initialize FakeETH registry and insert a receipt for a given lock_id.
+    // Helper: initialize FakeETH registry and insert a receipt for a given lock_id, bound
+    // to the current window and the default pair.
     fun insert_eth_receipt(
         atomica:     &signer,
         lock_id:     vector<u8>,
         seller_addr: address,
         amount:      u256,
     ) {
+        insert_bound_eth_receipt(atomica, lock_id, seller_addr, amount, auction::current_window_id());
+    }
+
+    fun insert_bound_eth_receipt(
+        atomica:     &signer,
+        lock_id:     vector<u8>,
+        seller_addr: address,
+        amount:      u256,
+        window_id:   u64,
+    ) {
         lock_receipt::initialize<Ethereum, FakeETH>(atomica);
-        lock_receipt::insert_test_receipt<Ethereum, FakeETH>(
-            lock_id,
-            seller_addr,
-            amount,
-            1u64, // block_number
+        lock_receipt::insert_bound_test_receipt<Ethereum, FakeETH>(
+            lock_id, seller_addr, amount, window_id, auction::pair_hash(default_pair_bcs()),
         );
     }
 
@@ -224,7 +246,7 @@ module atomica::auction_tests {
     fun test_create_auction_happy_path(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
         let pair_bcs    = default_pair_bcs();
-        let lock_id     = b"eth_lock_receipt_id_32bytes_pad__";
+        let lock_id     = b"eth_lock_receipt_id_32bytes_pad_";
         let seller_addr = @atomica; // @0xcafe in dev
         let lock_amount = 5_000_000_000_000_000_000u256; // 5 ETH in wei
 
@@ -234,7 +256,7 @@ module atomica::auction_tests {
         // The setup clock sits in window 5; use the current window.
         let window_id = auction::current_window_id();
         let mpk_bytes = vector::empty<u8>();
-        let timelock_id = TIMELOCK_ID;
+        let timelock_id = auction_bid_wrapper_tests::register_live_timelock();
         auction::create_auction(atomica, window_id, pair_bcs, lock_id, 2000u64, timelock_id, mpk_bytes);
 
         // get_auction must return the registered window.
@@ -259,7 +281,7 @@ module atomica::auction_tests {
         insert_eth_receipt(atomica, lock_id, DERIVED_OWNER, 1_000_000_000_000_000_000u256);
         auction::create_auction(
             atomica, auction::current_window_id(), default_pair_bcs(), lock_id, 2000u64,
-            TIMELOCK_ID, vector::empty<u8>(),
+            auction_bid_wrapper_tests::register_live_timelock(), vector::empty<u8>(),
         );
     }
 
@@ -275,7 +297,7 @@ module atomica::auction_tests {
         let owner = aptos_framework::account::create_signer_for_test(DERIVED_OWNER);
         let window_id = auction::current_window_id();
         auction::create_auction(
-            &owner, window_id, default_pair_bcs(), lock_id, 2000u64, TIMELOCK_ID,
+            &owner, window_id, default_pair_bcs(), lock_id, 2000u64, auction_bid_wrapper_tests::register_live_timelock(),
             vector::empty<u8>(),
         );
         let (_, supply, _, _, _) = auction::get_auction(window_id, default_pair_bcs());
@@ -296,12 +318,12 @@ module atomica::auction_tests {
         let seller_addr = @atomica;
         let lock_amount = 1_000_000_000_000_000_000u256; // 1 ETH in wei
 
-        insert_eth_receipt(atomica, lock_id, seller_addr, lock_amount);
-
         // window_id = current + 1 must be accepted.
         let window_id = auction::current_window_id() + 1;
+        insert_bound_eth_receipt(atomica, lock_id, seller_addr, lock_amount, window_id);
+
         let mpk_bytes = vector::empty<u8>();
-        let timelock_id = TIMELOCK_ID;
+        let timelock_id = auction_bid_wrapper_tests::register_live_timelock();
         auction::create_auction(atomica, window_id, pair_bcs, lock_id, 1900u64, timelock_id, mpk_bytes);
 
         let (wid, supply, _, _, _) = auction::get_auction(window_id, pair_bcs);
@@ -342,25 +364,20 @@ module atomica::auction_tests {
     fun test_create_auction_duplicate_accumulates_supply(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
         let pair_bcs     = default_pair_bcs();
-        let lock_id_a    = b"eth_lock_receipt_seller_a_32byte_";
-        let lock_id_b    = b"eth_lock_receipt_seller_b_32byte_";
+        let lock_id_a    = b"eth_lock_receipt_seller_a_32byte";
+        let lock_id_b    = b"eth_lock_receipt_seller_b_32byte";
         let seller_addr  = @atomica;
         let amount_a     = 3_000_000_000_000_000_000u256; // 3 ETH
         let amount_b     = 7_000_000_000_000_000_000u256; // 7 ETH
         let expected     = amount_a + amount_b;
 
         // Two separate FakeETH receipts.
-        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
-        lock_receipt::insert_test_receipt<Ethereum, FakeETH>(
-            lock_id_a, seller_addr, amount_a, 1u64,
-        );
-        lock_receipt::insert_test_receipt<Ethereum, FakeETH>(
-            lock_id_b, seller_addr, amount_b, 2u64,
-        );
+        insert_eth_receipt(atomica, lock_id_a, seller_addr, amount_a);
+        insert_eth_receipt(atomica, lock_id_b, seller_addr, amount_b);
 
         let window_id   = auction::current_window_id();
         let mpk_bytes   = vector::empty<u8>();
-        let timelock_id = TIMELOCK_ID;
+        let timelock_id = auction_bid_wrapper_tests::register_live_timelock();
 
         // First seller creates the window.
         auction::create_auction(atomica, window_id, pair_bcs, lock_id_a, 2000u64, timelock_id, mpk_bytes);
@@ -760,9 +777,8 @@ module atomica::auction_tests {
 
     // test_settle_releases_losing_collateral
     //
-    // After settle(), losing bidders' FakeUSD LockReceipts are released
-    // (STATUS_REVOKED = 2) so the off-chain relayer returns their collateral.
-    // Winning bidders' receipts remain STATUS_CLAIMED (= 1).
+    // After settle(), losing bidders' FakeUSD LockReceipts go back to the depositor
+    // (STATUS_REVOKED = 2). A winner whose collateral pays the seller is STATUS_FILLED (= 3).
     //
     // Setup: 2 bids — Alice wins (price=2100, qty=5 fills supply=5),
     //        Bob loses (price=2000, qty=3).
@@ -772,7 +788,7 @@ module atomica::auction_tests {
         caller:    &signer,
     ) {
         let pair_bcs = default_pair_bcs();
-        let supply: u256 = 5u256;
+        let supply: u256 = 5 * ETH;
         revealed_window(atomica, supply);
 
         let alice_lock = b"losing_collat_alice_lock_32bytes";
@@ -791,10 +807,10 @@ module atomica::auction_tests {
 
         // Alice wins (price=2100, qty=5 fills supply), Bob loses (price=2000).
         auction::test_insert_bid_with_qty(
-            atomica, WINDOW_ID, pair_bcs, @0xA11CE, b"c", alice_lock, 5u256,
+            atomica, WINDOW_ID, pair_bcs, @0xA11CE, b"c", alice_lock, 5 * ETH,
         );
         auction::test_insert_bid_with_qty(
-            atomica, WINDOW_ID, pair_bcs, @0xB0B, b"c", bob_lock, 3u256,
+            atomica, WINDOW_ID, pair_bcs, @0xB0B, b"c", bob_lock, 3 * ETH,
         );
         let prices = vector[2100u64, 2000u64];
         auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, prices);
@@ -806,9 +822,14 @@ module atomica::auction_tests {
         let bob_status = lock_receipt::get_receipt_status<Ethereum, FakeUSD>(bob_lock);
         assert!(bob_status == lock_receipt::status_revoked(), 1);
 
-        // Alice (winner): receipt stays claimed (STATUS_CLAIMED = 1) — not released.
+        // Alice (winner): her collateral pays the seller 5 ETH at 2100 = 10_500 FakeUSD,
+        // all of it, so the receipt is FILLED. The seller lock is FILLED too.
         let alice_status = lock_receipt::get_receipt_status<Ethereum, FakeUSD>(alice_lock);
-        assert!(alice_status == lock_receipt::status_claimed(), 2);
+        assert!(
+            lock_receipt::get_receipt_status<Ethereum, FakeETH>(SELLER_LOCK) == lock_receipt::status_filled(),
+            10
+        );
+        assert!(alice_status == lock_receipt::status_filled(), 2);
     }
 
     // A receipt a live window holds cannot be pulled out through the public
@@ -842,7 +863,7 @@ module atomica::auction_tests {
         let owner = aptos_framework::account::create_signer_for_test(DERIVED_OWNER);
         auction::create_auction(
             &owner, auction::current_window_id(), default_pair_bcs(), lock_id, 2000u64,
-            TIMELOCK_ID, vector::empty<u8>(),
+            auction_bid_wrapper_tests::register_live_timelock(), vector::empty<u8>(),
         );
         atomica::fake_eth::mint_from_lock(&owner, lock_id);
     }
@@ -1132,7 +1153,7 @@ module atomica::auction_tests {
         caller:    &signer,
     ) {
         let pair_bcs = default_pair_bcs();
-        let supply: u256 = 5u256;
+        let supply: u256 = 5 * ETH;
         // Insert window with 5-unit supply.
         revealed_window(atomica, supply);
 
@@ -1154,10 +1175,10 @@ module atomica::auction_tests {
 
         // Insert bid metadata into the window (test helper bypasses submit_bid).
         auction::test_insert_bid_with_qty(
-            atomica, WINDOW_ID, pair_bcs, @0xA11CE, b"c", alice_lock, 5u256,
+            atomica, WINDOW_ID, pair_bcs, @0xA11CE, b"c", alice_lock, 5 * ETH,
         );
         auction::test_insert_bid_with_qty(
-            atomica, WINDOW_ID, pair_bcs, @0xB0B, b"c", bob_lock, 2u256,
+            atomica, WINDOW_ID, pair_bcs, @0xB0B, b"c", bob_lock, 2 * ETH,
         );
 
         // Set revealed prices: Alice=2100, Bob=2000.
@@ -1181,9 +1202,14 @@ module atomica::auction_tests {
         let bob_status = lock_receipt::get_receipt_status<Ethereum, FakeUSD>(bob_lock);
         assert!(bob_status == lock_receipt::status_revoked(), 3);
 
-        // Alice (winner): receipt stays claimed (STATUS_CLAIMED = 1) — not released.
+        // Alice (winner): her collateral pays the seller 5 ETH at 2100 = 10_500 FakeUSD,
+        // all of it, so the receipt is FILLED. The seller lock is FILLED too.
         let alice_status = lock_receipt::get_receipt_status<Ethereum, FakeUSD>(alice_lock);
-        assert!(alice_status == lock_receipt::status_claimed(), 4);
+        assert!(
+            lock_receipt::get_receipt_status<Ethereum, FakeETH>(SELLER_LOCK) == lock_receipt::status_filled(),
+            10
+        );
+        assert!(alice_status == lock_receipt::status_filled(), 4);
     }
 
     // settle with zero bids: window settles with total_filled=0, winner_count=0.
@@ -1223,5 +1249,354 @@ module atomica::auction_tests {
 
         // settle must abort: bid_results.length (0) != bids.length (1).
         auction::settle(caller, WINDOW_ID, pair_bcs);
+    }
+
+    // ===================== Lock outcomes, settle and unwind (issue 194) =====================
+    //
+    // The mixed window: sellers A (2 ETH) and B (3 ETH), supply 5 ETH. Bids in order:
+    //   W1 4 ETH at 2100, collateral 9_000 USD   -> wins 4 ETH
+    //   W2 3 ETH at 2000, collateral 7_000 USD   -> marginal, wins 1 ETH; clearing price 2000
+    //   L  1 ETH at 1500, collateral 2_000 USD   -> loses
+    //   U  unopened,      collateral 1_000 USD   -> invalid
+    // Fills in bid order from the sellers in lock order (SDK planSettlementReleases):
+    //   W1 takes A's 2 ETH (4_000 USD to A) and 2 ETH of B (4_000 USD to B), 1_000 USD back.
+    //   W2 takes B's last 1 ETH (2_000 USD to B), 5_000 USD back.
+    // Every receipt is bound to WINDOW_ID and the default pair.
+
+    const USD: u256 = 1_000_000; // FakeUSD base units per dollar
+    const SELLER_A: address = @0x5A;
+    const SELLER_B: address = @0x5B;
+    const W1: address = @0xA11CE;
+    const W2: address = @0xB0B;
+    const LOSER: address = @0xCA401;
+    const UNOPENED: address = @0xD0D;
+    const SELLER_A_LOCK: vector<u8> = b"mixed_seller_a_lock_32bytes_____";
+    const SELLER_B_LOCK: vector<u8> = b"mixed_seller_b_lock_32bytes_____";
+    const W1_LOCK: vector<u8> = b"mixed_winner_1_collateral_32b___";
+    const W2_LOCK: vector<u8> = b"mixed_winner_2_collateral_32b___";
+    const LOSER_LOCK: vector<u8> = b"mixed_loser_collateral_32bytes__";
+    const UNOPENED_LOCK: vector<u8> = b"mixed_unopened_collateral_32b___";
+
+    fun add_seller(atomica: &signer, lock_id: vector<u8>, owner: address, amount: u256) {
+        lock_receipt::insert_bound_test_receipt<Ethereum, FakeETH>(
+            lock_id, owner, amount, WINDOW_ID, auction::pair_hash(default_pair_bcs()),
+        );
+        lock_receipt::claim<Ethereum, FakeETH>(owner, lock_id);
+        auction::test_add_seller_lock(atomica, WINDOW_ID, default_pair_bcs(), lock_id, 1000);
+    }
+
+    fun add_bid(atomica: &signer, lock_id: vector<u8>, bidder: address, collateral: u256, quantity: u256) {
+        lock_receipt::insert_bound_test_receipt<Ethereum, FakeUSD>(
+            lock_id, bidder, collateral, WINDOW_ID, auction::pair_hash(default_pair_bcs()),
+        );
+        lock_receipt::claim<Ethereum, FakeUSD>(bidder, lock_id);
+        auction::test_insert_bid_with_qty(atomica, WINDOW_ID, default_pair_bcs(), bidder, lock_id, lock_id, quantity);
+    }
+
+    // The mixed window, bound to timelock 11 with the key out but not settled. When
+    // `revealed` is false the timelock stays pending and no bid is opened.
+    fun mixed_window(atomica: &signer, revealed: bool) {
+        auction_bid_wrapper_tests::setup();
+        if (revealed) auction_bid_wrapper_tests::reveal_timelock();
+        let pair = default_pair_bcs();
+        auction::test_insert_window_with_timelock(atomica, WINDOW_ID, pair, 5 * ETH, false, 0, TIMELOCK_ID);
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+        add_seller(atomica, SELLER_A_LOCK, SELLER_A, 2 * ETH);
+        add_seller(atomica, SELLER_B_LOCK, SELLER_B, 3 * ETH);
+        add_bid(atomica, W1_LOCK, W1, 9_000 * USD, 4 * ETH);
+        add_bid(atomica, W2_LOCK, W2, 7_000 * USD, 3 * ETH);
+        add_bid(atomica, LOSER_LOCK, LOSER, 2_000 * USD, 1 * ETH);
+        add_bid(atomica, UNOPENED_LOCK, UNOPENED, 1_000 * USD, 1 * ETH);
+        if (revealed) {
+            auction::test_set_openings(
+                atomica, WINDOW_ID, pair, vector[2100, 2000, 1500, 0], vector[true, true, true, false],
+            );
+            auction::clear_uniform_price(WINDOW_ID, pair);
+        };
+    }
+
+    fun eth_owners(who: vector<address>): vector<vector<u8>> {
+        let out = vector::empty<vector<u8>>();
+        let i = 0;
+        while (i < vector::length(&who)) {
+            vector::push_back(&mut out, lock_receipt::test_eth_owner(*vector::borrow(&who, i)));
+            i = i + 1;
+        };
+        out
+    }
+
+    // The lock's status and stored outcome record are `kind`, paying `amounts[i]` to the
+    // Ethereum owner of `to[i]`.
+    fun assert_outcome<Asset>(lock_id: vector<u8>, kind: u8, to: vector<address>, amounts: vector<u256>) {
+        assert!(lock_receipt::get_receipt_status<Ethereum, Asset>(lock_id) == kind, 100);
+        let (k, window_id, recipients, paid) = lock_receipt::get_lock_outcome<Ethereum, Asset>(lock_id);
+        assert!(k == kind, 101);
+        assert!(window_id == WINDOW_ID, 102);
+        assert!(recipients == eth_owners(to), 103);
+        assert!(paid == amounts, 104);
+    }
+
+    fun assert_returned<Asset>(lock_id: vector<u8>, owner: address, amount: u256) {
+        assert_outcome<Asset>(lock_id, lock_receipt::status_revoked(), vector[owner], vector[amount]);
+    }
+
+    fun assert_mixed_settled() {
+        let filled = lock_receipt::status_filled();
+        assert_outcome<FakeETH>(SELLER_A_LOCK, filled, vector[W1], vector[2 * ETH]);
+        assert_outcome<FakeETH>(SELLER_B_LOCK, filled, vector[W1, W2], vector[2 * ETH, 1 * ETH]);
+        assert_outcome<FakeUSD>(
+            W1_LOCK, filled, vector[SELLER_A, SELLER_B, W1], vector[4_000 * USD, 4_000 * USD, 1_000 * USD],
+        );
+        assert_outcome<FakeUSD>(W2_LOCK, filled, vector[SELLER_B, W2], vector[2_000 * USD, 5_000 * USD]);
+        assert_returned<FakeUSD>(LOSER_LOCK, LOSER, 2_000 * USD);
+        assert_returned<FakeUSD>(UNOPENED_LOCK, UNOPENED, 1_000 * USD);
+    }
+
+    fun assert_mixed_returned() {
+        assert_returned<FakeETH>(SELLER_A_LOCK, SELLER_A, 2 * ETH);
+        assert_returned<FakeETH>(SELLER_B_LOCK, SELLER_B, 3 * ETH);
+        assert_returned<FakeUSD>(W1_LOCK, W1, 9_000 * USD);
+        assert_returned<FakeUSD>(W2_LOCK, W2, 7_000 * USD);
+        assert_returned<FakeUSD>(LOSER_LOCK, LOSER, 2_000 * USD);
+        assert_returned<FakeUSD>(UNOPENED_LOCK, UNOPENED, 1_000 * USD);
+    }
+
+    // Exactly one AuctionOutcome was emitted, and its root and leaf count are the
+    // outcome tree of the six stored per-lock records.
+    fun assert_one_outcome_matches_records() {
+        let outcomes = event::emitted_events<auction::AuctionOutcome>();
+        assert!(vector::length(&outcomes) == 1, 200);
+        let (window_id, pair_hash, deadline, root, leaf_count) =
+            auction::test_auction_outcome_fields(vector::borrow(&outcomes, 0));
+        assert!(window_id == WINDOW_ID, 201);
+        assert!(pair_hash == auction::pair_hash(default_pair_bcs()), 202);
+        assert!(deadline == auction::eth_lock_deadline(WINDOW_ID), 203);
+        assert!(leaf_count == 6, 204);
+
+        let ids = vector[SELLER_A_LOCK, SELLER_B_LOCK];
+        let hashes = vector::empty<vector<u8>>();
+        let i = 0;
+        while (i < 2) {
+            let (_, _, r, a) = lock_receipt::get_lock_outcome<Ethereum, FakeETH>(*vector::borrow(&ids, i));
+            vector::push_back(&mut hashes, outcome_tree::payouts_hash(&r, &a));
+            i = i + 1;
+        };
+        let usd = vector[W1_LOCK, W2_LOCK, LOSER_LOCK, UNOPENED_LOCK];
+        let j = 0;
+        while (j < 4) {
+            let id = *vector::borrow(&usd, j);
+            let (_, _, r, a) = lock_receipt::get_lock_outcome<Ethereum, FakeUSD>(id);
+            vector::push_back(&mut hashes, outcome_tree::payouts_hash(&r, &a));
+            vector::push_back(&mut ids, id);
+            j = j + 1;
+        };
+        assert!(root == outcome_tree::root(&outcome_tree::sorted_leaves(ids, hashes)), 205);
+    }
+
+    // Each LockOutcomeRecorded event of `Asset` equals the stored record of its lock, pays
+    // exactly the lock amount, and pays only Ethereum owners of the window's receipts.
+    // Returns the number of events.
+    fun assert_events_match_records<Asset>(): u64 {
+        let owners = eth_owners(vector[SELLER_A, SELLER_B, W1, W2, LOSER, UNOPENED]);
+        let events = event::emitted_events<lock_receipt::LockOutcomeRecorded<Ethereum, Asset>>();
+        let n = vector::length(&events);
+        let i = 0;
+        while (i < n) {
+            let (lock_id, kind, window_id, recipients, amounts) =
+                lock_receipt::test_lock_outcome_event_fields(vector::borrow(&events, i));
+            let (k, w, r, a) = lock_receipt::get_lock_outcome<Ethereum, Asset>(lock_id);
+            assert!(kind == k && window_id == w && recipients == r && amounts == a, 300);
+            let (_, amount, _, _, _) = lock_receipt::get_receipt<Ethereum, Asset>(lock_id);
+            let sum: u256 = 0;
+            let j = 0;
+            while (j < vector::length(&amounts)) {
+                assert!(vector::contains(&owners, vector::borrow(&recipients, j)), 301);
+                sum = sum + *vector::borrow(&amounts, j);
+                j = j + 1;
+            };
+            assert!(sum == amount, 302);
+            i = i + 1;
+        };
+        n
+    }
+
+    fun to_stuck_deadline() {
+        timestamp::update_global_time_for_test(auction::get_stuck_deadline_us(WINDOW_ID, default_pair_bcs()));
+    }
+
+    fun stranger(): signer { account::create_signer_for_test(@0x7777) }
+
+    // Settle before the stuck deadline honours the fills: FakeETH to the winners' Ethereum
+    // owners, FakeUSD to the sellers' Ethereum owners, and everything else back to its
+    // depositor. One AuctionOutcome covers every lock.
+    #[test(atomica = @atomica)]
+    fun settle_honours_fills_and_returns_the_rest(atomica: &signer) {
+        mixed_window(atomica, true);
+        auction::settle(&stranger(), WINDOW_ID, default_pair_bcs());
+        assert!(auction::is_settled(WINDOW_ID, default_pair_bcs()), 1);
+        assert_mixed_settled();
+        assert_one_outcome_matches_records();
+        assert!(assert_events_match_records<FakeETH>() == 2, 2);
+        assert!(assert_events_match_records<FakeUSD>() == 4, 3);
+    }
+
+    // A winner below supply leaves unsold supply, which goes back to the seller.
+    #[test(atomica = @atomica)]
+    fun settle_returns_unsold_supply(atomica: &signer) {
+        revealed_window(atomica, 5 * ETH);
+        add_bid(atomica, W1_LOCK, W1, 5_000 * USD, 2 * ETH);
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, default_pair_bcs(), vector[2100]);
+        auction::clear_uniform_price(WINDOW_ID, default_pair_bcs());
+        auction::settle(&stranger(), WINDOW_ID, default_pair_bcs());
+        let filled = lock_receipt::status_filled();
+        let (k, _, r, a) = lock_receipt::get_lock_outcome<Ethereum, FakeETH>(SELLER_LOCK);
+        assert!(k == filled && r == eth_owners(vector[W1, SELLER]) && a == vector[2 * ETH, 3 * ETH], 1);
+        assert_outcome<FakeUSD>(W1_LOCK, filled, vector[SELLER, W1], vector[4_200 * USD, 800 * USD]);
+    }
+
+    // A winner whose collateral cannot pay its fill makes the outcome unpayable: settle
+    // aborts, and after the stuck deadline unwind returns every lock.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 36, location = atomica::auction)] // E_UNPAYABLE_FILL
+    fun settle_aborts_when_collateral_cannot_pay(atomica: &signer) {
+        revealed_window(atomica, 5 * ETH);
+        add_bid(atomica, W1_LOCK, W1, 100 * USD, 5 * ETH);
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, default_pair_bcs(), vector[2100]);
+        auction::clear_uniform_price(WINDOW_ID, default_pair_bcs());
+        auction::settle(&stranger(), WINDOW_ID, default_pair_bcs());
+    }
+
+    // From the stuck deadline on only unwind finalizes a window.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 35, location = atomica::auction)] // E_PAST_STUCK_DEADLINE
+    fun settle_after_stuck_deadline_aborts(atomica: &signer) {
+        mixed_window(atomica, true);
+        to_stuck_deadline();
+        auction::settle(&stranger(), WINDOW_ID, default_pair_bcs());
+    }
+
+    // A non-admin settles the mixed window; each receipt has its terminal outcome. Unwind
+    // after the stuck deadline finds nothing held and emits no second outcome.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 34, location = atomica::auction)] // E_WINDOW_FINAL
+    fun unwind_settled_mixed_outcomes(atomica: &signer) {
+        mixed_window(atomica, true);
+        auction::settle(&stranger(), WINDOW_ID, default_pair_bcs());
+        assert_mixed_settled();
+        assert_one_outcome_matches_records();
+        to_stuck_deadline();
+        auction::unwind(&stranger(), WINDOW_ID, default_pair_bcs());
+    }
+
+    // A revealed window nobody settled: at the stuck deadline any account unwinds it, every
+    // lock goes back to its depositor, and one all-refund AuctionOutcome is emitted.
+    #[test(atomica = @atomica)]
+    fun unwind_stuck_after_grace(atomica: &signer) {
+        mixed_window(atomica, true);
+        let stuck = auction::get_stuck_deadline_us(WINDOW_ID, default_pair_bcs());
+        assert!(
+            stuck == aptos_framework::ibe_config::get_reveal_expiry(TIMELOCK_ID) + 600_000_000
+                + atomica::timelock_config::get_unwind_grace_us(),
+            1
+        );
+        to_stuck_deadline();
+        auction::unwind(&stranger(), WINDOW_ID, default_pair_bcs());
+        assert_mixed_returned();
+        assert_one_outcome_matches_records();
+        assert!(assert_events_match_records<FakeETH>() == 2, 2);
+        assert!(assert_events_match_records<FakeUSD>() == 4, 3);
+        let (_, _, refunded) = auction::get_window_status(WINDOW_ID, default_pair_bcs());
+        assert!(refunded && !auction::is_settled(WINDOW_ID, default_pair_bcs()), 4);
+    }
+
+    // Whatever the reveal state: a window whose key never came out unwinds the same way.
+    #[test(atomica = @atomica)]
+    fun unwind_stuck_unrevealed_window(atomica: &signer) {
+        mixed_window(atomica, false);
+        to_stuck_deadline();
+        auction::unwind(&stranger(), WINDOW_ID, default_pair_bcs());
+        assert_mixed_returned();
+        assert_one_outcome_matches_records();
+    }
+
+    // One microsecond before the stuck deadline, unwind aborts.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 33, location = atomica::auction)] // E_NOT_STUCK
+    fun unwind_before_grace_aborts(atomica: &signer) {
+        mixed_window(atomica, true);
+        let stuck = auction::get_stuck_deadline_us(WINDOW_ID, default_pair_bcs());
+        timestamp::update_global_time_for_test(stuck - 1);
+        auction::unwind(&stranger(), WINDOW_ID, default_pair_bcs());
+    }
+
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 34, location = atomica::auction)] // E_WINDOW_FINAL
+    fun unwind_twice_aborts(atomica: &signer) {
+        mixed_window(atomica, true);
+        to_stuck_deadline();
+        auction::unwind(&stranger(), WINDOW_ID, default_pair_bcs());
+        auction::unwind(&stranger(), WINDOW_ID, default_pair_bcs());
+    }
+
+    // A settled window that still holds claimed receipts (the state the pre-194 settle left
+    // behind): unwind returns only those coins and emits no AuctionOutcome.
+    #[test(atomica = @atomica)]
+    fun unwind_returns_coins_a_settled_window_still_holds(atomica: &signer) {
+        mixed_window(atomica, true);
+        auction::test_mark_settled(atomica, WINDOW_ID, default_pair_bcs());
+        to_stuck_deadline();
+        auction::unwind(&stranger(), WINDOW_ID, default_pair_bcs());
+        assert_mixed_returned();
+        assert!(vector::is_empty(&event::emitted_events<auction::AuctionOutcome>()), 1);
+    }
+
+    // Rounding dust: a winner pays the rounded-down quote, so the dust stays in its leaf
+    // and goes back to the depositor.
+    #[test]
+    fun quote_for_fill_rounds_down() {
+        assert!(auction::quote_for_fill(ETH, 2000) == 2_000 * USD, 1);
+        assert!(auction::quote_for_fill(1, 2000) == 0, 2);
+        assert!(auction::quote_for_fill(ETH / 3, 2000) == 666_666_666, 3);
+    }
+
+    // Timing order: timelock 11 has a 2023 deadline, so its stuck deadline plus the carrier
+    // margin is far past `eth_lock_deadline` of the current window.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 32, location = atomica::auction)] // E_STUCK_AFTER_LOCK_DEADLINE
+    fun create_auction_rejects_stuck_deadline_after_lock_deadline(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        let lock_id = b"timing_seller_lock_32bytes______";
+        insert_eth_receipt(atomica, lock_id, @atomica, ETH);
+        auction::create_auction(
+            atomica, auction::current_window_id(), default_pair_bcs(), lock_id, 2000, TIMELOCK_ID,
+            vector::empty<u8>(),
+        );
+    }
+
+    // A lock bound to the next window cannot back the current one.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 12, location = atomica::lock_receipt)] // E_WRONG_BINDING
+    fun create_auction_rejects_a_lock_bound_to_another_window(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        let lock_id = b"next_window_seller_lock_32bytes_";
+        insert_bound_eth_receipt(atomica, lock_id, @atomica, ETH, auction::current_window_id() + 1);
+        auction::create_auction(
+            atomica, auction::current_window_id(), default_pair_bcs(), lock_id, 2000,
+            auction_bid_wrapper_tests::register_live_timelock(), vector::empty<u8>(),
+        );
+    }
+
+    // A lock bound to another pair cannot back this window.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 12, location = atomica::lock_receipt)] // E_WRONG_BINDING
+    fun create_auction_rejects_a_lock_bound_to_another_pair(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        let lock_id = b"other_pair_seller_lock_32bytes__";
+        insert_eth_receipt(atomica, lock_id, @atomica, ETH);
+        auction::create_auction(
+            atomica, auction::current_window_id(), b"another-pair", lock_id, 2000,
+            auction_bid_wrapper_tests::register_live_timelock(), vector::empty<u8>(),
+        );
     }
 }

@@ -122,6 +122,9 @@ export interface EthLockProofResult {
  * @param mintAmount - Amount of the token to mint (base units, default: 1000 ETH)
  * @param token      - ERC-20 to mint and lock (default: FakeETH)
  * @param depositor  - Ethereum account that locks (default: the seller)
+ * @param pairBcs    - Pair BCS of the window the lock is bound to (default:
+ *                     {@link TEST_PAIR_BCS}). Aptos claims the lock only into
+ *                     that pair's current window.
  */
 export async function generateEthLockProof(
   fixture: IntegrationFixture,
@@ -129,6 +132,7 @@ export async function generateEthLockProof(
   mintAmount: bigint = ethers.parseEther("1000"),
   token: string = fixture.eth.contracts.fakeETH,
   depositor: EthSigner = fixture.eth.seller,
+  pairBcs: Uint8Array = TEST_PAIR_BCS,
 ): Promise<EthLockProofResult> {
   const { eth } = fixture;
 
@@ -140,6 +144,7 @@ export async function generateEthLockProof(
     eth.contracts.lockBox,
     lockAmount.toString(),
     mintAmount.toString(),
+    ethers.hexlify(pairBcs),
   );
 
   return {
@@ -268,13 +273,24 @@ function registerLockPayload(
 /** Default pair BCS bytes. Tests that need several windows pass distinct bytes. */
 export const TEST_PAIR_BCS = new Uint8Array(0);
 
-/** Default FakeUSD collateral locked for one bid (6 decimals). */
+/**
+ * Default FakeUSD collateral locked for one bid (6 decimals). The lock mints
+ * 20x this, which must fit FakeUSD's 10,000 FakeUSD MAX_MINT_AMOUNT. Aptos
+ * `settle` pays a winner's fill from its collateral at `quote_for_fill`
+ * (clearing price in USD per whole FakeETH, SDK `quoteForFill`), so tests
+ * bid small quantities: 0.0001 FakeETH at 2_000_000 costs 200 FakeUSD.
+ */
 export const DEFAULT_COLLATERAL = 500n * 10n ** 6n;
 
-/** `lock_receipt` status codes (`status_active`, `status_claimed`, `status_revoked`). */
+/**
+ * `lock_receipt` status codes (`status_active`, `status_claimed`,
+ * `status_revoked`, `status_filled`). Revoked returns the lock to its
+ * depositor; filled pays a counterparty per the auction outcome.
+ */
 export const RECEIPT_ACTIVE = 0;
 export const RECEIPT_CLAIMED = 1;
 export const RECEIPT_REVOKED = 2;
+export const RECEIPT_FILLED = 3;
 
 /**
  * The window `create_auction` accepts right now, from the chain clock.
@@ -537,6 +553,10 @@ export async function createLiveWindow(
   const { lockId, proof } = await generateEthLockProof(
     fixture,
     options.lockAmount,
+    undefined,
+    undefined,
+    undefined,
+    options.pairBcs,
   );
   await registerLockOnAptos(aptosClient, operator, moduleAddr, proof);
 
@@ -589,14 +609,16 @@ export async function createLiveWindow(
 }
 
 /**
- * Lock FakeUSD collateral on Ethereum as `bidder` and register its receipt on
- * Aptos (the operator carries the proof). The receipt belongs to the bidder's
- * Ethereum-derivable account. Returns the lock id that `submit_bid` claims.
+ * Lock FakeUSD collateral on Ethereum as `bidder`, bound to the current
+ * window of `pairBcs`, and register its receipt on Aptos (the operator
+ * carries the proof). The receipt belongs to the bidder's Ethereum-derivable
+ * account. Returns the lock id that `submit_bid` claims.
  */
 export async function lockBidCollateral(
   fixture: IntegrationFixture,
   aptosClient: Aptos,
   operator: Account,
+  pairBcs: Uint8Array,
   amount: bigint = DEFAULT_COLLATERAL,
   bidder: EthSigner = fixture.eth.bidder,
 ): Promise<string> {
@@ -606,6 +628,7 @@ export async function lockBidCollateral(
     amount * 20n,
     fixture.eth.contracts.fakeUSD,
     bidder,
+    pairBcs,
   );
   await registerLockOnAptos(
     aptosClient,
@@ -619,13 +642,15 @@ export async function lockBidCollateral(
 
 /**
  * Lock FakeUSD collateral `count` times as `bidder` in a few Ethereum blocks,
- * prove them all at one certified block, and register every receipt (the
- * operator carries the proofs). Returns the lock ids in lock order.
+ * bound to the current window of `pairBcs`, prove them all at one certified
+ * block, and register every receipt (the operator carries the proofs).
+ * Returns the lock ids in lock order.
  */
 export async function lockBidCollaterals(
   fixture: IntegrationFixture,
   aptosClient: Aptos,
   operator: Account,
+  pairBcs: Uint8Array,
   count: number,
   amount: bigint = DEFAULT_COLLATERAL,
   bidder: EthSigner = fixture.eth.bidder,
@@ -640,6 +665,7 @@ export async function lockBidCollaterals(
       fixture.eth.contracts.lockBox,
       amount.toString(),
       count,
+      ethers.hexlify(pairBcs),
     );
   const proofs: LockedBalanceProof[] = results.map((r) => ({
     ...r.proof,

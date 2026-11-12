@@ -76,8 +76,20 @@ stuck deadline + carrier margin  <  eth_lock_deadline(window_id)
 ```
 
 So unwind and outcome carrying always finish before Ethereum reclaim opens,
-and a reclaim never races an outcome that Aptos already finalized. Issue 194
-makes `create_auction` and `submit_bid` abort when a window breaks it.
+and a reclaim never races an outcome that Aptos already finalized.
+`create_auction` aborts `E_STUCK_AFTER_LOCK_DEADLINE` when the window's
+timelock breaks it. `submit_bid` needs no second check: the window's timelock
+and the configured values never change after `create_auction`.
+
+On Aptos (all times in microseconds):
+
+```
+stuck_deadline_us = timelock reveal expiry + OPENING_WINDOW_US + unwind grace
+settle:  timelock deadline <= now < stuck_deadline_us
+unwind:  now >= stuck_deadline_us
+```
+
+`auction::get_stuck_deadline_us(window_id, pair_bcs)` returns it.
 
 | Segment | Budget within the 72 h delay |
 | --- | --- |
@@ -87,9 +99,11 @@ makes `create_auction` and `submit_bid` abort when a window breaks it.
 | Carrier margin | 24 h |
 | **Total** | **at most 72 h** |
 
-The unwind grace and carrier margin values are set by issue 194 as
-`timelock_config` values. Any choice must keep the sum within
-`ETH_RECLAIM_DELAY_SECS`.
+The unwind grace and the carrier margin are `timelock_config` values
+(`get_unwind_grace_us`, `get_carrier_margin_us`), both 24 h. Any choice must
+keep the sum within `ETH_RECLAIM_DELAY_SECS`. The receipt cancel delay
+(`get_receipt_cancel_delay_us`, 24 h) is the age after which anyone may cancel
+a receipt no window claimed.
 
 ## Superseded Documents
 

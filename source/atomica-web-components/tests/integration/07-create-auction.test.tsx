@@ -140,7 +140,14 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     });
 
     // Lock ETH on Ethereum and prove it at a validator-certified block.
-    ethProof = await generateEthLockProof(fixture);
+    ethProof = await generateEthLockProof(
+      fixture,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      PAIR_BCS,
+    );
 
     // Register the lock on Aptos: no submit_header, any carrier.
     await registerLockOnAptos(

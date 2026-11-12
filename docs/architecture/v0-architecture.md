@@ -211,17 +211,50 @@ All winners pay 2 010 × their_fill in FakeUSD. Alice pays 8 040, Bob pays
 
 Each bidder must hold an active FakeUSD `LockReceipt` on Ethereum whose
 locked value is at least `bid_quantity × bid_price`. The receipt's `lock_id`
-is stored in `Bid.collateral_lock_id`. On win the receipt is consumed; on loss
-it is released. This mirrors the seller-side `LockReceipt<Ethereum, FakeETH>`
-already implemented in `source/atomica-move-contracts/sources/lock_receipt.move`.
+is stored in `Bid.collateral_lock_id`. This mirrors the seller-side
+`LockReceipt<Ethereum, FakeETH>` in
+`source/atomica-move-contracts/sources/lock_receipt.move`.
+
+**Receipt lifecycle (issue 194).** A receipt is `ACTIVE` (0) after
+registration. `create_auction` and `submit_bid` claim it (`CLAIMED`, 1) only
+into the window and pair its lock is bound to on Ethereum
+(`lock_receipt::claim_for_window`, `E_WRONG_BINDING`). Settle, a refund or
+unwind then gives it one terminal state with a stored outcome record
+(`get_lock_outcome`) and a `LockOutcomeRecorded` event with the same fields:
+
+- `FILLED` (3): the lock pays a counterparty. A seller lock pays the filled
+  FakeETH to the winners' `eth_owner`. A winner's collateral pays
+  `quote_for_fill` FakeUSD to the sellers' `eth_owner`.
+- `REVOKED` (2): the whole amount returns to the depositor's `eth_owner`.
+  Losing and unopened bids, refunded and unwound windows, and cancelled
+  receipts end here.
+
+A filled lock's leftover (winner excess collateral with its rounding dust, or
+unsold seller supply) is a payout to its own depositor in the same record.
+Each record's amounts sum to the lock amount, and `record_outcome` refuses a
+zero, malformed or short-summing payout list, so Ethereum never certifies an
+unpayable leaf. Any account may call `lock_receipt::cancel_unauctioned` on an
+`ACTIVE` receipt at least `timelock_config::get_receipt_cancel_delay_us` (24 h)
+old.
 
 Fee and rebate calibration is deferred to Phase 3c. The distance-to-clearing
 concept (bidders closer to the marginal price pay smaller fees / receive larger
 rebates) will be specified in that phase.
 
-### 2.9 AuctionSettled event
+### 2.9 Settlement events
 
 This is the canonical definition. §3 references it; §3 does not redefine it.
+
+`settle` honours the cleared fills (§2.8) and emits `AuctionSettled`. Winners
+in bid order take supply from the seller locks in `lock_ids` order. A fill
+that does not fit the locks (a payment above a winner's collateral) aborts
+`E_UNPAYABLE_FILL`; the window then unwinds after its stuck deadline.
+
+Whichever of `settle`, `refund_expired_window` or `unwind` finalizes a window
+first emits its one `AuctionOutcome`: the `outcome_tree` root over the payout
+lists of every lock claimed into the window (§3.5). `unwind` on a window that
+was already finalized returns only the receipts it still holds and emits
+`AuctionUnwound` with no second outcome.
 
 ```move
 #[event]
@@ -328,15 +361,20 @@ Each network attests one Ethereum chain id, and headers are keyed by block
 number only.
 
 **Every auction ends in an outcome Ethereum can verify (issues 194, 199).**
-Aptos emits one `AuctionOutcome` per auction, from `settle` or from the
-permissionless `auction::unwind(window_id, pair_bcs)`. Any account may call
-`unwind` on a finished window or on a stuck one (not settled and past the
-reveal deadline plus the opening window plus a grace period). It gives every
-receipt of the window a terminal state. Winning fills go to buyers at the
-clearing price. Unopened bids, losing bids, winner excess collateral, unsold
-seller supply and refunded windows go back to their depositors. A receipt that
-never reached an auction can be cancelled by anyone after a delay, and it goes
-back to its depositor.
+Aptos emits one `AuctionOutcome` per auction, from `settle`,
+`refund_expired_window` or the permissionless
+`auction::unwind(window_id, pair_bcs)`, whichever finalizes the window first.
+`settle` runs from the reveal until the window's stuck deadline (the reveal
+expiry plus the 10-minute opening window plus the 24 h unwind grace,
+`auction::get_stuck_deadline_us`). From the stuck deadline on, any account
+may call `unwind`. On a window that never settled, whatever its reveal state,
+it returns every lock to its depositor and emits an all-refund outcome. On a
+finalized window it returns only receipts still held and emits no second
+outcome. With nothing left it aborts `E_WINDOW_FINAL`. Winning fills go to
+buyers at the clearing price. Unopened bids, losing bids, winner excess
+collateral, unsold seller supply and refunded windows go back to their
+depositors (§2.8). A receipt that never reached an auction can be cancelled by
+anyone after a delay, and it goes back to its depositor.
 
 **Every lock has a deadline (issue 203).** A lock carries a deadline bound to
 its auction: the auction key is `keccak256(window_id, pair_hash, deadline)`.
