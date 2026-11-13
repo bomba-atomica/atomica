@@ -1,13 +1,13 @@
 // SCOUT(#222) EDIT: the header below names two ways out of LockBox; reclaimUnpayable is a third.
-// SCOUT(#221) EDIT: the header below says a lock names its auction by deadline too; the auction key is (window id, pair hash), and LockBox computes the deadline.
 /**
  * LockBox Contract Helpers
  *
  * Ethereum-side interactions for locking FakeETH/FakeUSD in the proof-gated
  * LockBox.sol. Covers approve → lock → query → reclaim.
  *
- * Every lock names its auction (window id, pair hash, deadline; see
- * lock-binding.ts). It leaves LockBox in one of two ways, and anyone may
+ * Every lock names its auction (window id, pair hash; see lock-binding.ts).
+ * LockBox computes the lock's deadline from the window id and accepts only the
+ * current or the next window. A lock leaves LockBox in one of two ways, and anyone may
  * trigger either: `releaseByOutcome` pays it out per a proven Aptos
  * `AuctionOutcome` (recorded with `recordOutcome` by any carrier, see
  * settlement/outcome-carrier.ts), or `reclaim` returns it to its depositor
@@ -85,7 +85,7 @@ async function getFakeUsdWithSigner(provider: ethers.BrowserProvider) {
   return new ethers.Contract(address, FAKE_USD_ABI, signer);
 }
 
-// SCOUT(#221) EDIT: call lock(token, amount, windowId, pairHash); LockBox computes the deadline.
+/** `LockBox.lock(token, amount, windowId, pairHash)`. LockBox computes the deadline. */
 async function lockToken(
   provider: ethers.BrowserProvider,
   token: string,
@@ -100,8 +100,6 @@ async function lockToken(
     amount,
     binding.windowId,
     binding.pairHash,
-    // SCOUT(#221) REMOVE: the deadline argument.
-    binding.deadline,
   );
   const receipt = await tx.wait();
   if (!receipt) throw new Error("lock() tx receipt is null");
@@ -219,7 +217,7 @@ export async function getLockById(
 /** `LockBox.outcomes(auctionKey)` of a lock's auction. Root zero means none recorded. */
 export async function getRecordedOutcome(
   provider: ethers.Provider,
-  lock: Pick<LockFields, "windowId" | "pairHash" | "deadline">,
+  lock: Pick<LockFields, "windowId" | "pairHash">,
 ): Promise<{ root: string; leafCount: bigint; recorded: boolean }> {
   const contract = new ethers.Contract(
     getLockBoxAddress(),
@@ -357,7 +355,6 @@ export async function releaseByOutcome(
   );
 }
 
-// SCOUT(#221) EDIT: the tuple below follows the final LockBox.Lock struct, with or without its deadline.
 // SCOUT(#236) EDIT: ReleaseButton calls recordOutcome and releaseByOutcome bindings that do not exist yet; the SDK unwind issue (195) adds them to this file.
 /**
  * Return an open lock to its depositor after its deadline (`LockBox.reclaim`).

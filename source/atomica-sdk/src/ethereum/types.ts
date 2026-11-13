@@ -11,13 +11,12 @@ export interface TokenContract {
 }
 
 export interface LockBoxContract {
-  // SCOUT(#221) EDIT: drop the deadline parameter (not in the issue text); the demo script deploy-lockbox-real.ts uses this type.
+  /** LockBox computes the deadline from `windowId`. */
   lock(
     token: string,
     amount: bigint,
     windowId: bigint,
     pairHash: string,
-    deadline: bigint,
   ): Promise<ethers.ContractTransactionResponse>;
   commitments(lockId: string): Promise<string>;
   statuses(lockId: string): Promise<bigint>;

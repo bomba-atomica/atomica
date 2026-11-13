@@ -153,7 +153,7 @@ module atomica::eth_lock_registration_tests {
     // `source/atomica-sdk/tests/fixtures/window_clock_vectors.json`, also
     // checked by `LockBox.t.sol` and the SDK `storage-key.test.ts`. Each row is
     // (at, window_id, close, deadline). Move cannot read JSON, so the rows are
-    // copied here; the SDK test checks this copy against the file.
+    // copied here: change them together with the file.
     #[test]
     fun window_close_and_lock_deadline_match_the_shared_table() {
         let rows = vector[

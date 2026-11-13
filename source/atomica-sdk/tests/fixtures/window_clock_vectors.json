@@ -1,10 +1,7 @@
 {
   "description": "Window clock of the production schedule: two closes a day at 07:45 and 16:15 UTC. Each row: at a unix second `at`, the open window is `window_id`; it closes at `close` (eth_proof::window_close_secs, LockBox.windowClose), and its locks reach their deadline at `deadline` = close + reclaim_delay_secs (eth_proof::eth_lock_deadline, LockBox.lockDeadline). Checked by LockBox.t.sol, eth_lock_registration_tests.move and storage-key.test.ts. The row at 1794441599 is the anvil lock fixture (window 41538).",
   "day_secs": 86400,
-  "close_offsets_secs": [
-    27900,
-    58500
-  ],
+  "close_offsets_secs": [27900, 58500],
   "reclaim_delay_secs": 259200,
   "rows": [
     {

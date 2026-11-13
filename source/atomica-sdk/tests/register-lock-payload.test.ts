@@ -46,7 +46,6 @@ import type { Aptos } from "@aptos-labs/ts-sdk";
 
 // ── Fixture ──────────────────────────────────────────────────────────────────
 
-// SCOUT(#221) EDIT: the proof's deadline is no longer a payload argument.
 function makeMockProof(): LockedBalanceProof {
   return {
     blockNumber: 42,
@@ -109,8 +108,7 @@ describe("getRegisterLockPayload", () => {
     expect(usd.functionArguments).toEqual(eth.functionArguments);
   });
 
-  // SCOUT(#221) EDIT: eight arguments once the deadline goes; the proof indexes 7 and 8 below become 6 and 7.
-  it("has exactly 9 function arguments matching the Move signature", () => {
+  it("getRegisterLockPayload sends eight arguments and no deadline", () => {
     // Move entry function args (excluding implicit `account: &signer`):
     //   0: block_number  (u64)
     //   1: user_address  (vector<u8>)
@@ -118,23 +116,23 @@ describe("getRegisterLockPayload", () => {
     //   3: amount        (u256 as decimal string)
     //   4: window_id     (u64 as decimal string)
     //   5: pair_hash     (vector<u8>, 32 bytes)
-    //   6: deadline      (u64 as decimal string)
-    //   7: account_proof (vector<vector<u8>>)
-    //   8: storage_proof (vector<vector<u8>>)
-    // The state root, LockBox, token, storage key and commitment are derived on chain.
+    //   6: account_proof (vector<vector<u8>>)
+    //   7: storage_proof (vector<vector<u8>>)
+    // The state root, LockBox, token, storage key, commitment and deadline
+    // (eth_lock_deadline(window_id)) are derived on chain.
     const payload = getRegisterLockPayload(makeMockProof());
-    expect(payload.functionArguments!.length).toBe(9);
+    expect(payload.functionArguments!.length).toBe(8);
+    expect(payload.functionArguments).not.toContain("1794728700");
+    expect(payload.functionArguments).not.toContain(1794728700n);
   });
 
-  // SCOUT(#221) EDIT: the deadline at index 6 is no longer sent.
-  it("sends the lock fields Aptos hashes into the commitment (indexes 3 to 6)", () => {
+  it("sends the lock fields Aptos hashes into the commitment (indexes 3 to 5)", () => {
     const args = getRegisterLockPayload(makeMockProof()).functionArguments!;
     expect(args[3]).toBe("1000000000000000000");
     expect(args[4]).toBe("41538");
     const pairHash = args[5] as Uint8Array;
     expect(pairHash).toBeInstanceOf(Uint8Array);
     expect(ethers.hexlify(pairHash)).toBe("0x" + "88".repeat(32));
-    expect(args[6]).toBe("1794728700");
   });
 
   it("never sends the proven commitment itself", () => {
@@ -168,16 +166,16 @@ describe("getRegisterLockPayload", () => {
     }
   });
 
-  it("serializes account_proof as Uint8Array[] at index 7", () => {
+  it("serializes account_proof as Uint8Array[] at index 6", () => {
     const payload = getRegisterLockPayload(makeMockProof());
-    const proof = payload.functionArguments![7] as Uint8Array[];
+    const proof = payload.functionArguments![6] as Uint8Array[];
     expect(Array.isArray(proof)).toBe(true);
     expect(proof[0]).toBeInstanceOf(Uint8Array);
   });
 
-  it("serializes storage_proof as Uint8Array[] at index 8", () => {
+  it("serializes storage_proof as Uint8Array[] at index 7", () => {
     const payload = getRegisterLockPayload(makeMockProof());
-    const proof = payload.functionArguments![8] as Uint8Array[];
+    const proof = payload.functionArguments![7] as Uint8Array[];
     expect(Array.isArray(proof)).toBe(true);
     expect(proof[0]).toBeInstanceOf(Uint8Array);
   });
@@ -315,9 +313,6 @@ describe("timelockIdFromEvents", () => {
 });
 
 describe("planned tests (SCOUT)", () => {
-  it.todo(
-    "SCOUT(#221) getRegisterLockPayload sends eight arguments and no deadline",
-  );
   it.todo(
     "SCOUT(#243) the create_auction payload has no timelock id: five arguments if it lands before the mpk (238) and reserve price (241) removals, three after all of them",
   );
