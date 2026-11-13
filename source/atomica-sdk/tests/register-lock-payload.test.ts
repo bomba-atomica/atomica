@@ -7,8 +7,7 @@
  *     pair_hash, deadline, account_proof, storage_proof
  *   )
  *   0x1::ethereum_headers::latest_block_number(): Option<u64>
- *   auction::create_auction(seller, window_id, pair_bcs, lock_id, min_price,
- *     timelock_id, mpk_bytes)
+ *   auction::create_auction(seller, window_id, pair_bcs, lock_id, timelock_id)
  *   ibe_config::register_timelock(account, deadline_us)
  *
  * Note: Aptos-side fake token mint payload removed — fake tokens mint on Ethereum.
@@ -246,14 +245,12 @@ describe("waitForCertifiedBlock", () => {
 
 // ── getCreateAuctionPayload ───────────────────────────────────────────────────
 
-// SCOUT(#241) EDIT: no minimum price argument.
 // SCOUT(#243) EDIT: no timelock id argument.
 // SCOUT(#217) EDIT: MIN_PRICE = 500_000n reads as micro-dollars; use a whole-USD value while the field exists.
 describe("getCreateAuctionPayload", () => {
   const WINDOW_ID = 41n;
   const PAIR_BCS = new Uint8Array([1, 2, 3]);
   const LOCK_ID = new Uint8Array(32).fill(0xcd);
-  const MIN_PRICE = 500_000n;
   const TIMELOCK_ID = 9n;
 
   const build = () =>
@@ -261,7 +258,6 @@ describe("getCreateAuctionPayload", () => {
       WINDOW_ID,
       PAIR_BCS,
       LOCK_ID,
-      MIN_PRICE,
       TIMELOCK_ID,
     ) as InputEntryFunctionData;
 
@@ -270,16 +266,17 @@ describe("getCreateAuctionPayload", () => {
   });
 
   it("getCreateAuctionPayload builds no mpk argument", () => {
-    // create_auction(seller, window_id, pair_bcs, lock_id, min_price, timelock_id)
+    // create_auction(seller, window_id, pair_bcs, lock_id, timelock_id)
     const args = build().functionArguments;
-    expect(args).toHaveLength(5);
-    expect(args).toEqual([
-      WINDOW_ID,
-      PAIR_BCS,
-      LOCK_ID,
-      MIN_PRICE,
-      TIMELOCK_ID,
-    ]);
+    expect(args).toHaveLength(4);
+    expect(args).toEqual([WINDOW_ID, PAIR_BCS, LOCK_ID, TIMELOCK_ID]);
+  });
+
+  it("getCreateAuctionPayload has no price value between the lock id and the timelock id", () => {
+    const args = build().functionArguments;
+    const lockIdx = args.indexOf(LOCK_ID);
+    expect(lockIdx).toBe(2);
+    expect(args[lockIdx + 1]).toBe(TIMELOCK_ID);
   });
 
   it("does not add type arguments", () => {
@@ -320,9 +317,6 @@ describe("timelockIdFromEvents", () => {
 describe("planned tests (SCOUT)", () => {
   it.todo(
     "SCOUT(#221) getRegisterLockPayload sends eight arguments and no deadline",
-  );
-  it.todo(
-    "SCOUT(#241) getCreateAuctionPayload has no price value between the lock id and the timelock id",
   );
   it.todo(
     "SCOUT(#243) the create_auction payload has no timelock id: five arguments if it lands before the mpk (238) and reserve price (241) removals, three after all of them",

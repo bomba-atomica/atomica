@@ -24,8 +24,6 @@ export const SELECTORS = {
   // Step2Lock
   step2Lock: {
     lockAmountInput: "lock-amount-input",
-    // SCOUT(#241) REMOVE: minPriceInput.
-    minPriceInput: "min-price-input",
     approveLockButton: "approve-lock-button",
     lockError: "lock-error",
   },

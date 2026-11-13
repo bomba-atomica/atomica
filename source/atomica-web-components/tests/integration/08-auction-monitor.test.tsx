@@ -49,9 +49,7 @@ import {
 import { setAptosInstance } from "@atomica/sdk/aptos";
 import { ethers } from "ethers";
 
-// SCOUT(#241) REMOVE: MIN_PRICE and the minPrice option below.
 // SCOUT(#217) EDIT: price constant in micro-dollar style.
-const MIN_PRICE = 1_000_000n;
 // SCOUT(#224) EDIT: use the launch pair.
 const PAIR_BCS = new TextEncoder().encode("08-auction-monitor");
 // SCOUT(#243) EDIT: a 20 second deadline is not possible when the deadline is the window close; it needs the test cap.
@@ -218,7 +216,6 @@ describe.sequential("08: Auction Monitor countdown and status", () => {
 
       const auction = await createLiveWindow(fixture, aptosClient, operator, {
         pairBcs: PAIR_BCS,
-        minPrice: MIN_PRICE,
         deadlineAheadUs: DEADLINE_AHEAD_US,
         lockAmount,
       });

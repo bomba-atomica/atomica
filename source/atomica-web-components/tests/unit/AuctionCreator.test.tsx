@@ -2,7 +2,7 @@
  * Unit tests for AuctionCreator component.
  *
  * Verifies that:
- *   1. Form fields for window_id, min_price, and lock_id are rendered.
+ *   1. Form fields for window_id and lock_id are rendered, with no price field.
  *   2. The submit button registers the timelock, then calls
  *      submitCreateAuction with the returned timelock id.
  *   3. An error message is shown when the transaction is rejected.
@@ -56,18 +56,15 @@ describe("AuctionCreator — unit", () => {
     vi.clearAllMocks();
   });
 
-  // SCOUT(#241) EDIT: there is no Min Price field.
-  it("renders form fields for window_id, min_price, and lock_id", () => {
+  it("renders form fields for window_id and lock_id, and no Min Price field", () => {
     renderAuctionCreator();
 
     // Window ID input
     const windowIdLabel = screen.getByText(/Window ID/i);
     expect(windowIdLabel).toBeTruthy();
 
-    // Min Price input
-    // SCOUT(#241) REMOVE: the Min Price label assert.
-    const minPriceLabel = screen.getByText(/Min Price/i);
-    expect(minPriceLabel).toBeTruthy();
+    // There is no reserve price field.
+    expect(screen.queryByText(/Min Price/i)).toBeNull();
 
     // Lock ID input
     const lockIdLabel = screen.getByText(/Lock ID/i);
@@ -90,7 +87,6 @@ describe("AuctionCreator — unit", () => {
   });
 
   // SCOUT(#243) REMOVE: this case; assert one transaction and no register_timelock.
-  // SCOUT(#241) EDIT: the argument count drops (6 today).
   it("registers the timelock before create_auction and passes its id", async () => {
     renderAuctionCreator();
 
@@ -104,10 +100,10 @@ describe("AuctionCreator — unit", () => {
     expect(
       vi.mocked(registerTimelock).mock.invocationCallOrder[0],
     ).toBeLessThan(vi.mocked(submitCreateAuction).mock.invocationCallOrder[0]);
-    // submitCreateAuction(account, windowId, pairBcs, lockId, minPrice, timelockId)
+    // submitCreateAuction(account, windowId, pairBcs, lockId, timelockId)
     const args = vi.mocked(submitCreateAuction).mock.calls[0];
-    expect(args).toHaveLength(6);
-    expect(args[5]).toBe(5n);
+    expect(args).toHaveLength(5);
+    expect(args[4]).toBe(5n);
   });
 
   it("shows success status with tx hash after successful submission", async () => {
@@ -151,6 +147,18 @@ describe("AuctionCreator — unit", () => {
   });
 
   it.todo("SCOUT(#243) the create step submits exactly one transaction and none to 0x1::ibe_config::register_timelock");
-  it.todo("SCOUT(#241) submitCreateAuction is called without a price argument");
+  it("submitCreateAuction is called without a price argument", async () => {
+    renderAuctionCreator();
+
+    fireEvent.click(screen.getByRole("button", { name: /Create Auction/i }));
+
+    await waitFor(() => {
+      expect(submitCreateAuction).toHaveBeenCalledTimes(1);
+    });
+    // (account, windowId, pairBcs, lockId, timelockId): the lock id is
+    // followed directly by the timelock id, with no price between them.
+    const args = vi.mocked(submitCreateAuction).mock.calls[0];
+    expect(args).toEqual([ACCOUNT, 0n, new Uint8Array(0), new Uint8Array(32), 5n]);
+  });
   it.todo("SCOUT(#224) the pair defaults to the SDK launch pair constant");
 });

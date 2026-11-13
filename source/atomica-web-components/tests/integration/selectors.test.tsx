@@ -96,16 +96,6 @@ describe("Selector contract — data-testid attributes", () => {
     ).toBeTruthy();
   });
 
-  // SCOUT(#241) REMOVE: this case.
-  it("Step2Lock: min-price-input is present", () => {
-    render(
-      <Step2Lock onLock={async () => {}} loading={false} />,
-    );
-    expect(
-      screen.getByTestId(SELECTORS.step2Lock.minPriceInput),
-    ).toBeTruthy();
-  });
-
   it("Step2Lock: approve-lock-button is present", () => {
     render(
       <Step2Lock onLock={async () => {}} loading={false} />,
@@ -347,8 +337,6 @@ describe("Selector contract — data-testid attributes", () => {
     expect(s.step1Connect.connectMetaMaskButton).toBe("connect-metamask-button");
     expect(s.step1Connect.connectedAddress).toBe("connected-address");
     expect(s.step2Lock.lockAmountInput).toBe("lock-amount-input");
-    // SCOUT(#241) REMOVE: this assert.
-    expect(s.step2Lock.minPriceInput).toBe("min-price-input");
     expect(s.step2Lock.approveLockButton).toBe("approve-lock-button");
     expect(s.step2Lock.lockError).toBe("lock-error");
     expect(s.step3Confirm.confirmSpinner).toBe("confirm-spinner");

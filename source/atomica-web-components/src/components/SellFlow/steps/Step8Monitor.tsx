@@ -7,8 +7,6 @@ import { useBidHistory } from "../../../hooks/useBidHistory";
 
 interface Props {
   amount?: bigint;
-  // SCOUT(#241) REMOVE: minPrice prop.
-  minPrice?: bigint;
   auctionEndTime?: number;
   unlockTime?: number;
   /** @deprecated v0 Beta — use windowId + pairBcs instead */
@@ -80,7 +78,6 @@ function formatDuration(seconds: number): string {
 
 export function Step8Monitor({
   amount,
-  minPrice,
   auctionEndTime,
   unlockTime,
   sellerAddress,
@@ -103,10 +100,6 @@ export function Step8Monitor({
     ? (Number(amount) / 1e18).toFixed(4) + " FETH"
     : "—";
   // SCOUT(#217) EDIT: price display divides by 1e6.
-  // SCOUT(#241) REMOVE: priceFormatted and the Min price row.
-  const priceFormatted = minPrice
-    ? "$" + (Number(minPrice) / 1e6).toFixed(2)
-    : "—";
 
   return (
     <div className="flex flex-col gap-4">
@@ -114,11 +107,6 @@ export function Step8Monitor({
         <div className="flex justify-between text-sm">
           <span className="text-zinc-500">Locked amount</span>
           <span className="text-zinc-200 font-mono">{amountFormatted}</span>
-        </div>
-        {/* SCOUT(#241) REMOVE: the Min price row. */}
-        <div className="flex justify-between text-sm">
-          <span className="text-zinc-500">Min price</span>
-          <span className="text-zinc-200 font-mono">{priceFormatted}</span>
         </div>
         {sellerAddress && (
           <div className="flex justify-between text-sm">

@@ -2,8 +2,7 @@ import { useState } from "react";
 import { ethers } from "ethers";
 
 interface Props {
-  // SCOUT(#241) EDIT: onLock takes the amount only.
-  onLock: (amount: bigint, minPrice: bigint) => Promise<void>;
+  onLock: (amount: bigint) => Promise<void>;
   fakeEthBalance?: bigint;
   loading: boolean;
   error?: string;
@@ -11,16 +10,12 @@ interface Props {
 
 export function Step2Lock({ onLock, fakeEthBalance, loading, error }: Props) {
   const [amount, setAmount] = useState("1.0");
-  // SCOUT(#241) REMOVE: minimum price state.
-  const [minPrice, setMinPrice] = useState("2000");
 
   // SCOUT(#218) EDIT: refuse an amount below the minimum seller lock here, before the Ethereum lock.
   const handleLock = () => {
     const amountWei = ethers.parseEther(amount || "0");
     // SCOUT(#217) EDIT: price parsed as micro-dollars (parseUnits with 6 decimals); the unit is whole USD through parsePrice, while the field exists.
-    // SCOUT(#241) REMOVE: minPriceWei.
-    const minPriceWei = ethers.parseUnits(minPrice || "0", 6); // USD with 6 decimals
-    onLock(amountWei, minPriceWei);
+    onLock(amountWei);
   };
 
   const maxAmount = fakeEthBalance
@@ -53,21 +48,7 @@ export function Step2Lock({ onLock, fakeEthBalance, loading, error }: Props) {
           />
         </div>
 
-        {/* SCOUT(#241) REMOVE: the minimum price input (test id min-price-input). */}
         {/* SCOUT(#217) EDIT: price input in whole USD, while it exists. */}
-        <div>
-          <label className="block text-xs text-zinc-500 mb-1">
-            Minimum price (USD)
-          </label>
-          <input
-            data-testid="min-price-input"
-            type="number"
-            value={minPrice}
-            onChange={(e) => setMinPrice(e.target.value)}
-            min="0"
-            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500 text-sm"
-          />
-        </div>
       </div>
 
       <button

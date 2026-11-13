@@ -58,9 +58,9 @@ import { ethers } from "ethers";
 
 // SCOUT(#218) EDIT: fill the same window to the seller cap as well (proposed 100 seller locks).
 const BID_COUNT = 100;
-// SCOUT(#241) EDIT: MIN_PRICE is also the base of the bid price ladder; only the createLiveWindow option goes.
 // SCOUT(#217) EDIT: price ladder in whole USD (for example 1000 plus 10 per bid).
-const MIN_PRICE = 1_000_000n;
+/** The lowest bid price; each later bid adds PRICE_STEP. */
+const BASE_PRICE = 1_000_000n;
 const PRICE_STEP = 10_000n;
 const BID_QUANTITY = ethers.parseEther("0.00002");
 /** Half the bids fill the supply. */
@@ -149,7 +149,6 @@ describe.sequential("16: Settle a 100-bid window", () => {
 
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
-      minPrice: MIN_PRICE,
       deadlineAheadUs: DEADLINE_AHEAD_US,
       // SCOUT(#218) EDIT: pull request 213 sets SUPPLY to 0.001 FakeETH (50 x 0.00002), below the proposed 0.01 FakeETH minimum seller lock, so create_auction aborts.
       lockAmount: SUPPLY,
@@ -158,7 +157,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
     const payloads = [];
     for (let i = 0; i < BID_COUNT; i++) {
       // SCOUT(#217) EDIT: price ladder; PRICE_STEP and its base move to whole USD.
-      const price = MIN_PRICE + PRICE_STEP * BigInt(i);
+      const price = BASE_PRICE + PRICE_STEP * BigInt(i);
       prices.push(price);
       // SCOUT(#228) EDIT: five-argument getBidPayload with no commitment.
       const sealed = await sealBid(

@@ -177,21 +177,21 @@ describe("useSellFlow state machine", () => {
     expect(result.current.lockBlock).toBe(42);
   });
 
-  // SCOUT(#241) EDIT: minPrice is ignored on resume.
   // SCOUT(#217) EDIT: the minPrice fixture is micro-dollars.
-  it("resumes bigint fields (minPrice, amount) from stringified localStorage", async () => {
+  it("resumes bigint fields (amount) from stringified localStorage and ignores an old minPrice", async () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         step: "monitoring",
-        minPrice: "2000000000", // bigint serialized as string
-        amount: "1000000000000000000",
+        minPrice: "2000000000", // saved by an older build
+        amount: "1000000000000000000", // bigint serialized as string
         auctionEndTime: 9999999999,
       }),
     );
     const { result } = renderHook(() => useSellFlow(ACCOUNT));
     await act(async () => {});
-    expect(result.current.minPrice).toBe(2_000_000_000n);
+    expect(result.current).not.toHaveProperty("minPrice");
+    expect(stored()).not.toHaveProperty("minPrice");
     expect(result.current.amount).toBe(1_000_000_000_000_000_000n);
     expect(result.current.auctionEndTime).toBe(9999999999);
   });
@@ -270,7 +270,6 @@ describe("useSellFlow state machine", () => {
       vi.restoreAllMocks();
     });
 
-    // SCOUT(#241) EDIT: lockEth takes the amount only (also in the two error cases below).
     it("lockEth: approves then locks, and moves lock → confirming with the receipt", async () => {
       // The confirming step polls the chain; report zero confirmations so it stays put.
       vi.spyOn(
@@ -288,7 +287,7 @@ describe("useSellFlow state machine", () => {
       expect(result.current.step).toBe("lock");
 
       await act(async () => {
-        await result.current.lockEth(10n ** 18n, 2_000_000_000n);
+        await result.current.lockEth(10n ** 18n);
       });
 
       expect(approveFakeEth).toHaveBeenCalledWith(
@@ -313,7 +312,7 @@ describe("useSellFlow state machine", () => {
       expect(result.current.lockBlock).toBe(77);
       expect(result.current.lockNonce).toBe(3n);
       expect(result.current.amount).toBe(10n ** 18n);
-      expect(result.current.minPrice).toBe(2_000_000_000n);
+      expect(result.current).not.toHaveProperty("minPrice");
       expect(result.current.windowId).toBe(41538n);
       // unlockTime is the lock deadline: after it anyone may reclaim the lock.
       expect(result.current.unlockTime).toBe(1_794_728_700);
@@ -326,8 +325,8 @@ describe("useSellFlow state machine", () => {
         lockNonce: "3",
         windowId: "41538",
         amount: "1000000000000000000",
-        minPrice: "2000000000",
       });
+      expect(stored()).not.toHaveProperty("minPrice");
       unmount();
     });
 
@@ -413,9 +412,8 @@ describe("useSellFlow state machine", () => {
     });
 
     // SCOUT(#243) REMOVE: the timelock registration asserts and the local one hour end time.
-    // SCOUT(#241) EDIT: no minPrice in the persisted state or in the payload.
     // SCOUT(#224) EDIT: pairBcs equals the launch pair, not empty bytes.
-    it("createAuction: registers the timelock first, then submits the 5-argument create_auction", async () => {
+    it("createAuction: registers the timelock first, then submits the 4-argument create_auction", async () => {
       vi.mocked(registerTimelock).mockResolvedValue(42n);
       vi.mocked(getCreateAuctionPayload).mockReturnValue({
         fn: "create_auction",
@@ -424,7 +422,6 @@ describe("useSellFlow state machine", () => {
       persist({
         step: "creating-auction",
         lockId: EXPECTED_LOCK_ID,
-        minPrice: "2000000000",
         amount: "1000000000000000000",
       });
 
@@ -456,14 +453,12 @@ describe("useSellFlow state machine", () => {
 
       expect(getCreateAuctionPayload).toHaveBeenCalledTimes(1);
       const args = vi.mocked(getCreateAuctionPayload).mock.calls[0];
-      expect(args).toHaveLength(5);
-      // SCOUT(#241) EDIT: the payload loses minPrice.
+      expect(args).toHaveLength(4);
       // SCOUT(#243) EDIT: the payload loses timelockId.
-      const [windowId, pairBcs, lockIdBytes, minPrice, timelockId] = args;
+      const [windowId, pairBcs, lockIdBytes, timelockId] = args;
       expect(typeof windowId).toBe("bigint");
       expect(pairBcs).toEqual(new Uint8Array(0));
       expect(lockIdBytes).toEqual(ethers.getBytes(EXPECTED_LOCK_ID));
-      expect(minPrice).toBe(2_000_000_000n);
       expect(timelockId).toBe(42n);
       expect(submitNativeTransaction).toHaveBeenCalledTimes(1);
       expect(submitNativeTransaction).toHaveBeenCalledWith(aptos, ACCOUNT, {
@@ -485,7 +480,6 @@ describe("useSellFlow state machine", () => {
       persist({
         step: "creating-auction",
         lockId: EXPECTED_LOCK_ID,
-        minPrice: "2000000000",
       });
 
       const { result } = renderHook(() => useSellFlow(ACCOUNT));
@@ -498,6 +492,29 @@ describe("useSellFlow state machine", () => {
       expect(submitNativeTransaction).not.toHaveBeenCalled();
       expect(result.current.step).toBe("creating-auction");
       expect(result.current.error).toBe("E_IBE_NOT_READY");
+    });
+
+    it("createAuction runs when the saved state has no minimum price", async () => {
+      vi.mocked(registerTimelock).mockResolvedValue(7n);
+      vi.mocked(getCreateAuctionPayload).mockReturnValue({
+        fn: "create_auction",
+      } as never);
+      vi.mocked(submitNativeTransaction).mockResolvedValue(undefined as never);
+      // Only the lock id: no price was ever saved.
+      persist({ step: "creating-auction", lockId: EXPECTED_LOCK_ID });
+
+      const { result } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      await act(async () => {
+        await result.current.createAuction();
+      });
+
+      expect(result.current.error).toBeUndefined();
+      expect(getCreateAuctionPayload).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(getCreateAuctionPayload).mock.calls[0][3]).toBe(7n);
+      expect(submitNativeTransaction).toHaveBeenCalledTimes(1);
+      expect(result.current.step).toBe("monitoring");
+      expect(stored()).not.toHaveProperty("minPrice");
     });
 
     it("cancelAndUnlock: reclaims the lock to the seller and resets the flow to lock", async () => {
@@ -539,7 +556,7 @@ describe("useSellFlow state machine", () => {
       const { result } = renderHook(() => useSellFlow(ACCOUNT));
       await act(async () => {});
       await act(async () => {
-        await result.current.lockEth(10n ** 18n, 2_000_000_000n);
+        await result.current.lockEth(10n ** 18n);
       });
 
       expect(result.current.step).toBe("lock");
@@ -558,7 +575,7 @@ describe("useSellFlow state machine", () => {
       const { result } = renderHook(() => useSellFlow(ACCOUNT));
       await act(async () => {});
       await act(async () => {
-        await result.current.lockEth(10n ** 18n, 2_000_000_000n);
+        await result.current.lockEth(10n ** 18n);
       });
 
       expect(result.current.step).toBe("lock");
@@ -579,7 +596,7 @@ describe("useSellFlow state machine", () => {
       const { result } = renderHook(() => useSellFlow(ACCOUNT));
       await act(async () => {});
       await act(async () => {
-        await result.current.lockEth(10n ** 18n, 2_000_000_000n);
+        await result.current.lockEth(10n ** 18n);
       });
 
       expect(assertSiweDomain).toHaveBeenCalledWith(window.location.host);
@@ -619,5 +636,4 @@ describe("useSellFlow state machine", () => {
   });
 
   it.todo("SCOUT(#243) createAuction submits exactly one transaction and never calls registerTimelock");
-  it.todo("SCOUT(#241) createAuction runs when the saved state has no minimum price");
 });

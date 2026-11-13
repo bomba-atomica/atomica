@@ -509,19 +509,16 @@ export async function submitManyDirect(
  * Create an auction as the seller's Ethereum-derivable account (SIWE), the
  * only account that can claim the seller's FakeETH receipt.
  *
- * Same 5-argument call as the SDK's `getCreateAuctionPayload`:
- *   create_auction(seller, window_id, pair_bcs, lock_id, min_price,
- *                  timelock_id)
+ * Same 4-argument call as the SDK's `getCreateAuctionPayload`:
+ *   create_auction(seller, window_id, pair_bcs, lock_id, timelock_id)
  *
  * Throws if the transaction aborts. Returns the Aptos transaction hash.
  */
-// SCOUT(#241) EDIT: drop the minPrice parameter; every caller passes it by position, including 14-happy-path, which the issue does not list.
 // SCOUT(#243) EDIT: drop the timelockId parameter.
 export async function createAuctionDirect(
   aptosClient: Aptos,
   seller: EthSigner,
   lockId: string,
-  minPrice: bigint,
   windowId: bigint,
   pairBcs: Uint8Array,
   timelockId: bigint,
@@ -533,7 +530,6 @@ export async function createAuctionDirect(
       windowId,
       pairBcs,
       ethers.getBytes(lockId),
-      minPrice,
       timelockId,
     ),
   );
@@ -563,7 +559,6 @@ export interface LiveWindow {
  * `reveal_final` and `refunded` both false.
  */
 // SCOUT(#243) EDIT: stop registering a timelock; deadlineAheadUs needs the owner's answer on a test cap (open question 1), since tests use 20 to 600 seconds.
-// SCOUT(#241) EDIT: drop options.minPrice.
 // SCOUT(#224) EDIT: options.pairBcs must be on the allowlist.
 export async function createLiveWindow(
   fixture: IntegrationFixture,
@@ -571,7 +566,6 @@ export async function createLiveWindow(
   operator: Account,
   options: {
     pairBcs: Uint8Array;
-    minPrice: bigint;
     deadlineAheadUs: bigint;
     lockAmount?: bigint;
   },
@@ -601,8 +595,6 @@ export async function createLiveWindow(
     aptosClient,
     fixture.eth.seller,
     lockId,
-    // SCOUT(#241) REMOVE: the minPrice argument to createAuctionDirect.
-    options.minPrice,
     windowId,
     options.pairBcs,
     timelockId,

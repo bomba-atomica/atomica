@@ -78,8 +78,6 @@ import {
 } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
 
-// SCOUT(#241) REMOVE: MIN_PRICE and the minPrice option below.
-const MIN_PRICE = 1_000_000n;
 // SCOUT(#217) EDIT: bid 2000 whole USD, not 2_000_000.
 // SCOUT(#216) EDIT: 1 FakeETH at this price needs 2,000,000 FakeUSD of collateral and the helper locks 500; the bid would be invalid once opened (this file never opens it, and pull request 213 does not shrink this quantity).
 const BID_PRICE = 2_000_000n;
@@ -158,7 +156,6 @@ describe.sequential("09: Submit Bid on Auction", () => {
     firstCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
-      minPrice: MIN_PRICE,
       deadlineAheadUs: DEADLINE_AHEAD_US,
     });
   }, 1_200_000);

@@ -149,17 +149,16 @@ export async function getLaunchPairBcs(): Promise<Uint8Array> {
   throw new Error("NOT_IMPLEMENTED: SCOUT(#224) getLaunchPairBcs");
 }
 
-// SCOUT(#241) EDIT: drop the minPrice parameter and argument; create_auction has no min_price.
 // SCOUT(#243) EDIT: drop the timelockId parameter and argument; create_auction registers the window's timelock itself.
 // SCOUT(#217) EDIT: minPrice is a whole-USD price for as long as the reserve price exists.
 /**
  * Build payload for auction::create_auction (v0 Beta global-registry).
  *
- *   create_auction(seller, window_id, pair_bcs, lock_id, min_price,
- *                  timelock_id)
+ *   create_auction(seller, window_id, pair_bcs, lock_id, timelock_id)
  *
  * `pairBcs` is the BCS-encoded Pair struct; callers can compute it with
  * `bcs.serialize` or pass a pre-encoded byte array.
+ * There is no reserve price: clearing alone sets the price.
  * `timelockId` is the id that `ibe_config::register_timelock` returned for the
  * window's deadline. Register it first with {@link registerTimelock}.
  *
@@ -169,29 +168,26 @@ export function getCreateAuctionPayload(
   windowId: bigint,
   pairBcs: Uint8Array,
   lockId: Uint8Array,
-  minPrice: bigint,
   timelockId: bigint,
 ): InputGenerateTransactionPayloadData {
   return {
     function: `${CONTRACT_ADDR}::auction::create_auction`,
-    functionArguments: [windowId, pairBcs, lockId, minPrice, timelockId],
+    functionArguments: [windowId, pairBcs, lockId, timelockId],
   };
 }
 
-// SCOUT(#241) EDIT: drop the minPrice parameter.
 // SCOUT(#243) EDIT: drop the timelockId parameter.
 export async function submitCreateAuction(
   ethAddress: string,
   windowId: bigint,
   pairBcs: Uint8Array,
   lockId: Uint8Array,
-  minPrice: bigint,
   timelockId: bigint,
 ) {
   return await submitNativeTransaction(
     aptos,
     ethAddress,
-    getCreateAuctionPayload(windowId, pairBcs, lockId, minPrice, timelockId),
+    getCreateAuctionPayload(windowId, pairBcs, lockId, timelockId),
   );
 }
 

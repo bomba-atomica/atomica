@@ -51,8 +51,8 @@ interface PersistedState {
   windowId?: string; // bigint as string
   lockId?: string; // hex string
   auctionEndTime?: number;
-  // SCOUT(#241) EDIT: keep reading saved state that still has minPrice, and ignore it.
-  minPrice?: string; // bigint as string
+  // Saved state from older builds may still hold a reserve price key. The loader
+  // ignores it, and the next save drops it: there is no reserve price.
   amount?: string; // bigint as string
   unlockTime?: number;
 }
@@ -69,9 +69,7 @@ export interface SellFlowState {
   windowId?: bigint;
   lockId?: string;
   auctionEndTime?: number;
-  // SCOUT(#241) REMOVE: minPrice leaves the flow state.
   // SCOUT(#217) EDIT: holds micro-dollars today (Step2Lock parses with 6 decimals).
-  minPrice?: bigint;
   amount?: bigint;
   /** The lock's deadline (unix seconds): after it, anyone may reclaim it to the seller */
   unlockTime?: number;
@@ -80,9 +78,8 @@ export interface SellFlowState {
 }
 
 export interface SellFlowActions {
-  // SCOUT(#241) EDIT: lockEth takes the amount only.
-  /** Step 2: approve + lock FakeETH. amount and minPrice in wei. */
-  lockEth: (amount: bigint, minPrice: bigint) => Promise<void>;
+  /** Step 2: approve + lock FakeETH. amount in wei. */
+  lockEth: (amount: bigint) => Promise<void>;
   /** Step 4: generate storage proof for the confirmed lock block */
   generateProof: () => Promise<void>;
   /** Step 5: submit proof to Aptos → creates LockReceipt */
@@ -154,8 +151,6 @@ export function useSellFlow(
       blockConfirmed: false, // will be re-checked on mount
       lockId: persisted.lockId,
       auctionEndTime: persisted.auctionEndTime,
-      // SCOUT(#241) REMOVE: restore of minPrice (first of two copies of this block).
-      minPrice: persisted.minPrice ? BigInt(persisted.minPrice) : undefined,
       amount: persisted.amount ? BigInt(persisted.amount) : undefined,
       unlockTime: persisted.unlockTime,
       loading: false,
@@ -190,8 +185,6 @@ export function useSellFlow(
         blockConfirmed: false,
         lockId: persisted.lockId,
         auctionEndTime: persisted.auctionEndTime,
-        // SCOUT(#241) REMOVE: restore of minPrice (second copy).
-        minPrice: persisted.minPrice ? BigInt(persisted.minPrice) : undefined,
         amount: persisted.amount ? BigInt(persisted.amount) : undefined,
         unlockTime: persisted.unlockTime,
         loading: false,
@@ -214,8 +207,6 @@ export function useSellFlow(
       windowId: state.windowId?.toString(),
       lockId: state.lockId,
       auctionEndTime: state.auctionEndTime,
-      // SCOUT(#241) REMOVE: minPrice is no longer persisted.
-      minPrice: state.minPrice?.toString(),
       amount: state.amount?.toString(),
       unlockTime: state.unlockTime,
     };
@@ -229,8 +220,6 @@ export function useSellFlow(
     state.windowId,
     state.lockId,
     state.auctionEndTime,
-    // SCOUT(#241) REMOVE: minPrice leaves the persisted-state dependency list.
-    state.minPrice,
     state.amount,
     state.unlockTime,
   ]);
@@ -281,10 +270,9 @@ export function useSellFlow(
     setState((s) => ({ ...s, error, loading: false }));
   }, []);
 
-  // SCOUT(#241) EDIT: drop the minPrice parameter.
   // SCOUT(#218) EDIT: a lock below the new minimum, or a seller lock past the cap, locks on Ethereum and then aborts in create_auction; pre-check with the SDK limits view reader, or the lock waits for reclaim.
   const lockEth = useCallback(
-    async (amount: bigint, minPrice: bigint) => {
+    async (amount: bigint) => {
       if (!account || !window.ethereum) return;
       setState((s) => ({ ...s, loading: true, error: undefined }));
 
@@ -321,8 +309,6 @@ export function useSellFlow(
           lockNonce,
           windowId: lock.windowId,
           amount,
-          // SCOUT(#241) REMOVE: lockEth stores no minPrice.
-          minPrice,
           unlockTime,
           loading: false,
         }));
@@ -419,8 +405,7 @@ export function useSellFlow(
   }, [account, setError]);
 
   const createAuction = useCallback(async () => {
-    // SCOUT(#241) EDIT: this guard returns early when minPrice is missing or zero; drop the minPrice test or createAuction never runs.
-    if (!account || !state.minPrice || !state.lockId) return;
+    if (!account || !state.lockId) return;
     setState((s) => ({
       ...s,
       step: "creating-auction",
@@ -448,13 +433,11 @@ export function useSellFlow(
         BigInt(auctionEndTime) * 1_000_000n,
       );
 
-      // SCOUT(#241) EDIT: drop state.minPrice.
       // SCOUT(#243) EDIT: drop timelockId.
       const payload = getCreateAuctionPayload(
         windowId,
         pairBcs,
         lockIdBytes,
-        state.minPrice,
         timelockId,
       );
       await submitNativeTransaction(aptos, account, payload);
@@ -468,8 +451,7 @@ export function useSellFlow(
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
-    // SCOUT(#241) EDIT: drop state.minPrice from this dependency list.
-  }, [account, state.minPrice, state.lockId, state.windowId, setError]);
+  }, [account, state.lockId, state.windowId, setError]);
 
   const cancelAndUnlock = useCallback(async () => {
     if (

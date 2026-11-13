@@ -123,12 +123,15 @@ window ID matches the auction's registered window ID.
 <!-- SCOUT(#242) DOC: WindowState as built also holds timelock_id, min_prices, revealed_prices, reveal_final, refunded and bid_results, bids is vector<SealedBid>, and sellers contribute supply, not bids. -->
 <!-- SCOUT(#218) DOC: state the cap on seller locks per window and the minimum seller lock size. -->
 <!-- SCOUT(#224) DOC: state the pair allowlist: create_auction aborts for unlisted pair bytes and stores the listed Pair. -->
-<!-- SCOUT(#241) DOC: state that a window has no reserve price at launch; min_prices leaves WindowState. -->
 <!-- SCOUT(#243) DOC: state that create_auction registers the window timelock itself, one per window id, and takes no timelock_id. -->
 
 The registry is keyed by `(auction_window_id, pair)`, not by seller address.
 Multiple sellers offering the same pair in the same window contribute bids to
 the same clearing pool.
+
+A window has no reserve price at launch. `create_auction` takes no minimum
+price, and `WindowState` stores none: clearing alone sets the price, as the PRD
+MVP scope states ("No reserve prices at launch").
 
 ```move
 struct AuctionRegistry has key {
