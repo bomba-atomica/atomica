@@ -1,4 +1,4 @@
-// SCOUT(#226) DOC: once the pin holds the fork status change, an unrevealed timelock reads `Expired` with reason 2 from its reveal expiry on, before the block queue reaches it; say so under "Status and expiry" below.
+// SCOUT(#243) DOC: once the pin holds the fork status change, an unrevealed timelock reads `Expired` with reason 2 from its reveal expiry on, before the block queue reaches it; say so under "Status and expiry" below.
 /// Atomica Timelock view-function facade.
 ///
 /// Exposes the Atomica-relevant subset of `aptos_framework::ibe_config` to

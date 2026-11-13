@@ -175,7 +175,7 @@ module atomica::auction_bid_wrapper_tests {
         assert!(!ibe_config::finalize_for_testing(TIMELOCK_ID, x"00"), 901);
     }
 
-    // SCOUT(#226) EDIT: once the pin holds the fork status change, the status reads expired at the reveal expiry without the `on_new_block_for_testing` call of `expire_reveal_window`.
+    // SCOUT(#243) EDIT: once the pin holds the fork status change, the status reads expired at the reveal expiry without the `on_new_block_for_testing` call of `expire_reveal_window`.
     // No key by the end of the reveal window: Expired(reveal-window-elapsed).
     fun expire_reveal_window() {
         timestamp::update_global_time_for_test(DEADLINE_US + 10 * MIN);
