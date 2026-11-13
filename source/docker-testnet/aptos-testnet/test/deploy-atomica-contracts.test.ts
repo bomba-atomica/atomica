@@ -51,11 +51,6 @@ describe.sequential("Atomica Contract Deployment", () => {
             deployerAddress: deployer.accountAddress.toString(),
             namedAddresses: { atomica: deployer.accountAddress.toString() },
             initFunctions: [
-                // SCOUT(#238) REMOVE: this registry::initialize call goes with registry.move.
-                {
-                    functionId: `${deployer.accountAddress.toString()}::registry::initialize`,
-                    args: ["hex:0123456789abcdef"],
-                },
                 {
                     functionId: `${deployer.accountAddress.toString()}::fake_eth::initialize`,
                     args: [],
@@ -76,21 +71,17 @@ describe.sequential("Atomica Contract Deployment", () => {
             accountAddress: deployer.accountAddress,
         });
 
-        // SCOUT(#238) EDIT: the issue text names only the initialize call above; the expected module list and the registry assert below also name the deleted module.
         // SCOUT(#243) EDIT: this test publishes under a random address, so its package is not the genesis registrar; it stays valid only while it never calls create_auction.
         // Verify expected modules exist
-        const expectedModules = ["registry", "fake_eth", "fake_usd"];
+        const expectedModules = ["lock_receipt", "auction", "fake_eth", "fake_usd"];
 
         for (const expectedModule of expectedModules) {
             const module = modules.find((m) => m.abi?.name === expectedModule);
             expect(module, `Module ${expectedModule} should be deployed`).toBeDefined();
         }
 
-        // Verify registry module has expected functions
-        const registryModule = modules.find((m) => m.abi?.name === "registry");
-        expect(registryModule?.abi?.exposed_functions.some((f) => f.name === "initialize")).toBe(
-            true,
-        );
+        // The package no longer has a registry module.
+        expect(modules.find((m) => m.abi?.name === "registry")).toBeUndefined();
 
         // Verify fake_eth module has expected functions
         const fakeEthModule = modules.find((m) => m.abi?.name === "fake_eth");

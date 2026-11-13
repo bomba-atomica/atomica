@@ -115,7 +115,26 @@ module atomica::lock_receipt_tests {
 
     // New comprehensive tests below
 
-    // SCOUT(#238) TEST: is_lock_claimed_reads_receipts_table_at_2000_locks
+    // `is_lock_claimed` answers from the `receipts` table, so it stays correct
+    // as the registry grows. This proves correctness, not gas cost.
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun is_lock_claimed_reads_receipts_table_at_2000_locks(
+        framework: &signer, atomica: &signer
+    ) {
+        setup_timestamp(framework);
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        let i = 0u64;
+        while (i < 2000) {
+            lock_receipt::insert_test_receipt<Ethereum, FakeETH>(
+                std::bcs::to_bytes(&i), @0x123, 1u256, 1
+            );
+            i = i + 1;
+        };
+        assert!(lock_receipt::is_lock_claimed<Ethereum, FakeETH>(std::bcs::to_bytes(&0u64)), 1);
+        assert!(lock_receipt::is_lock_claimed<Ethereum, FakeETH>(std::bcs::to_bytes(&1999u64)), 2);
+        assert!(!lock_receipt::is_lock_claimed<Ethereum, FakeETH>(std::bcs::to_bytes(&2000u64)), 3);
+    }
+
     // ==================== Claim: owner only ====================
 
     /// A depositor's Ethereum-derivable account (any address other than @atomica).

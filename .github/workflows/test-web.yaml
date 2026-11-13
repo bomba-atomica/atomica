@@ -434,7 +434,6 @@ jobs:
       # ── Aptos Testnet SDK Tests ────────────────────────────────────────────
       # SCOUT(#219) TEST: this step runs test/auction-round-trip.test.ts; no image step is needed, because the compose default image is validator:binary-52beee31a6, which already serves /v1/atomica.
       # SCOUT(#219) EDIT: ETH_BACKEND is unset here, so the Ethereum side is the Docker PoS chain (Prague active); the anvil backend starts on cancun and cannot run AptosLightClient.
-      # SCOUT(#238) TEST: this step runs test/deploy-atomica-contracts.test.ts, which must stop calling and asserting the registry module.
       # SCOUT(#221) TEST: this step runs test/lockbox-release.test.ts against the redeployed LockBox.
       # SCOUT(#243) EDIT: genesis must write timelock_registrar from the deployer address in the env block below, before the package is published.
       - name: Run Aptos Testnet SDK tests
@@ -628,12 +627,10 @@ jobs:
           - chunk: settle-100-bids
             test_files: >-
               tests/integration/16-settle-100-bids.test.tsx
-          # SCOUT(#238) REMOVE: tests/integration/12-fee-rebate.test.tsx leaves this chunk's test_files when the file is deleted.
           # SCOUT(#236) EDIT: tests/integration/11-claim-and-reclaim.test.tsx becomes a release test; rename it in this chunk's test_files if the file is renamed.
           - chunk: claim-reclaim-fees
             test_files: >-
               tests/integration/11-claim-and-reclaim.test.tsx
-              tests/integration/12-fee-rebate.test.tsx
               tests/integration/13-bid-history.test.tsx
           # SCOUT(#236) TEST: this chunk runs 14-happy-path ending with release on Ethereum; on this anvil tier that needs the anvil backend on the prague hardfork (it starts on cancun today).
           # SCOUT(#217) TEST: this chunk runs 14-happy-path with the 2000 price.
@@ -787,12 +784,10 @@ jobs:
           - chunk: settle-100-bids
             test_files: >-
               tests/integration/16-settle-100-bids.test.tsx
-          # SCOUT(#238) REMOVE: tests/integration/12-fee-rebate.test.tsx leaves this chunk's test_files when the file is deleted.
           # SCOUT(#236) EDIT: tests/integration/11-claim-and-reclaim.test.tsx becomes a release test; rename it in this chunk's test_files if the file is renamed.
           - chunk: claim-reclaim-fees
             test_files: >-
               tests/integration/11-claim-and-reclaim.test.tsx
-              tests/integration/12-fee-rebate.test.tsx
               tests/integration/13-bid-history.test.tsx
           # SCOUT(#236) TEST: this chunk runs 14-happy-path ending with release on Ethereum against the Docker PoS chain, where Prague is active.
           - chunk: happy-path

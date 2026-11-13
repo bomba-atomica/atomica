@@ -13,7 +13,6 @@
 <!-- SCOUT(#242) DOC: "Encrypted mempools" bullet: only the price is sealed; the bid quantity is a clear argument of submit_bid and no encrypted mempool is used; say so. -->
 <!-- SCOUT(#242) DOC: "Double verification pathways" bullet: label the ZK half as a later-phase item, in the wording the acceptance check greps for. -->
 <!-- SCOUT(#242) DOC: "Zero operator fees" bullet: no fee or rebate exists on chain and Bitcoin is not supported; label the deal-breaker rebate as a later-phase item. -->
-<!-- SCOUT(#238) DOC: "deal breakers pay deal makers": the zero-returning rebate scaffolding this points at is deleted from Move, SDK and UI. -->
 
 **Key Innovations:**
 - **Non-custodial with minimal lock time**: Assets locked only for the auction period—no prolonged custody risk
@@ -23,7 +22,7 @@
 - **Encrypted mempools**: Bid contents hidden from validators until decryption, eliminating front-running and MEV extraction
 - **High-throughput blockchain**: Built on Aptos-core infrastructure (Move VM, BLS signatures, parallel execution) for scalable auction processing
 - **Double verification pathways**: BLS threshold signatures for consensus (v0.1 Beta), with ZK proofs for independent computation verification (v1.0+)—both must agree for settlement in v1.0
-- **Zero operator fees on major pairs**: Bitcoin and Ethereum markets have no network fees; deal breakers pay deal makers
+- **Zero operator fees on major pairs**: Bitcoin and Ethereum markets have no network fees; deal breakers pay deal makers (not built: nothing on chain computes a fee or rebate yet)
 
 ## Problem Statement
 
@@ -235,7 +234,8 @@ Bidders (arbitrageurs) earn through bid-ask spreads (buy at auction price, sell/
 ### Fee Structure: Deal Breakers Pay Deal Makers
 
 <!-- SCOUT(#242) DOC: "Fee Structure: Deal Breakers Pay Deal Makers" section: unbuilt (the rebate coefficient is zero); label the rebate curve as a later-phase item. -->
-<!-- SCOUT(#238) DOC: the rebate scaffolding (compute_rebates, fetchRebates, useFeeRebate, FeeRebateDisplay) is deleted; nothing on chain computes a fee after this issue. -->
+
+> **Status:** not built. Nothing on chain computes a fee or rebate yet, and no client shows one. The rebate curve is an open question below.
 
 **Core Principle:** All externalities are internalized. Participants whose bids move the market away from efficient clearing compensate those whose bids improve price discovery.
 

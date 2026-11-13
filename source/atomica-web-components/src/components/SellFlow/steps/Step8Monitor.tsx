@@ -4,10 +4,6 @@ import { SettleButton } from "../../SettleButton";
 import { ClaimButton } from "../../ClaimButton";
 import { BidHistory } from "../../BidHistory";
 import { useBidHistory } from "../../../hooks/useBidHistory";
-// SCOUT(#238) REMOVE: the FeeRebateDisplay and useFeeRebate imports.
-import { FeeRebateDisplay } from "../../FeeRebateDisplay";
-import { useFeeRebate } from "../../../hooks/useFeeRebate";
-import { useWallet } from "../../../context/WalletContext";
 
 interface Props {
   amount?: bigint;
@@ -94,7 +90,6 @@ export function Step8Monitor({
   loading,
   error,
 }: Props) {
-  const { account } = useWallet();
   const remaining = useCountdown(auctionEndTime);
   const canUnlock = useIsUnlocked(unlockTime);
   // SCOUT(#243) EDIT: ended comes from a local one hour clock; read the window deadline view so the countdown matches the chain.
@@ -103,9 +98,6 @@ export function Step8Monitor({
   const { entries: bidHistoryEntries, recordSettlement } = useBidHistory(
     sellerAddress ?? null,
   );
-  // SCOUT(#238) REMOVE: the useFeeRebate call.
-  // v0 Beta: useFeeRebate now takes (windowId, pairBcs, bidderAddress)
-  const feeRebate = useFeeRebate(windowId ?? null, pairBcs ?? null, account);
 
   const amountFormatted = amount
     ? (Number(amount) / 1e18).toFixed(4) + " FETH"
@@ -179,14 +171,6 @@ export function Step8Monitor({
           windowId={windowId}
           pairBcs={pairBcs}
           sellerAddress={sellerAddress ?? undefined}
-        />
-      )}
-
-      {/* SCOUT(#238) REMOVE: the FeeRebateDisplay block. */}
-      {feeRebate.ready && feeRebate.isWinner && (
-        <FeeRebateDisplay
-          rebateAmount={feeRebate.rebateAmount}
-          feeAmount={feeRebate.feeAmount}
         />
       )}
 

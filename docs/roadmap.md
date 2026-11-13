@@ -42,7 +42,6 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 <!-- SCOUT(#224) DOC: multi-pair row: "single pair hard-coded" becomes an allowlist seeded with one launch pair. -->
 <!-- SCOUT(#228) DOC: sealed-bids row: describes submit_cleartext_and_clear and finalize_reveal with a price hash; on-chain opening replaces them with open_bids. -->
 <!-- SCOUT(#236) DOC: settle and claim row: ClaimButton (a faucet mint) is removed for a release action; AuctionRevealer and SellFlow get exported. -->
-<!-- SCOUT(#238) DOC: rebate rows (on-chain and UI): the "no uniform-price anchor" reason is stale and the scaffolding, hook and FeeRebateDisplay are deleted; drop or reword both rows. -->
 <!-- SCOUT(#241) DOC: auction creation UI row: loses the minimum price field. -->
 <!-- SCOUT(#243) DOC: windows row: after this issue the window timelock closes at the window close, not at a seller-picked time; the auction creation UI row loses the register-timelock step. -->
 
@@ -63,8 +62,7 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 | **Bidder collateral on Aptos** | `atomica-move-contracts/sources/auction.move` | `missing` — Demo explicitly skips collateral |
 | **Cross-chain settlement back to Ethereum (verified BLS outcome proof)** | `evm-contracts/src/escrow/LockBox.sol`, `BLSVerifier.sol` | `missing` — real BLS verification of Aptos outcomes ships in v0.1; the Aptos light client verifier and proof-gated LockBox are issues 201, 202, 203 |
 | **Permissionless unwind (finished or stuck auction, lock deadline reclaim)** | `atomica-move-contracts/sources/auction.move`, `lock_receipt.move`, `evm-contracts/src/escrow/LockBox.sol` | `missing` — issues 194, 195, 203 |
-| **Distance-to-clearing fee rebates (on-chain)** | `atomica-move-contracts/sources/auction.move` | `missing` — no uniform-price anchor to compute rebates against |
-| **Fee-rebate UI display** | `atomica-web-ui/src/components/FeeRebateDisplay.tsx` | `scaffold` — component present but driven by stubbed input |
+| **Distance-to-clearing fee rebates** | — | `missing` — not designed (PRD open question); the zero-returning scaffolding in Move, the SDK and the UI was deleted (issue 238) |
 | **Sell flow wizard (8-step UI)** | `atomica-web-ui/src/components/SellFlow/` | `live` |
 | **Bid submission UI** | `atomica-web-components/src/components/AuctionBidder.tsx` | `live` |
 | **Auction creation UI** | `atomica-web-ui/src/components/AuctionCreator.tsx` | `live` |

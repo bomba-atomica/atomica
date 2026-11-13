@@ -1,6 +1,10 @@
-<!-- SCOUT(#238) DOC: wholly superseded summary (old register_ethereum_lock signature, replay protection by block hash); the claimed_locks field in its ReceiptRegistry block goes; archive this file rather than edit one line. -->
-
 # Lock Receipt Implementation Summary
+
+> [!WARNING]
+> **Archived 2026-11-13 (issue 238).** This summary is superseded. It describes an old
+> `register_ethereum_lock` signature, replay protection by block hash, and a
+> `claimed_locks` map that no longer exist. The `receipts` table is the replay set.
+> For the current module see `source/atomica-move-contracts/sources/lock_receipt.move`.
 
 > [!IMPORTANT]
 > **Canonical token policy:** FakeETH and FakeUSD are minted only on the EVM testnet.

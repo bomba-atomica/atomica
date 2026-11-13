@@ -123,7 +123,6 @@ window ID matches the auction's registered window ID.
 <!-- SCOUT(#242) DOC: WindowState as built also holds timelock_id, min_prices, revealed_prices, reveal_final, refunded and bid_results, bids is vector<SealedBid>, and sellers contribute supply, not bids. -->
 <!-- SCOUT(#218) DOC: state the cap on seller locks per window and the minimum seller lock size. -->
 <!-- SCOUT(#224) DOC: state the pair allowlist: create_auction aborts for unlisted pair bytes and stores the listed Pair. -->
-<!-- SCOUT(#238) DOC: revealed_prices leaves WindowState and create_auction loses its unused mpk argument. -->
 <!-- SCOUT(#241) DOC: state that a window has no reserve price at launch; min_prices leaves WindowState. -->
 <!-- SCOUT(#243) DOC: state that create_auction registers the window timelock itself, one per window id, and takes no timelock_id. -->
 
@@ -259,7 +258,6 @@ All winners pay 2 010 × their_fill in FakeUSD. Alice pays 8 040, Bob pays
 <!-- SCOUT(#216) DOC: state the rule as enforced: collateral stored on the bid, invalid at opening when quote_for_fill(quantity, price) exceeds it, collateral returned to the depositor; the E_UNPAYABLE_FILL sentence that open pull request 213 adds to section 2.9 then no longer applies to an under-collateralised bid. -->
 <!-- SCOUT(#217) DOC: bid_quantity × bid_price needs units: quantity in wei, price in whole USD per whole token, product in FakeUSD units via quote_for_fill. -->
 <!-- SCOUT(#218) DOC: state the minimum FakeUSD collateral per bid. -->
-<!-- SCOUT(#238) DOC: "Fee and rebate calibration is deferred to Phase 3c" paragraph: the rebate scaffolding is deleted; drop or reword. -->
 
 Each bidder must hold an active FakeUSD `LockReceipt` on Ethereum whose
 locked value is at least `bid_quantity × bid_price`. The receipt's `lock_id`
@@ -289,9 +287,10 @@ unpayable leaf. Any account may call `lock_receipt::cancel_unauctioned` on an
 `ACTIVE` receipt at least `timelock_config::get_receipt_cancel_delay_us` (24 h)
 old.
 
-Fee and rebate calibration is deferred to Phase 3c. The distance-to-clearing
-concept (bidders closer to the marginal price pay smaller fees / receive larger
-rebates) will be specified in that phase.
+No fee or rebate is computed on chain. The distance-to-clearing concept
+(bidders closer to the marginal price pay smaller fees / receive larger
+rebates) is an open question in the PRD; no scaffolding for it exists in the
+contract, the SDK or the UI.
 
 ### 2.9 Settlement events
 

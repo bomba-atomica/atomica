@@ -17,6 +17,8 @@
  *   4. A second settle aborts with E_WINDOW_ALREADY_SETTLED; SettleButton
  *      shows "Already Settled"
  *   5. Step8Monitor shows the settled window and records it in the history
+ *   6. get_settlement returns the sum of the winners' fills, which SettleButton
+ *      shows as the total filled
  *
  * The bidder's Ethereum-derivable account bids: only it can claim the
  * bidder's collateral receipts. The operator (no special rights) relays
@@ -68,6 +70,7 @@ import {
   isSettled,
   getBidResults,
   getBidInfo,
+  getSettlement,
 } from "@atomica/sdk/aptos";
 import { WalletContext } from "../../src/context/WalletContext";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
@@ -350,5 +353,32 @@ describe.sequential("10: Settle Auction", () => {
   }, 60_000);
 
   it.todo("SCOUT(#216) an under-collateralized bid opens without abort, reads invalid, takes no fill, and settle returns its whole collateral to its depositor");
-  it.todo("SCOUT(#238) get_settlement returns the sum of the winners' fills and SettleButton shows it as the total filled");
+  // ── Test 6: get_settlement reads the filled total ──────────────────────────
+
+  it("get_settlement returns the sum of the winners' fills and SettleButton shows it as the total filled", async () => {
+    const results = await getBidResults(auction.windowId, PAIR_BCS);
+    const filled = results.reduce((sum, r) => sum + r.fillAmount, 0n);
+    expect(filled).toBe(SUPPLY);
+
+    const settlement = await getSettlement(auction.windowId, PAIR_BCS);
+    expect(settlement).toEqual({ clearingPrice: WIN_PRICE, totalFilled: filled });
+
+    render(
+      <SettleProviders account={settlerEthAddress}>
+        <SettleButton
+          windowId={auction.windowId}
+          pairBcs={PAIR_BCS}
+          auctionEndTime={Math.floor(Date.now() / 1000) - 10}
+        />
+      </SettleProviders>,
+    );
+    await waitFor(
+      () => {
+        expect(screen.getByTestId(settleButton.settleTotalFilled).textContent).toBe(
+          `${(Number(filled) / 1e18).toFixed(4)} ETH`,
+        );
+      },
+      { timeout: 15_000 },
+    );
+  }, 60_000);
 });

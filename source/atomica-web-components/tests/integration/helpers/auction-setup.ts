@@ -509,15 +509,14 @@ export async function submitManyDirect(
  * Create an auction as the seller's Ethereum-derivable account (SIWE), the
  * only account that can claim the seller's FakeETH receipt.
  *
- * Same 6-argument call as the SDK's `getCreateAuctionPayload`:
+ * Same 5-argument call as the SDK's `getCreateAuctionPayload`:
  *   create_auction(seller, window_id, pair_bcs, lock_id, min_price,
- *                  timelock_id, mpk_bytes)
+ *                  timelock_id)
  *
  * Throws if the transaction aborts. Returns the Aptos transaction hash.
  */
 // SCOUT(#241) EDIT: drop the minPrice parameter; every caller passes it by position, including 14-happy-path, which the issue does not list.
 // SCOUT(#243) EDIT: drop the timelockId parameter.
-// SCOUT(#238) EDIT: drop the mpk_bytes argument.
 export async function createAuctionDirect(
   aptosClient: Aptos,
   seller: EthSigner,
@@ -536,7 +535,6 @@ export async function createAuctionDirect(
       ethers.getBytes(lockId),
       minPrice,
       timelockId,
-      new Uint8Array(0), // mpk_bytes, reserved
     ),
   );
 }

@@ -13,7 +13,6 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 <!-- SCOUT(#221) DOC: the `register_ethereum_lock<Asset>` row below says the deadline must equal `auction::eth_lock_deadline(window_id)`; the deadline is no longer an argument. -->
 <!-- SCOUT(#224) DOC: add a row for the new entry `allow_pair`. -->
 <!-- SCOUT(#228) DOC: the `submit_bid` row loses "price commitment"; the `open_bid`, `submit_cleartext_and_clear`, `finalize_reveal` row becomes `open_bids`. -->
-<!-- SCOUT(#238) DOC: remove the `atomica::registry` `initialize` row. -->
 <!-- SCOUT(#242) DOC: the `settle` row says "single highest bid; uniform-price clearing is scaffold"; the code clears at a uniform price. The unwind pull request (213) rewrites this row. -->
 <!-- SCOUT(#243) DOC: the `create_auction` row must say that the package registers the window's timelock. -->
 
@@ -34,7 +33,6 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 | `atomica::fake_usd` | `initialize` | live |
 | `atomica::fake_usd` | `mint` | live (legacy faucet) |
 | `atomica::fake_usd` | `mint_from_lock` | retired (aborts `E_RETIRED`; issue 203) |
-| `atomica::registry` | `initialize` | live |
 | `atomica::timelock` | — (view funs only) | live (facade of `aptos_framework::ibe_config`) |
 
 ### View functions
@@ -42,7 +40,6 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 <!-- SCOUT(#218) DOC: add the view `get_window_limits`. -->
 <!-- SCOUT(#224) DOC: add the views `is_pair_allowed` and `launch_pair_bcs`. -->
 <!-- SCOUT(#228) DOC: remove `compute_bid_commitment` from the `atomica::auction` row. -->
-<!-- SCOUT(#238) DOC: remove the `atomica::registry` row. -->
 <!-- SCOUT(#243) DOC: add the views `timelock_registrar_address`, `window_timelock` and `window_deadline_us`. -->
 
 | Module | Function |
@@ -51,7 +48,6 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 | `atomica::lock_receipt` | `is_lock_claimed`, `get_total_locked`, `get_receipt_count`, `get_receipt`, `get_receipt_binding`, `get_lock_outcome`, `is_registry_initialized` |
 | `atomica::fake_eth` | `get_metadata`, `balance` |
 | `atomica::fake_usd` | `get_metadata`, `balance` |
-| `atomica::registry` | `get_aptos_address`, `get_nonce` |
 | `atomica::timelock` | `is_ibe_ready`, `get_mpk`, `get_status`, `get_expiry_reason`, `is_deadline_passed`, `is_timelock_expired` (the `Expired` status), `is_revealed`, `get_timelock_epoch`, `get_deadline`, `get_reveal_expiry`, `get_timelock_identity`, `get_decryption_key` |
 
 ### Internal modules (not directly called by clients)

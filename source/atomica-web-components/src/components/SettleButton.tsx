@@ -64,7 +64,6 @@ export function SettleButton({
         if (cancelled) return;
         setSettled(s);
         if (s) {
-          // SCOUT(#238) EDIT: get_settlement returns the filled total, not total_supply, so the Total filled line below changes value.
           // SCOUT(#217) EDIT: result.clearingPrice is whole USD per whole base token; it is stored here and passed to onSettled unchanged.
           const result = await getSettlement(windowId, pairBcs);
           if (cancelled) return;
@@ -99,17 +98,13 @@ export function SettleButton({
       onSettled?.(windowId, result.clearingPrice);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unknown error";
-      // SCOUT(#238) EDIT: these matches are stale: settle raises E_DEADLINE_NOT_PASSED (31) and E_WINDOW_ALREADY_SETTLED (11), and E_ALREADY_SETTLED (5) is never raised; fix them when the unused codes go.
-      if (msg.includes("E_AUCTION_NOT_ENDED") || msg.includes("abort 3")) {
+      // settle raises E_DEADLINE_NOT_PASSED (31) before the deadline and
+      // E_WINDOW_ALREADY_SETTLED (11) on a second call. `\b` keeps "abort 3"
+      // from matching "abort 31".
+      if (/E_DEADLINE_NOT_PASSED|abort 31\b/.test(msg)) {
         setStatus("Error: Auction window has not ended yet");
-      } else if (msg.includes("E_ALREADY_SETTLED") || msg.includes("abort 5")) {
+      } else if (/E_WINDOW_ALREADY_SETTLED|abort 11\b/.test(msg)) {
         setStatus("Error: Auction already settled");
-      } else if (
-        // SCOUT(#238) REMOVE: the E_NOT_IMPLEMENTED and abort 99 branch.
-        msg.includes("E_NOT_IMPLEMENTED") ||
-        msg.includes("abort 99")
-      ) {
-        setStatus("Error: Settlement not yet implemented (Phase 3a scaffold)");
       } else {
         setStatus(`Error: ${msg}`);
       }
@@ -154,7 +149,7 @@ export function SettleButton({
               {`$${(Number(clearingPrice) / 1e6).toFixed(2)}`}
             </span>
           </div>
-          {/* SCOUT(#238) EDIT: this value is the window supply today; it becomes the sum of the winners' fills. */}
+          {/* get_settlement returns the sum of the winners' fills, not the window supply. */}
           {totalFilled !== null && (
             <div className="flex justify-between">
               <span className="text-zinc-500">Total filled</span>

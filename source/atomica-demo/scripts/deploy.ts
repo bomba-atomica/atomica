@@ -229,13 +229,6 @@ async function deployAptosContracts(eth: {
 
   // Run initialization functions
   const initFunctions = [
-    // SCOUT(#238) REMOVE: the registry::initialize init function.
-    {
-      functionId: `${APTOS_DEPLOYER_ADDRESS}::registry::initialize`,
-      args: [
-        "hex:0000000000000000000000000000000000000000000000000000000000000000",
-      ],
-    },
     { functionId: `${APTOS_DEPLOYER_ADDRESS}::fake_eth::initialize`, args: [] },
     { functionId: `${APTOS_DEPLOYER_ADDRESS}::fake_usd::initialize`, args: [] },
     // Pin the LockBox, the token behind each asset (issue 171) and the SIWE
