@@ -6,12 +6,10 @@ Status: `live`
 
 Full-featured Aptos testnet running in Docker with production-like account funding.
 
-<!-- SCOUT(#239) DOC: this README documents the old SDK throughout: the @atomica/docker-testnet import here and under Usage Examples, the typescript-sdk links under Documentation (two of them point at files that do not exist), the Directory Structure tree with validator-config.yaml, and the Installation path. -->
-
 ## Quick Start
 
 ```typescript
-import { DockerTestnet } from "@atomica/docker-testnet";
+import { DockerTestnet } from "@atomica/aptos-docker-testnet";
 
 // Start 4-validator testnet
 const testnet = await DockerTestnet.new(4);
@@ -61,23 +59,13 @@ Simple, ergonomic API for testnet management:
 
 ### Getting Started
 
-- **[typescript-sdk/README.md](typescript-sdk/README.md)** - Complete API reference and usage guide
+- **[aptos-testnet/README.md](aptos-testnet/README.md)** - Aptos testnet SDK API and usage guide
 - **[config/README.md](config/README.md)** - Docker configuration and manual operation
-
-### Production-Like Faucet
-
-- **[typescript-sdk/FAUCET.md](typescript-sdk/FAUCET.md)** ⭐ - Production-like faucet system explained
-  - How it works (bootstrap → runtime)
-  - Why this approach
-  - API usage
-  - Comparison to production mainnet
+- **[ethereum-testnet/README.md](ethereum-testnet/README.md)** - Ethereum testnet
 
 ### Testing
 
-- **[typescript-sdk/test/README.md](typescript-sdk/test/README.md)** - Test suite documentation
-  - Faucet tests
-  - Network probes
-  - Cleanup handling
+- **[aptos-testnet/test/README.md](aptos-testnet/test/README.md)** - Test suite documentation
 
 ## Architecture
 
@@ -108,8 +96,6 @@ Runtime Phase:
   Validators → New Accounts: X APT (TRANSFER) ← Production-like!
 ```
 
-<!-- SCOUT(#239) DOC: the tree below lists config/validator-config.yaml and typescript-sdk/, both deleted; aptos-testnet/ and ethereum-testnet/ are missing from it. -->
-
 ## Directory Structure
 
 ```
@@ -118,17 +104,17 @@ docker-testnet/
 ├── config/
 │   ├── README.md                # Docker configuration
 │   ├── docker-compose.yaml      # 4-validator setup
-│   ├── generate-genesis.sh      # Genesis generation script
-│   └── validator-config.yaml    # Node configuration
-└── typescript-sdk/
-    ├── README.md                # SDK documentation
-    ├── FAUCET.md                # Production-like faucet ⭐
-    ├── src/
-    │   ├── index.ts             # DockerTestnet class
-    │   └── genesis.ts           # Genesis generation
-    └── test/
-        ├── README.md            # Test documentation
-        └── faucet.test.ts       # Faucet tests
+│   └── generate-genesis.sh      # Genesis generation script
+├── aptos-testnet/               # @atomica/aptos-docker-testnet SDK
+│   ├── README.md                # SDK documentation
+│   ├── src/
+│   │   ├── index.ts             # DockerTestnet class
+│   │   ├── genesis.ts           # Genesis generation
+│   │   └── localnet.ts          # Test lifecycle helpers
+│   └── test/
+│       ├── README.md            # Test documentation
+│       └── faucet.test.ts       # Faucet tests (and others)
+└── ethereum-testnet/            # Ethereum Docker testnet and SDK
 ```
 
 ## Usage Examples
@@ -136,7 +122,7 @@ docker-testnet/
 ### Basic Testing
 
 ```typescript
-import { DockerTestnet } from "@atomica/docker-testnet";
+import { DockerTestnet } from "@atomica/aptos-docker-testnet";
 import { AptosAccount } from "aptos";
 
 describe("My Aptos Tests", () => {
@@ -193,24 +179,22 @@ console.log(`Epoch: ${info.epoch}, Block: ${info.block_height}`);
 | Magic accounts | Don't exist           | Only for bootstrap               |
 | Code behavior  | Standard transfers    | **Identical** standard transfers |
 
-<!-- SCOUT(#239) DOC: the install path below is the deleted SDK; the acceptance grep matches it. -->
-
 ## Installation
 
 ```bash
-cd source/docker-testnet/typescript-sdk
-npm install
-npm run build
+cd source/docker-testnet/aptos-testnet
+bun install
+bun run build
 ```
 
 ## Running Tests
 
 ```bash
 # All tests
-npm test
+bun run test
 
 # Specific test file
-npx bun test test/faucet.test.ts
+bun run test test/faucet.test.ts
 
 # With debug logging
 ATOMICA_DEBUG_TESTNET=1 npm test

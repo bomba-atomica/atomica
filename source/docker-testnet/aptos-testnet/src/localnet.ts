@@ -2,7 +2,7 @@
  * Localnet Management - Docker-based Single Validator Testnet
  *
  * This module provides a simplified interface for managing a single-validator
- * Docker testnet for development and testing. It wraps the @atomica/docker-testnet SDK.
+ * Docker testnet for development and testing. It wraps the DockerTestnet class in ./index.ts.
  *
  * KEY CHANGES FROM OLD VERSION:
  * - ✅ No longer requires local `aptos` binary
@@ -32,9 +32,8 @@
  * - `killZombies()` - REMOVED (Docker handles cleanup)
  * - Ports: Validator on 8080 (no faucet on 8081 anymore)
  *
- * See: ../docker-testnet/typescript-sdk/README.md
+ * See: ../README.md
  */
-// SCOUT(#239) EDIT: the header comment above names the old SDK twice ("@atomica/docker-testnet SDK" and its README path); the acceptance grep matches the README path.
 
 import { DockerTestnet } from "./index.js";
 import { resolve as pathResolve, dirname } from "path";

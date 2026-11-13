@@ -43,8 +43,6 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 <!-- SCOUT(#228) DOC: sealed-bids row: describes submit_cleartext_and_clear and finalize_reveal with a price hash; on-chain opening replaces them with open_bids. -->
 <!-- SCOUT(#236) DOC: settle and claim row: ClaimButton (a faucet mint) is removed for a release action; AuctionRevealer and SellFlow get exported. -->
 <!-- SCOUT(#238) DOC: rebate rows (on-chain and UI): the "no uniform-price anchor" reason is stale and the scaffolding, hook and FeeRebateDisplay are deleted; drop or reword both rows. -->
-<!-- SCOUT(#239) DOC: orchestrator row: the script lives in atomica-demo/scripts and its Aptos testnet import is repointed. -->
-<!-- SCOUT(#239) DOC: ZK row: the ZK scaffold crate is deleted; the acceptance grep also hits three v1.0 rows and one v2.0 row below. -->
 <!-- SCOUT(#241) DOC: auction creation UI row: loses the minimum price field. -->
 <!-- SCOUT(#243) DOC: windows row: after this issue the window timelock closes at the window close, not at a seller-picked time; the auction creation UI row loses the register-timelock step. -->
 
@@ -73,11 +71,11 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 | **Bid history UI** | `atomica-web-ui/src/components/BidHistory.tsx` | `live` |
 | **Settle / Claim UI** | `atomica-web-ui/src/components/SettleButton.tsx`, `ClaimButton.tsx` | `live` — Demo-phase payout; lifetime bounded by real cross-chain settlement |
 | **Network / contract status UI** | `atomica-web-ui/src/components/NetworkStatus.tsx`, `ContractStatus.tsx` | `live` |
-| **Dual-chain testnet orchestrator** | `docker-testnet/`, `atomica-web/scripts/dual-testnet-orchestrator.ts` | `live` |
+| **Dual-chain testnet orchestrator** | `docker-testnet/aptos-testnet/`, `atomica-demo/scripts/orchestrator.ts` | `live` |
 | **Browser integration test suite** | `atomica-web/tests/`, `atomica-web-ui/tests/` | `live` |
 | **Move unit + integration tests** | `atomica-move-contracts/sources/*_tests.move` | `live` |
 | **Ethereum state-proof SDK** | `state-proofs/` | `live` — proof fetching, MPT verification and IBE; the off-chain beacon light client was removed (issue 237) |
-| **ZK auction verification (`atomica-zkp`)** | `atomica-zkp/src/` | `missing` — `lib.rs` is 2 lines |
+| **ZK auction verification** | new ZK crate (planned) | `missing` — no code |
 
 See [`docs/architecture/v0-architecture.md`](architecture/v0-architecture.md) (authored in #83) for the component interaction diagram.
 
@@ -87,16 +85,15 @@ See [`docs/architecture/v0-architecture.md`](architecture/v0-architecture.md) (a
 
 Goal: same validator honesty assumption as v0.1; add an independent ZK circuit that re-verifies auction clearing so validators cannot manipulate outcomes without detection. ZK double verification is the only v1.0 addition: v0.1 already has no trusted relayer to replace.
 
-<!-- SCOUT(#239) DOC: three rows name the ZK scaffold crate path, which is deleted; reword to a planned location. -->
 <!-- SCOUT(#242) DOC: "Dual-gate settlement" row names Settlement.sol, a retired contract; the gate belongs on LockBox. -->
 
 | Capability | Owning module(s) under `source/` | Status |
 |---|---|---|
-| **ZK auction-clearing circuit** | `atomica-zkp/src/` | `missing` |
+| **ZK auction-clearing circuit** | new ZK crate (planned) | `missing` |
 | **On-chain ZK verifier (Ethereum)** | `evm-contracts/src/` (new) | `missing` |
 | **Dual-gate settlement (BLS + ZK must agree)** | `evm-contracts/src/Settlement.sol` | `missing` |
-| **On-chain bid-validity verification via ZK** | `atomica-zkp/src/` | `missing` |
-| **MoveVM-independent ZK execution** | `atomica-zkp/` (isolated Rust) | `missing` |
+| **On-chain bid-validity verification via ZK** | new ZK crate (planned) | `missing` |
+| **MoveVM-independent ZK execution** | new ZK crate (planned, isolated Rust) | `missing` |
 
 See [`docs/architecture/zk-verification.md`](architecture/zk-verification.md) (authored in #83).
 
@@ -106,12 +103,10 @@ See [`docs/architecture/zk-verification.md`](architecture/zk-verification.md) (a
 
 Goal: Bitcoin support via BitVM + STARK proofs; multi-step ratchet for atomic cross-chain releases; extension to additional chains (Solana, etc.).
 
-<!-- SCOUT(#239) DOC: STARK row names the ZK scaffold crate path, which is deleted. -->
-
 | Capability | Owning module(s) under `source/` | Status |
 |---|---|---|
 | **Bitcoin integration (BitVM)** | TBD | `missing` |
-| **STARK proof generation** | `atomica-zkp/src/` (planned) | `missing` |
+| **STARK proof generation** | new ZK crate (planned) | `missing` |
 | **Multi-step atomic ratchet** | TBD | `missing` |
 | **Multi-chain extension (Solana, etc.)** | TBD | `missing` |
 | **Cross-chain trust via ratchet (no bridge liveness assumption)** | TBD | `missing` |

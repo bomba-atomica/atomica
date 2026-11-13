@@ -134,9 +134,7 @@ The testnet includes a **production-like faucet** that avoids magic accounts:
 - No reliance on Core Resources (0xA550C18) during runtime
 - Test code behaves identically to production mainnet
 
-<!-- SCOUT(#239) DOC: the link below points into the deleted SDK, at a file that does not exist today. -->
-
-See **[typescript-sdk/FAUCET.md](../typescript-sdk/FAUCET.md)** for complete documentation.
+See `DockerTestnet.faucet()` in **[aptos-testnet/src/index.ts](../aptos-testnet/src/index.ts)** for the implementation.
 
 ## Troubleshooting
 
@@ -153,12 +151,10 @@ See **[typescript-sdk/FAUCET.md](../typescript-sdk/FAUCET.md)** for complete doc
 - Stop other services using ports 8080-8083
 - Run `docker compose down -v` to remove old containers
 
-<!-- SCOUT(#239) DOC: the list below names validator-config.yaml, which is deleted. -->
-
 ## Files
 
 - `docker-compose.yaml` - 4-validator testnet configuration
-- `validator-config.yaml` - Node configuration overrides
+- `generate-genesis.sh` - Genesis and validator config generation
 
 ## Building Custom Images
 

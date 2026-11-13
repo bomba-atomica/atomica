@@ -5,21 +5,6 @@ import { ETHEREUM_DEPLOYER_ADDRESS } from "../../../shared/test-constants";
 
 describe("Merkle-Patricia Trie Core", () => {
     describe("verifyMerkleProof", () => {
-        // SCOUT(#239) REMOVE: placeholder; it asserts that the result is a boolean.
-        test("should verify valid MPT proof", () => {
-            // This will test with real proof data from integration
-            const proof: Buffer[] = []; // RLP-encoded nodes
-            const root = Buffer.from("0".repeat(64), "hex");
-            const key = Buffer.from("abc123", "hex");
-            const value = Buffer.from("value", "utf8");
-
-            // Will implement verification logic
-            // For now, with empty proof and non-empty key/value, it should fail unless root is empty
-            const isValid = verifyMerkleProof(proof, root, key, value);
-
-            expect(typeof isValid).toBe("boolean");
-        });
-
         test("should reject proof with broken chain", () => {
             const invalidProof: Buffer[] = [
                 Buffer.from("f8", "hex"), // Invalid RLP
@@ -138,38 +123,7 @@ describe("Merkle-Patricia Trie Core", () => {
         });
     });
 
-    // SCOUT(#239) REMOVE: placeholder; it asserts two local constants (not in the issue text).
-    describe("Key Path Encoding", () => {
-        test("should handle nibble path encoding", () => {
-            // MPT uses nibble (4-bit) path encoding
-            // This tests the HP (Hex-Prefix) encoding used in Ethereum
-
-            // Leaf node with even-length path: [0x20, path...]
-            // Leaf node with odd-length path: [0x3?, path...]
-            // Extension node with even-length path: [0x00, path...]
-            // Extension node with odd-length path: [0x1?, path...]
-
-            // These constants will be used in implementation
-            const HP_TERMINATOR = 0x20;
-            const HP_EXTENSION = 0x00;
-
-            expect(HP_TERMINATOR).toBe(32);
-            expect(HP_EXTENSION).toBe(0);
-        });
-    });
-
     describe("Account Key Hashing", () => {
-        // SCOUT(#239) REMOVE: placeholder; it asserts the byte length of a constant address (not in the issue text).
-        test("should hash Ethereum address to get trie key", () => {
-            const address = ETHEREUM_DEPLOYER_ADDRESS;
-
-            // Address should be hashed with Keccak-256 to get the trie key
-            // This will be implemented in the verifier
-            const addressBuffer = Buffer.from(address.slice(2), "hex");
-
-            expect(addressBuffer.length).toBe(20); // Ethereum address is 20 bytes
-        });
-
         test("should produce consistent key for same address", () => {
             const address = ETHEREUM_DEPLOYER_ADDRESS;
 
@@ -179,32 +133,5 @@ describe("Merkle-Patricia Trie Core", () => {
 
             expect(key1.equals(key2)).toBe(true);
         });
-    });
-});
-
-// SCOUT(#239) REMOVE: placeholders; the three cases assert that a Buffer is a Buffer (not in the issue text).
-describe("RLP Encoding/Decoding", () => {
-    test("should decode RLP list", () => {
-        // RLP list: [item1, item2, ...]
-        // Will use @ethereumjs/rlp for this
-        const rlpList = Buffer.from("c3010203", "hex"); // [1, 2, 3]
-
-        // Decode will be tested with @ethereumjs/rlp
-        expect(rlpList).toBeInstanceOf(Buffer);
-    });
-
-    test("should decode RLP string", () => {
-        // RLP string encoding
-        const rlpString = Buffer.from("83646f67", "hex"); // "dog"
-
-        expect(rlpString).toBeInstanceOf(Buffer);
-    });
-
-    test("should handle long RLP lists", () => {
-        // Lists > 55 bytes use different encoding
-        // This is common for branch nodes with 17 elements
-        const longList = Buffer.from("f8", "hex"); // Long list prefix
-
-        expect(longList).toBeInstanceOf(Buffer);
     });
 });

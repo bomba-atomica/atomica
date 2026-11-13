@@ -1,5 +1,3 @@
-<!-- SCOUT(#239) DOC: historical planning spec: it names the older Aptos testnet SDK package and atomica-web paths that no longer exist; archive it rather than edit lines. -->
-
 # Dual Testnet Integration: Ethereum + Aptos
 ## Project Specification v1.0
 

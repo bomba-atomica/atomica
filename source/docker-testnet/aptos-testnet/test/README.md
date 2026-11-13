@@ -364,6 +364,20 @@ If you have access to the private atomica repository:
 
 ---
 
+### `timelock-genesis.test.ts`
+
+**Purpose**: Timelock key at genesis
+**What it tests**: `config/generate-genesis.sh` turns the timelock DKG on, so after the first reconfiguration the chain holds a ready timelock key
+
+**Key assertions**:
+
+- 4 validators reach epoch 2
+- `0x1::ibe_config::is_ready` returns true
+- `0x1::ibe_config::get_mpk` returns a 96-byte compressed G2 point
+- `0x1::ibe_config::get_epoch_config` equals the current epoch
+
+---
+
 ## Running the Tests
 
 **IMPORTANT**: These tests run **sequentially** (one at a time), not in parallel. This is enforced by the vitest configuration (`fileParallelism: false`). Each test starts its own localnet instance on ports 8080/8081, so running multiple tests simultaneously would cause port conflicts.
@@ -391,7 +405,6 @@ npm run test:meta tests/meta/secp256k1-account.test.ts
 ```
 
 <!-- SCOUT(#219) DOC: add an entry for auction-round-trip.test.ts; sections 9 and 10 below describe test files that do not exist, and lockbox-release.test.ts has no entry. -->
-<!-- SCOUT(#239) DOC: add an entry for the moved timelock-genesis.test.ts. -->
 
 ### 9. `cross-chain/lock-receipt-e2e.test.ts`
 

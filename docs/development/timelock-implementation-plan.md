@@ -350,8 +350,6 @@ Validate that the existing `aptos-dkg` crate and zapatos validator infrastructur
 
 ### Task Breakdown
 
-<!-- SCOUT(#239) DOC: the validator-config.yaml task 1.1 names twice is a planned file under source/atomica-aptos/docker-testnet/, not the source/docker-testnet/config/validator-config.yaml this issue deletes; reword or mark the plan historical. -->
-
 #### 1.1 Docker Build Infrastructure (Week 1)
 
 **Goal**: Set up Docker build system to compile binaries from local zapatos source

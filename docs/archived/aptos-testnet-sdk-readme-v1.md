@@ -1,4 +1,3 @@
-<!-- SCOUT(#239) REMOVE: whole directory source/docker-testnet/typescript-sdk; only .github/workflows/aptos-docker-testnet.yaml runs it, and three atomica-demo scripts import its package name without declaring it. -->
 # Aptos Docker Testnet - TypeScript SDK
 
 Production-like Aptos testnet for local development and testing. Runs 1-7 validators with full consensus, block production, and **production-like account funding**.
