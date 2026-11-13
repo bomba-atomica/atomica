@@ -94,8 +94,6 @@ const COLLATERAL = 500n * USD;
 /** Whole USD per whole FakeETH. The winner pays 200 FakeUSD for the supply. */
 const WIN_PRICE = 200n;
 const LOSE_PRICE = 100n;
-/** Reserve price `create_auction` still takes. */
-const MIN_PRICE = 1n;
 /** Bids close this long after the timelock is registered. */
 const BID_WINDOW_US = 240_000_000n;
 /** Gas the Ethereum-derivable accounts get (5 APT). */
@@ -373,7 +371,6 @@ describe.sequential("Live cross-chain round trip: lock, auction, outcome, releas
                 windowId,
                 LAUNCH_PAIR_BCS,
                 ethers.getBytes(seller.proof.lockId),
-                MIN_PRICE,
                 timelockId,
             ),
         );
