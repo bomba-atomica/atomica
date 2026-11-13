@@ -28,8 +28,6 @@ module atomica::lock_receipt {
     use std::vector;
     use std::signer;
     use aptos_std::table::{Self, Table};
-    // SCOUT(#238) REMOVE: the `simple_map` import, with `claimed_locks`.
-    use aptos_std::simple_map::{Self, SimpleMap};
     use aptos_framework::event;
     use aptos_framework::timestamp;
     use aptos_std::type_info;
@@ -137,10 +135,6 @@ module atomica::lock_receipt {
         /// Map from lock_id -> receipt
         receipts: Table<vector<u8>, LockReceipt<Chain, Asset>>,
 
-        // SCOUT(#238) REMOVE: `claimed_locks`; the whole map is read and rewritten on every registration, and `receipts` answers the same question.
-        /// Set of claimed lock IDs (for efficient replay checking)
-        claimed_locks: SimpleMap<vector<u8>, bool>,
-
         /// Total value locked (for metrics)
         total_locked: u256,
 
@@ -191,8 +185,6 @@ module atomica::lock_receipt {
         if (!exists<ReceiptRegistry<Chain, Asset>>(addr)) {
             move_to(account, ReceiptRegistry<Chain, Asset> {
                 receipts: table::new(),
-                // SCOUT(#238) REMOVE: the `claimed_locks` entry of a new registry.
-                claimed_locks: simple_map::create(),
                 total_locked: 0,
                 receipt_count: 0,
                 outcomes: table::new(),
@@ -314,10 +306,6 @@ module atomica::lock_receipt {
 
         // Add to receipts table
         table::add(&mut registry.receipts, lock_id, receipt);
-
-        // SCOUT(#238) REMOVE: the `claimed_locks` write of `store_receipt`.
-        // Mark as claimed in replay protection map
-        simple_map::add(&mut registry.claimed_locks, lock_id, true);
 
         // Update metrics
         registry.total_locked = registry.total_locked + amount;
@@ -501,15 +489,15 @@ module atomica::lock_receipt {
     // ===================== View Functions =====================
 
     #[view]
-    /// Check if a lock has been claimed
-    // SCOUT(#238) EDIT: `is_lock_claimed` answers from `table::contains(&registry.receipts, lock_id)`. The name means "registered", not status CLAIMED.
+    /// True when `lock_id` has a receipt in the registry. The name means
+    /// "registered", not status CLAIMED: the `receipts` table is the replay set.
     public fun is_lock_claimed<Chain, Asset>(lock_id: vector<u8>): bool acquires ReceiptRegistry {
         if (!exists<ReceiptRegistry<Chain, Asset>>(@atomica)) {
             return false
         };
 
         let registry = borrow_global<ReceiptRegistry<Chain, Asset>>(@atomica);
-        simple_map::contains_key(&registry.claimed_locks, &lock_id)
+        table::contains(&registry.receipts, lock_id)
     }
 
     #[view]

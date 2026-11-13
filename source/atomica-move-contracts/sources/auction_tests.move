@@ -247,23 +247,60 @@ module atomica::auction_tests {
         auction::get_auction(WINDOW_ID, default_pair_bcs());
     }
 
-    // SCOUT(#238) EDIT: `test_get_settlement_returns_price` asserts the second value is `total_supply`; this settled window has no bids, so the new rule returns 0 filled.
     #[test(framework = @0x1, atomica = @atomica)]
     fun test_get_settlement_returns_price(framework: &signer, atomica: &signer) {
         setup(framework);
         let pair_bcs = default_pair_bcs();
         let clearing_price = 2050u64;
         auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, TOTAL_SUPPLY, true, clearing_price);
-        let (price, supply) = auction::get_settlement(WINDOW_ID, pair_bcs);
+        let (price, filled) = auction::get_settlement(WINDOW_ID, pair_bcs);
         assert!(price == clearing_price, 1);
-        assert!(supply == TOTAL_SUPPLY, 2);
+        // The window has no bids, so nothing filled.
+        assert!(filled == 0, 2);
     }
 
-    // SCOUT(#238) TEST: get_settlement_returns_filled_total
-    // SCOUT(#238) TEST: get_settlement_zero_before_settle
+    // A window of supply 8 with winning bids of 4 and 3: the second value is the sum of
+    // the winners' fills (7), not the window supply.
+    #[test(atomica = @atomica, caller = @0x9999)]
+    fun get_settlement_returns_filled_total(atomica: &signer, caller: &signer) {
+        let pair_bcs = default_pair_bcs();
+        revealed_window(atomica, 8u256);
+
+        let alice_lock = b"filled_total_alice_lock_32bytes_";
+        let bob_lock   = b"filled_total_bob___lock_32bytes_";
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(alice_lock, @0xA11CE, 10_500_000_000u256, 1u64);
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(bob_lock,   @0xB0B,   7_175_000_000u256, 1u64);
+        lock_receipt::claim<Ethereum, FakeUSD>(@0xA11CE, alice_lock);
+        lock_receipt::claim<Ethereum, FakeUSD>(@0xB0B, bob_lock);
+        auction::test_insert_bid_with_qty(atomica, WINDOW_ID, pair_bcs, @0xA11CE, b"c", alice_lock, 4u256);
+        auction::test_insert_bid_with_qty(atomica, WINDOW_ID, pair_bcs, @0xB0B, b"c", bob_lock, 3u256);
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, vector[2100u64, 2050u64]);
+        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
+        auction::settle(caller, WINDOW_ID, pair_bcs);
+
+        let (price, filled) = auction::get_settlement(WINDOW_ID, pair_bcs);
+        assert!(price == 2050, 1);
+        assert!(filled == 7u256, 2);
+    }
+
+    // A cleared window that is not settled yet reads (0, 0), not its cleared price.
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun get_settlement_zero_before_settle(framework: &signer, atomica: &signer) {
+        setup(framework);
+        let pair_bcs = default_pair_bcs();
+        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, 5u256, false, 0);
+        auction::test_insert_bid_with_qty(atomica, WINDOW_ID, pair_bcs, @0xA11CE, b"c", b"lock_alice", 5u256);
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, vector[2000u64]);
+        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
+        let (_, _, _, settled, cleared_price) = auction::get_auction(WINDOW_ID, pair_bcs);
+        assert!(!settled && cleared_price == 2000, 1);
+
+        let (price, filled) = auction::get_settlement(WINDOW_ID, pair_bcs);
+        assert!(price == 0, 2);
+        assert!(filled == 0, 3);
+    }
     // SCOUT(#218) TEST: window_limits_view
 
-    // SCOUT(#238) EDIT: the nine `create_auction` calls of this file drop the `mpk_bytes` argument; the three tests that reach the lazy registry bootstrap (happy path, next window, duplicate) must call `auction::init_for_test` first.
     // SCOUT(#241) EDIT: the nine `create_auction` calls of this file drop the price argument.
     // SCOUT(#243) EDIT: the nine `create_auction` calls of this file drop `timelock_id`; the golden timelock 11 can no longer be bound to a window through `create_auction`.
 
@@ -275,10 +312,10 @@ module atomica::auction_tests {
     //   - Far-future window_id (> current + 1) aborts with E_STALE_WINDOW_ID (6).
     //   - Duplicate create_auction for same (window_id, pair) accumulates supply.
     //
-    // The seller signer is @atomica (= @0xcafe in dev) so that the lazy registry
-    // bootstrap (move_to(seller, ...)) publishes the AuctionRegistry at @atomica.
-    // On chain, init_module publishes it, so any seller may be first. A pre-inserted FakeETH LockReceipt is required for each call so
-    // that lock_receipt::claim can succeed without proof verification.
+    // init_module publishes the AuctionRegistry at @atomica, so each test that reaches
+    // the registry calls `auction::init_for_test` first. A pre-inserted FakeETH
+    // LockReceipt is required for each call so that lock_receipt::claim can succeed
+    // without proof verification.
 
     // Helper: initialize FakeETH registry and insert a receipt for a given lock_id, bound
     // to the current window and the default pair.
@@ -308,6 +345,7 @@ module atomica::auction_tests {
     #[test(atomica = @atomica)]
     fun test_create_auction_happy_path(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
         let pair_bcs    = default_pair_bcs();
         let lock_id     = b"eth_lock_receipt_id_32bytes_pad_";
         let seller_addr = @atomica; // @0xcafe in dev
@@ -318,9 +356,8 @@ module atomica::auction_tests {
 
         // The setup clock sits in window 5; use the current window.
         let window_id = auction::current_window_id();
-        let mpk_bytes = vector::empty<u8>();
         let timelock_id = auction_bid_wrapper_tests::register_live_timelock();
-        auction::create_auction(atomica, window_id, pair_bcs, lock_id, 2000u64, timelock_id, mpk_bytes);
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id, 2000u64, timelock_id);
 
         // get_auction must return the registered window.
         let (wid, supply, bid_count, settled, clearing_price) =
@@ -344,7 +381,7 @@ module atomica::auction_tests {
         insert_eth_receipt(atomica, lock_id, DERIVED_OWNER, 1_000_000_000_000_000_000u256);
         auction::create_auction(
             atomica, auction::current_window_id(), default_pair_bcs(), lock_id, 2000u64,
-            auction_bid_wrapper_tests::register_live_timelock(), vector::empty<u8>(),
+            auction_bid_wrapper_tests::register_live_timelock(),
         );
     }
 
@@ -361,7 +398,6 @@ module atomica::auction_tests {
         let window_id = auction::current_window_id();
         auction::create_auction(
             &owner, window_id, default_pair_bcs(), lock_id, 2000u64, auction_bid_wrapper_tests::register_live_timelock(),
-            vector::empty<u8>(),
         );
         let (_, supply, _, _, _) = auction::get_auction(window_id, default_pair_bcs());
         assert!(supply == lock_amount, 0);
@@ -376,6 +412,7 @@ module atomica::auction_tests {
     #[test(atomica = @atomica)]
     fun test_create_auction_next_window_accepted(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
         let pair_bcs    = default_pair_bcs();
         let lock_id     = b"eth_lock_receipt_next_window_pad_";
         let seller_addr = @atomica;
@@ -385,9 +422,8 @@ module atomica::auction_tests {
         let window_id = auction::current_window_id() + 1;
         insert_bound_eth_receipt(atomica, lock_id, seller_addr, lock_amount, window_id);
 
-        let mpk_bytes = vector::empty<u8>();
         let timelock_id = auction_bid_wrapper_tests::register_live_timelock();
-        auction::create_auction(atomica, window_id, pair_bcs, lock_id, 1900u64, timelock_id, mpk_bytes);
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id, 1900u64, timelock_id);
 
         let (wid, supply, _, _, _) = auction::get_auction(window_id, pair_bcs);
         assert!(wid == window_id, 1);
@@ -403,10 +439,9 @@ module atomica::auction_tests {
         timestamp::fast_forward_seconds(86400); // day 1, window_id = 2
         let pair_bcs    = default_pair_bcs();
         let lock_id     = vector::empty<u8>();
-        let mpk_bytes   = vector::empty<u8>();
         let timelock_id = 0u64;
         // window_id 0 < current 2 → stale.
-        auction::create_auction(atomica, 0u64, pair_bcs, lock_id, 100u64, timelock_id, mpk_bytes);
+        auction::create_auction(atomica, 0u64, pair_bcs, lock_id, 100u64, timelock_id);
     }
 
     // Far-future window_id (> current + 1) aborts with E_STALE_WINDOW_ID.
@@ -417,15 +452,15 @@ module atomica::auction_tests {
         // current == 0; window_id 100 > 0 + 1 → too far in the future.
         let pair_bcs    = default_pair_bcs();
         let lock_id     = vector::empty<u8>();
-        let mpk_bytes   = vector::empty<u8>();
         let timelock_id = 0u64;
-        auction::create_auction(atomica, 100u64, pair_bcs, lock_id, 100u64, timelock_id, mpk_bytes);
+        auction::create_auction(atomica, 100u64, pair_bcs, lock_id, 100u64, timelock_id);
     }
 
     // Duplicate create_auction for same (window_id, pair) accumulates total_supply.
     #[test(atomica = @atomica)]
     fun test_create_auction_duplicate_accumulates_supply(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
         let pair_bcs     = default_pair_bcs();
         let lock_id_a    = b"eth_lock_receipt_seller_a_32byte";
         let lock_id_b    = b"eth_lock_receipt_seller_b_32byte";
@@ -439,16 +474,28 @@ module atomica::auction_tests {
         insert_eth_receipt(atomica, lock_id_b, seller_addr, amount_b);
 
         let window_id   = auction::current_window_id();
-        let mpk_bytes   = vector::empty<u8>();
         let timelock_id = auction_bid_wrapper_tests::register_live_timelock();
 
         // First seller creates the window.
-        auction::create_auction(atomica, window_id, pair_bcs, lock_id_a, 2000u64, timelock_id, mpk_bytes);
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id_a, 2000u64, timelock_id);
         // Second seller joins the same window — supply accumulates.
-        auction::create_auction(atomica, window_id, pair_bcs, lock_id_b, 1900u64, timelock_id, mpk_bytes);
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id_b, 1900u64, timelock_id);
 
         let (_, supply, _, _, _) = auction::get_auction(window_id, pair_bcs);
         assert!(supply == expected, 1);
+    }
+
+    // create_auction never publishes the AuctionRegistry: without init_module it aborts.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 1, location = atomica::auction)] // E_AUCTION_NOT_FOUND
+    fun create_auction_without_registry_aborts(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        let lock_id = b"eth_lock_receipt_no_registry_pad";
+        insert_eth_receipt(atomica, lock_id, @atomica, 1_000_000_000_000_000_000u256);
+        auction::create_auction(
+            atomica, auction::current_window_id(), default_pair_bcs(), lock_id, 2000u64,
+            auction_bid_wrapper_tests::register_live_timelock(),
+        );
     }
 
     // SCOUT(#218) TEST: create_auction_at_seller_cap_aborts
@@ -459,7 +506,6 @@ module atomica::auction_tests {
     // SCOUT(#224) TEST: create_auction_stores_listed_pair
     // SCOUT(#224) TEST: allow_pair_only_package_account
     // SCOUT(#224) TEST: sellers_join_one_window_per_pair
-    // SCOUT(#238) TEST: create_auction_without_registry_aborts
     // SCOUT(#241) TEST: create_auction_takes_no_min_price
     // SCOUT(#243) TEST: first_create_auction_registers_the_window_timelock
     // SCOUT(#243) TEST: second_seller_joins_the_stored_timelock
@@ -723,88 +769,6 @@ module atomica::auction_tests {
     // SCOUT(#216) TEST: huge_quantity_does_not_overflow_clearing
     // SCOUT(#217) TEST: quote_for_fill_reads_whole_usd_prices (quote_for_fill(10^18, 2000) == 2000 * 10^6; `quote_for_fill` exists only in the unwind pull request (213))
 
-    // SCOUT(#238) REMOVE: this section, the three `compute_rebates` tests.
-    // ===================== compute_rebates — Phase 3b implementation tests =====================
-    //
-    // REBATE_COEFFICIENT = 0 in v0, so all rebate amounts are 0.
-    // Phase 3c will calibrate the coefficient and update these expected values.
-    //
-    // @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
-
-    // No-window case: compute_rebates returns empty vector when window is absent.
-    #[test(framework = @0x1)]
-    fun test_compute_rebates_returns_empty_when_no_window(framework: &signer) {
-        setup(framework);
-        let rebates = auction::compute_rebates(WINDOW_ID, default_pair_bcs(), 2000u64);
-        assert!(vector::length(&rebates) == 0, 1);
-    }
-
-    // Single-bidder fixture: with one winner at the clearing price the rebate is 0
-    // (REBATE_COEFFICIENT = 0 in v0; Phase 3c will calibrate).
-    #[test(framework = @0x1, atomica = @atomica)]
-    fun test_compute_rebates_single_bidder_zero_rebate(
-        framework: &signer,
-        atomica:   &signer,
-    ) {
-        setup(framework);
-        let pair_bcs = default_pair_bcs();
-        let supply: u256 = 5u256;
-        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, supply, false, 0);
-
-        // One winning bid at 2000, fill = 5.
-        auction::test_insert_bid_with_qty(
-            atomica, WINDOW_ID, pair_bcs, @0xA11CE, b"c", b"lock_alice", 5u256,
-        );
-        let prices = vector[2000u64];
-        auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, prices);
-        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
-
-        let rebates = auction::compute_rebates(WINDOW_ID, pair_bcs, 2000u64);
-        assert!(vector::length(&rebates) == 1, 1);
-        // REBATE_COEFFICIENT = 0 → amount = 0.
-        let (rebate_bidder, rebate_amount) = auction::test_rebate_fields(vector::borrow(&rebates, 0));
-        assert!(rebate_bidder == @0xA11CE, 2);
-        assert!(rebate_amount == 0u64, 3);
-    }
-
-    // Multi-bidder known-distance fixture: three winners above clearing price.
-    // Alice (2100), Bob (2050), Carol (2010) vs clearing_price = 2010.
-    // REBATE_COEFFICIENT = 0 → all amounts are 0 until Phase 3c calibration.
-    #[test(framework = @0x1, atomica = @atomica)]
-    fun test_compute_rebates_multi_bidder_known_distances(
-        framework: &signer,
-        atomica:   &signer,
-    ) {
-        setup(framework);
-        let pair_bcs = default_pair_bcs();
-        let supply: u256 = 10u256;
-        auction::test_insert_window(atomica, WINDOW_ID, pair_bcs, supply, false, 0);
-
-        // Alice (2100, 4), Bob (2050, 3), Carol (2010, 3) — all win, supply exactly filled.
-        auction::test_insert_bid_with_qty(
-            atomica, WINDOW_ID, pair_bcs, @0xA11CE, b"c", b"lock_alice", 4u256,
-        );
-        auction::test_insert_bid_with_qty(
-            atomica, WINDOW_ID, pair_bcs, @0xB0B, b"c", b"lock_bob", 3u256,
-        );
-        auction::test_insert_bid_with_qty(
-            atomica, WINDOW_ID, pair_bcs, @0xCA401, b"c", b"lock_carol", 3u256,
-        );
-        let prices = vector[2100u64, 2050u64, 2010u64];
-        auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, prices);
-        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
-
-        let rebates = auction::compute_rebates(WINDOW_ID, pair_bcs, CLEARING_PRICE_FIXTURE);
-        assert!(vector::length(&rebates) == 3, 1);
-        // All rebate amounts are 0 until Phase 3c calibrates REBATE_COEFFICIENT.
-        let i = 0u64;
-        while (i < 3u64) {
-            let (_, amount) = auction::test_rebate_fields(vector::borrow(&rebates, i));
-            assert!(amount == 0u64, 10 + i);
-            i = i + 1;
-        };
-    }
-
     // ===================== settle: named acceptance-criteria tests =====================
     //
     // These seven tests are the primary acceptance criteria for issue #131.
@@ -824,7 +788,6 @@ module atomica::auction_tests {
     //
     // Setup: 1 seller (5 ETH supply), 1 winning bid (price=2100, qty=5).
     // Expected total_filled = 5, clearing_price = 2100.
-    // SCOUT(#238) EDIT: `test_settle_distributes_proceeds_to_seller` reads the second `get_settlement` value as supply; it becomes the filled total (the same number here).
     #[test(atomica = @atomica, caller = @0x9999)]
     fun test_settle_distributes_proceeds_to_seller(
         atomica:   &signer,
@@ -861,12 +824,12 @@ module atomica::auction_tests {
         // Window is settled.
         assert!(auction::is_settled(WINDOW_ID, pair_bcs), 2);
 
-        // get_settlement returns (clearing_price, total_supply).
-        // total_supply = 5 — the amount of seller liquidity available.
+        // get_settlement returns (clearing_price, total_filled).
+        // Alice fills the whole supply: total_filled = 5.
         // Seller proceeds = clearing_price * total_filled = 2100 * 5 units.
-        let (settlement_price, settlement_supply) = auction::get_settlement(WINDOW_ID, pair_bcs);
+        let (settlement_price, settlement_filled) = auction::get_settlement(WINDOW_ID, pair_bcs);
         assert!(settlement_price == 2100, 3);
-        assert!(settlement_supply == 5u256, 4);
+        assert!(settlement_filled == 5u256, 4);
     }
 
     // test_settle_releases_losing_collateral
@@ -957,72 +920,9 @@ module atomica::auction_tests {
         let owner = aptos_framework::account::create_signer_for_test(DERIVED_OWNER);
         auction::create_auction(
             &owner, auction::current_window_id(), default_pair_bcs(), lock_id, 2000u64,
-            auction_bid_wrapper_tests::register_live_timelock(), vector::empty<u8>(),
+            auction_bid_wrapper_tests::register_live_timelock(),
         );
         atomica::fake_eth::mint_from_lock(&owner, lock_id);
-    }
-
-    // SCOUT(#238) REMOVE: `test_settle_applies_fee_rebates`.
-    // test_settle_applies_fee_rebates
-    //
-    // After settle(), compute_rebates returns a vector of Rebate entries for all
-    // bidders in the cleared window.  With REBATE_COEFFICIENT = 0 (v0 calibration
-    // deferred to Phase 3c), all rebate amounts are 0.  This test asserts that:
-    //   - compute_rebates is callable after settle()
-    //   - it returns one entry per bidder
-    //   - all amounts are 0 at the current coefficient
-    //
-    // Setup: 3 bids — Alice wins (price=2100), Bob wins (price=2050),
-    //        Carol loses (price=1900). Supply=7.
-    #[test(atomica = @atomica, caller = @0x9999)]
-    fun test_settle_applies_fee_rebates(
-        atomica:   &signer,
-        caller:    &signer,
-    ) {
-        let pair_bcs = default_pair_bcs();
-        let supply: u256 = 7u256;
-        revealed_window(atomica, supply);
-
-        let alice_lock = b"fee_rebate_alice_lock_32bytes_pa";
-        let bob_lock   = b"fee_rebate_bob___lock_32bytes_pa";
-        let carol_lock = b"fee_rebate_carol_lock_32bytes_pa";
-
-        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
-        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(alice_lock, @0xA11CE, 10_500_000_000u256, 1u64);
-        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(bob_lock,   @0xB0B,   7_175_000_000u256, 1u64);
-        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(carol_lock, @0xCA401, 6_650_000_000u256, 1u64);
-        lock_receipt::claim<Ethereum, FakeUSD>(@0xA11CE, alice_lock);
-        lock_receipt::claim<Ethereum, FakeUSD>(@0xB0B, bob_lock);
-        lock_receipt::claim<Ethereum, FakeUSD>(@0xCA401, carol_lock);
-
-        // Alice (2100, 4) + Bob (2050, 3) = 7 fills supply. Carol (1900, 2) loses.
-        auction::test_insert_bid_with_qty(
-            atomica, WINDOW_ID, pair_bcs, @0xA11CE, b"c", alice_lock, 4u256,
-        );
-        auction::test_insert_bid_with_qty(
-            atomica, WINDOW_ID, pair_bcs, @0xB0B, b"c", bob_lock, 3u256,
-        );
-        auction::test_insert_bid_with_qty(
-            atomica, WINDOW_ID, pair_bcs, @0xCA401, b"c", carol_lock, 2u256,
-        );
-        let prices = vector[2100u64, 2050u64, 1900u64];
-        auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, prices);
-
-        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
-        auction::settle(caller, WINDOW_ID, pair_bcs);
-
-        // compute_rebates must return 3 entries (one per bidder).
-        let clearing_price = 2050u64; // Bob's price is the marginal price
-        let rebates = auction::compute_rebates(WINDOW_ID, pair_bcs, clearing_price);
-        assert!(vector::length(&rebates) == 3, 1);
-
-        // REBATE_COEFFICIENT = 0 → all rebate amounts are 0 until Phase 3c.
-        let i = 0u64;
-        while (i < 3u64) {
-            let (_, amount) = auction::test_rebate_fields(vector::borrow(&rebates, i));
-            assert!(amount == 0u64, 10 + i);
-            i = i + 1;
-        };
     }
 
     // test_settle_emits_auction_settled_event
@@ -1201,12 +1101,12 @@ module atomica::auction_tests {
     // Issue #130: grade B→A coverage for submit_cleartext_and_clear.
     // Four new tests cover:
     //   1. Partial batch failure: atomicity guarantee — any invalid cleartext
-    //      aborts the whole call and no revealed_prices are written.
+    //      aborts the whole call and no bid price is written.
     //   2. Decryption key not yet revealed: timelock expired but DK not submitted
     //      by validators → abort from ibe_config with E_DECRYPTION_KEY_NOT_REVEALED.
     //   3. Auction not found: non-existent (window_id, pair) → E_AUCTION_NOT_FOUND.
     //   4. Idempotency: calling submit_cleartext_and_clear twice on the same window
-    //      overwrites revealed_prices and returns successfully (not idempotent by
+    //      overwrites the bid prices and returns successfully (not idempotent by
     //      spec, but the second call does not corrupt state when cleartexts match).
     //
     // @see docs/architecture/v0-architecture.md §2.6
@@ -1667,7 +1567,6 @@ module atomica::auction_tests {
         insert_eth_receipt(atomica, lock_id, @atomica, ETH);
         auction::create_auction(
             atomica, auction::current_window_id(), default_pair_bcs(), lock_id, 2000, TIMELOCK_ID,
-            vector::empty<u8>(),
         );
     }
 
@@ -1680,7 +1579,7 @@ module atomica::auction_tests {
         insert_bound_eth_receipt(atomica, lock_id, @atomica, ETH, auction::current_window_id() + 1);
         auction::create_auction(
             atomica, auction::current_window_id(), default_pair_bcs(), lock_id, 2000,
-            auction_bid_wrapper_tests::register_live_timelock(), vector::empty<u8>(),
+            auction_bid_wrapper_tests::register_live_timelock(),
         );
     }
 
@@ -1693,7 +1592,7 @@ module atomica::auction_tests {
         insert_eth_receipt(atomica, lock_id, @atomica, ETH);
         auction::create_auction(
             atomica, auction::current_window_id(), b"another-pair", lock_id, 2000,
-            auction_bid_wrapper_tests::register_live_timelock(), vector::empty<u8>(),
+            auction_bid_wrapper_tests::register_live_timelock(),
         );
     }
 }

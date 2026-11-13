@@ -4,7 +4,7 @@ Status: `live`
 
 ## Purpose
 
-React UI component library and custom hooks for the Atomica auction interface. Provides all user-facing components — auction creation, bid submission, settlement, claim, fee-rebate display, bid history, and wallet/network context — as well as the React hooks that wire those components to on-chain state. Depends on `@atomica/sdk` for headless protocol logic and has zero awareness of testnet orchestration or deployment scripts.
+React UI component library and custom hooks for the Atomica auction interface. Provides all user-facing components — auction creation, bid submission, settlement, claim, bid history, and wallet/network context — as well as the React hooks that wire those components to on-chain state. Depends on `@atomica/sdk` for headless protocol logic and has zero awareness of testnet orchestration or deployment scripts.
 
 ## Public API surface
 
@@ -13,7 +13,6 @@ React UI component library and custom hooks for the Atomica auction interface. P
 `src/index.ts` — re-exports everything below.
 
 <!-- SCOUT(#236) DOC: ClaimButton leaves this table; AuctionRevealer, SellFlow and ReleaseButton join it. -->
-<!-- SCOUT(#238) DOC: FeeRebateDisplay, useFeeRebate and the fee-rebate wording in Purpose go. -->
 
 ### Exported components
 
@@ -28,7 +27,6 @@ React UI component library and custom hooks for the Atomica auction interface. P
 | `TxButton` | `src/components/TxButton.tsx` |
 | `SettleButton` | `src/components/SettleButton.tsx` |
 | `ClaimButton` | `src/components/ClaimButton.tsx` |
-| `FeeRebateDisplay` | `src/components/FeeRebateDisplay.tsx` |
 | `BidHistory`, `BidHistoryEntry` | `src/components/BidHistory.tsx` |
 
 ### Exported hooks
@@ -37,7 +35,6 @@ React UI component library and custom hooks for the Atomica auction interface. P
 |---|---|
 | `useTokenBalances` | `src/hooks/useTokenBalances.ts` |
 | `useBidHistory`, `UseBidHistoryResult` | `src/hooks/useBidHistory.ts` |
-| `useFeeRebate`, `FeeRebateResult` | `src/hooks/useFeeRebate.ts` |
 
 ### Exported context / providers
 

@@ -380,11 +380,6 @@ export async function setupDualChainTestnet(
         deployerAddress: aptosModuleAddress,
         namedAddresses: { atomica: aptosModuleAddress },
         initFunctions: [
-            // SCOUT(#238) REMOVE: this registry::initialize call goes with registry.move.
-            {
-                functionId: `${aptosModuleAddress}::registry::initialize`,
-                args: ["hex:0123456789abcdef"],
-            },
             { functionId: `${aptosModuleAddress}::fake_eth::initialize`, args: [] },
             { functionId: `${aptosModuleAddress}::fake_usd::initialize`, args: [] },
             // Pin the LockBox, the token behind each asset (issue 171) and

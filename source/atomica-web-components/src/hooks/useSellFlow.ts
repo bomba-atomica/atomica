@@ -438,10 +438,6 @@ export function useSellFlow(
       // SCOUT(#224) EDIT: use the launch pair.
       // pairBcs: empty bytes for scaffold
       const pairBcs = SELL_PAIR_BCS;
-      // SCOUT(#238) REMOVE: the mpk argument.
-      // MPK: empty bytes for scaffold (create_auction does not read it yet)
-      const mpk = new Uint8Array(0);
-
       // SCOUT(#243) REMOVE: registerTimelock and the local one hour auctionEndTime; read the window deadline from the new view instead.
       // SCOUT(#225) EDIT: this call aborts with E_NOT_REGISTRAR once the validator image has the registrar check.
       // create_auction records the timelock that opens the window's bids, so
@@ -454,14 +450,12 @@ export function useSellFlow(
 
       // SCOUT(#241) EDIT: drop state.minPrice.
       // SCOUT(#243) EDIT: drop timelockId.
-      // SCOUT(#238) EDIT: drop mpk.
       const payload = getCreateAuctionPayload(
         windowId,
         pairBcs,
         lockIdBytes,
         state.minPrice,
         timelockId,
-        mpk,
       );
       await submitNativeTransaction(aptos, account, payload);
 

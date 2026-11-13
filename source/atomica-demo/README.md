@@ -86,12 +86,10 @@ bun run test:ui
 
 <!-- SCOUT(#241) DOC: Create Auction no longer sets a minimum price. -->
 <!-- SCOUT(#236) DOC: this list gains open, settle and release, and loses the faucet claim. -->
-<!-- SCOUT(#238) DOC: MPK Generation is not a client step; create_auction takes no key. -->
 
 - **Create Auction**: Lock FAKEETH and set minimum price
 - **Place Bid**: Submit encrypted bids using IBE
 - **Sealed-Bid**: Bids hidden until reveal phase
-- **MPK Generation**: Automatic master public key creation
 
 ### 4. Developer Tools
 

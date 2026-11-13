@@ -112,11 +112,6 @@ async function main() {
     deployerAddress: DEPLOYER_ADDR,
     namedAddresses: { atomica: DEPLOYER_ADDR },
     initFunctions: [
-      // SCOUT(#238) REMOVE: the registry::initialize init function.
-      {
-        functionId: `${DEPLOYER_ADDR}::registry::initialize`,
-        args: ["hex:0123456789abcdef"],
-      },
       {
         functionId: `${DEPLOYER_ADDR}::fake_eth::initialize`,
         args: [],
@@ -192,25 +187,6 @@ async function main() {
       // Bytecode only: "sparse" metadata exceeds the 60000-byte publish limit.
       "--included-artifacts",
       "none",
-      "--assume-yes",
-    ],
-    CONTRACTS_DIR,
-  );
-
-  // Init Registry
-  // SCOUT(#238) REMOVE: the registry::initialize run.
-  console.log("⚙️  Initializing Registry...");
-  await runCommand(
-    aptosBin,
-    [
-      "move",
-      "run",
-      "--function-id",
-      "default::registry::initialize",
-      "--args",
-      "hex:0123456789abcdef",
-      "--profile",
-      "default",
       "--assume-yes",
     ],
     CONTRACTS_DIR,

@@ -41,6 +41,7 @@ vi.mock("../src/transaction.js", () => ({
 // ─── Import after mocks ────────────────────────────────────────────────────────
 
 import {
+  areCoreContractsDeployed,
   isSettled,
   getSettlement,
   getMpk,
@@ -249,10 +250,25 @@ describe("getPinnedEthereumConfig", () => {
   });
 });
 
+describe("areCoreContractsDeployed", () => {
+  it("areCoreContractsDeployed returns true for a module list without registry", async () => {
+    vi.mocked(config.aptos.getAccountModules).mockResolvedValueOnce([
+      { abi: { name: "lock_receipt" } },
+      { abi: { name: "eth_proof" } },
+      { abi: { name: "auction" } },
+    ] as never);
+    await expect(areCoreContractsDeployed()).resolves.toBe(true);
+  });
+
+  it("returns false when a required module is missing", async () => {
+    vi.mocked(config.aptos.getAccountModules).mockResolvedValueOnce([
+      { abi: { name: "lock_receipt" } },
+    ] as never);
+    await expect(areCoreContractsDeployed()).resolves.toBe(false);
+  });
+});
+
 describe("planned tests (SCOUT)", () => {
-  it.todo(
-    "SCOUT(#238) areCoreContractsDeployed returns true for a module list without registry",
-  );
   it.todo(
     "SCOUT(#218) getWindowLimits reads the limits view and returns the bid cap, the seller cap and the two minimums",
   );

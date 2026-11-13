@@ -105,6 +105,7 @@ export const SELECTORS = {
     settleResult: "settle-result",
     settleWinner: "settle-winner",
     settleClearingPrice: "settle-clearing-price",
+    settleTotalFilled: "settle-total-filled",
   },
 
   // SCOUT(#236) REMOVE: the claimButton block; add a releaseButton block.
@@ -115,13 +116,6 @@ export const SELECTORS = {
     claimStatus: "claim-status",
     claimResult: "claim-result",
     claimAmount: "claim-amount",
-  },
-
-  // SCOUT(#238) REMOVE: the feeRebateDisplay block.
-  // FeeRebateDisplay
-  feeRebateDisplay: {
-    rebateAmount: "rebate-amount",
-    feeAmount: "fee-amount",
   },
 
   // BidHistory
@@ -146,7 +140,5 @@ export const {
   settleButton,
   // SCOUT(#236) REMOVE: flat export.
   claimButton,
-  // SCOUT(#238) REMOVE: flat export.
-  feeRebateDisplay,
   bidHistory,
 } = SELECTORS;

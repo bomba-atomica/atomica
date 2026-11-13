@@ -448,7 +448,19 @@ module atomica::auction_bid_wrapper_tests {
         auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
     }
 
-    // SCOUT(#238) EDIT: `open_bid_accepts_the_committed_price_and_finalizes` and two more tests of this file read `test_get_revealed_prices`; assert the `get_bid_info` prices instead.
+    // The opened price of every bid of the window, from `get_bid_info` (zero when unopened).
+    fun bid_prices(): vector<u64> {
+        let prices = vector::empty<u64>();
+        let i = 0u64;
+        let n = auction::get_bid_count(AUCTION_ID, pair());
+        while (i < n) {
+            let (_, _, _, _, price) = auction::get_bid_info(AUCTION_ID, pair(), i);
+            vector::push_back(&mut prices, price);
+            i = i + 1;
+        };
+        prices
+    }
+
     #[test(atomica = @atomica)]
     fun open_bid_accepts_the_committed_price_and_finalizes(atomica: &signer) {
         setup_window(atomica);
@@ -464,8 +476,7 @@ module atomica::auction_bid_wrapper_tests {
         assert!(opened && price == 2010, 1);
         let (_, reveal_final, refunded) = auction::get_window_status(AUCTION_ID, pair());
         assert!(reveal_final && !refunded, 2);
-        let prices = auction::test_get_revealed_prices(AUCTION_ID, pair());
-        assert!(prices == vector[2010u64], 3);
+        assert!(bid_prices() == vector[2010u64], 3);
     }
 
     // A relayer cannot lie about a price: the commitment pins it.
@@ -578,7 +589,7 @@ module atomica::auction_bid_wrapper_tests {
         );
         let (_, reveal_final, _) = auction::get_window_status(AUCTION_ID, pair());
         assert!(reveal_final, 2);
-        assert!(auction::test_get_revealed_prices(AUCTION_ID, pair()) == vector[2010u64, 1500u64], 3);
+        assert!(bid_prices() == vector[2010u64, 1500u64], 3);
     }
 
     #[test(atomica = @atomica)]
@@ -641,7 +652,7 @@ module atomica::auction_bid_wrapper_tests {
         // Opening window: reveal_expiry (deadline + 10 min) plus 10 min.
         timestamp::update_global_time_for_test(DEADLINE_US + 20 * MIN);
         auction::finalize_reveal(&bidder, AUCTION_ID, pair());
-        assert!(auction::test_get_revealed_prices(AUCTION_ID, pair()) == vector[2010u64, 0u64], 1);
+        assert!(bid_prices() == vector[2010u64, 0u64], 1);
 
         auction::clear_uniform_price(AUCTION_ID, pair());
         let results = auction::test_get_bid_results(AUCTION_ID, pair());
@@ -985,12 +996,11 @@ module atomica::auction_bid_wrapper_tests {
         lock_receipt::insert_test_receipt<Ethereum, FakeETH>(SELLER_LOCK, @atomica, 5u256, 1);
     }
 
-    // SCOUT(#238) EDIT: drop the `vector::empty<u8>()` mpk argument of `create_auction` in `create_with_timelock` and in `setup_funded_window`.
     // SCOUT(#241) EDIT: drop the price argument of `create_auction` in `create_with_timelock` and in `setup_funded_window`.
     // SCOUT(#243) EDIT: `create_with_timelock` cannot pick a timelock by id any more; the five `create_auction_rejects_*` and `review_create_auction_*` tests below need a new shape.
     fun create_with_timelock(atomica: &signer, timelock_id: u64) {
         auction::create_auction(
-            atomica, auction::current_window_id(), pair(), SELLER_LOCK, 2000, timelock_id, vector::empty<u8>(),
+            atomica, auction::current_window_id(), pair(), SELLER_LOCK, 2000, timelock_id,
         );
     }
 

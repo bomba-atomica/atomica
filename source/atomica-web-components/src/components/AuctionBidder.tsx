@@ -22,7 +22,6 @@ import { proveLock } from "../hooks/proveLock";
 import { saveBidPrice } from "../storage/bidStorage";
 
 // SCOUT(#228) EDIT: this header describes the commitment and the price_le8 || salt32 plaintext; rewrite it for the 8-byte price and the five-argument submit_bid.
-// SCOUT(#238) EDIT: this header says the stored price feeds useFeeRebate; that hook is removed.
 /**
  * UI panel for submitting a sealed bid on an active auction (v0 Beta).
  *
@@ -54,7 +53,7 @@ import { saveBidPrice } from "../storage/bidStorage";
  *     Calls `auction::submit_bid` via the SIWE-authenticated Aptos transaction
  *     flow with the V2 ciphertext, the price commitment, the lock ID as
  *     collateral margin and the bid quantity.  Persists the bid price to
- *     localStorage so {@link useFeeRebate} can compute the post-settlement rebate.
+ *     localStorage (`saveBidPrice`).
  *
  * `submit_bid` takes
  * `(window_id, pair_bcs, ciphertext, commitment, collateral_lock_id, quantity)`.
@@ -243,9 +242,9 @@ export function AuctionBidder() {
 
       // SCOUT(#235) EDIT: store price, salt and commitment with saveBidOpening, only after submitBid resolves.
       // SCOUT(#217) EDIT: the stored price changes unit with the input.
-      // SCOUT(#238) EDIT: nothing reads this value once useFeeRebate is deleted.
       // SCOUT(#228) REMOVE: nothing is stored once the salt is gone.
-      // Persist bid price in localStorage for post-settlement rebate computation
+      // Persist the bid price in localStorage. Nothing reads it yet; the bid
+      // identity issue (235) owns bid storage.
       // Key: windowId (string) used as auction identifier in this v0 shape
       saveBidPrice(windowId, account, price);
 

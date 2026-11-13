@@ -246,7 +246,6 @@ describe("waitForCertifiedBlock", () => {
 
 // ── getCreateAuctionPayload ───────────────────────────────────────────────────
 
-// SCOUT(#238) EDIT: no mpk argument.
 // SCOUT(#241) EDIT: no minimum price argument.
 // SCOUT(#243) EDIT: no timelock id argument.
 // SCOUT(#217) EDIT: MIN_PRICE = 500_000n reads as micro-dollars; use a whole-USD value while the field exists.
@@ -256,7 +255,6 @@ describe("getCreateAuctionPayload", () => {
   const LOCK_ID = new Uint8Array(32).fill(0xcd);
   const MIN_PRICE = 500_000n;
   const TIMELOCK_ID = 9n;
-  const MPK = new Uint8Array(96).fill(0xee);
 
   const build = () =>
     getCreateAuctionPayload(
@@ -265,22 +263,22 @@ describe("getCreateAuctionPayload", () => {
       LOCK_ID,
       MIN_PRICE,
       TIMELOCK_ID,
-      MPK,
     ) as InputEntryFunctionData;
 
   it("targets auction::create_auction", () => {
     expect(build().function).toBe("0xtest::auction::create_auction");
   });
 
-  it("sends 6 arguments in the Move order, timelock_id before mpk_bytes", () => {
-    // create_auction(seller, window_id, pair_bcs, lock_id, min_price, timelock_id, mpk_bytes)
-    expect(build().functionArguments).toEqual([
+  it("getCreateAuctionPayload builds no mpk argument", () => {
+    // create_auction(seller, window_id, pair_bcs, lock_id, min_price, timelock_id)
+    const args = build().functionArguments;
+    expect(args).toHaveLength(5);
+    expect(args).toEqual([
       WINDOW_ID,
       PAIR_BCS,
       LOCK_ID,
       MIN_PRICE,
       TIMELOCK_ID,
-      MPK,
     ]);
   });
 
@@ -322,9 +320,6 @@ describe("timelockIdFromEvents", () => {
 describe("planned tests (SCOUT)", () => {
   it.todo(
     "SCOUT(#221) getRegisterLockPayload sends eight arguments and no deadline",
-  );
-  it.todo(
-    "SCOUT(#238) getCreateAuctionPayload builds no mpk argument (five arguments only while min_price and timelock_id remain)",
   );
   it.todo(
     "SCOUT(#241) getCreateAuctionPayload has no price value between the lock id and the timelock id",

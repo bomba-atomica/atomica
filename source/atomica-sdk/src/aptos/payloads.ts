@@ -121,8 +121,7 @@ export async function areContractsDeployed(): Promise<boolean> {
 }
 
 export async function areCoreContractsDeployed(): Promise<boolean> {
-  // SCOUT(#238) EDIT: drop "registry" from the required modules, because registry.move is deleted.
-  const requiredModules = ["registry", "lock_receipt", "eth_proof"];
+  const requiredModules = ["lock_receipt", "eth_proof"];
   try {
     const modules = await aptos.getAccountModules({
       accountAddress: CONTRACT_ADDR,
@@ -150,7 +149,6 @@ export async function getLaunchPairBcs(): Promise<Uint8Array> {
   throw new Error("NOT_IMPLEMENTED: SCOUT(#224) getLaunchPairBcs");
 }
 
-// SCOUT(#238) EDIT: drop the mpkBytes parameter and argument; create_auction has no _mpk_bytes.
 // SCOUT(#241) EDIT: drop the minPrice parameter and argument; create_auction has no min_price.
 // SCOUT(#243) EDIT: drop the timelockId parameter and argument; create_auction registers the window's timelock itself.
 // SCOUT(#217) EDIT: minPrice is a whole-USD price for as long as the reserve price exists.
@@ -158,7 +156,7 @@ export async function getLaunchPairBcs(): Promise<Uint8Array> {
  * Build payload for auction::create_auction (v0 Beta global-registry).
  *
  *   create_auction(seller, window_id, pair_bcs, lock_id, min_price,
- *                  timelock_id, mpk_bytes)
+ *                  timelock_id)
  *
  * `pairBcs` is the BCS-encoded Pair struct; callers can compute it with
  * `bcs.serialize` or pass a pre-encoded byte array.
@@ -173,22 +171,13 @@ export function getCreateAuctionPayload(
   lockId: Uint8Array,
   minPrice: bigint,
   timelockId: bigint,
-  mpkBytes: Uint8Array,
 ): InputGenerateTransactionPayloadData {
   return {
     function: `${CONTRACT_ADDR}::auction::create_auction`,
-    functionArguments: [
-      windowId,
-      pairBcs,
-      lockId,
-      minPrice,
-      timelockId,
-      mpkBytes,
-    ],
+    functionArguments: [windowId, pairBcs, lockId, minPrice, timelockId],
   };
 }
 
-// SCOUT(#238) EDIT: drop the mpkBytes parameter.
 // SCOUT(#241) EDIT: drop the minPrice parameter.
 // SCOUT(#243) EDIT: drop the timelockId parameter.
 export async function submitCreateAuction(
@@ -198,19 +187,11 @@ export async function submitCreateAuction(
   lockId: Uint8Array,
   minPrice: bigint,
   timelockId: bigint,
-  mpkBytes: Uint8Array,
 ) {
   return await submitNativeTransaction(
     aptos,
     ethAddress,
-    getCreateAuctionPayload(
-      windowId,
-      pairBcs,
-      lockId,
-      minPrice,
-      timelockId,
-      mpkBytes,
-    ),
+    getCreateAuctionPayload(windowId, pairBcs, lockId, minPrice, timelockId),
   );
 }
 
@@ -491,13 +472,13 @@ export async function isSettled(
   return result[0] as boolean;
 }
 
-// SCOUT(#238) EDIT: get_settlement returns the sum of the winners' fills, not total_supply; fix the doc and keep the field name.
 // SCOUT(#217) EDIT: clearingPrice is whole USD per whole base token; say so in the doc.
 /**
  * Query `auction::get_settlement` view function (v0 Beta window-keyed).
  *
- * Returns { clearingPrice, totalFilled } after settlement.
- * Aborts if no window exists for (windowId, pairBcs).
+ * Returns { clearingPrice, totalFilled } after settlement. `totalFilled` is
+ * the sum of the winners' fills, not the window supply. Both are 0 before the
+ * window settles. Aborts if no window exists for (windowId, pairBcs).
  *
  * @see docs/architecture/v0-architecture.md §2.7
  */
@@ -575,14 +556,9 @@ export async function getBidResults(
       isWinner: is_winner,
     }));
   } catch (e: unknown) {
-    // SCOUT(#238) EDIT: stop matching E_NOT_IMPLEMENTED below; the abort code is deleted (the issue lists only the two UI matches).
     // Return empty array for not-yet-settled windows to allow callers to handle gracefully.
     const msg = e instanceof Error ? e.message : String(e);
-    if (
-      msg.includes("E_NOT_IMPLEMENTED") ||
-      msg.includes("ABORTED") ||
-      msg.includes("abort_code")
-    ) {
+    if (msg.includes("ABORTED") || msg.includes("abort_code")) {
       return [];
     }
     throw e;
@@ -600,72 +576,6 @@ export interface WindowLimits {
 // SCOUT(#218) ADD: reader for the window limits view.
 export async function getWindowLimits(): Promise<WindowLimits> {
   throw new Error("NOT_IMPLEMENTED: SCOUT(#218) getWindowLimits");
-}
-
-// SCOUT(#238) REMOVE: the rebate entry type.
-/**
- * Per-bidder rebate entry returned by the `auction::compute_rebates` view function.
- *
- * @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
- */
-export interface Rebate {
-  /** Aptos address of the bidder. */
-  bidder: string;
-  /** Rebate amount in quote-token micro-units. 0 until Phase 3c impl. */
-  amount: bigint;
-}
-
-// SCOUT(#238) REMOVE: fetchRebates and its read of auction::compute_rebates.
-// SCOUT(#217) EDIT: clearingPrice is a whole-USD price for as long as this reader exists.
-/**
- * Query `auction::compute_rebates` view function (Phase 3c scaffold).
- *
- * Returns a `Rebate[]` for all bidders in the specified window based on their
- * distance to the uniform clearing price.  Coefficient calibration is TBD in v0;
- * the Move body aborts with E_NOT_IMPLEMENTED (99) until Phase 3c impl lands.
- *
- * Callers must handle the `E_NOT_IMPLEMENTED` abort gracefully — this function
- * returns `null` when the on-chain function is not yet implemented, allowing
- * the UI to show a "pending" state.
- *
- * @param windowId      - Auction window ID
- * @param pairBcs       - BCS-encoded Pair struct
- * @param clearingPrice - Uniform clearing price from `get_settlement`
- * @returns Array of {@link Rebate} entries, or `null` if not yet implemented.
- *
- * @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
- */
-export async function fetchRebates(
-  windowId: bigint,
-  pairBcs: Uint8Array,
-  clearingPrice: bigint,
-): Promise<Rebate[] | null> {
-  try {
-    const result = await aptos.view({
-      payload: {
-        function: `${CONTRACT_ADDR}::auction::compute_rebates`,
-        functionArguments: [windowId, pairBcs, clearingPrice],
-      },
-    });
-    // The Move function returns vector<Rebate> serialised as an array of objects.
-    const raw = result[0] as Array<{ bidder: string; amount: string }>;
-    return raw.map(({ bidder, amount }) => ({
-      bidder,
-      amount: BigInt(amount),
-    }));
-  } catch (e: unknown) {
-    // E_NOT_IMPLEMENTED (99) abort from scaffold — return null for "pending" state.
-    const msg = e instanceof Error ? e.message : String(e);
-    if (
-      msg.includes("E_NOT_IMPLEMENTED") ||
-      msg.includes("ABORTED") ||
-      msg.includes('abort_code":99') ||
-      msg.includes("abort_code: 99")
-    ) {
-      return null;
-    }
-    throw e;
-  }
 }
 
 // SCOUT(#236) REMOVE: the faucet claim payload.
@@ -713,7 +623,6 @@ export async function getFakeEthBalance(ownerAddr: string): Promise<bigint> {
   return BigInt(result[0] as string);
 }
 
-// SCOUT(#238) EDIT: AuctionCreator is the only caller and stops fetching the key once create_auction has no mpk argument.
 /**
  * Query `timelock::get_mpk` view function.
  *

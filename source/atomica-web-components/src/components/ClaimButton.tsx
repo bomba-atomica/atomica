@@ -1,5 +1,4 @@
 // SCOUT(#236) REMOVE: whole file (the claim mints the clearing price from the public faucet and moves nothing from the seller).
-// SCOUT(#238) EDIT: the E_NOT_IMPLEMENTED note in the doc comment below goes with the abort code; moot once the file is deleted.
 // SCOUT(#217) EDIT: line 102 passes the clearing price to submitClaim as a FakeETH amount; moot once the file is deleted.
 import { useState, useEffect, useCallback } from "react";
 import {
@@ -37,8 +36,7 @@ interface Props {
  * current user is the clearing winner) is deferred to Phase 3b (#86b) when
  * bidder collateral verification is implemented.
  *
- * In Phase 3a the Claim button is shown but always disabled (scaffold body
- * aborts with E_NOT_IMPLEMENTED in the Move contract).
+ * In Phase 3a the Claim button is shown but always disabled.
  *
  * v0 Beta breaking change: `isSettled` and `getSettlement` now take
  * `(windowId, pairBcs)` instead of `(sellerAddress)`. The `winner` field

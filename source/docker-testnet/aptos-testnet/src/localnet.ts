@@ -181,7 +181,6 @@ export async function fundAccount(address: string, amount: number = 100_000_000)
     return txHash;
 }
 
-// SCOUT(#238) EDIT: the deployContracts comment below lists the registry module and its initialize step, which are deleted.
 /** Guard flag to prevent duplicate contract deployments */
 let contractsDeployed = false;
 
@@ -192,9 +191,8 @@ let contractsDeployed = false;
  * 1. Uses Docker container's aptos CLI (no local binary needed!)
  * 2. Copies contracts into validator container
  * 3. Publishes atomica-move-contracts package
- * 4. Initializes registry module
- * 5. Initializes fake_eth module
- * 6. Initializes fake_usd module
+ * 4. Initializes fake_eth module
+ * 5. Initializes fake_usd module
  *
  * KEY BENEFIT:
  * - No local `aptos` binary needed AT ALL! ✅
@@ -204,7 +202,7 @@ let contractsDeployed = false;
  * IMPORTANT:
  * - Localnet must be running first (call setupLocalnet())
  * - Takes ~30-60 seconds to complete
- * - Modules deployed: registry, fake_eth, fake_usd
+ * - Modules initialized: fake_eth, fake_usd
  * - Contracts deployed to DEPLOYER_ADDR
  *
  * @throws Error if localnet not running or deployment fails
@@ -226,11 +224,6 @@ export async function deployContracts(): Promise<void> {
         deployerAddress: DEPLOYER_ADDR,
         namedAddresses: { atomica: DEPLOYER_ADDR },
         initFunctions: [
-            // SCOUT(#238) REMOVE: this registry::initialize call goes with registry.move.
-            {
-                functionId: `${DEPLOYER_ADDR}::registry::initialize`,
-                args: ["hex:0123456789abcdef"],
-            },
             {
                 functionId: `${DEPLOYER_ADDR}::fake_eth::initialize`,
                 args: [],

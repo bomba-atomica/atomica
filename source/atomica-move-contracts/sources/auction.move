@@ -66,13 +66,7 @@ module atomica::auction {
     // ===================== Error Codes =====================
 
     const E_AUCTION_NOT_FOUND: u64 = 1;
-    // SCOUT(#238) REMOVE: `E_AUCTION_ENDED` is never raised.
-    const E_AUCTION_ENDED: u64 = 2;
     const E_AUCTION_NOT_ENDED: u64 = 3;
-    // SCOUT(#238) REMOVE: `E_BID_TOO_LOW` is never raised.
-    const E_BID_TOO_LOW: u64 = 4;
-    // SCOUT(#238) REMOVE: `E_ALREADY_SETTLED` is never raised either (`E_WINDOW_ALREADY_SETTLED` is the live code); the issue text does not list it.
-    const E_ALREADY_SETTLED: u64 = 5;
 
     /// Caller supplied a window_id that is strictly less than the current window.
     /// Only the current window and the immediately next window are accepted.
@@ -90,9 +84,11 @@ module atomica::auction {
     /// The window has already been settled.
     const E_WINDOW_ALREADY_SETTLED: u64 = 11;
 
-    // SCOUT(#238) REMOVE: `E_NOT_IMPLEMENTED`, but only after every SCOUT ADD stub of this module has a real body: the stubs abort with it.
-    /// Scaffold stub sentinel — all Phase 3a entry function bodies abort with this
-    /// code until their implementations land in #86b–#86f.
+    /// Scout stub sentinel. These stubs abort with it until their issues build them:
+    /// `allow_pair`, `is_pair_allowed` and `launch_pair_bcs` (pair allowlist, 224),
+    /// `get_window_limits` (caps, 218), `open_bids` (ciphertext opening, 228), and
+    /// `timelock_registrar_address`, `window_timelock` and `window_deadline_us`
+    /// (timelock registration, 243). The issue that builds the last stub deletes it.
     const E_NOT_IMPLEMENTED: u64 = 99;
 
     // New abort codes. The open unwind pull request (213) takes 32 to 36, so these start at 37.
@@ -209,15 +205,6 @@ module atomica::auction {
     /// FakeETH wei per whole FakeETH (18 decimals).
     const BASE_UNIT: u256 = 1_000_000_000_000_000_000;
 
-    // ===================== Fee/Rebate Constants =====================
-
-    // SCOUT(#238) REMOVE: this section and `REBATE_COEFFICIENT`.
-    /// Distance-to-clearing rebate coefficient.
-    /// Formula calibration is explicitly TBD in v0 — this placeholder will be
-    /// replaced with a calibrated value in the Phase 3c implementation follow-up.
-    /// @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
-    const REBATE_COEFFICIENT: u64 = 0; // TBD calibration Phase 3c impl
-
     // ===================== Types =====================
 
     /// Trading pair descriptor.
@@ -240,19 +227,6 @@ module atomica::auction {
     struct TimelockRegistrar has key {
         extend_ref:       aptos_framework::object::ExtendRef,
         window_timelocks: Table<u64, u64>,
-    }
-
-    // SCOUT(#238) REMOVE: `Rebate`.
-    /// Per-bidder rebate entry returned by `compute_rebates`.
-    ///
-    /// The rebate amount is proportional to the distance between the bidder's
-    /// revealed price and the uniform clearing price.  Coefficient calibration
-    /// is deferred to the Phase 3c implementation follow-up.
-    ///
-    /// @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
-    struct Rebate has copy, drop, store {
-        bidder: address,
-        amount: u64,
     }
 
     // SCOUT(#216) EDIT: `SealedBid` gains the collateral amount claimed at submission and a validity flag set at opening. The receipt table already holds that amount (`lock_receipt::get_receipt`, read by `settle_locks` in the unwind pull request (213)), so only the flag strictly needs a new field.
@@ -293,7 +267,6 @@ module atomica::auction {
 
     // SCOUT(#217) DOC: state the unit of `WindowState.clearing_price`.
     // SCOUT(#228) EDIT: `WindowState` gains the opening cursor of `open_bids`; `reveal_final` then means every bid is opened.
-    // SCOUT(#238) REMOVE: `WindowState.revealed_prices`; clearing reads `bids[i].price`.
     // SCOUT(#241) REMOVE: `WindowState.min_prices` and the "index-aligned with min_prices" note on `lock_ids`.
     /// Per-window clearing state within the global registry.
     /// @see docs/architecture/v0-architecture.md §2.3
@@ -311,11 +284,6 @@ module atomica::auction {
         clearing_price:   u64,
         lock_ids:         vector<vector<u8>>, // seller LockReceipt IDs consumed (index-aligned with min_prices)
         min_prices:       vector<u64>,        // per-seller minimum acceptable clearing price
-        /// Revealed cleartext prices, index-aligned to bids.
-        /// Populated by submit_cleartext_and_clear after IBE decryption key is released.
-        /// Empty until submit_cleartext_and_clear succeeds.
-        /// @see docs/architecture/v0-architecture.md §2.6
-        revealed_prices:  vector<u64>,
         /// True once `finalize_reveal` ran. Openings are closed and clearing may run.
         reveal_final:     bool,
         /// True once the window was refunded because its timelock expired.
@@ -557,23 +525,17 @@ module atomica::auction {
     /// to `total_supply`, and appends the `lock_id` and `min_price` to the
     /// parallel vectors `lock_ids` / `min_prices`.
     ///
-    /// `mpk_bytes` is accepted but not stored in Phase 3a — IBE MPK on-chain
-    /// fetch is wired in follow-up issue #90.
-    ///
     /// `timelock_id` is the on-chain timelock registered via
     /// `ibe_config::register_timelock` that controls IBE key release for this
     /// window. It must be registered (E_TIMELOCK_NOT_REGISTERED), in the current
     /// epoch (E_TIMELOCK_WRONG_EPOCH), `Pending` (E_TIMELOCK_NOT_PENDING), and its
     /// deadline must be in the future (E_TIMELOCK_DEADLINE_PASSED).
     ///
-    /// Call-site break from Demo phase:
-    ///   payloads.ts::getCreateAuctionPayload(lockId, minPrice, duration, mpk)
-    ///   → (window_id, pair_bcs, lock_id, min_price, timelock_id, mpk_bytes)
+    /// Arguments after the signer: (window_id, pair_bcs, lock_id, min_price, timelock_id).
     ///
     /// @see docs/architecture/v0-architecture.md §2.3
     // SCOUT(#218) EDIT: `create_auction` aborts when the window holds `MAX_SELLER_LOCKS_PER_WINDOW` locks, or when the claimed lock is below `MIN_SELLER_LOCK_AMOUNT`.
     // SCOUT(#224) EDIT: `create_auction` aborts unless `pair_bcs` is on the allowlist; a new window stores the listed `Pair`.
-    // SCOUT(#238) REMOVE: the `_mpk_bytes` argument of `create_auction` and its doc lines above.
     // SCOUT(#241) REMOVE: the `min_price` argument of `create_auction` and its doc lines above.
     // SCOUT(#243) EDIT: `create_auction` drops `timelock_id`; the first call for a window id registers its timelock with deadline `eth_proof::window_close_secs(window_id)`, later calls join it.
     public entry fun create_auction(
@@ -583,7 +545,6 @@ module atomica::auction {
         lock_id:     vector<u8>,
         min_price:   u64,
         timelock_id: u64,
-        _mpk_bytes:  vector<u8>,  // reserved — IBE MPK wired in #90
     ) acquires AuctionRegistry {
         // 1. Validate window_id: reject stale (< current) and far-future (> current + 1).
         let current = current_window_id();
@@ -611,16 +572,8 @@ module atomica::auction {
             seller_addr, lock_id, window_id, pair_hash(pair_bcs),
         );
 
-        // 3. Ensure the global AuctionRegistry exists at @atomica.
-        //
-        // init_module publishes it. Move unit tests that skip init_module
-        // still bootstrap it here when @atomica is the first seller.
-        // SCOUT(#238) REMOVE: this registry bootstrap; abort `E_AUCTION_NOT_FOUND` when the registry is missing.
-        if (!exists<AuctionRegistry>(@atomica)) {
-            move_to(seller, AuctionRegistry {
-                windows: table::new(),
-            });
-        };
+        // 3. The global AuctionRegistry must exist at @atomica (init_module publishes it).
+        assert!(exists<AuctionRegistry>(@atomica), E_AUCTION_NOT_FOUND);
 
         // 4. Build the registry key and either create or update the window.
         let key = make_window_key(window_id, pair_bcs);
@@ -646,8 +599,6 @@ module atomica::auction {
                 lock_ids:        vector::singleton(lock_id),
                 // SCOUT(#241) REMOVE: the `min_prices` entry of a new window.
                 min_prices:      vector::singleton(min_price),
-                // SCOUT(#238) REMOVE: the `revealed_prices` entry of a new window.
-                revealed_prices: vector::empty(),
                 reveal_final:    false,
                 refunded:        false,
                 bid_results:     vector::empty(),
@@ -854,24 +805,16 @@ module atomica::auction {
         opened
     }
 
-    /// Closes openings: copies the opened prices into `revealed_prices` (zero for an
-    /// unopened bid), sets `reveal_final`, and clears the window at the uniform price.
+    /// Closes openings: sets `reveal_final` and clears the window at the uniform price
+    /// on `bids[i].price` (zero for an unopened bid).
     /// Every finalizing path (`open_bid`, `submit_cleartext_and_clear`, `finalize_reveal`)
     /// therefore leaves the window ready for `settle`.
     ///
     /// @see docs/architecture/v0-architecture.md §2.6 and §2.7
     // SCOUT(#228) EDIT: `open_bids` calls `finalize_internal` when the cursor passes the last bid; the `RevealFinalized` event goes away.
-    // SCOUT(#238) EDIT: `finalize_internal` stops copying prices into `revealed_prices`.
     fun finalize_internal(state: &mut WindowState) {
-        let prices = vector::empty<u64>();
-        let i = 0u64;
         let n = vector::length(&state.bids);
-        while (i < n) {
-            vector::push_back(&mut prices, vector::borrow(&state.bids, i).price);
-            i = i + 1;
-        };
         let opened_count = count_opened(state);
-        state.revealed_prices = prices;
         state.reveal_final = true;
         event::emit(RevealFinalized { window_id: state.window_id, bid_count: n, opened_count });
         clear_internal(state);
@@ -1173,7 +1116,7 @@ module atomica::auction {
     /// `total_supply` exactly.
     ///
     /// Algorithm (§2.7):
-    ///   1. Build an index array sorted descending by revealed_prices.
+    ///   1. Build an index array sorted descending by `bids[i].price`.
     ///   2. Walk sorted indices, accumulating quantity until total_supply is met.
     ///   3. The last bid whose cumulative quantity does not exceed supply sets
     ///      the clearing price. If that bid would overfill, it gets a partial
@@ -1182,12 +1125,11 @@ module atomica::auction {
     ///   4. Write BidResult for each bid into WindowState.bid_results.
     ///   5. Write clearing_price into WindowState.clearing_price.
     ///
-    /// Precondition: the reveal is final, so `revealed_prices` is populated.
+    /// Precondition: the reveal is final, so every opened bid holds its price.
     /// Callers: `finalize_internal` and `clear_uniform_price`.
     ///
     /// @see docs/architecture/v0-architecture.md §2.7
     // SCOUT(#216) EDIT: `clear_internal` skips an invalid bid like an unopened one, and compares `qty <= supply - accumulated` so a huge quantity cannot overflow.
-    // SCOUT(#238) EDIT: `clear_internal` reads `bids[i].price` instead of `revealed_prices`, and loses `found_marginal`.
     fun clear_internal(state: &mut WindowState) {
         let bid_count = vector::length(&state.bids);
 
@@ -1208,16 +1150,15 @@ module atomica::auction {
             k = k + 1;
         };
 
-        // Insertion sort: sort sorted_idx descending by revealed_prices[sorted_idx[i]].
+        // Insertion sort: sort sorted_idx descending by bids[sorted_idx[i]].price.
         let i = 1u64;
         while (i < bid_count) {
             let j = i;
             while (j > 0) {
                 let idx_j   = *vector::borrow(&sorted_idx, j);
                 let idx_j1  = *vector::borrow(&sorted_idx, j - 1);
-                // SCOUT(#238) EDIT: the sort reads `bids[idx].price`, not `revealed_prices`.
-                let price_j  = *vector::borrow(&state.revealed_prices, idx_j);
-                let price_j1 = *vector::borrow(&state.revealed_prices, idx_j1);
+                let price_j  = vector::borrow(&state.bids, idx_j).price;
+                let price_j1 = vector::borrow(&state.bids, idx_j1).price;
                 if (price_j > price_j1) {
                     // Swap
                     *vector::borrow_mut(&mut sorted_idx, j)     = idx_j1;
@@ -1238,8 +1179,6 @@ module atomica::auction {
         // (the last bid that contributes to fill).
         let marginal_sorted_pos: u64 = 0;
         let marginal_fill: u256 = 0;  // partial fill for the marginal bid
-        // SCOUT(#238) REMOVE: `found_marginal` is computed and discarded.
-        let found_marginal = false;
         let winner_found = false;
 
         let s = 0u64;
@@ -1253,8 +1192,7 @@ module atomica::auction {
             };
             winner_found = true;
             let qty = vector::borrow(&state.bids, orig_idx).quantity;
-            // SCOUT(#238) EDIT: the walk reads `bids[orig_idx].price`, not `revealed_prices`.
-            let price = *vector::borrow(&state.revealed_prices, orig_idx);
+            let price = vector::borrow(&state.bids, orig_idx).price;
 
             // SCOUT(#216) EDIT: `accumulated + qty` aborts on overflow; compare `qty <= supply - accumulated`.
             if (accumulated + qty <= supply) {
@@ -1265,7 +1203,6 @@ module atomica::auction {
                 marginal_fill = qty;
 
                 if (accumulated == supply) {
-                    found_marginal = true;
                     break
                 };
             } else {
@@ -1276,7 +1213,6 @@ module atomica::auction {
                 clearing_price = price;
                 marginal_sorted_pos = s;
                 marginal_fill = remaining;
-                found_marginal = true;
                 break
             };
             s = s + 1;
@@ -1284,11 +1220,7 @@ module atomica::auction {
 
         // If we exhausted all bids without filling supply, the last processed
         // bid is already recorded in marginal_sorted_pos / clearing_price /
-        // marginal_fill above.  found_marginal may still be false if all bids
-        // fit under supply without exactly hitting it — that is fine; the loop
-        // above sets clearing_price / marginal_sorted_pos on every iteration.
-        // Suppress unused variable warning.
-        let _ = found_marginal;
+        // marginal_fill above: the loop sets them on every iteration.
 
         // 4. Build BidResult vector aligned to bids (not to sorted order).
         //    Initialise all results as losing with fill_amount = 0.
@@ -1358,7 +1290,6 @@ module atomica::auction {
     /// @see docs/architecture/v0-architecture.md §2.8 and §2.9
     // SCOUT(#216) EDIT: in `settle` an invalid bid gets no fill and its whole collateral goes back to its depositor. After the unwind pull request (213) `settle_locks` already returns a non-winner's whole collateral, so only `clear_internal` changes, and its `E_UNPAYABLE_FILL` check can no longer fire on collateral.
     // SCOUT(#228) EDIT: `settle` aborts until `open_bids` has opened every bid; no `finalize_reveal` is left to close a partly opened window.
-    // SCOUT(#238) REMOVE: the `REBATE_COEFFICIENT` read in the body of `settle`.
     public entry fun settle(
         _caller:   &signer,
         window_id: u64,
@@ -1398,11 +1329,6 @@ module atomica::auction {
 
         // 3-4. Allocate the fills and record every lock's outcome.
         let (lock_ids, hashes, total_filled, winner_count) = settle_locks(state);
-
-        // Fee/rebate (Phase 3c): REBATE_COEFFICIENT = 0, so all rebate amounts are 0 and
-        // no payout changes. When Phase 3c calibrates the coefficient, the rebates must
-        // become payouts of the winners' collateral leaves.
-        let _coeff = REBATE_COEFFICIENT; // TBD Phase 3c calibration
 
         // 5. Emit AuctionSettled and the one AuctionOutcome.
         event::emit(AuctionSettled {
@@ -1694,61 +1620,11 @@ module atomica::auction {
         abort E_NOT_IMPLEMENTED
     }
 
-    // Compute per-bidder fee/rebate curve for a cleared auction window.
-    //
-    // The rebate amount for each winning bidder is proportional to the distance
-    // between the bidder's revealed price and the uniform clearing price,
-    // scaled by REBATE_COEFFICIENT.  At the current coefficient of 0 all
-    // rebate amounts are zero; Phase 3c will calibrate the coefficient.
-    //
-    // Returns a vector of Rebate { bidder, amount } for all bidders in the
-    // specified window.  Non-winning bidders receive amount = 0.
-    // Returns an empty vector if the window does not exist.
-    //
-    // @see docs/architecture/v0-architecture.md §2 (fee/rebate section)
-    #[view]
-    // SCOUT(#238) REMOVE: `compute_rebates` and its comment block above.
-    public fun compute_rebates(
-        window_id:      u64,
-        pair_bcs:       vector<u8>,
-        _clearing_price: u64,
-    ): vector<Rebate> acquires AuctionRegistry {
-        if (!exists<AuctionRegistry>(@atomica)) return vector::empty();
-        let registry = borrow_global<AuctionRegistry>(@atomica);
-        let key = make_window_key(window_id, pair_bcs);
-        if (!table::contains(&registry.windows, key)) return vector::empty();
-
-        let state = table::borrow(&registry.windows, key);
-        let bid_count    = vector::length(&state.bids);
-        let result_count = vector::length(&state.bid_results);
-
-        // If clearing has not yet run, return empty (no rebates computable).
-        if (result_count != bid_count) return vector::empty();
-
-        // REBATE_COEFFICIENT = 0 → all rebate amounts are 0.
-        // Phase 3c will replace this with a calibrated formula:
-        //   amount = REBATE_COEFFICIENT × (revealed_price - clearing_price) × fill_amount
-        let _coeff = REBATE_COEFFICIENT;
-
-        let rebates = vector::empty<Rebate>();
-        let i = 0u64;
-        while (i < bid_count) {
-            let result  = vector::borrow(&state.bid_results, i);
-            let bidder  = result.bidder;
-            // Distance-to-clearing rebate is 0 until Phase 3c calibration.
-            // Only winners receive rebates (positive distance means higher bid than clearing).
-            let amount: u64 = 0; // TBD Phase 3c: calibrate with REBATE_COEFFICIENT
-            vector::push_back(&mut rebates, Rebate { bidder, amount });
-            i = i + 1;
-        };
-        rebates
-    }
-
-    // Return (clearing_price, total_filled) after settlement.
+    // Return (clearing_price, total_filled) after settlement. `total_filled` is the
+    // sum of the bid results' `fill_amount`.
     // Aborts with E_AUCTION_NOT_FOUND if no entry exists.
     // Returns (0, 0) if not yet settled.
     #[view]
-    // SCOUT(#238) EDIT: `get_settlement` returns `(clearing_price, total_filled)` for a settled window and `(0, 0)` before. Today it returns `total_supply`, and the cleared price of a window that is not settled yet. `WindowState` stores no filled total.
     public fun get_settlement(
         window_id: u64,
         pair_bcs:  vector<u8>,
@@ -1758,7 +1634,15 @@ module atomica::auction {
         let key = make_window_key(window_id, pair_bcs);
         assert!(table::contains(&registry.windows, key), E_AUCTION_NOT_FOUND);
         let w = table::borrow(&registry.windows, key);
-        (w.clearing_price, w.total_supply)
+        if (!w.settled) return (0, 0);
+        let total_filled: u256 = 0;
+        let i = 0u64;
+        let n = vector::length(&w.bid_results);
+        while (i < n) {
+            total_filled = total_filled + vector::borrow(&w.bid_results, i).fill_amount;
+            i = i + 1;
+        };
+        (w.clearing_price, total_filled)
     }
 
     // ===================== Test helpers =====================
@@ -1831,7 +1715,6 @@ module atomica::auction {
     // `prices` is index-aligned to the bids.
     #[test_only]
     // SCOUT(#216) EDIT: decide whether `test_set_revealed_prices` applies the validity rule; 13 clearing and settle tests on `main` open bids through it, and so does the `E_UNPAYABLE_FILL` test of the unwind pull request (213).
-    // SCOUT(#238) EDIT: `test_set_revealed_prices` stops writing `revealed_prices`.
     public fun test_set_revealed_prices(
         atomica:   &signer,
         window_id: u64,
@@ -1861,7 +1744,6 @@ module atomica::auction {
         let key = make_window_key(window_id, pair_bcs);
         let registry = borrow_global_mut<AuctionRegistry>(addr);
         let state = table::borrow_mut(&mut registry.windows, key);
-        let revealed = vector::empty<u64>();
         let i = 0u64;
         while (i < vector::length(&prices)) {
             let bid = vector::borrow_mut(&mut state.bids, i);
@@ -1869,10 +1751,8 @@ module atomica::auction {
                 bid.opened = true;
                 bid.price = *vector::borrow(&prices, i);
             };
-            vector::push_back(&mut revealed, bid.price);
             i = i + 1;
         };
-        state.revealed_prices = revealed;
         state.reveal_final = true;
     }
 
@@ -1904,8 +1784,8 @@ module atomica::auction {
     }
 
     // Insert a WindowState directly for unit tests, bypassing create_auction.
-    // Allows tests to exercise view functions and settle path without
-    // triggering E_NOT_IMPLEMENTED in create_auction.
+    // Allows tests to exercise view functions and the settle path without
+    // claiming a seller lock through create_auction.
     #[test_only]
     public fun test_insert_window(
         atomica:        &signer,
@@ -1923,7 +1803,6 @@ module atomica::auction {
     // which timelock_id is associated with the window.
     #[test_only]
     // SCOUT(#224) EDIT: the hardcoded `Pair` in `test_insert_window_with_timelock` bypasses the allowlist.
-    // SCOUT(#238) REMOVE: the `revealed_prices` entry in `test_insert_window_with_timelock`.
     // SCOUT(#241) REMOVE: the `min_prices` entry in `test_insert_window_with_timelock`; the unwind pull request (213) also adds `test_add_seller_lock(.., min_price)`.
     // SCOUT(#243) EDIT: `test_insert_window_with_timelock` must also record the window id's timelock in `TimelockRegistrar`, or a later `create_auction` registers a second one.
     public fun test_insert_window_with_timelock(
@@ -1959,7 +1838,6 @@ module atomica::auction {
             clearing_price,
             lock_ids:        vector::empty(),
             min_prices:      vector::empty(),
-            revealed_prices: vector::empty(),
             reveal_final:    false,
             refunded:        false,
             bid_results:     vector::empty(),
@@ -1992,27 +1870,5 @@ module atomica::auction {
     ) acquires AuctionRegistry {
         let registry = borrow_global_mut<AuctionRegistry>(signer::address_of(atomica));
         table::borrow_mut(&mut registry.windows, make_window_key(window_id, pair_bcs)).settled = true;
-    }
-
-    // Destructure a Rebate into (bidder, amount).
-    // Allows tests to inspect fields without a direct field accessor.
-    #[test_only]
-    // SCOUT(#238) REMOVE: `test_rebate_fields`.
-    public fun test_rebate_fields(r: &Rebate): (address, u64) {
-        (r.bidder, r.amount)
-    }
-
-    // Return the revealed_prices vector for a window.
-    // Used by tests to verify submit_cleartext_and_clear stored prices correctly.
-    #[test_only]
-    // SCOUT(#238) REMOVE: `test_get_revealed_prices`.
-    public fun test_get_revealed_prices(
-        window_id: u64,
-        pair_bcs:  vector<u8>,
-    ): vector<u64> acquires AuctionRegistry {
-        let registry = borrow_global<AuctionRegistry>(@atomica);
-        let key = make_window_key(window_id, pair_bcs);
-        let state = table::borrow(&registry.windows, key);
-        state.revealed_prices
     }
 }

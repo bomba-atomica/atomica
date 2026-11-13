@@ -414,9 +414,8 @@ describe("useSellFlow state machine", () => {
 
     // SCOUT(#243) REMOVE: the timelock registration asserts and the local one hour end time.
     // SCOUT(#241) EDIT: no minPrice in the persisted state or in the payload.
-    // SCOUT(#238) EDIT: no mpk argument.
     // SCOUT(#224) EDIT: pairBcs equals the launch pair, not empty bytes.
-    it("createAuction: registers the timelock first, then submits the 6-argument create_auction", async () => {
+    it("createAuction: registers the timelock first, then submits the 5-argument create_auction", async () => {
       vi.mocked(registerTimelock).mockResolvedValue(42n);
       vi.mocked(getCreateAuctionPayload).mockReturnValue({
         fn: "create_auction",
@@ -457,17 +456,15 @@ describe("useSellFlow state machine", () => {
 
       expect(getCreateAuctionPayload).toHaveBeenCalledTimes(1);
       const args = vi.mocked(getCreateAuctionPayload).mock.calls[0];
-      expect(args).toHaveLength(6);
+      expect(args).toHaveLength(5);
       // SCOUT(#241) EDIT: the payload loses minPrice.
       // SCOUT(#243) EDIT: the payload loses timelockId.
-      // SCOUT(#238) EDIT: the payload loses mpk; three arguments remain.
-      const [windowId, pairBcs, lockIdBytes, minPrice, timelockId, mpk] = args;
+      const [windowId, pairBcs, lockIdBytes, minPrice, timelockId] = args;
       expect(typeof windowId).toBe("bigint");
       expect(pairBcs).toEqual(new Uint8Array(0));
       expect(lockIdBytes).toEqual(ethers.getBytes(EXPECTED_LOCK_ID));
       expect(minPrice).toBe(2_000_000_000n);
       expect(timelockId).toBe(42n);
-      expect(mpk).toEqual(new Uint8Array(0));
       expect(submitNativeTransaction).toHaveBeenCalledTimes(1);
       expect(submitNativeTransaction).toHaveBeenCalledWith(aptos, ACCOUNT, {
         fn: "create_auction",

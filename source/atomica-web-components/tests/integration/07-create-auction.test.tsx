@@ -324,20 +324,17 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     (window as any).ethereum = rejectedMock;
 
     const lockIdBytes = ethers.getBytes(ethProof.lockId);
-    const mpk = new Uint8Array(0);
 
     const onCreateAuction = async () => {
       // SCOUT(#241) EDIT: no minPrice argument.
       // SCOUT(#243) EDIT: no timelockId argument.
-      // SCOUT(#238) EDIT: no mpk argument.
-      // getCreateAuctionPayload(windowId, pairBcs, lockId, minPrice, timelockId, mpkBytes)
+      // getCreateAuctionPayload(windowId, pairBcs, lockId, minPrice, timelockId)
       const payload = getCreateAuctionPayload(
         0n,                // windowId
         new Uint8Array(0), // pairBcs (empty — the wallet rejects before submission)
         lockIdBytes,
         MIN_PRICE,
         0n,                // timelockId
-        mpk,
       );
       const result = await submitNativeTransaction(aptosGlobal, sellerAddress, payload);
       return { txHash: (result as { hash?: string }).hash };

@@ -18,10 +18,8 @@ import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/re
 import { WalletContext } from "../../src/context/WalletContext";
 
 // SCOUT(#243) REMOVE: the registerTimelock mock.
-// SCOUT(#238) REMOVE: the getMpk mock.
 vi.mock("@atomica/sdk/aptos", () => ({
   submitCreateAuction: vi.fn().mockResolvedValue({ hash: "0xdeadbeef" }),
-  getMpk: vi.fn().mockResolvedValue(new Uint8Array(48)),
   registerTimelock: vi.fn().mockResolvedValue(5n),
 }));
 
@@ -37,11 +35,7 @@ vi.mock("ethers", async (importOriginal) => {
 });
 
 import { AuctionCreator } from "../../src/components/AuctionCreator";
-import {
-  submitCreateAuction,
-  getMpk,
-  registerTimelock,
-} from "@atomica/sdk/aptos";
+import { submitCreateAuction, registerTimelock } from "@atomica/sdk/aptos";
 
 const ACCOUNT = "0xAbCd1234567890123456789012345678901234Ab";
 
@@ -84,7 +78,6 @@ describe("AuctionCreator — unit", () => {
     expect(submitButton).toBeTruthy();
   });
 
-  // SCOUT(#238) EDIT: there is no getMpk call.
   it("calls submitCreateAuction when the button is clicked with a connected account", async () => {
     renderAuctionCreator();
 
@@ -92,14 +85,12 @@ describe("AuctionCreator — unit", () => {
     fireEvent.click(button);
 
     await waitFor(() => {
-      expect(getMpk).toHaveBeenCalled();
       expect(submitCreateAuction).toHaveBeenCalled();
     });
   });
 
   // SCOUT(#243) REMOVE: this case; assert one transaction and no register_timelock.
-  // SCOUT(#241) EDIT: the argument count drops (7 today).
-  // SCOUT(#238) EDIT: no mpk at the end.
+  // SCOUT(#241) EDIT: the argument count drops (6 today).
   it("registers the timelock before create_auction and passes its id", async () => {
     renderAuctionCreator();
 
@@ -113,11 +104,10 @@ describe("AuctionCreator — unit", () => {
     expect(
       vi.mocked(registerTimelock).mock.invocationCallOrder[0],
     ).toBeLessThan(vi.mocked(submitCreateAuction).mock.invocationCallOrder[0]);
-    // submitCreateAuction(account, windowId, pairBcs, lockId, minPrice, timelockId, mpk)
+    // submitCreateAuction(account, windowId, pairBcs, lockId, minPrice, timelockId)
     const args = vi.mocked(submitCreateAuction).mock.calls[0];
-    expect(args).toHaveLength(7);
+    expect(args).toHaveLength(6);
     expect(args[5]).toBe(5n);
-    expect(args[6]).toEqual(new Uint8Array(48));
   });
 
   it("shows success status with tx hash after successful submission", async () => {

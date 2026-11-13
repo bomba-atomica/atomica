@@ -25,8 +25,6 @@ import { AuctionBidder } from "../../src/components/AuctionBidder";
 import { SettleButton } from "../../src/components/SettleButton";
 // SCOUT(#236) REMOVE: the ClaimButton import and its two cases below.
 import { ClaimButton } from "../../src/components/ClaimButton";
-// SCOUT(#238) REMOVE: the FeeRebateDisplay import and its two cases below.
-import { FeeRebateDisplay } from "../../src/components/FeeRebateDisplay";
 import { BidHistory } from "../../src/components/BidHistory";
 import type { BidHistoryEntry } from "../../src/components/BidHistory";
 import {
@@ -319,21 +317,6 @@ describe("Selector contract — data-testid attributes", () => {
     ).toBeTruthy();
   });
 
-  // SCOUT(#238) REMOVE: both FeeRebateDisplay cases.
-  it("FeeRebateDisplay: rebate-amount is present", () => {
-    render(<FeeRebateDisplay rebateAmount={1000000n} feeAmount={500000n} />);
-    expect(
-      screen.getByTestId(SELECTORS.feeRebateDisplay.rebateAmount),
-    ).toBeTruthy();
-  });
-
-  it("FeeRebateDisplay: fee-amount is present", () => {
-    render(<FeeRebateDisplay rebateAmount={1000000n} feeAmount={500000n} />);
-    expect(
-      screen.getByTestId(SELECTORS.feeRebateDisplay.feeAmount),
-    ).toBeTruthy();
-  });
-
   it("BidHistory: bid-history-table is present", () => {
     render(<BidHistory />);
     expect(
@@ -388,9 +371,6 @@ describe("Selector contract — data-testid attributes", () => {
     // SCOUT(#236) REMOVE: both claimButton asserts.
     expect(s.claimButton.claimButton).toBe("claim-button");
     expect(s.claimButton.reclaimButton).toBe("reclaim-button");
-    // SCOUT(#238) REMOVE: both feeRebateDisplay asserts.
-    expect(s.feeRebateDisplay.rebateAmount).toBe("rebate-amount");
-    expect(s.feeRebateDisplay.feeAmount).toBe("fee-amount");
     expect(s.bidHistory.bidHistoryTable).toBe("bid-history-table");
     expect(s.bidHistory.bidHistoryRow).toBe("bid-history-row");
   });

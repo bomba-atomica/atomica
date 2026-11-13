@@ -1,35 +1,23 @@
 import { useState } from "react";
 import { ethers } from "ethers";
 // SCOUT(#243) REMOVE: drop the registerTimelock import.
-// SCOUT(#238) REMOVE: drop the getMpk import.
-import {
-  submitCreateAuction,
-  getMpk,
-  registerTimelock,
-} from "@atomica/sdk/aptos";
+import { submitCreateAuction, registerTimelock } from "@atomica/sdk/aptos";
 import { useWallet } from "../context/WalletContext";
 
-// SCOUT(#238) EDIT: this header describes the MPK fetch and the mpk_bytes argument; both go.
 // SCOUT(#241) EDIT: this header lists the minimum price; it goes.
 // SCOUT(#243) EDIT: this header says the screen registers the timelock; create_auction does it.
 /**
  * UI panel for creating a new sealed-bid auction on Aptos (v0 Beta).
  *
- * Fetches the IBE Master Public Key from `timelock_config::get_mpk()` on-chain
- * (Phase 3e), collects the LockBox `lock_id`, window ID, pair BCS bytes, and
- * minimum price from the seller, registers the window timelock with
+ * Collects the LockBox `lock_id`, window ID, pair BCS bytes, and minimum
+ * price from the seller, registers the window timelock with
  * `ibe_config::register_timelock`, then calls `auction::create_auction` via
  * the SIWE-authenticated Aptos transaction flow.
- *
- * Phase 3e change: no local `generateSystemParameters()` — MPK is fetched from
- * the on-chain timelock_config module so all auction participants share the same
- * authoritative key.
  *
  * `create_auction` takes
  // SCOUT(#241) EDIT: min_price leaves this argument list.
  // SCOUT(#243) EDIT: timelock_id leaves this argument list.
- // SCOUT(#238) EDIT: mpk_bytes leaves this argument list.
- * `(window_id, pair_bcs, lock_id, min_price, timelock_id, mpk_bytes)`.
+ * `(window_id, pair_bcs, lock_id, min_price, timelock_id)`.
  *
  * Requires {@link WalletContext} to be mounted above this component.
  *
@@ -50,22 +38,17 @@ export function AuctionCreator() {
   const handleCreateAuction = async () => {
     if (!account) return;
     setLoading(true);
-    setStatus("Fetching MPK from chain...");
     try {
-      // SCOUT(#238) REMOVE: create_auction has no _mpk_bytes argument, so the getMpk fetch goes.
-      // 1. Fetch Master Public Key from on-chain timelock_config::get_mpk()
-      const mpk = await getMpk();
-
       // SCOUT(#243) REMOVE: create_auction registers the window timelock itself; this caller-chosen one hour deadline goes.
       // SCOUT(#225) EDIT: this call aborts with E_NOT_REGISTRAR once the validator image has the registrar check.
-      // 2. Register the timelock that opens the window's bids. Its deadline
+      // 1. Register the timelock that opens the window's bids. Its deadline
       //    is one hour out, the sell flow's auction length.
       setStatus("Please sign the timelock registration in MetaMask...");
       const deadlineUs =
         BigInt(Math.floor(Date.now() / 1000) + 3600) * 1_000_000n;
       const timelockId = await registerTimelock(account, deadlineUs);
 
-      // 3. Submit Transaction
+      // 2. Submit Transaction
       setStatus("Please sign the transaction in MetaMask...");
 
       // Convert inputs
@@ -83,7 +66,6 @@ export function AuctionCreator() {
 
       // SCOUT(#241) EDIT: drop the minPriceBn argument.
       // SCOUT(#243) EDIT: drop the timelockId argument.
-      // SCOUT(#238) EDIT: drop the mpk argument.
       const pendingTx = await submitCreateAuction(
         account,
         windowIdBn,
@@ -91,7 +73,6 @@ export function AuctionCreator() {
         lockId,
         minPriceBn,
         timelockId,
-        mpk,
       );
 
       const hash = (pendingTx as { hash?: string }).hash || "submitted";

@@ -255,13 +255,12 @@ export const teardownLocalnetCommand: BrowserCommand<[]> = async () => {
     return { success: true };
 };
 
-// SCOUT(#238) EDIT: the comment below names the registry module, which is deleted.
 /**
  * Deploy Atomica contracts to localnet.
  *
  * WHAT IT DOES:
  * - Calls deployContracts() from ./localnet.ts
- * - Deploys registry, fake_eth, fake_usd modules
+ * - Deploys the Atomica package and initializes fake_eth and fake_usd
  * - Initializes all modules
  * - Takes ~30-60 seconds
  *
