@@ -394,7 +394,7 @@ This falls under the same security threshold as a consensus takeover. If >2/3 va
 
 ### Challenge 4: Fallback for Missing Shares
 
-<!-- SCOUT(#226) DOC: "Timeout + refund" is the built path: once the reveal expiry passes, the timelock reads Expired at once (not when the 50-per-block queue reaches it) and refund_expired_window returns every receipt. -->
+<!-- SCOUT(#243) DOC: "Timeout + refund" is the built path: once the reveal expiry passes, the timelock reads Expired at once (not when the 50-per-block queue reaches it) and refund_expired_window returns every receipt. -->
 
 **Problem:** What if <t validators publish shares?
 
