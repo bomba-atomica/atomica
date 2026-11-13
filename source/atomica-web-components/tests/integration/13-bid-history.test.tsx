@@ -138,7 +138,7 @@ describe("13: BidHistory — entries from useBidHistory hook + localStorage", ()
       <BidHistoryHarness
         walletAddress={TEST_WALLET}
         settlements={[
-          ["0xseller_older", 150_000_000n],
+          ["0xseller_older", 150n],
           ["0xseller_newer", 200n],
         ]}
       />,
@@ -164,7 +164,7 @@ describe("13: BidHistory — entries from useBidHistory hook + localStorage", ()
     const { unmount } = render(
       <BidHistoryHarness
         walletAddress={TEST_WALLET}
-        settlements={[["0xseller_persist", 250_000_000n]]}
+        settlements={[["0xseller_persist", 250n]]}
       />,
     );
 
@@ -185,7 +185,7 @@ describe("13: BidHistory — entries from useBidHistory hook + localStorage", ()
 
     const row = screen.getByTestId(SELECTORS.bidHistory.bidHistoryRow);
     expect(row.textContent).toContain("0xseller_persist");
-    expect(row.textContent).toContain("$250.00");
+    expect(row.textContent).toContain("$250");
   });
 
   // ── 13-6: Duplicate seller address is deduplicated ────────────────────────
