@@ -52,7 +52,6 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      # SCOUT(#228) EDIT: hardcoded binary tag; this non-gated duplicate of the happy-path job is not covered by the Move Framework Pin check and must move with APTOS_VERSION.
       - name: Install Aptos CLI
         run: |
           APTOS_VERSION="binary-245937376b"
@@ -149,7 +148,6 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      # SCOUT(#228) EDIT: hardcoded binary tag; this non-gated duplicate of the happy-path job is not covered by the Move Framework Pin check and must move with APTOS_VERSION.
       - name: Install Aptos CLI
         run: |
           APTOS_VERSION="binary-245937376b"

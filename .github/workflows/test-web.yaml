@@ -29,7 +29,6 @@ env:
   # The atomica-aptos binary release the Move jobs install. Its commit must equal
   # the AptosFramework rev in source/atomica-move-contracts/Move.toml (checked
   # by move-framework-pin).
-  # SCOUT(#228) EDIT: move APTOS_VERSION to the fork release that ships the ibe::decrypt_bid native (227).
   APTOS_VERSION: binary-245937376b
 
 jobs:
@@ -387,7 +386,6 @@ jobs:
           bun install
           bun run build
 
-      # SCOUT(#228) EDIT: the binary tag in this step is hardcoded (it does not read the workflow env) and must move with APTOS_VERSION.
       - name: Install Aptos CLI
         run: |
           # Download aptos binary from atomica-aptos releases
@@ -479,7 +477,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # SCOUT(#228) EDIT: this check passes only when Move.toml rev and APTOS_VERSION move together to the fork commit with the decrypt native.
       # The script reads APTOS_VERSION from the top-level env of this file. It fails when
       # the Move.toml rev, any workflow binary- tag, APTOS_PROOF_RELEASE or
       # APTOS_PROOF_COMMIT differs from it. The validator image digest in
@@ -525,7 +522,6 @@ jobs:
           aptos --version
           which aptos
 
-      # SCOUT(#228) TEST: the rewritten auction tests need the fork's price-plaintext golden ciphertexts and the decrypt native, so this step fails until the pins move.
       # Raise MIN_MOVE_TESTS when tests are added, so a silently skipped module fails the job.
       - name: Run Move Tests (at least MIN_MOVE_TESTS must run)
         env:
@@ -612,13 +608,11 @@ jobs:
             test_files: >-
               tests/integration/07-create-auction.test.tsx
               tests/integration/08-auction-monitor.test.tsx
-          # SCOUT(#228) TEST: this chunk runs open_bids in 09 and 10 against the live validators.
           - chunk: bid-settle
             test_files: >-
               tests/integration/09-submit-bid.test.tsx
               tests/integration/10-settle.test.tsx
           # 16-settle-100-bids runs at both caps (100 seller locks, 100 bids); it took 10.5 of 45 minutes at one seller lock.
-          # SCOUT(#228) TEST: this chunk opens 100 bids in batches through open_bids.
           - chunk: settle-100-bids
             test_files: >-
               tests/integration/16-settle-100-bids.test.tsx
@@ -628,7 +622,6 @@ jobs:
               tests/integration/11-claim-and-reclaim.test.tsx
               tests/integration/13-bid-history.test.tsx
           # SCOUT(#236) TEST: this chunk runs 14-happy-path ending with release on Ethereum; on this anvil tier that needs the anvil backend on the prague hardfork (it starts on cancun today).
-          # SCOUT(#228) TEST: this chunk runs 14-happy-path with the on-chain open step.
           - chunk: happy-path
             test_files: >-
               tests/integration/14-happy-path.test.tsx
@@ -688,7 +681,6 @@ jobs:
         working-directory: source/evm-contracts
         run: forge build
 
-      # SCOUT(#228) EDIT: the binary tag in this step is hardcoded and must move with APTOS_VERSION.
       # SCOUT(#236) EDIT: a new or renamed chunk must also be added to the two chunk lists in the `if:` lines of this step and the next, and to the gate list in required-checks.
       - name: Install Aptos CLI
         if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim' || matrix.chunk == 'happy-path' || matrix.chunk == 'unwind'
@@ -840,7 +832,6 @@ jobs:
         working-directory: source/evm-contracts
         run: forge build
 
-      # SCOUT(#228) EDIT: the binary tag in this step is hardcoded and must move with APTOS_VERSION.
       - name: Install Aptos CLI
         if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim' || matrix.chunk == 'happy-path'
         run: |
@@ -1048,7 +1039,6 @@ jobs:
     timeout-minutes: 45
     env:
       CI_CLASS: system-correctness
-      # SCOUT(#228) EDIT: APTOS_PROOF_RELEASE, APTOS_PROOF_COMMIT (full SHA) and the IMAGE_NAME tag below must move with APTOS_VERSION.
       APTOS_PROOF_RELEASE: binary-245937376b
       APTOS_PROOF_COMMIT: 245937376b19dd278c3e62776aedc9401da28647
       IMAGE_NAME: atomica-validator:245937376b
