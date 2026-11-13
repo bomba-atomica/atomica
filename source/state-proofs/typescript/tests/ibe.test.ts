@@ -1,11 +1,10 @@
-// SCOUT(#228) EDIT: copy fixtures/ibe_v2_golden_vectors.json again from the fork commit of the new framework pin (it gains the price bid cases of the decrypt native issue (227)), and fix the commit named in the header below.
 /**
  * V2 timelock bid encryption: golden-vector parity with the fork's Rust reference.
  *
  * Replaces the retired G1 Boneh-Franklin tests. The vectors in
  * `fixtures/ibe_v2_golden_vectors.json` are a byte copy of
  * `atomica/golden_vectors/ibe_v2_golden_vectors.json` in `bomba-atomica/atomica-aptos` at
- * commit `2c32b09d95` (the pinned framework). They come from
+ * commit `245937376b` (the pinned framework, vectors version 3.1.0). They come from
  * `cargo test -p aptos-dkg --lib ibe::golden_vectors::write_golden_vectors -- --ignored`.
  *
  * The valid golden bid was made by `encrypt_bid` with `StdRng::seed_from_u64(seed ^ 0xB1D)` from
@@ -193,4 +192,34 @@ describe("V2 bid decrypt with the golden dk", () => {
             if (c.opens) expect(hex(opened!)).toBe(c.plaintext);
         });
     }
+});
+
+describe("V2 price bids (vectors 3.1.0) with the golden dk", () => {
+    const identity = unhex(dealing.identity);
+    const dk = unhex(dealing.dk);
+    const priceBids: {
+        auction_id: number;
+        cases: { bidder: string; price: number; plaintext: string; ad: string; ct: string }[];
+        bad_length: { plaintext: string; ad: string; ct: string };
+    } = vectors.price_bids;
+
+    it("every price bid opens to its 8-byte little-endian price", () => {
+        expect(priceBids.auction_id).toBe(9);
+        expect(priceBids.cases).toHaveLength(3);
+        for (const c of priceBids.cases) {
+            const opened = decryptBid(dk, identity, unhex(c.ad), unhex(c.ct));
+            expect(opened).toHaveLength(8);
+            expect(new DataView(opened.buffer, opened.byteOffset, 8).getBigUint64(0, true)).toBe(
+                BigInt(c.price),
+            );
+            expect(hex(opened)).toBe(c.plaintext);
+        }
+    });
+
+    it("the bad-length bid opens to a plaintext that is not 8 bytes", () => {
+        const b = priceBids.bad_length;
+        const opened = decryptBid(dk, identity, unhex(b.ad), unhex(b.ct));
+        expect(opened.length).not.toBe(8);
+        expect(hex(opened)).toBe(b.plaintext);
+    });
 });

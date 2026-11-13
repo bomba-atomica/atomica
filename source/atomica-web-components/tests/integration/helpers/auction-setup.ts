@@ -20,8 +20,10 @@
  *   lockBidCollateral()     — FakeUSD collateral receipt for one bid
  *   lockBidCollaterals()    — many FakeUSD receipts proven at one Ethereum block
  *   submitBidDirect()       — `sealBid` + the current `submit_bid` ABI
- *   waitForReveal(), openWindowBidsDirect(),
- *   settleAuctionDirect()   — the reveal → open (clears) → settle sequence
+ *   waitForReveal(), openAndFinalizeWindowDirect(),
+ *   settleAuctionDirect()   — the reveal → open_bids batches → finalize_window
+ *                             (clears) → settle sequence. openBidsDirect() and
+ *                             finalizeWindowDirect() send one call each
  *   getAuctionState(), getWindowStatus(), getReceiptStatus() — chain reads
  *
  * A lock receipt belongs to the depositor's Ethereum-derivable Aptos account,
@@ -40,17 +42,17 @@ import {
   AccountAddress,
   type InputGenerateTransactionPayloadData,
 } from "@aptos-labs/ts-sdk";
-// SCOUT(#228) EDIT: getSubmitCleartextPayload and the OpenedBid opening flow go; import the SDK getOpenBidsPayload.
 import {
-  decryptWindowBids,
+  MAX_OPEN_BIDS_PER_CALL,
   getBidPayload,
   getCreateAuctionPayload,
+  getFinalizeWindowPayload,
+  getOpenBidsPayload,
+  getOpenCursor,
   getRegisterLockPayload,
   getSettlePayload,
-  getSubmitCleartextPayload,
   isRevealed,
   sealBid,
-  type OpenedBid,
 } from "@atomica/sdk/aptos";
 import {
   getDerivedAddress,
@@ -759,22 +761,19 @@ export async function lockBidCollaterals(
   return results.map((r) => r.lockId);
 }
 
-// SCOUT(#228) EDIT: salt and commitment leave SubmittedBid.
-/** A bid submitted on chain. Keep `salt`: it opens the bid. */
+/** A bid submitted on chain. Nothing is kept to open it: the chain does. */
 export interface SubmittedBid {
   hash: string;
   price: bigint;
-  salt: Uint8Array;
   ciphertext: Uint8Array;
-  commitment: Uint8Array;
 }
 
 /**
  * Seal a bid with the SDK's `sealBid` (the AuctionBidder code path) and send
  * it with the current `submit_bid` ABI from `getBidPayload`:
  *
- *   submit_bid(bidder, window_id, pair_bcs, ciphertext, commitment,
- *              collateral_lock_id, quantity)
+ *   submit_bid(bidder, window_id, pair_bcs, ciphertext, collateral_lock_id,
+ *              quantity)
  *
  * The bidder's Ethereum-derivable account signs (SIWE): only it can claim
  * the bidder's collateral receipt.
@@ -787,7 +786,6 @@ export interface SubmittedBid {
  * The SDK's Aptos instance must point at the testnet (`setAptosInstance`).
  * Throws if the transaction aborts.
  */
-// SCOUT(#228) EDIT: getBidPayload loses the commitment argument and sealBid returns no salt.
 export async function submitBidDirect(
   aptosClient: Aptos,
   bidder: EthSigner,
@@ -809,18 +807,11 @@ export async function submitBidDirect(
       window.windowId,
       window.pairBcs,
       sealed.ciphertext,
-      sealed.commitment,
       ethers.getBytes(collateralLockId),
       quantity,
     ),
   );
-  return {
-    hash,
-    price,
-    salt: sealed.salt,
-    ciphertext: sealed.ciphertext,
-    commitment: sealed.commitment,
-  };
+  return { hash, price, ciphertext: sealed.ciphertext };
 }
 
 /** Wait until the validators reveal the timelock key (`timelock::is_revealed`). */
@@ -833,40 +824,72 @@ export async function waitForReveal(
   );
 }
 
-// SCOUT(#228) REMOVE: replace with openBidsDirect (stub at the end of this file): any account calls open_bids in batches.
 /**
- * Decrypt every bid of a window with the revealed key (`decryptWindowBids`)
- * and open them all in one `submit_cleartext_and_clear`. Opening the last bid
- * finalizes the reveal and clears the window, so `settle` can follow directly.
- * Throws unless every bid decrypts to an opening that matches its commitment.
- * An under-collateralized or zero-price bid still opens without abort: the
- * chain marks it invalid (`getBidInfo(...).valid`) and it never fills.
+ * Send one `auction::open_bids(window_id, pair_bcs, max_bids)` from any
+ * account (no SIWE). The chain decrypts up to `maxBids` bids from the opening
+ * cursor, clamped to `MAX_OPEN_BIDS_PER_CALL`. It never clears. Throws if the
+ * transaction aborts.
  */
-export async function openWindowBidsDirect(
+export async function openBidsDirect(
   aptosClient: Aptos,
   sender: Account,
   window: { windowId: bigint; pairBcs: Uint8Array },
-): Promise<OpenedBid[]> {
-  const opened = await decryptWindowBids(window.windowId, window.pairBcs);
-  const bad = opened.filter((b) => !b.matchesCommitment);
-  if (bad.length > 0) {
-    throw new Error(
-      `bids ${bad.map((b) => b.index).join(", ")} did not decrypt to their commitment: ` +
-        bad.map((b) => b.error ?? "commitment mismatch").join("; "),
-    );
-  }
-  await submitDirect(
+  maxBids: bigint = MAX_OPEN_BIDS_PER_CALL,
+): Promise<string> {
+  return submitDirect(
     aptosClient,
     sender,
-    // SCOUT(#228) REMOVE: the cleartext payload; open_bids takes no prices and no salts.
-    getSubmitCleartextPayload(
-      window.windowId,
-      window.pairBcs,
-      opened.map((b) => b.price!),
-      opened.map((b) => b.salt!),
-    ),
+    getOpenBidsPayload(window.windowId, window.pairBcs, maxBids),
   );
-  return opened;
+}
+
+/**
+ * Send one `auction::finalize_window(window_id, pair_bcs)` from any account
+ * (no SIWE): it clears a window whose bids are all opened. Throws if the
+ * transaction aborts.
+ */
+export async function finalizeWindowDirect(
+  aptosClient: Aptos,
+  sender: Account,
+  window: { windowId: bigint; pairBcs: Uint8Array },
+): Promise<string> {
+  return submitDirect(
+    aptosClient,
+    sender,
+    getFinalizeWindowPayload(window.windowId, window.pairBcs),
+  );
+}
+
+/**
+ * Open every bid of a window with `open_bids` batches of
+ * `MAX_OPEN_BIDS_PER_CALL` until `get_open_cursor` reports every bid opened,
+ * then clear it with one `finalize_window`, all from `sender`. `settle` can
+ * follow directly. A bid that does not decrypt to an 8-byte price, or whose
+ * collateral is below its quote, opens without abort: the chain marks it
+ * invalid (`getBidInfo(...).valid`) and it never fills.
+ *
+ * Returns the hashes of the `open_bids` calls and of `finalize_window`. The
+ * SDK's Aptos instance must point at the testnet (`setAptosInstance`).
+ */
+export async function openAndFinalizeWindowDirect(
+  aptosClient: Aptos,
+  sender: Account,
+  window: { windowId: bigint; pairBcs: Uint8Array },
+): Promise<{ openHashes: string[]; finalizeHash: string }> {
+  const openHashes: string[] = [];
+  let cursor = await getOpenCursor(window.windowId, window.pairBcs);
+  while (cursor.next < cursor.total) {
+    openHashes.push(await openBidsDirect(aptosClient, sender, window));
+    const after = await getOpenCursor(window.windowId, window.pairBcs);
+    if (after.next <= cursor.next) {
+      throw new Error(
+        `open_bids did not move the cursor of window ${window.windowId} (${cursor.next} of ${cursor.total})`,
+      );
+    }
+    cursor = after;
+  }
+  const finalizeHash = await finalizeWindowDirect(aptosClient, sender, window);
+  return { openHashes, finalizeHash };
 }
 
 /**
@@ -889,7 +912,7 @@ export async function settleAuctionDirect(
  * Read `auction::get_window_status(window_id, pair_bcs)`.
  * Aborts (throws) with E_AUCTION_NOT_FOUND when the window does not exist.
  */
-// SCOUT(#228) EDIT: reveal_final loses its meaning when finalize_reveal goes; the view tuple may change.
+// `reveal_final` is true once `finalize_window` cleared the window.
 export async function getWindowStatus(
   aptosClient: Aptos,
   moduleAddr: string,
@@ -1052,18 +1075,4 @@ export async function getWindowDeadlineUs(
     },
   });
   return BigInt(deadline as string);
-}
-
-// ---------------------------------------------------------------------------
-// Scout stubs: planned helpers. No test calls them yet.
-// ---------------------------------------------------------------------------
-
-// SCOUT(#228) ADD: open up to maxBids bids of a window with auction::open_bids from any account; callers repeat it until the window is cleared.
-export async function openBidsDirect(
-  _aptosClient: Aptos,
-  _sender: Account,
-  _window: { windowId: bigint; pairBcs: Uint8Array },
-  _maxBids: number,
-): Promise<string> {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#228) openBidsDirect");
 }

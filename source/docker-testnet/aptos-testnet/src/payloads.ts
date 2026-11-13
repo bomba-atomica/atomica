@@ -1,8 +1,7 @@
-import type { InputGenerateTransactionPayloadData } from "@atomica/sdk";
 export { CONTRACT_ADDR } from "./config.js";
 import { CONTRACT_ADDR, aptos } from "./config.js";
 import { getDerivedAddress } from "./siwe.js";
-import { submitNativeTransaction, type SubmitResult } from "./transaction.js";
+import { submitNativeTransaction } from "./transaction.js";
 
 /**
  * Sanity Test: Simple APT transfer using MetaMask signature
@@ -114,27 +113,4 @@ export async function submitFaucet(ethAddress: string) {
 export async function requestTestTokens(_ethAddress: string) {
     console.warn("requestTestTokens: fake token minting moved to Ethereum side");
     return { hash: "noop" };
-}
-
-// SCOUT(#228) EDIT: submit_bid changes shape again (no commitment argument), so any builder kept here is one more call site to update.
-export function getBidPayload(
-    sellerAddr: string,
-    amountUsd: bigint,
-): InputGenerateTransactionPayloadData {
-    return {
-        function: `${CONTRACT_ADDR}::auction::submit_bid`,
-        functionArguments: [sellerAddr, amountUsd],
-    };
-}
-
-export async function submitBid(
-    ethAddress: string,
-    sellerAddr: string,
-    amountUsd: bigint,
-    _u: Uint8Array,
-    _v: Uint8Array,
-): Promise<SubmitResult> {
-    // _u and _v are IBE params not yet wired up at this layer; kept in the
-    // signature so callers don't need to change when IBE is wired in.
-    return await submitNativeTransaction(ethAddress, getBidPayload(sellerAddr, amountUsd));
 }

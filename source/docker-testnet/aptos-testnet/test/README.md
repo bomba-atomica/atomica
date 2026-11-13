@@ -127,55 +127,55 @@ The docker-testnet test requires configuration before first use. You have two op
 
 1. Create your environment configuration:
 
-   ```bash
-   cd source/atomica-web
-   cp .env.example .env
-   ```
+    ```bash
+    cd source/atomica-web
+    cp .env.example .env
+    ```
 
 2. Build the Docker image (10-20 minutes first time):
 
-   ```bash
-   cd ../../docker-testnet
-   ./build-local-image.sh
-   ```
+    ```bash
+    cd ../../docker-testnet
+    ./build-local-image.sh
+    ```
 
 3. The `.env` file is already configured for local images (default)
 
 4. Run the test:
-   ```bash
-   cd ../source/atomica-web
-   npm run test:docker
-   ```
+    ```bash
+    cd ../source/atomica-web
+    npm run test:docker
+    ```
 
 **Option 2: Use Pre-Built Images from GitHub Container Registry (GHCR)**
 
 If you have access to the private atomica repository:
 
 1. Create a GitHub Personal Access Token (Classic):
-   - Go to: https://github.com/settings/tokens
-   - Click "Generate new token" → "Generate new token (classic)"
-   - Note: "GHCR access for atomica docker images"
-   - Select scope: `read:packages` (and optionally `repo` if you need repo access)
-   - Click "Generate token" and copy it
-   - **Important**: Fine-grained tokens don't currently support package registry access
+    - Go to: https://github.com/settings/tokens
+    - Click "Generate new token" → "Generate new token (classic)"
+    - Note: "GHCR access for atomica docker images"
+    - Select scope: `read:packages` (and optionally `repo` if you need repo access)
+    - Click "Generate token" and copy it
+    - **Important**: Fine-grained tokens don't currently support package registry access
 
 2. Update `source/atomica-web/.env`:
 
-   ```bash
-   # Uncomment and configure:
-   VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica-aptos/validator
-   IMAGE_TAG=5df0e6d1
-   GHCR_USERNAME=your_github_username
-   GHCR_TOKEN=ghp_YourPersonalAccessTokenHere
-   ```
+    ```bash
+    # Uncomment and configure:
+    VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica-aptos/validator
+    IMAGE_TAG=5df0e6d1
+    GHCR_USERNAME=your_github_username
+    GHCR_TOKEN=ghp_YourPersonalAccessTokenHere
+    ```
 
 3. Run the test:
 
-   ```bash
-   npm run test:docker
-   ```
+    ```bash
+    npm run test:docker
+    ```
 
-   The test harness will automatically authenticate with GHCR using your credentials.
+    The test harness will automatically authenticate with GHCR using your credentials.
 
 **Note**: The `.env` file is gitignored and will not be committed. Each developer manages their own configuration.
 
@@ -482,7 +482,7 @@ const account = Account.generate();
 
 // SECP256k1 account (Ethereum-compatible)
 const secpAccount = SingleKeyAccount.generate({
-  scheme: SigningSchemeInput.Secp256k1Ecdsa,
+    scheme: SigningSchemeInput.Secp256k1Ecdsa,
 });
 ```
 
@@ -496,7 +496,7 @@ await fundAccount(account.accountAddress.toString(), 1_000_000_000);
 
 ```typescript
 const balance = await aptos.getAccountAPTAmount({
-  accountAddress: account.accountAddress,
+    accountAddress: account.accountAddress,
 });
 ```
 
@@ -504,11 +504,11 @@ const balance = await aptos.getAccountAPTAmount({
 
 ```typescript
 const txn = await aptos.transaction.build.simple({
-  sender: sender.accountAddress,
-  data: {
-    function: "0x1::aptos_account::transfer",
-    functionArguments: [recipient.accountAddress, amount],
-  },
+    sender: sender.accountAddress,
+    data: {
+        function: "0x1::aptos_account::transfer",
+        functionArguments: [recipient.accountAddress, amount],
+    },
 });
 ```
 
@@ -516,8 +516,8 @@ const txn = await aptos.transaction.build.simple({
 
 ```typescript
 const pendingTxn = await aptos.signAndSubmitTransaction({
-  signer: sender,
-  transaction: txn,
+    signer: sender,
+    transaction: txn,
 });
 ```
 
@@ -525,7 +525,7 @@ const pendingTxn = await aptos.signAndSubmitTransaction({
 
 ```typescript
 const response = await aptos.waitForTransaction({
-  transactionHash: pendingTxn.hash,
+    transactionHash: pendingTxn.hash,
 });
 ```
 

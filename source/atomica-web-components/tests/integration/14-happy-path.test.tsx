@@ -23,16 +23,17 @@
  *   Bidder context:
  *     8. Sealed bid — the client encrypts the bid with sealBid (the code path
  *        of AuctionBidder: timelock::get_mpk, get_timelock_identity,
- *        bid_associated_data) and submits ciphertext, commitment and quantity.
+ *        bid_associated_data) and submits the ciphertext of the 8-byte price
+ *        and the quantity. No commitment and no salt exist.
  *        The bidder's Ethereum-derivable account bids (SIWE): only it can
  *        claim the bidder's FakeUSD collateral receipt (lock_receipt::claim).
  *   Reveal:
  *    8b. The validators reveal the timelock key after the deadline.
- *        AuctionRevealer decrypts the bid with timelock::get_decryption_key and
- *        recovers the same price and salt. Opening the bid with them passes the
- *        on-chain commitment check.
+ *        AuctionRevealer shows the reveal. A third account (the deployer,
+ *        neither seller nor bidder) sends open_bids, which decrypts the bid on
+ *        chain, then finalize_window, which clears the window.
  *   Settlement:
- *   9-10. Opening the bid already cleared the window, so the real
+ *   9-10. finalize_window already cleared the window, so the real
  *        SettleButton settles it with no separate clearing call. is_settled, the clearing price and
  *        the collateral and seller receipt statuses are asserted on chain
  *    11. ClaimButton — click real component, verify the FakeETH balance change
@@ -118,7 +119,8 @@ import {
   waitForTimelockKey,
   waitForWindowTimeLeft,
   chainNowUs,
-  submitDirect,
+  openBidsDirect,
+  finalizeWindowDirect,
   submitAsEthAccount,
   ethAccountAddress,
   pollUntil,
@@ -154,8 +156,7 @@ import {
   getBidPayload,
   getBidInfo,
   getBidCount,
-  // SCOUT(#228) REMOVE: getSubmitCleartextPayload leaves the SDK; import the open_bids payload builder.
-  getSubmitCleartextPayload,
+  getOpenCursor,
   isRevealed,
   isSettled,
   getBidResults,
@@ -282,7 +283,6 @@ function withProviders(account: string, children: React.ReactNode) {
 // ── Test suite ────────────────────────────────────────────────────────────
 
 // SCOUT(#236) EDIT: the suite ends with release on Ethereum instead of the faucet claim; the header comment (steps 8b to 11) needs the same rewrite.
-// SCOUT(#228) EDIT: step 8b becomes an on-chain open_bids call from a third account.
 describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
   let fixture: IntegrationFixture;
   let aptosClient: Aptos;
@@ -298,7 +298,6 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
   let windowId: bigint;
   let timelockId: bigint;
   let deadlineUs: bigint;
-  let bidSalt: Uint8Array;
 
   // Bidder state
   let bidderEthAddress: string;
@@ -549,11 +548,9 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       // sealBid builds the identity and associated data from the chain id,
       // epoch and deadline, checks them against the node's views, reads
       // timelock::get_mpk from the one configured endpoint and encrypts
-      // price || salt.
-      // SCOUT(#228) EDIT: no salt and no commitment come back, and getBidPayload has five arguments.
+      // the 8-byte little-endian price.
       const sealed = await sealBid(windowId, LAUNCH_PAIR_BCS, bidder, BID_PRICE);
       expect(sealed.timelockId).toBe(timelockId);
-      bidSalt = sealed.salt;
 
       await submitAsEthAccount(
         aptosClient,
@@ -562,7 +559,6 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
           windowId,
           LAUNCH_PAIR_BCS,
           sealed.ciphertext,
-          sealed.commitment,
           ethers.getBytes(collateralLockId),
           BID_QUANTITY,
         ),
@@ -574,8 +570,6 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       const stored = await getBidInfo(windowId, LAUNCH_PAIR_BCS, 0n);
       expect(stored.bidder.replace(/^0x0*/, "")).toBe(bidder.replace(/^0x0*/, ""));
       expect(stored.ciphertext).toEqual(sealed.ciphertext);
-      // SCOUT(#228) REMOVE: the bid view has no commitment.
-      expect(stored.commitment).toEqual(sealed.commitment);
       expect(stored.opened).toBe(false);
       console.log(
         `[14-happy-path] Sealed bid stored (${sealed.ciphertext.length}-byte ciphertext)`,
@@ -584,14 +578,13 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
     120_000,
   );
 
-  // ── Step 8b: Reveal — decrypt the bid with the revealed key ──────────────
+  // ── Step 8b: Reveal — the chain opens the bid ─────────────────────────────
 
-  // SCOUT(#228) EDIT: replace the decrypt, cleartext and salt assertions and the relayed submit_cleartext_and_clear with one open_bids call.
   // SCOUT(#236) EDIT: the open step is one click on the real component.
   it(
-    "step 8b — reveal: AuctionRevealer decrypts the same bid with get_decryption_key and it opens on chain",
+    "step 8b — reveal: a third account opens the bid on chain with open_bids, then finalize_window clears the window",
     async () => {
-      console.log("[14-happy-path] Step 8b: wait for the timelock reveal, then decrypt");
+      console.log("[14-happy-path] Step 8b: wait for the timelock reveal, then open on chain");
       await pollUntil("timelock reveal", TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS, async () =>
         (await isRevealed(timelockId)) ? true : undefined,
       );
@@ -610,52 +603,38 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         },
         { timeout: 30_000 },
       );
+      expect(screen.getByTestId(auctionRevealer.openBidsButton)).toBeTruthy();
 
-      fireEvent.click(screen.getByTestId(auctionRevealer.decryptBidsButton));
-      await waitFor(
-        () => {
-          expect(screen.getAllByTestId(auctionRevealer.decryptedBid)).toHaveLength(1);
-        },
-        { timeout: 30_000 },
-      );
-      expect(screen.queryByTestId(auctionRevealer.decryptError)).toBeNull();
-      const row = screen.getByTestId(auctionRevealer.decryptedBid);
-      expect(row.textContent).toContain(`price ${formatPrice(BID_PRICE)}`);
-      expect(row.textContent).toContain("matches commitment");
-
-      // The revealer recovered the bidder's price and salt.
-      const cleartexts = (
-        screen.getByTestId(auctionRevealer.cleartextsInput) as HTMLInputElement
-      ).value;
-      const salts = (screen.getByTestId(auctionRevealer.saltsInput) as HTMLInputElement)
-        .value;
-      expect(cleartexts).toBe(BID_PRICE.toString());
-      expect(salts).toBe(ethers.hexlify(bidSalt));
-
-      // Relay the decrypted opening. The contract checks it against the
-      // commitment made at submission, so only the true price and salt pass.
-      await submitDirect(
-        aptosClient,
-        deployerAccount,
-        // SCOUT(#228) REMOVE: relayed submit_cleartext_and_clear; replace with open_bids sent by a third account.
-        getSubmitCleartextPayload(windowId, LAUNCH_PAIR_BCS, [BigInt(cleartexts)], [
-          ethers.getBytes(salts),
-        ]),
-      );
+      // The deployer is neither seller nor bidder. It sends no price and no
+      // salt: open_bids decrypts the bid on chain with the revealed key.
+      await openBidsDirect(aptosClient, deployerAccount, {
+        windowId,
+        pairBcs: LAUNCH_PAIR_BCS,
+      });
+      expect(await getOpenCursor(windowId, LAUNCH_PAIR_BCS)).toEqual({ next: 1n, total: 1n });
       const opened = await getBidInfo(windowId, LAUNCH_PAIR_BCS, 0n);
       expect(opened.opened).toBe(true);
+      // SCOUT(#217) EDIT: the price the chain decrypted, in whole USD.
       expect(opened.price).toBe(BID_PRICE);
       expect(opened.valid).toBe(true);
+      expect(
+        (await getWindowStatus(aptosClient, moduleAddr, windowId, LAUNCH_PAIR_BCS)).revealFinal,
+      ).toBe(false);
+
+      await finalizeWindowDirect(aptosClient, deployerAccount, {
+        windowId,
+        pairBcs: LAUNCH_PAIR_BCS,
+      });
       const status = await getWindowStatus(aptosClient, moduleAddr, windowId, LAUNCH_PAIR_BCS);
       expect(status.revealFinal).toBe(true);
-      console.log(`[14-happy-path] Bid decrypted off chain and opened on chain at ${opened.price}`);
+      console.log(`[14-happy-path] Bid opened on chain at ${opened.price} and the window cleared`);
     },
     (TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 180) * 1000,
   );
 
   // ── Step 9-10: settle via the real SettleButton ──────────────────────────
   //
-  // The window has one opened bid. Opening it finalized the reveal and cleared
+  // The window has one opened bid. finalize_window cleared
   // the window, so the bid results already exist; the real SettleButton sends
   // `settle` through SIWE and reads the settlement back.
 

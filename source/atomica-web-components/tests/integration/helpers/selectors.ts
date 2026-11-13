@@ -82,18 +82,14 @@ export const SELECTORS = {
     bidStatus: "bid-status",
   },
 
-  // SCOUT(#228) EDIT: the decrypt, cleartext and salt selectors go; add the Open bids button.
-  // SCOUT(#236) EDIT: the same block changes for the single open action.
   // AuctionRevealer
   auctionRevealer: {
     windowIdInput: "revealer-window-id-input",
     startPollingButton: "start-polling-button",
     revealStatus: "reveal-status",
-    decryptBidsButton: "decrypt-bids-button",
-    decryptedBid: "decrypted-bid",
-    decryptError: "decrypt-error",
-    cleartextsInput: "cleartexts-input",
-    saltsInput: "salts-input",
+    openBidsButton: "open-bids-button",
+    openedCount: "opened-count",
+    openStatus: "open-status",
   },
 
   // SettleButton

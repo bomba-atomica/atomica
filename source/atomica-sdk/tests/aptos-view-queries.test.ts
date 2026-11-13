@@ -17,6 +17,8 @@
  *   - getWindowDeadlineUs → auction::window_deadline_us → bigint
  *   - getWindowSchedule → eth_proof::get_window_schedule → WindowSchedule
  *   - getWindowLimits → auction::get_window_limits → WindowLimits
+ *   - getMaxOpenBids → auction::get_max_open_bids → bigint
+ *   - getOpenCursor  → auction::get_open_cursor   → { next, total }
  *
  * @see source/atomica-sdk/src/aptos/payloads.ts
  * @see docs/architecture/v0-architecture.md §2 — sealed-bid reveal path
@@ -28,7 +30,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // NOTE: vi.mock factories must not reference top-level variables (browser mode).
 // Use vi.fn() inline and access via vi.mocked() or module import after the mock.
 
-vi.mock("../src/aptos/config.js", () => ({
+// The other config exports stay real: the @atomica/sdk/aptos entry
+// (src/aptos/index.ts) re-exports them.
+vi.mock("../src/aptos/config.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/aptos/config.js")>()),
   CONTRACT_ADDR: "0xdeadbeef",
   aptos: {
     view: vi.fn(),
@@ -61,6 +66,7 @@ import {
   getWindowLimits,
   LAUNCH_PAIR_BCS,
 } from "../src/aptos/payloads.js";
+import * as aptosEntry from "../src/aptos/index.js";
 import * as config from "../src/aptos/config.js";
 
 // ─── Shared fixtures ───────────────────────────────────────────────────────────
@@ -376,6 +382,39 @@ describe("window limits view", () => {
       payload: {
         function: "0xdeadbeef::auction::get_window_limits",
         functionArguments: [],
+      },
+    });
+  });
+});
+
+describe("on-chain opening views", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("getMaxOpenBids calls auction::get_max_open_bids and returns a bigint, and MAX_OPEN_BIDS_PER_CALL is exported from @atomica/sdk/aptos", async () => {
+    vi.mocked(config.aptos.view).mockResolvedValueOnce(["12"]);
+    const max = await aptosEntry.getMaxOpenBids();
+    expect(max).toBe(12n);
+    expect(typeof max).toBe("bigint");
+    expect(config.aptos.view).toHaveBeenLastCalledWith({
+      payload: {
+        function: "0xdeadbeef::auction::get_max_open_bids",
+        functionArguments: [],
+      },
+    });
+    expect(aptosEntry.MAX_OPEN_BIDS_PER_CALL).toBe(12n);
+    expect(max).toBe(aptosEntry.MAX_OPEN_BIDS_PER_CALL);
+  });
+
+  it("getOpenCursor calls auction::get_open_cursor with the window id and pair bytes and returns next and total as bigints", async () => {
+    vi.mocked(config.aptos.view).mockResolvedValueOnce(["2", "5"]);
+    const cursor = await aptosEntry.getOpenCursor(WINDOW_ID, PAIR_BCS);
+    expect(cursor).toEqual({ next: 2n, total: 5n });
+    expect(config.aptos.view).toHaveBeenLastCalledWith({
+      payload: {
+        function: "0xdeadbeef::auction::get_open_cursor",
+        functionArguments: [WINDOW_ID, PAIR_BCS],
       },
     });
   });

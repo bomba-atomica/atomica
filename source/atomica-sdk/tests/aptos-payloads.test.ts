@@ -8,8 +8,7 @@
  * Functions under test:
  *   - getBidPayload          → auction::submit_bid
  *   - getSettlePayload       → auction::settle
- *   - getSubmitCleartextPayload → auction::submit_cleartext_and_clear
- *   - getOpenBidPayload / getFinalizeRevealPayload / getRefundExpiredWindowPayload
+ *   - getOpenBidsPayload / getFinalizeWindowPayload / getRefundExpiredWindowPayload
  *   - getUnwindPayload            → auction::unwind
  *   - getCancelUnauctionedPayload → lock_receipt::cancel_unauctioned<Ethereum, Asset>
  *   - getSiweDomain / assertSiweDomain → eth_proof::siwe_domain
@@ -61,12 +60,12 @@ import {
   getUnwindPayload,
   SiweDomainMismatchError,
   getBidPayload,
-  getFinalizeRevealPayload,
-  getOpenBidPayload,
+  getFinalizeWindowPayload,
+  getOpenBidsPayload,
   getRefundExpiredWindowPayload,
   getSettlePayload,
-  getSubmitCleartextPayload,
   LAUNCH_PAIR_BCS,
+  MAX_OPEN_BIDS_PER_CALL,
 } from "../src/aptos/payloads.js";
 
 // ─── Shared fixtures ───────────────────────────────────────────────────────────
@@ -74,27 +73,17 @@ import {
 const WINDOW_ID = 7n;
 const PAIR_BCS = new Uint8Array([0x01, 0x02, 0x03, 0x04]);
 const CIPHERTEXT = new Uint8Array(190).fill(0xbb); // V2 bid ciphertext BCS(vk, U, nonce, C, sig)
-// SCOUT(#228) REMOVE: the commitment fixture.
-const COMMITMENT = new Uint8Array(32).fill(0xaa); // price commitment
 const COLLATERAL_LOCK_ID = new Uint8Array(32).fill(0xcc);
 const QUANTITY = 1_000_000_000_000_000_000n;
-const CLEARTEXTS = [100n, 200n, 300n];
-const SALTS = [
-  new Uint8Array(32).fill(1),
-  new Uint8Array(32).fill(2),
-  new Uint8Array(32).fill(3),
-];
 
 // ─── getBidPayload ─────────────────────────────────────────────────────────────
 
-// SCOUT(#228) EDIT: the cases below pin six arguments; getBidPayload has five and no commitment.
 describe("getBidPayload", () => {
   const build = () =>
     getBidPayload(
       WINDOW_ID,
       PAIR_BCS,
       CIPHERTEXT,
-      COMMITMENT,
       COLLATERAL_LOCK_ID,
       QUANTITY,
     ) as InputEntryFunctionData;
@@ -106,20 +95,16 @@ describe("getBidPayload", () => {
     expect(payload.function).toMatch(/::submit_bid$/);
   });
 
-  it("has 6 function arguments matching the Move signature", () => {
+  it("getBidPayload has five function arguments and no commitment", () => {
     // submit_bid(bidder &signer [implicit], window_id, pair_bcs, ciphertext,
-    //   commitment, collateral_lock_id, quantity) — 6 non-signer args.
-    expect(build().functionArguments!.length).toBe(6);
-  });
-
-  it("passes the arguments in Move order", () => {
-    const args = build().functionArguments!;
-    expect(args[0]).toBe(WINDOW_ID);
-    expect(args[1]).toBe(PAIR_BCS);
-    expect(args[2]).toBe(CIPHERTEXT);
-    expect(args[3]).toBe(COMMITMENT);
-    expect(args[4]).toBe(COLLATERAL_LOCK_ID);
-    expect(args[5]).toBe(QUANTITY);
+    //   collateral_lock_id, quantity) — 5 non-signer args.
+    expect(build().functionArguments).toEqual([
+      WINDOW_ID,
+      PAIR_BCS,
+      CIPHERTEXT,
+      COLLATERAL_LOCK_ID,
+      QUANTITY,
+    ]);
   });
 
   it("does not add type arguments", () => {
@@ -177,84 +162,30 @@ describe("getSettlePayload", () => {
   });
 });
 
-// ─── getSubmitCleartextPayload ─────────────────────────────────────────────────
+// ─── getOpenBidsPayload / getFinalizeWindowPayload / getRefundExpiredWindowPayload
 
-// SCOUT(#228) REMOVE: the builder is deleted.
-describe("getSubmitCleartextPayload", () => {
-  it("targets auction::submit_cleartext_and_clear", () => {
-    const payload = getSubmitCleartextPayload(
-      WINDOW_ID,
-      PAIR_BCS,
-      CLEARTEXTS,
-      SALTS,
-    ) as InputEntryFunctionData;
-    expect(payload.function).toContain("::auction::");
-    expect(payload.function).toMatch(/::submit_cleartext_and_clear$/);
-  });
-
-  it("has 4 function arguments (window_id, pair_bcs, cleartexts, salts)", () => {
-    const payload = getSubmitCleartextPayload(
-      WINDOW_ID,
-      PAIR_BCS,
-      CLEARTEXTS,
-      SALTS,
-    );
-    expect(payload.functionArguments!.length).toBe(4);
-  });
-
-  it("passes the arguments in Move order", () => {
-    const args = getSubmitCleartextPayload(
-      WINDOW_ID,
-      PAIR_BCS,
-      CLEARTEXTS,
-      SALTS,
-    ).functionArguments!;
-    expect(args[0]).toBe(WINDOW_ID);
-    expect(args[1]).toBe(PAIR_BCS);
-    expect(args[2]).toBe(CLEARTEXTS);
-    expect(args[3]).toBe(SALTS);
-  });
-
-  it("accepts empty arrays", () => {
-    const args = getSubmitCleartextPayload(
-      WINDOW_ID,
-      PAIR_BCS,
-      [],
-      [],
-    ).functionArguments!;
-    expect(args[2]).toHaveLength(0);
-    expect(args[3]).toHaveLength(0);
-  });
-});
-
-// ─── getOpenBidPayload / getFinalizeRevealPayload / getRefundExpiredWindowPayload
-
-// SCOUT(#228) EDIT: remove the open_bid and finalize_reveal cases and keep the refund case.
 describe("open, finalize and refund payloads", () => {
-  it("getOpenBidPayload targets auction::open_bid with 5 arguments", () => {
-    const payload = getOpenBidPayload(
+  it("getOpenBidsPayload targets auction::open_bids with the window id, the pair bytes and max_bids", () => {
+    const payload = getOpenBidsPayload(
       WINDOW_ID,
       PAIR_BCS,
-      2n,
-      2010n,
-      SALTS[0],
+      MAX_OPEN_BIDS_PER_CALL,
     ) as InputEntryFunctionData;
-    expect(payload.function).toMatch(/::auction::open_bid$/);
+    expect(payload.function).toBe("0xdeadbeef::auction::open_bids");
     expect(payload.functionArguments).toEqual([
       WINDOW_ID,
       PAIR_BCS,
-      2n,
-      2010n,
-      SALTS[0],
+      MAX_OPEN_BIDS_PER_CALL,
     ]);
+    expect(payload.typeArguments).toBeUndefined();
   });
 
-  it("getFinalizeRevealPayload targets auction::finalize_reveal", () => {
-    const payload = getFinalizeRevealPayload(
+  it("getFinalizeWindowPayload targets auction::finalize_window with the window id and the pair bytes", () => {
+    const payload = getFinalizeWindowPayload(
       WINDOW_ID,
       PAIR_BCS,
     ) as InputEntryFunctionData;
-    expect(payload.function).toMatch(/::auction::finalize_reveal$/);
+    expect(payload.function).toBe("0xdeadbeef::auction::finalize_window");
     expect(payload.functionArguments).toEqual([WINDOW_ID, PAIR_BCS]);
   });
 
@@ -269,12 +200,6 @@ describe("open, finalize and refund payloads", () => {
 });
 
 describe("planned tests (SCOUT)", () => {
-  it.todo(
-    "SCOUT(#228) getBidPayload has five function arguments and no commitment",
-  );
-  it.todo(
-    "SCOUT(#228) getOpenBidsPayload targets auction::open_bids with the window id, the pair bytes and max_bids",
-  );
   it.todo(
     "SCOUT(#236) the payloads module exports no getClaimMintPayload and no submitClaim",
   );

@@ -52,7 +52,8 @@ import {
   lockBidCollaterals,
   submitBidDirect,
   waitForReveal,
-  openWindowBidsDirect,
+  openAndFinalizeWindowDirect,
+  openBidsDirect,
   settleAuctionDirect,
   getWindowStatus,
   getAuctionState,
@@ -251,18 +252,25 @@ describe.sequential("10: Settle Auction", () => {
         TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS,
       );
 
-      // SCOUT(#228) EDIT: call open_bids from an account that is not the bidder, with no prices and no salts.
-      const opened = await openWindowBidsDirect(aptosClient, operator, auction);
-      expect(opened.map((b) => b.price)).toEqual([WIN_PRICE, LOSE_PRICE, INVALID_PRICE]);
-      expect((await getBidInfo(auction.windowId, PAIR_BCS, 0n)).opened).toBe(true);
-      expect((await getBidInfo(auction.windowId, PAIR_BCS, 1n)).opened).toBe(true);
-      expect((await getBidInfo(auction.windowId, PAIR_BCS, 2n)).opened).toBe(true);
-      // SCOUT(#228) EDIT: reveal_final has no finalize step any more; assert the cleared state the new view gives.
+      // The operator, which is not a bidder, opens the bids on chain with
+      // open_bids: no price and no salt is sent. It does not clear.
+      await openBidsDirect(aptosClient, operator, auction);
+      for (const [i, price] of [WIN_PRICE, LOSE_PRICE, INVALID_PRICE].entries()) {
+        const info = await getBidInfo(auction.windowId, PAIR_BCS, BigInt(i));
+        expect(info.opened).toBe(true);
+        expect(info.price).toBe(price);
+      }
+      expect(
+        await getWindowStatus(aptosClient, moduleAddr, auction.windowId, PAIR_BCS),
+      ).toEqual({ timelockId: auction.timelockId, revealFinal: false, refunded: false });
+
+      // finalize_window, from the same non-bidder, clears the window.
+      const { openHashes } = await openAndFinalizeWindowDirect(aptosClient, operator, auction);
+      expect(openHashes).toHaveLength(0);
       expect(
         await getWindowStatus(aptosClient, moduleAddr, auction.windowId, PAIR_BCS),
       ).toEqual({ timelockId: auction.timelockId, revealFinal: true, refunded: false });
 
-      // Opening the last bid finalized the reveal and cleared the window.
       const results = await getBidResults(auction.windowId, PAIR_BCS);
       expect(results.map((r) => [r.isWinner, r.fillAmount])).toEqual([
         [true, SUPPLY],

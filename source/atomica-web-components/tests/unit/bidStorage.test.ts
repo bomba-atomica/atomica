@@ -12,6 +12,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/react";
+import * as bidStorage from "../../src/storage/bidStorage";
 import { loadBidPrice, saveBidPrice } from "../../src/storage/bidStorage";
 import { useBidHistory } from "../../src/hooks/useBidHistory";
 
@@ -54,7 +55,18 @@ describe("bidStorage", () => {
     expect(localStorage.getItem(oldKey)).toBeNull();
   });
 
-  it.todo(
-    "SCOUT(#228) the opening storage is gone and no salt is written to localStorage",
-  );
+  it("the opening storage is gone and no salt is written to localStorage", () => {
+    // The chain opens every bid with open_bids, so nothing stores an opening.
+    expect(Object.keys(bidStorage).sort()).toEqual([
+      "clearBidPrice",
+      "loadBidPrice",
+      "saveBidPrice",
+    ]);
+    // The only stored value is the decimal price: no salt, no commitment.
+    bidStorage.saveBidPrice(SELLER, BIDDER, 2010n);
+    expect(localStorage.length).toBe(1);
+    const key = localStorage.key(0)!;
+    expect(key).not.toMatch(/salt|opening|commit/i);
+    expect(localStorage.getItem(key)).toBe("2010");
+  });
 });

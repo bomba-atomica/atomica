@@ -1,4 +1,3 @@
-// SCOUT(#228) EDIT: the header below describes the salt and the commitment; rewrite it for the 8-byte price plaintext and on-chain opening.
 /**
  * V2 sealed bids against the live chain: seal a bid for a window and open a
  * window's bids after the timelock reveal.
@@ -10,23 +9,20 @@
  * unless the node's `timelock::get_timelock_identity` and
  * `auction::bid_associated_data` equal them. It reads the epoch key
  * (`timelock::get_mpk`) from every configured endpoint and throws when two
- * answers differ. It then encrypts the plaintext `price_le8 || salt32` with the
- * V2 wrapper and commits to the price.
+ * answers differ. It then encrypts the plaintext, the 8-byte little-endian
+ * price and nothing else, with the V2 wrapper. No commitment and no salt exist.
  *
- * Opening reads the revealed key (`timelock::get_decryption_key`) and every bid
- * (`auction::get_bid_info`), decrypts each ciphertext off chain and checks the
- * result against the bid's on-chain commitment.
+ * The chain opens every bid itself: any account calls `auction::open_bids`
+ * (see `openBids` in `./payloads.js`). `decryptWindowBids` here is only a
+ * read-only preview that decrypts the bids off chain with the revealed key.
  *
  * @see source/state-proofs/typescript/src/ibe/index.ts — the V2 encryptor and decryptor
- * @see source/atomica-move-contracts/sources/auction.move — submit_bid, open_bid
+ * @see source/atomica-move-contracts/sources/auction.move — submit_bid, open_bids
  */
-import { randomBytes } from "@noble/hashes/utils";
 import { decryptBid, encryptBid } from "@atomica/state-proof-verifier/ibe";
 import { CONTRACT_ADDR, aptos, getExtraAptosClients } from "./config.js";
-// SCOUT(#228) EDIT: computeBidCommitment is deleted; only the 8-byte price encoder remains.
 import {
   buildBidAd,
-  computeBidCommitment,
   computeTimelockIdentityV2,
   encodeBidPlaintext,
 } from "../ibe/bid.js";
@@ -111,37 +107,35 @@ export async function getBidAssociatedData(
   return hexToBytes(ad);
 }
 
-// SCOUT(#228) EDIT: drop commitment.
 /** One stored bid (`auction::get_bid_info`). */
 export interface BidInfo {
   bidder: string;
   ciphertext: Uint8Array;
-  commitment: Uint8Array;
+  /** True once `open_bids` passed the bid, whether or not it decrypted. */
   opened: boolean;
   price: bigint;
   /**
-   * False once opening judged the bid invalid (zero price, or collateral below
+   * False once opening judged the bid invalid (a ciphertext that does not
+   * decrypt to 8 bytes, a zero price, or collateral below
    * `quote_for_fill(quantity, price)`). An invalid bid never fills and its
    * whole collateral goes back to its depositor. True for an unopened bid.
    */
   valid: boolean;
 }
 
-// SCOUT(#228) EDIT: the tuple is positional; without commitment, opened and price move up one place.
 /** Bid `bidIndex` of a window (`auction::get_bid_info`). */
 export async function getBidInfo(
   windowId: bigint,
   pairBcs: Uint8Array,
   bidIndex: bigint,
 ): Promise<BidInfo> {
-  const [bidder, ciphertext, commitment, opened, price, valid] = await view(
+  const [bidder, ciphertext, opened, price, valid] = await view(
     `${CONTRACT_ADDR}::auction::get_bid_info`,
     [windowId, pairBcs, bidIndex],
   );
   return {
     bidder: String(bidder),
     ciphertext: hexToBytes(ciphertext),
-    commitment: hexToBytes(commitment),
     opened: Boolean(opened),
     price: BigInt(price as string),
     valid: Boolean(valid),
@@ -207,25 +201,21 @@ export async function getMpkFromAllEndpoints(): Promise<Uint8Array> {
   return keys[0];
 }
 
-// SCOUT(#228) EDIT: drop commitment and salt.
-/** A bid sealed for `submit_bid`. Keep `salt`: it opens the bid. */
+/** A bid sealed for `submit_bid`. Nothing needs to be kept: the chain opens it. */
 export interface SealedBid {
   timelockId: bigint;
   ciphertext: Uint8Array;
-  commitment: Uint8Array;
-  salt: Uint8Array;
 }
 
-// SCOUT(#228) EDIT: encrypt the 8-byte little-endian price only; no salt parameter and no commitment.
 /**
  * Seal a bid of `price` for `bidder` on window `(windowId, pairBcs)`.
  * `price` is whole USD per whole base token with no decimal shift: callers
- * pass `parsePrice` output.
+ * pass `parsePrice` output. It is encrypted as the 8-byte little-endian `u64`.
  *
  * `bidder` is the Aptos address that will send `submit_bid` (for a SIWE
  * wallet, its derived address). The ciphertext is bound to that sender, the
- * window, the timelock, its epoch and its deadline. A fresh 32-byte salt is
- * drawn unless one is given.
+ * window, the timelock, its epoch and its deadline. The plaintext is the
+ * 8-byte little-endian price.
  *
  * The identity and the associated data are built locally from the chain id,
  * the timelock epoch and deadline, the window and the bidder. The call throws
@@ -239,7 +229,6 @@ export async function sealBid(
   pairBcs: Uint8Array,
   bidder: string,
   price: bigint,
-  salt: Uint8Array = randomBytes(32),
 ): Promise<SealedBid> {
   const timelockId = await getWindowTimelockId(windowId);
   const [chainId, epoch, deadlineUs, nodeIdentity, nodeAd, mpk] =
@@ -275,40 +264,34 @@ export async function sealBid(
       `The Aptos node returned bid associated data for window ${windowId} that differs from the one built locally. Refusing to seal the bid.`,
     );
   }
-  const plaintext = encodeBidPlaintext(price, salt);
+  const plaintext = encodeBidPlaintext(price);
   return {
     timelockId,
     ciphertext: encryptBid(mpk, identity, ad, plaintext),
-    commitment: computeBidCommitment(price, salt, ad),
-    salt,
   };
 }
 
-// SCOUT(#228) EDIT: drop salt and matchesCommitment.
-/** One bid of a window after off-chain decryption. */
+/** One bid of a window after off-chain decryption (a preview). */
 export interface OpenedBid {
   index: number;
   bidder: string;
-  /** True when the bid was already opened on chain. */
+  /** True when `open_bids` already opened the bid on chain. */
   alreadyOpened: boolean;
   /** The chain's validity flag. False once opening judged the bid invalid. */
   valid: boolean;
-  /** Decrypted price and salt. Absent when the bid did not decrypt. */
+  /** Decrypted price. Absent when the bid does not decrypt to 8 bytes. */
   price?: bigint;
-  salt?: Uint8Array;
-  /** True when `(price, salt)` matches the on-chain commitment, so `open_bid` accepts it. */
-  matchesCommitment: boolean;
   error?: string;
 }
 
-// SCOUT(#228) EDIT: keep as a read-only preview; expect an 8-byte plaintext and drop the commitment check.
 /**
- * Decrypt every bid of a window with the revealed key.
+ * Decrypt every bid of a window with the revealed key, off chain, as a
+ * read-only preview. The chain opens the bids itself with `open_bids`.
  *
  * Reads `timelock::get_decryption_key` (aborts until `Revealed`), then each
  * bid's ciphertext, and opens it with the V2 decryptor. A bid that fails to
- * decrypt or whose plaintext does not match its commitment is reported, not
- * thrown: only its bidder can open it.
+ * decrypt, or whose plaintext is not exactly 8 bytes, is reported, not thrown:
+ * `open_bids` will mark it invalid.
  */
 export async function decryptWindowBids(
   windowId: bigint,
@@ -329,24 +312,17 @@ export async function decryptWindowBids(
       bidder: info.bidder,
       alreadyOpened: info.opened,
       valid: info.valid,
-      matchesCommitment: false,
     };
     try {
       const plaintext = decryptBid(dk, identity, ad, info.ciphertext);
-      // SCOUT(#228) EDIT: the plaintext is 8 bytes.
-      if (plaintext.length !== 40) {
-        throw new Error("bid plaintext is not price_le8 || salt32");
+      if (plaintext.length !== 8) {
+        throw new Error("bid plaintext is not an 8-byte price");
       }
       bid.price = new DataView(
         plaintext.buffer,
         plaintext.byteOffset,
         8,
       ).getBigUint64(0, true);
-      bid.salt = plaintext.slice(8);
-      bid.matchesCommitment = bytesEqual(
-        computeBidCommitment(bid.price, bid.salt, ad),
-        info.commitment,
-      );
     } catch (e) {
       bid.error = e instanceof Error ? e.message : String(e);
     }

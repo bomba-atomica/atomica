@@ -6,10 +6,6 @@ export const BID_AD_TAG = "atomica/timelock-bid/v2";
 /** Domain tag of the V2 timelock identity (`ibe_config::compute_identity`). */
 export const TIMELOCK_IDENTITY_TAG = "ATOMICA_TIMELOCK_IBE_V2_ID";
 
-// SCOUT(#228) REMOVE: the commitment tag.
-/** Domain tag of the price commitment (`auction::compute_bid_commitment`). */
-export const BID_COMMIT_TAG = "atomica/bid-commitment/v1";
-
 const enc = new TextEncoder();
 
 function concat(...parts: Uint8Array[]): Uint8Array {
@@ -114,31 +110,11 @@ export function buildBidAd(f: BidAdFields): Uint8Array {
   );
 }
 
-// SCOUT(#228) EDIT: the plaintext is the 8-byte little-endian price, with no salt.
 /**
- * Bid plaintext convention: `price_le8 || salt32`. The relayer that decrypts a
- * bid with the revealed key reads the price and salt from it.
+ * Bid plaintext convention: the 8-byte little-endian `u64` price and nothing
+ * else. `auction::open_bids` decrypts each bid on chain and reads the price
+ * from exactly these 8 bytes. Any other length makes the bid invalid.
  */
-export function encodeBidPlaintext(
-  price: bigint,
-  salt: Uint8Array,
-): Uint8Array {
-  if (salt.length !== 32) throw new Error("salt must be 32 bytes");
-  return concat(u64le(price), salt);
-}
-
-// SCOUT(#228) REMOVE: auction::compute_bid_commitment is deleted.
-/**
- * Price commitment. Matches `auction::compute_bid_commitment` in Move:
- *   SHA3-256( tag || BCS(price: u64) || salt || SHA3-256(ad) )
- */
-export function computeBidCommitment(
-  price: bigint,
-  salt: Uint8Array,
-  ad: Uint8Array,
-): Uint8Array {
-  if (salt.length !== 32) throw new Error("salt must be 32 bytes");
-  return sha3_256(
-    concat(enc.encode(BID_COMMIT_TAG), u64le(price), salt, sha3_256(ad)),
-  );
+export function encodeBidPlaintext(price: bigint): Uint8Array {
+  return u64le(price);
 }

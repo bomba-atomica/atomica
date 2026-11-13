@@ -15,7 +15,6 @@ export type { BidHistoryEntry } from "./components/BidHistory";
 export { useTokenBalances } from "./hooks/useTokenBalances";
 export { useBidHistory } from "./hooks/useBidHistory";
 export type { UseBidHistoryResult } from "./hooks/useBidHistory";
-// SCOUT(#228) REMOVE: the bid opening exports that the salt issue (235) adds go away with the salt.
 export {
   saveBidPrice,
   loadBidPrice,

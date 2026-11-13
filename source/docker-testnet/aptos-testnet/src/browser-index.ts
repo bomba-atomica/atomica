@@ -33,8 +33,6 @@ export {
     requestTestTokens,
     areContractsDeployed,
     submitFaucet,
-    getBidPayload,
-    submitBid,
 } from "./payloads.js";
 
 export {
