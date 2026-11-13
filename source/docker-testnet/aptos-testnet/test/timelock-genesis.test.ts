@@ -7,11 +7,22 @@
  * holds a ready timelock key: is_ready() is true and get_mpk() is a 96-byte G2
  * point. See docs/decisions/aptos-validator-timelock.md (Docker testnet epoch
  * policy).
+ *
+ * Genesis also names the auction package's timelock registrar (layout field
+ * timelock_registrar), the only address that may register a timelock. The
+ * deployed package runs the window schedule of ATOMICA_TEST_WINDOW_SCHEDULE,
+ * which the CI job sets to 900:900.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AptosClient } from "aptos";
-import { getTestnet, setupLocalnet, teardownLocalnet } from "../src/localnet";
+import { AccountAddress } from "@aptos-labs/ts-sdk";
+import { deployContracts, getTestnet, setupLocalnet, teardownLocalnet } from "../src/localnet";
+import { timelockRegistrarAddress } from "../src/genesis";
 import type { DockerTestnet } from "../src/index";
+import {
+    APTOS_DEPLOYER_ADDRESS,
+    APTOS_TIMELOCK_REGISTRAR_ADDRESS,
+} from "../../../shared/test-constants";
 
 const TARGET_EPOCH = 2;
 /** Compressed BLS12-381 G2 point length (ibe_config::G2_COMPRESSED_LENGTH). */
@@ -86,7 +97,30 @@ describe.sequential("Timelock genesis", () => {
         console.log(`Epoch ${epoch}: is_ready=true, mpk is ${MPK_LENGTH_BYTES} bytes`);
     }, 360000);
 
-    it.todo(
-        "SCOUT(#243) genesis names the package's timelock registrar: 0x1::ibe_config::timelock_registrar equals the address derived from the deployer address",
-    );
+    it("genesis names the package's timelock registrar: 0x1::ibe_config::timelock_registrar equals the address derived from the deployer address", async () => {
+        const [registrar] = await client.view({
+            function: "0x1::ibe_config::timelock_registrar",
+            type_arguments: [],
+            arguments: [],
+        });
+        // Option<address> is returned as { vec: [] } or { vec: ["0x..."] }.
+        const { vec } = registrar as { vec: string[] };
+        expect(vec).toHaveLength(1);
+        const expected = timelockRegistrarAddress(APTOS_DEPLOYER_ADDRESS);
+        expect(expected).toBe(APTOS_TIMELOCK_REGISTRAR_ADDRESS);
+        expect(AccountAddress.from(vec[0]).toStringLong()).toBe(expected);
+    }, 60000);
+
+    it("the deployed package reports the test window schedule 900:900 from eth_proof::get_window_schedule", async () => {
+        // deployContracts stores ATOMICA_TEST_WINDOW_SCHEDULE right after publish.
+        expect(process.env.ATOMICA_TEST_WINDOW_SCHEDULE).toBe("900:900");
+        await deployContracts();
+        const [daySecs, offsets] = await client.view({
+            function: `${APTOS_DEPLOYER_ADDRESS}::eth_proof::get_window_schedule`,
+            type_arguments: [],
+            arguments: [],
+        });
+        expect(String(daySecs)).toBe("900");
+        expect((offsets as string[]).map(String)).toEqual(["900"]);
+    }, 600000);
 });

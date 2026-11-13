@@ -1,12 +1,15 @@
-import type {
-  Aptos,
-  InputGenerateTransactionPayloadData,
+import { sha3_256 } from "@noble/hashes/sha3";
+import {
+  AccountAddress,
+  type Aptos,
+  type InputGenerateTransactionPayloadData,
 } from "@aptos-labs/ts-sdk";
 import { ethers } from "ethers";
 import { CONTRACT_ADDR, aptos } from "./config.js";
 import { getDerivedAddress } from "../siwe.js";
 import { submitNativeTransaction } from "../transaction.js";
 import type { LockedBalanceProof } from "../ethereum/proofs/generator.js";
+import type { WindowSchedule } from "../ethereum/lock-binding.js";
 import { LAUNCH_PAIR_BCS } from "../settlement/bridge.js";
 import {
   setPinnedEthereumConfigReader,
@@ -174,18 +177,18 @@ export async function getLaunchPairBcs(): Promise<Uint8Array> {
   return ethers.getBytes(result[0] as string);
 }
 
-// SCOUT(#243) EDIT: drop the timelockId parameter and argument; create_auction registers the window's timelock itself.
 // SCOUT(#217) EDIT: minPrice is a whole-USD price for as long as the reserve price exists.
 /**
  * Build payload for auction::create_auction (v0 Beta global-registry).
  *
- *   create_auction(seller, window_id, pair_bcs, lock_id, timelock_id)
+ *   create_auction(seller, window_id, pair_bcs, lock_id)
  *
  * `pairBcs` must be on the pair allowlist (`E_PAIR_NOT_ALLOWED` otherwise);
  * pass {@link LAUNCH_PAIR_BCS}.
  * There is no reserve price: clearing alone sets the price.
- * `timelockId` is the id that `ibe_config::register_timelock` returned for the
- * window's deadline. Register it first with {@link registerTimelock}.
+ * There is no timelock id: the first `create_auction` of a window id registers
+ * the window's timelock, with the window close as its deadline, and every later
+ * seller of that window id joins it. Read it with {@link getWindowTimelock}.
  *
  * @see docs/architecture/v0-architecture.md §2.3
  */
@@ -193,98 +196,126 @@ export function getCreateAuctionPayload(
   windowId: bigint,
   pairBcs: Uint8Array,
   lockId: Uint8Array,
-  timelockId: bigint,
 ): InputGenerateTransactionPayloadData {
   return {
     function: `${CONTRACT_ADDR}::auction::create_auction`,
-    functionArguments: [windowId, pairBcs, lockId, timelockId],
+    functionArguments: [windowId, pairBcs, lockId],
   };
 }
 
-// SCOUT(#243) EDIT: drop the timelockId parameter.
+/** Sign and submit {@link getCreateAuctionPayload}: one transaction creates or joins a window. */
 export async function submitCreateAuction(
   ethAddress: string,
   windowId: bigint,
   pairBcs: Uint8Array,
   lockId: Uint8Array,
-  timelockId: bigint,
 ) {
   return await submitNativeTransaction(
     aptos,
     ethAddress,
-    getCreateAuctionPayload(windowId, pairBcs, lockId, timelockId),
+    getCreateAuctionPayload(windowId, pairBcs, lockId),
   );
 }
 
-// SCOUT(#243) REMOVE: the SDK no longer builds a register_timelock payload; the integration helper registerTimelockDirect imports this one.
-// SCOUT(#225) EDIT: once the framework pin has the registrar check, this entry aborts with E_NOT_REGISTRAR for every wallet.
 /**
- * Build payload for the framework entry
- * `0x1::ibe_config::register_timelock(account, deadline_us)`.
- *
- * The chain aborts unless the epoch's IBE key is ready, `deadlineUs` is in the
- * future, and `deadlineUs` is at least 15 minutes before the epoch ends.
+ * Event type that `0x1::ibe_config` emits when a timelock is registered. Its
+ * sender is the auction package's registrar ({@link timelockRegistrarAddress}).
  */
-export function getRegisterTimelockPayload(
-  deadlineUs: bigint,
-): InputGenerateTransactionPayloadData {
-  return {
-    function: "0x1::ibe_config::register_timelock",
-    functionArguments: [deadlineUs],
-  };
-}
-
-// SCOUT(#243) EDIT: decide whether this constant and timelockIdFromEvents stay for the live test that reads the registration event, or go with registerTimelock.
-/** Event type that `ibe_config::register_timelock` emits. */
 export const TIMELOCK_REGISTRATION_EVENT =
   "0x1::ibe_config::TimelockRegistrationEvent";
 
 /**
- * Read the timelock id from the events of a `register_timelock` transaction.
- * Throws when the transaction emitted no `TimelockRegistrationEvent`.
+ * Read the timelock id from the events of a transaction that registered a
+ * timelock (the first `create_auction` of a window id). Throws when the
+ * transaction emitted no `TimelockRegistrationEvent`.
  */
 export function timelockIdFromEvents(
   events: ReadonlyArray<{ type: string; data: unknown }>,
 ): bigint {
   const event = events.find((e) => e.type === TIMELOCK_REGISTRATION_EVENT);
   if (!event) {
-    throw new Error("register_timelock emitted no TimelockRegistrationEvent");
+    throw new Error("the transaction emitted no TimelockRegistrationEvent");
   }
   return BigInt((event.data as { timelock_id: string }).timelock_id);
 }
 
-// SCOUT(#243) REMOVE: no client registers a timelock; AuctionCreator and useSellFlow call this today.
-// SCOUT(#225) EDIT: this call fails for every user wallet once the framework pin has the registrar check.
+/** Domain byte of `object::create_object_address` (the named-object scheme). */
+const OBJECT_FROM_SEED_SCHEME = 0xfe;
+
+/** Seed of the registrar object (`auction::TIMELOCK_REGISTRAR_SEED`). */
+export const TIMELOCK_REGISTRAR_SEED = "atomica/timelock-registrar";
+
 /**
- * Register a timelock for `deadlineUs` and return its id. Call this before
- * `create_auction`, which records the id on the window.
+ * The auction package's timelock registrar address,
+ * `object::create_object_address(&moduleAddress, TIMELOCK_REGISTRAR_SEED)`:
+ * sha3-256 of the module address, the seed and the named-object scheme byte
+ * (0xFE). It equals `auction::timelock_registrar_address` and the genesis
+ * `timelock_registrar` (`0x1::ibe_config::timelock_registrar`).
  */
-export async function registerTimelock(
-  ethAddress: string,
-  deadlineUs: bigint,
-): Promise<bigint> {
-  const { hash } = await submitNativeTransaction(
-    aptos,
-    ethAddress,
-    getRegisterTimelockPayload(deadlineUs),
+export function timelockRegistrarAddress(
+  moduleAddress: string = CONTRACT_ADDR,
+): string {
+  // Not the ts-sdk `createObjectAddress`: it needs Node's Buffer, and this runs
+  // in the browser too.
+  const seed = new TextEncoder().encode(TIMELOCK_REGISTRAR_SEED);
+  const preimage = new Uint8Array(32 + seed.length + 1);
+  preimage.set(
+    AccountAddress.fromString(moduleAddress, {
+      maxMissingChars: 63,
+    }).toUint8Array(),
   );
-  const tx = await aptos.waitForTransaction({ transactionHash: hash });
-  return timelockIdFromEvents("events" in tx ? tx.events : []);
+  preimage.set(seed, 32);
+  preimage[32 + seed.length] = OBJECT_FROM_SEED_SCHEME;
+  return AccountAddress.from(sha3_256(preimage)).toStringLong();
 }
 
-// SCOUT(#243) ADD: derives the package's timelock registrar address, object::create_object_address(@atomica, seed), from the module address.
-export function timelockRegistrarAddress(_moduleAddress?: string): string {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#243) timelockRegistrarAddress");
+/**
+ * The timelock id registered for `windowId` (`auction::window_timelock`). One
+ * timelock per window id, shared by every pair. The view aborts until a
+ * `create_auction` of that window id has registered it.
+ */
+export async function getWindowTimelock(windowId: bigint): Promise<bigint> {
+  const [id] = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::auction::window_timelock`,
+      functionArguments: [windowId],
+    },
+  });
+  return BigInt(id as string);
 }
 
-// SCOUT(#243) ADD: reader for the view that returns the timelock id of a window id.
-export async function getWindowTimelock(_windowId: bigint): Promise<bigint> {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#243) getWindowTimelock");
+/**
+ * The timelock deadline of `windowId` in microseconds
+ * (`auction::window_deadline_us`): the window close. Bids are accepted
+ * strictly before it.
+ */
+export async function getWindowDeadlineUs(windowId: bigint): Promise<bigint> {
+  const [deadline] = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::auction::window_deadline_us`,
+      functionArguments: [windowId],
+    },
+  });
+  return BigInt(deadline as string);
 }
 
-// SCOUT(#243) ADD: reader for the view that returns the timelock deadline of a window id, in microseconds.
-export async function getWindowDeadlineUs(_windowId: bigint): Promise<bigint> {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#243) getWindowDeadlineUs");
+/**
+ * The window clock in force on the chain (`eth_proof::get_window_schedule`):
+ * the production 07:45 and 16:15 UTC closes unless a test chain stored
+ * another schedule. Pass it to `currentWindowId`, `lockBinding` and
+ * `ethLockDeadline` of `@atomica/sdk/ethereum`.
+ */
+export async function getWindowSchedule(): Promise<WindowSchedule> {
+  const [daySecs, offsets] = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::eth_proof::get_window_schedule`,
+      functionArguments: [],
+    },
+  });
+  return {
+    daySecs: BigInt(daySecs as string),
+    closeOffsetsSecs: (offsets as string[]).map((o) => BigInt(o)),
+  };
 }
 
 /** The asset of a lock receipt: the `lock_receipt` type argument. */

@@ -22,12 +22,12 @@ import {
 } from "@atomica/sdk/ethereum";
 import { getChainConfig } from "@atomica/sdk/chain-config";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
-// SCOUT(#243) REMOVE: drop the registerTimelock import.
 import {
   assertSiweDomain,
   getRegisterLockPayload,
   getCreateAuctionPayload,
-  registerTimelock,
+  getWindowDeadlineUs,
+  getWindowSchedule,
 } from "@atomica/sdk/aptos";
 import { submitNativeTransaction } from "@atomica/sdk";
 import { aptos } from "@atomica/sdk/aptos";
@@ -85,8 +85,10 @@ export interface SellFlowActions {
   generateProof: () => Promise<void>;
   /** Step 5: submit proof to Aptos → creates LockReceipt */
   submitProof: () => Promise<void>;
-  // SCOUT(#243) EDIT: createAuction sends one transaction.
-  /** Step 6: register the window timelock, then create the auction (consumes the LockReceipt) */
+  /**
+   * Step 6: create the auction (consumes the LockReceipt). One transaction:
+   * create_auction registers the window timelock itself.
+   */
   createAuction: () => Promise<void>;
   /** Return the lock to the seller after its deadline (LockBox.reclaim) */
   cancelAndUnlock: () => Promise<void>;
@@ -289,9 +291,12 @@ export function useSellFlow(
         // after it, anyone may reclaim the lock to the seller. LockBox
         // reverts (WindowClosed) if the window closed by the time the lock
         // is mined, so a wrong client clock fails here with no funds moved.
+        // The window clock is the chain's (a test chain stores a short one).
+        const schedule = await getWindowSchedule();
         const binding = lockBinding(
-          currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
+          currentWindowId(BigInt(Math.floor(Date.now() / 1000)), schedule),
           LAUNCH_PAIR_BCS,
+          schedule,
         );
         const receipt = await lockFakeEth(provider, amount, binding);
         const lock = lockFromReceipt(receipt);
@@ -333,6 +338,7 @@ export function useSellFlow(
     }));
 
     try {
+      const schedule = await getWindowSchedule();
       // Prove at a certified block that covers the lock (shared with the
       // bidder's FakeUSD lock step).
       const proof = await proveLock(
@@ -342,7 +348,7 @@ export function useSellFlow(
           nonce: state.lockNonce,
           amount: state.amount,
           // lockBinding carries the computed deadline the commitment binds.
-          ...lockBinding(state.windowId, LAUNCH_PAIR_BCS),
+          ...lockBinding(state.windowId, LAUNCH_PAIR_BCS, schedule),
         },
         state.lockBlock,
       );
@@ -413,27 +419,20 @@ export function useSellFlow(
       // fall back to the current_window_id formula on the client clock.
       const windowId =
         state.windowId ??
-        currentWindowId(BigInt(Math.floor(Date.now() / 1000)));
+        currentWindowId(
+          BigInt(Math.floor(Date.now() / 1000)),
+          await getWindowSchedule(),
+        );
       // The window's pair: the launch pair, the bytes the lock is bound to.
       const pairBcs = LAUNCH_PAIR_BCS;
-      // SCOUT(#243) REMOVE: registerTimelock and the local one hour auctionEndTime; read the window deadline from the new view instead.
-      // SCOUT(#225) EDIT: this call aborts with E_NOT_REGISTRAR once the validator image has the registrar check.
-      // create_auction records the timelock that opens the window's bids, so
-      // register it first. Its deadline is the auction end.
-      const auctionEndTime = Math.floor(Date.now() / 1000) + 3600;
-      const timelockId = await registerTimelock(
-        account,
-        BigInt(auctionEndTime) * 1_000_000n,
-      );
-
-      // SCOUT(#243) EDIT: drop timelockId.
-      const payload = getCreateAuctionPayload(
-        windowId,
-        pairBcs,
-        lockIdBytes,
-        timelockId,
-      );
+      // One transaction: create_auction registers the window's timelock on
+      // the first call for the window id, with the window close as deadline.
+      const payload = getCreateAuctionPayload(windowId, pairBcs, lockIdBytes);
       await submitNativeTransaction(aptos, account, payload);
+      // The auction ends at the window timelock deadline the chain stored.
+      const auctionEndTime = Number(
+        (await getWindowDeadlineUs(windowId)) / 1_000_000n,
+      );
 
       setState((s) => ({
         ...s,
@@ -468,8 +467,12 @@ export function useSellFlow(
         nonce: state.lockNonce,
         amount: state.amount,
         // The Lock struct's deadline is LockBox.lockDeadline(windowId), as lockBinding returns it.
-        // The same pair bytes as the lock binding.
-        ...lockBinding(state.windowId, LAUNCH_PAIR_BCS),
+        // The same pair bytes and window clock as the lock binding.
+        ...lockBinding(
+          state.windowId,
+          LAUNCH_PAIR_BCS,
+          await getWindowSchedule(),
+        ),
       });
 
       if (account) clearState(account);

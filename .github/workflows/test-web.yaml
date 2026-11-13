@@ -30,8 +30,7 @@ env:
   # the AptosFramework rev in source/atomica-move-contracts/Move.toml (checked
   # by move-framework-pin).
   # SCOUT(#228) EDIT: move APTOS_VERSION to the fork release that ships the ibe::decrypt_bid native (227).
-  # SCOUT(#243) EDIT: move APTOS_VERSION to the fork release that ships the timelock registrar (225).
-  APTOS_VERSION: binary-52beee31a6
+  APTOS_VERSION: binary-245937376b
 
 jobs:
   changes:
@@ -338,8 +337,10 @@ jobs:
     runs-on: ubuntu-latest
     # The job ran 20-21 minutes on main before test/auction-round-trip.test.ts,
     # which adds a dual-chain boot, three locks and proofs, a timelock reveal
-    # and the outcome carry. 60 keeps headroom for it.
-    timeout-minutes: 60
+    # and the outcome carry. On the 900:900 test window schedule the round trip
+    # and the 900:900 lock case can each wait up to one 900-second window for a
+    # close, so 90 keeps headroom for them.
+    timeout-minutes: 90
     env:
       CI_CLASS: system-correctness
     permissions:
@@ -388,11 +389,10 @@ jobs:
           bun run build
 
       # SCOUT(#228) EDIT: the binary tag in this step is hardcoded (it does not read the workflow env) and must move with APTOS_VERSION.
-      # SCOUT(#243) EDIT: the binary tag in this step is hardcoded and must move with APTOS_VERSION; the stricter Move Framework Pin check will fail on it otherwise.
       - name: Install Aptos CLI
         run: |
           # Download aptos binary from atomica-aptos releases
-          APTOS_VERSION="binary-52beee31a6"
+          APTOS_VERSION="binary-245937376b"
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
           APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
@@ -435,11 +435,13 @@ jobs:
       # ── Aptos Testnet SDK Tests ────────────────────────────────────────────
       # This step runs test/auction-round-trip.test.ts, the live lock, auction,
       # outcome and release round trip. The compose default validator image
-      # (binary-52beee31a6) serves /v1/atomica, so no image step is needed.
+      # (binary-245937376b) serves /v1/atomica, so no image step is needed.
       # ETH_BACKEND is unset, so the Ethereum side is the Docker PoS chain,
       # where Prague gives AptosLightClient its EIP-2537 precompiles.
       # It also runs test/lockbox-release.test.ts against the LockBox it deploys.
-      # SCOUT(#243) EDIT: genesis must write timelock_registrar from the deployer address in the env block below, before the package is published.
+      # Genesis names the package's timelock registrar, derived from
+      # APTOS_DEPLOYER_ADDRESS below, so create_auction can register timelocks.
+      # ATOMICA_TEST_WINDOW_SCHEDULE gives the testnet a close every 15 minutes.
       - name: Run Aptos Testnet SDK tests
         working-directory: source/docker-testnet/aptos-testnet
         env:
@@ -448,6 +450,7 @@ jobs:
           APTOS_ROOT_ACCOUNT_PUBLIC_KEY: "0x9b34d9d1f7e943b6c9462a987d978125899c0ca8e84018f0a0afca93ac2fcfaf"
           APTOS_DEPLOYER_ADDRESS: "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa"
           APTOS_DEPLOYER_PRIVATE_KEY: "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717"
+          ATOMICA_TEST_WINDOW_SCHEDULE: "900:900"
           APTOS_VALIDATOR_0_SEED: "0000000000000000000000000000000000000000000000000000000000000001"
           APTOS_VALIDATOR_1_SEED: "0000000000000000000000000000000000000000000000000000000000000002"
           APTOS_VALIDATOR_2_SEED: "0000000000000000000000000000000000000000000000000000000000000003"
@@ -478,34 +481,18 @@ jobs:
       - uses: actions/checkout@v4
 
       # SCOUT(#228) EDIT: this check passes only when Move.toml rev and APTOS_VERSION move together to the fork commit with the decrypt native.
-      - name: Move.toml rev must be the full SHA of APTOS_VERSION
-        run: |
-          MOVE_TOML=source/atomica-move-contracts/Move.toml
-          REV=$(sed -n 's/^AptosFramework = .*rev = "\([^"]*\)".*/\1/p' "$MOVE_TOML")
-          APTOS_HASH="${APTOS_VERSION#binary-}"
-          echo "Move.toml rev: ${REV:-<none>}"
-          echo "APTOS_VERSION: ${APTOS_VERSION}"
-          if ! [[ "$REV" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error file=${MOVE_TOML}::AptosFramework rev '${REV}' is not a full 40-character commit SHA"
-            exit 1
-          fi
-          if [[ "$REV" != "$APTOS_HASH"* ]]; then
-            echo "::error file=${MOVE_TOML}::AptosFramework rev ${REV} does not match ${APTOS_VERSION}"
-            exit 1
-          fi
-          echo "Move.toml rev matches ${APTOS_VERSION}"
+      # The script reads APTOS_VERSION from the top-level env of this file. It fails when
+      # the Move.toml rev, any workflow binary- tag, APTOS_PROOF_RELEASE or
+      # APTOS_PROOF_COMMIT differs from it. The validator image digest in
+      # source/docker-testnet/config/docker-compose.yaml stays unchecked: a
+      # digest cannot be compared with a tag without a registry read.
+      - name: Every fork pin must equal APTOS_VERSION
+        run: bash .github/scripts/check-fork-pin.sh
 
-      # SCOUT(#243) ADD: new step that fails when any workflow names a binary- tag other than APTOS_VERSION (today 7 hardcoded copies exist in 3 workflow files, plus APTOS_PROOF_RELEASE).
-      # - name: Every workflow binary- tag must equal APTOS_VERSION
-      #   run: |
-      #     set -euo pipefail
-      #     others=$(grep -rnoE 'binary-[0-9a-f]{10,40}' .github/workflows --include='*.yml' --include='*.yaml' | grep -v ":${APTOS_VERSION}\$" || true)
-      #     if [ -n "$others" ]; then
-      #       echo "::error::workflow binary tags differ from ${APTOS_VERSION}:"
-      #       echo "$others"
-      #       exit 1
-      #     fi
-      # SCOUT(#243) ADD: nothing checks the validator image digest in source/docker-testnet/config/docker-compose.yaml against APTOS_VERSION; a digest cannot be compared with a tag without a registry read.
+      # Proves the check fails on each bad fixture and passes on the good one
+      # and on the real tree.
+      - name: Fork pin check rejects the bad fixtures
+        run: bash .github/scripts/check-fork-pin-fixtures.sh
 
   move-unit-tests:
     name: Move Unit Tests
@@ -596,12 +583,14 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
-    # The unwind chunk waits about 25 minutes for a window to pass its stuck
-    # deadline (reveal window, opening window and the shortened grace).
-    timeout-minutes: ${{ matrix.chunk == 'unwind' && 75 || 45 }}
+    # On the 900:900 test window schedule a chunk waits up to one 900-second
+    # window for its close. The unwind chunk then waits about 25 more minutes
+    # for the stuck deadline (reveal window, opening window, shortened grace).
+    timeout-minutes: ${{ matrix.chunk == 'unwind' && 90 || 75 }}
     env:
       CI_CLASS: feature-correctness
       ETH_BACKEND: anvil
+      ATOMICA_TEST_WINDOW_SCHEDULE: "900:900"
       # Prague gives the unwind chunk the EIP-2537 precompiles the Aptos light
       # client verifies with. The other chunks keep Cancun, like the Docker EL.
       ETH_ANVIL_HARDFORK: ${{ matrix.chunk == 'unwind' && 'prague' || 'cancun' }}
@@ -620,7 +609,6 @@ jobs:
             test_files: >-
               tests/integration/01-faucet.test.tsx
               tests/integration/02-wallet-connect.test.tsx
-          # SCOUT(#243) TEST: this chunk runs 07-create-auction, which registers the timelock through create_auction and checks the rejected direct registration.
           - chunk: auction
             test_files: >-
               tests/integration/07-create-auction.test.tsx
@@ -637,7 +625,7 @@ jobs:
             test_files: >-
               tests/integration/16-settle-100-bids.test.tsx
           # SCOUT(#236) EDIT: tests/integration/11-claim-and-reclaim.test.tsx becomes a release test; rename it in this chunk's test_files if the file is renamed.
-          - chunk: claim-reclaim-fees
+          - chunk: claim-reclaim
             test_files: >-
               tests/integration/11-claim-and-reclaim.test.tsx
               tests/integration/13-bid-history.test.tsx
@@ -704,12 +692,11 @@ jobs:
         run: forge build
 
       # SCOUT(#228) EDIT: the binary tag in this step is hardcoded and must move with APTOS_VERSION.
-      # SCOUT(#243) EDIT: the binary tag in this step is hardcoded and must move with APTOS_VERSION.
       # SCOUT(#236) EDIT: a new or renamed chunk must also be added to the two chunk lists in the `if:` lines of this step and the next, and to the gate list in required-checks.
       - name: Install Aptos CLI
-        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path' || matrix.chunk == 'unwind'
+        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim' || matrix.chunk == 'happy-path' || matrix.chunk == 'unwind'
         run: |
-          APTOS_VERSION="binary-52beee31a6"
+          APTOS_VERSION="binary-245937376b"
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
           APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
@@ -726,7 +713,7 @@ jobs:
           which aptos
 
       - name: Pre-warm Move git dependency cache
-        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path' || matrix.chunk == 'unwind'
+        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim' || matrix.chunk == 'happy-path' || matrix.chunk == 'unwind'
         run: |
           # Step 1: Fetch the atomica-aptos git dependency by compiling atomica-move-contracts.
           # This clones the repo and generates Move.lock for atomica-move-contracts.
@@ -765,10 +752,13 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # On the 900:900 test window schedule a chunk waits up to one 900-second
+    # window for its close.
+    timeout-minutes: 90
     env:
       CI_CLASS: system-correctness
       ETH_BACKEND: docker
+      ATOMICA_TEST_WINDOW_SCHEDULE: "900:900"
     permissions:
       packages: read
       contents: read
@@ -793,7 +783,7 @@ jobs:
             test_files: >-
               tests/integration/16-settle-100-bids.test.tsx
           # SCOUT(#236) EDIT: tests/integration/11-claim-and-reclaim.test.tsx becomes a release test; rename it in this chunk's test_files if the file is renamed.
-          - chunk: claim-reclaim-fees
+          - chunk: claim-reclaim
             test_files: >-
               tests/integration/11-claim-and-reclaim.test.tsx
               tests/integration/13-bid-history.test.tsx
@@ -854,11 +844,10 @@ jobs:
         run: forge build
 
       # SCOUT(#228) EDIT: the binary tag in this step is hardcoded and must move with APTOS_VERSION.
-      # SCOUT(#243) EDIT: the binary tag in this step is hardcoded and must move with APTOS_VERSION.
       - name: Install Aptos CLI
-        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path'
+        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim' || matrix.chunk == 'happy-path'
         run: |
-          APTOS_VERSION="binary-52beee31a6"
+          APTOS_VERSION="binary-245937376b"
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
           APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
@@ -875,7 +864,7 @@ jobs:
           which aptos
 
       - name: Pre-warm Move git dependency cache
-        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim-fees' || matrix.chunk == 'happy-path'
+        if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim' || matrix.chunk == 'happy-path'
         run: |
           # Step 1: Fetch the atomica-aptos git dependency by compiling atomica-move-contracts.
           # This clones the repo and generates Move.lock for atomica-move-contracts.
@@ -1063,10 +1052,9 @@ jobs:
     env:
       CI_CLASS: system-correctness
       # SCOUT(#228) EDIT: APTOS_PROOF_RELEASE, APTOS_PROOF_COMMIT (full SHA) and the IMAGE_NAME tag below must move with APTOS_VERSION.
-      # SCOUT(#243) EDIT: APTOS_PROOF_RELEASE, APTOS_PROOF_COMMIT (full SHA) and the IMAGE_NAME tag below must move with APTOS_VERSION.
-      APTOS_PROOF_RELEASE: binary-52beee31a6
-      APTOS_PROOF_COMMIT: 52beee31a6ec0a64f2471971d202e6b0e2392440
-      IMAGE_NAME: atomica-validator:52beee31a6
+      APTOS_PROOF_RELEASE: binary-245937376b
+      APTOS_PROOF_COMMIT: 245937376b19dd278c3e62776aedc9401da28647
+      IMAGE_NAME: atomica-validator:245937376b
     permissions:
       contents: read
     steps:
@@ -1231,8 +1219,8 @@ jobs:
             "base;;Move Framework Pin"
             "base;;Move Unit Tests"
             "base;;Move Lint Warnings"
-            "base;Browser Tests (${D}{{ matrix.chunk }}, anvil);Browser Tests (component, anvil);Browser Tests (faucet-wallet, anvil);Browser Tests (auction, anvil);Browser Tests (bid-settle, anvil);Browser Tests (settle-100-bids, anvil);Browser Tests (claim-reclaim-fees, anvil);Browser Tests (happy-path, anvil);Browser Tests (unwind, anvil)"
-            "docker;Browser Tests (${D}{{ matrix.chunk }}, docker);Browser Tests (faucet-wallet, docker);Browser Tests (auction, docker);Browser Tests (bid-settle, docker);Browser Tests (settle-100-bids, docker);Browser Tests (claim-reclaim-fees, docker);Browser Tests (happy-path, docker)"
+            "base;Browser Tests (${D}{{ matrix.chunk }}, anvil);Browser Tests (component, anvil);Browser Tests (faucet-wallet, anvil);Browser Tests (auction, anvil);Browser Tests (bid-settle, anvil);Browser Tests (settle-100-bids, anvil);Browser Tests (claim-reclaim, anvil);Browser Tests (happy-path, anvil);Browser Tests (unwind, anvil)"
+            "docker;Browser Tests (${D}{{ matrix.chunk }}, docker);Browser Tests (faucet-wallet, docker);Browser Tests (auction, docker);Browser Tests (bid-settle, docker);Browser Tests (settle-100-bids, docker);Browser Tests (claim-reclaim, docker);Browser Tests (happy-path, docker)"
             "base;;EVM e2e tests (anvil)"
             "docker;;EVM e2e tests (docker)"
             "base;;EVM Contract Tests (forge)"

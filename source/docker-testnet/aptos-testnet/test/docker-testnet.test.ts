@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { DockerTestnet } from "../src/index";
 
 // SCOUT(#228) EDIT: the comment below repeats the validator image digest and must move with the compose default.
-// SCOUT(#243) EDIT: the comment below repeats the validator image digest and must move with the compose default.
 /**
  * Test: Docker Testnet - Multi-Validator Blockchain Progress
  *
@@ -28,7 +27,7 @@ import { DockerTestnet } from "../src/index";
  * - 8GB RAM minimum
  *
  * NOTES:
- * - Uses pre-built images: ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:c86881514504e43b12a599152d43f1f6ad6c8453600662378684323a4942d965
+ * - Uses pre-built images: ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:f8dc4a3a74d1ad23384c5f279d8863fec606bde9930de19380a4ce8232674087
  * - First run: ~1-2 minutes (image download)
  * - Subsequent runs: ~30-45 seconds
  * - Matches Rust `DockerTestnet` harness pattern

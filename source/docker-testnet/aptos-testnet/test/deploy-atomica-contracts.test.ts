@@ -71,7 +71,9 @@ describe.sequential("Atomica Contract Deployment", () => {
             accountAddress: deployer.accountAddress,
         });
 
-        // SCOUT(#243) EDIT: this test publishes under a random address, so its package is not the genesis registrar; it stays valid only while it never calls create_auction.
+        // This package sits at a random address, so it is not the genesis
+        // timelock registrar: create_auction would abort E_NOT_REGISTRAR (17).
+        // The test only checks the publish, never create_auction.
         // Verify expected modules exist
         const expectedModules = ["lock_receipt", "auction", "fake_eth", "fake_usd"];
 

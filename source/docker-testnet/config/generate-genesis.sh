@@ -40,7 +40,7 @@ cd "$WORKSPACE"
 echo "=== Generating genesis for $NUM_VALIDATORS validators (chain_id=$CHAIN_ID) ==="
 
 # Validate required env vars
-for var in APTOS_ROOT_ACCOUNT_PUBLIC_KEY; do
+for var in APTOS_ROOT_ACCOUNT_PUBLIC_KEY TIMELOCK_REGISTRAR; do
     if [ -z "${!var}" ]; then
         echo "ERROR: ${var} is required"; exit 1
     fi
@@ -85,8 +85,12 @@ done
 # timelock_dkg_enabled: true turns the timelock DKG on at genesis (atomica-aptos
 # layout flag, issue 155). Its default chunky DKG config and validator
 # transactions are already on for CLI genesis.
-# SCOUT(#225) EDIT: once the pinned fork revision has the registrar rule, the layout below must set timelock_registrar, or every register_timelock call on this testnet aborts (unset never means open).
-# SCOUT(#243) EDIT: add timelock_registrar to the layout below: the named object address of the package address and the fixed seed, passed in as an env var by genesis.ts (this script runs in the validator image and cannot hash sha3-256 itself).
+# timelock_registrar is the only address 0x1::ibe_config::register_timelock
+# accepts: the auction package's registrar object, the named object address of
+# the package address and the seed "atomica/timelock-registrar". genesis.ts
+# derives it and passes it in as TIMELOCK_REGISTRAR, because this script runs
+# in the validator image and cannot hash sha3-256. Unset would let nobody
+# register a timelock.
 # SCOUT(#231) EDIT: epoch_duration_secs: 86400 and the "first epoch ends at the first block" note above change when epochs end at fixed UTC times; the layout below then needs the boundary values, chosen so no live test registers a timelock within 25 minutes of an epoch end.
 echo "Step 2/6: Creating layout.yaml..."
 cat > layout.yaml <<EOF
@@ -105,6 +109,7 @@ required_proposer_stake: 100000000000000
 rewards_apy_percentage: 10
 voting_duration_secs: 43200
 voting_power_increase_limit: 20
+timelock_registrar: "${TIMELOCK_REGISTRAR}"
 timelock_dkg_enabled: true
 eth_chain_id: ${ETH_CHAIN_ID}
 EOF

@@ -394,7 +394,6 @@ This falls under the same security threshold as a consensus takeover. If >2/3 va
 
 ### Challenge 4: Fallback for Missing Shares
 
-<!-- SCOUT(#243) DOC: "Timeout + refund" is the built path: once the reveal expiry passes, the timelock reads Expired at once (not when the 50-per-block queue reaches it) and refund_expired_window returns every receipt. -->
 
 **Problem:** What if <t validators publish shares?
 
@@ -407,6 +406,11 @@ This falls under the same security threshold as a consensus takeover. If >2/3 va
 1. **Timeout + refund:** Cancel auction after X blocks
 2. **Social recovery:** Governance vote to decrypt (emergency)
 3. **Slashing:** Penalize non-publishing validators
+
+**Built path:** timeout and refund. From the first block at or past the reveal
+expiry, `0x1::ibe_config::get_status` reads `Expired` at once, before the
+50-per-block expiry queue reaches the entry. `auction::refund_expired_window`
+then returns every receipt of the window.
 
 ---
 
@@ -514,13 +518,14 @@ This falls under the same security threshold as a consensus takeover. If >2/3 va
 **Status:** proposed
 
 <!-- SCOUT(#231) DOC: "Not decided here: the epoch policy of a production network" is the open questions 1 to 3 of this issue; record the answer here and in the timing spec. -->
-<!-- SCOUT(#243) DOC: the 24 h docker epoch holds the next window close, but tests cannot wait hours for it: record how tests reach a window close (open question 1 of this issue). -->
 
 **Choice:** the Docker testnet genesis (`source/docker-testnet/config/generate-genesis.sh`) uses `epoch_duration_secs: 86400` (24 hours) and sets the layout flag `timelock_dkg_enabled: true`. It replaces the upstream default of 7200 seconds.
 
 **Why:**
 - A timelock lives inside one epoch. `ibe_config::register_timelock` needs `deadline <= epoch_end - 15 minutes`, and an epoch change expires every pending timelock of the old epoch.
 - Only the stored registrar (`ibe_config::timelock_registrar`) may call `ibe_config::register_timelock`. Every other signer aborts with `E_NOT_REGISTRAR` (17), and every signer does while no registrar is set.
+- The registrar is the auction package's named object, `object::create_object_address(&@atomica, b"atomica/timelock-registrar")`. The genesis layout field `timelock_registrar` names it; `source/docker-testnet/aptos-testnet/src/genesis.ts` derives it from the deployer address. The first `create_auction` of a window id registers one timelock with the window close as its deadline, and every later seller of that window id joins it.
+- Tests cannot wait hours for a production window close. On the docker testnet the deploy calls `eth_proof::set_window_schedule` when `ATOMICA_TEST_WINDOW_SCHEDULE` is set, and CI sets `900:900`: one close every 15 minutes. Only chain id 4 accepts a schedule, and only once. A test then reaches its window close within 15 minutes. With that schedule every close lies inside epoch 2 until 23 h 45 min after its start.
 - The PRD bid window runs 4 hours (12:15 to 16:15 UTC). A 2-hour epoch can never hold it. A 24-hour epoch holds it for any auction that starts in the first 19 hours 45 minutes of the epoch.
 - Genesis time is 0, so the first epoch ends at the first block. Its reconfiguration runs the timelock DKG, and epoch 2 has the key within minutes of start-up. No test waits a full epoch.
 - A test session never crosses an epoch boundary after epoch 2. So no test timelock expires with the reason `epoch-ended` by accident.

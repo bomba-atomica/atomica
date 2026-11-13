@@ -39,6 +39,7 @@ import { DockerTestnet } from "./index.js";
 import { resolve as pathResolve, dirname } from "path";
 import { existsSync } from "fs";
 import { fileURLToPath } from "url";
+import { parseWindowSchedule, type WindowSchedule } from "@atomica/sdk/ethereum/lock-binding";
 
 /**
  * Global testnet instance (singleton for all tests in a process)
@@ -67,7 +68,8 @@ const DEPLOYER_PK = "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f2115682
  * Address derived from DEPLOYER_PK.
  * Used as the deployment address for Atomica contracts.
  */
-// SCOUT(#243) EDIT: the genesis timelock_registrar is derived from this address; test/deploy-atomica-contracts.test.ts publishes under a random address, whose package could not register a timelock.
+// Genesis derives its timelock_registrar from this address (DockerTestnet.new),
+// so only a package published here can register a timelock.
 const DEPLOYER_ADDR = "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 
 /**
@@ -232,11 +234,40 @@ export async function deployContracts(): Promise<void> {
                 functionId: `${DEPLOYER_ADDR}::fake_usd::initialize`,
                 args: [],
             },
+            ...testWindowScheduleInit(DEPLOYER_ADDR),
         ],
         fundAmount: 10_000_000_000n, // 100 APT
     });
 
     contractsDeployed = true;
+}
+
+/**
+ * The test window schedule of `ATOMICA_TEST_WINDOW_SCHEDULE`
+ * (`<day_secs>:<offset>[,<offset>...]`, CI sets `900:900`), or null when the
+ * env var is unset and the production 07:45 and 16:15 UTC closes apply.
+ */
+export function testWindowSchedule(): WindowSchedule | null {
+    const value = process.env.ATOMICA_TEST_WINDOW_SCHEDULE;
+    return value ? parseWindowSchedule(value) : null;
+}
+
+/**
+ * The init call that stores the test window schedule right after publish
+ * (`eth_proof::set_window_schedule`, chain id 4 only), or none when
+ * `ATOMICA_TEST_WINDOW_SCHEDULE` is unset.
+ */
+export function testWindowScheduleInit(
+    moduleAddress: string,
+): Array<{ functionId: string; args: string[] }> {
+    const schedule = testWindowSchedule();
+    if (!schedule) return [];
+    return [
+        {
+            functionId: `${moduleAddress}::eth_proof::set_window_schedule`,
+            args: [`u64:${schedule.daySecs}`, `u64:[${schedule.closeOffsetsSecs.join(",")}]`],
+        },
+    ];
 }
 
 /**

@@ -14,6 +14,7 @@
 /// certificate. Every registration is carried by an account that is neither
 /// @atomica nor the depositor: any account may carry a proof.
 module atomica::eth_lock_registration_tests {
+    use aptos_framework::chain_id;
     use aptos_framework::ethereum_headers;
     use aptos_framework::timestamp;
     use atomica::auction;
@@ -453,5 +454,66 @@ module atomica::eth_lock_registration_tests {
         let lock_id = eth_proof::lock_id(USER, FAKE_ETH, 0);
         assert!(lock_receipt::get_receipt_status<Ethereum, FakeETH>(lock_id) == lock_receipt::status_active(), 0);
         assert!(lock_receipt::claim<Ethereum, FakeETH>(USER_ACCOUNT, lock_id) == TEN_ETH, 1);
+    }
+
+    // ==================== Window schedule ====================
+
+    // With no schedule stored the production clock applies: closes at 07:45 and 16:15 UTC.
+    #[test]
+    fun window_schedule_defaults_to_0745_and_1615_utc() {
+        let (day_secs, offsets) = eth_proof::get_window_schedule();
+        assert!(day_secs == 86400, 1);
+        assert!(offsets == vector[27900, 58500], 2);
+        assert!(eth_proof::window_close_secs(0) == 27900, 3);
+    }
+
+    // Chain id 4 with the test schedule (900, [900]): one close every 15 minutes. The lock
+    // deadline equals `LockBox.lockDeadline(5)` on the same schedule (forge test of 221).
+    #[test(framework = @0x1, atomica = @atomica)]
+    fun set_window_schedule_drives_window_ids_and_closes(framework: &signer, atomica: &signer) {
+        chain_id::initialize_for_test(framework, 4);
+        eth_proof::set_window_schedule(atomica, 900, vector[900]);
+        let (day_secs, offsets) = eth_proof::get_window_schedule();
+        assert!(day_secs == 900 && offsets == vector[900], 1);
+        assert!(eth_proof::window_close_secs(5) == 5400, 2);
+        assert!(eth_proof::window_id_at(5399) == 5, 3);
+        assert!(eth_proof::window_id_at(5400) == 6, 4);
+        assert!(eth_proof::eth_lock_deadline(5) == 264600, 5);
+    }
+
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 16, location = atomica::eth_proof)] // E_NOT_TEST_CHAIN
+    fun set_window_schedule_aborts_off_the_test_chain(framework: &signer, atomica: &signer) {
+        chain_id::initialize_for_test(framework, 1);
+        eth_proof::set_window_schedule(atomica, 900, vector[900]);
+    }
+
+    #[test(framework = @0x1, stranger = @0x123)]
+    #[expected_failure(abort_code = 5, location = atomica::eth_proof)] // E_NOT_ADMIN
+    fun set_window_schedule_aborts_for_a_non_admin(framework: &signer, stranger: &signer) {
+        chain_id::initialize_for_test(framework, 4);
+        eth_proof::set_window_schedule(stranger, 900, vector[900]);
+    }
+
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 17, location = atomica::eth_proof)] // E_SCHEDULE_ALREADY_SET
+    fun set_window_schedule_aborts_when_already_set(framework: &signer, atomica: &signer) {
+        chain_id::initialize_for_test(framework, 4);
+        eth_proof::set_window_schedule(atomica, 900, vector[900]);
+        eth_proof::set_window_schedule(atomica, 1800, vector[900, 1800]);
+    }
+
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 18, location = atomica::eth_proof)] // E_INVALID_SCHEDULE
+    fun set_window_schedule_aborts_on_unsorted_offsets(framework: &signer, atomica: &signer) {
+        chain_id::initialize_for_test(framework, 4);
+        eth_proof::set_window_schedule(atomica, 1800, vector[900, 600]);
+    }
+
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 18, location = atomica::eth_proof)] // E_INVALID_SCHEDULE
+    fun set_window_schedule_aborts_on_three_offsets(framework: &signer, atomica: &signer) {
+        chain_id::initialize_for_test(framework, 4);
+        eth_proof::set_window_schedule(atomica, 1800, vector[300, 600, 900]);
     }
 }

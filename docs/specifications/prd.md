@@ -77,7 +77,6 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 
 <!-- SCOUT(#242) DOC: timeline: no code opens bidding at 12:15 or delays settlement to 17:15; bids run from create_auction to the window timelock deadline, and settle is callable from the reveal. -->
 <!-- SCOUT(#228) DOC: "automatic decryption" at the close needs open_bids; today each bid needs a submitted price and salt. -->
-<!-- SCOUT(#243) DOC: "16:15 UTC Auction close": the close is the first seller's timelock deadline today; it is the window close only once create_auction registers the timelock itself. -->
 <!-- SCOUT(#231) DOC: "12:15 UTC Bid window opens": bids can start only in the chain epoch that holds the close, so the opening time depends on the epoch ends the owner picks. -->
 
 **Example Timeline (16:15 UTC Auction):**
@@ -89,6 +88,10 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 16:15-17:15 UTC  Settlement window (verification & hedging)
 17:15 UTC  Settlement (native assets delivered atomically)
 ```
+
+The auction close is the window close. The first `create_auction` of a window
+registers the window's one timelock with the close as its deadline, so no
+seller can move it.
 
 **Why 1-3 Hour Settlement (Not 24 Hours):**
 1. **Economic benefit:** Prevents arbitrage and private information withholding—achievable in hours, not days
@@ -308,7 +311,6 @@ Atomica prioritizes:
 ## Open Questions
 
 <!-- SCOUT(#218) DOC: question 6 (DoS prevention): partly answered by the seller-lock cap, the bid cap and the minimum lock sizes; name the values the owner picks. -->
-<!-- SCOUT(#243) DOC: question 6 also covers timelock registration spam: closed when only the auction package registers a timelock, one per window. -->
 <!-- SCOUT(#242) DOC: question 5: headers are validator transactions now; the open incentive question is who pays the outcome carrier's gas (review K-2). Question 9: the package upgrade-key is the governance question that matters (owner decision 30). -->
 
 1. Optimal settlement delay within 1-3 hour range
@@ -316,7 +318,7 @@ Atomica prioritizes:
 3. Later phase: reserve price mechanics if needed (RMS deviation fee structure). Launch has no reserve price (review decision 33).
 4. Fraud proof latency windows and impact on finality/UX
 5. Validator incentives for submitting away-chain headers
-6. DoS prevention (spam bids/commitments)
+6. DoS prevention (spam bids/commitments). Timelock registration spam is closed: only the auction package registers a timelock, one per window id.
 7. Economic bounds on griefing attacks. Partly answered: a dust bid can no longer win supply or cancel a window, because an under-collateralised bid is invalid at opening and skipped. Its collateral still goes back in full (no slash), so spam is bounded by the collateral a bid must lock.
 8. Away-chain reorganization detection/resolution
 9. Governance for parameter changes and upgrades

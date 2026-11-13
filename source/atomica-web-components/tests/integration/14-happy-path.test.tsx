@@ -14,11 +14,11 @@
  *     1. Faucet — mint FakeETH + FakeUSD to seller wallet (real balance hooks)
  *     2. SellFlow step 2 — Approve & Lock FakeETH (UI-driven)
  *     3-5. SellFlow steps 3-5 — auto-confirmation, proof generation, proof submission
- *     6. Auction creation — via direct helper (duration hardcoded to 1h in
- *        useSellFlow makes UI-driven auction creation impractical for CI).
- *        Waits for the epoch timelock key (ibe_config::is_ready), registers a
- *        real timelock (ibe_config::register_timelock), creates a window bound
- *        to it and reads it back with get_window_status.
+ *     6. Auction creation — via direct helper. Waits for the epoch timelock
+ *        key (ibe_config::is_ready) and creates the locks' window:
+ *        create_auction registers the window timelock, with the window close
+ *        (window_deadline_us, at most one 900 s test window away) as its
+ *        deadline. Reads it back with get_window_status.
  *     7. Step8Monitor — verifies seller address, countdown, auction details
  *   Bidder context:
  *     8. Sealed bid — the client encrypts the bid with sealBid (the code path
@@ -94,7 +94,6 @@ import { commands } from "vitest/browser";
 import {
   setupIntegrationFixture,
   teardownIntegrationFixture,
-  AUCTION_DURATION_BID,
   type IntegrationFixture,
 } from "./fixtures/dual-chain";
 import { setupWalletMock } from "./fixtures/wallet-mock";
@@ -110,18 +109,21 @@ import {
   generateEthLockProof,
   registerLockOnAptos,
   createAuctionDirect,
-  currentWindowId,
+  getChainWindowSchedule,
+  getWindowDeadlineUs,
   getWindowStatus,
+  getWindowTimelock,
   getAuctionState,
   getReceiptStatus,
   waitForTimelockKey,
+  waitForWindowTimeLeft,
   chainNowUs,
-  registerTimelockDirect,
   submitDirect,
   submitAsEthAccount,
   ethAccountAddress,
   pollUntil,
   RECEIPT_FILLED,
+  TEST_WINDOW_SECS,
 } from "./helpers/auction-setup";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { Faucet } from "../../src/components/Faucet";
@@ -192,15 +194,15 @@ const COLLATERAL_AMOUNT = 500n * 10n ** 6n;
 const COLLATERAL_MINT = 10_000n * 10n ** 6n;
 // COLLATERAL_AMOUNT above must be at least quoteForFill(BID_QUANTITY, BID_PRICE)
 // or the bid is invalid at opening. The 10,000 FakeUSD mint cap limits it.
-// SCOUT(#243) EDIT: the test no longer sets the deadline; it needs the test cap.
 // SCOUT(#231) EDIT: this comment relies on a 24 hour docker epoch; UTC-anchored epoch ends change that.
 /**
- * How far ahead of the chain clock the timelock deadline is set. The bid must
- * land before it: create_auction, the Step8Monitor check and the sealed bid
- * take a few seconds. Registration needs deadline <= epoch end - 15 minutes,
- * and the docker testnet epoch is 24 hours.
+ * The locks are made with at least this long left in their window, so the
+ * bid lands before the window close: the lock proofs, create_auction, the
+ * Step8Monitor check and the sealed bid take a few minutes. Registration
+ * needs the close <= epoch end - 15 minutes, and the docker testnet epoch is
+ * 24 hours.
  */
-const DEADLINE_AHEAD_US = 120_000_000n;
+const MIN_WINDOW_LEFT_SECS = 360n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
 const REVEAL_TIMEOUT_SECS = 300;
 
@@ -424,6 +426,12 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
     async () => {
       console.log("[14-happy-path] Steps 3-7: Lock proof + auction creation (direct helpers)");
 
+      // The timelock key exists only from epoch 2. Both locks below bind to
+      // the window open when they lock: start them early enough in a window.
+      console.log("[14-happy-path] Waiting for the epoch timelock key (ibe_config::is_ready)...");
+      await waitForTimelockKey(aptosClient);
+      await waitForWindowTimeLeft(aptosClient, moduleAddr, MIN_WINDOW_LEFT_SECS);
+
       // Generate ETH lock proof via Node.js-side helper
       // Both locks are bound to the launch pair (generateEthLockProof default).
       const proofResult = await generateEthLockProof(fixture, LOCK_AMOUNT, MINT_AMOUNT);
@@ -452,29 +460,20 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         "FakeUSD",
       );
 
-      // SCOUT(#243) REMOVE: the manual timelock registration.
-      // SCOUT(#225) EDIT: it aborts with E_NOT_REGISTRAR on a validator image with the registrar check.
-      // The timelock key exists only from epoch 2. Then register a real
-      // timelock whose deadline closes the bidding.
-      console.log("[14-happy-path] Waiting for the epoch timelock key (ibe_config::is_ready)...");
-      await waitForTimelockKey(aptosClient);
-      deadlineUs = (await chainNowUs(aptosClient)) + DEADLINE_AHEAD_US;
-      timelockId = await registerTimelockDirect(aptosClient, deployerAccount, deadlineUs);
-      console.log(`[14-happy-path] Registered timelock ${timelockId}, deadline ${deadlineUs} us`);
-
-      // Create a real window: the current window by the chain clock. This
-      // must succeed, so no catch.
-      const auctionCreatedAt = Math.floor(Date.now() / 1000);
-      windowId = await currentWindowId(aptosClient);
-      // SCOUT(#243) EDIT: drop timelockId.
+      // Create a real window: the window both locks are bound to. This must
+      // succeed, so no catch. create_auction registers the window timelock.
+      windowId = BigInt(proofResult.proof.windowId);
+      expect(BigInt(collateral.proof.windowId)).toBe(windowId);
       await createAuctionDirect(
         aptosClient,
         fixture.eth.seller,
         lockId,
         windowId,
         LAUNCH_PAIR_BCS,
-        timelockId,
       );
+      timelockId = await getWindowTimelock(aptosClient, moduleAddr, windowId);
+      deadlineUs = await getWindowDeadlineUs(aptosClient, moduleAddr, windowId);
+      console.log(`[14-happy-path] Window timelock ${timelockId}, deadline ${deadlineUs} us`);
 
       // The window exists on chain with the timelock create_auction recorded.
       const windowStatus = await getWindowStatus(
@@ -494,7 +493,8 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         refunded: false,
       });
 
-      auctionEndTime = auctionCreatedAt + AUCTION_DURATION_BID;
+      // The auction ends at the window close the chain stored.
+      auctionEndTime = Number(deadlineUs / 1_000_000n);
       // The seller's Ethereum-derivable account created the window.
       sellerAptosAddress = await ethAccountAddress(fixture.eth.seller);
 
@@ -589,7 +589,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
     "step 8b — reveal: AuctionRevealer decrypts the same bid with get_decryption_key and it opens on chain",
     async () => {
       console.log("[14-happy-path] Step 8b: wait for the timelock reveal, then decrypt");
-      await pollUntil("timelock reveal", Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS, async () =>
+      await pollUntil("timelock reveal", TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS, async () =>
         (await isRevealed(timelockId)) ? true : undefined,
       );
       console.log(`[14-happy-path] Timelock ${timelockId} revealed`);
@@ -648,7 +648,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       expect(status.revealFinal).toBe(true);
       console.log(`[14-happy-path] Bid decrypted off chain and opened on chain at ${opened.price}`);
     },
-    (Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS + 120) * 1000,
+    (TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 180) * 1000,
   );
 
   // ── Step 9-10: settle via the real SettleButton ──────────────────────────
@@ -855,13 +855,19 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       );
       const rpc = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
       const head = await rpc.getBlock("latest");
+      // The window clock is the chain's: the test schedule on the testnet.
+      const schedule = await getChainWindowSchedule(aptosClient, moduleAddr);
       const amount = 1_000_000n;
       await approveFakeUsd(provider, amount);
       const lock = lockFromReceipt(
         await lockFakeUsd(
           provider,
           amount,
-          lockBinding(hostWindowId(BigInt(head!.timestamp)), new TextEncoder().encode("14-pin")),
+          lockBinding(
+            hostWindowId(BigInt(head!.timestamp), schedule),
+            new TextEncoder().encode("14-pin"),
+            schedule,
+          ),
         ),
       );
       expect(lock.token.toLowerCase()).toBe(fixture.eth.contracts.fakeUSD.toLowerCase());

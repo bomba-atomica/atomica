@@ -1,6 +1,7 @@
 import { spawn } from "child_process";
 import { existsSync, mkdirSync, rmSync, readFileSync } from "fs";
 import { resolve as pathResolve } from "path";
+import { AccountAddress, createObjectAddress } from "@aptos-labs/ts-sdk";
 
 /**
  * Genesis generation for multi-validator testnets using Docker
@@ -26,22 +27,34 @@ function debug(message: string, data?: Record<string, unknown>): void {
     }
 }
 
-// SCOUT(#243) EDIT: GenesisConfig gains the registrar address that the layout's timelock_registrar field is written from.
 interface GenesisConfig {
     numValidators: number;
     chainId: number;
     workspaceDir: string;
     baseIp?: string; // Base IP for validators (default: 172.19.0.10)
+    /**
+     * The layout's `timelock_registrar`: the only address
+     * `0x1::ibe_config::register_timelock` accepts. Derive it from the package
+     * address with {@link timelockRegistrarAddress}.
+     */
+    timelockRegistrar: string;
 }
+
+/** Seed of the auction package's registrar object (`auction::TIMELOCK_REGISTRAR_SEED`). */
+export const TIMELOCK_REGISTRAR_SEED = "atomica/timelock-registrar";
 
 /**
  * Address of the auction package's timelock registrar object: the named object
  * address of `packageAddress` and the package's fixed seed. Genesis must name it
  * before the package is published.
  */
-// SCOUT(#243) ADD: derive the registrar address (sha3-256 of package address, seed and the named-object scheme byte) for the genesis layout; the SDK gains the same derivation.
-export function timelockRegistrarAddress(_packageAddress: string): string {
-    throw new Error("NOT_IMPLEMENTED: SCOUT(#243) timelockRegistrarAddress");
+// It is sha3-256 of the package address, the seed and the named-object scheme
+// byte (0xFE), the same derivation as `timelockRegistrarAddress` in @atomica/sdk/aptos.
+export function timelockRegistrarAddress(packageAddress: string): string {
+    return createObjectAddress(
+        AccountAddress.from(packageAddress),
+        TIMELOCK_REGISTRAR_SEED,
+    ).toStringLong();
 }
 
 /**
@@ -51,7 +64,13 @@ export function timelockRegistrarAddress(_packageAddress: string): string {
  * producing all necessary artifacts in workspaceDir.
  */
 export async function generateGenesis(config: GenesisConfig): Promise<void> {
-    const { numValidators, chainId, workspaceDir, baseIp = "172.19.0.10" } = config;
+    const {
+        numValidators,
+        chainId,
+        workspaceDir,
+        baseIp = "172.19.0.10",
+        timelockRegistrar,
+    } = config;
 
     console.log(`Generating genesis for ${numValidators} validators...`);
 
@@ -76,6 +95,7 @@ export async function generateGenesis(config: GenesisConfig): Promise<void> {
         numValidators,
         chainId,
         baseIp,
+        timelockRegistrar,
     });
 
     console.log(`Genesis generation complete!`);
@@ -87,6 +107,7 @@ interface ScriptConfig {
     numValidators: number;
     chainId: number;
     baseIp: string;
+    timelockRegistrar: string;
 }
 
 function extractImageFromCompose(configDir: string): string | null {
@@ -124,13 +145,12 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         const composeImage = extractImageFromCompose(configDir);
 
         // SCOUT(#228) EDIT: the fallback digest below must move with the compose default to the image of the fork commit with the decrypt native.
-        // SCOUT(#243) EDIT: the fallback digest below must move with the compose default to the image of the fork commit with the timelock registrar.
         const genesisImage =
             process.env.IMAGE_NAME_GENESIS ||
             process.env.IMAGE_NAME ||
             composeImage ||
             process.env.VALIDATOR_IMAGE_REPO ||
-            "ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:c86881514504e43b12a599152d43f1f6ad6c8453600662378684323a4942d965";
+            "ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:f8dc4a3a74d1ad23384c5f279d8863fec606bde9930de19380a4ce8232674087";
 
         const validatorImage = genesisImage;
 
@@ -192,7 +212,8 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
             dockerArgs.push("-e", `ATOMICA_DEBUG_TESTNET=${process.env.ATOMICA_DEBUG_TESTNET}`);
         }
 
-        // SCOUT(#243) ADD: pass the registrar address to the script here (a new env var, derived with timelockRegistrarAddress below from the package address the testnet will publish to).
+        // The package's timelock registrar, written to the layout's timelock_registrar.
+        dockerArgs.push("-e", `TIMELOCK_REGISTRAR=${config.timelockRegistrar}`);
         // SCOUT(#231) ADD: pass the epoch boundary layout values to the script here once the fork adds them.
         // Ethereum header attestation overrides (the script defaults to the
         // host's Ethereum testnet on port 8545, chain id 32382, tag latest).

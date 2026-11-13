@@ -42,6 +42,10 @@ vi.mock("@atomica/sdk/aptos", () => ({
     typeArguments: [`0xa::lock_receipt::${asset}`],
   })),
   waitForCertifiedBlock: vi.fn(async (minBlock: number) => minBlock + 2),
+  getWindowSchedule: vi.fn(async () => ({
+    daySecs: 86_400n,
+    closeOffsetsSecs: [27_900n, 58_500n],
+  })),
   aptos: { mock: "aptos-client" },
 }));
 

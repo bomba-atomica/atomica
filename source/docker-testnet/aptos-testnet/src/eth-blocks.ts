@@ -26,6 +26,26 @@ export async function isAnvil(provider: ethers.JsonRpcProvider): Promise<boolean
 }
 
 /**
+ * Bring the anvil clock up to the host clock before a lock.
+ *
+ * Each lock proof mines blocks 12 s apart on anvil (`waitForEthBlock`), and
+ * anvil otherwise stamps a block one second after the last one, so its clock
+ * drifts from the host's. A lock binds to a window by `block.timestamp`, so on
+ * anvil, when the latest block is behind the host second, this sets the next
+ * block's timestamp to that second (`evm_setNextBlockTimestamp`). Anvil cannot
+ * move back, so when it is ahead this sends nothing. Off anvil it sends nothing.
+ */
+export async function syncAnvilClockToHost(
+    provider: ethers.JsonRpcProvider,
+    hostNowSecs: number = Math.floor(Date.now() / 1000),
+): Promise<void> {
+    if (!(await isAnvil(provider))) return;
+    const latest = await provider.getBlock("latest");
+    if (!latest || latest.timestamp >= hostNowSecs) return;
+    await provider.send("evm_setNextBlockTimestamp", [hostNowSecs]);
+}
+
+/**
  * Wait until the chain reaches `target`. Mines on anvil, polls on docker.
  * Throws after `timeoutSecs` so a stalled chain fails loudly.
  */

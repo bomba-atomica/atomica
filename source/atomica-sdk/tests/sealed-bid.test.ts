@@ -93,8 +93,9 @@ function mockChain(
     const name = payload.function.split("::").slice(1).join("::");
     calls.push(name);
     switch (name) {
-      case "auction::get_window_status":
-        return [TIMELOCK.toString(), false, false];
+      case "auction::window_timelock":
+        expect(payload.functionArguments).toEqual([WINDOW]);
+        return [TIMELOCK.toString()];
       case "timelock::get_mpk":
         return [node.mpk ?? MPK];
       case "timelock::get_timelock_epoch":
@@ -150,7 +151,7 @@ describe("sealBid", () => {
 
     expect(calls).toEqual(
       expect.arrayContaining([
-        "auction::get_window_status",
+        "auction::window_timelock",
         "getChainId",
         "timelock::get_timelock_epoch",
         "timelock::get_deadline",

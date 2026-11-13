@@ -1,22 +1,20 @@
 import { useState } from "react";
 import { ethers } from "ethers";
-// SCOUT(#243) REMOVE: drop the registerTimelock import.
-import { submitCreateAuction, registerTimelock } from "@atomica/sdk/aptos";
+import { submitCreateAuction } from "@atomica/sdk/aptos";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { useWallet } from "../context/WalletContext";
 
-// SCOUT(#243) EDIT: this header says the screen registers the timelock; create_auction does it.
 /**
  * UI panel for creating a new sealed-bid auction on Aptos (v0 Beta).
  *
  * Collects the LockBox `lock_id`, window ID and pair BCS bytes from the
- * seller, registers the window timelock with
- * `ibe_config::register_timelock`, then calls `auction::create_auction` via
- * the SIWE-authenticated Aptos transaction flow.
+ * seller, then calls `auction::create_auction` via the SIWE-authenticated
+ * Aptos transaction flow. The seller signs one transaction: the first
+ * `create_auction` of a window id registers the window's timelock itself,
+ * with the window close as its deadline, and later sellers join it.
  *
- * `create_auction` takes
- // SCOUT(#243) EDIT: timelock_id leaves this argument list.
- * `(window_id, pair_bcs, lock_id, timelock_id)`. There is no reserve price.
+ * `create_auction` takes `(window_id, pair_bcs, lock_id)`. There is no
+ * reserve price. An empty lock id shows an error and submits nothing.
  *
  * Requires {@link WalletContext} to be mounted above this component.
  *
@@ -33,23 +31,16 @@ export function AuctionCreator() {
 
   const handleCreateAuction = async () => {
     if (!account) return;
+    if (!lockIdHex.trim()) {
+      setStatus("Error: enter the lock id from the proof step");
+      return;
+    }
     setLoading(true);
     try {
-      // SCOUT(#243) REMOVE: create_auction registers the window timelock itself; this caller-chosen one hour deadline goes.
-      // SCOUT(#225) EDIT: this call aborts with E_NOT_REGISTRAR once the validator image has the registrar check.
-      // 1. Register the timelock that opens the window's bids. Its deadline
-      //    is one hour out, the sell flow's auction length.
-      setStatus("Please sign the timelock registration in MetaMask...");
-      const deadlineUs =
-        BigInt(Math.floor(Date.now() / 1000) + 3600) * 1_000_000n;
-      const timelockId = await registerTimelock(account, deadlineUs);
-
-      // 2. Submit Transaction
       setStatus("Please sign the transaction in MetaMask...");
 
       // Convert inputs
-      // SCOUT(#243) EDIT: remove the 32 zero byte default lock id; the UI happy path issue (236) assigns it to this issue, whose text does not mention it.
-      const lockId = ethers.getBytes(lockIdHex || "0x" + "00".repeat(32));
+      const lockId = ethers.getBytes(lockIdHex.trim());
       const windowIdBn = BigInt(windowId);
       // pairBcs: must be on the pair allowlist; an empty input means the launch pair.
       const pairBcs = pairBcsHex
@@ -57,13 +48,11 @@ export function AuctionCreator() {
         : LAUNCH_PAIR_BCS;
       // SCOUT(#217) EDIT: price parse (BigInt of the text); use parsePrice while the field exists.
 
-      // SCOUT(#243) EDIT: drop the timelockId argument.
       const pendingTx = await submitCreateAuction(
         account,
         windowIdBn,
         pairBcs,
         lockId,
-        timelockId,
       );
 
       const hash = (pendingTx as { hash?: string }).hash || "submitted";

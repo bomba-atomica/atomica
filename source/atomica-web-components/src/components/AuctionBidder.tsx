@@ -4,6 +4,7 @@ import {
   aptos,
   assertSiweDomain,
   getRegisterLockPayload,
+  getWindowSchedule,
   sealBid,
   submitBid,
 } from "@atomica/sdk/aptos";
@@ -143,9 +144,12 @@ export function AuctionBidder() {
         //    current window and the pair the bid names. Step 2 starts on
         //    that window. LockBox computes the lock deadline, and reverts
         //    (WindowClosed) if the window closed before the lock is mined.
+        //    The window clock is the chain's (a test chain stores a short one).
+        const schedule = await getWindowSchedule();
         const binding = lockBinding(
-          currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
+          currentWindowId(BigInt(Math.floor(Date.now() / 1000)), schedule),
           pairBytes(pairBcsHex),
+          schedule,
         );
         const lockReceipt = await lockFakeUsd(provider, amountWei, binding);
         // 3. The lock id and nonce come from the Locked event.

@@ -7,8 +7,7 @@
  *     pair_hash, deadline, account_proof, storage_proof
  *   )
  *   0x1::ethereum_headers::latest_block_number(): Option<u64>
- *   auction::create_auction(seller, window_id, pair_bcs, lock_id, timelock_id)
- *   ibe_config::register_timelock(account, deadline_us)
+ *   auction::create_auction(seller, window_id, pair_bcs, lock_id)
  *
  * Note: Aptos-side fake token mint payload removed — fake tokens mint on Ethereum.
  */
@@ -16,6 +15,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { InputEntryFunctionData } from "@aptos-labs/ts-sdk";
 import { ethers } from "ethers";
+import { sha3_256 } from "@noble/hashes/sha3";
 
 // Mock the Aptos config to avoid SDK initialization side effects.
 vi.mock("../src/aptos/config", () => ({
@@ -37,8 +37,9 @@ import {
   getLatestCertifiedBlock,
   waitForCertifiedBlock,
   getCreateAuctionPayload,
-  getRegisterTimelockPayload,
   timelockIdFromEvents,
+  timelockRegistrarAddress,
+  TIMELOCK_REGISTRAR_SEED,
   TIMELOCK_REGISTRATION_EVENT,
 } from "../src/aptos/payloads";
 import type { LockedBalanceProof } from "../src/ethereum/proofs/generator";
@@ -243,38 +244,28 @@ describe("waitForCertifiedBlock", () => {
 
 // ── getCreateAuctionPayload ───────────────────────────────────────────────────
 
-// SCOUT(#243) EDIT: no timelock id argument.
 // SCOUT(#217) EDIT: MIN_PRICE = 500_000n reads as micro-dollars; use a whole-USD value while the field exists.
 describe("getCreateAuctionPayload", () => {
   const WINDOW_ID = 41n;
   const PAIR_BCS = new Uint8Array([1, 2, 3]);
   const LOCK_ID = new Uint8Array(32).fill(0xcd);
-  const TIMELOCK_ID = 9n;
 
   const build = () =>
     getCreateAuctionPayload(
       WINDOW_ID,
       PAIR_BCS,
       LOCK_ID,
-      TIMELOCK_ID,
     ) as InputEntryFunctionData;
 
   it("targets auction::create_auction", () => {
     expect(build().function).toBe("0xtest::auction::create_auction");
   });
 
-  it("getCreateAuctionPayload builds no mpk argument", () => {
-    // create_auction(seller, window_id, pair_bcs, lock_id, timelock_id)
+  it("the create_auction payload has no timelock id: five arguments if it lands before the mpk (238) and reserve price (241) removals, three after all of them", () => {
+    // Both removals are on main: create_auction(seller, window_id, pair_bcs, lock_id)
     const args = build().functionArguments;
-    expect(args).toHaveLength(4);
-    expect(args).toEqual([WINDOW_ID, PAIR_BCS, LOCK_ID, TIMELOCK_ID]);
-  });
-
-  it("getCreateAuctionPayload has no price value between the lock id and the timelock id", () => {
-    const args = build().functionArguments;
-    const lockIdx = args.indexOf(LOCK_ID);
-    expect(lockIdx).toBe(2);
-    expect(args[lockIdx + 1]).toBe(TIMELOCK_ID);
+    expect(args).toHaveLength(3);
+    expect(args).toEqual([WINDOW_ID, PAIR_BCS, LOCK_ID]);
   });
 
   it("does not add type arguments", () => {
@@ -282,20 +273,44 @@ describe("getCreateAuctionPayload", () => {
   });
 });
 
-// ── register_timelock ─────────────────────────────────────────────────────────
+// ── timelock registration ─────────────────────────────────────────────────────
 
-// SCOUT(#243) REMOVE: the builder is deleted.
-describe("getRegisterTimelockPayload", () => {
-  it("targets the framework register_timelock with the deadline in microseconds", () => {
-    const payload = getRegisterTimelockPayload(
-      1_700_000_000_000_000n,
-    ) as InputEntryFunctionData;
-    expect(payload.function).toBe("0x1::ibe_config::register_timelock");
-    expect(payload.functionArguments).toEqual([1_700_000_000_000_000n]);
+describe("timelock registration", () => {
+  it("the payloads module exports no registerTimelock and no getRegisterTimelockPayload", () => {
+    expect(payloads).not.toHaveProperty("registerTimelock");
+    expect(payloads).not.toHaveProperty("getRegisterTimelockPayload");
+  });
+
+  it("timelockRegistrarAddress equals object::create_object_address of the module address and the seed", () => {
+    expect(TIMELOCK_REGISTRAR_SEED).toBe("atomica/timelock-registrar");
+    // sha3-256(address || seed || 0xFE), the named-object scheme.
+    const expected = (address: string) =>
+      ethers.hexlify(
+        sha3_256(
+          ethers.getBytes(
+            ethers.concat([
+              ethers.zeroPadValue(address, 32),
+              ethers.toUtf8Bytes(TIMELOCK_REGISTRAR_SEED),
+              "0xfe",
+            ]),
+          ),
+        ),
+      );
+    // The Move test `timelock_registrar_address_is_the_named_object_address`
+    // pins the dev address 0xcafe to this value.
+    expect(timelockRegistrarAddress("0xcafe")).toBe(
+      "0x8dfa6196d1ba90701076299d7eb1916a1cb59089d494dc339ae130628d563afb",
+    );
+    expect(timelockRegistrarAddress("0xcafe")).toBe(expected("0xcafe"));
+    const deployer =
+      "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
+    expect(timelockRegistrarAddress(deployer)).toBe(expected(deployer));
+    expect(timelockRegistrarAddress(deployer)).toBe(
+      "0x7e819a5584c17cbe952839d4e2b1327d96db4679bde4d7a26b7eefcb9d896e4d",
+    );
   });
 });
 
-// SCOUT(#243) EDIT: keep or remove with timelockIdFromEvents.
 describe("timelockIdFromEvents", () => {
   it("reads timelock_id from the TimelockRegistrationEvent", () => {
     const id = timelockIdFromEvents([
@@ -310,16 +325,4 @@ describe("timelockIdFromEvents", () => {
       /no TimelockRegistrationEvent/,
     );
   });
-});
-
-describe("planned tests (SCOUT)", () => {
-  it.todo(
-    "SCOUT(#243) the create_auction payload has no timelock id: five arguments if it lands before the mpk (238) and reserve price (241) removals, three after all of them",
-  );
-  it.todo(
-    "SCOUT(#243) the payloads module exports no registerTimelock and no getRegisterTimelockPayload",
-  );
-  it.todo(
-    "SCOUT(#243) timelockRegistrarAddress equals object::create_object_address of the module address and the seed",
-  );
 });

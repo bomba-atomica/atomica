@@ -53,12 +53,17 @@ vi.mock("@atomica/sdk/ethereum", () => ({
 vi.mock("@atomica/sdk/ethereum/proofs", () => ({
   generateLockedBalanceProof: vi.fn(),
 }));
-// SCOUT(#243) REMOVE: the registerTimelock mock.
+// getWindowDeadlineUs answers the close of window 41538 (07:45 UTC), and
+// getWindowSchedule the production schedule.
 vi.mock("@atomica/sdk/aptos", () => ({
   assertSiweDomain: vi.fn().mockResolvedValue(undefined),
   getRegisterLockPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
-  registerTimelock: vi.fn(),
+  getWindowDeadlineUs: vi.fn(async () => 1_794_469_500_000_000n),
+  getWindowSchedule: vi.fn(async () => ({
+    daySecs: 86_400n,
+    closeOffsetsSecs: [27_900n, 58_500n],
+  })),
   waitForCertifiedBlock: vi.fn(async (minBlock: number) => minBlock),
   aptos: { mock: "aptos-client" },
 }));
@@ -80,13 +85,15 @@ import {
   assertSiweDomain,
   getRegisterLockPayload,
   getCreateAuctionPayload,
-  registerTimelock,
+  getWindowDeadlineUs,
   waitForCertifiedBlock,
 } from "@atomica/sdk/aptos";
 import { submitNativeTransaction } from "@atomica/sdk";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
 const ACCOUNT = "0x1234567890123456789012345678901234567890";
+/** The window_deadline_us answer of the mock above. */
+const WINDOW_DEADLINE_US = 1_794_469_500_000_000n;
 const STORAGE_KEY = `sell-flow-${ACCOUNT.toLowerCase()}`;
 const LOCK_BOX = "0x" + "11".repeat(20);
 const FAKE_ETH = "0x" + "22".repeat(20);
@@ -414,9 +421,7 @@ describe("useSellFlow state machine", () => {
       });
     });
 
-    // SCOUT(#243) REMOVE: the timelock registration asserts and the local one hour end time.
-    it("createAuction: registers the timelock first, then submits the 4-argument create_auction", async () => {
-      vi.mocked(registerTimelock).mockResolvedValue(42n);
+    it("createAuction: submits the 3-argument create_auction and ends at the chain's window deadline", async () => {
       vi.mocked(getCreateAuctionPayload).mockReturnValue({
         fn: "create_auction",
       } as never);
@@ -424,65 +429,41 @@ describe("useSellFlow state machine", () => {
       persist({
         step: "creating-auction",
         lockId: EXPECTED_LOCK_ID,
+        windowId: "41538",
         amount: "1000000000000000000",
       });
 
       const { result } = renderHook(() => useSellFlow(ACCOUNT));
       await act(async () => {});
-      const before = Math.floor(Date.now() / 1000);
       await act(async () => {
         await result.current.createAuction();
       });
-      const after = Math.floor(Date.now() / 1000);
-
-      // The timelock is registered before the payload is built or submitted.
-      expect(registerTimelock).toHaveBeenCalledTimes(1);
-      const registerOrder =
-        vi.mocked(registerTimelock).mock.invocationCallOrder[0];
-      expect(registerOrder).toBeLessThan(
-        vi.mocked(getCreateAuctionPayload).mock.invocationCallOrder[0],
-      );
-      expect(registerOrder).toBeLessThan(
-        vi.mocked(submitNativeTransaction).mock.invocationCallOrder[0],
-      );
-      // Its deadline is the auction end, in microseconds.
-      const [registerAccount, deadlineUs] =
-        vi.mocked(registerTimelock).mock.calls[0];
-      expect(registerAccount).toBe(ACCOUNT);
-      expect(deadlineUs).toBe(
-        BigInt(result.current.auctionEndTime!) * 1_000_000n,
-      );
 
       expect(getCreateAuctionPayload).toHaveBeenCalledTimes(1);
       const args = vi.mocked(getCreateAuctionPayload).mock.calls[0];
-      expect(args).toHaveLength(4);
-      // SCOUT(#243) EDIT: the payload loses timelockId.
-      const [windowId, pairBcs, lockIdBytes, timelockId] = args;
-      expect(typeof windowId).toBe("bigint");
+      expect(args).toHaveLength(3);
+      const [windowId, pairBcs, lockIdBytes] = args;
+      expect(windowId).toBe(41538n);
       expect(pairBcs).toEqual(LAUNCH_PAIR_BCS);
       expect(lockIdBytes).toEqual(ethers.getBytes(EXPECTED_LOCK_ID));
-      expect(timelockId).toBe(42n);
-      expect(submitNativeTransaction).toHaveBeenCalledTimes(1);
       expect(submitNativeTransaction).toHaveBeenCalledWith(aptos, ACCOUNT, {
         fn: "create_auction",
       });
       expect(result.current.step).toBe("monitoring");
-      expect(result.current.auctionEndTime).toBeGreaterThanOrEqual(
-        before + 3600,
+      // The end time is the window_deadline_us view, not a local clock.
+      expect(getWindowDeadlineUs).toHaveBeenCalledWith(41538n);
+      expect(result.current.auctionEndTime).toBe(
+        Number(WINDOW_DEADLINE_US / 1_000_000n),
       );
-      expect(result.current.auctionEndTime).toBeLessThanOrEqual(after + 3600);
       expect(stored().step).toBe("monitoring");
     });
 
-    // SCOUT(#243) REMOVE: this case.
-    it("createAuction: does not submit create_auction when timelock registration fails", async () => {
-      vi.mocked(registerTimelock).mockRejectedValue(
-        new Error("E_IBE_NOT_READY"),
-      );
-      persist({
-        step: "creating-auction",
-        lockId: EXPECTED_LOCK_ID,
-      });
+    it("createAuction submits exactly one transaction and never calls registerTimelock", async () => {
+      vi.mocked(getCreateAuctionPayload).mockReturnValue({
+        fn: "create_auction",
+      } as never);
+      vi.mocked(submitNativeTransaction).mockResolvedValue(undefined as never);
+      persist({ step: "creating-auction", lockId: EXPECTED_LOCK_ID });
 
       const { result } = renderHook(() => useSellFlow(ACCOUNT));
       await act(async () => {});
@@ -490,14 +471,27 @@ describe("useSellFlow state machine", () => {
         await result.current.createAuction();
       });
 
-      expect(getCreateAuctionPayload).not.toHaveBeenCalled();
-      expect(submitNativeTransaction).not.toHaveBeenCalled();
-      expect(result.current.step).toBe("creating-auction");
-      expect(result.current.error).toBe("E_IBE_NOT_READY");
+      expect(result.current.error).toBeUndefined();
+      expect(submitNativeTransaction).toHaveBeenCalledTimes(1);
+      // No transaction goes to the framework's timelock registration.
+      for (const call of vi.mocked(getCreateAuctionPayload).mock.calls) {
+        expect(call).toHaveLength(3);
+      }
+      expect(
+        vi
+          .mocked(submitNativeTransaction)
+          .mock.calls.some(
+            ([, , payload]) =>
+              (payload as { function?: string }).function ===
+              "0x1::ibe_config::register_timelock",
+          ),
+      ).toBe(false);
+      expect("registerTimelock" in (await import("@atomica/sdk/aptos"))).toBe(
+        false,
+      );
     });
 
     it("createAuction runs when the saved state has no minimum price", async () => {
-      vi.mocked(registerTimelock).mockResolvedValue(7n);
       vi.mocked(getCreateAuctionPayload).mockReturnValue({
         fn: "create_auction",
       } as never);
@@ -513,7 +507,7 @@ describe("useSellFlow state machine", () => {
 
       expect(result.current.error).toBeUndefined();
       expect(getCreateAuctionPayload).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(getCreateAuctionPayload).mock.calls[0][3]).toBe(7n);
+      expect(vi.mocked(getCreateAuctionPayload).mock.calls[0]).toHaveLength(3);
       expect(submitNativeTransaction).toHaveBeenCalledTimes(1);
       expect(result.current.step).toBe("monitoring");
       expect(stored()).not.toHaveProperty("minPrice");
@@ -636,8 +630,4 @@ describe("useSellFlow state machine", () => {
       expect(result.current.proof).toBe(PROOF);
     });
   });
-
-  it.todo(
-    "SCOUT(#243) createAuction submits exactly one transaction and never calls registerTimelock",
-  );
 });

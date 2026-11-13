@@ -66,12 +66,12 @@ module atomica::auction_bid_wrapper_tests {
         auction::compute_bid_commitment(price, salt(s), ad)
     }
 
-    // SCOUT(#225) EDIT: once the pin holds the fork registrar change, `ibe_config::register_timelock` aborts `E_NOT_REGISTRAR` for the framework signer; `setup` must set a registrar first. This breaks at the first pin bump past that change, whichever product issue makes it.
     // SCOUT(#231) EDIT: if epoch ends become UTC anchored, the epoch config and the golden deadline of `setup` must still pass the 15 minute guard after the pin bump.
-    // SCOUT(#243) EDIT: `setup` sets the package's registrar address before any registration.
     // Chain state of the golden bid: chain id 7, epoch 3, timelock id 11 pending with the
     // golden deadline, clock inside auction window 5. Public so `auction_tests` can bind
-    // windows to a real registered timelock.
+    // windows to a real registered timelock. The framework signer registers the golden
+    // timelocks as a temporary registrar; `setup` then names the auction package's registrar
+    // object, so `create_auction` registers each window timelock as on a live chain.
     public fun setup(): signer {
         let framework = account::create_signer_for_test(@0x1);
         account::create_account_for_test(@aptos_framework);
@@ -88,22 +88,25 @@ module atomica::auction_bid_wrapper_tests {
         ibe_config::set_epoch_config_for_testing(
             &framework, 3, fixtures::timelock_basic_mpk(), 3, vector[2, 1, 2], EPOCH_INTERVAL_US,
         );
+        ibe_config::set_timelock_registrar(&framework, @aptos_framework);
         let n = 0;
         while (n < 13) {
             ibe_config::register_timelock(&framework, DEADLINE_US);
             n = n + 1;
         };
+        ibe_config::set_timelock_registrar(&framework, auction::timelock_registrar_address());
         timestamp::update_global_time_for_test(BID_TIME_US);
         framework
     }
 
-    // Registers a timelock whose deadline is 10 minutes after the setup clock, so a window
-    // of the setup clock meets the timing order `create_auction` checks (stuck deadline plus
-    // carrier margin before `eth_lock_deadline(window_id)`). The golden timelock 11 has a
-    // 2023 deadline and fails it. Call after `setup`.
+    // Registers a timelock whose deadline is 10 minutes after the setup clock, outside
+    // `create_auction`, with the framework signer as a temporary registrar. The package's
+    // registrar is restored afterwards. Call after `setup`.
     public fun register_live_timelock(): u64 {
         let framework = account::create_signer_for_test(@0x1);
+        ibe_config::set_timelock_registrar(&framework, @aptos_framework);
         ibe_config::register_timelock(&framework, BID_TIME_US + 10 * MIN);
+        ibe_config::set_timelock_registrar(&framework, auction::timelock_registrar_address());
         ibe_config::get_next_timelock_id() - 1
     }
 
@@ -175,11 +178,10 @@ module atomica::auction_bid_wrapper_tests {
         assert!(!ibe_config::finalize_for_testing(TIMELOCK_ID, x"00"), 901);
     }
 
-    // SCOUT(#243) EDIT: once the pin holds the fork status change, the status reads expired at the reveal expiry without the `on_new_block_for_testing` call of `expire_reveal_window`.
-    // No key by the end of the reveal window: Expired(reveal-window-elapsed).
+    // No key by the end of the reveal window: Expired(reveal-window-elapsed). The status
+    // reads expired from the reveal expiry on, with no block queue step.
     fun expire_reveal_window() {
         timestamp::update_global_time_for_test(DEADLINE_US + 10 * MIN);
-        ibe_config::on_new_block_for_testing();
     }
 
     // The epoch changes before the reveal: Expired(epoch-ended).
@@ -332,7 +334,7 @@ module atomica::auction_bid_wrapper_tests {
         ibe_config::set_epoch_config_for_testing(
             &framework, 4, fixtures::timelock_basic_mpk(), 3, vector[2, 1, 2], EPOCH_INTERVAL_US,
         );
-        // SCOUT(#225) EDIT: second direct `register_timelock` of this file; it needs the registrar signer after the pin bump.
+        ibe_config::set_timelock_registrar(&framework, @aptos_framework);
         ibe_config::register_timelock(&framework, DEADLINE_US);
         let epoch4_timelock = ibe_config::get_next_timelock_id() - 1;
         assert!(ibe_config::get_timelock_epoch(epoch4_timelock) == 4, 1);
@@ -918,7 +920,6 @@ module atomica::auction_bid_wrapper_tests {
         auction::submit_cleartext_and_clear(&bidder, AUCTION_ID, pair(), vector[2010u64], vector[salt(7)]);
     }
 
-    // SCOUT(#243) EDIT: `setup_funded_window` below binds the golden timelock 11 through `create_auction`; that stops working. The unwind pull request (213) already replaces the call with a test insert.
     // ===================== Refund after Expired =====================
 
     // A window with one seller lock and one bid submitted through `submit_bid`.
@@ -1087,7 +1088,9 @@ module atomica::auction_bid_wrapper_tests {
     // Regression tests for review finding 6 (`docs/code-reviews/aptos-1-49-6-upgrade-review.md`,
     // task T2.4): `settle` had no timelock or deadline check and passed with 0 bids, and
     // `create_auction` accepted an unregistered timelock. The `review_` tests replay those
-    // attacks and pin the abort code that now stops each one.
+    // attacks and pin the abort code that now stops each one. `create_auction` now takes no
+    // timelock id: it registers the window id's timelock itself, so the unregistered-timelock
+    // attack has no entry point.
 
 
     // The published auction package (registry and pair allowlist), lock registries, and one
@@ -1099,11 +1102,13 @@ module atomica::auction_bid_wrapper_tests {
         lock_receipt::insert_test_receipt<Ethereum, FakeETH>(SELLER_LOCK, @atomica, 5u256, 1);
     }
 
-    // SCOUT(#243) EDIT: `create_with_timelock` cannot pick a timelock by id any more; the five `create_auction_rejects_*` and `review_create_auction_*` tests below need a new shape.
-    fun create_with_timelock(atomica: &signer, timelock_id: u64) {
-        auction::create_auction(
-            atomica, auction::current_window_id(), pair(), SELLER_LOCK, timelock_id,
-        );
+    // A seller joins the current window id after its timelock was stored as `timelock_id`.
+    // A window of another pair stores it, as if an earlier seller had registered it, so
+    // `create_auction` checks the stored timelock instead of registering one.
+    fun join_window_bound_to(atomica: &signer, timelock_id: u64) {
+        let window_id = auction::current_window_id();
+        auction::test_insert_window_with_timelock(atomica, window_id, b"earlier", SUPPLY, false, 0, timelock_id);
+        auction::create_auction(atomica, window_id, pair(), SELLER_LOCK);
     }
 
     // A window with one seller lock and no bids.
@@ -1158,16 +1163,6 @@ module atomica::auction_bid_wrapper_tests {
         auction::settle(&attacker, AUCTION_ID, pair());
     }
 
-    // SCOUT(#243) REMOVE: `review_create_auction_unregistered_timelock_aborts`; with no caller-supplied id the attack has no entry point.
-    // Attack: bind a window to a timelock id the registry never issued (setup issues 0 to 12).
-    #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 28, location = atomica::auction)] // E_TIMELOCK_NOT_REGISTERED
-    fun review_create_auction_unregistered_timelock_aborts(atomica: &signer) {
-        setup();
-        setup_seller_receipt(atomica);
-        create_with_timelock(atomica, 13);
-    }
-
     // Empty-auction rule: after the reveal an empty window settles and the seller lock goes
     // back to the seller.
     #[test(atomica = @atomica)]
@@ -1215,7 +1210,7 @@ module atomica::auction_bid_wrapper_tests {
         setup();
         setup_seller_receipt(atomica);
         expire_epoch_ended();
-        create_with_timelock(atomica, TIMELOCK_ID);
+        join_window_bound_to(atomica, TIMELOCK_ID);
     }
 
     // create_auction: the timelock is no longer Pending.
@@ -1225,7 +1220,7 @@ module atomica::auction_bid_wrapper_tests {
         setup();
         setup_seller_receipt(atomica);
         reveal_timelock();
-        create_with_timelock(atomica, TIMELOCK_ID);
+        join_window_bound_to(atomica, TIMELOCK_ID);
     }
 
     // create_auction: the deadline has passed, so the window could take no bids.
@@ -1235,18 +1230,18 @@ module atomica::auction_bid_wrapper_tests {
         setup();
         setup_seller_receipt(atomica);
         timestamp::update_global_time_for_test(DEADLINE_US);
-        create_with_timelock(atomica, TIMELOCK_ID);
+        join_window_bound_to(atomica, TIMELOCK_ID);
     }
 
-    // SCOUT(#243) EDIT: in `create_auction_rejects_a_missing_registry` the abort then comes from the framework registration, not from `E_TIMELOCK_NOT_REGISTERED`.
-    // create_auction: no timelock registry at all.
+    // create_auction: no timelock registry and no registrar at all. The framework
+    // registration refuses first.
     #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 28, location = atomica::auction)] // E_TIMELOCK_NOT_REGISTERED
+    #[expected_failure(abort_code = 17, location = aptos_framework::ibe_config)] // E_NOT_REGISTRAR
     fun create_auction_rejects_a_missing_registry(atomica: &signer) {
         let framework = account::create_signer_for_test(@0x1);
         timestamp::set_time_has_started_for_testing(&framework);
         setup_seller_receipt(atomica);
-        create_with_timelock(atomica, 0);
+        auction::create_auction(atomica, auction::current_window_id(), pair(), SELLER_LOCK);
     }
 
     // ===================== timelock facade =====================

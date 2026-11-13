@@ -113,7 +113,7 @@ describe("13: BidHistory — entries from useBidHistory hook + localStorage", ()
 
   // ── 13-3: Row displays correct clearing price ─────────────────────────────
 
-  // SCOUT(#217) EDIT: 100_000_000 displays as $100.00 today; record 100 and expect $100 (Browser Tests claim-reclaim-fees chunk runs this file).
+  // SCOUT(#217) EDIT: 100_000_000 displays as $100.00 today; record 100 and expect $100 (Browser Tests claim-reclaim chunk runs this file).
   it("row displays clearing price from recorded settlement as '$100.00'", async () => {
     render(
       <BidHistoryHarness

@@ -3,9 +3,10 @@
  *
  * Verifies that:
  *   1. Form fields for window_id and lock_id are rendered, with no price field.
- *   2. The submit button registers the timelock, then calls
- *      submitCreateAuction with the returned timelock id.
- *   3. An error message is shown when the transaction is rejected.
+ *   2. The submit button sends one transaction, submitCreateAuction, with no
+ *      timelock id: create_auction registers the window timelock itself.
+ *   3. An error message is shown when the transaction is rejected, or when
+ *      the lock id is empty (then nothing is submitted).
  *
  * Mocks @atomica/sdk/aptos and ethers so no blockchain connection is needed.
  *
@@ -17,10 +18,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { WalletContext } from "../../src/context/WalletContext";
 
-// SCOUT(#243) REMOVE: the registerTimelock mock.
 vi.mock("@atomica/sdk/aptos", () => ({
   submitCreateAuction: vi.fn().mockResolvedValue({ hash: "0xdeadbeef" }),
-  registerTimelock: vi.fn().mockResolvedValue(5n),
 }));
 
 vi.mock("ethers", async (importOriginal) => {
@@ -35,17 +34,26 @@ vi.mock("ethers", async (importOriginal) => {
 });
 
 import { AuctionCreator } from "../../src/components/AuctionCreator";
-import { submitCreateAuction, registerTimelock } from "@atomica/sdk/aptos";
+import * as aptosSdk from "@atomica/sdk/aptos";
+import { submitCreateAuction } from "@atomica/sdk/aptos";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
 const ACCOUNT = "0xAbCd1234567890123456789012345678901234Ab";
+const LOCK_ID_HEX = "0x" + "ab".repeat(32);
 
-function renderAuctionCreator(account: string | null = ACCOUNT) {
-  return render(
+function renderAuctionCreator(
+  account: string | null = ACCOUNT,
+  lockIdHex: string = LOCK_ID_HEX,
+) {
+  const view = render(
     <WalletContext.Provider value={{ account, connect: vi.fn() }}>
       <AuctionCreator />
     </WalletContext.Provider>,
   );
+  fireEvent.change(screen.getByPlaceholderText("0x..."), {
+    target: { value: lockIdHex },
+  });
+  return view;
 }
 
 describe("AuctionCreator — unit", () => {
@@ -87,8 +95,7 @@ describe("AuctionCreator — unit", () => {
     });
   });
 
-  // SCOUT(#243) REMOVE: this case; assert one transaction and no register_timelock.
-  it("registers the timelock before create_auction and passes its id", async () => {
+  it("the create step submits exactly one transaction and none to 0x1::ibe_config::register_timelock", async () => {
     renderAuctionCreator();
 
     fireEvent.click(screen.getByRole("button", { name: /Create Auction/i }));
@@ -96,15 +103,23 @@ describe("AuctionCreator — unit", () => {
     await waitFor(() => {
       expect(submitCreateAuction).toHaveBeenCalledTimes(1);
     });
-    expect(registerTimelock).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(registerTimelock).mock.calls[0][0]).toBe(ACCOUNT);
-    expect(
-      vi.mocked(registerTimelock).mock.invocationCallOrder[0],
-    ).toBeLessThan(vi.mocked(submitCreateAuction).mock.invocationCallOrder[0]);
-    // submitCreateAuction(account, windowId, pairBcs, lockId, timelockId)
+    // The SDK has no timelock registration to call, and the one transaction
+    // is create_auction(window_id, pair_bcs, lock_id) with no timelock id.
+    expect("registerTimelock" in aptosSdk).toBe(false);
+    expect("getRegisterTimelockPayload" in aptosSdk).toBe(false);
     const args = vi.mocked(submitCreateAuction).mock.calls[0];
-    expect(args).toHaveLength(5);
-    expect(args[4]).toBe(5n);
+    expect(args).toHaveLength(4);
+  });
+
+  it("with an empty lock id the create step shows an error and submits nothing", async () => {
+    renderAuctionCreator(ACCOUNT, "");
+
+    fireEvent.click(screen.getByRole("button", { name: /Create Auction/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Error: enter the lock id/i)).toBeTruthy();
+    });
+    expect(submitCreateAuction).not.toHaveBeenCalled();
   });
 
   it("shows success status with tx hash after successful submission", async () => {
@@ -143,11 +158,9 @@ describe("AuctionCreator — unit", () => {
 
     // Short wait to confirm no SDK call happened
     await new Promise((r) => setTimeout(r, 50));
-    expect(registerTimelock).not.toHaveBeenCalled();
     expect(submitCreateAuction).not.toHaveBeenCalled();
   });
 
-  it.todo("SCOUT(#243) the create step submits exactly one transaction and none to 0x1::ibe_config::register_timelock");
   it("submitCreateAuction is called without a price argument", async () => {
     renderAuctionCreator();
 
@@ -156,10 +169,14 @@ describe("AuctionCreator — unit", () => {
     await waitFor(() => {
       expect(submitCreateAuction).toHaveBeenCalledTimes(1);
     });
-    // (account, windowId, pairBcs, lockId, timelockId): the lock id is
-    // followed directly by the timelock id, with no price between them.
+    // (account, windowId, pairBcs, lockId): no price and no timelock id.
     const args = vi.mocked(submitCreateAuction).mock.calls[0];
-    expect(args).toEqual([ACCOUNT, 0n, LAUNCH_PAIR_BCS, new Uint8Array(32), 5n]);
+    expect(args).toEqual([
+      ACCOUNT,
+      0n,
+      LAUNCH_PAIR_BCS,
+      new Uint8Array(32).fill(0xab),
+    ]);
   });
 
   it("the pair defaults to the SDK launch pair constant", async () => {
