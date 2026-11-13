@@ -1445,6 +1445,9 @@ module atomica::auction {
         // Bids in bid order. Winners take supply from the sellers in lock order.
         let total_filled: u256 = 0;
         let winner_count = 0u64;
+        // Sellers fill in lock order, so the exhausted ones are a prefix: each winner
+        // starts at the first seller with supply left.
+        let first_open = 0u64;
         let bid_count = vector::length(&state.bids);
         let i = 0u64;
         while (i < bid_count) {
@@ -1459,7 +1462,7 @@ module atomica::auction {
                 winner_count = winner_count + 1;
                 total_filled = total_filled + result.fill_amount;
                 let unfilled = result.fill_amount;
-                let k = 0u64;
+                let k = first_open;
                 while (unfilled > 0 && k < seller_count) {
                     let avail = *vector::borrow(&supply_left, k);
                     if (avail > 0) {
@@ -1473,6 +1476,7 @@ module atomica::auction {
                             vector::push_back(&mut amounts, quote);
                         };
                         *vector::borrow_mut(&mut supply_left, k) = avail - chunk;
+                        if (avail == chunk && k == first_open) { first_open = k + 1; };
                         unfilled = unfilled - chunk;
                         left = left - quote;
                     };

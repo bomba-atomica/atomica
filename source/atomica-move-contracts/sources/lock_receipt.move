@@ -68,6 +68,9 @@ module atomica::lock_receipt {
     /// Terminal: the lock pays at least one counterparty per the auction outcome.
     const STATUS_FILLED: u8 = 3;
 
+    /// The zero Ethereum address: never a payout recipient.
+    const ZERO_ETH_ADDRESS: vector<u8> = x"0000000000000000000000000000000000000000";
+
     // Public constant accessors — allow callers to compare against status values
     // without hardcoding magic numbers in external modules or tests.
     public fun status_active(): u8  { STATUS_ACTIVE }
@@ -459,7 +462,7 @@ module atomica::lock_receipt {
         let i = 0;
         while (i < n) {
             let r = vector::borrow(&recipients, i);
-            assert!(vector::length(r) == 20 && !is_zero(r), E_UNPAYABLE_OUTCOME);
+            assert!(vector::length(r) == 20 && *r != ZERO_ETH_ADDRESS, E_UNPAYABLE_OUTCOME);
             if (*r != receipt.eth_owner) { to_depositor_only = false; };
             sum = sum + *vector::borrow(&amounts, i);
             i = i + 1;
@@ -472,16 +475,6 @@ module atomica::lock_receipt {
         table::add(&mut registry.outcomes, lock_id, LockOutcome { kind, window_id, recipients, amounts });
         event::emit(LockOutcomeRecorded<Chain, Asset> { lock_id, kind, window_id, recipients, amounts });
         outcome_tree::payouts_hash(&recipients, &amounts)
-    }
-
-    fun is_zero(bytes: &vector<u8>): bool {
-        let i = 0;
-        let n = vector::length(bytes);
-        while (i < n) {
-            if (*vector::borrow(bytes, i) != 0) return false;
-            i = i + 1;
-        };
-        true
     }
 
     // ===================== View Functions =====================
