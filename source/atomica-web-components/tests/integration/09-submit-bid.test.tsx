@@ -17,7 +17,7 @@
  *
  * Setup:
  *   - Dual-chain testnet started in beforeAll
- *   - One window created with at least 360 s left (createLiveWindow); its
+ *   - One window created with at least 780 s left (createLiveWindow); its
  *     timelock, registered by create_auction, closes at the window close
  *   - The bidder locks FakeUSD collateral. Its receipt belongs to the bidder's
  *     Ethereum-derivable account, which alone can claim it
@@ -46,6 +46,7 @@ import { auctionBidder } from "./helpers/selectors";
 import {
   createLiveWindow,
   lockBidCollateral,
+  lockBidCollaterals,
   submitBidDirect,
   getWindowStatus,
   getAuctionState,
@@ -94,11 +95,13 @@ const WINDOW_SUPPLY = ethers.parseEther("10");
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
 /**
- * The window is created with at least 360 s left before its close: tests 1-4
- * run before that. Test 4 waits for a certified Ethereum block before it
+ * The window is created with at least 780 s left before its close: tests 1-4
+ * run before that. On the docker Ethereum chain one lock proof cycle takes
+ * about 3 minutes, and the seller lock, the collateral locks and the lock of
+ * test 4 each take one. Test 4 waits for a certified Ethereum block before it
  * registers its lock.
  */
-const MIN_WINDOW_LEFT_SECS = 360n;
+const MIN_WINDOW_LEFT_SECS = 780n;
 /** Budget past the window close, as in the reveal tests (seconds). */
 const REVEAL_TIMEOUT_SECS = 300;
 const MISSING_WINDOW_ID = 999_999n;
@@ -171,9 +174,15 @@ describe.sequential("09: Submit Bid on Auction", () => {
       pairBcs: PAIR_BCS,
       minWindowLeftSecs: MIN_WINDOW_LEFT_SECS,
     });
-    firstCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
-    spareCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
-  }, 1_200_000);
+    // One proof cycle for both collaterals.
+    [firstCollateral, spareCollateral] = await lockBidCollaterals(
+      fixture,
+      aptosClient,
+      operator,
+      PAIR_BCS,
+      2,
+    );
+  }, 2_400_000);
 
   afterAll(async () => {
     await teardownIntegrationFixture();

@@ -77,9 +77,11 @@ const BID_QUANTITY = ethers.parseEther("0.0001");
 const PAIR_BCS = LAUNCH_PAIR_BCS;
 /**
  * The window is created with at least this long left before its close, so
- * the collateral and the bid land in it (seconds).
+ * the collateral and the bid land in it (seconds). On the docker Ethereum
+ * chain one lock proof cycle takes about 3 minutes: the seller lock and the
+ * collateral take two.
  */
-const MIN_WINDOW_LEFT_SECS = 240n;
+const MIN_WINDOW_LEFT_SECS = 540n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
 const REVEAL_TIMEOUT_SECS = 300;
 
@@ -136,7 +138,7 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
     });
     collateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
     await submitBidDirect(aptosClient, fixture.eth.bidder, auction, BID_PRICE, collateral, BID_QUANTITY);
-  }, 1_200_000);
+  }, 2_400_000);
 
   afterAll(async () => {
     await teardownIntegrationFixture();

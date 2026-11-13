@@ -49,6 +49,7 @@ import { settleButton, step8Monitor, bidHistory } from "./helpers/selectors";
 import {
   createLiveWindow,
   lockBidCollateral,
+  lockBidCollaterals,
   submitBidDirect,
   waitForReveal,
   openWindowBidsDirect,
@@ -100,9 +101,11 @@ const INVALID_COLLATERAL = 100n * 10n ** 6n;
 const PAIR_BCS = LAUNCH_PAIR_BCS;
 /**
  * The window is created with at least this long left before its close, so
- * both collaterals and both bids land in it (seconds).
+ * the collaterals and the bids land in it (seconds). On the docker Ethereum
+ * chain one lock proof cycle takes about 3 minutes: the seller lock, the two
+ * default collaterals and the invalid collateral take three.
  */
-const MIN_WINDOW_LEFT_SECS = 300n;
+const MIN_WINDOW_LEFT_SECS = 720n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
 const REVEAL_TIMEOUT_SECS = 300;
 
@@ -161,8 +164,14 @@ describe.sequential("10: Settle Auction", () => {
       // SCOUT(#218) EDIT: pull request 213 sets SUPPLY to 0.0001 FakeETH, below the proposed 0.01 FakeETH minimum seller lock, so create_auction aborts; raise SUPPLY and size collateral with whole-USD prices (217).
       lockAmount: SUPPLY,
     });
-    winCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
-    loseCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
+    // One proof cycle for both default collaterals.
+    [winCollateral, loseCollateral] = await lockBidCollaterals(
+      fixture,
+      aptosClient,
+      operator,
+      PAIR_BCS,
+      2,
+    );
     invalidCollateral = await lockBidCollateral(
       fixture,
       aptosClient,
@@ -196,7 +205,7 @@ describe.sequential("10: Settle Auction", () => {
       settled: false,
       clearingPrice: 0n,
     });
-  }, 1_200_000);
+  }, 2_400_000);
 
   afterAll(async () => {
     await teardownIntegrationFixture();

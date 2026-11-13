@@ -202,7 +202,7 @@ const COLLATERAL_MINT = 10_000n * 10n ** 6n;
  * needs the close <= epoch end - 15 minutes, and the docker testnet epoch is
  * 24 hours.
  */
-const MIN_WINDOW_LEFT_SECS = 360n;
+const MIN_WINDOW_LEFT_SECS = 660n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
 const REVEAL_TIMEOUT_SECS = 300;
 
@@ -532,7 +532,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
 
       console.log("[14-happy-path] Step8Monitor renders correctly with live data");
     },
-    1_200_000,
+    1_800_000,
   );
 
   // ── Step 8: Bidder — connect wallet and submit bid ────────────────────────
