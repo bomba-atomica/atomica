@@ -34,7 +34,6 @@ import {AptosWaypoint} from "../src/aptos/AptosWaypoint.sol";
  *          --rpc-url http://localhost:8545 --broadcast
  */
 contract DeployAptosLightClient is Script {
-    // SCOUT(#219) EDIT: the dual-chain testnet deploys with ethers from forge artifacts, not with this script, so it must port these two node reads and the same-LedgerInfo check; it also deploys LockBox before Aptos starts today.
     /// @notice EXPECTED_GENESIS_WAYPOINT is unset or empty.
     error MissingExpectedWaypoint();
     /// @notice The node serves another genesis waypoint than the expected one.
@@ -163,7 +162,6 @@ contract DeployAptosLightClient is Script {
         return string(vm.ffi(cmd));
     }
 
-    // SCOUT(#219) EDIT: this writes the tracked file test-results/deployment.json on every run; write to an untracked path, or only return the address, before the testnet setup calls it.
     function _record(address client) internal {
         string memory dir = string.concat(vm.projectRoot(), "/test-results");
         vm.createDir(dir, true);

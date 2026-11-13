@@ -40,7 +40,6 @@ const ETH_RPC_URL = `http://127.0.0.1:${ANVIL_PORT}`;
 const DEPLOYER_KEY: Hex = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const FEE_STATEMENT_TYPE = "0x1::transaction_fee::FeeStatement";
 
-// SCOUT(#219) EDIT: the BCS reader, parseLedgerInfo, readEpochState and structTag below are the proof encoding the round-trip helper needs; export them from one shared module and import them here.
 // ---------------------------------------------------------------- bytes and BCS
 
 function fromHex(h: string): Uint8Array {
@@ -171,7 +170,6 @@ function structTag(type: string): Uint8Array {
     );
 }
 
-// SCOUT(#219) EDIT: g1Uncompressed and g2Encode move with the BCS helpers; the package that holds the shared module then needs @noble/curves (pinned to 1.9.1 here).
 // ---------------------------------------------------------------- BLS encodings
 
 function fp(v: bigint): Uint8Array {
@@ -231,7 +229,6 @@ async function startAnvil(): Promise<ChildProcess> {
     throw new Error("anvil did not start");
 }
 
-// SCOUT(#219) EDIT: the round-trip helper needs the same artifact read for LockBox (ABI and custom errors); share this loader.
 function loadAbi(): Abi {
     const names = ["AptosLightClient", "Bls12381", "AptosTypes", "AptosHash", "Bcs"];
     const abi: Abi[number][] = [];
@@ -246,7 +243,6 @@ function loadAbi(): Abi {
     return abi;
 }
 
-// SCOUT(#219) EDIT: the dual-chain testnet setup needs this deploy step; share it, and note that it rewrites the tracked file test-results/deployment.json.
 /**
  * Deploys with EXPECTED_GENESIS_WAYPOINT from the testnet's genesis files, so the script checks
  * the node's waypoint against a value the node did not supply.
@@ -353,7 +349,6 @@ async function main(): Promise<void> {
         const signedLi = fromHex(proof.ledger_info_with_signatures);
         const target = parseLedgerInfo(signedLi).epoch;
 
-        // SCOUT(#219) EDIT: the validator set map, the signed() encoder and the advanceEpoch loop below are the carrier's epoch advance; move them to the shared module as one function.
         // Validator sets by epoch, from the genesis LedgerInfo and each epoch change.
         const sets = new Map<bigint, ValidatorSet>();
         const genesis = await getJson<{ ledger_info_with_signatures: string }>(
@@ -411,7 +406,6 @@ async function main(): Promise<void> {
         }
 
         const typeTag = toHex(structTag(FEE_STATEMENT_TYPE));
-        // SCOUT(#219) EDIT: this object is the EventProof that LockBox.recordOutcome takes; build it in the shared module from the /v1/atomica/event_proof response.
         const eventProof = {
             ledgerInfo: signed(signedLi),
             version: BigInt(proof.version),

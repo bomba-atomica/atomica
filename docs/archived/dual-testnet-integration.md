@@ -8,7 +8,7 @@
 > [!NOTE]
 > This document captures the original planning specification and architecture intent.
 > For current roadmap/progress, use `docs/plans/implementation-plan.md`.
-> For current cross-chain suite structure/usage, use `docs/development/cross-chain-test-suite.md`.
+> For current cross-chain suite structure/usage, use `source/docker-testnet/aptos-testnet/test/README.md`.
 
 ---
 

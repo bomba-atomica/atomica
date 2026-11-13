@@ -418,9 +418,10 @@ export function testLockBinding(pairBcsHex: string = "0x"): LockBinding {
     );
 }
 
-// SCOUT(#219) EDIT: the round-trip test calls this for three depositors (a FakeETH seller and two FakeUSD bidders) bound to one window and the launch pair; that needs the pairBcsHex parameter that pull request 213 adds, and an export (it is module private today).
 /**
- * Lock `count` times and return the storage proof of each lock.
+ * Lock `count` times and return the storage proof of each lock. The live
+ * round-trip test (test/auction-round-trip.test.ts) calls it directly, once
+ * per depositor, with the window's `pairBcsHex`.
  *
  * Steps:
  *   1. Mint the token to the signer
@@ -438,7 +439,7 @@ export function testLockBinding(pairBcsHex: string = "0x"): LockBinding {
  * All proofs share one certified block. No one submits a header: Aptos reads
  * the root the validators certified.
  */
-async function lockAndProve(
+export async function lockAndProve(
     rpcUrl: string,
     aptosNodeUrl: string,
     sellerPrivateKey: string,

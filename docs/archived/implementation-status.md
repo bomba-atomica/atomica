@@ -6,7 +6,7 @@
 >
 > Use:
 > - `docs/plans/implementation-plan.md` for roadmap/progress tracking
-> - `docs/development/cross-chain-test-suite.md` for suite structure and usage
+> - `source/docker-testnet/aptos-testnet/test/README.md` for suite structure and usage
 
 ## ✅ COMPLETE
 

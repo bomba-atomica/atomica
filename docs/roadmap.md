@@ -36,7 +36,6 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 <!-- SCOUT(#242) DOC: settlement row: stale: the Aptos light client (202) and proof-gated LockBox (203) are merged and BLSVerifier.sol is retired; missing are the Aptos outcome (194), the carrier (195) and a live round trip (219). -->
 <!-- SCOUT(#242) DOC: unwind row: LockBox reclaim is live (203); the Aptos unwind is open pull request 213 (194); the SDK and UI half (195) is open. -->
 <!-- SCOUT(#216) DOC: collateral row: becomes live when collateral must cover price times quantity. -->
-<!-- SCOUT(#219) DOC: settlement row: it can read live only once a CI test runs lock, auction, recordOutcome and releaseByOutcome across both chains; name that test here. -->
 <!-- SCOUT(#221) DOC: LockBox row: lock takes no deadline and the auction key drops it; LockBox redeploys. -->
 <!-- SCOUT(#222) DOC: LockBox row: add reclaimUnpayable and the remainder-to-depositor leaf rule. -->
 <!-- SCOUT(#224) DOC: multi-pair row: "single pair hard-coded" becomes an allowlist seeded with one launch pair. -->
@@ -59,7 +58,7 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 | **Twice-daily global auction windows (07:45 / 16:15 UTC)** | `atomica-move-contracts/sources/auction.move`, `atomica-move-contracts/sources/eth_proof.move` | `missing` — window ids come from the chain clock and change exactly at 07:45 and 16:15 UTC (`eth_proof::window_id_at`); the window timelock deadline is still picked by the first seller |
 | **Multi-asset / multi-pair clearing** | `atomica-move-contracts/sources/auction.move` | `missing` — single pair hard-coded |
 | **Bidder collateral on Aptos** | `atomica-move-contracts/sources/auction.move` | `missing` — Demo explicitly skips collateral |
-| **Cross-chain settlement back to Ethereum (verified BLS outcome proof)** | `evm-contracts/src/escrow/LockBox.sol`, `BLSVerifier.sol` | `missing` — real BLS verification of Aptos outcomes ships in v0.1; the Aptos light client verifier and proof-gated LockBox are issues 201, 202, 203 |
+| **Cross-chain settlement back to Ethereum (verified BLS outcome proof)** | `evm-contracts/src/escrow/LockBox.sol`, `BLSVerifier.sol` | `live` — `AptosLightClient` verifies the validator BLS signatures of an Aptos `AuctionOutcome`, and LockBox records it and releases each lock (issues 201, 202, 203, 194, 195). The CI test `source/docker-testnet/aptos-testnet/test/auction-round-trip.test.ts` runs lock, auction, `recordOutcome` and `releaseByOutcome` across both live chains (issue 219) |
 | **Permissionless unwind (finished or stuck auction, lock deadline reclaim)** | `atomica-move-contracts/sources/auction.move`, `lock_receipt.move`, `evm-contracts/src/escrow/LockBox.sol` | `missing` — issues 194, 195, 203 |
 | **Distance-to-clearing fee rebates** | — | `missing` — not designed (PRD open question); the zero-returning scaffolding in Move, the SDK and the UI was deleted (issue 238) |
 | **Sell flow wizard (8-step UI)** | `atomica-web-ui/src/components/SellFlow/` | `live` |

@@ -1117,4 +1117,4 @@ export * from "./localnet.js";
 export * from "./browser-commands.js";
 export * from "./findAptosBinary.js";
 export * from "./genesis.js";
-// SCOUT(#219) ADD: export ./outcome-carrier.js and ./eth-derivable-account.js here once the round-trip test uses them.
+export * from "./eth-derivable-account.js";
