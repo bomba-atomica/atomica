@@ -28,7 +28,6 @@ import { WalletContext } from "../../src/context/WalletContext";
 
 // Stub SDK modules so no blockchain calls are made.
 // SCOUT(#228) EDIT: the sealBid mock returns no commitment and no salt.
-// SCOUT(#235) EDIT: the stored opening must equal this mocked salt and commitment.
 vi.mock("@atomica/sdk/aptos", () => ({
   assertSiweDomain: vi.fn().mockResolvedValue(undefined),
   submitBid: vi.fn().mockResolvedValue({ hash: "0xabc123" }),
@@ -93,7 +92,6 @@ vi.mock("@atomica/sdk/chain-config", () => ({
   })),
 }));
 
-// SCOUT(#235) EDIT: mock saveBidOpening too, or use the real storage for the loadBidOpening case.
 vi.mock("../../src/storage/bidStorage", () => ({
   saveBidPrice: vi.fn(),
 }));
@@ -238,6 +236,35 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     expect(vi.mocked(sealBid).mock.calls[0][2]).toBe(expected);
   });
 
+  it("when sealBid throws, AuctionBidder shows the error and never calls submitBid", async () => {
+    const { submitBid, sealBid } = await import("@atomica/sdk/aptos");
+    const { saveBidPrice } = await import("../../src/storage/bidStorage");
+    vi.mocked(sealBid).mockRejectedValueOnce(
+      new Error(
+        "The Aptos node returned a timelock identity for timelock 11 that differs from the one built from its chain id, epoch and deadline. Refusing to seal the bid.",
+      ),
+    );
+    renderBidder();
+    fireEvent.click(screen.getByTestId("skip-to-bid-button"));
+    fireEvent.change(screen.getByTestId("bid-amount-input"), {
+      target: { value: "200" },
+    });
+    fireEvent.change(screen.getByTestId("collateral-lock-id-input"), {
+      target: { value: "0x" + "cd".repeat(32) },
+    });
+    fireEvent.click(screen.getByTestId("submit-bid-button"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("bid-status").textContent).toContain(
+        "Refusing to seal the bid",
+      ),
+    );
+    expect(sealBid).toHaveBeenCalledTimes(1);
+    expect(submitBid).not.toHaveBeenCalled();
+    expect(saveBidPrice).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Bid Submitted/)).toBeNull();
+  });
+
   it("shows Step 2 as active in step indicator after skipping to bid", () => {
     renderBidder();
     fireEvent.click(screen.getByTestId("skip-to-bid-button"));
@@ -278,10 +305,6 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
   it.todo(
     "SCOUT(#217) a price of 2000.5, -1 or an empty field shows an error and neither seals nor submits",
   );
-  it.todo(
-    "SCOUT(#235) after a successful bid, loadBidOpening returns the price, salt and commitment that sealBid returned",
-  );
-  it.todo("SCOUT(#235) nothing is stored when submitBid rejects");
   it.todo("SCOUT(#228) submitBid is called with no commitment");
   it("refuses the FakeUSD lock on another host and shows the expected SIWE domain", async () => {
     (window as unknown as { ethereum: object }).ethereum = {};

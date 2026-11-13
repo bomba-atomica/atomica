@@ -38,7 +38,6 @@ exemptions:
       - source/atomica-web-components/tests/integration/10-settle.test.tsx
       # SCOUT(#236) EDIT: rename this line with the file when 11-claim-and-reclaim becomes the release test; the guard does not expand the browser matrix, so the new name must be listed here.
       - source/atomica-web-components/tests/integration/11-claim-and-reclaim.test.tsx
-      # SCOUT(#235) TEST: this file is exempt and in no browser chunk, so new stored-opening cases here never run in CI; add it to a chunk or test bid storage in tests/unit.
       - source/atomica-web-components/tests/integration/12a-bid-storage.test.tsx
       - source/atomica-web-components/tests/integration/13-bid-history.test.tsx
       - source/atomica-web-components/tests/integration/15-pool-events.test.tsx

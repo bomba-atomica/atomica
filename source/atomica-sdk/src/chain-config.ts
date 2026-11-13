@@ -19,16 +19,33 @@ export type ChainConfig = {
     /** Deployed LockBox escrow contract address */
     lockBox: string;
   };
-  // SCOUT(#235) ADD: an optional list of extra Aptos fullnode URLs, read by the master public key comparison.
   aptos: {
     /** Deployed Atomica Move package address on Aptos */
     contractAddress: string;
+    /**
+     * Extra Aptos fullnode URLs, each ending in `/v1`. `sealBid` reads
+     * `timelock::get_mpk` from each of them and from the primary node, and
+     * refuses to seal when two answers differ.
+     */
+    extraFullnodeUrls?: string[];
   };
 };
 
 // Safe env access: works in Node (test/ts-node) and in Vite browser builds
 const env =
   (import.meta as { env?: Record<string, string> }).env || process.env || {};
+
+/**
+ * Parse `VITE_APTOS_EXTRA_FULLNODE_URLS`: a comma-separated list of absolute
+ * fullnode URLs, each ending in `/v1`. Entries are trimmed and empty entries
+ * dropped. An unset or empty value gives an empty list.
+ */
+export function parseExtraFullnodeUrls(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((url) => url.trim())
+    .filter((url) => url.length > 0);
+}
 
 export const DEFAULT_CHAIN_CONFIG: ChainConfig = {
   ethereum: {
@@ -40,11 +57,13 @@ export const DEFAULT_CHAIN_CONFIG: ChainConfig = {
     lockBox:
       env.VITE_LOCK_BOX_ADDRESS || "0x0000000000000000000000000000000000000000",
   },
-  // SCOUT(#235) ADD: fill the extra endpoints from a VITE_* variable here.
   aptos: {
     contractAddress:
       env.VITE_CONTRACT_ADDRESS ||
       "0x0000000000000000000000000000000000000000000000000000000000000000",
+    extraFullnodeUrls: parseExtraFullnodeUrls(
+      env.VITE_APTOS_EXTRA_FULLNODE_URLS,
+    ),
   },
 };
 

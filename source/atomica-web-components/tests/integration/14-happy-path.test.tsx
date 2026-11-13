@@ -543,10 +543,11 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       console.log("[14-happy-path] Step 8: client-encrypted bid (sealBid, the AuctionBidder path)");
       const bidder = await ethAccountAddress(fixture.eth.bidder);
 
-      // sealBid reads timelock::get_mpk, timelock::get_timelock_identity and
-      // auction::bid_associated_data from chain and encrypts price || salt.
+      // sealBid builds the identity and associated data from the chain id,
+      // epoch and deadline, checks them against the node's views, reads
+      // timelock::get_mpk from the one configured endpoint and encrypts
+      // price || salt.
       // SCOUT(#228) EDIT: no salt and no commitment come back, and getBidPayload has five arguments.
-      // SCOUT(#235) EDIT: sealBid cross-checks the node's identity and associated data here, on live chains.
       const sealed = await sealBid(windowId, TEST_PAIR_BCS, bidder, BID_PRICE);
       expect(sealed.timelockId).toBe(timelockId);
       bidSalt = sealed.salt;
