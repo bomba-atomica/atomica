@@ -183,7 +183,8 @@ Client workflow:
 
 The original rules below are history. Their deposit forfeits are superseded by the owner axiom.
 
-<!-- SCOUT(#218) DOC: spam is bounded by a minimum collateral size and per-window caps, not by a forfeited deposit. -->
+Spam is bounded by minimum sizes and per-window caps, not by a forfeited deposit (issue 218): at most 100 bids and 100 seller locks per window, at least 10 FakeUSD collateral per bid and 0.01 FakeETH per seller lock.
+
 <!-- SCOUT(#228) DOC: steps a and b: a ciphertext that does not decrypt to an 8-byte price is invalid and its collateral returns; nothing is forfeited. -->
 
 ```

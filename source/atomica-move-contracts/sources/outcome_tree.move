@@ -18,8 +18,10 @@
 /// unchanged. A proof lists the siblings from the leaf up and skips the levels
 /// where the node moves up alone.
 module atomica::outcome_tree {
+    use std::bcs;
     use std::vector;
     use aptos_std::aptos_hash::keccak256;
+    use aptos_std::from_bcs;
 
     /// Payout recipients and amounts differ in length
     const E_LENGTH_MISMATCH: u64 = 1;
@@ -76,30 +78,79 @@ module atomica::outcome_tree {
     ): vector<vector<u8>> {
         let n = vector::length(&lock_ids);
         assert!(n == vector::length(&payouts_hashes), E_LENGTH_MISMATCH);
-        // Insertion sort of (lock id, payouts hash) pairs by lock id.
-        let i = 1;
+        // Each lock id as a big-endian u256 key (Solidity bytes32 order), then a merge sort
+        // of the indices by key. A settle at both window caps sorts 200 locks, so the sort
+        // is O(n log n) with native u256 comparisons.
+        let keys = vector::empty<u256>();
+        let i = 0;
         while (i < n) {
-            let j = i;
-            while (j > 0 && less(vector::borrow(&lock_ids, j), vector::borrow(&lock_ids, j - 1))) {
-                vector::swap(&mut lock_ids, j, j - 1);
-                vector::swap(&mut payouts_hashes, j, j - 1);
-                j = j - 1;
-            };
+            vector::push_back(&mut keys, be_key(vector::borrow(&lock_ids, i)));
             i = i + 1;
         };
+        let order = sorted_order(&keys);
         let leaves = vector::empty<vector<u8>>();
         let k = 0;
         while (k < n) {
+            let idx = *vector::borrow(&order, k);
             if (k > 0) {
-                assert!(less(vector::borrow(&lock_ids, k - 1), vector::borrow(&lock_ids, k)), E_DUPLICATE_LOCK);
+                let prev = *vector::borrow(&order, k - 1);
+                assert!(*vector::borrow(&keys, prev) < *vector::borrow(&keys, idx), E_DUPLICATE_LOCK);
             };
             vector::push_back(
                 &mut leaves,
-                leaf_hash(*vector::borrow(&lock_ids, k), *vector::borrow(&payouts_hashes, k)),
+                leaf_hash(*vector::borrow(&lock_ids, idx), *vector::borrow(&payouts_hashes, idx)),
             );
             k = k + 1;
         };
         leaves
+    }
+
+    /// A 32-byte id as a big-endian u256, so `<` on keys is Solidity bytes32 `<`.
+    fun be_key(id: &vector<u8>): u256 {
+        assert!(vector::length(id) == 32, E_INVALID_HASH);
+        let le = *id;
+        vector::reverse(&mut le);
+        from_bcs::to_u256(le)
+    }
+
+    /// The indices of `keys` in ascending key order (bottom-up merge sort).
+    fun sorted_order(keys: &vector<u256>): vector<u64> {
+        let n = vector::length(keys);
+        let order = vector::empty<u64>();
+        let i = 0;
+        while (i < n) {
+            vector::push_back(&mut order, i);
+            i = i + 1;
+        };
+        let width = 1;
+        while (width < n) {
+            let next = vector::empty<u64>();
+            let lo = 0;
+            while (lo < n) {
+                let mid = if (lo + width < n) { lo + width } else { n };
+                let hi = if (mid + width < n) { mid + width } else { n };
+                let a = lo;
+                let b = mid;
+                while (a < mid || b < hi) {
+                    let take_a = b >= hi || (
+                        a < mid
+                            && *vector::borrow(keys, *vector::borrow(&order, a))
+                                <= *vector::borrow(keys, *vector::borrow(&order, b))
+                    );
+                    if (take_a) {
+                        vector::push_back(&mut next, *vector::borrow(&order, a));
+                        a = a + 1;
+                    } else {
+                        vector::push_back(&mut next, *vector::borrow(&order, b));
+                        b = b + 1;
+                    };
+                };
+                lo = hi;
+            };
+            order = next;
+            width = width * 2;
+        };
+        order
     }
 
     /// Root of `leaves` (tree order).
@@ -174,26 +225,10 @@ module atomica::outcome_tree {
         next
     }
 
-    /// Big-endian comparison of two 32-byte ids (Solidity bytes32 `<`).
-    fun less(a: &vector<u8>, b: &vector<u8>): bool {
-        assert!(vector::length(a) == 32 && vector::length(b) == 32, E_INVALID_HASH);
-        let i = 0;
-        while (i < 32) {
-            let x = *vector::borrow(a, i);
-            let y = *vector::borrow(b, i);
-            if (x != y) return x < y;
-            i = i + 1;
-        };
-        false
-    }
-
+    /// `value` as 32 big-endian bytes (Solidity uint256): BCS is little-endian.
     fun u256_be(value: u256): vector<u8> {
-        let out = vector::empty<u8>();
-        let i = 0;
-        while (i < 32) {
-            vector::push_back(&mut out, (((value >> (8 * (31 - i) as u8)) & 0xff) as u8));
-            i = i + 1;
-        };
+        let out = bcs::to_bytes(&value);
+        vector::reverse(&mut out);
         out
     }
 }

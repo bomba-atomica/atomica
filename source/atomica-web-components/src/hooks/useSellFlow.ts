@@ -27,11 +27,13 @@ import {
   getRegisterLockPayload,
   getCreateAuctionPayload,
   getWindowDeadlineUs,
+  getWindowLimits,
   getWindowSchedule,
 } from "@atomica/sdk/aptos";
 import { submitNativeTransaction } from "@atomica/sdk";
 import { aptos } from "@atomica/sdk/aptos";
 import { proveLock } from "./proveLock";
+import { sellerLockRefusal } from "./lockPrecheck";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type SellFlowStep =
@@ -76,6 +78,8 @@ export interface SellFlowState {
   unlockTime?: number;
   error?: string; // not persisted (transient)
   loading: boolean;
+  /** Minimum seller lock in FakeETH wei (`auction::get_window_limits`); undefined until read */
+  minSellerLockAmount?: bigint;
 }
 
 export interface SellFlowActions {
@@ -155,6 +159,26 @@ export function useSellFlow(
       loading: false,
     };
   });
+
+  // The minimum seller lock, for the lock step. lockEth reads the limits again
+  // before it locks, so a failed read here only hides the hint.
+  const [minSellerLockAmount, setMinSellerLockAmount] = useState<
+    bigint | undefined
+  >(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const limits = await getWindowLimits();
+        if (!cancelled) setMinSellerLockAmount(limits.minSellerLockAmount);
+      } catch {
+        // The lock step shows no minimum; lockEth still refuses a small lock.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Ref to latest proof (not stored in state to avoid re-renders from large objects)
   const proofRef = useRef<LockedBalanceProof | undefined>(undefined);
@@ -269,7 +293,6 @@ export function useSellFlow(
     setState((s) => ({ ...s, error, loading: false }));
   }, []);
 
-  // SCOUT(#218) EDIT: a lock below the new minimum, or a seller lock past the cap, locks on Ethereum and then aborts in create_auction; pre-check with the SDK limits view reader, or the lock waits for reclaim.
   const lockEth = useCallback(
     async (amount: bigint) => {
       if (!account || !window.ethereum) return;
@@ -280,6 +303,25 @@ export function useSellFlow(
         // domain. Refuse to lock from any other host: Aptos would never let
         // this wallet claim the lock.
         await assertSiweDomain(window.location.host);
+
+        // Pre-check: Aptos refuses a lock below the minimum seller lock or
+        // into a window that holds the maximum seller locks. LockBox would
+        // accept it, and the funds would wait for the reclaim deadline.
+        // The window clock is the chain's (a test chain stores a short one).
+        const schedule = await getWindowSchedule();
+        const windowId = currentWindowId(
+          BigInt(Math.floor(Date.now() / 1000)),
+          schedule,
+        );
+        const refusal = await sellerLockRefusal(
+          amount,
+          windowId,
+          LAUNCH_PAIR_BCS,
+        );
+        if (refusal) {
+          setError(refusal);
+          return;
+        }
         const provider = new ethers.BrowserProvider(window.ethereum);
 
         // Step 1: Approve
@@ -291,13 +333,7 @@ export function useSellFlow(
         // after it, anyone may reclaim the lock to the seller. LockBox
         // reverts (WindowClosed) if the window closed by the time the lock
         // is mined, so a wrong client clock fails here with no funds moved.
-        // The window clock is the chain's (a test chain stores a short one).
-        const schedule = await getWindowSchedule();
-        const binding = lockBinding(
-          currentWindowId(BigInt(Math.floor(Date.now() / 1000)), schedule),
-          LAUNCH_PAIR_BCS,
-          schedule,
-        );
+        const binding = lockBinding(windowId, LAUNCH_PAIR_BCS, schedule);
         const receipt = await lockFakeEth(provider, amount, binding);
         const lock = lockFromReceipt(receipt);
         const lockNonce = lock.nonce;
@@ -491,6 +527,7 @@ export function useSellFlow(
   return {
     ...state,
     proof: state.proof,
+    minSellerLockAmount,
     lockEth,
     generateProof,
     submitProof,

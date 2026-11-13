@@ -87,8 +87,7 @@ module atomica::auction {
     const E_WINDOW_ALREADY_SETTLED: u64 = 11;
 
     /// Scout stub sentinel. These stubs abort with it until their issues build them:
-    /// `get_window_limits` (caps, 218) and `open_bids` (ciphertext opening, 228). The issue
-    /// that builds the last stub deletes it.
+    /// `open_bids` (ciphertext opening, 228). The issue that builds the last stub deletes it.
     const E_NOT_IMPLEMENTED: u64 = 99;
 
     // New abort codes. The unwind pull request (213) took 32 to 36, so these start at 37.
@@ -96,13 +95,10 @@ module atomica::auction {
     const E_ZERO_QUANTITY: u64 = 37;
     /// A bid quantity must not be above the window's supply at submission.
     const E_QUANTITY_ABOVE_SUPPLY: u64 = 38;
-    // SCOUT(#218) ADD: `create_auction` aborts with `E_SELLER_LOCKS_FULL` when the window holds `MAX_SELLER_LOCKS_PER_WINDOW` locks.
     /// The window holds the maximum number of seller locks.
     const E_SELLER_LOCKS_FULL: u64 = 39;
-    // SCOUT(#218) ADD: `create_auction` aborts with `E_SELLER_LOCK_TOO_SMALL` when the claimed lock is below `MIN_SELLER_LOCK_AMOUNT`.
     /// The seller lock is below the minimum lock size.
     const E_SELLER_LOCK_TOO_SMALL: u64 = 40;
-    // SCOUT(#218) ADD: `submit_bid` aborts with `E_COLLATERAL_TOO_SMALL` when the claimed collateral is below `MIN_BID_COLLATERAL`.
     /// The bid collateral is below the minimum collateral size.
     const E_COLLATERAL_TOO_SMALL: u64 = 41;
     /// `create_auction`: the pair bytes are not on the allowlist.
@@ -178,13 +174,10 @@ module atomica::auction {
     const CT_VK_LEN: u64 = 32;
     /// Per-window bid cap. The clearing sort is quadratic.
     const MAX_BIDS_PER_WINDOW: u64 = 100;
-    // SCOUT(#218) ADD: cap on seller locks per window. The value waits for the owner (proposed: 100).
     /// Per-window seller lock cap. Settle, refund and unwind loop over every seller lock.
     const MAX_SELLER_LOCKS_PER_WINDOW: u64 = 100;
-    // SCOUT(#218) ADD: minimum seller lock in FakeETH wei. The value waits for the owner (proposed: 0.01 FakeETH).
     /// Minimum amount of one seller lock, in FakeETH wei (18 decimals).
     const MIN_SELLER_LOCK_AMOUNT: u256 = 10_000_000_000_000_000;
-    // SCOUT(#218) ADD: minimum bid collateral in FakeUSD base units. The value waits for the owner (proposed: 10 FakeUSD).
     /// Minimum collateral of one bid, in FakeUSD base units (6 decimals).
     const MIN_BID_COLLATERAL: u256 = 10_000_000;
     /// Seed of the timelock registrar object under `@atomica`. The SDK
@@ -578,10 +571,13 @@ module atomica::auction {
     /// to `total_supply`, and appends the `lock_id` to `lock_ids`. There is no
     /// reserve price: clearing alone sets the price.
     ///
+    /// Spam bounds: the claimed lock must be at least `MIN_SELLER_LOCK_AMOUNT`
+    /// (E_SELLER_LOCK_TOO_SMALL), and a window takes at most `MAX_SELLER_LOCKS_PER_WINDOW`
+    /// seller locks (E_SELLER_LOCKS_FULL).
+    ///
     /// Arguments after the signer: (window_id, pair_bcs, lock_id).
     ///
     /// @see docs/architecture/v0-architecture.md §2.3
-    // SCOUT(#218) EDIT: `create_auction` aborts when the window holds `MAX_SELLER_LOCKS_PER_WINDOW` locks, or when the claimed lock is below `MIN_SELLER_LOCK_AMOUNT`.
     public entry fun create_auction(
         seller:    &signer,
         window_id: u64,
@@ -617,6 +613,7 @@ module atomica::auction {
         let locked_amount = lock_receipt::claim_for_window<Ethereum, FakeETH>(
             seller_addr, lock_id, window_id, pair_hash(pair_bcs),
         );
+        assert!(locked_amount >= MIN_SELLER_LOCK_AMOUNT, E_SELLER_LOCK_TOO_SMALL);
 
         // 3. The global AuctionRegistry must exist at @atomica (init_module publishes it).
         assert!(exists<AuctionRegistry>(@atomica), E_AUCTION_NOT_FOUND);
@@ -644,7 +641,10 @@ module atomica::auction {
             // Subsequent seller — accumulate supply and append metadata.
             let state = table::borrow_mut(&mut registry.windows, key);
             state.total_supply = state.total_supply + (locked_amount as u256);
-            // SCOUT(#218) EDIT: check the seller lock cap before this push.
+            assert!(
+                vector::length(&state.lock_ids) < MAX_SELLER_LOCKS_PER_WINDOW,
+                E_SELLER_LOCKS_FULL
+            );
             vector::push_back(&mut state.lock_ids, lock_id);
         };
     }
@@ -732,7 +732,8 @@ module atomica::auction {
     ///   - the collateral lock is bound to `(window_id, pair_hash(pair_bcs))`;
     ///   - `quantity` is above zero (`E_ZERO_QUANTITY`) and at most the window's
     ///     `total_supply` now (`E_QUANTITY_ABOVE_SUPPLY`). Supply only grows before the
-    ///     deadline, so a bid at or below the visible supply always passes.
+    ///     deadline, so a bid at or below the visible supply always passes;
+    ///   - the claimed collateral is at least `MIN_BID_COLLATERAL` (`E_COLLATERAL_TOO_SMALL`).
     ///
     /// The claimed collateral amount is stored on the bid. Opening judges the bid against it.
     ///
@@ -743,7 +744,6 @@ module atomica::auction {
     /// `quantity` is the bid quantity in wei (FakeETH base token).
     ///
     /// @see docs/architecture/v0-architecture.md §2.5
-    // SCOUT(#218) EDIT: `submit_bid` aborts when the claimed collateral is below `MIN_BID_COLLATERAL`.
     // SCOUT(#228) EDIT: `submit_bid` drops the `commitment` argument, its 32-byte check and the stored field.
     public entry fun submit_bid(
         bidder:             &signer,
@@ -792,8 +792,10 @@ module atomica::auction {
         );
 
         // 7. Bid checks. A bounded quantity keeps `quote_for_fill` and clearing in range.
+        //    A minimum collateral makes each of the `MAX_BIDS_PER_WINDOW` slots cost capital.
         assert!(quantity > 0, E_ZERO_QUANTITY);
         assert!(quantity <= state.total_supply, E_QUANTITY_ABOVE_SUPPLY);
+        assert!(collateral >= MIN_BID_COLLATERAL, E_COLLATERAL_TOO_SMALL);
 
         // 8. Store the sealed bid.
         vector::push_back(&mut state.bids, SealedBid {
@@ -1443,6 +1445,9 @@ module atomica::auction {
         // Bids in bid order. Winners take supply from the sellers in lock order.
         let total_filled: u256 = 0;
         let winner_count = 0u64;
+        // Sellers fill in lock order, so the exhausted ones are a prefix: each winner
+        // starts at the first seller with supply left.
+        let first_open = 0u64;
         let bid_count = vector::length(&state.bids);
         let i = 0u64;
         while (i < bid_count) {
@@ -1457,7 +1462,7 @@ module atomica::auction {
                 winner_count = winner_count + 1;
                 total_filled = total_filled + result.fill_amount;
                 let unfilled = result.fill_amount;
-                let k = 0u64;
+                let k = first_open;
                 while (unfilled > 0 && k < seller_count) {
                     let avail = *vector::borrow(&supply_left, k);
                     if (avail > 0) {
@@ -1471,6 +1476,7 @@ module atomica::auction {
                             vector::push_back(&mut amounts, quote);
                         };
                         *vector::borrow_mut(&mut supply_left, k) = avail - chunk;
+                        if (avail == chunk && k == first_open) { first_open = k + 1; };
                         unfilled = unfilled - chunk;
                         left = left - quote;
                     };
@@ -1654,10 +1660,11 @@ module atomica::auction {
         table::contains(&registry.windows, key)
     }
 
-    // SCOUT(#218) ADD: one view of the four window limits: (max bids, max seller locks, min seller lock amount, min bid collateral).
     #[view]
+    /// The four window limits, in order: max bids per window, max seller locks per window,
+    /// min seller lock amount (FakeETH wei), min bid collateral (FakeUSD base units).
     public fun get_window_limits(): (u64, u64, u256, u256) {
-        abort E_NOT_IMPLEMENTED
+        (MAX_BIDS_PER_WINDOW, MAX_SELLER_LOCKS_PER_WINDOW, MIN_SELLER_LOCK_AMOUNT, MIN_BID_COLLATERAL)
     }
 
     #[view]

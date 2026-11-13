@@ -310,7 +310,6 @@ Atomica prioritizes:
 
 ## Open Questions
 
-<!-- SCOUT(#218) DOC: question 6 (DoS prevention): partly answered by the seller-lock cap, the bid cap and the minimum lock sizes; name the values the owner picks. -->
 <!-- SCOUT(#242) DOC: question 5: headers are validator transactions now; the open incentive question is who pays the outcome carrier's gas (review K-2). Question 9: the package upgrade-key is the governance question that matters (owner decision 30). -->
 
 1. Optimal settlement delay within 1-3 hour range
@@ -318,7 +317,7 @@ Atomica prioritizes:
 3. Later phase: reserve price mechanics if needed (RMS deviation fee structure). Launch has no reserve price (review decision 33).
 4. Fraud proof latency windows and impact on finality/UX
 5. Validator incentives for submitting away-chain headers
-6. DoS prevention (spam bids/commitments). Timelock registration spam is closed: only the auction package registers a timelock, one per window id.
+6. DoS prevention (spam bids/commitments). Timelock registration spam is closed: only the auction package registers a timelock, one per window id. Bid and seller spam is partly answered: a window takes at most 100 bids and 100 seller locks, each seller lock is at least 0.01 FakeETH and each bid's collateral at least 10 FakeUSD, so filling a window costs real capital. The UI checks these limits before the Ethereum lock, so an honest user never locks an amount Aptos refuses.
 7. Economic bounds on griefing attacks. Partly answered: a dust bid can no longer win supply or cancel a window, because an under-collateralised bid is invalid at opening and skipped. Its collateral still goes back in full (no slash), so spam is bounded by the collateral a bid must lock.
 8. Away-chain reorganization detection/resolution
 9. Governance for parameter changes and upgrades

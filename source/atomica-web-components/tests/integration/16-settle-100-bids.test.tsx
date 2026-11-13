@@ -13,7 +13,11 @@
  * signs with the simulated gas plus a margin, capped at the chain maximum.
  * Every bid and the operator's direct calls use the same simulated limit.
  *
- * 100 bids of 0.1 FakeETH compete for 5 FakeETH, so 50 win and 50 lose.
+ * The window is at both caps: 100 seller locks of the 0.01 FakeETH minimum
+ * (1 FakeETH supply) and 100 bids of 0.02 FakeETH, so 50 win and 50 lose.
+ * Settle loops over winners times seller locks and records an outcome for
+ * every lock, so this is the most expensive settle a window allows; its
+ * gas_used must stay below the chain's maximum gas per transaction.
  * The bidder's Ethereum-derivable account places every bid (SIWE): only it
  * can claim the bidder's collateral receipts. The operator (no special
  * rights) relays openings.
@@ -29,6 +33,7 @@ import {
 import { setupWalletMock } from "./fixtures/wallet-mock";
 import {
   createLiveWindow,
+  joinWindowAsSellers,
   lockBidCollaterals,
   submitAsEthAccount,
   ethAccountAddress,
@@ -46,41 +51,48 @@ import {
   Ed25519PrivateKey,
   type UserTransactionResponse,
 } from "@aptos-labs/ts-sdk";
-import { submitNativeTransaction } from "@atomica/sdk";
+import { getGasLimits, submitNativeTransaction } from "@atomica/sdk";
 import {
   setAptosInstance,
   sealBid,
   getBidPayload,
   getSettlePayload,
   getBidResults,
+  getWindowLimits,
+  getWindowLockIds,
 } from "@atomica/sdk/aptos";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
-// SCOUT(#218) EDIT: fill the same window to the seller cap as well (proposed 100 seller locks).
+/** The bid cap, MAX_BIDS_PER_WINDOW. */
 const BID_COUNT = 100;
-// SCOUT(#217) EDIT: price ladder in whole USD (for example 1000 plus 10 per bid).
-/** The lowest bid price; each later bid adds PRICE_STEP. */
-const BASE_PRICE = 1_000_000n;
-const PRICE_STEP = 10_000n;
-const BID_QUANTITY = ethers.parseEther("0.00002");
+/** The seller lock cap, MAX_SELLER_LOCKS_PER_WINDOW. */
+const SELLER_LOCK_COUNT = 100;
+/** Each seller lock is the minimum seller lock, 0.01 FakeETH. */
+const SELLER_LOCK = ethers.parseEther("0.01");
+/** The lowest bid price (whole USD per whole FakeETH); each later bid adds PRICE_STEP. */
+const BASE_PRICE = 1_000n;
+const PRICE_STEP = 10n;
+/** The window supply: every seller lock, 1 FakeETH. */
+const SUPPLY = SELLER_LOCK * BigInt(SELLER_LOCK_COUNT);
 /** Half the bids fill the supply. */
-const SUPPLY = BID_QUANTITY * 50n;
+const BID_QUANTITY = SUPPLY / 50n;
 /**
- * FakeUSD per bid. 100 locks must fit one 10,000 FakeUSD MAX_MINT_AMOUNT. A
- * winner pays BID_QUANTITY at the clearing price (USD per whole FakeETH,
- * `quoteForFill`): at most 0.00002 * 1_990_000 = 39.8 FakeUSD.
+ * FakeUSD per bid, at or above the 10 FakeUSD minimum bid collateral. 100
+ * locks must fit one 10,000 FakeUSD MAX_MINT_AMOUNT. A winner pays
+ * BID_QUANTITY at the clearing price (USD per whole FakeETH,
+ * `quoteForFill`): at most 0.02 * 1_990 = 39.8 FakeUSD.
  */
 const COLLATERAL = 50n * 10n ** 6n;
-// SCOUT(#218) EDIT: COLLATERAL above (50 FakeUSD per bid) must stay at or above the minimum collateral.
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
 /**
  * The window is created with at least this long left before its close, so
- * the 100 collaterals and the 100 bids land in it (seconds).
+ * the 100 collaterals, the 99 joining seller locks and the 100 bids land in
+ * it (seconds). A test window is 900 seconds.
  */
-const MIN_WINDOW_LEFT_SECS = 600n;
+const MIN_WINDOW_LEFT_SECS = 840n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
 const REVEAL_TIMEOUT_SECS = 300;
 /** The ts-sdk default maxGasAmount, used when nothing sets one. */
@@ -144,8 +156,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
       minWindowLeftSecs: MIN_WINDOW_LEFT_SECS,
-      // SCOUT(#218) EDIT: pull request 213 sets SUPPLY to 0.001 FakeETH (50 x 0.00002), below the proposed 0.01 FakeETH minimum seller lock, so create_auction aborts.
-      lockAmount: SUPPLY,
+      lockAmount: SELLER_LOCK,
     });
 
     const bidderAptosAddress = await ethAccountAddress(fixture.eth.bidder);
@@ -158,6 +169,25 @@ describe.sequential("16: Settle a 100-bid window", () => {
       COLLATERAL,
     );
     expect(new Set(collateral).size).toBe(BID_COUNT);
+
+    // The limits this test fills: both caps, at the minimum seller lock and
+    // above the minimum collateral.
+    const limits = await getWindowLimits();
+    expect(limits.maxBidsPerWindow).toBe(BigInt(BID_COUNT));
+    expect(limits.maxSellerLocksPerWindow).toBe(BigInt(SELLER_LOCK_COUNT));
+    expect(limits.minSellerLockAmount).toBe(SELLER_LOCK);
+    expect(COLLATERAL >= limits.minBidCollateral).toBe(true);
+
+    await joinWindowAsSellers(
+      fixture,
+      aptosClient,
+      operator,
+      auction,
+      SELLER_LOCK_COUNT - 1,
+      SELLER_LOCK,
+    );
+    const { sellers } = await getWindowLockIds(auction.windowId, PAIR_BCS);
+    expect(sellers).toHaveLength(SELLER_LOCK_COUNT);
 
     const payloads = [];
     for (let i = 0; i < BID_COUNT; i++) {
@@ -201,7 +231,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
 
   // SCOUT(#228) EDIT: open the 100 bids in batches with open_bids and log the gas of each batch.
   it(
-    "opens and clears 100 bids in one call, settles them and logs gas_used",
+    "opens and clears 100 bids in one call and logs gas_used",
     async () => {
       await waitForReveal(
         auction.timelockId,
@@ -236,34 +266,43 @@ describe.sequential("16: Settle a 100-bid window", () => {
       expect(await getBidResults(auction.windowId, PAIR_BCS)).toHaveLength(
         BID_COUNT,
       );
-
-      const { hash: settleHash } = await submitNativeTransaction(
-        aptosClient,
-        settlerEthAddress,
-        getSettlePayload(auction.windowId, PAIR_BCS),
-      );
-      const settleTx = await logGas(aptosClient, "settle", settleHash);
-      expect(settleTx.success).toBe(true);
-      // The SDK set the limit from the simulation, not the ts-sdk default.
-      expect(Number(settleTx.max_gas_amount)).not.toBe(TS_SDK_DEFAULT_MAX_GAS);
-      expect(Number(settleTx.max_gas_amount)).toBeGreaterThan(
-        Number(settleTx.gas_used),
-      );
-
-      const state = await getAuctionState(aptosClient, moduleAddr, auction);
-      expect(state.settled).toBe(true);
-      expect(state.bidCount).toBe(BigInt(BID_COUNT));
-      const results = await getBidResults(auction.windowId, PAIR_BCS);
-      expect(results).toHaveLength(BID_COUNT);
-      // 50 winners only if every bid is valid: each holds COLLATERAL, above
-      // its quote at its own price.
-      const winners = results.filter((r) => r.isWinner);
-      expect(winners).toHaveLength(BID_COUNT / 2);
-      expect(winners.reduce((sum, r) => sum + r.fillAmount, 0n)).toBe(SUPPLY);
     },
     (TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 300) * 1000,
   );
 
-  it.todo("SCOUT(#218) a window with the maximum seller locks and 100 bids settles in one transaction and its gas used is below the maximum transaction gas");
-  it.todo("SCOUT(#228) 100 bids are opened in batches by an account that is not the bidder, and the window settles");
+  it("a window with the maximum seller locks and 100 bids settles in one transaction and its gas used is below the maximum transaction gas", async () => {
+    const { hash: settleHash } = await submitNativeTransaction(
+      aptosClient,
+      settlerEthAddress,
+      getSettlePayload(auction.windowId, PAIR_BCS),
+    );
+    const settleTx = await logGas(aptosClient, "settle", settleHash);
+    expect(settleTx.success).toBe(true);
+    // One transaction settles both caps, below the chain's gas ceiling.
+    const { maxGasAmount } = await getGasLimits(aptosClient);
+    console.log(
+      `[gas] settle at both caps (${SELLER_LOCK_COUNT} seller locks, ${BID_COUNT} bids): gas_used=${settleTx.gas_used} max_transaction_gas=${maxGasAmount}`,
+    );
+    expect(Number(settleTx.gas_used)).toBeLessThan(maxGasAmount);
+    // The SDK set the limit from the simulation, not the ts-sdk default.
+    expect(Number(settleTx.max_gas_amount)).not.toBe(TS_SDK_DEFAULT_MAX_GAS);
+    expect(Number(settleTx.max_gas_amount)).toBeGreaterThan(
+      Number(settleTx.gas_used),
+    );
+
+    const state = await getAuctionState(aptosClient, moduleAddr, auction);
+    expect(state.settled).toBe(true);
+    expect(state.bidCount).toBe(BigInt(BID_COUNT));
+    const results = await getBidResults(auction.windowId, PAIR_BCS);
+    expect(results).toHaveLength(BID_COUNT);
+    // 50 winners only if every bid is valid: each holds COLLATERAL, above
+    // its quote at its own price.
+    const winners = results.filter((r) => r.isWinner);
+    expect(winners).toHaveLength(BID_COUNT / 2);
+    expect(winners.reduce((sum, r) => sum + r.fillAmount, 0n)).toBe(SUPPLY);
+  }, 300_000);
+
+  it.todo(
+    "SCOUT(#228) 100 bids are opened in batches by an account that is not the bidder, and the window settles",
+  );
 });

@@ -46,6 +46,15 @@ vi.mock("@atomica/sdk/aptos", () => ({
     daySecs: 86_400n,
     closeOffsetsSecs: [27_900n, 58_500n],
   })),
+  // The window limits of auction::get_window_limits, and an empty window.
+  getWindowLimits: vi.fn(async () => ({
+    maxBidsPerWindow: 100n,
+    maxSellerLocksPerWindow: 100n,
+    minSellerLockAmount: 10_000_000_000_000_000n,
+    minBidCollateral: 10_000_000n,
+  })),
+  getBidCount: vi.fn(async () => 0n),
+  getWindowLockIds: vi.fn(async () => ({ sellers: [], collateral: [] })),
   aptos: { mock: "aptos-client" },
 }));
 
@@ -101,7 +110,7 @@ vi.mock("../../src/storage/bidStorage", () => ({
 }));
 
 import { AuctionBidder } from "../../src/components/AuctionBidder";
-import { assertSiweDomain } from "@atomica/sdk/aptos";
+import { assertSiweDomain, getBidCount } from "@atomica/sdk/aptos";
 import { approveFakeUsd, lockFakeUsd } from "@atomica/sdk/ethereum";
 
 const ACCOUNT = "0x1234567890123456789012345678901234567890";
@@ -361,6 +370,53 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     expect(lockFakeUsd).not.toHaveBeenCalled();
     expect(screen.getByTestId("lock-collateral-step")).toBeTruthy();
     delete (window as unknown as { ethereum?: object }).ethereum;
+  });
+});
+
+describe("AuctionBidder — lock pre-check", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (window as unknown as { ethereum: object }).ethereum = { request: vi.fn() };
+  });
+
+  afterEach(() => {
+    cleanup();
+    delete (window as unknown as { ethereum?: object }).ethereum;
+  });
+
+  it("refuses a collateral below the minimum bid collateral before the Ethereum lock", async () => {
+    renderBidder();
+    fireEvent.change(screen.getByTestId("collateral-amount-input"), {
+      target: { value: "9.999999" },
+    });
+    fireEvent.click(screen.getByTestId("approve-lock-usd-button"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("lock-status").textContent).toContain(
+        "minimum bid collateral is 10.0 FakeUSD",
+      ),
+    );
+    expect(approveFakeUsd).not.toHaveBeenCalled();
+    expect(lockFakeUsd).not.toHaveBeenCalled();
+    expect(screen.getByTestId("lock-collateral-step")).toBeTruthy();
+  });
+
+  it("refuses a bid into a window that holds the maximum bids before the Ethereum lock", async () => {
+    vi.mocked(getBidCount).mockResolvedValueOnce(100n);
+    renderBidder();
+    fireEvent.change(screen.getByTestId("collateral-amount-input"), {
+      target: { value: "50" },
+    });
+    fireEvent.click(screen.getByTestId("approve-lock-usd-button"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("lock-status").textContent).toContain(
+        "maximum of 100 bids",
+      ),
+    );
+    expect(getBidCount).toHaveBeenCalledWith(7n, expect.any(Uint8Array));
+    expect(approveFakeUsd).not.toHaveBeenCalled();
+    expect(lockFakeUsd).not.toHaveBeenCalled();
   });
 });
 

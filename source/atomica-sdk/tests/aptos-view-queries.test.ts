@@ -16,6 +16,7 @@
  *   - getWindowTimelock → auction::window_timelock → bigint
  *   - getWindowDeadlineUs → auction::window_deadline_us → bigint
  *   - getWindowSchedule → eth_proof::get_window_schedule → WindowSchedule
+ *   - getWindowLimits → auction::get_window_limits → WindowLimits
  *
  * @see source/atomica-sdk/src/aptos/payloads.ts
  * @see docs/architecture/v0-architecture.md §2 — sealed-bid reveal path
@@ -57,6 +58,7 @@ import {
   getWindowTimelock,
   getWindowDeadlineUs,
   getWindowSchedule,
+  getWindowLimits,
   LAUNCH_PAIR_BCS,
 } from "../src/aptos/payloads.js";
 import * as config from "../src/aptos/config.js";
@@ -352,8 +354,29 @@ describe("window timelock and schedule views", () => {
   });
 });
 
-describe("planned tests (SCOUT)", () => {
-  it.todo(
-    "SCOUT(#218) getWindowLimits reads the limits view and returns the bid cap, the seller cap and the two minimums",
-  );
+describe("window limits view", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("getWindowLimits reads the limits view and returns the bid cap, the seller cap and the two minimums", async () => {
+    vi.mocked(config.aptos.view).mockResolvedValueOnce([
+      "100",
+      "100",
+      "10000000000000000",
+      "10000000",
+    ]);
+    await expect(getWindowLimits()).resolves.toEqual({
+      maxBidsPerWindow: 100n,
+      maxSellerLocksPerWindow: 100n,
+      minSellerLockAmount: 10_000_000_000_000_000n,
+      minBidCollateral: 10_000_000n,
+    });
+    expect(config.aptos.view).toHaveBeenLastCalledWith({
+      payload: {
+        function: "0xdeadbeef::auction::get_window_limits",
+        functionArguments: [],
+      },
+    });
+  });
 });

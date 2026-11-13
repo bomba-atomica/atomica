@@ -21,6 +21,7 @@ import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { getDerivedAddress, submitNativeTransaction } from "@atomica/sdk";
 import { useWallet } from "../context/WalletContext";
 import { proveLock } from "../hooks/proveLock";
+import { bidCollateralRefusal } from "../hooks/lockPrecheck";
 import { saveBidPrice } from "../storage/bidStorage";
 
 // SCOUT(#228) EDIT: this header describes the commitment and the price_le8 || salt32 plaintext; rewrite it for the 8-byte price and the five-argument submit_bid.
@@ -119,7 +120,6 @@ export function AuctionBidder() {
   const [status, setStatus] = useState<string | null>(null);
 
   // ── Step 1 handler: approve + lock + prove + register FakeUSD ─────────────
-  // SCOUT(#218) EDIT: a collateral below the new minimum locks on Ethereum and then aborts on Aptos, so the lock waits for reclaim; read the SDK limits view reader before the lock.
   const handleLockCollateral = async () => {
     if (!account) return;
     setLockLoading(true);
@@ -130,11 +130,31 @@ export function AuctionBidder() {
       await assertSiweDomain(window.location.host);
       let pending = unregistered;
       if (!pending) {
+        const amountWei = ethers.parseUnits(collateralAmount || "0", 6); // FakeUSD uses 6 decimals
+        // The window clock is the chain's (a test chain stores a short one).
+        const schedule = await getWindowSchedule();
+        const lockWindowId = currentWindowId(
+          BigInt(Math.floor(Date.now() / 1000)),
+          schedule,
+        );
+
+        // 0. Pre-check: Aptos refuses a collateral below the minimum or a bid
+        //    into a full window. LockBox would accept the lock, and the funds
+        //    would wait for the reclaim deadline.
+        const refusal = await bidCollateralRefusal(
+          amountWei,
+          lockWindowId,
+          pairBytes(pairBcsHex),
+        );
+        if (refusal) {
+          setLockStatus(`Refused: ${refusal}`);
+          return;
+        }
+
         setLockStatus("Waiting for MetaMask — Approve FakeUSD...");
         const provider = new ethers.BrowserProvider(
           (window as unknown as { ethereum: ethers.Eip1193Provider }).ethereum,
         );
-        const amountWei = ethers.parseUnits(collateralAmount || "0", 6); // FakeUSD uses 6 decimals
 
         // 1. Approve LockBox to spend FakeUSD.
         await approveFakeUsd(provider, amountWei);
@@ -144,10 +164,8 @@ export function AuctionBidder() {
         //    current window and the pair the bid names. Step 2 starts on
         //    that window. LockBox computes the lock deadline, and reverts
         //    (WindowClosed) if the window closed before the lock is mined.
-        //    The window clock is the chain's (a test chain stores a short one).
-        const schedule = await getWindowSchedule();
         const binding = lockBinding(
-          currentWindowId(BigInt(Math.floor(Date.now() / 1000)), schedule),
+          lockWindowId,
           pairBytes(pairBcsHex),
           schedule,
         );

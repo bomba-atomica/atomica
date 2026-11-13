@@ -6,12 +6,35 @@ interface Props {
   fakeEthBalance?: bigint;
   loading: boolean;
   error?: string;
+  /** Minimum seller lock in FakeETH wei; below it Aptos refuses the lock */
+  minSellerLockAmount?: bigint;
 }
 
-export function Step2Lock({ onLock, fakeEthBalance, loading, error }: Props) {
+/** Wei of the typed amount, or null when the text is not a FakeETH amount. */
+function parseAmount(text: string): bigint | null {
+  try {
+    return ethers.parseEther(text || "0");
+  } catch {
+    return null;
+  }
+}
+
+export function Step2Lock({
+  onLock,
+  fakeEthBalance,
+  loading,
+  error,
+  minSellerLockAmount,
+}: Props) {
   const [amount, setAmount] = useState("1.0");
 
-  // SCOUT(#218) EDIT: refuse an amount below the minimum seller lock here, before the Ethereum lock.
+  // Below the minimum seller lock, Aptos refuses the lock after Ethereum took
+  // it, so the button stays disabled.
+  const typedWei = parseAmount(amount);
+  const belowMinimum =
+    minSellerLockAmount !== undefined &&
+    (typedWei === null || typedWei < minSellerLockAmount);
+
   const handleLock = () => {
     const amountWei = ethers.parseEther(amount || "0");
     // SCOUT(#217) EDIT: price parsed as micro-dollars (parseUnits with 6 decimals); the unit is whole USD through parsePrice, while the field exists.
@@ -36,6 +59,14 @@ export function Step2Lock({ onLock, fakeEthBalance, loading, error }: Props) {
             {fakeEthBalance !== undefined && (
               <span className="ml-2 text-zinc-600">max {maxAmount}</span>
             )}
+            {minSellerLockAmount !== undefined && (
+              <span
+                data-testid="min-seller-lock"
+                className="ml-2 text-zinc-600"
+              >
+                min {ethers.formatEther(minSellerLockAmount)}
+              </span>
+            )}
           </label>
           <input
             data-testid="lock-amount-input"
@@ -54,9 +85,9 @@ export function Step2Lock({ onLock, fakeEthBalance, loading, error }: Props) {
       <button
         data-testid="approve-lock-button"
         onClick={handleLock}
-        disabled={loading}
+        disabled={loading || belowMinimum}
         className={`w-full py-2 rounded font-semibold transition-colors ${
-          loading
+          loading || belowMinimum
             ? "bg-zinc-800 cursor-not-allowed text-zinc-600 border border-zinc-700"
             : "bg-zinc-100 hover:bg-white text-zinc-900"
         }`}

@@ -65,6 +65,15 @@ vi.mock("@atomica/sdk/aptos", () => ({
     closeOffsetsSecs: [27_900n, 58_500n],
   })),
   waitForCertifiedBlock: vi.fn(async (minBlock: number) => minBlock),
+  // The window limits of auction::get_window_limits, and an empty window.
+  getWindowLimits: vi.fn(async () => ({
+    maxBidsPerWindow: 100n,
+    maxSellerLocksPerWindow: 100n,
+    minSellerLockAmount: 10_000_000_000_000_000n,
+    minBidCollateral: 10_000_000n,
+  })),
+  getWindowLockIds: vi.fn(async () => ({ sellers: [], collateral: [] })),
+  getBidCount: vi.fn(async () => 0n),
   aptos: { mock: "aptos-client" },
 }));
 vi.mock("@atomica/sdk", () => ({
@@ -86,6 +95,7 @@ import {
   getRegisterLockPayload,
   getCreateAuctionPayload,
   getWindowDeadlineUs,
+  getWindowLockIds,
   waitForCertifiedBlock,
 } from "@atomica/sdk/aptos";
 import { submitNativeTransaction } from "@atomica/sdk";
@@ -601,6 +611,81 @@ describe("useSellFlow state machine", () => {
       expect(result.current.step).toBe("lock");
       expect(result.current.error).toContain("localhost:3000");
       expect(result.current.loading).toBe(false);
+    });
+
+    it("lockEth refuses an amount below the minimum seller lock before the Ethereum lock", async () => {
+      const { result } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      expect(result.current.minSellerLockAmount).toBe(10n ** 16n);
+      await act(async () => {
+        await result.current.lockEth(10n ** 16n - 1n);
+      });
+
+      expect(result.current.step).toBe("lock");
+      expect(result.current.error).toContain("minimum seller lock is 0.01");
+      expect(result.current.loading).toBe(false);
+      expect(approveFakeEth).not.toHaveBeenCalled();
+      expect(lockFakeEth).not.toHaveBeenCalled();
+    });
+
+    it("lockEth refuses a seller lock into a window that holds the maximum seller locks", async () => {
+      vi.mocked(getWindowLockIds).mockResolvedValueOnce({
+        sellers: Array.from({ length: 100 }, (_, i) => `0x${i}`),
+        collateral: [],
+      });
+      const { result } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      await act(async () => {
+        await result.current.lockEth(10n ** 18n);
+      });
+
+      expect(getWindowLockIds).toHaveBeenCalledWith(41538n, LAUNCH_PAIR_BCS);
+      expect(result.current.step).toBe("lock");
+      expect(result.current.error).toContain("maximum of 100 seller locks");
+      expect(approveFakeEth).not.toHaveBeenCalled();
+      expect(lockFakeEth).not.toHaveBeenCalled();
+    });
+
+    it("lockEth treats a window that does not exist yet as empty", async () => {
+      vi.spyOn(
+        ethers.JsonRpcProvider.prototype,
+        "getBlockNumber",
+      ).mockResolvedValue(77);
+      vi.mocked(getWindowLockIds).mockRejectedValueOnce(
+        new Error(
+          "Move abort in 0xdeadbeef::auction: E_AUCTION_NOT_FOUND(0x1): window not found",
+        ),
+      );
+      vi.mocked(approveFakeEth).mockResolvedValue(undefined as never);
+      vi.mocked(lockFakeEth).mockResolvedValue({
+        hash: "0xlocktx",
+        blockNumber: 77,
+      } as never);
+      const { result, unmount } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      await act(async () => {
+        await result.current.lockEth(10n ** 18n);
+      });
+
+      expect(lockFakeEth).toHaveBeenCalled();
+      expect(result.current.error).toBeUndefined();
+      expect(result.current.step).toBe("confirming");
+      unmount();
+    });
+
+    it("lockEth refuses the lock when the window read fails for another reason", async () => {
+      vi.mocked(getWindowLockIds).mockRejectedValueOnce(
+        new Error("network unreachable"),
+      );
+      const { result } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      await act(async () => {
+        await result.current.lockEth(10n ** 18n);
+      });
+
+      expect(result.current.error).toBe("network unreachable");
+      expect(approveFakeEth).not.toHaveBeenCalled();
+      expect(lockFakeEth).not.toHaveBeenCalled();
     });
 
     it("submitProof error: sets the error message and stays at submitting-proof", async () => {

@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { WalletContext } from "../../src/context/WalletContext";
 
 // Mock balance hooks so BalancesProvider doesn't make real network calls.
@@ -82,6 +82,29 @@ describe("SellFlow step rendering", () => {
     renderSellFlow();
     // Step2Lock has an "Approve & Lock" button
     expect(screen.getByText(/Approve & Lock/i)).toBeTruthy();
+  });
+
+  it("Step2Lock disables the lock below the minimum seller lock", () => {
+    vi.mocked(useSellFlow).mockReturnValue({
+      ...BASE_FLOW,
+      step: "lock",
+      minSellerLockAmount: 10_000_000_000_000_000n,
+    });
+    renderSellFlow();
+    expect(screen.getByTestId("min-seller-lock").textContent).toContain("0.01");
+    const button = screen.getByTestId(
+      "approve-lock-button",
+    ) as HTMLButtonElement;
+    fireEvent.change(screen.getByTestId("lock-amount-input"), {
+      target: { value: "0.009" },
+    });
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(BASE_FLOW.lockEth).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("lock-amount-input"), {
+      target: { value: "0.01" },
+    });
+    expect(button.disabled).toBe(false);
   });
 
   it("shows Step3Confirm at confirming step", () => {
@@ -161,5 +184,7 @@ describe("SellFlow step rendering", () => {
     expect(screen.queryByText("Auction")).toBeFalsy();
   });
 
-  it.todo("SCOUT(#236) the monitoring step passes windowId and pairBcs, so the settle and release steps render");
+  it.todo(
+    "SCOUT(#236) the monitoring step passes windowId and pairBcs, so the settle and release steps render",
+  );
 });

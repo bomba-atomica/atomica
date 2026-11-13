@@ -33,8 +33,12 @@ module atomica::auction_bid_wrapper_tests {
     const EPOCH_INTERVAL_US: u64 = 2_000_000_000_000_000;
     const TIMELOCK_ID: u64 = 11;
     const AUCTION_ID: u64 = 5;
-    // SCOUT(#218) EDIT: the 5 wei seller locks (SUPPLY) and the 1000-unit FakeUSD receipts of this file are below the proposed minimums; 56 of the 63 tests of this file go through `submit_bid` or `create_auction` and need new amounts.
-    const SUPPLY: u256 = 5u256;
+    // The seller lock is the minimum seller lock (0.01 FakeETH). A FakeUSD receipt holds
+    // COLLATERAL (1000 FakeUSD), above the minimum bid collateral (10 FakeUSD).
+    const SUPPLY: u256 = 10_000_000_000_000_000;
+    const COLLATERAL: u256 = 1_000_000_000;
+    // The minimum bid collateral, `auction::get_window_limits` field 4.
+    const MIN_COLLATERAL: u256 = 10_000_000;
 
     // The launch pair bytes, on the allowlist after `init_module`.
     fun pair(): vector<u8> { auction::launch_pair_bcs() }
@@ -113,7 +117,7 @@ module atomica::auction_bid_wrapper_tests {
     // The golden bidder's FakeUSD receipt, bound to window AUCTION_ID of `pair()`.
     fun insert_golden_receipt() {
         lock_receipt::insert_bound_test_receipt<Ethereum, FakeUSD>(
-            GOLDEN_LOCK, golden_bidder(), 1000u256, AUCTION_ID, auction::pair_hash(pair()),
+            GOLDEN_LOCK, golden_bidder(), COLLATERAL, AUCTION_ID, auction::pair_hash(pair()),
         );
     }
 
@@ -283,7 +287,7 @@ module atomica::auction_bid_wrapper_tests {
     fun submit_bid_rejects_ciphertext_of_another_bidder(atomica: &signer) {
         setup_window(atomica);
         let thief_addr = @0x7777;
-        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(b"usd_lock_thief_32bytes__________", thief_addr, 1000u256, 1);
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(b"usd_lock_thief_32bytes__________", thief_addr, COLLATERAL, 1);
         let thief = account::create_signer_for_test(thief_addr);
         auction::submit_bid(
             &thief, AUCTION_ID, pair(), golden_ct(),
@@ -384,7 +388,7 @@ module atomica::auction_bid_wrapper_tests {
     #[expected_failure(abort_code = 15, location = atomica::auction)] // E_DUPLICATE_BID
     fun submit_bid_rejects_duplicate_ciphertext(atomica: &signer) {
         setup_window(atomica);
-        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(b"usd_lock_second_32bytes_________", golden_bidder(), 1000u256, 1);
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(b"usd_lock_second_32bytes_________", golden_bidder(), COLLATERAL, 1);
         let bidder = account::create_signer_for_test(golden_bidder());
         submit_golden(&bidder, 2010, 7, SUPPLY);
         auction::submit_bid(
@@ -427,7 +431,7 @@ module atomica::auction_bid_wrapper_tests {
     fun submit_bid_aborts_after_window_settled(atomica: &signer) {
         setup();
         lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
-        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(GOLDEN_LOCK, golden_bidder(), 1000u256, 1);
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(GOLDEN_LOCK, golden_bidder(), COLLATERAL, 1);
         auction::test_insert_window_with_timelock(atomica, AUCTION_ID, pair(), SUPPLY, true, 2000, TIMELOCK_ID);
         let bidder = account::create_signer_for_test(golden_bidder());
         submit_golden(&bidder, 2010, 7, SUPPLY);
@@ -587,6 +591,38 @@ module atomica::auction_bid_wrapper_tests {
         submit_golden(&bidder, 2010, 7, total_supply + 1);
     }
 
+    // A window with one seller lock, and a golden receipt holding `collateral` FakeUSD units.
+    fun setup_window_with_collateral(atomica: &signer, collateral: u256) {
+        setup();
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        lock_receipt::insert_bound_test_receipt<Ethereum, FakeUSD>(
+            GOLDEN_LOCK, golden_bidder(), collateral, AUCTION_ID, auction::pair_hash(pair()),
+        );
+        insert_window_with_seller(atomica);
+    }
+
+    // Collateral one base unit below the minimum bid collateral aborts at submission.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 41, location = atomica::auction)] // E_COLLATERAL_TOO_SMALL
+    fun submit_bid_below_min_collateral_aborts(atomica: &signer) {
+        let (_, _, _, min_collateral) = auction::get_window_limits();
+        assert!(min_collateral == MIN_COLLATERAL, 1);
+        setup_window_with_collateral(atomica, MIN_COLLATERAL - 1);
+        let bidder = account::create_signer_for_test(golden_bidder());
+        submit_golden(&bidder, 2010, 7, 1);
+    }
+
+    // Collateral exactly at the minimum bid collateral is accepted.
+    #[test(atomica = @atomica)]
+    fun submit_bid_at_min_collateral_succeeds(atomica: &signer) {
+        setup_window_with_collateral(atomica, MIN_COLLATERAL);
+        let bidder = account::create_signer_for_test(golden_bidder());
+        submit_golden(&bidder, 2010, 7, 1);
+        assert!(auction::get_bid_count(AUCTION_ID, pair()) == 1, 1);
+        assert!(lock_receipt::is_lock_claimed<Ethereum, FakeUSD>(GOLDEN_LOCK), 2);
+    }
+
     // The golden bid plus a dust-collateral bid for the whole supply at the top price and
     // a small honest bid. The batch call opens all three without abort and finalizes.
     #[test(atomica = @atomica)]
@@ -602,7 +638,7 @@ module atomica::auction_bid_wrapper_tests {
         );
         // The dust bid holds one base unit less than its quote at its own price.
         let quote = auction::quote_for_fill(SUPPLY, max_price);
-        assert!(quote == 92_233_720, 1);
+        assert!(quote == 184_467_440_737_095_516_150_000, 1);
         auction::test_set_bid_collateral(atomica, AUCTION_ID, pair(), 1, quote - 1);
         let other = @0x3333;
         auction::test_insert_committed_bid(
@@ -636,15 +672,15 @@ module atomica::auction_bid_wrapper_tests {
         assert!(!dust_win && dust_fill == 0, 9);
     }
 
-    // A golden bid whose collateral (50 base units) is below its quote at the top price
-    // (92,233,720) is invalid. `settle` succeeds and the outcome returns all 50 to the depositor.
+    // A golden bid whose collateral (the 10 FakeUSD minimum) is below its quote at the top
+    // price is invalid. `settle` succeeds and the outcome returns all of it to the depositor.
     #[test(atomica = @atomica)]
     fun settle_returns_invalid_bid_collateral_to_depositor(atomica: &signer) {
         setup();
         lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
         lock_receipt::initialize<Ethereum, FakeETH>(atomica);
         lock_receipt::insert_bound_test_receipt<Ethereum, FakeUSD>(
-            GOLDEN_LOCK, golden_bidder(), 50u256, AUCTION_ID, auction::pair_hash(pair()),
+            GOLDEN_LOCK, golden_bidder(), MIN_COLLATERAL, AUCTION_ID, auction::pair_hash(pair()),
         );
         insert_window_with_seller(atomica);
         let max_price = 18_446_744_073_709_551_615u64;
@@ -659,7 +695,7 @@ module atomica::auction_bid_wrapper_tests {
         assert!(auction::is_settled(AUCTION_ID, pair()), 2);
         let (_, _, to, amounts) = lock_receipt::get_lock_outcome<Ethereum, FakeUSD>(GOLDEN_LOCK);
         assert!(to == vector[lock_receipt::test_eth_owner(golden_bidder())], 3);
-        assert!(amounts == vector[50u256], 4);
+        assert!(amounts == vector[MIN_COLLATERAL], 4);
         // No fill: the seller lock goes back to the seller.
         assert!(seller_lock_status() == lock_receipt::status_revoked(), 5);
     }
@@ -746,9 +782,9 @@ module atomica::auction_bid_wrapper_tests {
         let bidder = account::create_signer_for_test(golden_bidder());
         submit_golden(&bidder, 2010, 7, SUPPLY);
         let ghost_lock = b"usd_lock_ghost_32bytes__________";
-        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(ghost_lock, @0x2222, 1000u256, 1);
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(ghost_lock, @0x2222, COLLATERAL, 1);
         lock_receipt::claim<Ethereum, FakeUSD>(@0x2222, ghost_lock);
-        auction::test_insert_committed_bid(atomica, AUCTION_ID, pair(), @0x2222, b"ct2", x"00", ghost_lock, 5u256);
+        auction::test_insert_committed_bid(atomica, AUCTION_ID, pair(), @0x2222, b"ct2", x"00", ghost_lock, SUPPLY);
         reveal_timelock();
         auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
 
@@ -761,7 +797,7 @@ module atomica::auction_bid_wrapper_tests {
         let results = auction::test_get_bid_results(AUCTION_ID, pair());
         let (win0, fill0, price0) = auction::test_bid_result_fields(vector::borrow(&results, 0));
         let (win1, fill1, _) = auction::test_bid_result_fields(vector::borrow(&results, 1));
-        assert!(win0 && fill0 == 5 && price0 == 2010, 2);
+        assert!(win0 && fill0 == SUPPLY && price0 == 2010, 2);
         assert!(!win1 && fill1 == 0, 3);
 
         auction::settle(&bidder, AUCTION_ID, pair());
@@ -804,7 +840,7 @@ module atomica::auction_bid_wrapper_tests {
         submit_golden(&bidder, 2010, 7, SUPPLY);
         let other = @0x2222;
         let other_lock = b"usd_lock_other_bidder_32bytes___";
-        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(other_lock, other, 1000u256, 1);
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(other_lock, other, COLLATERAL, 1);
         lock_receipt::claim<Ethereum, FakeUSD>(other, other_lock);
         let other_ad = auction::bid_associated_data(TIMELOCK_ID, AUCTION_ID, other);
         auction::test_insert_committed_bid(
@@ -835,7 +871,7 @@ module atomica::auction_bid_wrapper_tests {
         assert!(results.length() == 2, 4);
         let (win0, fill0, price0) = auction::test_bid_result_fields(vector::borrow(&results, 0));
         let (win1, fill1, _) = auction::test_bid_result_fields(vector::borrow(&results, 1));
-        assert!(win0 && fill0 == 5 && price0 == 2010, 5);
+        assert!(win0 && fill0 == SUPPLY && price0 == 2010, 5);
         assert!(!win1 && fill1 == 0, 6);
 
         auction::settle(&bidder, AUCTION_ID, pair());
@@ -1034,7 +1070,7 @@ module atomica::auction_bid_wrapper_tests {
         setup_funded_window(atomica);
         expire_reveal_window();
         assert_refunded(2);
-        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(b"usd_lock_late_32bytes___________", golden_bidder(), 1000u256, 1);
+        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(b"usd_lock_late_32bytes___________", golden_bidder(), COLLATERAL, 1);
         let bidder = account::create_signer_for_test(golden_bidder());
         auction::submit_bid(
             &bidder, AUCTION_ID, pair(), golden_ct(),
@@ -1055,7 +1091,7 @@ module atomica::auction_bid_wrapper_tests {
         let revoked = lock_receipt::status_revoked();
         let (k, w, r, a) = lock_receipt::get_lock_outcome<Ethereum, FakeUSD>(GOLDEN_LOCK);
         assert!(k == revoked && w == AUCTION_ID, 1);
-        assert!(r == vector[lock_receipt::test_eth_owner(golden_bidder())] && a == vector[1000u256], 2);
+        assert!(r == vector[lock_receipt::test_eth_owner(golden_bidder())] && a == vector[COLLATERAL], 2);
         let (k, _, r, a) = lock_receipt::get_lock_outcome<Ethereum, FakeETH>(SELLER_LOCK);
         assert!(k == revoked && r == vector[lock_receipt::test_eth_owner(@atomica)] && a == vector[SUPPLY], 3);
         let outcomes = aptos_framework::event::emitted_events<auction::AuctionOutcome>();
@@ -1076,7 +1112,7 @@ module atomica::auction_bid_wrapper_tests {
         lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
         lock_receipt::initialize<Ethereum, FakeETH>(atomica);
         lock_receipt::insert_bound_test_receipt<Ethereum, FakeUSD>(
-            GOLDEN_LOCK, golden_bidder(), 1000u256, AUCTION_ID + 1, auction::pair_hash(pair()),
+            GOLDEN_LOCK, golden_bidder(), COLLATERAL, AUCTION_ID + 1, auction::pair_hash(pair()),
         );
         insert_window_with_seller(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
@@ -1094,12 +1130,12 @@ module atomica::auction_bid_wrapper_tests {
 
 
     // The published auction package (registry and pair allowlist), lock registries, and one
-    // FakeETH seller receipt of 5 at @atomica.
+    // FakeETH seller receipt of SUPPLY at @atomica.
     fun setup_seller_receipt(atomica: &signer) {
         auction::init_for_test(atomica);
         lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
         lock_receipt::initialize<Ethereum, FakeETH>(atomica);
-        lock_receipt::insert_test_receipt<Ethereum, FakeETH>(SELLER_LOCK, @atomica, 5u256, 1);
+        lock_receipt::insert_test_receipt<Ethereum, FakeETH>(SELLER_LOCK, @atomica, SUPPLY, 1);
     }
 
     // A seller joins the current window id after its timelock was stored as `timelock_id`.

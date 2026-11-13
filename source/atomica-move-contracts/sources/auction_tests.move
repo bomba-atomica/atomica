@@ -31,6 +31,7 @@ module atomica::auction_tests {
     const WINDOW_ID: u64 = 100;
     const TOTAL_SUPPLY: u256 = 10_000_000_000_000_000_000u256; // 10 ETH in wei
     const ETH: u256 = 1_000_000_000_000_000_000; // 1 ETH in wei
+    const MIN_SELLER_LOCK: u256 = 10_000_000_000_000_000; // 0.01 FakeETH, the minimum seller lock
     // The registered timelock of `auction_bid_wrapper_tests::setup`.
     const TIMELOCK_ID: u64 = 11;
 
@@ -306,7 +307,17 @@ module atomica::auction_tests {
         assert!(price == 0, 2);
         assert!(filled == 0, 3);
     }
-    // SCOUT(#218) TEST: window_limits_view
+
+    // `get_window_limits` returns, in order: max bids, max seller locks, min seller lock
+    // amount (0.01 FakeETH in wei), min bid collateral (10 FakeUSD in base units).
+    #[test]
+    fun window_limits_view() {
+        let (max_bids, max_sellers, min_lock, min_collateral) = auction::get_window_limits();
+        assert!(max_bids == 100, 1);
+        assert!(max_sellers == 100, 2);
+        assert!(min_lock == MIN_SELLER_LOCK, 3);
+        assert!(min_collateral == 10_000_000, 4);
+    }
 
     // ===================== create_auction tests =====================
     //
@@ -521,9 +532,60 @@ module atomica::auction_tests {
         assert!(clearing_price == 0, 5);
     }
 
-    // SCOUT(#218) TEST: create_auction_at_seller_cap_aborts
-    // SCOUT(#218) TEST: create_auction_below_min_lock_aborts
-    // SCOUT(#218) TEST: create_auction_at_min_lock_succeeds
+    // A distinct 32-byte lock id per index, for filling a window with seller locks.
+    fun cap_lock_id(i: u64): vector<u8> {
+        let id = b"seller_cap_lock_";
+        vector::append(&mut id, std::bcs::to_bytes(&i));
+        vector::append(&mut id, b"_pad____");
+        id
+    }
+
+    // A window filled to the seller lock cap (100 locks) refuses the next seller.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 39, location = atomica::auction)] // E_SELLER_LOCKS_FULL
+    fun create_auction_at_seller_cap_aborts(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        let window_id = auction::current_window_id();
+        let (_, max_sellers, _, _) = auction::get_window_limits();
+        let i = 0;
+        while (i < max_sellers) {
+            let lock_id = cap_lock_id(i);
+            insert_eth_receipt(atomica, lock_id, @atomica, MIN_SELLER_LOCK);
+            auction::create_auction(atomica, window_id, default_pair_bcs(), lock_id);
+            i = i + 1;
+        };
+        let (lock_ids, _) = auction::get_window_lock_ids(window_id, default_pair_bcs());
+        assert!(vector::length(&lock_ids) == max_sellers, 1);
+        let lock_id = cap_lock_id(max_sellers);
+        insert_eth_receipt(atomica, lock_id, @atomica, MIN_SELLER_LOCK);
+        auction::create_auction(atomica, window_id, default_pair_bcs(), lock_id);
+    }
+
+    // A seller lock one wei below the minimum is refused.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 40, location = atomica::auction)] // E_SELLER_LOCK_TOO_SMALL
+    fun create_auction_below_min_lock_aborts(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        let lock_id = b"seller_lock_below_minimum_32byt_";
+        insert_eth_receipt(atomica, lock_id, @atomica, MIN_SELLER_LOCK - 1);
+        auction::create_auction(atomica, auction::current_window_id(), default_pair_bcs(), lock_id);
+    }
+
+    // A seller lock exactly at the minimum creates the window.
+    #[test(atomica = @atomica)]
+    fun create_auction_at_min_lock_succeeds(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        let lock_id = b"seller_lock_at_minimum_32bytes__";
+        insert_eth_receipt(atomica, lock_id, @atomica, MIN_SELLER_LOCK);
+        let window_id = auction::current_window_id();
+        auction::create_auction(atomica, window_id, default_pair_bcs(), lock_id);
+        let (_, supply, _, _, _) = auction::get_auction(window_id, default_pair_bcs());
+        assert!(supply == MIN_SELLER_LOCK, 1);
+    }
+
     // ===================== Window timelock registration =====================
 
     // The first `create_auction` of a window id registers the window's timelock with the
@@ -805,8 +867,8 @@ module atomica::auction_tests {
     // existing happy-path and uninitialized-registry tests.
     //
     // @see docs/architecture/v0-architecture.md §2.5
-    // SCOUT(#218) TEST: submit_bid_below_min_collateral_aborts
-    // SCOUT(#218) TEST: submit_bid_at_min_collateral_succeeds
+    // (The minimum collateral tests live in `auction_bid_wrapper_tests.move`, which can
+    // submit a bid that passes the ciphertext check.)
 
     // settle aborts with E_AUCTION_NOT_FOUND (1) when no registry exists.
     // This replaces the old E_NOT_IMPLEMENTED scaffold test now that settle is implemented.

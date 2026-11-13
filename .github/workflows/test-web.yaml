@@ -530,7 +530,7 @@ jobs:
       # Raise MIN_MOVE_TESTS when tests are added, so a silently skipped module fails the job.
       - name: Run Move Tests (at least MIN_MOVE_TESTS must run)
         env:
-          MIN_MOVE_TESTS: 248
+          MIN_MOVE_TESTS: 270
         run: |
           set -euo pipefail
           aptos move test --package-dir source/atomica-move-contracts | tee move-test.log
@@ -619,7 +619,7 @@ jobs:
             test_files: >-
               tests/integration/09-submit-bid.test.tsx
               tests/integration/10-settle.test.tsx
-          # SCOUT(#218) TEST: this chunk runs 16-settle-100-bids at both caps; it took 10.5 of 45 minutes on main and 100 seller locks add 100 register and 100 create_auction transactions.
+          # 16-settle-100-bids runs at both caps (100 seller locks, 100 bids); it took 10.5 of 45 minutes at one seller lock.
           # SCOUT(#228) TEST: this chunk opens 100 bids in batches through open_bids.
           - chunk: settle-100-bids
             test_files: >-
@@ -778,7 +778,7 @@ jobs:
             test_files: >-
               tests/integration/09-submit-bid.test.tsx
               tests/integration/10-settle.test.tsx
-          # SCOUT(#218) TEST: this chunk runs 16-settle-100-bids at both caps on the Docker PoS chain; it took 18.1 of 60 minutes on main, and each lock batch waits real 12 second slots.
+          # 16-settle-100-bids runs at both caps on the Docker PoS chain; it took 18.1 of 60 minutes at one seller lock, and each lock batch waits real 12 second slots.
           - chunk: settle-100-bids
             test_files: >-
               tests/integration/16-settle-100-bids.test.tsx

@@ -614,7 +614,12 @@ export async function getBidResults(
   }
 }
 
-// SCOUT(#218) ADD: the four window limits the new auction view returns.
+/**
+ * The per-window limits of `auction::get_window_limits`. Amounts are in base units:
+ * FakeETH wei (18 decimals) and FakeUSD (6 decimals).
+ *
+ * @see docs/architecture/v0-architecture.md §2.3, §2.5
+ */
 export interface WindowLimits {
   maxBidsPerWindow: bigint;
   maxSellerLocksPerWindow: bigint;
@@ -622,9 +627,24 @@ export interface WindowLimits {
   minBidCollateral: bigint;
 }
 
-// SCOUT(#218) ADD: reader for the window limits view.
+/**
+ * Query `auction::get_window_limits`: the bid cap, the seller lock cap, the minimum
+ * seller lock (FakeETH wei) and the minimum bid collateral (FakeUSD base units).
+ * The UI reads it to refuse a bad amount before the Ethereum lock.
+ */
 export async function getWindowLimits(): Promise<WindowLimits> {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#218) getWindowLimits");
+  const [maxBids, maxSellers, minLock, minCollateral] = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::auction::get_window_limits`,
+      functionArguments: [],
+    },
+  });
+  return {
+    maxBidsPerWindow: BigInt(maxBids as string),
+    maxSellerLocksPerWindow: BigInt(maxSellers as string),
+    minSellerLockAmount: BigInt(minLock as string),
+    minBidCollateral: BigInt(minCollateral as string),
+  };
 }
 
 // SCOUT(#236) REMOVE: the faucet claim payload.
