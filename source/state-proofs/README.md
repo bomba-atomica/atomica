@@ -44,11 +44,6 @@ Entry point: `typescript/dist/index.d.ts`
 
 Re-exported from `./ibe` — Boneh-Franklin IBE for sealed-bid encryption.
 
-<!-- SCOUT(#237) DOC: remove the Beacon chain section. -->
-### Beacon chain
-
-Re-exported from `./beacon` — Ethereum beacon chain state helpers.
-
 ### Types
 
 `EthereumProof`, `StorageProof`, `AccountState`, `VerificationResult`, `Block`, `TrieNode`, `BranchNode`, `ExtensionNode`, `LeafNode`

@@ -515,15 +515,12 @@ atomica/
 
 ---
 
-<!-- SCOUT(#237) DOC: ETH_BEACON_URL below is the env var a beacon light client would read; nothing in the SDK reads it, so drop it with the light client or say it only reaches the beacon node API. -->
-
 ## Appendix B: Environment Variables
 
 ```bash
 # Ethereum Testnet
 ETH_RPC_URL=http://localhost:8545
 ETH_WS_URL=ws://localhost:8546
-ETH_BEACON_URL=http://localhost:5052
 FAKE_ETH_CONTRACT_ADDRESS=<deployed-address>
 FAKE_USD_CONTRACT_ADDRESS=<deployed-address>
 

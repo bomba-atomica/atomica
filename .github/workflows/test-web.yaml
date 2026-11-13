@@ -308,7 +308,6 @@ jobs:
           bun run build
 
       # ── integration: State Proofs Tests ────────────────────────────────────
-      # SCOUT(#237) TEST: this step is the only gated run of a state-proofs test; every other state-proofs test, and so the proof that the package still works without the beacon client, runs only in the non-gated State Proof Verifier workflow.
       - name: Run IBE / State Proofs tests
         if: needs.changes.outputs.code != 'false' && matrix.type == 'integration'
         working-directory: source/state-proofs/typescript

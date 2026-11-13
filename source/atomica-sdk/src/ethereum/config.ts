@@ -15,8 +15,6 @@ const _env =
 // Build-time env vars are kept for backwards compatibility constants below.
 // Runtime RPC host is always derived from the selector state (localStorage/page host).
 const ENV_ETH_WS_URL = _env.VITE_ETH_WS_URL as string | undefined;
-// SCOUT(#237) REMOVE: VITE_ETH_BEACON_URL has no reader in the repo (not in the issue text).
-const ENV_ETH_BEACON_URL = _env.VITE_ETH_BEACON_URL as string | undefined;
 
 export function getEthRpcUrl(): string {
   return buildEthRpcUrl(getStoredHost());
@@ -30,9 +28,6 @@ export const ETH_RPC_URL = ethereum.rpcUrl;
 // Ensure we at least resolve the host based on Vite env variables if not explicitly provided
 const fallbackHost = _env.VITE_HOST_IP || "localhost";
 export const ETH_WS_URL = ENV_ETH_WS_URL || `ws://${fallbackHost}:8546`;
-// SCOUT(#237) REMOVE: this beacon URL export has no importer in the repo (not in the issue text).
-export const ETH_BEACON_URL =
-  ENV_ETH_BEACON_URL || `http://${fallbackHost}:5052`;
 
 // Contract addresses (set after deployment)
 // Read once at import, for reads and mints (contracts.ts). The SDK approve and
