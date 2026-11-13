@@ -197,7 +197,7 @@ struct Bid has store {
 
 <!-- SCOUT(#242) DOC: reveal as built: submit_cleartext_and_clear(settler, window_id, pair_bcs, cleartexts, salts) and open_bid check each (price, salt) against the 32-byte hash stored at submission, never against the ciphertext; the key getter is timelock::get_decryption_key. -->
 <!-- SCOUT(#216) DOC: an opened bid with price zero or a quote above its collateral is marked invalid without aborting. -->
-<!-- SCOUT(#227) DOC: the fork native ibe::decrypt_bid is what lets the chain check a ciphertext; until it ships no Move code can decrypt. -->
+<!-- SCOUT(#228) DOC: the fork native ibe::decrypt_bid is what lets the chain check a ciphertext; until it ships no Move code can decrypt. -->
 <!-- SCOUT(#228) DOC: whole section is replaced: open_bids(window_id, pair_bcs, max_bids) decrypts in batches and clears on the last batch; submit_cleartext_and_clear, open_bid, finalize_reveal and the opening window go. -->
 
 After the window closes the on-chain DKG releases a decryption key for the
