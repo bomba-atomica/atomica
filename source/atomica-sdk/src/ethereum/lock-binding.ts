@@ -38,32 +38,76 @@ export interface LockBinding {
 }
 
 /**
- * `auction::current_window_id` (`eth_proof::window_id_at`) at `nowSecs`. The
- * id changes exactly at 07:45:00 and 16:15:00 UTC:
- * `day * 2 + (t >= 27900 ? 1 : 0) + (t >= 58500 ? 1 : 0)`, with
- * `day = nowSecs / 86400` and `t = nowSecs % 86400`.
+ * A window clock (`eth_proof::get_window_schedule`, `LockBox.windowSchedule`):
+ * `closeOffsetsSecs` are the seconds of each day, of length `daySecs`, at
+ * which a window closes. One or two offsets, strictly increasing, the first
+ * above 0 and the last at most `daySecs`.
  */
-export function currentWindowId(nowSecs: bigint): bigint {
-  const t = nowSecs % WINDOW_DAY_SECS;
-  return (
-    (nowSecs / WINDOW_DAY_SECS) * 2n +
-    (t >= WINDOW_MORNING_CLOSE_SECS ? 1n : 0n) +
-    (t >= WINDOW_AFTERNOON_CLOSE_SECS ? 1n : 0n)
-  );
+export interface WindowSchedule {
+  daySecs: bigint;
+  closeOffsetsSecs: bigint[];
+}
+
+/**
+ * The production window clock: closes at 07:45 and 16:15 UTC. Aptos uses it
+ * while no schedule is stored. Only a test chain (chain id 4) can store
+ * another one, through `eth_proof::set_window_schedule`.
+ */
+export const PRODUCTION_WINDOW_SCHEDULE: WindowSchedule = {
+  daySecs: WINDOW_DAY_SECS,
+  closeOffsetsSecs: [WINDOW_MORNING_CLOSE_SECS, WINDOW_AFTERNOON_CLOSE_SECS],
+};
+
+/**
+ * Parse a schedule in the `ATOMICA_TEST_WINDOW_SCHEDULE` format,
+ * `<day_secs>:<offset>[,<offset>...]` (for example `900:900`).
+ */
+export function parseWindowSchedule(value: string): WindowSchedule {
+  const [day, offsets] = value.split(":");
+  if (!day || !offsets) {
+    throw new Error(
+      `window schedule "${value}" is not <day_secs>:<offset>[,<offset>...]`,
+    );
+  }
+  return {
+    daySecs: BigInt(day.trim()),
+    closeOffsetsSecs: offsets.split(",").map((o) => BigInt(o.trim())),
+  };
+}
+
+/**
+ * `auction::current_window_id` (`eth_proof::window_id_at`) at `nowSecs`. With
+ * `n` closes a day: `day * n` plus the number of offsets at or before `t`,
+ * with `day = nowSecs / daySecs` and `t = nowSecs % daySecs`. On the default
+ * production schedule the id changes exactly at 07:45:00 and 16:15:00 UTC.
+ */
+export function currentWindowId(
+  nowSecs: bigint,
+  schedule: WindowSchedule = PRODUCTION_WINDOW_SCHEDULE,
+): bigint {
+  const t = nowSecs % schedule.daySecs;
+  let id =
+    (nowSecs / schedule.daySecs) * BigInt(schedule.closeOffsetsSecs.length);
+  for (const offset of schedule.closeOffsetsSecs) {
+    if (t >= offset) id += 1n;
+  }
+  return id;
 }
 
 /**
  * Unix second at which `windowId` stops being the current window
- * (`eth_proof::window_close_secs`): `(windowId / 2) * 86400 + (even ? 27900 : 58500)`.
- * An even window closes at 07:45 UTC, an odd window at 16:15 UTC.
+ * (`eth_proof::window_close_secs`): with `n` closes a day,
+ * `(windowId / n) * daySecs + closeOffsetsSecs[windowId % n]`. On the default
+ * production schedule an even window closes at 07:45 UTC, an odd one at 16:15 UTC.
  */
-export function windowCloseSecs(windowId: bigint): bigint {
-  const dayStart = (windowId / 2n) * WINDOW_DAY_SECS;
+export function windowCloseSecs(
+  windowId: bigint,
+  schedule: WindowSchedule = PRODUCTION_WINDOW_SCHEDULE,
+): bigint {
+  const n = BigInt(schedule.closeOffsetsSecs.length);
   return (
-    dayStart +
-    (windowId % 2n === 0n
-      ? WINDOW_MORNING_CLOSE_SECS
-      : WINDOW_AFTERNOON_CLOSE_SECS)
+    (windowId / n) * schedule.daySecs +
+    schedule.closeOffsetsSecs[Number(windowId % n)]
   );
 }
 
@@ -71,10 +115,14 @@ export function windowCloseSecs(windowId: bigint): bigint {
  * `auction::eth_lock_deadline` and `LockBox.lockDeadline`: window close plus
  * ETH_RECLAIM_DELAY_SECS. The proof generator recomputes the lock commitment
  * from it, so it must equal `LockBox.lockDeadline` exactly
- * (tests/fixtures/window_clock_vectors.json).
+ * (tests/fixtures/window_clock_vectors.json). Pass the chain schedule on a
+ * test chain.
  */
-export function ethLockDeadline(windowId: bigint): bigint {
-  return windowCloseSecs(windowId) + ETH_RECLAIM_DELAY_SECS;
+export function ethLockDeadline(
+  windowId: bigint,
+  schedule: WindowSchedule = PRODUCTION_WINDOW_SCHEDULE,
+): bigint {
+  return windowCloseSecs(windowId, schedule) + ETH_RECLAIM_DELAY_SECS;
 }
 
 /**
@@ -86,15 +134,19 @@ export function pairHashOf(pairBcs: Uint8Array): string {
   return ethers.keccak256(pairBcs);
 }
 
-/** The binding of a lock into window `windowId` of pair `pairBcs`. */
+/**
+ * The binding of a lock into window `windowId` of pair `pairBcs`, on the
+ * window clock `schedule` (the production one by default).
+ */
 export function lockBinding(
   windowId: bigint,
   pairBcs: Uint8Array,
+  schedule: WindowSchedule = PRODUCTION_WINDOW_SCHEDULE,
 ): LockBinding {
   return {
     windowId,
     pairHash: pairHashOf(pairBcs),
-    deadline: ethLockDeadline(windowId),
+    deadline: ethLockDeadline(windowId, schedule),
   };
 }
 

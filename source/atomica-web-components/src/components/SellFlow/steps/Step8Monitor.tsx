@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getWindowDeadlineUs } from "@atomica/sdk/aptos";
 import { SettleButton } from "../../SettleButton";
 // SCOUT(#236) REMOVE: ClaimButton import; import the open step and ReleaseButton.
 import { ClaimButton } from "../../ClaimButton";
@@ -37,6 +38,32 @@ function useCountdown(endTime?: number) {
   }, [endTime]);
 
   return remaining;
+}
+
+/**
+ * The window timelock deadline in unix seconds, read from the chain
+ * (`auction::window_deadline_us`). Without a window id, or until the view
+ * answers, it is `fallback`.
+ */
+function useWindowDeadline(windowId?: bigint | null, fallback?: number) {
+  const [deadline, setDeadline] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (windowId === undefined || windowId === null) return;
+    let cancelled = false;
+    getWindowDeadlineUs(windowId)
+      .then((us) => {
+        if (!cancelled) setDeadline(Number(us / 1_000_000n));
+      })
+      .catch(() => {
+        // The window has no timelock yet: keep the fallback.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [windowId]);
+
+  return deadline ?? fallback;
 }
 
 function useIsUnlocked(unlockTime?: number) {
@@ -87,11 +114,12 @@ export function Step8Monitor({
   loading,
   error,
 }: Props) {
-  const remaining = useCountdown(auctionEndTime);
+  // The countdown ends at the chain's window timelock deadline.
+  const endTime = useWindowDeadline(windowId, auctionEndTime);
+  const remaining = useCountdown(endTime);
   const canUnlock = useIsUnlocked(unlockTime);
-  // SCOUT(#243) EDIT: ended comes from a local one hour clock; read the window deadline view so the countdown matches the chain.
   // SCOUT(#236) EDIT: the badge says Settled as soon as the local clock ends; drive open, settle and release from chain state.
-  const ended = remaining === 0 && auctionEndTime !== undefined;
+  const ended = remaining === 0 && endTime !== undefined;
   const { entries: bidHistoryEntries, recordSettlement } = useBidHistory(
     sellerAddress ?? null,
   );
@@ -127,7 +155,7 @@ export function Step8Monitor({
             data-testid="auction-countdown"
             className={`font-mono ${ended ? "text-zinc-500" : "text-zinc-200"}`}
           >
-            {auctionEndTime ? formatDuration(remaining) : "—"}
+            {endTime ? formatDuration(remaining) : "—"}
           </span>
         </div>
         <div className="flex justify-between text-sm">

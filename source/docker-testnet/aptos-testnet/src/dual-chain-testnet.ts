@@ -12,17 +12,13 @@
 
 import { EthereumDockerTestnet } from "@atomica/ethereum-docker-testnet";
 import { DockerTestnet } from "./index.js";
-import { setTestnet } from "./localnet.js";
+import { setTestnet, testWindowSchedule, testWindowScheduleInit } from "./localnet.js";
 import { ethers } from "ethers";
 import { waitForEthBlock } from "./eth-blocks.js";
 import { resolve as pathResolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
-import {
-    WINDOW_AFTERNOON_CLOSE_SECS,
-    WINDOW_DAY_SECS,
-    WINDOW_MORNING_CLOSE_SECS,
-} from "@atomica/sdk/ethereum/lock-binding";
+import { PRODUCTION_WINDOW_SCHEDULE } from "@atomica/sdk/ethereum/lock-binding";
 import { execSync } from "child_process";
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
@@ -292,7 +288,8 @@ export async function setupDualChainTestnet(
     console.log(`[Dual-Chain] Deployer: ${deployerAddress}`);
     console.log(`[Dual-Chain] Bidder:   ${bidderAddress}`);
 
-    // SCOUT(#243) EDIT: the genesis layout must name the registrar derived from this package address, so DockerTestnet.new below needs it before the package is published.
+    // Genesis names the timelock registrar derived from this package address,
+    // so DockerTestnet.new below gets it before the package is published.
     const aptosModuleAddress =
         process.env.APTOS_ATOMICA_CONTRACT_ADDRESS ||
         "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
@@ -336,7 +333,7 @@ export async function setupDualChainTestnet(
 
     // ── Aptos ─────────────────────────────────────────────────────────────────
     // The timelock DKG needs 4 validators (see localnet.ts setupLocalnet).
-    aptosTestnet = await DockerTestnet.new(4);
+    aptosTestnet = await DockerTestnet.new(4, { packageAddress: aptosModuleAddress });
     setTestnet(aptosTestnet);
     const nodeUrl = `${aptosTestnet.validatorApiUrl(0)}/v1`;
 
@@ -348,16 +345,19 @@ export async function setupDualChainTestnet(
     // The type tag names the Atomica package below.
     const lightClient = await deployLightClient(deployer, aptosTestnet);
     console.log(`[Dual-Chain] ✓ AptosLightClient: ${lightClient}`);
-    // The last two arguments are the window clock LockBox freezes: the
-    // production schedule (DeployLockBox.productionWindowSchedule), two closes
-    // a day at 07:45 and 16:15 UTC, as the Aptos package uses.
+    // The last two arguments are the window clock LockBox freezes. It is the
+    // one the Aptos package uses: the ATOMICA_TEST_WINDOW_SCHEDULE test
+    // schedule when set (stored by eth_proof::set_window_schedule below),
+    // otherwise the production schedule (DeployLockBox.productionWindowSchedule),
+    // two closes a day at 07:45 and 16:15 UTC.
+    const windowSchedule = testWindowSchedule() ?? PRODUCTION_WINDOW_SCHEDULE;
     const lockBox = await deployContract(deployer, readArtifact("LockBox"), [
         fakeETH,
         fakeUSD,
         lightClient,
         auctionOutcomeTypeTag(aptosModuleAddress),
-        WINDOW_DAY_SECS,
-        [WINDOW_MORNING_CLOSE_SECS, WINDOW_AFTERNOON_CLOSE_SECS],
+        windowSchedule.daySecs,
+        windowSchedule.closeOffsetsSecs,
     ]);
     console.log(`[Dual-Chain] ✓ LockBox: ${lockBox}`);
 
@@ -403,6 +403,8 @@ export async function setupDualChainTestnet(
                 ],
                 args: [],
             },
+            // The test window schedule, before any window id is computed.
+            ...testWindowScheduleInit(aptosModuleAddress),
             ...(options.unwindGraceUs !== undefined
                 ? [
                       {

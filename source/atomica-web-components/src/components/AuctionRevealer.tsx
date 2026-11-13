@@ -84,17 +84,15 @@ export function AuctionRevealer() {
   // SCOUT(#236) EDIT: only is_revealed is polled, so an expired timelock waits forever; report it and hand over to Unwind (SDK unwind issue (195)).
   const checkRevealed = useCallback(async () => {
     try {
-      const timelockId = await getWindowTimelockId(
-        BigInt(windowId),
-        parsePairBcs(pairBcsHex),
-      );
+      // One timelock per window id, shared by every pair.
+      const timelockId = await getWindowTimelockId(BigInt(windowId));
       const result = await isRevealed(timelockId);
       setRevealed(result);
       setPollError(null);
     } catch (err) {
       setPollError(err instanceof Error ? err.message : "Poll failed");
     }
-  }, [windowId, pairBcsHex]);
+  }, [windowId]);
 
   const startPolling = useCallback(() => {
     if (polling) return;

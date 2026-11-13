@@ -111,8 +111,13 @@ import { setupEthereumTestnet, teardownEthereumTestnet } from "./ethereum-testne
 import { setupDualChainTestnet, teardownDualChainTestnet } from "./dual-chain-testnet.js";
 import type { DualChainTestnetInfo } from "./dual-chain-testnet.js";
 import { ethers } from "ethers";
-import { waitForCertifiedEthBlock, waitForEthBlock } from "./eth-blocks.js";
-import { currentWindowId, lockBinding, type LockBinding } from "@atomica/sdk/ethereum/lock-binding";
+import { syncAnvilClockToHost, waitForCertifiedEthBlock, waitForEthBlock } from "./eth-blocks.js";
+import {
+    currentWindowId,
+    lockBinding,
+    type LockBinding,
+    type WindowSchedule,
+} from "@atomica/sdk/ethereum/lock-binding";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
 /** Hex of the SDK launch pair bytes: the default pair of every test lock. */
@@ -389,29 +394,41 @@ const ERC20_MINT_ABI = [
 const LOCKBOX_LOCK_ABI = [
     "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash) returns (bytes32)",
     "event Locked(bytes32 indexed lockId, address indexed depositor, address indexed token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)",
+    "function windowSchedule() view returns (uint64 daySecs, uint64[] closeOffsetsSecs)",
 ];
 
 /**
- * The binding of a test lock: the current window by the host clock (the SDK
- * `currentWindowId` mirror of `auction::current_window_id`, whose id changes
- * at 07:45 and 16:15 UTC) and the pair BCS of the window the
- * test claims the lock into (`pairBcsHex`, the SDK launch pair by default).
- * Aptos claims a lock only into the window and pair it is bound to (issue
- * 194). LockBox computes its deadline, `lockDeadline(windowId)` =
- * `auction::eth_lock_deadline(windowId)`, 72 hours past the window close (the
- * next 07:45 or 16:15 UTC), so it cannot be reclaimed during a test.
- * `binding.deadline` is that value; `lock()` does not take it.
+ * The binding of a test lock: the window open at `nowSecs` on the chain's
+ * window clock `schedule` (the SDK `currentWindowId` mirror of
+ * `auction::current_window_id`; read the schedule from `LockBox.windowSchedule`,
+ * which equals `eth_proof::get_window_schedule`) and the pair BCS of the
+ * window the test claims the lock into (`pairBcsHex`, the SDK launch pair by
+ * default). Aptos claims a lock only into the window and pair it is bound to
+ * (issue 194). LockBox computes its deadline, `lockDeadline(windowId)` =
+ * `auction::eth_lock_deadline(windowId)`, 72 hours past the window close, so
+ * it cannot be reclaimed during a test. `binding.deadline` is that value;
+ * `lock()` does not take it.
  *
  * LockBox.lock rejects a window that is closed at `block.timestamp`
- * (`WindowClosed`), so the host clock, the Ethereum block time and the Aptos
- * clock must agree on the window. A lock sent near a close can fail here. The
- * create_auction registers timelock issue (243) syncs the anvil clock.
+ * (`WindowClosed`). `lockAndProve` therefore syncs the anvil clock to the
+ * host first (`syncAnvilClockToHost`) and binds to the window of the later of
+ * the host second and the latest block time. Aptos accepts that window: it is
+ * the current or the next one.
  */
-export function testLockBinding(pairBcsHex: string = LAUNCH_PAIR_BCS_HEX): LockBinding {
-    return lockBinding(
-        currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
-        ethers.getBytes(pairBcsHex),
-    );
+export function testLockBinding(
+    schedule: WindowSchedule,
+    nowSecs: bigint = BigInt(Math.floor(Date.now() / 1000)),
+    pairBcsHex: string = LAUNCH_PAIR_BCS_HEX,
+): LockBinding {
+    return lockBinding(currentWindowId(nowSecs, schedule), ethers.getBytes(pairBcsHex), schedule);
+}
+
+/** The window clock a LockBox froze at deploy (`LockBox.windowSchedule`). */
+export async function lockBoxWindowSchedule(lockBox: ethers.Contract): Promise<WindowSchedule> {
+    const [daySecs, offsets] = (await (
+        lockBox.windowSchedule as () => Promise<[bigint, bigint[]]>
+    )()) as [bigint, bigint[]];
+    return { daySecs: BigInt(daySecs), closeOffsetsSecs: [...offsets].map((o) => BigInt(o)) };
 }
 
 /**
@@ -422,8 +439,9 @@ export function testLockBinding(pairBcsHex: string = LAUNCH_PAIR_BCS_HEX): LockB
  * Steps:
  *   1. Mint the token to the signer
  *   2. Approve LockBox for count * lockAmount
- *   3. Send `count` LockBox.lock() calls with consecutive nonces, bound to
- *      `testLockBinding()`
+ *   3. Sync the anvil clock to the host, then send `count` LockBox.lock()
+ *      calls with consecutive nonces, bound to `testLockBinding()` on the
+ *      LockBox window clock
  *   4. Read each lock nonce from its Locked event
  *   5. Wait 12 blocks past the last lock for archive proof availability
  *   6. Wait until the Aptos validators certify a block at or after the last
@@ -468,7 +486,17 @@ export async function lockAndProve(
     )(lockBoxAddress, lockAmount * BigInt(count), { nonce: nonce++ });
     await provider.waitForTransaction(approveTx.hash, 1);
 
-    const binding = testLockBinding(pairBcsHex);
+    // Right before the locks: bring anvil up to the host clock, then bind to
+    // the window of the later of the host second and the latest block time.
+    await syncAnvilClockToHost(provider);
+    const schedule = await lockBoxWindowSchedule(lockBox);
+    const latest = await provider.getBlock("latest");
+    const hostNow = Math.floor(Date.now() / 1000);
+    const binding = testLockBinding(
+        schedule,
+        BigInt(Math.max(hostNow, latest?.timestamp ?? 0)),
+        pairBcsHex,
+    );
     const lockHashes: string[] = [];
     for (let i = 0; i < count; i++) {
         const lockTx = await (
@@ -501,8 +529,8 @@ export async function lockAndProve(
 
     // Wait for archive proof availability (12 blocks). Mines them on anvil,
     // 12 seconds apart, which moves block.timestamp ahead of the host and
-    // Aptos clocks. A later lock near a window close can then revert
-    // WindowClosed on Ethereum (the timelock issue (243) syncs the clocks).
+    // Aptos clocks. The next lockAndProve binds to the window of that later
+    // block time, which LockBox and Aptos both accept.
     await waitForEthBlock(provider, proofBlockNumber + 12, 300, "Lock Proof");
 
     // Prove at a block the validators certified that includes every lock.

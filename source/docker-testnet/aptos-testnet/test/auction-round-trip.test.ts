@@ -18,20 +18,22 @@ import {
     getCreateAuctionPayload,
     getLockOutcome,
     getRegisterLockPayload,
-    getRegisterTimelockPayload,
     getSettlePayload,
     getSettlement,
+    getWindowDeadlineUs,
+    getWindowSchedule,
+    getWindowTimelock,
     getSubmitCleartextPayload,
     isRevealed,
     sealBid,
     setAptosInstance,
-    timelockIdFromEvents,
     type ReceiptAsset,
 } from "@atomica/sdk/aptos";
 import {
     auctionKey,
     currentWindowId,
     pairHashOf,
+    windowCloseSecs,
     type LockBinding,
 } from "@atomica/sdk/ethereum/lock-binding";
 import {
@@ -86,8 +88,12 @@ const COLLATERAL = 500n * USD;
 /** Whole USD per whole FakeETH. The winner pays 200 FakeUSD for the supply. */
 const WIN_PRICE = 200n;
 const LOSE_PRICE = 100n;
-/** Bids close this long after the timelock is registered. */
-const BID_WINDOW_US = 240_000_000n;
+/**
+ * Least time left in the current window before the test locks. With less, it
+ * waits for the next window, so locking, proving and create_auction finish in
+ * the window the locks are bound to (on the 900-second test schedule).
+ */
+const MIN_WINDOW_LEFT_SECS = 420n;
 /** Gas the Ethereum-derivable accounts get (5 APT). */
 const ETH_ACCOUNT_GAS_OCTAS = 500_000_000;
 /** `maxEpochAge` of the testnet light client (LIGHT_CLIENT_MAX_EPOCH_AGE). */
@@ -312,6 +318,18 @@ describe.sequential("Live cross-chain round trip: lock, auction, outcome, releas
         const domain = info.aptos.siweDomain;
         const moduleAddr = info.aptos.moduleAddress;
 
+        // 0. The window clock in force (900:900 in CI). Lock, prove and create
+        //    inside one window: wait for the next window when this one is
+        //    about to close.
+        const schedule = await getWindowSchedule();
+        const startSecs = (await chainNowUs()) / 1_000_000n;
+        const closeSecs = windowCloseSecs(currentWindowId(startSecs, schedule), schedule);
+        if (closeSecs - startSecs < MIN_WINDOW_LEFT_SECS) {
+            await pollUntil("the next window", Number(MIN_WINDOW_LEFT_SECS) + 120, async () =>
+                (await chainNowUs()) / 1_000_000n >= closeSecs ? true : undefined,
+            );
+        }
+
         // 1. Three locks on Ethereum, one per depositor, proven at certified blocks.
         [seller, winner, loser] = await Promise.all([
             lockFor(info.eth.deployerPrivateKey, "FakeETH", SUPPLY, 10n * SUPPLY),
@@ -333,25 +351,25 @@ describe.sequential("Live cross-chain round trip: lock, auction, outcome, releas
         // 2. Each lock proven on Aptos.
         for (const l of [seller, winner, loser]) await register(l);
 
-        // 3. The window's timelock, once the epoch's timelock key exists.
+        // 3. create_auction registers the window's timelock, so the epoch's
+        //    timelock key must exist first.
         await pollUntil("ibe_config::is_ready", 600, async () => {
             const [ready] = await aptos.view({
                 payload: { function: "0x1::ibe_config::is_ready", functionArguments: [] },
             });
             return ready === true ? true : undefined;
         });
-        const bidDeadlineUs = (await chainNowUs()) + BID_WINDOW_US;
-        const registered = await submitAsOperator(getRegisterTimelockPayload(bidDeadlineUs));
-        const timelockId = timelockIdFromEvents("events" in registered ? registered.events : []);
-        const chainWindow = currentWindowId((await chainNowUs()) / 1_000_000n);
-        if (chainWindow !== windowId) {
+        const chainWindow = currentWindowId((await chainNowUs()) / 1_000_000n, schedule);
+        if (windowId < chainWindow) {
             throw new Error(
                 `the locks are bound to window ${windowId}, but the chain is in window ${chainWindow}`,
             );
         }
 
-        // 4. The seller creates the auction and both bidders bid, each as its
-        //    Ethereum-derivable account (only it can claim its receipt).
+        // 4. The seller creates the auction, which registers the window's
+        //    timelock with the window close as its deadline, and both bidders
+        //    bid, each as its Ethereum-derivable account (only it can claim its
+        //    receipt).
         for (const l of [seller, winner, loser]) {
             await fundAccount(await ethAccountAddress(l.privateKey, domain), ETH_ACCOUNT_GAS_OCTAS);
         }
@@ -363,9 +381,11 @@ describe.sequential("Live cross-chain round trip: lock, auction, outcome, releas
                 windowId,
                 LAUNCH_PAIR_BCS,
                 ethers.getBytes(seller.proof.lockId),
-                timelockId,
             ),
         );
+        const timelockId = await getWindowTimelock(windowId);
+        const bidDeadlineUs = await getWindowDeadlineUs(windowId);
+        expect(bidDeadlineUs).toBe(windowCloseSecs(windowId, schedule) * 1_000_000n);
         for (const [bidder, price] of [
             [winner, WIN_PRICE],
             [loser, LOSE_PRICE],
@@ -393,7 +413,7 @@ describe.sequential("Live cross-chain round trip: lock, auction, outcome, releas
 
         // 5. Bids close, the validators reveal the key, the bids are opened
         //    (which clears the window) and the window settles.
-        await pollUntil("the bid deadline", 600, async () =>
+        await pollUntil("the bid deadline", Number(schedule.daySecs) + 300, async () =>
             (await chainNowUs()) >= bidDeadlineUs ? true : undefined,
         );
         await pollUntil(`timelock ${timelockId} reveal`, 900, async () =>

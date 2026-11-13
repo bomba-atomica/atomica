@@ -35,6 +35,7 @@ import {
   waitForReveal,
   openWindowBidsDirect,
   getAuctionState,
+  TEST_WINDOW_SECS,
   type LiveWindow,
 } from "./helpers/auction-setup";
 import {
@@ -75,8 +76,11 @@ const COLLATERAL = 50n * 10n ** 6n;
 // SCOUT(#218) EDIT: COLLATERAL above (50 FakeUSD per bid) must stay at or above the minimum collateral.
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
-// SCOUT(#243) EDIT: a 300 second deadline needs the test cap.
-const DEADLINE_AHEAD_US = 300_000_000n;
+/**
+ * The window is created with at least this long left before its close, so
+ * the 100 collaterals and the 100 bids land in it (seconds).
+ */
+const MIN_WINDOW_LEFT_SECS = 600n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
 const REVEAL_TIMEOUT_SECS = 300;
 /** The ts-sdk default maxGasAmount, used when nothing sets one. */
@@ -136,6 +140,14 @@ describe.sequential("16: Settle a 100-bid window", () => {
     );
     await commands.fundAccount(settlerAptosAddress.toString(), 500_000_000);
 
+    // The window first: the collaterals lock into the window open then.
+    auction = await createLiveWindow(fixture, aptosClient, operator, {
+      pairBcs: PAIR_BCS,
+      minWindowLeftSecs: MIN_WINDOW_LEFT_SECS,
+      // SCOUT(#218) EDIT: pull request 213 sets SUPPLY to 0.001 FakeETH (50 x 0.00002), below the proposed 0.01 FakeETH minimum seller lock, so create_auction aborts.
+      lockAmount: SUPPLY,
+    });
+
     const bidderAptosAddress = await ethAccountAddress(fixture.eth.bidder);
     const collateral = await lockBidCollaterals(
       fixture,
@@ -146,13 +158,6 @@ describe.sequential("16: Settle a 100-bid window", () => {
       COLLATERAL,
     );
     expect(new Set(collateral).size).toBe(BID_COUNT);
-
-    auction = await createLiveWindow(fixture, aptosClient, operator, {
-      pairBcs: PAIR_BCS,
-      deadlineAheadUs: DEADLINE_AHEAD_US,
-      // SCOUT(#218) EDIT: pull request 213 sets SUPPLY to 0.001 FakeETH (50 x 0.00002), below the proposed 0.01 FakeETH minimum seller lock, so create_auction aborts.
-      lockAmount: SUPPLY,
-    });
 
     const payloads = [];
     for (let i = 0; i < BID_COUNT; i++) {
@@ -200,7 +205,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
     async () => {
       await waitForReveal(
         auction.timelockId,
-        Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS,
+        TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS,
       );
 
       // The opening is the operator's next transaction: find it by sequence number.
@@ -256,7 +261,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
       expect(winners).toHaveLength(BID_COUNT / 2);
       expect(winners.reduce((sum, r) => sum + r.fillAmount, 0n)).toBe(SUPPLY);
     },
-    (Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS + 300) * 1000,
+    (TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 300) * 1000,
   );
 
   it.todo("SCOUT(#218) a window with the maximum seller locks and 100 bids settles in one transaction and its gas used is below the maximum transaction gas");

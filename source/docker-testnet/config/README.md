@@ -50,28 +50,32 @@ curl http://localhost:8080/v1/blocks/by_height/100 | jq
 **Primary config**: `source/atomica-web/.env` (gitignored)
 
 <!-- SCOUT(#228) DOC: the image settings below are stale: docker-compose.yaml reads IMAGE_NAME and defaults to a pinned digest, and VALIDATOR_IMAGE_REPO with IMAGE_TAG is only a late fallback in genesis.ts; an implementer who moves the pin needs the real steps. -->
-<!-- SCOUT(#243) DOC: same stale image settings; the pin move for the registrar revision follows the same steps. -->
 
-### Published Images (Default - Recommended)
+### Validator Image (Default)
 
-Pull pre-built validator images from GitHub Container Registry. Images are automatically published by the atomica-aptos repository.
+`docker-compose.yaml` runs every validator from `${IMAGE_NAME:-<pinned digest>}`:
+an `ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:...` image built from
+one `dev-atomica` revision of the fork. `genesis.ts` runs `generate-genesis.sh`
+in the same image. It takes, in order, `IMAGE_NAME_GENESIS`, `IMAGE_NAME`, the
+compose default, then `VALIDATOR_IMAGE_REPO`, then its own fallback digest.
+Leave `IMAGE_NAME` unset to use the pinned digest.
 
-**Local development**:
-```bash
-# In source/atomica-web/.env:
-VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica-aptos/validator
-IMAGE_TAG=latest  # or specific commit hash like abc1234
-GHCR_USERNAME=your_github_username
-GHCR_TOKEN=ghp_YourPersonalAccessToken
-```
+### Moving the Fork Pin
 
-**CI/CD**:
-```bash
-# In source/atomica-web/.env (no credentials needed):
-VALIDATOR_IMAGE_REPO=ghcr.io/bomba-atomica/atomica-aptos/validator
-IMAGE_TAG=latest
-# GITHUB_TOKEN is automatic in GitHub Actions
-```
+Every product pin names one fork revision. Move them all in one pull request:
+
+1. Merge the fork change on `dev-atomica`. A Rust change cuts a
+   `binary-<hash>` release through `build-aptos-binary.yml`.
+2. Dispatch `build-validator-image.yml` on the fork for that revision (the
+   release event starts no workflow). Read the pushed image digest from the run.
+3. Replace the digest in the compose header and its four services here, in the
+   fallback of `aptos-testnet/src/genesis.ts` and in the comment of
+   `aptos-testnet/test/docker-testnet.test.ts`.
+4. Move the `AptosFramework` rev in `source/atomica-move-contracts/Move.toml`,
+   `APTOS_VERSION` and every `binary-<hash>` tag in `.github/workflows`
+   (including `APTOS_PROOF_RELEASE` and the full `APTOS_PROOF_COMMIT`).
+   `.github/scripts/check-fork-pin.sh` checks all of them except the digest,
+   which cannot be compared with a tag without a registry read.
 
 ### Custom Images
 

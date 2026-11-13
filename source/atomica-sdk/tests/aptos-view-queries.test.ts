@@ -13,6 +13,9 @@
  *   - getPinnedEthereumConfig → eth_proof::get_config → { lockBox, fakeETH, fakeUSD }
  *   - isPairAllowed  → auction::is_pair_allowed   → boolean
  *   - getLaunchPairBcs → auction::launch_pair_bcs → Uint8Array
+ *   - getWindowTimelock → auction::window_timelock → bigint
+ *   - getWindowDeadlineUs → auction::window_deadline_us → bigint
+ *   - getWindowSchedule → eth_proof::get_window_schedule → WindowSchedule
  *
  * @see source/atomica-sdk/src/aptos/payloads.ts
  * @see docs/architecture/v0-architecture.md §2 — sealed-bid reveal path
@@ -51,6 +54,9 @@ import {
   getPinnedEthereumConfig,
   isPairAllowed,
   getLaunchPairBcs,
+  getWindowTimelock,
+  getWindowDeadlineUs,
+  getWindowSchedule,
   LAUNCH_PAIR_BCS,
 } from "../src/aptos/payloads.js";
 import * as config from "../src/aptos/config.js";
@@ -304,11 +310,50 @@ describe("pair allowlist views", () => {
   });
 });
 
+describe("window timelock and schedule views", () => {
+  beforeEach(() => {
+    vi.mocked(config.aptos.view).mockReset();
+  });
+
+  it("getWindowTimelock and getWindowDeadlineUs read the new window views", async () => {
+    vi.mocked(config.aptos.view).mockResolvedValueOnce(["17"]);
+    await expect(getWindowTimelock(WINDOW_ID)).resolves.toBe(17n);
+    expect(config.aptos.view).toHaveBeenLastCalledWith({
+      payload: {
+        function: "0xdeadbeef::auction::window_timelock",
+        functionArguments: [WINDOW_ID],
+      },
+    });
+
+    vi.mocked(config.aptos.view).mockResolvedValueOnce(["231300000000"]);
+    await expect(getWindowDeadlineUs(WINDOW_ID)).resolves.toBe(
+      231_300_000_000n,
+    );
+    expect(config.aptos.view).toHaveBeenLastCalledWith({
+      payload: {
+        function: "0xdeadbeef::auction::window_deadline_us",
+        functionArguments: [WINDOW_ID],
+      },
+    });
+  });
+
+  it("getWindowSchedule reads eth_proof::get_window_schedule", async () => {
+    vi.mocked(config.aptos.view).mockResolvedValueOnce(["900", ["900"]]);
+    await expect(getWindowSchedule()).resolves.toEqual({
+      daySecs: 900n,
+      closeOffsetsSecs: [900n],
+    });
+    expect(config.aptos.view).toHaveBeenLastCalledWith({
+      payload: {
+        function: "0xdeadbeef::eth_proof::get_window_schedule",
+        functionArguments: [],
+      },
+    });
+  });
+});
+
 describe("planned tests (SCOUT)", () => {
   it.todo(
     "SCOUT(#218) getWindowLimits reads the limits view and returns the bid cap, the seller cap and the two minimums",
-  );
-  it.todo(
-    "SCOUT(#243) getWindowTimelock and getWindowDeadlineUs read the new window views",
   );
 });

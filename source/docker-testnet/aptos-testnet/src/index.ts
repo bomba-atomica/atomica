@@ -4,10 +4,18 @@ import * as dotenv from "dotenv";
 import { cpSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { resolve as pathResolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { generateGenesis } from "./genesis.js";
+import { generateGenesis, timelockRegistrarAddress } from "./genesis.js";
 import { findAptosBinary } from "./findAptosBinary.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * The fixed test deployer address (`APTOS_DEPLOYER_ADDRESS`, `localnet.ts`
+ * `DEPLOYER_ADDR`) the Atomica package is published at by default. Genesis
+ * derives the timelock registrar from it.
+ */
+const DEFAULT_PACKAGE_ADDRESS =
+    "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa";
 
 /** Base API port for validators (incremented for each validator) */
 const BASE_API_PORT = 8080;
@@ -86,12 +94,18 @@ export class DockerTestnet {
     }
 
     /**
-     * Create a fresh, isolated Docker testnet with N validators
+     * Create a fresh, isolated Docker testnet with N validators.
+     *
+     * Genesis names the timelock registrar of the Atomica package that will be
+     * published at `options.packageAddress` (default: the env
+     * `APTOS_ATOMICA_CONTRACT_ADDRESS`, then the fixed deployer address). Only
+     * that package can register a timelock on this testnet.
      */
     static async new(
         numValidators: number,
-        _options?: {
-            // Options reserved for future use
+        options?: {
+            /** Address the Atomica package will be published at. */
+            packageAddress?: string;
         },
     ): Promise<DockerTestnet> {
         if (numValidators < 1 || numValidators > 7) {
@@ -121,12 +135,15 @@ export class DockerTestnet {
         const genesisArtifactsDir = pathResolve(composeDir, "genesis-artifacts");
         const validatorsDir = pathResolve(composeDir, "validators");
 
-        // SCOUT(#243) EDIT: pass the timelock registrar address (from the options above or the deployer address env) into generateGenesis.
-        // SCOUT(#225) EDIT: with no registrar in genesis, a fork revision with the registrar rule lets nobody register a timelock on this testnet.
+        const packageAddress =
+            options?.packageAddress ||
+            process.env.APTOS_ATOMICA_CONTRACT_ADDRESS ||
+            DEFAULT_PACKAGE_ADDRESS;
         await generateGenesis({
             numValidators,
             chainId: 4,
             workspaceDir,
+            timelockRegistrar: timelockRegistrarAddress(packageAddress),
         });
 
         const outputDir = pathResolve(workspaceDir, "output");

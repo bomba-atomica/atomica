@@ -9,7 +9,8 @@
  *   2. Status badge reads "Active" while auction is open
  *   3. Status badge transitions to "Settled" (i.e. "Ended") after expiry
  *   4. A live window created on chain reads back from get_window_status and
- *      Step8Monitor counts down to it
+ *      Step8Monitor counts down to its window close (`window_deadline_us`),
+ *      at most one test window (900 s) away
  *
  * Setup:
  *   - Dual-chain testnet started in beforeAll
@@ -37,6 +38,7 @@ import {
   getReceiptStatus,
   getWindowStatus,
   RECEIPT_CLAIMED,
+  TEST_WINDOW_SECS,
 } from "./helpers/auction-setup";
 import { Step8Monitor } from "../../src/components/SellFlow/steps/Step8Monitor";
 import {
@@ -53,9 +55,8 @@ import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 // SCOUT(#217) EDIT: price constant in micro-dollar style.
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
-// SCOUT(#243) EDIT: a 20 second deadline is not possible when the deadline is the window close; it needs the test cap.
-/** The live window's bids close this far after creation. */
-const DEADLINE_AHEAD_US = 20_000_000n;
+/** Budget past the window close, as in the reveal tests (seconds). */
+const REVEAL_TIMEOUT_SECS = 300;
 
 describe.sequential("08: Auction Monitor countdown and status", () => {
   let fixture: IntegrationFixture;
@@ -217,7 +218,6 @@ describe.sequential("08: Auction Monitor countdown and status", () => {
 
       const auction = await createLiveWindow(fixture, aptosClient, operator, {
         pairBcs: PAIR_BCS,
-        deadlineAheadUs: DEADLINE_AHEAD_US,
         lockAmount,
       });
 
@@ -234,7 +234,8 @@ describe.sequential("08: Auction Monitor countdown and status", () => {
         await getReceiptStatus(aptosClient, moduleAddr, "FakeETH", auction.sellerLockId),
       ).toBe(RECEIPT_CLAIMED);
 
-      // The monitor counts down to the timelock deadline, in wall-clock seconds.
+      // The monitor counts down to the window timelock deadline, the window
+      // close, in wall-clock seconds. It reads window_deadline_us itself.
       const remainingSecs = Number(
         (auction.deadlineUs - (await chainNowUs(aptosClient))) / 1_000_000n,
       );
@@ -244,6 +245,7 @@ describe.sequential("08: Auction Monitor countdown and status", () => {
       render(
         <Step8Monitor
           auctionEndTime={endTime}
+          windowId={auction.windowId}
           onCancelAndUnlock={async () => {}}
           loading={false}
         />,
@@ -261,6 +263,6 @@ describe.sequential("08: Auction Monitor countdown and status", () => {
         { timeout: (remainingSecs + 10) * 1000 },
       );
     },
-    900_000,
+    (TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 180) * 1000,
   );
 });

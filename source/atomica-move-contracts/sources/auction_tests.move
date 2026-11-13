@@ -18,6 +18,8 @@ module atomica::auction_tests {
     use aptos_framework::account;
     use aptos_framework::event;
     use aptos_framework::timestamp;
+    use aptos_framework::ibe_config;
+    use atomica::timelock;
     use atomica::auction::{Self};
     use atomica::eth_proof;
     use atomica::outcome_tree;
@@ -306,8 +308,6 @@ module atomica::auction_tests {
     }
     // SCOUT(#218) TEST: window_limits_view
 
-    // SCOUT(#243) EDIT: the nine `create_auction` calls of this file drop `timelock_id`; the golden timelock 11 can no longer be bound to a window through `create_auction`.
-
     // ===================== create_auction tests =====================
     //
     // Tests cover:
@@ -315,6 +315,8 @@ module atomica::auction_tests {
     //   - Stale window_id aborts with E_STALE_WINDOW_ID (6).
     //   - Far-future window_id (> current + 1) aborts with E_STALE_WINDOW_ID (6).
     //   - Duplicate create_auction for same (window_id, pair) accumulates supply.
+    //   - The first create_auction of a window id registers its one timelock, with the
+    //     window close as deadline; later sellers of any pair join it.
     //
     // init_module publishes the AuctionRegistry at @atomica, so each test that reaches
     // the registry calls `auction::init_for_test` first. A pre-inserted FakeETH
@@ -360,8 +362,7 @@ module atomica::auction_tests {
 
         // The setup clock sits in window 5; use the current window.
         let window_id = auction::current_window_id();
-        let timelock_id = auction_bid_wrapper_tests::register_live_timelock();
-        auction::create_auction(atomica, window_id, pair_bcs, lock_id, timelock_id);
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id);
 
         // get_auction must return the registered window.
         let (wid, supply, bid_count, settled, clearing_price) =
@@ -386,7 +387,6 @@ module atomica::auction_tests {
         insert_eth_receipt(atomica, lock_id, DERIVED_OWNER, 1_000_000_000_000_000_000u256);
         auction::create_auction(
             atomica, auction::current_window_id(), default_pair_bcs(), lock_id,
-            auction_bid_wrapper_tests::register_live_timelock(),
         );
     }
 
@@ -402,7 +402,7 @@ module atomica::auction_tests {
         let owner = aptos_framework::account::create_signer_for_test(DERIVED_OWNER);
         let window_id = auction::current_window_id();
         auction::create_auction(
-            &owner, window_id, default_pair_bcs(), lock_id, auction_bid_wrapper_tests::register_live_timelock(),
+            &owner, window_id, default_pair_bcs(), lock_id,
         );
         let (_, supply, _, _, _) = auction::get_auction(window_id, default_pair_bcs());
         assert!(supply == lock_amount, 0);
@@ -427,8 +427,7 @@ module atomica::auction_tests {
         let window_id = auction::current_window_id() + 1;
         insert_bound_eth_receipt(atomica, lock_id, seller_addr, lock_amount, window_id);
 
-        let timelock_id = auction_bid_wrapper_tests::register_live_timelock();
-        auction::create_auction(atomica, window_id, pair_bcs, lock_id, timelock_id);
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id);
 
         let (wid, supply, _, _, _) = auction::get_auction(window_id, pair_bcs);
         assert!(wid == window_id, 1);
@@ -444,9 +443,8 @@ module atomica::auction_tests {
         timestamp::fast_forward_seconds(86400); // day 1, window_id = 2
         let pair_bcs    = default_pair_bcs();
         let lock_id     = vector::empty<u8>();
-        let timelock_id = 0u64;
         // window_id 0 < current 2 → stale.
-        auction::create_auction(atomica, 0u64, pair_bcs, lock_id, timelock_id);
+        auction::create_auction(atomica, 0u64, pair_bcs, lock_id);
     }
 
     // Far-future window_id (> current + 1) aborts with E_STALE_WINDOW_ID.
@@ -457,8 +455,7 @@ module atomica::auction_tests {
         // current == 0; window_id 100 > 0 + 1 → too far in the future.
         let pair_bcs    = default_pair_bcs();
         let lock_id     = vector::empty<u8>();
-        let timelock_id = 0u64;
-        auction::create_auction(atomica, 100u64, pair_bcs, lock_id, timelock_id);
+        auction::create_auction(atomica, 100u64, pair_bcs, lock_id);
     }
 
     // Duplicate create_auction for same (window_id, pair) accumulates total_supply.
@@ -479,12 +476,11 @@ module atomica::auction_tests {
         insert_eth_receipt(atomica, lock_id_b, seller_addr, amount_b);
 
         let window_id   = auction::current_window_id();
-        let timelock_id = auction_bid_wrapper_tests::register_live_timelock();
 
         // First seller creates the window.
-        auction::create_auction(atomica, window_id, pair_bcs, lock_id_a, timelock_id);
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id_a);
         // Second seller joins the same window — supply accumulates.
-        auction::create_auction(atomica, window_id, pair_bcs, lock_id_b, timelock_id);
+        auction::create_auction(atomica, window_id, pair_bcs, lock_id_b);
 
         let (_, supply, _, _, _) = auction::get_auction(window_id, pair_bcs);
         assert!(supply == expected, 1);
@@ -500,12 +496,11 @@ module atomica::auction_tests {
         insert_eth_receipt(atomica, lock_id, @atomica, 1_000_000_000_000_000_000u256);
         auction::create_auction(
             atomica, auction::current_window_id(), default_pair_bcs(), lock_id,
-            auction_bid_wrapper_tests::register_live_timelock(),
         );
     }
 
-    // There is no reserve price: `create_auction` takes (window_id, pair_bcs, lock_id,
-    // timelock_id) after the signer, and the window holds only the lock's supply.
+    // There is no reserve price: `create_auction` takes (window_id, pair_bcs, lock_id)
+    // after the signer, and the window holds only the lock's supply.
     #[test(atomica = @atomica)]
     fun create_auction_takes_no_reserve_price(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
@@ -516,7 +511,6 @@ module atomica::auction_tests {
         let window_id = auction::current_window_id();
         auction::create_auction(
             atomica, window_id, default_pair_bcs(), lock_id,
-            auction_bid_wrapper_tests::register_live_timelock(),
         );
         let (wid, supply, bid_count, settled, clearing_price) =
             auction::get_auction(window_id, default_pair_bcs());
@@ -530,14 +524,156 @@ module atomica::auction_tests {
     // SCOUT(#218) TEST: create_auction_at_seller_cap_aborts
     // SCOUT(#218) TEST: create_auction_below_min_lock_aborts
     // SCOUT(#218) TEST: create_auction_at_min_lock_succeeds
-    // SCOUT(#243) TEST: first_create_auction_registers_the_window_timelock
-    // SCOUT(#243) TEST: second_seller_joins_the_stored_timelock
-    // SCOUT(#243) TEST: two_pairs_of_one_window_share_a_timelock (waits for open question 2)
-    // SCOUT(#243) TEST: current_and_next_window_get_two_timelocks
-    // SCOUT(#243) TEST: create_auction_aborts_when_registrar_is_not_the_package (framework `E_NOT_REGISTRAR`)
-    // SCOUT(#243) TEST: create_auction_aborts_when_close_is_inside_the_epoch_guard (framework `E_DEADLINE_AFTER_EPOCH_END`)
-    // SCOUT(#243) TEST: joining_an_expired_window_timelock_aborts
-    // SCOUT(#243) TEST: timelock_registrar_address_is_the_named_object_address
+    // ===================== Window timelock registration =====================
+
+    // The first `create_auction` of a window id registers the window's timelock with the
+    // next id, and its deadline is the window close.
+    #[test(atomica = @atomica)]
+    fun first_create_auction_registers_the_window_timelock(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        let lock_id = b"first_seller_lock_32bytes_______";
+        insert_eth_receipt(atomica, lock_id, @atomica, ETH);
+        let window_id = auction::current_window_id();
+        let expected_id = ibe_config::get_next_timelock_id();
+        auction::create_auction(atomica, window_id, default_pair_bcs(), lock_id);
+        assert!(auction::window_timelock(window_id) == expected_id, 1);
+        let close_us = eth_proof::window_close_secs(window_id) * 1_000_000;
+        assert!(timelock::get_deadline(expected_id) == close_us, 2);
+        assert!(auction::window_deadline_us(window_id) == close_us, 3);
+        let (status_timelock, _, _) = auction::get_window_status(window_id, default_pair_bcs());
+        assert!(status_timelock == expected_id, 4);
+    }
+
+    // A second seller of the window id joins the stored timelock: no new registration.
+    #[test(atomica = @atomica)]
+    fun second_seller_joins_the_stored_timelock(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        let lock_a = b"join_seller_lock_a_32bytes______";
+        let lock_b = b"join_seller_lock_b_32bytes______";
+        insert_eth_receipt(atomica, lock_a, @atomica, ETH);
+        insert_eth_receipt(atomica, lock_b, DERIVED_OWNER, ETH);
+        let window_id = auction::current_window_id();
+        auction::create_auction(atomica, window_id, default_pair_bcs(), lock_a);
+        let next_after_first = ibe_config::get_next_timelock_id();
+        let owner = aptos_framework::account::create_signer_for_test(DERIVED_OWNER);
+        auction::create_auction(&owner, window_id, default_pair_bcs(), lock_b);
+        assert!(ibe_config::get_next_timelock_id() == next_after_first, 1);
+        let (status_timelock, _, _) = auction::get_window_status(window_id, default_pair_bcs());
+        assert!(status_timelock == auction::window_timelock(window_id), 2);
+        assert!(status_timelock == next_after_first - 1, 3);
+    }
+
+    // Two listed pairs of one window id share one timelock: one registration in all.
+    #[test(atomica = @atomica)]
+    fun two_pairs_of_one_window_share_a_timelock(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        auction::allow_pair(atomica, b"ethereum", b"FakeETH", b"ethereum", b"OtherUSD");
+        let window_id = auction::current_window_id();
+        let lock_a = b"pair_a_seller_lock_32bytes______";
+        let lock_b = b"pair_b_seller_lock_32bytes______";
+        insert_eth_receipt(atomica, lock_a, @atomica, ETH);
+        lock_receipt::insert_bound_test_receipt<Ethereum, FakeETH>(
+            lock_b, @atomica, ETH, window_id, auction::pair_hash(other_pair_bcs()),
+        );
+        let before = ibe_config::get_next_timelock_id();
+        auction::create_auction(atomica, window_id, default_pair_bcs(), lock_a);
+        auction::create_auction(atomica, window_id, other_pair_bcs(), lock_b);
+        assert!(ibe_config::get_next_timelock_id() == before + 1, 1);
+        let (timelock_a, _, _) = auction::get_window_status(window_id, default_pair_bcs());
+        let (timelock_b, _, _) = auction::get_window_status(window_id, other_pair_bcs());
+        assert!(timelock_a == before && timelock_b == before, 2);
+        assert!(auction::window_timelock(window_id) == before, 3);
+    }
+
+    // The current and the next window id each get their own timelock, each closing at its
+    // own window close.
+    #[test(atomica = @atomica)]
+    fun current_and_next_window_get_two_timelocks(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        let current = auction::current_window_id();
+        let lock_a = b"current_window_lock_32bytes_____";
+        let lock_b = b"next_window_lock_32bytes________";
+        insert_eth_receipt(atomica, lock_a, @atomica, ETH);
+        insert_bound_eth_receipt(atomica, lock_b, @atomica, ETH, current + 1);
+        auction::create_auction(atomica, current, default_pair_bcs(), lock_a);
+        auction::create_auction(atomica, current + 1, default_pair_bcs(), lock_b);
+        let timelock_a = auction::window_timelock(current);
+        let timelock_b = auction::window_timelock(current + 1);
+        assert!(timelock_a != timelock_b, 1);
+        assert!(timelock::get_deadline(timelock_a) == eth_proof::window_close_secs(current) * 1_000_000, 2);
+        assert!(timelock::get_deadline(timelock_b) == eth_proof::window_close_secs(current + 1) * 1_000_000, 3);
+    }
+
+    // The framework refuses the registration when the chain's registrar is another address.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 17, location = aptos_framework::ibe_config)] // E_NOT_REGISTRAR
+    fun create_auction_aborts_when_registrar_is_not_the_package(atomica: &signer) {
+        let framework = auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        ibe_config::set_timelock_registrar(&framework, @0xBAD);
+        let lock_id = b"wrong_registrar_lock_32bytes____";
+        insert_eth_receipt(atomica, lock_id, @atomica, ETH);
+        auction::create_auction(atomica, auction::current_window_id(), default_pair_bcs(), lock_id);
+    }
+
+    // The framework refuses a window close later than 15 minutes before the epoch end. The
+    // epoch here ends 10 minutes after the close of the current window 5 (231 300 s).
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 9, location = aptos_framework::ibe_config)] // E_DEADLINE_AFTER_EPOCH_END
+    fun create_auction_aborts_when_close_is_inside_the_epoch_guard(atomica: &signer) {
+        let framework = auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        let epoch_start_us = aptos_framework::reconfiguration::last_reconfiguration_time();
+        let close_us = eth_proof::window_close_secs(auction::current_window_id()) * 1_000_000;
+        ibe_config::set_epoch_config_for_testing(
+            &framework, 3, aptos_framework::ibe_golden_vector_fixtures::timelock_basic_mpk(), 3,
+            vector[2, 1, 2], close_us + 600_000_000 - epoch_start_us,
+        );
+        let lock_id = b"epoch_guard_lock_32bytes________";
+        insert_eth_receipt(atomica, lock_id, @atomica, ETH);
+        auction::create_auction(atomica, auction::current_window_id(), default_pair_bcs(), lock_id);
+    }
+
+    // A seller cannot join a window id whose stored timelock is no longer `Pending`: here its
+    // key check failed before the window closed. No second timelock is registered.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 14, location = atomica::auction)] // E_TIMELOCK_NOT_PENDING
+    fun joining_an_expired_window_timelock_aborts(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        let window_id = auction::current_window_id();
+        let expired = auction_bid_wrapper_tests::register_live_timelock();
+        timestamp::update_global_time_for_test(timelock::get_deadline(expired));
+        ibe_config::submit_dk_shares_for_testing(expired, vector[x"aa", x"aa"], 0, @0xB0, 3);
+        ibe_config::submit_dk_shares_for_testing(expired, vector[x"aa"], 1, @0xB1, 3);
+        assert!(!ibe_config::finalize_for_testing(expired, x"00"), 1);
+        assert!(timelock::get_status(expired) == timelock::status_expired(), 2);
+        assert!(auction::current_window_id() == window_id, 3);
+        auction::test_insert_window_with_timelock(atomica, window_id, b"earlier", ETH, false, 0, expired);
+        let lock_id = b"late_seller_lock_32bytes________";
+        insert_eth_receipt(atomica, lock_id, @atomica, ETH);
+        auction::create_auction(atomica, window_id, default_pair_bcs(), lock_id);
+    }
+
+    // The registrar is the named object of `@atomica` and the seed. With the dev address
+    // 0xcafe it is the address the SDK test pins.
+    #[test]
+    fun timelock_registrar_address_is_the_named_object_address() {
+        assert!(
+            auction::timelock_registrar_address()
+                == aptos_framework::object::create_object_address(&@atomica, b"atomica/timelock-registrar"),
+            1
+        );
+        assert!(
+            auction::timelock_registrar_address()
+                == @0x8dfa6196d1ba90701076299d7eb1916a1cb59089d494dc339ae130628d563afb,
+            2
+        );
+    }
 
     // ===================== Pair allowlist =====================
 
@@ -570,7 +706,7 @@ module atomica::auction_tests {
             lock_id, @atomica, ETH, window_id, auction::pair_hash(unlisted),
         );
         auction::create_auction(
-            atomica, window_id, unlisted, lock_id, auction_bid_wrapper_tests::register_live_timelock(),
+            atomica, window_id, unlisted, lock_id,
         );
     }
 
@@ -584,7 +720,6 @@ module atomica::auction_tests {
         let window_id = auction::current_window_id();
         auction::create_auction(
             atomica, window_id, default_pair_bcs(), lock_id,
-            auction_bid_wrapper_tests::register_live_timelock(),
         );
         assert!(auction::auction_exists(window_id, default_pair_bcs()), 1);
         let (base_chain, base_token, quote_chain, quote_token) =
@@ -624,7 +759,7 @@ module atomica::auction_tests {
             lock_id, @atomica, ETH, window_id, auction::pair_hash(other),
         );
         auction::create_auction(
-            atomica, window_id, other, lock_id, auction_bid_wrapper_tests::register_live_timelock(),
+            atomica, window_id, other, lock_id,
         );
         let (_, _, quote_chain, quote_token) = auction::test_get_window_pair(window_id, other);
         assert!(quote_chain == b"ethereum", 4);
@@ -638,7 +773,6 @@ module atomica::auction_tests {
         auction_bid_wrapper_tests::setup();
         auction::init_for_test(atomica);
         let window_id = auction::current_window_id();
-        let timelock_id = auction_bid_wrapper_tests::register_live_timelock();
         let lock_a = b"one_window_seller_lock_a_32byte_";
         let lock_b = b"one_window_seller_lock_b_32byte_";
         insert_eth_receipt(atomica, lock_a, DERIVED_OWNER, 2 * ETH);
@@ -646,8 +780,8 @@ module atomica::auction_tests {
             lock_b, @atomica, 3 * ETH, window_id, auction::pair_hash(default_pair_bcs()),
         );
         let owner = aptos_framework::account::create_signer_for_test(DERIVED_OWNER);
-        auction::create_auction(&owner, window_id, default_pair_bcs(), lock_a, timelock_id);
-        auction::create_auction(atomica, window_id, default_pair_bcs(), lock_b, timelock_id);
+        auction::create_auction(&owner, window_id, default_pair_bcs(), lock_a);
+        auction::create_auction(atomica, window_id, default_pair_bcs(), lock_b);
 
         let (_, supply, _, _, _) = auction::get_auction(window_id, default_pair_bcs());
         assert!(supply == 5 * ETH, 1);
@@ -1208,7 +1342,6 @@ module atomica::auction_tests {
         let owner = aptos_framework::account::create_signer_for_test(DERIVED_OWNER);
         auction::create_auction(
             &owner, auction::current_window_id(), default_pair_bcs(), lock_id,
-            auction_bid_wrapper_tests::register_live_timelock(),
         );
         atomica::fake_eth::mint_from_lock(&owner, lock_id);
     }
@@ -1846,17 +1979,18 @@ module atomica::auction_tests {
     }
 
     // Timing order: timelock 11 has a 2023 deadline, so its stuck deadline plus the carrier
-    // margin is far past `eth_lock_deadline` of the current window.
+    // margin is far past `eth_lock_deadline` of the current window. A test insert stores it
+    // as the window id's timelock, and the seller joins it.
     #[test(atomica = @atomica)]
     #[expected_failure(abort_code = 32, location = atomica::auction)] // E_STUCK_AFTER_LOCK_DEADLINE
     fun create_auction_rejects_stuck_deadline_after_lock_deadline(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
         auction::init_for_test(atomica);
+        let window_id = auction::current_window_id();
+        auction::test_insert_window_with_timelock(atomica, window_id, b"earlier", ETH, false, 0, TIMELOCK_ID);
         let lock_id = b"timing_seller_lock_32bytes______";
         insert_eth_receipt(atomica, lock_id, @atomica, ETH);
-        auction::create_auction(
-            atomica, auction::current_window_id(), default_pair_bcs(), lock_id, TIMELOCK_ID,
-        );
+        auction::create_auction(atomica, window_id, default_pair_bcs(), lock_id);
     }
 
     // A lock bound to the next window cannot back the current one.
@@ -1869,7 +2003,6 @@ module atomica::auction_tests {
         insert_bound_eth_receipt(atomica, lock_id, @atomica, ETH, auction::current_window_id() + 1);
         auction::create_auction(
             atomica, auction::current_window_id(), default_pair_bcs(), lock_id,
-            auction_bid_wrapper_tests::register_live_timelock(),
         );
     }
 
@@ -1884,7 +2017,6 @@ module atomica::auction_tests {
         insert_eth_receipt(atomica, lock_id, @atomica, ETH);
         auction::create_auction(
             atomica, auction::current_window_id(), other_pair_bcs(), lock_id,
-            auction_bid_wrapper_tests::register_live_timelock(),
         );
     }
 }

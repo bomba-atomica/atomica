@@ -94,9 +94,8 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
 
     const status = screen.getByTestId("reveal-status");
     expect(status.textContent).toContain("Waiting for decryption key reveal");
-    // The window's timelock id, not the window id, is polled.
-    // An empty pair input means the launch pair.
-    expect(mockGetWindowTimelockId).toHaveBeenCalledWith(0n, LAUNCH_PAIR_BCS);
+    // The window id's timelock id, not the window id, is polled.
+    expect(mockGetWindowTimelockId).toHaveBeenCalledWith(0n);
     expect(mockIsRevealed).toHaveBeenCalledWith(42n);
   });
 

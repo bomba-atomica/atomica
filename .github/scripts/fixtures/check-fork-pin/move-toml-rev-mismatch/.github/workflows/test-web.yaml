@@ -1,0 +1,21 @@
+# Fixture for .github/scripts/check-fork-pin.sh (case: move-toml-rev-mismatch). Made-up SHAs.
+name: fixture
+on: workflow_dispatch
+env:
+  APTOS_VERSION: binary-1a2b3c4d5e
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Aptos CLI
+        run: |
+          APTOS_VERSION="binary-1a2b3c4d5e"
+          echo "${APTOS_VERSION#binary-}"
+  live:
+    runs-on: ubuntu-latest
+    env:
+      APTOS_PROOF_RELEASE: binary-1a2b3c4d5e
+      APTOS_PROOF_COMMIT: 1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+      IMAGE_NAME: atomica-validator:1a2b3c4d5e
+    steps:
+      - run: echo ok

@@ -12,6 +12,11 @@
  *   4. SIWE signature rejected: error shown via error prop
  *   5. A second seller with the SDK launch pair joins the same window
  *   6. Pair bytes that are not on the allowlist abort with E_PAIR_NOT_ALLOWED
+ *   7. The window timelock that create_auction registered closes at the
+ *      window close (window_deadline_us), and the package registrar sent it
+ *   8. The SDK registrar address equals the package view and the framework's
+ *      stored registrar
+ *   9. A direct register_timelock from the operator aborts with E_NOT_REGISTRAR
  *
  * Setup:
  *   - Dual-chain testnet started in beforeAll
@@ -19,7 +24,8 @@
  *     deployer account (no special rights) carries the proof to Aptos, with
  *     no header submission. The receipt belongs to the seller's
  *     Ethereum-derivable account, which signs create_auction (SIWE)
- *   - A real timelock registered for the window (the epoch key must exist)
+ *   - The epoch key must exist; the first create_auction of the window id
+ *     registers its timelock (test 1)
  *   - Seller wallet mock injected for SIWE signing in UI callbacks
  */
 
@@ -37,10 +43,13 @@ import {
   generateEthLockProof,
   registerLockOnAptos,
   createAuctionDirect,
-  currentWindowId,
   waitForTimelockKey,
+  waitForWindowTimeLeft,
   chainNowUs,
   registerTimelockDirect,
+  getChainWindowSchedule,
+  getWindowDeadlineUs,
+  getWindowTimelock,
   getWindowStatus,
   getReceiptStatus,
   getAuctionState,
@@ -56,7 +65,10 @@ import {
   getCreateAuctionPayload,
   getLaunchPairBcs,
   isPairAllowed,
+  timelockRegistrarAddress,
+  TIMELOCK_REGISTRATION_EVENT,
 } from "@atomica/sdk/aptos";
+import { windowCloseSecs } from "@atomica/sdk/ethereum";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { submitNativeTransaction } from "@atomica/sdk";
 
@@ -65,9 +77,16 @@ import { submitNativeTransaction } from "@atomica/sdk";
 const PAIR_BCS = LAUNCH_PAIR_BCS;
 /** Pair bytes that are not on the allowlist: only the abort case uses them. */
 const UNLISTED_PAIR_BCS = new TextEncoder().encode("07-create-auction");
-// SCOUT(#243) EDIT: the test no longer picks the deadline; it needs the test cap of open question 1.
-/** The timelock deadline is far enough out that the window stays open. */
-const DEADLINE_AHEAD_US = 600_000_000n;
+/**
+ * The first lock is made with at least this long left in its window, so the
+ * second seller of test 5 still locks into the same, open window (seconds).
+ */
+const MIN_WINDOW_LEFT_SECS = 600n;
+
+/** Read an Aptos address view result as a normalized 0x + 64 hex string. */
+function longAddress(value: unknown): string {
+  return "0x" + String(value).replace(/^0x/, "").padStart(64, "0").toLowerCase();
+}
 
 // ---------------------------------------------------------------------------
 // Stateful wrapper so we can observe the result of onCreateAuction
@@ -122,7 +141,12 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
   let sellerAddress: string;
   let deployerAccount: Account;
   let windowId: bigint;
+  /** `ibe_config::get_next_timelock_id` right before test 1's create_auction. */
+  let nextTimelockIdBefore: bigint;
+  /** The timelock test 1's create_auction registered for the window id. */
   let timelockId: bigint;
+  /** Hash of test 1's create_auction, which registered the timelock. */
+  let createTxHash: string;
 
   beforeAll(async () => {
     fixture = await setupIntegrationFixture();
@@ -142,11 +166,19 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
       chainId: fixture.eth.chainId,
     });
 
-    // The deployer's native Aptos account carries the proof and registers the
-    // timelock. It has no special rights: any account could.
+    // The deployer's native Aptos account carries the proof. It has no special
+    // rights: any account could, and it cannot register a timelock.
     deployerAccount = Account.fromPrivateKey({
       privateKey: new Ed25519PrivateKey(fixture.aptos.deployerPrivateKey),
     });
+
+    // create_auction needs the epoch key to register the window timelock.
+    await waitForTimelockKey(aptosGlobal);
+    await waitForWindowTimeLeft(
+      aptosGlobal,
+      fixture.aptos.moduleAddress,
+      MIN_WINDOW_LEFT_SECS,
+    );
 
     // Lock ETH on Ethereum and prove it at a validator-certified block.
     ethProof = await generateEthLockProof(
@@ -166,16 +198,8 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
       ethProof.proof,
     );
 
-    // SCOUT(#243) REMOVE: the manual timelock registration; create_auction registers it.
-    // SCOUT(#225) EDIT: this operator registration aborts with E_NOT_REGISTRAR on a validator image with the registrar check.
-    // create_auction needs a Pending timelock in the current epoch.
-    await waitForTimelockKey(aptosGlobal);
-    timelockId = await registerTimelockDirect(
-      aptosGlobal,
-      deployerAccount,
-      (await chainNowUs(aptosGlobal)) + DEADLINE_AHEAD_US,
-    );
-    windowId = await currentWindowId(aptosGlobal);
+    // The window is the one the lock is bound to.
+    windowId = BigInt(ethProof.proof.windowId);
   }, 1_200_000);
 
   afterAll(async () => {
@@ -200,16 +224,23 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
       await getReceiptStatus(aptosGlobal, moduleAddr, "FakeETH", ethProof.lockId),
     ).toBe(RECEIPT_ACTIVE);
 
+    const [next] = await aptosGlobal.view({
+      payload: {
+        function: "0x1::ibe_config::get_next_timelock_id",
+        functionArguments: [],
+      },
+    });
+    nextTimelockIdBefore = BigInt(next as string);
+
     const onCreateAuction = async () => {
-      // SCOUT(#243) EDIT: drop timelockId here and in the third case.
       const txHash = await createAuctionDirect(
         aptosGlobal,
         fixture.eth.seller,
         ethProof.lockId,
         windowId,
         PAIR_BCS,
-        timelockId,
       );
+      createTxHash = txHash;
       return { txHash };
     };
 
@@ -233,7 +264,10 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     );
     expect(document.querySelector(".text-red-400")).toBeNull();
 
-    // SCOUT(#243) EDIT: expect the timelock id that create_auction registered (ibe_config::get_next_timelock_id before the call).
+    // create_auction registered the window id's timelock: the id
+    // ibe_config::get_next_timelock_id reported before the call.
+    timelockId = await getWindowTimelock(aptosGlobal, moduleAddr, windowId);
+    expect(timelockId).toBe(nextTimelockIdBefore);
     expect(
       await getWindowStatus(aptosGlobal, moduleAddr, windowId, PAIR_BCS),
     ).toEqual({ timelockId, revealFinal: false, refunded: false });
@@ -270,7 +304,6 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
         ethProof.lockId,
         windowId,
         PAIR_BCS,
-        timelockId,
       );
       return { txHash };
     };
@@ -324,13 +357,11 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     const lockIdBytes = ethers.getBytes(ethProof.lockId);
 
     const onCreateAuction = async () => {
-      // SCOUT(#243) EDIT: no timelockId argument.
-      // getCreateAuctionPayload(windowId, pairBcs, lockId, timelockId)
+      // getCreateAuctionPayload(windowId, pairBcs, lockId)
       const payload = getCreateAuctionPayload(
         0n,                // windowId
         new Uint8Array(0), // pairBcs (empty — the wallet rejects before submission)
         lockIdBytes,
-        0n,                // timelockId
       );
       const result = await submitNativeTransaction(aptosGlobal, sellerAddress, payload);
       return { txHash: (result as { hash?: string }).hash };
@@ -365,6 +396,7 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
 
     // A second seller lock, bound to the launch pair (the helper default).
     const second = await generateEthLockProof(fixture);
+    expect(BigInt(second.proof.windowId)).toBe(windowId);
     await registerLockOnAptos(aptosGlobal, deployerAccount, moduleAddr, second.proof);
     const before = await getAuctionState(aptosGlobal, moduleAddr, {
       windowId,
@@ -378,7 +410,6 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
         second.lockId,
         windowId,
         LAUNCH_PAIR_BCS,
-        timelockId,
       );
       return { txHash };
     };
@@ -397,7 +428,8 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
       { timeout: 60_000 },
     );
 
-    // One pair, one window: the second lock joins the window of test 1.
+    // One pair, one window: the second lock joins the window of test 1, and
+    // its timelock: no second one was registered.
     const after = await getAuctionState(aptosGlobal, moduleAddr, {
       windowId,
       pairBcs: LAUNCH_PAIR_BCS,
@@ -406,6 +438,9 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     expect(
       await getReceiptStatus(aptosGlobal, moduleAddr, "FakeETH", second.lockId),
     ).toBe(RECEIPT_CLAIMED);
+    expect(await getWindowTimelock(aptosGlobal, moduleAddr, windowId)).toBe(
+      timelockId,
+    );
   }, 600_000);
 
   // ── Test 6: unlisted pair bytes ──────────────────────────────────────────
@@ -421,7 +456,6 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
         ethProof.lockId,
         windowId,
         UNLISTED_PAIR_BCS,
-        timelockId,
       );
       return { txHash };
     };
@@ -441,7 +475,91 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     expect(screen.queryByTestId(step7Auction.auctionTxHash)).toBeNull();
   }, 90_000);
 
-  it.todo("SCOUT(#243) the window timelock deadline equals the window_deadline_us view and the TimelockRegistrationEvent sender is the registrar address");
-  it.todo("SCOUT(#243) the SDK registrar address equals auction::timelock_registrar_address and 0x1::ibe_config::timelock_registrar");
-  it.todo("SCOUT(#243) register_timelock from the operator account fails with E_NOT_REGISTRAR");
+  // ── Test 7: the registered timelock closes at the window close ───────────
+
+  it("the window timelock deadline equals the window_deadline_us view and the TimelockRegistrationEvent sender is the registrar address", async () => {
+    const moduleAddr = fixture.aptos.moduleAddress;
+    const deadlineUs = await getWindowDeadlineUs(aptosGlobal, moduleAddr, windowId);
+    const [timelockDeadline] = await aptosGlobal.view({
+      payload: {
+        function: `${moduleAddr}::timelock::get_deadline`,
+        functionArguments: [timelockId],
+      },
+    });
+    expect(BigInt(timelockDeadline as string)).toBe(deadlineUs);
+    // The deadline is the window close on the chain's window schedule.
+    const schedule = await getChainWindowSchedule(aptosGlobal, moduleAddr);
+    expect(deadlineUs).toBe(windowCloseSecs(windowId, schedule) * 1_000_000n);
+
+    // Test 1's create_auction emitted the registration, sent by the package's
+    // registrar object.
+    const tx = await aptosGlobal.getTransactionByHash({
+      transactionHash: createTxHash,
+    });
+    const events = "events" in tx ? tx.events : [];
+    const registration = events.find(
+      (e) => e.type === TIMELOCK_REGISTRATION_EVENT,
+    );
+    expect(registration).toBeDefined();
+    const data = registration!.data as {
+      timelock_id: string;
+      deadline_us: string;
+      sender: string;
+    };
+    expect(BigInt(data.timelock_id)).toBe(timelockId);
+    expect(BigInt(data.deadline_us)).toBe(deadlineUs);
+    expect(longAddress(data.sender)).toBe(
+      longAddress(timelockRegistrarAddress(moduleAddr)),
+    );
+  }, 60_000);
+
+  // ── Test 8: one registrar address on every side ──────────────────────────
+
+  it("the SDK registrar address equals auction::timelock_registrar_address and 0x1::ibe_config::timelock_registrar", async () => {
+    const moduleAddr = fixture.aptos.moduleAddress;
+    const sdk = longAddress(timelockRegistrarAddress(moduleAddr));
+    const [packageView] = await aptosGlobal.view({
+      payload: {
+        function: `${moduleAddr}::auction::timelock_registrar_address`,
+        functionArguments: [],
+      },
+    });
+    const [stored] = await aptosGlobal.view({
+      payload: {
+        function: "0x1::ibe_config::timelock_registrar",
+        functionArguments: [],
+      },
+    });
+    expect(longAddress(packageView)).toBe(sdk);
+    // An Option<address> reads as { vec: [address] }.
+    const vec = (stored as { vec: string[] }).vec;
+    expect(vec).toHaveLength(1);
+    expect(longAddress(vec[0])).toBe(sdk);
+  }, 60_000);
+
+  // ── Test 9: no other account registers a timelock ────────────────────────
+
+  it("register_timelock from the operator account fails with E_NOT_REGISTRAR", async () => {
+    const before = await aptosGlobal.view({
+      payload: {
+        function: "0x1::ibe_config::get_next_timelock_id",
+        functionArguments: [],
+      },
+    });
+    await expect(
+      registerTimelockDirect(
+        aptosGlobal,
+        deployerAccount,
+        (await chainNowUs(aptosGlobal)) + 120_000_000n,
+      ),
+    ).rejects.toThrow(/E_NOT_REGISTRAR/);
+    // No timelock was registered.
+    const after = await aptosGlobal.view({
+      payload: {
+        function: "0x1::ibe_config::get_next_timelock_id",
+        functionArguments: [],
+      },
+    });
+    expect(after).toEqual(before);
+  }, 60_000);
 });

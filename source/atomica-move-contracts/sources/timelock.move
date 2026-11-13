@@ -1,4 +1,3 @@
-// SCOUT(#243) DOC: once the pin holds the fork status change, an unrevealed timelock reads `Expired` with reason 2 from its reveal expiry on, before the block queue reaches it; say so under "Status and expiry" below.
 /// Atomica Timelock view-function facade.
 ///
 /// Exposes the Atomica-relevant subset of `aptos_framework::ibe_config` to
@@ -19,6 +18,8 @@
 /// - `get_status` returns 0 pending, 1 revealed, 2 expired.
 /// - `get_expiry_reason` returns 1 epoch-ended, 2 reveal-window-elapsed,
 ///   3 key-check-failed, and 0 when the timelock is not expired.
+/// - An unrevealed timelock reads `Expired` with reason 2 from its reveal expiry
+///   on, before the per-block queue reaches it.
 ///
 /// Design: `atomica/docs/decisions/aptos-upgrade-ibe-chunky-spec.md` sections 7 and 8.
 module atomica::timelock {

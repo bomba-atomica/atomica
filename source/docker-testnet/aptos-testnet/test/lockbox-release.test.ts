@@ -19,7 +19,13 @@ import {
     type DualChainTestnetInfo,
 } from "../src/dual-chain-testnet";
 import { generateEthLockProofCommand, type EthLockProofResult } from "../src/browser-commands";
-import { waitForCertifiedEthBlock, waitForEthBlock } from "../src/eth-blocks";
+import { syncAnvilClockToHost, waitForCertifiedEthBlock, waitForEthBlock } from "../src/eth-blocks";
+import {
+    currentWindowId,
+    ethLockDeadline,
+    PRODUCTION_WINDOW_SCHEDULE,
+    type WindowSchedule,
+} from "@atomica/sdk/ethereum/lock-binding";
 
 /**
  * Live dual-chain test of the proof-gated LockBox (issue 203).
@@ -31,8 +37,10 @@ import { waitForCertifiedEthBlock, waitForEthBlock } from "../src/eth-blocks";
  * slot on Aptos with `lock_receipt::register_ethereum_lock`, which takes no
  * deadline.
  *
- * Cases: the receipt holds the proven lock and its binding; registration
- * rejects a wrong amount; one lock gives one receipt;
+ * Cases: the receipt holds the proven lock and its binding; a lock on the
+ * 900:900 test window schedule (ATOMICA_TEST_WINDOW_SCHEDULE, which the CI job
+ * sets) locks and registers; registration rejects a wrong amount; one lock
+ * gives one receipt;
  * and LockBox releases nothing without a proven outcome or before the lock
  * deadline. No relayer exists: LockBox has no relayer-only release or
  * pull-payment path. The live outcome release of a filled trade
@@ -60,6 +68,7 @@ const LOCKBOX_ABI = [
     `function reclaim(${LOCK_TUPLE} l, (bytes32 lockId, bytes32 payoutsHash, uint256 index, bytes32[] proof)[] neighbours)`,
     `function releaseByOutcome(${LOCK_TUPLE} l, (address recipient, uint256 amount)[] payouts, (uint256 index, bytes32[] proof) leaf)`,
     "function lockDeadline(uint64 windowId) view returns (uint64)",
+    "function windowSchedule() view returns (uint64 daySecs, uint64[] closeOffsetsSecs)",
     "error DeadlineNotReached(uint64 deadline)",
     "error NoOutcome(bytes32 auctionKey)",
 ];
@@ -126,6 +135,10 @@ async function lockAndProve(
     amount: bigint,
     mintAmount: bigint,
 ): Promise<EthLockProofResult> {
+    // The anvil clock runs ahead after each proof (12 mined blocks, 12 s
+    // apart) and must not lag the host when a lock binds to a window.
+    // generateEthLockProofCommand syncs again right before LockBox.lock.
+    await syncAnvilClockToHost(provider);
     return generateEthLockProofCommand(
         {} as never,
         info.eth.rpcUrl,
@@ -243,6 +256,49 @@ describe.sequential("Proof-gated LockBox with Aptos lock registration (live dual
             },
         });
         expect(String(deadline)).toBe(proof.deadline);
+    }, 900_000);
+
+    it("locks and registers a lock on the 900:900 test window schedule", async () => {
+        const testSchedule: WindowSchedule = { daySecs: 900n, closeOffsetsSecs: [900n] };
+        const lockBox = new ethers.Contract(info.eth.contracts.lockBox, LOCKBOX_ABI, provider);
+
+        // Both chains run the test schedule: LockBox froze it at deploy and
+        // eth_proof stored it right after publish.
+        const [daySecs, offsets] = await lockBox.windowSchedule();
+        expect([BigInt(daySecs), [...offsets].map((o: bigint) => BigInt(o))]).toEqual([
+            testSchedule.daySecs,
+            testSchedule.closeOffsetsSecs,
+        ]);
+        const [aptosDaySecs, aptosOffsets] = await aptos.view({
+            payload: {
+                function: `${info.aptos.moduleAddress}::eth_proof::get_window_schedule`,
+                functionArguments: [],
+            },
+        });
+        expect(String(aptosDaySecs)).toBe("900");
+        expect((aptosOffsets as string[]).map(String)).toEqual(["900"]);
+
+        // The lock binds to the SDK currentWindowId of that schedule: the
+        // window open at the host second, or the next one when the anvil
+        // clock already runs past its close.
+        const hostWindow = currentWindowId(BigInt(Math.floor(Date.now() / 1000)), testSchedule);
+        const receipt = await lockAndRegister(
+            info.eth.deployerPrivateKey,
+            "FakeETH",
+            1n * ETH,
+            10n * ETH,
+        );
+        const windowId = BigInt(receipt.proof.windowId);
+        expect(windowId === hostWindow || windowId === hostWindow + 1n).toBe(true);
+
+        // The Locked deadline is the SDK ethLockDeadline of the test schedule,
+        // not of the production one, and equals LockBox.lockDeadline.
+        const deadline = BigInt(receipt.proof.deadline);
+        expect(deadline).toBe(ethLockDeadline(windowId, testSchedule));
+        expect(deadline).not.toBe(ethLockDeadline(windowId, PRODUCTION_WINDOW_SCHEDULE));
+        expect(await lockBox.lockDeadline(windowId)).toBe(deadline);
+        // register_ethereum_lock accepted the proof (lockAndRegister read the receipt).
+        expect(receipt.amount).toBe(1n * ETH);
     }, 900_000);
 
     // The register call takes no deadline, and lock() cannot make a commitment

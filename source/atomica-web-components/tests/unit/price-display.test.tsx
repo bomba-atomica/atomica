@@ -4,7 +4,7 @@
  * Scout stub: every case is a todo. SettlementStatus and WithdrawWinnings
  * have browser-mode tests only (tests/*.test.tsx), which no CI job runs.
  * BidHistory is covered only by tests/integration/13-bid-history.test.tsx,
- * which runs in the Browser Tests (claim-reclaim-fees) chunk on live chains.
+ * which runs in the Browser Tests (claim-reclaim) chunk on live chains.
  *
  * Runs in the Unit Tests (atomica-sdk, atomica-web-components) job through
  * vitest.unit.config.ts.

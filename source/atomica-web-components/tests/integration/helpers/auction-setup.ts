@@ -14,8 +14,9 @@
  *                             header submission, no special signer
  *   submitAsEthAccount()    — SIWE-sign a transaction as the Ethereum-derivable
  *                             account of an Ethereum key (the receipt owner)
- *   createLiveWindow()      — Seller lock + timelock + `create_auction` for the
- *                             current window, read back with `get_window_status`
+ *   createLiveWindow()      — Seller lock + `create_auction` (which registers
+ *                             the window timelock) for the lock's window, read
+ *                             back with `get_window_status`
  *   lockBidCollateral()     — FakeUSD collateral receipt for one bid
  *   lockBidCollaterals()    — many FakeUSD receipts proven at one Ethereum block
  *   submitBidDirect()       — `sealBid` + the current `submit_bid` ABI
@@ -27,7 +28,7 @@
  * and only that account can claim it (issue 197). So `create_auction` is
  * SIWE-signed as the seller's account and `submit_bid` as the bidder's
  * ({@link submitAsEthAccount}). Calls that claim nothing (registration,
- * timelocks, openings, settle) use a native Ed25519 account, which has no
+ * openings, settle) use a native Ed25519 account, which has no
  * special rights. Each call simulates first and signs with the SDK's simulated
  * `maxGasAmount`.
  */
@@ -40,18 +41,15 @@ import {
   type InputGenerateTransactionPayloadData,
 } from "@aptos-labs/ts-sdk";
 // SCOUT(#228) EDIT: getSubmitCleartextPayload and the OpenedBid opening flow go; import the SDK getOpenBidsPayload.
-// SCOUT(#243) EDIT: getRegisterTimelockPayload and timelockIdFromEvents leave the SDK; keep a local payload for the E_NOT_REGISTRAR case.
 import {
   decryptWindowBids,
   getBidPayload,
   getCreateAuctionPayload,
   getRegisterLockPayload,
-  getRegisterTimelockPayload,
   getSettlePayload,
   getSubmitCleartextPayload,
   isRevealed,
   sealBid,
-  timelockIdFromEvents,
   type OpenedBid,
 } from "@atomica/sdk/aptos";
 import {
@@ -59,7 +57,11 @@ import {
   simulateMaxGasAmount,
   submitNativeTransaction,
 } from "@atomica/sdk";
-import { currentWindowId as windowIdAt } from "@atomica/sdk/ethereum";
+import {
+  currentWindowId as windowIdAt,
+  windowCloseSecs,
+  type WindowSchedule,
+} from "@atomica/sdk/ethereum";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { commands } from "vitest/browser";
 import type { EthLockProofResult as CommandEthLockProofResult } from "@atomica/aptos-docker-testnet/browser-commands";
@@ -311,14 +313,45 @@ export const RECEIPT_REVOKED = 2;
 export const RECEIPT_FILLED = 3;
 
 /**
+ * Window length of the test schedule, in seconds: CI boots the testnet with
+ * `ATOMICA_TEST_WINDOW_SCHEDULE=900:900`, one window close every 900 s. A
+ * window created now closes at most this long after.
+ */
+export const TEST_WINDOW_SECS = 900;
+
+/**
+ * The window clock in force on the chain (`eth_proof::get_window_schedule`):
+ * the test schedule on the testnet, the 07:45 and 16:15 UTC closes otherwise.
+ */
+export async function getChainWindowSchedule(
+  aptosClient: Aptos,
+  moduleAddr: string,
+): Promise<WindowSchedule> {
+  const [daySecs, offsets] = await aptosClient.view({
+    payload: {
+      function: `${moduleAddr}::eth_proof::get_window_schedule`,
+      functionArguments: [],
+    },
+  });
+  return {
+    daySecs: BigInt(daySecs as string),
+    closeOffsetsSecs: (offsets as string[]).map((o) => BigInt(o)),
+  };
+}
+
+/**
  * The window `create_auction` accepts right now, from the chain clock.
  *
  * `auction::current_window_id` is not a view function, so this applies the SDK
- * mirror (the id changes at 07:45 and 16:15 UTC) to the chain clock.
+ * mirror to the chain clock, on the chain's window schedule.
  */
-export async function currentWindowId(aptosClient: Aptos): Promise<bigint> {
+export async function currentWindowId(
+  aptosClient: Aptos,
+  moduleAddr: string,
+): Promise<bigint> {
+  const schedule = await getChainWindowSchedule(aptosClient, moduleAddr);
   const { ledger_timestamp } = await aptosClient.getLedgerInfo();
-  return windowIdAt(BigInt(ledger_timestamp) / 1_000_000n);
+  return windowIdAt(BigInt(ledger_timestamp) / 1_000_000n, schedule);
 }
 
 /** Poll `probe` every 2 s until it returns a value, or throw after `timeoutSecs`. */
@@ -371,37 +404,29 @@ export async function chainNowUs(aptosClient: Aptos): Promise<bigint> {
 export async function waitForChainTime(
   aptosClient: Aptos,
   deadlineUs: bigint,
-  timeoutSecs = 600,
+  timeoutSecs = 1200,
 ): Promise<void> {
   await pollUntil(`chain time ${deadlineUs} us`, timeoutSecs, async () =>
     (await chainNowUs(aptosClient)) >= deadlineUs ? true : undefined,
   );
 }
 
-// SCOUT(#243) EDIT: this helper stays only for the case that expects E_NOT_REGISTRAR; createLiveWindow stops calling it.
-// SCOUT(#225) EDIT: it aborts with E_NOT_REGISTRAR for the operator once the validator image has the registrar check, which breaks every chunk that creates a window unless the product half (243) lands with the same pin bump.
 /**
- * Register a timelock for `deadlineUs` with `0x1::ibe_config::register_timelock`
- * and return its id from the `TimelockRegistrationEvent`.
+ * Send `0x1::ibe_config::register_timelock(deadline_us)` from `sender`. Only
+ * the stored registrar, the auction package's object, may register a
+ * timelock, so this aborts with the framework's `E_NOT_REGISTRAR` (17) for
+ * any test account. Only the test that expects that abort calls it. The
+ * payload is local: the SDK builds no registration.
  */
 export async function registerTimelockDirect(
   aptosClient: Aptos,
   sender: Account,
   deadlineUs: bigint,
-): Promise<bigint> {
-  const txn = await aptosClient.transaction.build.simple({
-    sender: sender.accountAddress,
-    data: getRegisterTimelockPayload(deadlineUs),
+): Promise<string> {
+  return submitDirect(aptosClient, sender, {
+    function: "0x1::ibe_config::register_timelock",
+    functionArguments: [deadlineUs],
   });
-  const submitted = await aptosClient.signAndSubmitTransaction({
-    signer: sender,
-    transaction: txn,
-  });
-  const done = await aptosClient.waitForTransaction({
-    transactionHash: submitted.hash,
-    options: { checkSuccess: true },
-  });
-  return timelockIdFromEvents("events" in done ? done.events : []);
 }
 
 /**
@@ -505,72 +530,100 @@ export async function submitManyDirect(
  * Create an auction as the seller's Ethereum-derivable account (SIWE), the
  * only account that can claim the seller's FakeETH receipt.
  *
- * Same 4-argument call as the SDK's `getCreateAuctionPayload`:
- *   create_auction(seller, window_id, pair_bcs, lock_id, timelock_id)
+ * Same 3-argument call as the SDK's `getCreateAuctionPayload`:
+ *   create_auction(seller, window_id, pair_bcs, lock_id)
  *
- * Throws if the transaction aborts. Returns the Aptos transaction hash.
+ * The first call for a window id registers the window timelock, with the
+ * window close as its deadline. Throws if the transaction aborts. Returns the
+ * Aptos transaction hash.
  */
-// SCOUT(#243) EDIT: drop the timelockId parameter.
 export async function createAuctionDirect(
   aptosClient: Aptos,
   seller: EthSigner,
   lockId: string,
   windowId: bigint,
   pairBcs: Uint8Array,
-  timelockId: bigint,
 ): Promise<string> {
   return submitAsEthAccount(
     aptosClient,
     seller,
-    getCreateAuctionPayload(
-      windowId,
-      pairBcs,
-      ethers.getBytes(lockId),
-      timelockId,
-    ),
+    getCreateAuctionPayload(windowId, pairBcs, ethers.getBytes(lockId)),
   );
 }
 
-// SCOUT(#243) EDIT: timelockId and deadlineUs are read back from the chain, not chosen by the test.
-/** A window created on chain with its own timelock. */
+/** A window created on chain, with the timelock its window id registered. */
 export interface LiveWindow {
   windowId: bigint;
   pairBcs: Uint8Array;
+  /** The window id's timelock (`auction::window_timelock`). */
   timelockId: bigint;
-  /** Timelock deadline in chain microseconds: bids close here. */
+  /** Timelock deadline in chain microseconds, the window close: bids close here. */
   deadlineUs: bigint;
   /** The seller's FakeETH lock id claimed by `create_auction`. */
   sellerLockId: string;
 }
 
+/** Seconds a new window must have left by default, so bids have time to land. */
+const MIN_WINDOW_LEFT_SECS = 60n;
+
 /**
- * Lock FakeETH on Ethereum as the seller, register the receipt on Aptos,
- * register a timelock that closes `deadlineAheadUs` after the chain clock, and
- * create the current window for `pairBcs` bound to it. The operator (no
- * special rights) carries the proof and registers the timelock. The seller's
- * Ethereum-derivable account creates the window: only it can claim the
- * seller receipt.
+ * Wait for the close of the current window when less than `minLeftSecs`
+ * remain in it, on the chain clock and the chain's window schedule. Locks
+ * made right after are bound to a window with at least that long left.
+ */
+export async function waitForWindowTimeLeft(
+  aptosClient: Aptos,
+  moduleAddr: string,
+  minLeftSecs: bigint,
+): Promise<void> {
+  const schedule = await getChainWindowSchedule(aptosClient, moduleAddr);
+  const nowSecs = (await chainNowUs(aptosClient)) / 1_000_000n;
+  const close = windowCloseSecs(windowIdAt(nowSecs, schedule), schedule);
+  if (close - nowSecs < minLeftSecs) {
+    await waitForChainTime(aptosClient, close * 1_000_000n);
+  }
+}
+
+/**
+ * Lock FakeETH on Ethereum as the seller, register the receipt on Aptos, and
+ * create the lock's window for `pairBcs`. `create_auction` registers the
+ * window id's timelock on its first call, with the window close as its
+ * deadline (`window_deadline_us`); a later call joins it. The operator (no
+ * special rights) carries the proof. The seller's Ethereum-derivable account
+ * creates the window: only it can claim the seller receipt.
+ *
+ * When less than `options.minWindowLeftSecs` (default 60) seconds remain in
+ * the current window, it first waits for the close, so the new window leaves
+ * bids time to land. On the test schedule
+ * the window then closes at most {@link TEST_WINDOW_SECS} later.
  *
  * `options.pairBcs` must be on the pair allowlist (the SDK `LAUNCH_PAIR_BCS`),
  * or `create_auction` aborts with `E_PAIR_NOT_ALLOWED`. Each test file starts
  * its own chain, so one pair is enough: two calls for one window id join one
  * window.
  *
- * Throws unless `get_window_status` reads back the new timelock with
+ * Throws unless `get_window_status` reads back the window id's timelock with
  * `reveal_final` and `refunded` both false.
  */
-// SCOUT(#243) EDIT: stop registering a timelock; deadlineAheadUs needs the owner's answer on a test cap (open question 1), since tests use 20 to 600 seconds.
 export async function createLiveWindow(
   fixture: IntegrationFixture,
   aptosClient: Aptos,
   operator: Account,
   options: {
     pairBcs: Uint8Array;
-    deadlineAheadUs: bigint;
     lockAmount?: bigint;
+    minWindowLeftSecs?: bigint;
   },
 ): Promise<LiveWindow> {
   const moduleAddr = fixture.aptos.moduleAddress;
+  // SCOUT(#231) EDIT: registration needs the window close 15 minutes before the epoch end; with UTC-anchored epoch ends a testnet started near a boundary fails in create_auction.
+  await waitForTimelockKey(aptosClient);
+  await waitForWindowTimeLeft(
+    aptosClient,
+    moduleAddr,
+    options.minWindowLeftSecs ?? MIN_WINDOW_LEFT_SECS,
+  );
+
   const { lockId, proof } = await generateEthLockProof(
     fixture,
     options.lockAmount,
@@ -581,25 +634,22 @@ export async function createLiveWindow(
   );
   await registerLockOnAptos(aptosClient, operator, moduleAddr, proof);
 
-  await waitForTimelockKey(aptosClient);
-  // SCOUT(#231) EDIT: registration needs the deadline 15 minutes before the epoch end; with UTC-anchored epoch ends a testnet started near a boundary fails here.
-  const deadlineUs = (await chainNowUs(aptosClient)) + options.deadlineAheadUs;
-  const timelockId = await registerTimelockDirect(
-    aptosClient,
-    operator,
-    deadlineUs,
-  );
-
-  const windowId = await currentWindowId(aptosClient);
+  // The lock is bound to its window: create exactly that one.
+  const windowId = BigInt(proof.windowId);
   await createAuctionDirect(
     aptosClient,
     fixture.eth.seller,
     lockId,
     windowId,
     options.pairBcs,
-    timelockId,
   );
 
+  const timelockId = await getWindowTimelock(aptosClient, moduleAddr, windowId);
+  const deadlineUs = await getWindowDeadlineUs(
+    aptosClient,
+    moduleAddr,
+    windowId,
+  );
   const status = await getWindowStatus(
     aptosClient,
     moduleAddr,
@@ -839,7 +889,6 @@ export async function settleAuctionDirect(
  * Aborts (throws) with E_AUCTION_NOT_FOUND when the window does not exist.
  */
 // SCOUT(#228) EDIT: reveal_final loses its meaning when finalize_reveal goes; the view tuple may change.
-// SCOUT(#243) EDIT: the timelock id read here is the one create_auction registered.
 export async function getWindowStatus(
   aptosClient: Aptos,
   moduleAddr: string,
@@ -914,6 +963,48 @@ export async function getReceiptStatus(
 }
 
 // ---------------------------------------------------------------------------
+// Window timelock reads
+// ---------------------------------------------------------------------------
+
+/**
+ * Read `auction::window_timelock(window_id)`: the timelock the first
+ * `create_auction` of the window id registered. Throws until one did.
+ */
+export async function getWindowTimelock(
+  aptosClient: Aptos,
+  moduleAddr: string,
+  windowId: bigint,
+): Promise<bigint> {
+  const [id] = await aptosClient.view({
+    payload: {
+      function: `${moduleAddr}::auction::window_timelock`,
+      functionArguments: [windowId],
+    },
+  });
+  return BigInt(id as string);
+}
+
+/**
+ * Read `auction::window_deadline_us(window_id)`: the timelock deadline that
+ * `create_auction` derived from the window id, the window close in
+ * microseconds. The SDK reader (`getWindowDeadlineUs` of `@atomica/sdk/aptos`)
+ * reads the same view through the SDK's own client; tests pass theirs.
+ */
+export async function getWindowDeadlineUs(
+  aptosClient: Aptos,
+  moduleAddr: string,
+  windowId: bigint,
+): Promise<bigint> {
+  const [deadline] = await aptosClient.view({
+    payload: {
+      function: `${moduleAddr}::auction::window_deadline_us`,
+      functionArguments: [windowId],
+    },
+  });
+  return BigInt(deadline as string);
+}
+
+// ---------------------------------------------------------------------------
 // Scout stubs: planned helpers. No test calls them yet.
 // ---------------------------------------------------------------------------
 
@@ -937,13 +1028,4 @@ export async function joinWindowAsSellers(
   _lockAmount: bigint,
 ): Promise<string[]> {
   throw new Error("NOT_IMPLEMENTED: SCOUT(#218) joinWindowAsSellers");
-}
-
-// SCOUT(#243) ADD: read auction::window_deadline_us, the timelock deadline that create_auction derives from the window id.
-export async function getWindowDeadlineUs(
-  _aptosClient: Aptos,
-  _moduleAddr: string,
-  _windowId: bigint,
-): Promise<bigint> {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#243) getWindowDeadlineUs");
 }

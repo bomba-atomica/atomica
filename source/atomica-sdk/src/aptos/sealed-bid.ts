@@ -3,7 +3,7 @@
  * V2 sealed bids against the live chain: seal a bid for a window and open a
  * window's bids after the timelock reveal.
  *
- * Sealing reads from chain the window's timelock (`auction::get_window_status`),
+ * Sealing reads from chain the window id's timelock (`auction::window_timelock`),
  * the chain id, the timelock epoch (`timelock::get_timelock_epoch`) and its
  * deadline (`timelock::get_deadline`). It builds the timelock identity and the
  * associated data the contract will rebuild at submission itself, and throws
@@ -56,15 +56,16 @@ async function view(
   });
 }
 
-// SCOUT(#243) EDIT: the timelock now belongs to the window id; read the new window_timelock view, or keep get_window_status, which needs an existing (window, pair).
-/** The timelock id recorded on a window (`auction::get_window_status`). */
-export async function getWindowTimelockId(
-  windowId: bigint,
-  pairBcs: Uint8Array,
-): Promise<bigint> {
+/**
+ * The timelock id of a window id (`auction::window_timelock`). One timelock per
+ * window id, shared by every pair, so a bidder can seal before a window of its
+ * own pair exists. The view aborts until a `create_auction` of that window id
+ * has registered it.
+ */
+export async function getWindowTimelockId(windowId: bigint): Promise<bigint> {
   const [timelockId] = await view(
-    `${CONTRACT_ADDR}::auction::get_window_status`,
-    [windowId, pairBcs],
+    `${CONTRACT_ADDR}::auction::window_timelock`,
+    [windowId],
   );
   return BigInt(timelockId as string);
 }
@@ -239,7 +240,7 @@ export async function sealBid(
   price: bigint,
   salt: Uint8Array = randomBytes(32),
 ): Promise<SealedBid> {
-  const timelockId = await getWindowTimelockId(windowId, pairBcs);
+  const timelockId = await getWindowTimelockId(windowId);
   const [chainId, epoch, deadlineUs, nodeIdentity, nodeAd, mpk] =
     await Promise.all([
       aptos.getChainId(),
@@ -312,7 +313,7 @@ export async function decryptWindowBids(
   windowId: bigint,
   pairBcs: Uint8Array,
 ): Promise<OpenedBid[]> {
-  const timelockId = await getWindowTimelockId(windowId, pairBcs);
+  const timelockId = await getWindowTimelockId(windowId);
   const [dk, identity, count] = await Promise.all([
     getDecryptionKey(timelockId),
     getTimelockIdentity(timelockId),

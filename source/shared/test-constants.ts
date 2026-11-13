@@ -30,7 +30,6 @@ export const APTOS_ROOT_ACCOUNT_PRIVATE_KEY = env(
 );
 
 // Aptos — contract deployer
-// SCOUT(#243) ADD: a constant for the timelock registrar address derived from this deployer address, for the genesis layout field timelock_registrar and for the tests.
 export const APTOS_DEPLOYER_ADDRESS = env(
   "APTOS_DEPLOYER_ADDRESS",
   "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa",
@@ -38,6 +37,15 @@ export const APTOS_DEPLOYER_ADDRESS = env(
 export const APTOS_DEPLOYER_PRIVATE_KEY = env(
   "APTOS_DEPLOYER_PRIVATE_KEY",
   "0x52a0d787625121df4e45d1d6a36f71dce7466710404f22ae3f21156828551717",
+);
+// The auction package's timelock registrar when the package is published at
+// APTOS_DEPLOYER_ADDRESS: object::create_object_address(deployer,
+// b"atomica/timelock-registrar"), sha3-256 of the address, the seed and 0xFE.
+// Docker genesis writes it to the layout field timelock_registrar.
+// test/timelock-genesis.test.ts in aptos-testnet checks the derivation.
+export const APTOS_TIMELOCK_REGISTRAR_ADDRESS = env(
+  "APTOS_TIMELOCK_REGISTRAR_ADDRESS",
+  "0x7e819a5584c17cbe952839d4e2b1327d96db4679bde4d7a26b7eefcb9d896e4d",
 );
 export const APTOS_ATOMICA_CONTRACT_ADDRESS = env(
   "APTOS_ATOMICA_CONTRACT_ADDRESS",

@@ -51,13 +51,24 @@ const ERC20_ABI = [
 // Private copy of the lock ABI. LockBox computes the deadline.
 const LOCKBOX_ABI = [
   "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash) external returns (bytes32)",
+  "function windowSchedule() view returns (uint64 daySecs, uint64[] closeOffsetsSecs)",
 ] as const;
 
-/** Lock `amount` of `token` into the current window of the launch pair. */
+/**
+ * Lock `amount` of `token` into the current window of the launch pair, on the
+ * chain's window clock (`LockBox.windowSchedule`, equal to
+ * `eth_proof::get_window_schedule`: the test schedule on the testnet).
+ */
 async function lockNow(lockBox: ethers.Contract, token: string, amount: bigint) {
+  const [daySecs, closeOffsetsSecs] = (await lockBox.windowSchedule()) as [
+    bigint,
+    bigint[],
+  ];
+  const schedule = { daySecs, closeOffsetsSecs: [...closeOffsetsSecs] };
   const b = lockBinding(
-    currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
+    currentWindowId(BigInt(Math.floor(Date.now() / 1000)), schedule),
     LAUNCH_PAIR_BCS,
+    schedule,
   );
   const tx = await lockBox.lock(token, amount, b.windowId, b.pairHash);
   await tx.wait();

@@ -44,7 +44,6 @@ module atomica::integration_tests {
         let pair = auction::launch_pair_bcs();
         let window_id = auction::current_window_id();
         let pair_hash = auction::pair_hash(pair);
-        let timelock_id = atomica::auction_bid_wrapper_tests::register_live_timelock();
 
         let sellers = vector[@0x5A, @0x5B];
         let seller_locks = vector[b"e2e_seller_lock_a_32bytes_______", b"e2e_seller_lock_b_32bytes_______"];
@@ -57,7 +56,7 @@ module atomica::integration_tests {
                 lock_id, who, *vector::borrow(&seller_amounts, i), window_id, pair_hash,
             );
             let seller = aptos_framework::account::create_signer_for_test(who);
-            auction::create_auction(&seller, window_id, pair, lock_id, timelock_id);
+            auction::create_auction(&seller, window_id, pair, lock_id);
             i = i + 1;
         };
 

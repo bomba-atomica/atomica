@@ -37,7 +37,6 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 <!-- SCOUT(#242) DOC: unwind row: LockBox reclaim is live (203); the Aptos unwind is open pull request 213 (194); the SDK and UI half (195) is open. -->
 <!-- SCOUT(#228) DOC: sealed-bids row: describes submit_cleartext_and_clear and finalize_reveal with a price hash; on-chain opening replaces them with open_bids. -->
 <!-- SCOUT(#236) DOC: settle and claim row: ClaimButton (a faucet mint) is removed for a release action; AuctionRevealer and SellFlow get exported. -->
-<!-- SCOUT(#243) DOC: windows row: after this issue the window timelock closes at the window close, not at a seller-picked time; the auction creation UI row loses the register-timelock step. -->
 
 | Capability | Owning module(s) under `source/` | Status |
 |---|---|---|
@@ -51,7 +50,7 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 | **IBE timelock — on-chain Move scaffolding** | `atomica-move-contracts/sources/timelock.move`, `timelock_config.move` | `scaffold` |
 | **Uniform-price batch auction (`auction.move`)** | `atomica-move-contracts/sources/auction.move` | `scaffold` — current `settle()` picks single highest bid; uniform-price clearing unimplemented |
 | **Sealed bids end-to-end (encrypted on-chain, plaintext-reveal path)** | `atomica-move-contracts/sources/auction.move`, `atomica-web-ui/src/lib/ibe.ts` | `live` — bids are stored as IBE ciphertext with a price commitment; `submit_cleartext_and_clear` opens them and, once every bid is open, clears the window in the same transaction; `finalize_reveal` closes and clears a partly opened window after the opening window |
-| **Twice-daily global auction windows (07:45 / 16:15 UTC)** | `atomica-move-contracts/sources/auction.move`, `atomica-move-contracts/sources/eth_proof.move` | `missing` — window ids come from the chain clock and change exactly at 07:45 and 16:15 UTC (`eth_proof::window_id_at`); the window timelock deadline is still picked by the first seller |
+| **Twice-daily global auction windows (07:45 / 16:15 UTC)** | `atomica-move-contracts/sources/auction.move`, `atomica-move-contracts/sources/eth_proof.move` | `live` — window ids come from the chain clock and change exactly at 07:45 and 16:15 UTC (`eth_proof::window_id_at`); the first `create_auction` of a window id registers its one timelock with the window close as deadline, and only the package may register (issue 243). Only a test chain (chain id 4) may store a shorter schedule (`eth_proof::set_window_schedule`) |
 | **Multi-asset / multi-pair clearing** | `atomica-move-contracts/sources/auction.move` | `missing` — pair allowlist seeded with one launch pair (`ethereum` FakeETH / `ethereum` FakeUSD); only the package account adds pairs |
 | **Bidder collateral on Aptos** | `atomica-move-contracts/sources/auction.move` | `live` — `submit_bid` claims a FakeUSD receipt bound to the window and stores its amount; a bid whose collateral does not cover `quote_for_fill(quantity, price)`, or whose price is zero, is invalid at opening, never fills, and gets its whole collateral back (issue 216) |
 | **Cross-chain settlement back to Ethereum (verified BLS outcome proof)** | `evm-contracts/src/escrow/LockBox.sol`, `BLSVerifier.sol` | `live` — `AptosLightClient` verifies the validator BLS signatures of an Aptos `AuctionOutcome`, and LockBox records it and releases each lock (issues 201, 202, 203, 194, 195). The CI test `source/docker-testnet/aptos-testnet/test/auction-round-trip.test.ts` runs lock, auction, `recordOutcome` and `releaseByOutcome` across both live chains (issue 219) |
@@ -59,7 +58,7 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 | **Distance-to-clearing fee rebates** | — | `missing` — not designed (PRD open question); the zero-returning scaffolding in Move, the SDK and the UI was deleted (issue 238) |
 | **Sell flow wizard (8-step UI)** | `atomica-web-ui/src/components/SellFlow/` | `live` |
 | **Bid submission UI** | `atomica-web-components/src/components/AuctionBidder.tsx` | `live` |
-| **Auction creation UI** | `atomica-web-ui/src/components/AuctionCreator.tsx` | `live` — takes the window id, pair and lock id; no minimum price field, since launch has no reserve price (issue 241) |
+| **Auction creation UI** | `atomica-web-ui/src/components/AuctionCreator.tsx` | `live` — takes the window id, pair and lock id and sends one `create_auction` transaction; no minimum price field, since launch has no reserve price (issue 241), and no timelock registration step (issue 243) |
 | **Bid history UI** | `atomica-web-ui/src/components/BidHistory.tsx` | `live` |
 | **Settle / Claim UI** | `atomica-web-ui/src/components/SettleButton.tsx`, `ClaimButton.tsx` | `live` — Demo-phase payout; lifetime bounded by real cross-chain settlement |
 | **Network / contract status UI** | `atomica-web-ui/src/components/NetworkStatus.tsx`, `ContractStatus.tsx` | `live` |

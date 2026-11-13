@@ -49,6 +49,7 @@ import { settleButton, step8Monitor, bidHistory } from "./helpers/selectors";
 import {
   createLiveWindow,
   lockBidCollateral,
+  lockBidCollaterals,
   submitBidDirect,
   waitForReveal,
   openWindowBidsDirect,
@@ -58,6 +59,7 @@ import {
   getReceiptStatus,
   RECEIPT_FILLED,
   RECEIPT_REVOKED,
+  TEST_WINDOW_SECS,
   type LiveWindow,
 } from "./helpers/auction-setup";
 import { SettleButton } from "../../src/components/SettleButton";
@@ -97,8 +99,13 @@ const INVALID_PRICE = 3_000_000n;
 const INVALID_COLLATERAL = 100n * 10n ** 6n;
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
-// SCOUT(#243) EDIT: a 120 second deadline needs the test cap.
-const DEADLINE_AHEAD_US = 120_000_000n;
+/**
+ * The window is created with at least this long left before its close, so
+ * the collaterals and the bids land in it (seconds). On the docker Ethereum
+ * chain one lock proof cycle takes about 3 minutes: the seller lock, the two
+ * default collaterals and the invalid collateral take three.
+ */
+const MIN_WINDOW_LEFT_SECS = 720n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
 const REVEAL_TIMEOUT_SECS = 300;
 
@@ -150,8 +157,21 @@ describe.sequential("10: Settle Auction", () => {
     settlerAptosAddress = (await getDerivedAddress(settlerEthAddress.toLowerCase())).toString();
     await commands.fundAccount(settlerAptosAddress, 500_000_000);
 
-    winCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
-    loseCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
+    // The window first: the collaterals lock into the window open then.
+    auction = await createLiveWindow(fixture, aptosClient, operator, {
+      pairBcs: PAIR_BCS,
+      minWindowLeftSecs: MIN_WINDOW_LEFT_SECS,
+      // SCOUT(#218) EDIT: pull request 213 sets SUPPLY to 0.0001 FakeETH, below the proposed 0.01 FakeETH minimum seller lock, so create_auction aborts; raise SUPPLY and size collateral with whole-USD prices (217).
+      lockAmount: SUPPLY,
+    });
+    // One proof cycle for both default collaterals.
+    [winCollateral, loseCollateral] = await lockBidCollaterals(
+      fixture,
+      aptosClient,
+      operator,
+      PAIR_BCS,
+      2,
+    );
     invalidCollateral = await lockBidCollateral(
       fixture,
       aptosClient,
@@ -160,13 +180,6 @@ describe.sequential("10: Settle Auction", () => {
       INVALID_COLLATERAL,
     );
     expect(quoteForFill(SUPPLY, INVALID_PRICE)).toBeGreaterThan(INVALID_COLLATERAL);
-
-    auction = await createLiveWindow(fixture, aptosClient, operator, {
-      pairBcs: PAIR_BCS,
-      deadlineAheadUs: DEADLINE_AHEAD_US,
-      // SCOUT(#218) EDIT: pull request 213 sets SUPPLY to 0.0001 FakeETH, below the proposed 0.01 FakeETH minimum seller lock, so create_auction aborts; raise SUPPLY and size collateral with whole-USD prices (217).
-      lockAmount: SUPPLY,
-    });
     await submitBidDirect(aptosClient, fixture.eth.bidder, auction, WIN_PRICE, winCollateral, SUPPLY);
     await submitBidDirect(
       aptosClient,
@@ -192,7 +205,7 @@ describe.sequential("10: Settle Auction", () => {
       settled: false,
       clearingPrice: 0n,
     });
-  }, 1_200_000);
+  }, 2_400_000);
 
   afterAll(async () => {
     await teardownIntegrationFixture();
@@ -237,7 +250,7 @@ describe.sequential("10: Settle Auction", () => {
     async () => {
       await waitForReveal(
         auction.timelockId,
-        Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS,
+        TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS,
       );
 
       // SCOUT(#228) EDIT: call open_bids from an account that is not the bidder, with no prices and no salts.
@@ -308,7 +321,7 @@ describe.sequential("10: Settle Auction", () => {
         await getReceiptStatus(aptosClient, moduleAddr, "FakeETH", auction.sellerLockId),
       ).toBe(RECEIPT_FILLED);
     },
-    (Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS + 180) * 1000,
+    (TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 180) * 1000,
   );
 
   // ── Test 4: double settle rejected ─────────────────────────────────────────

@@ -13,6 +13,8 @@ import {
   lockBinding,
   lockCommitment,
   pairHashOf,
+  parseWindowSchedule,
+  PRODUCTION_WINDOW_SCHEDULE,
   WINDOW_AFTERNOON_CLOSE_SECS,
   WINDOW_DAY_SECS,
   WINDOW_MORNING_CLOSE_SECS,
@@ -144,6 +146,43 @@ describe("eth_lock_deadline", () => {
 
   it("pairHashOf is keccak256 of the pair BCS", () => {
     expect(pairHashOf(new Uint8Array([1, 2]))).toBe(ethers.keccak256("0x0102"));
+  });
+});
+
+describe("window schedule", () => {
+  it("windowCloseSecs, currentWindowId and ethLockDeadline follow a passed schedule and default to 07:45 and 16:15 UTC", () => {
+    expect(PRODUCTION_WINDOW_SCHEDULE).toEqual({
+      daySecs: 86_400n,
+      closeOffsetsSecs: [27_900n, 58_500n],
+    });
+    // Default and explicit production schedule agree.
+    for (const w of [0n, 1n, 41538n]) {
+      expect(windowCloseSecs(w, PRODUCTION_WINDOW_SCHEDULE)).toBe(
+        windowCloseSecs(w),
+      );
+      expect(ethLockDeadline(w, PRODUCTION_WINDOW_SCHEDULE)).toBe(
+        ethLockDeadline(w),
+      );
+    }
+    expect(windowCloseSecs(0n)).toBe(27_900n);
+
+    // The 900:900 test schedule: one close every 15 minutes. These are the
+    // values eth_proof::set_window_schedule_drives_window_ids_and_closes and
+    // the LockBox (900, [900]) forge test assert.
+    const test = parseWindowSchedule("900:900");
+    expect(test).toEqual({ daySecs: 900n, closeOffsetsSecs: [900n] });
+    expect(windowCloseSecs(5n, test)).toBe(5_400n);
+    expect(currentWindowId(5_399n, test)).toBe(5n);
+    expect(currentWindowId(5_400n, test)).toBe(6n);
+    expect(ethLockDeadline(5n, test)).toBe(264_600n);
+    expect(lockBinding(5n, new Uint8Array(0), test).deadline).toBe(264_600n);
+
+    // A two-close test schedule.
+    const two = parseWindowSchedule("1800:600,1200");
+    expect(currentWindowId(599n, two)).toBe(0n);
+    expect(currentWindowId(600n, two)).toBe(1n);
+    expect(currentWindowId(1_200n, two)).toBe(2n);
+    expect(windowCloseSecs(3n, two)).toBe(1_800n + 1_200n);
   });
 });
 

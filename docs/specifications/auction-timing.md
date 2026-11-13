@@ -27,11 +27,16 @@ This document is the single source of truth for Atomica auction timing.
 ## Operational Guidance
 
 <!-- SCOUT(#231) DOC: add the chain epoch rule: epochs end at fixed UTC times at least 25 minutes from both closes (after the owner answers the questions of this issue). -->
-<!-- SCOUT(#243) DOC: "decryption deadlines MUST key off UTC timestamps": the first seller of a window picks the timelock deadline today; say that create_auction registers it at the window close. -->
 
 - All protocol-level timing MUST be specified in UTC.
 - Frontends MAY display localized times, but UTC is authoritative.
 - Scheduling, decryption deadlines, and settlement windows MUST key off UTC timestamps.
+- The decryption deadline of a window is its close. The first `create_auction`
+  of a window id registers the window's one timelock with deadline
+  `eth_proof::window_close_secs(window_id)`; no seller picks it.
+- Only a test chain (chain id 4) may store a shorter window schedule, through
+  `eth_proof::set_window_schedule` (the docker testnet uses `900:900`, one close
+  every 15 minutes). A production chain always closes at 07:45 and 16:15 UTC.
 
 ## Settlement Coupling
 
@@ -120,17 +125,18 @@ unwind:  now >= stuck_deadline_us
 `auction::get_stuck_deadline_us(window_id, pair_bcs)` returns it.
 
 <!-- SCOUT(#228) DOC: budget table: remove the "Opening window, 10 min" row. -->
-<!-- SCOUT(#243) DOC: budget table: once the timelock deadline is the window close, the first row shrinks from 23 h 50 min to the 10-minute reveal window. -->
 
 | Segment | Budget within the 72 h delay |
 | --- | --- |
-| Window close to reveal deadline (key release) | at most 23 h 50 min |
+| Window close to reveal deadline (key release) | 10 min (reveal window) |
 | Opening window | 10 min |
 | Unwind grace (stuck deadline) | 24 h |
 | Carrier margin | 24 h |
-| **Total** | **at most 72 h** |
+| **Total** | **48 h 20 min, within 72 h** |
 
-The 72 h total is the reclaim delay that LockBox freezes at deploy.
+The 72 h reclaim delay that LockBox freezes at deploy bounds the total. The
+timelock deadline is the window close, so the first row is only the reveal
+window.
 
 The unwind grace and the carrier margin are `timelock_config` values
 (`get_unwind_grace_us`, `get_carrier_margin_us`), both 24 h. Any choice must

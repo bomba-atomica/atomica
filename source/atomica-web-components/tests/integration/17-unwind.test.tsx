@@ -35,7 +35,11 @@ import {
   Account,
   Ed25519PrivateKey,
 } from "@aptos-labs/ts-sdk";
-import { setAptosInstance, getStuckDeadlineUs } from "@atomica/sdk/aptos";
+import {
+  setAptosInstance,
+  getStuckDeadlineUs,
+  getWindowSchedule,
+} from "@atomica/sdk/aptos";
 import {
   approveFakeEth,
   currentWindowId as hostWindowId,
@@ -75,7 +79,11 @@ const PAIR_BCS = LAUNCH_PAIR_BCS;
  * so no window can ever claim the lock: it goes home only through reclaim.
  */
 const RECLAIM_PAIR_BCS = new TextEncoder().encode("17-reclaim");
-const DEADLINE_AHEAD_US = 120_000_000n;
+/**
+ * The window is created with at least this long left before its close, so
+ * the collateral and the bid land in it (seconds).
+ */
+const MIN_WINDOW_LEFT_SECS = 240n;
 /** The testnet's shortened unwind grace, microseconds. */
 const UNWIND_GRACE_US = 60_000_000n;
 const LOCK_AMOUNT = ethers.parseEther("1");
@@ -83,8 +91,11 @@ const COLLATERAL = 500n * 10n ** 6n;
 // 0.0001 FakeETH at 2_000_000 USD per FakeETH quotes 200 FakeUSD (`quoteForFill`).
 const BID_PRICE = 2_000_000n;
 const BID_QUANTITY = ethers.parseEther("0.0001");
-/** Reveal window, opening window and grace after the timelock deadline, plus slack. */
-const STALL_TIMEOUT_SECS = 1_800;
+/**
+ * The window close (up to one 900 s test window away), then the reveal
+ * window, opening window and grace after it, plus slack.
+ */
+const STALL_TIMEOUT_SECS = 2_700;
 const ERC20 = ["function balanceOf(address) view returns (uint256)"];
 
 describe.sequential("17: permissionless unwind and reclaim", () => {
@@ -131,7 +142,7 @@ describe.sequential("17: permissionless unwind and reclaim", () => {
     // pre-lock balance is the balance after the lock plus the locked amount.
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
-      deadlineAheadUs: DEADLINE_AHEAD_US,
+      minWindowLeftSecs: MIN_WINDOW_LEFT_SECS,
       lockAmount: LOCK_AMOUNT,
     });
     const sellerPreLock =
@@ -230,7 +241,7 @@ describe.sequential("17: permissionless unwind and reclaim", () => {
 
     expect(await fakeEth.balanceOf(seller)).toBe(sellerPreLock);
     expect(await fakeUsd.balanceOf(bidder)).toBe(bidderPreLock);
-  }, 2_700_000);
+  }, 3_600_000);
 
   it("17-2: anyone reclaims a lock after its deadline and the depositor's balance is restored", async () => {
     // The seller locks 1 FakeETH into the current window, with no Aptos
@@ -248,9 +259,12 @@ describe.sequential("17: permissionless unwind and reclaim", () => {
     )) as bigint;
     await approveFakeEth(sellerProvider, LOCK_AMOUNT);
     const head = await rpc.getBlock("latest");
+    // The window clock is the chain's: the test schedule on the testnet.
+    const schedule = await getWindowSchedule();
     const binding = lockBinding(
-      hostWindowId(BigInt(head!.timestamp)),
+      hostWindowId(BigInt(head!.timestamp), schedule),
       RECLAIM_PAIR_BCS,
+      schedule,
     );
     const lock: LockFields = lockFromReceipt(
       await lockFakeEth(sellerProvider, LOCK_AMOUNT, binding),

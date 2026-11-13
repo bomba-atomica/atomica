@@ -28,7 +28,8 @@ import {DeployLockBox} from "./DeployLockBox.s.sol";
  *        block 4 mint 10 FakeETH [3], block 5 approve [4],
  *        block 6 lock 10 FakeETH, lock nonce 0, into window WINDOW_ID, pair hash keccak256("") [5],
  *        block 7 an unrelated FakeUSD mint [6].
- *      LockBox takes the production window schedule. WINDOW_ID defaults to its `currentWindowId()`
+ *      LockBox takes the production window schedule, or ATOMICA_TEST_WINDOW_SCHEDULE when set
+ *      (`<day_secs>:<offset>[,<offset>...]`, e.g. `900:900`). WINDOW_ID defaults to its `currentWindowId()`
  *      at the chain clock. LockBox computes the deadline, `lockDeadline(WINDOW_ID)`: the window
  *      close plus 72 hours (`eth_proof::eth_lock_deadline`).
  *      `proofs` prints the commitment, the state roots of blocks 6 and 7, and `eth_getProof` of the
@@ -47,7 +48,7 @@ contract LockProofFixture is Script {
         bytes32 atomica = vm.envOr("ATOMICA_ADDRESS", bytes32(uint256(0xcafe)));
         DeployLockBox deployer = new DeployLockBox();
         bytes memory typeTag = deployer.outcomeTypeTag(atomica);
-        (uint64 daySecs, uint64[] memory closeOffsetsSecs) = deployer.productionWindowSchedule();
+        (uint64 daySecs, uint64[] memory closeOffsetsSecs) = windowSchedule(deployer);
         address user = vm.addr(key);
 
         vm.startBroadcast(key);
@@ -70,6 +71,27 @@ contract LockProofFixture is Script {
         console.log("DEADLINE:   ", lockBox.lockDeadline(windowId));
         console.log("LOCK_ID:    ", vm.toString(lockId));
         console.log("STORAGE_KEY:", vm.toString(lockBox.commitmentStorageKey(lockId)));
+    }
+
+    /// @notice The window clock for the LockBox: `ATOMICA_TEST_WINDOW_SCHEDULE`
+    ///         (`<day_secs>:<offset>[,<offset>...]`, e.g. `900:900`) when set, the
+    ///         production schedule otherwise. It must equal the Aptos
+    ///         `eth_proof::get_window_schedule` of the chain the lock is proven on.
+    function windowSchedule(DeployLockBox deployer)
+        internal
+        view
+        returns (uint64 daySecs, uint64[] memory closeOffsetsSecs)
+    {
+        string memory schedule = vm.envOr("ATOMICA_TEST_WINDOW_SCHEDULE", string(""));
+        if (bytes(schedule).length == 0) return deployer.productionWindowSchedule();
+        string[] memory parts = vm.split(schedule, ":");
+        require(parts.length == 2, "ATOMICA_TEST_WINDOW_SCHEDULE is not <day_secs>:<offsets>");
+        daySecs = uint64(vm.parseUint(parts[0]));
+        string[] memory offsets = vm.split(parts[1], ",");
+        closeOffsetsSecs = new uint64[](offsets.length);
+        for (uint256 i = 0; i < offsets.length; i++) {
+            closeOffsetsSecs[i] = uint64(vm.parseUint(offsets[i]));
+        }
     }
 
     /// @notice Print the commitment, the state roots and `eth_getProof` of the commitment slot at

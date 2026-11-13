@@ -1,4 +1,4 @@
-// SCOUT(#236) EDIT: this file becomes the release test; a rename also needs the claim-reclaim-fees file list of test-web.yaml (both tiers) and the exemptions list changed.
+// SCOUT(#236) EDIT: this file becomes the release test; a rename also needs the claim-reclaim file list of test-web.yaml (both tiers) and the exemptions list changed.
 /**
  * @file 11-claim-and-reclaim.test.tsx
  * @description Live ClaimButton tests on one window of the dual-chain testnet.
@@ -44,6 +44,7 @@ import {
   getAuctionState,
   getReceiptStatus,
   RECEIPT_FILLED,
+  TEST_WINDOW_SECS,
   type LiveWindow,
 } from "./helpers/auction-setup";
 // SCOUT(#236) REMOVE: import ReleaseButton instead.
@@ -74,8 +75,13 @@ const BID_PRICE = 2_000_000n;
 const BID_QUANTITY = ethers.parseEther("0.0001");
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
-// SCOUT(#243) EDIT: a 120 second deadline needs the test cap.
-const DEADLINE_AHEAD_US = 120_000_000n;
+/**
+ * The window is created with at least this long left before its close, so
+ * the collateral and the bid land in it (seconds). On the docker Ethereum
+ * chain one lock proof cycle takes about 3 minutes: the seller lock and the
+ * collateral take two.
+ */
+const MIN_WINDOW_LEFT_SECS = 540n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
 const REVEAL_TIMEOUT_SECS = 300;
 
@@ -125,13 +131,14 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
     derivedAddress = (await getDerivedAddress(ethAddress.toLowerCase())).toString();
     await commands.fundAccount(derivedAddress, 500_000_000);
 
-    collateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
+    // The window first: the collateral locks into the window open then.
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
-      deadlineAheadUs: DEADLINE_AHEAD_US,
+      minWindowLeftSecs: MIN_WINDOW_LEFT_SECS,
     });
+    collateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
     await submitBidDirect(aptosClient, fixture.eth.bidder, auction, BID_PRICE, collateral, BID_QUANTITY);
-  }, 1_200_000);
+  }, 2_400_000);
 
   afterAll(async () => {
     await teardownIntegrationFixture();
@@ -178,7 +185,7 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
     async () => {
       await waitForReveal(
         auction.timelockId,
-        Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS,
+        TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS,
       );
       // SCOUT(#228) EDIT: open with open_bids.
       await openWindowBidsDirect(aptosClient, operator, auction);
@@ -236,7 +243,7 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
       // SCOUT(#217) EDIT: this compares a FakeETH balance change with a price.
       expect(balanceAfter - balanceBefore).toBe(BID_PRICE);
     },
-    (Number(DEADLINE_AHEAD_US / 1_000_000n) + REVEAL_TIMEOUT_SECS + 180) * 1000,
+    (TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 180) * 1000,
   );
 
   // ── 11-3: reclaim is not available in the Demo phase ───────────────────────

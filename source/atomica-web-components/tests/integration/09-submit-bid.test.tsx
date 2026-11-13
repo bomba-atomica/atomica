@@ -17,7 +17,8 @@
  *
  * Setup:
  *   - Dual-chain testnet started in beforeAll
- *   - One window created with a real timelock (createLiveWindow)
+ *   - One window created with at least 780 s left (createLiveWindow); its
+ *     timelock, registered by create_auction, closes at the window close
  *   - The bidder locks FakeUSD collateral. Its receipt belongs to the bidder's
  *     Ethereum-derivable account, which alone can claim it
  *     (`lock_receipt::claim`). Bids are sealed with sealBid (the AuctionBidder
@@ -45,11 +46,13 @@ import { auctionBidder } from "./helpers/selectors";
 import {
   createLiveWindow,
   lockBidCollateral,
+  lockBidCollaterals,
   submitBidDirect,
   getWindowStatus,
   getAuctionState,
   getReceiptStatus,
   waitForChainTime,
+  TEST_WINDOW_SECS,
   RECEIPT_ACTIVE,
   RECEIPT_CLAIMED,
   type LiveWindow,
@@ -91,12 +94,16 @@ const BID_QUANTITY = ethers.parseEther("0.0001");
 const WINDOW_SUPPLY = ethers.parseEther("10");
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
-// SCOUT(#243) EDIT: a 360 second deadline needs the test cap.
 /**
- * Bids close 360 s after the window is created: tests 1-4 run before that.
- * Test 4 waits for a certified Ethereum block before it registers its lock.
+ * The window is created with at least 780 s left before its close: tests 1-4
+ * run before that. On the docker Ethereum chain one lock proof cycle takes
+ * about 3 minutes, and the seller lock, the collateral locks and the lock of
+ * test 4 each take one. Test 4 waits for a certified Ethereum block before it
+ * registers its lock.
  */
-const DEADLINE_AHEAD_US = 360_000_000n;
+const MIN_WINDOW_LEFT_SECS = 780n;
+/** Budget past the window close, as in the reveal tests (seconds). */
+const REVEAL_TIMEOUT_SECS = 300;
 const MISSING_WINDOW_ID = 999_999n;
 
 // ---------------------------------------------------------------------------
@@ -161,14 +168,29 @@ describe.sequential("09: Submit Bid on Auction", () => {
     bidderAptosAddress = (await getDerivedAddress(bidderAddress.toLowerCase())).toString();
     await commands.fundAccount(bidderAptosAddress, 500_000_000);
 
-    // Collateral first: the timelock deadline starts counting at createLiveWindow.
-    firstCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
-    spareCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
+    // The window first, then the collateral: the collateral is bound to the
+    // window open when it locks, which is the window just created.
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
-      deadlineAheadUs: DEADLINE_AHEAD_US,
+      minWindowLeftSecs: MIN_WINDOW_LEFT_SECS,
     });
-  }, 1_200_000);
+    // One proof cycle for both collaterals.
+    [firstCollateral, spareCollateral] = await lockBidCollaterals(
+      fixture,
+      aptosClient,
+      operator,
+      PAIR_BCS,
+      2,
+    );
+    // The batch mints exactly what it locks. Test 4 locks more FakeUSD
+    // through the screen, so the bidder needs a balance of its own.
+    const fakeUsd = new ethers.Contract(
+      fixture.eth.contracts.fakeUSD,
+      ["function mint(address to, uint256 amount)"],
+      new ethers.Wallet(fixture.eth.bidder.privateKey, new ethers.JsonRpcProvider(fixture.eth.rpcUrl)),
+    );
+    await (await fakeUsd.mint(bidderAddress, 1_000n * 10n ** 6n)).wait();
+  }, 2_400_000);
 
   afterAll(async () => {
     await teardownIntegrationFixture();
@@ -383,7 +405,6 @@ describe.sequential("09: Submit Bid on Auction", () => {
 
   // ── Test 5: bids close at the timelock deadline ───────────────────────────
 
-  // SCOUT(#243) EDIT: this waits for auction.deadlineUs, which becomes the window close or the test cap.
   it("rejects a bid after the timelock deadline and leaves its receipt active", async () => {
     const lateCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
     await waitForChainTime(aptosClient, auction.deadlineUs);
@@ -409,6 +430,6 @@ describe.sequential("09: Submit Bid on Auction", () => {
     // The direct bid of test 1 and the screen bid of test 4.
     expect(state.bidCount).toBe(2n);
     expect(state.settled).toBe(false);
-  }, 900_000);
+  }, (TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 180) * 1000);
 
 });

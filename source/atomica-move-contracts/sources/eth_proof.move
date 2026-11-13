@@ -40,6 +40,7 @@ module atomica::eth_proof {
     use std::string;
     use aptos_std::aptos_hash::keccak256;
     use aptos_framework::account_abstraction;
+    use aptos_framework::chain_id;
     use aptos_framework::ethereum_headers;
     use aptos_framework::function_info;
     use atomica::mpt;
@@ -65,13 +66,21 @@ module atomica::eth_proof {
     const E_COMMITMENT_MISMATCH: u64 = 14;
     /// A pair hash must be 32 bytes
     const E_INVALID_PAIR_HASH: u64 = 15;
+    /// `set_window_schedule` runs only on a test chain (chain id 4)
+    const E_NOT_TEST_CHAIN: u64 = 16;
+    /// A window schedule is stored once: a change would shift every window id
+    const E_SCHEDULE_ALREADY_SET: u64 = 17;
+    /// A schedule needs one or two strictly increasing close offsets, the
+    /// first above 0 and the last at most `day_secs` (LockBox `InvalidWindowSchedule`)
+    const E_INVALID_SCHEDULE: u64 = 18;
 
     /// Storage slot of `LockBox.commitments` (LockBox.sol storage layout).
     const LOCK_COMMITMENTS_SLOT: u8 = 0;
 
-    // Window id formula: two closes a day, at 07:45 and 16:15 UTC
-    // (docs/specifications/auction-timing.md). `auction::current_window_id`
-    // reads it through `window_id_at`, because a Move constant is private.
+    // Production window clock: two closes a day, at 07:45 and 16:15 UTC
+    // (docs/specifications/auction-timing.md). It is in force while no
+    // `WindowSchedule` is stored. `auction::current_window_id` reads the clock
+    // through `window_id_at`, because a Move constant is private.
     /// Seconds per day.
     const WINDOW_DAY_SECS: u64 = 86400;
     /// Second of the day of the morning close, 07:45:00 UTC.
@@ -83,6 +92,9 @@ module atomica::eth_proof {
     /// must end before it (docs/specifications/auction-timing.md). LockBox
     /// freezes the same value as `RECLAIM_DELAY`.
     const ETH_RECLAIM_DELAY_SECS: u64 = 259200;
+    /// Chain id of the docker test chain, the only chain that may store a
+    /// `WindowSchedule`.
+    const TEST_CHAIN_ID: u8 = 4;
 
     /// The pinned Ethereum side: the LockBox, the token behind each asset, and
     /// the SIWE domain of Ethereum-derivable accounts that own receipts.
@@ -91,6 +103,15 @@ module atomica::eth_proof {
         fake_eth_token: vector<u8>,
         fake_usd_token: vector<u8>,
         siwe_domain: vector<u8>,
+    }
+
+    /// A test chain's window clock, stored at `@atomica` by
+    /// `set_window_schedule`: each day of `day_secs` seconds holds one window
+    /// close at each of `close_offsets_secs`. While none is stored the
+    /// production clock applies (86400 s, closes at 27900 and 58500).
+    struct WindowSchedule has key {
+        day_secs: u64,
+        close_offsets_secs: vector<u64>,
     }
 
     // ==================== Admin ====================
@@ -114,7 +135,44 @@ module atomica::eth_proof {
         move_to(admin, EthereumConfig { lockbox, fake_eth_token, fake_usd_token, siwe_domain });
     }
 
+    /// Store a test window clock (for example `900, [900]`: one close every 15
+    /// minutes), so live tests reach a window close in minutes. Only `@atomica`
+    /// may call it (E_NOT_ADMIN), only on chain id 4 (E_NOT_TEST_CHAIN), and
+    /// only once (E_SCHEDULE_ALREADY_SET), because a change would shift every
+    /// window id. The offsets must be one or two, strictly increasing, the
+    /// first above 0 and the last at most `day_secs` (E_INVALID_SCHEDULE): the
+    /// rules of the LockBox constructor, so any schedule Aptos accepts LockBox
+    /// accepts too. A production chain keeps the 07:45 and 16:15 UTC closes.
+    public entry fun set_window_schedule(
+        admin: &signer,
+        day_secs: u64,
+        close_offsets_secs: vector<u64>,
+    ) {
+        assert!(signer::address_of(admin) == @atomica, E_NOT_ADMIN);
+        assert!(chain_id::get() == TEST_CHAIN_ID, E_NOT_TEST_CHAIN);
+        assert!(!exists<WindowSchedule>(@atomica), E_SCHEDULE_ALREADY_SET);
+        let n = vector::length(&close_offsets_secs);
+        assert!(n == 1 || n == 2, E_INVALID_SCHEDULE);
+        let first = *vector::borrow(&close_offsets_secs, 0);
+        let last = *vector::borrow(&close_offsets_secs, n - 1);
+        assert!(first > 0 && last <= day_secs, E_INVALID_SCHEDULE);
+        assert!(n == 1 || first < last, E_INVALID_SCHEDULE);
+        move_to(admin, WindowSchedule { day_secs, close_offsets_secs });
+    }
+
     // ==================== Views ====================
+
+    #[view]
+    /// The window clock in force: `(day_secs, close_offsets_secs)`. The stored
+    /// test schedule, or the production one, `(86400, [27900, 58500])`.
+    public fun get_window_schedule(): (u64, vector<u64>) acquires WindowSchedule {
+        if (exists<WindowSchedule>(@atomica)) {
+            let schedule = borrow_global<WindowSchedule>(@atomica);
+            (schedule.day_secs, schedule.close_offsets_secs)
+        } else {
+            (WINDOW_DAY_SECS, vector[WINDOW_MORNING_CLOSE_SECS, WINDOW_AFTERNOON_CLOSE_SECS])
+        }
+    }
 
     #[view]
     /// Whether the validators certified a header for `block_number`.
@@ -233,35 +291,44 @@ module atomica::eth_proof {
         keccak256(data)
     }
 
-    /// Window id at unix second `secs`. It changes exactly at 07:45:00 and
-    /// 16:15:00 UTC:
+    /// Window id at unix second `secs` on the clock of `get_window_schedule`.
+    /// With `n` closes a day:
     ///
-    ///   day = secs / 86400, t = secs % 86400
-    ///   id  = day * 2 + (t >= 27900 ? 1 : 0) + (t >= 58500 ? 1 : 0)
+    ///   day = secs / day_secs, t = secs % day_secs
+    ///   id  = day * n + (number of close offsets <= t)
+    ///
+    /// On the production clock it changes exactly at 07:45:00 and 16:15:00 UTC:
+    /// `day * 2 + (t >= 27900 ? 1 : 0) + (t >= 58500 ? 1 : 0)`.
     ///
     /// @see docs/architecture/v0-architecture.md §2.2
-    public fun window_id_at(secs: u64): u64 {
-        let day = secs / WINDOW_DAY_SECS;
-        let t = secs % WINDOW_DAY_SECS;
-        let id = day * 2;
-        if (t >= WINDOW_MORNING_CLOSE_SECS) { id = id + 1 };
-        if (t >= WINDOW_AFTERNOON_CLOSE_SECS) { id = id + 1 };
+    public fun window_id_at(secs: u64): u64 acquires WindowSchedule {
+        let (day_secs, offsets) = get_window_schedule();
+        let n = vector::length(&offsets);
+        let t = secs % day_secs;
+        let id = (secs / day_secs) * n;
+        let i = 0;
+        while (i < n) {
+            if (t >= *vector::borrow(&offsets, i)) { id = id + 1 };
+            i = i + 1;
+        };
         id
     }
 
     /// Unix second at which `window_id` stops being `auction::current_window_id`:
-    /// (w / 2) * 86400 + (w even ? 27900 : 58500). An even window closes at
-    /// 07:45 UTC, an odd window at 16:15 UTC. It is the first second of `w + 1`.
-    public fun window_close_secs(window_id: u64): u64 {
-        let day_start = (window_id / 2) * WINDOW_DAY_SECS;
-        if (window_id % 2 == 0) { day_start + WINDOW_MORNING_CLOSE_SECS } else { day_start + WINDOW_AFTERNOON_CLOSE_SECS }
+    /// with `n` closes a day, `(w / n) * day_secs + close_offsets_secs[w % n]`.
+    /// On the production clock an even window closes at 07:45 UTC and an odd
+    /// window at 16:15 UTC. It is the first second of `w + 1`.
+    public fun window_close_secs(window_id: u64): u64 acquires WindowSchedule {
+        let (day_secs, offsets) = get_window_schedule();
+        let n = vector::length(&offsets);
+        (window_id / n) * day_secs + *vector::borrow(&offsets, window_id % n)
     }
 
     /// The Ethereum lock deadline of every lock of window `window_id`: window
     /// close plus ETH_RECLAIM_DELAY_SECS. A pure function of the window id,
     /// because a lock is made before its window or timelock exists. Equals
     /// `LockBox.lockDeadline`, which computes it for every lock.
-    public fun eth_lock_deadline(window_id: u64): u64 {
+    public fun eth_lock_deadline(window_id: u64): u64 acquires WindowSchedule {
         window_close_secs(window_id) + ETH_RECLAIM_DELAY_SECS
     }
 
@@ -290,7 +357,7 @@ module atomica::eth_proof {
         pair_hash: vector<u8>,
         account_proof: vector<vector<u8>>,
         storage_proof: vector<vector<u8>>,
-    ) acquires EthereumConfig {
+    ) acquires EthereumConfig, WindowSchedule {
         assert!(amount > 0, E_EMPTY_LOCK);
         let expected = lock_commitment(user, token, amount, window_id, pair_hash, eth_lock_deadline(window_id));
         assert!(vector::length(&account_proof) > 0, E_INVALID_PROOF);

@@ -83,7 +83,6 @@ All auctions within a window share the same `auction_window_id`. A day lasts
 ### 2.2 Window ID formula
 
 <!-- SCOUT(#242) DOC: last sentence of 2.2 is false: submit_bid never reads the clock window id; it checks the window timelock status and deadline, and create_auction accepts the current and the next window id. -->
-<!-- SCOUT(#243) DOC: say here that the window timelock deadline is the window close, which is what binds a bid to the window clock. -->
 
 ```
 day               = unix_seconds / 86400          // integer division
@@ -115,6 +114,28 @@ public fun window_id_at(secs: u64): u64 {
 The SDK mirror is `currentWindowId` and `windowCloseSecs` in
 `source/atomica-sdk/src/ethereum/lock-binding.ts`.
 
+The formula above is the production window schedule. `eth_proof` reads the
+schedule in force from `WindowSchedule { day_secs, close_offsets_secs }` at
+`@atomica`; while none is stored it is `day_secs = 86400`,
+`close_offsets_secs = [27900, 58500]`. With `n` closes a day,
+`close(w) = (w / n) * day_secs + close_offsets_secs[w % n]`, and the window id
+is `day * n` plus the number of offsets at or before `t`. The view
+`eth_proof::get_window_schedule` returns it. `eth_proof::set_window_schedule`
+stores another schedule only on a test chain: the signer must be `@atomica`
+(`E_NOT_ADMIN`), the chain id must be 4 (`E_NOT_TEST_CHAIN`), no schedule may be
+stored yet (`E_SCHEDULE_ALREADY_SET`), and there must be one or two strictly
+increasing offsets, the first above 0 and the last at most `day_secs`
+(`E_INVALID_SCHEDULE`). A production chain therefore always closes at 07:45 and
+16:15 UTC. The docker testnet stores `900:900`, one close every 15 minutes, when
+`ATOMICA_TEST_WINDOW_SCHEDULE` is set. The SDK functions take the same schedule
+as an optional argument.
+
+The window timelock deadline is the window close. The first `create_auction`
+of a window id registers the timelock with deadline `close(w) * 1_000_000`
+microseconds (section 2.3). `submit_bid` accepts a bid only while that timelock
+is `Pending` and strictly before its deadline, which binds every bid to the
+window clock.
+
 The window ID monotonically increases. A bid is only accepted when the current
 window ID matches the auction's registered window ID.
 
@@ -122,11 +143,28 @@ window ID matches the auction's registered window ID.
 
 <!-- SCOUT(#242) DOC: WindowState as built also holds timelock_id, min_prices, revealed_prices, reveal_final, refunded and bid_results, bids is vector<SealedBid>, and sellers contribute supply, not bids. -->
 <!-- SCOUT(#218) DOC: state the cap on seller locks per window and the minimum seller lock size. -->
-<!-- SCOUT(#243) DOC: state that create_auction registers the window timelock itself, one per window id, and takes no timelock_id. -->
 
 The registry is keyed by `(auction_window_id, pair)`, not by seller address.
 Multiple sellers offering the same pair in the same window contribute bids to
 the same clearing pool.
+
+`create_auction(seller, window_id, pair_bcs, lock_id)` takes no timelock id.
+The package holds a timelock registrar: a named object at
+`object::create_object_address(&@atomica, b"atomica/timelock-registrar")`
+(view `auction::timelock_registrar_address`) whose `ExtendRef` only the
+`auction` module can sign with. Genesis names that address as the framework's
+`timelock_registrar`, so `0x1::ibe_config` lets no other signer register a
+timelock (`E_NOT_REGISTRAR`, 17). The first `create_auction` of a window id
+registers one timelock through `ibe_config::register_timelock_with_id`, with
+deadline `eth_proof::window_close_secs(window_id) * 1_000_000`, and stores its
+id in `TimelockRegistrar.window_timelocks`. Every later seller of that window
+id joins the stored timelock, for any pair. A window id gets one timelock, ever.
+When it is no longer `Pending` or its deadline has passed, a new seller aborts
+and no second timelock is registered. The framework still checks the
+registration: it aborts when the epoch has no key (`E_IBE_NOT_READY`) or when
+the close is later than 15 minutes before the epoch end
+(`E_DEADLINE_AFTER_EPOCH_END`, 9). The views `auction::window_timelock` and
+`auction::window_deadline_us` return the id and the deadline of a window id.
 
 A window can exist only for a pair on the allowlist. `PairAllowlist` at
 `@atomica` maps pair bytes to a `Pair`, and `init_module` seeds it with the

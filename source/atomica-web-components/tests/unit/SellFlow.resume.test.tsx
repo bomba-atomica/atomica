@@ -47,12 +47,15 @@ vi.mock("@atomica/sdk/ethereum", () => ({
 vi.mock("@atomica/sdk/ethereum/proofs", () => ({
   generateLockedBalanceProof: vi.fn(),
 }));
-// SCOUT(#243) REMOVE: the registerTimelock mock.
 vi.mock("@atomica/sdk/aptos", () => ({
   assertSiweDomain: vi.fn().mockResolvedValue(undefined),
   getRegisterLockPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
-  registerTimelock: vi.fn(),
+  getWindowDeadlineUs: vi.fn(async () => 1_794_441_900_000_000n),
+  getWindowSchedule: vi.fn(async () => ({
+    daySecs: 86_400n,
+    closeOffsetsSecs: [27_900n, 58_500n],
+  })),
   waitForCertifiedBlock: vi.fn(async (minBlock: number) => minBlock),
   aptos: { mock: "aptos-client" },
 }));
@@ -244,7 +247,6 @@ describe("SellFlow localStorage resume", () => {
     );
   });
 
-  // SCOUT(#243) EDIT: still two Aptos transactions (register lock, create auction) and no timelock registration.
   it("auto-progresses proof → submit proof → create auction → monitor on successful Aptos transactions", async () => {
     const proof = {
       blockNumber: 100,
@@ -280,7 +282,8 @@ describe("SellFlow localStorage resume", () => {
     await waitFor(() => {
       expect(screen.getByText(/Locked amount/i)).toBeTruthy();
     });
-    // One Aptos tx registers the lock, the second creates the auction.
+    // One Aptos tx registers the lock, the second creates the auction. There
+    // is no timelock registration: create_auction registers it.
     expect(submitNativeTransaction).toHaveBeenCalledTimes(2);
     const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") as {
       step: string;

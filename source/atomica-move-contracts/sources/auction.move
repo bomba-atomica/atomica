@@ -7,8 +7,9 @@
 ///
 /// ## Bid lifecycle
 ///
-/// 1. `create_auction` registers sellers' supply for a `(window_id, pair)` window that is
-///    bound to a registered timelock (`timelock_id`).
+/// 1. `create_auction` registers sellers' supply for a `(window_id, pair)` window. The
+///    first `create_auction` of a window id registers that window id's one timelock, whose
+///    deadline is the window close; every later seller of the window id, of any pair, joins it.
 /// 2. `submit_bid` takes a V2 bid ciphertext (`BCS(vk, U, nonce, C, sig)`), builds the
 ///    associated data on chain (tag, chain id, epoch, timelock id, auction id, bidder,
 ///    deadline) and aborts unless `ibe::verify_bid_ct(ct, ad)` accepts. Bids are accepted
@@ -50,6 +51,7 @@ module atomica::auction {
     use std::vector;
     use std::hash::sha3_256;
     use aptos_framework::event;
+    use aptos_framework::object;
     use aptos_framework::timestamp;
     use aptos_framework::table::{Self, Table};
     use aptos_std::bcs;
@@ -85,9 +87,8 @@ module atomica::auction {
     const E_WINDOW_ALREADY_SETTLED: u64 = 11;
 
     /// Scout stub sentinel. These stubs abort with it until their issues build them:
-    /// `get_window_limits` (caps, 218), `open_bids` (ciphertext opening, 228), and
-    /// `timelock_registrar_address`, `window_timelock` and `window_deadline_us`
-    /// (timelock registration, 243). The issue that builds the last stub deletes it.
+    /// `get_window_limits` (caps, 218) and `open_bids` (ciphertext opening, 228). The issue
+    /// that builds the last stub deletes it.
     const E_NOT_IMPLEMENTED: u64 = 99;
 
     // New abort codes. The unwind pull request (213) took 32 to 36, so these start at 37.
@@ -146,12 +147,9 @@ module atomica::auction {
     const E_INVALID_COMMITMENT: u64 = 26;
     /// The timelock is `Expired`: the key will never be released, so openings are impossible.
     const E_TIMELOCK_EXPIRED: u64 = 27;
-    // SCOUT(#243) REMOVE: `E_TIMELOCK_NOT_REGISTERED` cannot be raised once no caller supplies a timelock id; the issue text does not list it.
-    /// `create_auction` got a `timelock_id` that `ibe_config::register_timelock` never issued.
-    const E_TIMELOCK_NOT_REGISTERED: u64 = 28;
-    /// `create_auction` got a timelock registered in an earlier epoch.
+    /// The window id's timelock was registered in an earlier epoch.
     const E_TIMELOCK_WRONG_EPOCH: u64 = 29;
-    /// `create_auction` got a timelock whose deadline has passed, so the window could take no bids.
+    /// The window id's timelock deadline has passed, so the window could take no bids.
     const E_TIMELOCK_DEADLINE_PASSED: u64 = 30;
     /// `settle` ran before the timelock deadline.
     const E_DEADLINE_NOT_PASSED: u64 = 31;
@@ -189,8 +187,9 @@ module atomica::auction {
     // SCOUT(#218) ADD: minimum bid collateral in FakeUSD base units. The value waits for the owner (proposed: 10 FakeUSD).
     /// Minimum collateral of one bid, in FakeUSD base units (6 decimals).
     const MIN_BID_COLLATERAL: u256 = 10_000_000;
-    // SCOUT(#243) ADD: seed of the registrar's named object under `@atomica`. The SDK export and the genesis `timelock_registrar` field derive the same address from it.
-    /// Seed of the timelock registrar object.
+    /// Seed of the timelock registrar object under `@atomica`. The SDK
+    /// (`TIMELOCK_REGISTRAR_SEED`) and the docker genesis `timelock_registrar` field derive
+    /// the same address from it.
     const TIMELOCK_REGISTRAR_SEED: vector<u8> = b"atomica/timelock-registrar";
     // SCOUT(#228) REMOVE: `OPENING_WINDOW_US`; the stuck deadline of the unwind pull request (213) drops this term.
     /// Time after the registry's `reveal_expiry_us` during which unopened bids can still be opened.
@@ -223,10 +222,12 @@ module atomica::auction {
         pairs: Table<vector<u8>, Pair>,
     }
 
-    // SCOUT(#243) ADD: the package's timelock registrar: a named object under `@atomica` that only this module signs for.
-    /// The registrar object's `ExtendRef` and the timelock id registered for each window id.
+    /// The package's timelock registrar, stored at `@atomica`: the `ExtendRef` of a named
+    /// object under `@atomica` that only this module signs for, and the timelock id it
+    /// registered for each window id. Genesis names the object's address as the chain's one
+    /// timelock registrar (`ibe_config::timelock_registrar`).
     struct TimelockRegistrar has key {
-        extend_ref:       aptos_framework::object::ExtendRef,
+        extend_ref:       object::ExtendRef,
         window_timelocks: Table<u64, u64>,
     }
 
@@ -463,17 +464,10 @@ module atomica::auction {
         key
     }
 
-    /// Aborts unless `timelock_id` can still take bids.
-    ///
-    /// Timelock ids are issued sequentially from 0 and never removed, so an id below
-    /// `get_next_timelock_id` is registered. A `Pending` timelock of an earlier epoch already
-    /// reads as `Expired`; the explicit epoch check gives that case its own abort code.
-    // SCOUT(#243) EDIT: `assert_timelock_open` checks the window id's stored timelock for a joining seller; the "is registered" check goes away.
+    /// Aborts unless `timelock_id` can still take bids: current epoch, `Pending`, deadline in
+    /// the future. A `Pending` timelock of an earlier epoch already reads as `Expired`; the
+    /// explicit epoch check gives that case its own abort code.
     fun assert_timelock_open(timelock_id: u64) {
-        assert!(
-            ibe_config::is_initialized() && timelock_id < ibe_config::get_next_timelock_id(),
-            E_TIMELOCK_NOT_REGISTERED
-        );
         assert!(
             timelock::get_timelock_epoch(timelock_id) == reconfiguration::current_epoch(),
             E_TIMELOCK_WRONG_EPOCH
@@ -482,17 +476,42 @@ module atomica::auction {
         assert!(timestamp::now_microseconds() < timelock::get_deadline(timelock_id), E_TIMELOCK_DEADLINE_PASSED);
     }
 
+    /// The timelock of `window_id`. The first call for a window id registers it with the
+    /// registrar signer through `ibe_config::register_timelock_with_id`, with the window close
+    /// as its deadline, and stores its id. Later calls return the stored id. The framework
+    /// aborts the registration unless the package is the chain's registrar (`E_NOT_REGISTRAR`),
+    /// the epoch key is ready, and the close is at least 15 minutes before the epoch end.
+    fun window_timelock_or_register(window_id: u64): u64 acquires TimelockRegistrar {
+        let registrar = borrow_global_mut<TimelockRegistrar>(@atomica);
+        if (table::contains(&registrar.window_timelocks, window_id)) {
+            let timelock_id = *table::borrow(&registrar.window_timelocks, window_id);
+            assert_timelock_open(timelock_id);
+            timelock_id
+        } else {
+            let registrar_signer = object::generate_signer_for_extending(&registrar.extend_ref);
+            let deadline_us = eth_proof::window_close_secs(window_id) * 1_000_000;
+            let timelock_id = ibe_config::register_timelock_with_id(&registrar_signer, deadline_us);
+            table::add(&mut registrar.window_timelocks, window_id, timelock_id);
+            timelock_id
+        }
+    }
+
     // ===================== Entry Functions =====================
 
     /// Publish the global AuctionRegistry at @atomica when the package is
     /// published, so the first `create_auction` may come from any seller.
-    /// Also publish the `PairAllowlist`, seeded with the launch pair.
-    // SCOUT(#243) EDIT: `init_module` also creates the registrar object and stores `TimelockRegistrar`.
+    /// Also publish the `PairAllowlist`, seeded with the launch pair, and the
+    /// `TimelockRegistrar`, whose named object registers every window timelock.
     fun init_module(atomica: &signer) {
         move_to(atomica, AuctionRegistry { windows: table::new() });
         let pairs = table::new();
         table::add(&mut pairs, launch_pair_bcs(), launch_pair());
         move_to(atomica, PairAllowlist { pairs });
+        let constructor_ref = object::create_named_object(atomica, TIMELOCK_REGISTRAR_SEED);
+        move_to(atomica, TimelockRegistrar {
+            extend_ref:       object::generate_extend_ref(&constructor_ref),
+            window_timelocks: table::new(),
+        });
     }
 
     /// The launch pair: FakeETH against FakeUSD, both locked on Ethereum. The token names
@@ -534,6 +553,16 @@ module atomica::auction {
     /// Pair: `pair_bcs` must be on the allowlist (E_PAIR_NOT_ALLOWED). A new window stores
     /// the `Pair` the allowlist holds for those bytes.
     ///
+    /// Timelock: one per window id, shared by every pair. The first `create_auction` of a
+    /// window id registers it with the package's registrar, with deadline
+    /// `eth_proof::window_close_secs(window_id)` in microseconds; no caller argument changes
+    /// it. The framework aborts that registration with its own code when the chain's stored
+    /// registrar is not the package (`E_NOT_REGISTRAR`, 17), when the epoch has no key, or
+    /// when the close is later than 15 minutes before the epoch end. A later seller joins the
+    /// stored timelock, which must still be in the current epoch (E_TIMELOCK_WRONG_EPOCH),
+    /// `Pending` (E_TIMELOCK_NOT_PENDING) and before its deadline
+    /// (E_TIMELOCK_DEADLINE_PASSED); no second timelock is registered for the window id.
+    ///
     /// Timing: the timelock's stuck deadline plus the carrier margin must be before
     /// `eth_lock_deadline(window_id)` (E_STUCK_AFTER_LOCK_DEADLINE). The seller lock must be
     /// bound to `(window_id, pair_hash(pair_bcs))` (lock_receipt E_WRONG_BINDING).
@@ -549,24 +578,16 @@ module atomica::auction {
     /// to `total_supply`, and appends the `lock_id` to `lock_ids`. There is no
     /// reserve price: clearing alone sets the price.
     ///
-    /// `timelock_id` is the on-chain timelock registered via
-    /// `ibe_config::register_timelock` that controls IBE key release for this
-    /// window. It must be registered (E_TIMELOCK_NOT_REGISTERED), in the current
-    /// epoch (E_TIMELOCK_WRONG_EPOCH), `Pending` (E_TIMELOCK_NOT_PENDING), and its
-    /// deadline must be in the future (E_TIMELOCK_DEADLINE_PASSED).
-    ///
-    /// Arguments after the signer: (window_id, pair_bcs, lock_id, timelock_id).
+    /// Arguments after the signer: (window_id, pair_bcs, lock_id).
     ///
     /// @see docs/architecture/v0-architecture.md §2.3
     // SCOUT(#218) EDIT: `create_auction` aborts when the window holds `MAX_SELLER_LOCKS_PER_WINDOW` locks, or when the claimed lock is below `MIN_SELLER_LOCK_AMOUNT`.
-    // SCOUT(#243) EDIT: `create_auction` drops `timelock_id`; the first call for a window id registers its timelock with deadline `eth_proof::window_close_secs(window_id)`, later calls join it.
     public entry fun create_auction(
-        seller:      &signer,
-        window_id:   u64,
-        pair_bcs:    vector<u8>,
-        lock_id:     vector<u8>,
-        timelock_id: u64,
-    ) acquires AuctionRegistry, PairAllowlist {
+        seller:    &signer,
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+        lock_id:   vector<u8>,
+    ) acquires AuctionRegistry, PairAllowlist, TimelockRegistrar {
         // 1. Validate window_id: reject stale (< current) and far-future (> current + 1).
         let current = current_window_id();
         assert!(window_id >= current, E_STALE_WINDOW_ID);
@@ -576,10 +597,10 @@ module atomica::auction {
         assert!(is_pair_allowed(pair_bcs), E_PAIR_NOT_ALLOWED);
         let listed_pair = *table::borrow(&borrow_global<PairAllowlist>(@atomica).pairs, pair_bcs);
 
-        // 1b. The timelock must be able to take bids: registered, current epoch, `Pending`,
-        //     deadline in the future. Otherwise the seller lock would back a window that can
-        //     never clear.
-        assert_timelock_open(timelock_id);
+        // 1b. The window id's timelock: registered here on first use, with the window close
+        //     as deadline, or the stored one, which must still take bids. Otherwise the seller
+        //     lock would back a window that can never clear.
+        let timelock_id = window_timelock_or_register(window_id);
 
         // 1c. Timing order: the stuck deadline plus the carrier margin ends before the
         //     Ethereum lock deadline, so unwind and outcome carrying finish before reclaim.
@@ -1653,22 +1674,30 @@ module atomica::auction {
         bcs::to_bytes(&launch_pair())
     }
 
-    // SCOUT(#243) ADD: the registrar's address, `object::create_object_address(&@atomica, TIMELOCK_REGISTRAR_SEED)`.
     #[view]
+    /// The package's timelock registrar address,
+    /// `object::create_object_address(&@atomica, TIMELOCK_REGISTRAR_SEED)`. Genesis names it
+    /// as the chain's registrar (`ibe_config::timelock_registrar`).
     public fun timelock_registrar_address(): address {
-        abort E_NOT_IMPLEMENTED
+        object::create_object_address(&@atomica, TIMELOCK_REGISTRAR_SEED)
     }
 
-    // SCOUT(#243) ADD: the timelock id registered for a window id.
     #[view]
-    public fun window_timelock(_window_id: u64): u64 {
-        abort E_NOT_IMPLEMENTED
+    /// The timelock id registered for `window_id`, shared by every pair of the window id.
+    /// Aborts with E_AUCTION_NOT_FOUND until a `create_auction` of the window id registered it:
+    /// until then no window of that id exists, for any pair.
+    public fun window_timelock(window_id: u64): u64 acquires TimelockRegistrar {
+        assert!(exists<TimelockRegistrar>(@atomica), E_AUCTION_NOT_FOUND);
+        let timelocks = &borrow_global<TimelockRegistrar>(@atomica).window_timelocks;
+        assert!(table::contains(timelocks, window_id), E_AUCTION_NOT_FOUND);
+        *table::borrow(timelocks, window_id)
     }
 
-    // SCOUT(#243) ADD: the timelock deadline of a window id, in microseconds.
     #[view]
-    public fun window_deadline_us(_window_id: u64): u64 {
-        abort E_NOT_IMPLEMENTED
+    /// The timelock deadline of `window_id` in microseconds: its window close. Bids are
+    /// accepted strictly before it. Aborts like `window_timelock`.
+    public fun window_deadline_us(window_id: u64): u64 acquires TimelockRegistrar {
+        timelock::get_deadline(window_timelock(window_id))
     }
 
     // Return (clearing_price, total_filled) after settlement. `total_filled` is the
@@ -1892,7 +1921,7 @@ module atomica::auction {
         total_supply:   u256,
         settled:        bool,
         clearing_price: u64,
-    ) acquires AuctionRegistry, PairAllowlist {
+    ) acquires AuctionRegistry, PairAllowlist, TimelockRegistrar {
         test_insert_window_with_timelock(atomica, window_id, pair_bcs, total_supply, settled, clearing_price, 0)
     }
 
@@ -1902,7 +1931,9 @@ module atomica::auction {
     #[test_only]
     // It bypasses the allowlist check: it stores the listed `Pair` when `pair_bcs` is listed,
     // and the launch `Pair` otherwise.
-    // SCOUT(#243) EDIT: `test_insert_window_with_timelock` must also record the window id's timelock in `TimelockRegistrar`, or a later `create_auction` registers a second one.
+    // It also records `timelock_id` as the window id's timelock in `TimelockRegistrar`, when
+    // the registrar exists and holds none for the window id yet, so a later `create_auction`
+    // joins it.
     public fun test_insert_window_with_timelock(
         atomica:        &signer,
         window_id:      u64,
@@ -1911,8 +1942,14 @@ module atomica::auction {
         settled:        bool,
         clearing_price: u64,
         timelock_id:    u64,
-    ) acquires AuctionRegistry, PairAllowlist {
+    ) acquires AuctionRegistry, PairAllowlist, TimelockRegistrar {
         let addr = signer::address_of(atomica);
+        if (exists<TimelockRegistrar>(@atomica)) {
+            let timelocks = &mut borrow_global_mut<TimelockRegistrar>(@atomica).window_timelocks;
+            if (!table::contains(timelocks, window_id)) {
+                table::add(timelocks, window_id, timelock_id);
+            };
+        };
         if (!exists<AuctionRegistry>(addr)) {
             move_to(atomica, AuctionRegistry {
                 windows: table::new(),
