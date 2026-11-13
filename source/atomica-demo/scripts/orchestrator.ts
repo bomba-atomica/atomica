@@ -1,5 +1,4 @@
-// SCOUT(#239) EDIT: import DockerTestnet from @atomica/aptos-docker-testnet; @atomica/docker-testnet is not a dependency of this package, so the script fails at import today.
-import { DockerTestnet } from "@atomica/docker-testnet";
+import { DockerTestnet } from "@atomica/aptos-docker-testnet";
 import { spawn, execSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";

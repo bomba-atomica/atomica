@@ -211,27 +211,6 @@ describe("End-to-End Verification", () => {
         expect(result.error).toBeDefined();
         // expect(result.error).toContain("root");
     });
-
-    // SCOUT(#239) REMOVE: named for a beacon check it never makes; the case above it already verifies against the block state root.
-    test("should verify proof matches beacon block execution payload", async () => {
-        // This test verifies the full chain:
-        // Beacon Block -> Execution Payload -> State Root -> Account Proof
-
-        // For now, just verify against execution layer
-        // Use 'latest' instead of 'finalized' as local testnet may not have finalized blocks yet
-        const proof = await fetchProof(rpcUrl, testAddress, [], "latest");
-        const block = await fetchBlock(rpcUrl, "latest");
-
-        const result = await verifyAccountProof(proof.accountProof, block.stateRoot, testAddress);
-
-        expect(result.valid).toBe(true);
-
-        // TODO: Once beacon API integration is added, verify:
-        // 1. Fetch beacon block at same height
-        // 2. Extract execution_payload.state_root
-        // 3. Verify it matches block.stateRoot
-        // 4. Verify account proof against that state root
-    });
 });
 
 describe("Transaction & Receipt Verification", () => {

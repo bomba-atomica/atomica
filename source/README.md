@@ -7,10 +7,9 @@ This directory contains Atomica's implementation workspaces.
 - `atomica-web/`: Main web app/demo and cross-chain integration tests.
 - `evm-contracts/`: EVM contracts, deployment helpers, and test orchestration.
 - `state-proofs/`: State-proof tooling and TypeScript integration utilities.
-- `atomica-zkp/`: ZKP-related Solidity/data artifacts.
 - `docker-testnet/`: Local testnet infra and SDK for development/testing.
 - `atomica-move-contracts/`: Move contract workspace.
-- `test-utils/`: Shared testing helpers.
+- `test-utils/`: Browser test helpers (`browser-commands.ts`, `browser-utils/`) imported by `atomica-web-components` tests.
 - `web/`: Additional web-facing module(s).
 
 ## Where to Start

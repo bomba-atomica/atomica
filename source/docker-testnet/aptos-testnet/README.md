@@ -64,13 +64,11 @@ const provider = wallet.getProvider();
 
 ## Architecture
 
-<!-- SCOUT(#239) DOC: the list below names ensureFramework.ts, a dead file the issue text misses. -->
 <!-- SCOUT(#219) DOC: add outcome-carrier.ts and eth-derivable-account.ts to the list below, and the round-trip test to Test coverage. -->
 
 **Node.js Side** (Test Infrastructure):
 - `localnet.ts`: Docker container management
 - `genesis.ts`: Genesis block creation
-- `ensureFramework.ts`: Contract deployment
 - `probe.ts`: Network health checks
 
 **Browser Side** (Test Utilities):

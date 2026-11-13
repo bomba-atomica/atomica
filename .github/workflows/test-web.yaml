@@ -337,7 +337,7 @@ jobs:
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
     runs-on: ubuntu-latest
     # SCOUT(#219) EDIT: this job took 20.8 of its 45 minutes on main (run 43093915182); the round-trip file adds a dual-chain boot, three locks and a timelock reveal, so the limit needs review.
-    # SCOUT(#239) EDIT: the moved timelock-genesis file adds one more testnet boot and an epoch wait to this job's 45 minutes.
+    # test/timelock-genesis.test.ts adds one 4-validator boot and an epoch 2 wait (a few minutes); the job ran 20-21 minutes on main before it, so 45 keeps ample headroom.
     timeout-minutes: 45
     env:
       CI_CLASS: system-correctness
@@ -434,7 +434,6 @@ jobs:
       # ── Aptos Testnet SDK Tests ────────────────────────────────────────────
       # SCOUT(#219) TEST: this step runs test/auction-round-trip.test.ts; no image step is needed, because the compose default image is validator:binary-52beee31a6, which already serves /v1/atomica.
       # SCOUT(#219) EDIT: ETH_BACKEND is unset here, so the Ethereum side is the Docker PoS chain (Prague active); the anvil backend starts on cancun and cannot run AptosLightClient.
-      # SCOUT(#239) TEST: this step runs the moved test/timelock-genesis.test.ts.
       # SCOUT(#238) TEST: this step runs test/deploy-atomica-contracts.test.ts, which must stop calling and asserting the registry module.
       # SCOUT(#221) TEST: this step runs test/lockbox-release.test.ts against the redeployed LockBox.
       # SCOUT(#243) EDIT: genesis must write timelock_registrar from the deployer address in the env block below, before the package is published.

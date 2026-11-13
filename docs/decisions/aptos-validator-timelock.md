@@ -515,7 +515,6 @@ This falls under the same security threshold as a consensus takeover. If >2/3 va
 
 <!-- SCOUT(#225) DOC: "ibe_config::register_timelock needs deadline <= epoch_end - 15 minutes": add that only the stored registrar may call it. -->
 <!-- SCOUT(#231) DOC: "Not decided here: the epoch policy of a production network" is the open questions 1 to 3 of this issue; record the answer here and in the timing spec. -->
-<!-- SCOUT(#239) DOC: "Proof in CI" names a workflow file and an SDK test path that are deleted; the test moves to aptos-testnet/test and runs in the Aptos Testnet SDK (docker) job. -->
 <!-- SCOUT(#243) DOC: the 24 h docker epoch holds the next window close, but tests cannot wait hours for it: record how tests reach a window close (open question 1 of this issue). -->
 
 **Choice:** the Docker testnet genesis (`source/docker-testnet/config/generate-genesis.sh`) uses `epoch_duration_secs: 86400` (24 hours) and sets the layout flag `timelock_dkg_enabled: true`. It replaces the upstream default of 7200 seconds.
@@ -527,7 +526,7 @@ This falls under the same security threshold as a consensus takeover. If >2/3 va
 - A test session never crosses an epoch boundary after epoch 2. So no test timelock expires with the reason `epoch-ended` by accident.
 - The timelock DKG needs 4 validators. The dual-chain browser fixture (`source/docker-testnet/aptos-testnet/src/dual-chain-testnet.ts`) runs 4.
 
-**Proof in CI:** `aptos-docker-testnet.yaml` runs `typescript-sdk/test/timelock-genesis.test.ts`. It starts 4 validators, waits for epoch 2, and asserts that `ibe_config::is_ready()` is true and `ibe_config::get_mpk()` is 96 bytes.
+**Proof in CI:** the Aptos Testnet SDK (docker) job of `test-web.yaml` runs `source/docker-testnet/aptos-testnet/test/timelock-genesis.test.ts`. It starts 4 validators, waits for epoch 2, and asserts that `ibe_config::is_ready()` is true and `ibe_config::get_mpk()` is 96 bytes.
 
 **Not decided here:** the epoch policy of a production network. It must still line up epochs with the fixed auction times, or let timelocks span epochs (upgrade review finding 12).
 

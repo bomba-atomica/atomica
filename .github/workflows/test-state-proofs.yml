@@ -21,7 +21,6 @@ on:
 #
 # The test suite runs in two tiers. Only ETH_BACKEND differs.
 # - anvil: fast JSON-RPC chain. Runs on draft PRs (feature-correctness).
-# SCOUT(#239) TEST: the two Run Tests steps below are the only CI run of verifier.test.ts, mpt.test.ts and integration.test.ts, where the placeholder cases are deleted.
 # - docker: full Geth + Lighthouse PoS chain. Runs from ready-for-review
 #   onward and on main (system-correctness).
 
