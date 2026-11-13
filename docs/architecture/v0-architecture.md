@@ -369,7 +369,6 @@ SDK release path are retired (issue 195).
 
 ### 3.1 End-to-end flow
 
-<!-- SCOUT(#221) DOC: diagram: LockBox.lock takes no deadline. -->
 <!-- SCOUT(#236) DOC: diagram: add the user flow: open, settle, then the release action that records the outcome and calls releaseByOutcome per lock. -->
 <!-- SCOUT(#242) DOC: diagram: "auction settle / unwind emits AuctionOutcome" is not on main (open pull request 213). -->
 
@@ -377,7 +376,7 @@ SDK release path are retired (issue 195).
 Ethereum chain                      Aptos chain                       Ethereum chain
 ──────────────                      ───────────                       ──────────────
 LockBox.lock(token, amount,
-  window, pair, deadline)
+  window, pair)
         │
         ▼
 Validators attest the header ─────► ethereum_headers stores
@@ -409,8 +408,6 @@ the UI Unwind and Reclaim actions (`UnwindButton`, `ReclaimLockButton`) send
 ordinary transactions from the user's own wallet. Every byte a carrier brings
 is checked on chain, so a carrier holds no special authority.
 
-<!-- SCOUT(#221) DOC: last bullet: register_ethereum_lock takes no deadline; verify_lock recomputes the commitment with eth_lock_deadline(window_id) and E_WRONG_DEADLINE goes. -->
-
 A lock proof is checked on Aptos against trusted inputs only (issues 171, 196,
 197):
 
@@ -432,9 +429,11 @@ A lock proof is checked on Aptos against trusted inputs only (issues 171, 196,
   however many blocks it is proven at.
 - The proven slot is `LockBox.commitments[lock_id]` (slot 0). It holds
   `keccak256(abi.encode(depositor, token, amount, window_id, pair_hash,
-  deadline))`. Aptos recomputes it from the fields the carrier names, so a
-  wrong amount or binding does not verify, and it accepts only
-  `deadline == auction::eth_lock_deadline(window_id)`.
+  deadline))`. `register_ethereum_lock` takes no deadline: `verify_lock`
+  recomputes the commitment from the fields the carrier names and the
+  deadline `eth_lock_deadline(window_id)`, which LockBox computed (issue
+  221). A wrong amount, binding or deadline does not verify
+  (`E_COMMITMENT_MISMATCH`).
 
 A bidder's FakeUSD collateral lock registers the same way, with the
 `FakeUSD` asset type (`getRegisterLockPayload(proof, "FakeUSD")` in the SDK).
@@ -488,15 +487,16 @@ collateral, unsold seller supply and refunded windows go back to their
 depositors (§2.8). A receipt that never reached an auction can be cancelled by
 anyone after a delay, and it goes back to its depositor.
 
-<!-- SCOUT(#221) DOC: the auction key becomes keccak256(window_id, pair_hash); LockBox computes the deadline, so "Aptos registers a lock only when its deadline equals" goes. -->
 <!-- SCOUT(#222) DOC: add: a short leaf pays its remainder to the depositor, and a covered lock whose leaf is unpayable goes home through reclaimUnpayable with no deadline wait. -->
 
-**Every lock has a deadline (issue 203).** A lock carries a deadline bound to
-its auction: the auction key is `keccak256(window_id, pair_hash, deadline)`.
-All locks of an auction share one deadline, because Aptos registers a lock
-only when its deadline equals `auction::eth_lock_deadline(window_id)` (the
-window close, 07:45 or 16:15 UTC, plus `ETH_RECLAIM_DELAY_SECS`, see
-[auction timing](../specifications/auction-timing.md)). A recorded outcome
+**Every lock has a deadline (issues 203, 221).** A lock is bound to its
+auction by the auction key `keccak256(abi.encode(window_id, pair_hash))`.
+LockBox computes the lock's deadline from the window id,
+`lockDeadline(window_id)`, equal to `auction::eth_lock_deadline(window_id)`
+(the window close, 07:45 or 16:15 UTC, plus `ETH_RECLAIM_DELAY_SECS`, see
+[auction timing](../specifications/auction-timing.md)). No caller supplies
+it, so all locks of an auction share one deadline, and `lock` accepts only
+the current or the next window. A recorded outcome
 pays a lock out at any time. After the deadline, anyone may `reclaim` an open
 lock, and the whole amount returns to the depositor unless the auction's
 recorded outcome covers that lock. A lock the outcome does not cover goes home
@@ -610,14 +610,24 @@ the same trust assumption.
 
 Each lock is released on its own (`source/evm-contracts/src/escrow/LockBox.sol`,
 issue 203). Every call is permissionless, and LockBox has no admin, relayer or
-upgrade key. It ships at a new address.
-
-<!-- SCOUT(#221) DOC: lock drops uint64 deadline; add lockDeadline, windowClose and currentWindowId; "It ships at a new address" happens again. -->
+upgrade key. It ships at a new address, and again with the computed lock
+deadline (issue 221). Its constructor takes the window clock as its last two
+arguments, `uint64 daySecs` and `uint64[] closeOffsetsSecs` (one or two
+closes, `DeployLockBox.productionWindowSchedule()`), and freezes them.
 <!-- SCOUT(#222) DOC: the releaseByOutcome comment becomes "payouts, then the remainder to the depositor"; add reclaimUnpayable(lock, payouts, leaf). -->
 
 ```solidity
-function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)
+// windowId must be currentWindowId() or the next one (WindowClosed,
+// WindowTooFarAhead). The commitment binds lockDeadline(windowId).
+function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash)
     external returns (bytes32 lockId);
+function auctionKey(uint64 windowId, bytes32 pairHash) external pure returns (bytes32);
+// The window clock: mirrors eth_proof::window_id_at, window_close_secs and
+// eth_lock_deadline (windowClose + RECLAIM_DELAY, 259_200 s).
+function currentWindowId() external view returns (uint64);
+function windowClose(uint64 windowId) external view returns (uint64);
+function lockDeadline(uint64 windowId) external view returns (uint64);
+function windowSchedule() external view returns (uint64 daySecs, uint64[] memory closeOffsetsSecs);
 // Verifies the AuctionOutcome event through the Aptos light client and stores
 // its dispositions root and leaf count for the auction key.
 function recordOutcome(IAptosLightClient.EventProof calldata proof) external returns (bytes32 auctionKey);

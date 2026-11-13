@@ -36,7 +36,6 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 <!-- SCOUT(#242) DOC: settlement row: stale: the Aptos light client (202) and proof-gated LockBox (203) are merged and BLSVerifier.sol is retired; missing are the Aptos outcome (194), the carrier (195) and a live round trip (219). -->
 <!-- SCOUT(#242) DOC: unwind row: LockBox reclaim is live (203); the Aptos unwind is open pull request 213 (194); the SDK and UI half (195) is open. -->
 <!-- SCOUT(#216) DOC: collateral row: becomes live when collateral must cover price times quantity. -->
-<!-- SCOUT(#221) DOC: LockBox row: lock takes no deadline and the auction key drops it; LockBox redeploys. -->
 <!-- SCOUT(#222) DOC: LockBox row: add reclaimUnpayable and the remainder-to-depositor leaf rule. -->
 <!-- SCOUT(#228) DOC: sealed-bids row: describes submit_cleartext_and_clear and finalize_reveal with a price hash; on-chain opening replaces them with open_bids. -->
 <!-- SCOUT(#236) DOC: settle and claim row: ClaimButton (a faucet mint) is removed for a release action; AuctionRevealer and SellFlow get exported. -->
@@ -44,7 +43,7 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 
 | Capability | Owning module(s) under `source/` | Status |
 |---|---|---|
-| **Ethereum ERC-20 lock / LockBox** | `evm-contracts/src/escrow/LockBox.sol` | `live` — proof-gated: a lock leaves by `releaseByOutcome` on a proven Aptos `AuctionOutcome` or by permissionless `reclaim` after its deadline; no settlement authority (issue 203) |
+| **Ethereum ERC-20 lock / LockBox** | `evm-contracts/src/escrow/LockBox.sol` | `live` — proof-gated: a lock leaves by `releaseByOutcome` on a proven Aptos `AuctionOutcome` or by permissionless `reclaim` after its deadline; no settlement authority (issue 203). `lock` takes no deadline: LockBox computes `lockDeadline(windowId)` from a window clock frozen at deploy, accepts only the current or next window, and keys auctions by `(windowId, pairHash)` (issue 221) |
 | **Fake-token issuance (FakeETH / FakeUSD)** | `evm-contracts/src/tokens/`, `atomica-move-contracts/sources/fake_eth.move`, `fake_usd.move` | `live` |
 | **Cross-chain state-proof verification (Ethereum → Aptos)** | `atomica-move-contracts/sources/eth_proof.move`, `mpt.move`, `rlp.move` | `live` — proofs check against admin-submitted roots; validator-attested headers that anyone carries are `missing` (issues 196, 197) |
 | **Lock-receipt registry** | `atomica-move-contracts/sources/lock_receipt.move` | `live` |
