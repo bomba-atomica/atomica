@@ -18,6 +18,7 @@
  * Settle loops over winners times seller locks and records an outcome for
  * every lock, so this is the most expensive settle a window allows; its
  * gas_used must stay below the chain's maximum gas per transaction.
+ * Prices are whole USD per whole FakeETH, from 1000 to 1990.
  * The bidder's Ethereum-derivable account places every bid (SIWE): only it
  * can claim the bidder's collateral receipts. The operator (no special
  * rights) relays openings.
@@ -191,7 +192,6 @@ describe.sequential("16: Settle a 100-bid window", () => {
 
     const payloads = [];
     for (let i = 0; i < BID_COUNT; i++) {
-      // SCOUT(#217) EDIT: price ladder; PRICE_STEP and its base move to whole USD.
       const price = BASE_PRICE + PRICE_STEP * BigInt(i);
       prices.push(price);
       // SCOUT(#228) EDIT: five-argument getBidPayload with no commitment.

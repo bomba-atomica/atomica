@@ -126,6 +126,7 @@ import {
   TEST_WINDOW_SECS,
 } from "./helpers/auction-setup";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
+import { formatPrice, quoteForFill } from "@atomica/sdk";
 import { Faucet } from "../../src/components/Faucet";
 import { AuctionRevealer } from "../../src/components/AuctionRevealer";
 import { SettleButton } from "../../src/components/SettleButton";
@@ -180,20 +181,22 @@ import { ethers } from "ethers";
 
 const LOCK_AMOUNT = ethers.parseEther("10");
 const MINT_AMOUNT = ethers.parseEther("1000");
-// SCOUT(#217) EDIT: bid 2000 whole USD and expect $2000; size the collateral with quoteForFill.
-/** Bid price in FakeUSD micro-units: 2.00 USD. */
-const BID_PRICE = 2_000_000n;
+/** Bid price in whole USD per whole FakeETH. */
+const BID_PRICE = 2000n;
 /** How SettleButton and BidHistory display {@link BID_PRICE}. */
-const BID_PRICE_USD = "$2.00";
+const BID_PRICE_USD = "$2000";
 /** Bid quantity in wei of FakeETH. */
-// Small enough that the winner's quote fits the 500 FakeUSD collateral:
-// 0.0001 FakeETH at BID_PRICE (USD per whole FakeETH, `quoteForFill`) = 200.
-const BID_QUANTITY = ethers.parseEther("0.0001");
-/** FakeUSD collateral locked for the bid (6 decimals). */
-const COLLATERAL_AMOUNT = 500n * 10n ** 6n;
+const BID_QUANTITY = ethers.parseEther("0.1");
+/**
+ * FakeUSD collateral locked for the bid (6 decimals): exactly the quote,
+ * quoteForFill(0.1 FakeETH, 2000) = 200 FakeUSD, so the bid is valid at
+ * opening. The 10,000 FakeUSD mint cap limits it.
+ */
+const COLLATERAL_AMOUNT = quoteForFill(BID_QUANTITY, BID_PRICE);
 const COLLATERAL_MINT = 10_000n * 10n ** 6n;
-// COLLATERAL_AMOUNT above must be at least quoteForFill(BID_QUANTITY, BID_PRICE)
-// or the bid is invalid at opening. The 10,000 FakeUSD mint cap limits it.
+// The Demo ClaimButton self-mints the clearing price number as FakeETH base
+// units (wei). It is a faucet amount, not a price: 2000 wei, not 2000 USD.
+const CLAIM_MINT_WEI = BID_PRICE;
 // SCOUT(#231) EDIT: this comment relies on a 24 hour docker epoch; UTC-anchored epoch ends change that.
 /**
  * The locks are made with at least this long left in their window, so the
@@ -617,8 +620,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       );
       expect(screen.queryByTestId(auctionRevealer.decryptError)).toBeNull();
       const row = screen.getByTestId(auctionRevealer.decryptedBid);
-      // SCOUT(#217) EDIT: price text shown by AuctionRevealer.
-      expect(row.textContent).toContain(`price ${BID_PRICE}`);
+      expect(row.textContent).toContain(`price ${formatPrice(BID_PRICE)}`);
       expect(row.textContent).toContain("matches commitment");
 
       // The revealer recovered the bidder's price and salt.
@@ -699,7 +701,6 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         },
         { timeout: 60_000 },
       );
-      // SCOUT(#217) EDIT: this expects BID_PRICE_USD, which becomes $2000.
       expect(screen.getByTestId(settleButton.settleClearingPrice).textContent).toBe(
         BID_PRICE_USD,
       );
@@ -728,7 +729,6 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
   );
 
   // SCOUT(#236) REMOVE: step 11, the faucet claim; replace it with the release action and ERC-20 balance asserts on Ethereum.
-  // SCOUT(#217) EDIT: line 737 compares a FakeETH balance change with a price.
   // ── Step 11: Claim via the real ClaimButton ──────────────────────────────
   //
   // ClaimButton reads the settlement and, in the Demo phase, the claim mints
@@ -771,7 +771,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         { timeout: 60_000 },
       );
       const balanceAfter = await getFakeEthBalance(derived);
-      expect(balanceAfter - balanceBefore).toBe(BID_PRICE);
+      expect(balanceAfter - balanceBefore).toBe(CLAIM_MINT_WEI);
 
       console.log(`[14-happy-path] Claimed ${balanceAfter - balanceBefore} FakeETH units`);
     },
@@ -814,7 +814,6 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
           const rows = screen.getAllByTestId(bidHistory.bidHistoryRow);
           expect(rows).toHaveLength(1);
           expect(rows[0].textContent).toContain(windowId.toString());
-          // SCOUT(#217) EDIT: the bid history price becomes $2000.
           expect(rows[0].textContent).toContain(BID_PRICE_USD);
         },
         { timeout: 30_000 },

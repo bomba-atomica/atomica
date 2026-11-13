@@ -217,9 +217,10 @@ export interface SealedBid {
 }
 
 // SCOUT(#228) EDIT: encrypt the 8-byte little-endian price only; no salt parameter and no commitment.
-// SCOUT(#217) EDIT: price is whole USD per whole base token; callers pass parsePrice output.
 /**
  * Seal a bid of `price` for `bidder` on window `(windowId, pairBcs)`.
+ * `price` is whole USD per whole base token with no decimal shift: callers
+ * pass `parsePrice` output.
  *
  * `bidder` is the Aptos address that will send `submit_bid` (for a SIWE
  * wallet, its derived address). The ciphertext is bound to that sender, the

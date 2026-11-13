@@ -72,7 +72,6 @@ import { windowCloseSecs } from "@atomica/sdk/ethereum";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { submitNativeTransaction } from "@atomica/sdk";
 
-// SCOUT(#217) EDIT: a price constant (100 raw units, shown as $0.00 below).
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
 /** Pair bytes that are not on the allowlist: only the abort case uses them. */
@@ -278,7 +277,6 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
 
   // ── Test 2: amount displayed, no reserve price ─────────────────────────────
 
-  // SCOUT(#217) EDIT: it asserts $0.00 for a price of 100 raw units.
   it("shows formatted amount and no min price in description text", () => {
     render(
       <Step7Auction

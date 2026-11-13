@@ -1,5 +1,4 @@
 // SCOUT(#236) REMOVE: whole file (the claim mints the clearing price from the public faucet and moves nothing from the seller).
-// SCOUT(#217) EDIT: line 102 passes the clearing price to submitClaim as a FakeETH amount; moot once the file is deleted.
 import { useState, useEffect, useCallback } from "react";
 import {
   isSettled,

@@ -18,7 +18,6 @@
 // share the hook stub in ../hooks/useWindowRelease.ts.
 //
 // SCOUT(#236) EDIT: releaseByOutcome reverts on an unpayable leaf; for that lock call LockBox.reclaimUnpayable (the leaf rule issue (222)), chosen by planWindowReleases.
-// SCOUT(#217) EDIT: any price shown beside a lock goes through the SDK formatPrice.
 
 /** Props of the planned ReleaseButton. */
 export interface ReleaseButtonProps {

@@ -67,9 +67,8 @@ describe("WithdrawWinnings (read-only status display)", () => {
     expect(content).toContain("1");
     // winnerCount
     expect(content).toContain("2");
-    // SCOUT(#217) EDIT: this asserts the raw 1000; it becomes $1000 through formatPrice.
-    // clearing price
-    expect(content).toContain("1000");
+    // clearing price, whole USD per whole base token
+    expect(content).toContain("clearing price $1000");
   });
 
   it("always shows the payout notice: a carried proof, never a relayer", () => {

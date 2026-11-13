@@ -14,20 +14,27 @@ import type { BidHistoryEntry } from "../components/BidHistory";
 
 // ── Persistence helpers ──────────────────────────────────────────────────────
 
+// The `v2` key marks the price unit: whole USD per whole base token. Builds
+// before it stored history under `bid-history-<wallet>`, with prices in another
+// unit. That key is dropped on load, not migrated.
 function storageKey(walletAddress: string): string {
+  return `bid-history-v2-${walletAddress.toLowerCase()}`;
+}
+
+function legacyStorageKey(walletAddress: string): string {
   return `bid-history-${walletAddress.toLowerCase()}`;
 }
 
-// SCOUT(#217) EDIT: clearingPrice is persisted in localStorage in the old unit; entries written before the change display a million times off unless they are migrated or cleared.
 /** Serialisable form — bigint cannot be JSON.stringified directly. */
 interface PersistedEntry {
   auctionId: string;
-  clearingPrice: string; // bigint as decimal string
+  clearingPrice: string; // whole USD per whole base token, as a decimal string
   settledAt: number;
 }
 
 function loadEntries(walletAddress: string): BidHistoryEntry[] {
   try {
+    localStorage.removeItem(legacyStorageKey(walletAddress));
     const raw = localStorage.getItem(storageKey(walletAddress));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as PersistedEntry[];

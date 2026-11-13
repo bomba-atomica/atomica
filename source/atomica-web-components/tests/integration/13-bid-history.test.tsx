@@ -99,7 +99,7 @@ describe("13: BidHistory — entries from useBidHistory hook + localStorage", ()
     render(
       <BidHistoryHarness
         walletAddress={TEST_WALLET}
-        settlements={[["0xseller_a", 100_000_000n]]}
+        settlements={[["0xseller_a", 100n]]}
       />,
     );
 
@@ -113,12 +113,12 @@ describe("13: BidHistory — entries from useBidHistory hook + localStorage", ()
 
   // ── 13-3: Row displays correct clearing price ─────────────────────────────
 
-  // SCOUT(#217) EDIT: 100_000_000 displays as $100.00 today; record 100 and expect $100 (Browser Tests claim-reclaim chunk runs this file).
-  it("row displays clearing price from recorded settlement as '$100.00'", async () => {
+  // Prices are whole USD per whole base token: 100n shows as $100.
+  it("row displays clearing price from recorded settlement as '$100'", async () => {
     render(
       <BidHistoryHarness
         walletAddress={TEST_WALLET}
-        settlements={[["0xseller_b", 100_000_000n]]}
+        settlements={[["0xseller_b", 100n]]}
       />,
     );
 
@@ -127,7 +127,8 @@ describe("13: BidHistory — entries from useBidHistory hook + localStorage", ()
     });
 
     const row = screen.getByTestId(SELECTORS.bidHistory.bidHistoryRow);
-    expect(row.textContent).toContain("$100.00");
+    expect(row.textContent).toContain("$100");
+    expect(row.textContent).not.toContain("$100.00");
   });
 
   // ── 13-4: Two settlements — both rows present, newest-first ───────────────
@@ -138,7 +139,7 @@ describe("13: BidHistory — entries from useBidHistory hook + localStorage", ()
         walletAddress={TEST_WALLET}
         settlements={[
           ["0xseller_older", 150_000_000n],
-          ["0xseller_newer", 200_000_000n],
+          ["0xseller_newer", 200n],
         ]}
       />,
     );
@@ -194,8 +195,8 @@ describe("13: BidHistory — entries from useBidHistory hook + localStorage", ()
       <BidHistoryHarness
         walletAddress={TEST_WALLET}
         settlements={[
-          ["0xseller_dup", 100_000_000n],
-          ["0xseller_dup", 200_000_000n], // same seller — should be deduplicated
+          ["0xseller_dup", 100n],
+          ["0xseller_dup", 200n], // same seller — should be deduplicated
         ]}
       />,
     );
@@ -216,7 +217,7 @@ describe("13: BidHistory — entries from useBidHistory hook + localStorage", ()
     const { unmount: unmountA } = render(
       <BidHistoryHarness
         walletAddress="0xwallet_a"
-        settlements={[["0xseller_for_a", 100_000_000n]]}
+        settlements={[["0xseller_for_a", 100n]]}
       />,
     );
 

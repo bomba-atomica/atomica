@@ -18,6 +18,7 @@ import {
   type Pair,
 } from "@atomica/sdk/settlement/bridge";
 import { getChainConfig } from "@atomica/sdk/chain-config";
+import { formatPrice } from "@atomica/sdk";
 import { defaultAptosNodes } from "@atomica/sdk/settlement/window-release";
 
 /** The SDK's Aptos node and the configured Atomica package. */
@@ -124,10 +125,9 @@ export function SettlementStatus({
                 key={i}
                 className="rounded border border-emerald-900/40 bg-emerald-950/20 px-2 py-1.5 text-xs text-emerald-400"
               >
-                {/* SCOUT(#217) EDIT: clearing price shown as a raw integer; use formatPrice (the SDK unwind issue (195) also rewrites this panel). */}
                 <span className="font-mono">
                   Window {ev.windowId.toString()} — {ev.winnerCount.toString()}{" "}
-                  winner(s), clearing price {ev.clearingPrice.toString()}
+                  winner(s), clearing price {formatPrice(ev.clearingPrice)}
                 </span>
               </div>
             ))

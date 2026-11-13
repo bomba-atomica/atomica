@@ -72,7 +72,7 @@ export interface SellFlowState {
   windowId?: bigint;
   lockId?: string;
   auctionEndTime?: number;
-  // SCOUT(#217) EDIT: holds micro-dollars today (Step2Lock parses with 6 decimals).
+  /** FakeETH wei locked by the seller (a token amount, never a price). */
   amount?: bigint;
   /** The lock's deadline (unix seconds): after it, anyone may reclaim it to the seller */
   unlockTime?: number;

@@ -88,9 +88,9 @@ const MIN_WINDOW_LEFT_SECS = 240n;
 const UNWIND_GRACE_US = 60_000_000n;
 const LOCK_AMOUNT = ethers.parseEther("1");
 const COLLATERAL = 500n * 10n ** 6n;
-// 0.0001 FakeETH at 2_000_000 USD per FakeETH quotes 200 FakeUSD (`quoteForFill`).
-const BID_PRICE = 2_000_000n;
-const BID_QUANTITY = ethers.parseEther("0.0001");
+// 0.1 FakeETH at 2000 (whole USD per whole FakeETH) quotes 200 FakeUSD (`quoteForFill`).
+const BID_PRICE = 2000n;
+const BID_QUANTITY = ethers.parseEther("0.1");
 /**
  * The window close (up to one 900 s test window away), then the reveal
  * window, opening window and grace after it, plus slack.

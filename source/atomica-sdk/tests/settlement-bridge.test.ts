@@ -3,7 +3,7 @@
  * permissionless settlement path that replaced the relayer:
  *
  *   - scanAuctionOutcomeEvents / queryAuctionSettledEvents: Aptos event parsing
- *   - quoteForFill, parseBidResults, bcsEncodePair
+ *   - parseBidResults, bcsEncodePair (quoteForFill is in tests/price.test.ts)
  *   - outcome-carrier.ts: the golden recordOutcome and advanceEpoch call data,
  *     epoch advance before recordOutcome, the StaleEpoch refetch, and the
  *     version_pruned fallback across nodes
@@ -28,7 +28,6 @@ import {
   bcsEncodePair,
   LAUNCH_PAIR,
   LAUNCH_PAIR_BCS,
-  quoteForFill,
   parseBidResults,
   type BridgeConfig,
   type Pair,
@@ -353,14 +352,6 @@ describe("scanAuctionOutcomeEvents", () => {
 });
 
 const ETH = 10n ** 18n;
-const USD = 10n ** 6n;
-
-describe("quoteForFill", () => {
-  // SCOUT(#217) EDIT: this is the only SDK test that pins the price unit; move it to the price test file with quoteForFill, before the SDK unwind issue (195) deletes this suite.
-  it("prices FakeUSD with 6 decimals against 18-decimal FakeETH", () => {
-    expect(quoteForFill(ETH / 2n, 2010n)).toBe(1_005n * USD);
-  });
-});
 
 describe("bcsEncodePair", () => {
   it("writes Move BCS: ULEB128 lengths, fields in Pair order", () => {

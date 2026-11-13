@@ -25,8 +25,9 @@ Sub-path exports are available via the `"exports"` field in `package.json`.
 | `simulateNativeTransaction` | Pre-flight simulate a prepared transaction |
 | `submitPreparedTransaction` | Submit a prepared transaction and wait for execution |
 | `submitNativeTransaction` | All-in-one: prepare → simulate → submit |
-
-<!-- SCOUT(#217) DOC: add rows for parsePrice and formatPrice (src/price.ts), the one price parser and formatter. -->
+| `parsePrice` | Parse a price typed as whole USD per whole base token (`src/price.ts`). Throws on empty, signed, decimal, zero, non-digit or above `u64` |
+| `formatPrice` | Format a price for display: `formatPrice(2000n)` is `$2000` (`src/price.ts`) |
+| `quoteForFill` | FakeUSD units (6 decimals) owed for a FakeETH amount at a price (`src/price.ts`); also re-exported from `@atomica/sdk/settlement/bridge` |
 
 ### `@atomica/sdk/aptos`
 

@@ -58,7 +58,7 @@ describe("SettleButton — unit", () => {
     // filled total reaches the UI through get_settlement.
     vi.mocked(submitSettle).mockResolvedValue(undefined as never);
     vi.mocked(getSettlement).mockResolvedValue({
-      clearingPrice: 2_050_000_000n,
+      clearingPrice: 2050n,
       totalFilled: 3_000_000_000_000_000_000n,
     });
 
@@ -126,7 +126,21 @@ describe("SettleButton — unit", () => {
     );
   });
 
-  it.todo("SCOUT(#217) renders a clearing price of 2000n as $2000");
+  it("renders a clearing price of 2000n as $2000", async () => {
+    vi.mocked(submitSettle).mockResolvedValue(undefined as never);
+    vi.mocked(getSettlement).mockResolvedValue({
+      clearingPrice: 2000n,
+      totalFilled: 1_000_000_000_000_000_000n,
+    });
+
+    renderSettleButton();
+    const button = await screen.findByTestId("settle-button");
+    await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(button);
+
+    const price = await screen.findByTestId("settle-clearing-price");
+    expect(price.textContent).toBe("$2000");
+  });
   it.todo(
     "SCOUT(#236) enables from chain state when no auctionEndTime prop is passed",
   );

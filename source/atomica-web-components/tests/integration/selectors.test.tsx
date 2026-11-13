@@ -318,8 +318,7 @@ describe("Selector contract — data-testid attributes", () => {
     const entries: BidHistoryEntry[] = [
       {
         auctionId: "0xabc",
-        // SCOUT(#217) EDIT: price fixture in micro-dollar style.
-        clearingPrice: 100000000n,
+        clearingPrice: 2000n, // whole USD per whole base token
         settledAt: Math.floor(Date.now() / 1000),
       },
     ];

@@ -12,6 +12,7 @@
  */
 
 import type { AuctionSettledEvent } from "@atomica/sdk/settlement/bridge";
+import { formatPrice } from "@atomica/sdk";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -53,10 +54,9 @@ export function WithdrawWinnings({ events }: WithdrawWinningsProps) {
               key={i}
               className="rounded border border-emerald-900/40 bg-emerald-950/20 px-2 py-1.5 text-xs text-emerald-400"
             >
-              {/* SCOUT(#217) EDIT: clearing price shown as a raw integer; use formatPrice (the SDK unwind issue (195) also rewrites this panel). */}
               <span className="font-mono">
                 Window {ev.windowId.toString()} — {ev.winnerCount.toString()}{" "}
-                winner(s), clearing price {ev.clearingPrice.toString()}
+                winner(s), clearing price {formatPrice(ev.clearingPrice)}
               </span>
               <p className="mt-1 text-emerald-600">
                 Settled on Aptos. Carry the outcome to Ethereum to release the

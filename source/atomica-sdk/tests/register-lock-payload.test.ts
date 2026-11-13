@@ -244,7 +244,6 @@ describe("waitForCertifiedBlock", () => {
 
 // ── getCreateAuctionPayload ───────────────────────────────────────────────────
 
-// SCOUT(#217) EDIT: MIN_PRICE = 500_000n reads as micro-dollars; use a whole-USD value while the field exists.
 describe("getCreateAuctionPayload", () => {
   const WINDOW_ID = 41n;
   const PAIR_BCS = new Uint8Array([1, 2, 3]);

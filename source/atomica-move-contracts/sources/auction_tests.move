@@ -1251,7 +1251,13 @@ module atomica::auction_tests {
         assert!(!last_win && last_fill == 0, 4);
     }
 
-    // SCOUT(#217) TEST: quote_for_fill_reads_whole_usd_prices (quote_for_fill(10^18, 2000) == 2000 * 10^6; `quote_for_fill` exists only in the unwind pull request (213))
+    // A price is whole USD per whole base token: one whole FakeETH (10^18 wei) at a price
+    // of 2000 costs 2000 FakeUSD, which is 2000 * 10^6 FakeUSD base units.
+    #[test]
+    fun quote_for_fill_reads_whole_usd_prices() {
+        assert!(auction::quote_for_fill(1_000_000_000_000_000_000, 2000) == 2000 * 1_000_000, 1);
+        assert!(auction::quote_for_fill(ETH / 10, 2000) == 200 * USD, 2);
+    }
 
     // ===================== settle: named acceptance-criteria tests =====================
     //

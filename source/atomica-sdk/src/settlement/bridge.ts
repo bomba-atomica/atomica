@@ -431,21 +431,9 @@ export function samePair(a: Pair, b: Pair): boolean {
 /** Escrowed asset. FakeETH is the base token, FakeUSD the quote token. */
 export type LockAsset = "FakeETH" | "FakeUSD";
 
-/** FakeUSD has 6 decimals, FakeETH 18. */
-const QUOTE_UNIT = 10n ** 6n;
-const BASE_UNIT = 10n ** 18n;
-
-// SCOUT(#217) EDIT: state the unit here and move this function to src/price.ts, because the SDK unwind issue (195) deletes the release planner around it.
-/**
- * FakeUSD units a winner pays for `baseAmount` FakeETH wei at
- * `clearingPrice` (USD per base token, no decimal shift). Rounds down.
- */
-export function quoteForFill(
-  baseAmount: bigint,
-  clearingPrice: bigint,
-): bigint {
-  return (baseAmount * clearingPrice * QUOTE_UNIT) / BASE_UNIT;
-}
+// Price helpers live in src/price.ts. This re-export keeps existing imports
+// working.
+export { quoteForFill } from "../price.js";
 
 /** An Aptos lock receipt, resolved to its Ethereum owner. */
 export interface LockReceiptInfo {
