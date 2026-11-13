@@ -2,11 +2,13 @@
  * 10-settle.test.tsx
  *
  * Live settlement tests for SettleButton on one window of the dual-chain
- * testnet. Two sealed bids compete for the seller's 10 FakeETH:
+ * testnet. Three sealed bids compete for the seller's 0.0001 FakeETH:
  *
  // SCOUT(#217) EDIT: header prices read 2.00 and 1.50; they become 2000 and 1500 whole USD.
- *   winner — price 2.00, quantity 10 FakeETH (fills the whole supply)
- *   loser  — price 1.50, quantity  1 FakeETH
+ *   winner  — price 2.00, quantity 0.0001 FakeETH (fills the whole supply)
+ *   loser   — price 1.50, quantity 0.0001 FakeETH
+ *   invalid — price 3.00, quantity 0.0001 FakeETH, 100 FakeUSD collateral
+ *             against a 300 FakeUSD quote: invalid at opening, never fills
  *
  * Scenarios:
  *   1. SettleButton is disabled before the window ends
@@ -17,7 +19,9 @@
  *   4. A second settle aborts with E_WINDOW_ALREADY_SETTLED; SettleButton
  *      shows "Already Settled"
  *   5. Step8Monitor shows the settled window and records it in the history
- *   6. get_settlement returns the sum of the winners' fills, which SettleButton
+ *   6. The under-collateralized bid opened without abort, reads invalid, took
+ *      no fill, and settle returned its whole collateral to its depositor
+ *   7. get_settlement returns the sum of the winners' fills, which SettleButton
  *      shows as the total filled
  *
  * The bidder's Ethereum-derivable account bids: only it can claim the
@@ -71,21 +75,26 @@ import {
   getBidResults,
   getBidInfo,
   getSettlement,
+  getLockOutcome,
 } from "@atomica/sdk/aptos";
 import { WalletContext } from "../../src/context/WalletContext";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
-import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
+import { LAUNCH_PAIR_BCS, quoteForFill } from "@atomica/sdk/settlement/bridge";
 
 // SCOUT(#217) EDIT: whole-USD prices (2000 and 1500); the $2.00 expectations below become $2000.
-// SCOUT(#216) EDIT: on main the winner bids the whole 10 FakeETH supply, far above its 500 FakeUSD collateral; pull request 213 already shrinks SUPPLY to 0.0001 FakeETH (200 FakeUSD at 2_000_000), but LOSE_QUANTITY stays 1 FakeETH, which is above that supply, so the loser's submit_bid aborts with the new over-supply code; shrink LOSE_QUANTITY too.
 const WIN_PRICE = 2_000_000n;
 const LOSE_PRICE = 1_500_000n;
 // The winner bids the whole supply. Its quote must fit the 500 FakeUSD
 // collateral: 0.0001 FakeETH at WIN_PRICE (USD per whole FakeETH,
 // `quoteForFill`) = 200.
 const SUPPLY = ethers.parseEther("0.0001");
-const LOSE_QUANTITY = ethers.parseEther("1");
+// submit_bid aborts on a quantity above the window supply.
+const LOSE_QUANTITY = SUPPLY;
+// Above WIN_PRICE, so it would win if it were valid. Its quote at its own
+// price is 300 FakeUSD, above the 100 FakeUSD it locks: invalid at opening.
+const INVALID_PRICE = 3_000_000n;
+const INVALID_COLLATERAL = 100n * 10n ** 6n;
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
 // SCOUT(#243) EDIT: a 120 second deadline needs the test cap.
@@ -117,6 +126,7 @@ describe.sequential("10: Settle Auction", () => {
   let auction: LiveWindow;
   let winCollateral: string;
   let loseCollateral: string;
+  let invalidCollateral: string;
 
   beforeAll(async () => {
     fixture = await setupIntegrationFixture();
@@ -142,6 +152,14 @@ describe.sequential("10: Settle Auction", () => {
 
     winCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
     loseCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
+    invalidCollateral = await lockBidCollateral(
+      fixture,
+      aptosClient,
+      operator,
+      PAIR_BCS,
+      INVALID_COLLATERAL,
+    );
+    expect(quoteForFill(SUPPLY, INVALID_PRICE)).toBeGreaterThan(INVALID_COLLATERAL);
 
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
@@ -156,14 +174,21 @@ describe.sequential("10: Settle Auction", () => {
       auction,
       LOSE_PRICE,
       loseCollateral,
-      // SCOUT(#216) EDIT: after pull request 213 this quantity (1 FakeETH) is above the window supply (0.0001 FakeETH) and aborts with the new over-supply code.
       LOSE_QUANTITY,
+    );
+    await submitBidDirect(
+      aptosClient,
+      fixture.eth.bidder,
+      auction,
+      INVALID_PRICE,
+      invalidCollateral,
+      SUPPLY,
     );
 
     const state = await getAuctionState(aptosClient, moduleAddr, auction);
     expect(state).toEqual({
       totalSupply: SUPPLY,
-      bidCount: 2n,
+      bidCount: 3n,
       settled: false,
       clearingPrice: 0n,
     });
@@ -217,9 +242,10 @@ describe.sequential("10: Settle Auction", () => {
 
       // SCOUT(#228) EDIT: call open_bids from an account that is not the bidder, with no prices and no salts.
       const opened = await openWindowBidsDirect(aptosClient, operator, auction);
-      expect(opened.map((b) => b.price)).toEqual([WIN_PRICE, LOSE_PRICE]);
+      expect(opened.map((b) => b.price)).toEqual([WIN_PRICE, LOSE_PRICE, INVALID_PRICE]);
       expect((await getBidInfo(auction.windowId, PAIR_BCS, 0n)).opened).toBe(true);
       expect((await getBidInfo(auction.windowId, PAIR_BCS, 1n)).opened).toBe(true);
+      expect((await getBidInfo(auction.windowId, PAIR_BCS, 2n)).opened).toBe(true);
       // SCOUT(#228) EDIT: reveal_final has no finalize step any more; assert the cleared state the new view gives.
       expect(
         await getWindowStatus(aptosClient, moduleAddr, auction.windowId, PAIR_BCS),
@@ -229,6 +255,7 @@ describe.sequential("10: Settle Auction", () => {
       const results = await getBidResults(auction.windowId, PAIR_BCS);
       expect(results.map((r) => [r.isWinner, r.fillAmount])).toEqual([
         [true, SUPPLY],
+        [false, 0n],
         [false, 0n],
       ]);
 
@@ -350,8 +377,36 @@ describe.sequential("10: Settle Auction", () => {
     );
   }, 60_000);
 
-  it.todo("SCOUT(#216) an under-collateralized bid opens without abort, reads invalid, takes no fill, and settle returns its whole collateral to its depositor");
-  // ── Test 6: get_settlement reads the filled total ──────────────────────────
+  // ── Test 6: the under-collateralized bid ───────────────────────────────────
+
+  it("an under-collateralized bid opens without abort, reads invalid, takes no fill, and settle returns its whole collateral to its depositor", async () => {
+    // Test 3 opened all three bids in one call without abort.
+    const info = await getBidInfo(auction.windowId, PAIR_BCS, 2n);
+    expect(info.opened).toBe(true);
+    expect(info.price).toBe(INVALID_PRICE);
+    expect(info.valid).toBe(false);
+    // The valid bids stay valid.
+    expect((await getBidInfo(auction.windowId, PAIR_BCS, 0n)).valid).toBe(true);
+    expect((await getBidInfo(auction.windowId, PAIR_BCS, 1n)).valid).toBe(true);
+
+    // The higher price did not win and did not set the clearing price.
+    const results = await getBidResults(auction.windowId, PAIR_BCS);
+    expect([results[2].isWinner, results[2].fillAmount]).toEqual([false, 0n]);
+    const state = await getAuctionState(aptosClient, moduleAddr, auction);
+    expect(state.clearingPrice).toBe(WIN_PRICE);
+
+    // Its whole collateral goes back to its depositor: nothing is slashed.
+    expect(
+      await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", invalidCollateral),
+    ).toBe(RECEIPT_REVOKED);
+    const outcome = await getLockOutcome("FakeUSD", invalidCollateral);
+    expect(outcome.recipients).toEqual([
+      new ethers.Wallet(fixture.eth.bidder.privateKey).address,
+    ]);
+    expect(outcome.amounts).toEqual([INVALID_COLLATERAL]);
+  }, 60_000);
+
+  // ── Test 7: get_settlement reads the filled total ──────────────────────────
 
   it("get_settlement returns the sum of the winners' fills and SettleButton shows it as the total filled", async () => {
     const results = await getBidResults(auction.windowId, PAIR_BCS);

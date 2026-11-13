@@ -179,7 +179,6 @@ import { ethers } from "ethers";
 const LOCK_AMOUNT = ethers.parseEther("10");
 const MINT_AMOUNT = ethers.parseEther("1000");
 // SCOUT(#217) EDIT: bid 2000 whole USD and expect $2000; size the collateral with quoteForFill.
-// SCOUT(#216) EDIT: on main 1 FakeETH at 2_000_000 needs 2,000,000 FakeUSD of collateral and 500 makes the bid invalid; pull request 213 already shrinks BID_QUANTITY to 0.0001 FakeETH (200 FakeUSD).
 /** Bid price in FakeUSD micro-units: 2.00 USD. */
 const BID_PRICE = 2_000_000n;
 /** How SettleButton and BidHistory display {@link BID_PRICE}. */
@@ -191,7 +190,8 @@ const BID_QUANTITY = ethers.parseEther("0.0001");
 /** FakeUSD collateral locked for the bid (6 decimals). */
 const COLLATERAL_AMOUNT = 500n * 10n ** 6n;
 const COLLATERAL_MINT = 10_000n * 10n ** 6n;
-// SCOUT(#216) EDIT: COLLATERAL_AMOUNT above must be at least quoteForFill(BID_QUANTITY, BID_PRICE), and the 10,000 FakeUSD mint cap limits it (marker sits here to avoid a merge conflict with pull request 213).
+// COLLATERAL_AMOUNT above must be at least quoteForFill(BID_QUANTITY, BID_PRICE)
+// or the bid is invalid at opening. The 10,000 FakeUSD mint cap limits it.
 // SCOUT(#243) EDIT: the test no longer sets the deadline; it needs the test cap.
 // SCOUT(#231) EDIT: this comment relies on a 24 hour docker epoch; UTC-anchored epoch ends change that.
 /**
@@ -640,10 +640,10 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
           ethers.getBytes(salts),
         ]),
       );
-      // SCOUT(#216) EDIT: assert that the opened bid reads valid.
       const opened = await getBidInfo(windowId, LAUNCH_PAIR_BCS, 0n);
       expect(opened.opened).toBe(true);
       expect(opened.price).toBe(BID_PRICE);
+      expect(opened.valid).toBe(true);
       const status = await getWindowStatus(aptosClient, moduleAddr, windowId, LAUNCH_PAIR_BCS);
       expect(status.revealFinal).toBe(true);
       console.log(`[14-happy-path] Bid decrypted off chain and opened on chain at ${opened.price}`);

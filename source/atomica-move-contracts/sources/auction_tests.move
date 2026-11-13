@@ -671,8 +671,6 @@ module atomica::auction_tests {
     // existing happy-path and uninitialized-registry tests.
     //
     // @see docs/architecture/v0-architecture.md §2.5
-    // SCOUT(#216) TEST: submit_bid_zero_quantity_aborts (this file holds no `submit_bid` test: the golden bid setup is private to auction_bid_wrapper_tests.move)
-    // SCOUT(#216) TEST: submit_bid_above_supply_aborts
     // SCOUT(#218) TEST: submit_bid_below_min_collateral_aborts
     // SCOUT(#218) TEST: submit_bid_at_min_collateral_succeeds
 
@@ -902,10 +900,161 @@ module atomica::auction_tests {
         assert!(vector::length(&results) == 0, 2);
     }
 
-    // SCOUT(#216) TEST: undercollateralized_bid_is_invalid_and_does_not_fill
-    // SCOUT(#216) TEST: zero_price_bid_is_invalid
-    // SCOUT(#216) TEST: exact_collateral_bid_is_valid
-    // SCOUT(#216) TEST: huge_quantity_does_not_overflow_clearing
+    // ===================== Bid validity at opening =====================
+    //
+    // These tests open bids through `submit_cleartext_and_clear`, so the validity rule of
+    // `open_one` runs. The submit-time quantity checks live in auction_bid_wrapper_tests.move.
+    //
+    // @see docs/architecture/v0-architecture.md §2.6 to §2.8
+
+    const MAX_PRICE: u64 = 18_446_744_073_709_551_615;
+
+    fun salt32(b: u8): vector<u8> {
+        let s = vector::empty<u8>();
+        let i = 0;
+        while (i < 32) {
+            vector::push_back(&mut s, b);
+            i = i + 1;
+        };
+        s
+    }
+
+    // Inserts a bid committed to `(price, salt32(s))` holding `collateral`.
+    fun insert_open_able_bid(
+        atomica: &signer, bidder: address, price: u64, s: u8, quantity: u256, collateral: u256,
+    ) {
+        let pair_bcs = default_pair_bcs();
+        let ad = auction::bid_associated_data(TIMELOCK_ID, WINDOW_ID, bidder);
+        auction::test_insert_committed_bid(
+            atomica, WINDOW_ID, pair_bcs, bidder, vector[s],
+            auction::compute_bid_commitment(price, salt32(s), ad), vector[s], quantity,
+        );
+        let index = auction::get_bid_count(WINDOW_ID, pair_bcs) - 1;
+        auction::test_set_bid_collateral(atomica, WINDOW_ID, pair_bcs, index, collateral);
+    }
+
+    // Opens every bid in one call. `prices[i]` opens bid i with salt32(i + 1).
+    fun open_all(prices: vector<u64>) {
+        let salts = vector::empty<vector<u8>>();
+        let i = 0u64;
+        while (i < vector::length(&prices)) {
+            vector::push_back(&mut salts, salt32(((i + 1) as u8)));
+            i = i + 1;
+        };
+        let caller = account::create_signer_for_test(@0x9999);
+        auction::submit_cleartext_and_clear(&caller, WINDOW_ID, default_pair_bcs(), prices, salts);
+    }
+
+    fun bid_valid(index: u64): bool {
+        let (_, _, _, opened, _, valid) = auction::get_bid_info(WINDOW_ID, default_pair_bcs(), index);
+        assert!(opened, 900);
+        valid
+    }
+
+    fun fill_of(index: u64): (bool, u256) {
+        let results = auction::get_bid_results(WINDOW_ID, default_pair_bcs());
+        let (win, fill, _) = auction::test_bid_result_fields(vector::borrow(&results, index));
+        (win, fill)
+    }
+
+    // The one BidInvalid event of the test: (bid_index, reason).
+    fun only_invalid_event(): (u64, u8) {
+        let events = event::emitted_events<auction::BidInvalid>();
+        assert!(vector::length(&events) == 1, 901);
+        let (window_id, pair_bcs, bid_index, _, reason) =
+            auction::test_bid_invalid_fields(vector::borrow(&events, 0));
+        assert!(window_id == WINDOW_ID && pair_bcs == default_pair_bcs(), 902);
+        (bid_index, reason)
+    }
+
+    // Review finding A-1: one dust lock bids the whole supply at the top price. It opens
+    // without abort, reads invalid, and takes nothing. The honest bid wins at its own price.
+    #[test(atomica = @atomica)]
+    fun undercollateralized_bid_is_invalid_and_does_not_fill(atomica: &signer) {
+        revealed_window(atomica, TOTAL_SUPPLY);
+        insert_open_able_bid(atomica, @0xA11CE, 2000, 1, ETH, auction::quote_for_fill(ETH, 2000));
+        insert_open_able_bid(atomica, @0xD057, MAX_PRICE, 2, TOTAL_SUPPLY, 1);
+        open_all(vector[2000, MAX_PRICE]);
+
+        assert!(bid_valid(0), 1);
+        assert!(!bid_valid(1), 2);
+        let (bid_index, reason) = only_invalid_event();
+        assert!(bid_index == 1 && reason == 2, 3);
+        let (dust_win, dust_fill) = fill_of(1);
+        assert!(!dust_win && dust_fill == 0, 4);
+        let (honest_win, honest_fill) = fill_of(0);
+        assert!(honest_win && honest_fill == ETH, 5);
+        let (_, _, _, _, clearing_price) = auction::get_auction(WINDOW_ID, default_pair_bcs());
+        assert!(clearing_price == 2000, 6);
+    }
+
+    // A zero price is invalid (reason 1) and does not set the clearing price of an
+    // undersubscribed window: the lowest valid winning price does.
+    #[test(atomica = @atomica)]
+    fun zero_price_bid_is_invalid(atomica: &signer) {
+        revealed_window(atomica, TOTAL_SUPPLY);
+        insert_open_able_bid(atomica, @0xA11CE, 2100, 1, ETH, auction::quote_for_fill(ETH, 2100));
+        insert_open_able_bid(atomica, @0xB0B, 2000, 2, ETH, auction::quote_for_fill(ETH, 2000));
+        insert_open_able_bid(atomica, @0x2E40, 0, 3, ETH, auction::quote_for_fill(ETH, 2100));
+        open_all(vector[2100, 2000, 0]);
+
+        assert!(!bid_valid(2), 1);
+        let (bid_index, reason) = only_invalid_event();
+        assert!(bid_index == 2 && reason == 1, 2);
+        let (zero_win, zero_fill) = fill_of(2);
+        assert!(!zero_win && zero_fill == 0, 3);
+        let (_, _, _, _, clearing_price) = auction::get_auction(WINDOW_ID, default_pair_bcs());
+        assert!(clearing_price == 2000, 4);
+    }
+
+    // Collateral equal to `quote_for_fill(quantity, price)` is valid and fills. One base
+    // unit less is invalid with reason 2.
+    #[test(atomica = @atomica)]
+    fun exact_collateral_bid_is_valid(atomica: &signer) {
+        revealed_window(atomica, TOTAL_SUPPLY);
+        let quote = auction::quote_for_fill(ETH, 2000);
+        assert!(quote == 2_000_000_000, 1);
+        insert_open_able_bid(atomica, @0xA11CE, 2000, 1, ETH, quote);
+        insert_open_able_bid(atomica, @0xB0B, 2000, 2, ETH, quote - 1);
+        open_all(vector[2000, 2000]);
+
+        assert!(bid_valid(0), 2);
+        assert!(!bid_valid(1), 3);
+        let (bid_index, reason) = only_invalid_event();
+        assert!(bid_index == 1 && reason == 2, 4);
+        let (exact_win, exact_fill) = fill_of(0);
+        assert!(exact_win && exact_fill == ETH, 5);
+        let (short_win, short_fill) = fill_of(1);
+        assert!(!short_win && short_fill == 0, 6);
+    }
+
+    // Review finding A-2: a `2^256 - 1` quantity behind a filled bid made `accumulated + qty`
+    // overflow and froze the window. `submit_bid` now bounds the quantity; this inserts it
+    // through the test helper and opens it through the bypass helper (opening it through
+    // `open_one` would overflow `quote_for_fill`). The bypass closes the reveal, so the test
+    // runs the clearing through `clear_uniform_price`, the same `clear_internal` that
+    // `finalize_reveal` runs.
+    #[test(atomica = @atomica)]
+    fun huge_quantity_does_not_overflow_clearing(atomica: &signer) {
+        revealed_window(atomica, TOTAL_SUPPLY);
+        let pair_bcs = default_pair_bcs();
+        let huge = 115792089237316195423570985008687907853269984665640564039457584007913129639935u256;
+        auction::test_insert_bid_with_qty(atomica, WINDOW_ID, pair_bcs, @0xA11CE, b"a", b"lock_a", ETH);
+        auction::test_insert_bid_with_qty(atomica, WINDOW_ID, pair_bcs, @0xB16, b"b", b"lock_b", huge);
+        auction::test_insert_bid_with_qty(atomica, WINDOW_ID, pair_bcs, @0xB17, b"c", b"lock_c", huge);
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, pair_bcs, vector[3000, 2000, 1000]);
+        auction::clear_uniform_price(WINDOW_ID, pair_bcs);
+
+        let (_, _, _, _, clearing_price) = auction::get_auction(WINDOW_ID, pair_bcs);
+        assert!(clearing_price == 2000, 1);
+        let (first_win, first_fill) = fill_of(0);
+        assert!(first_win && first_fill == ETH, 2);
+        let (huge_win, huge_fill) = fill_of(1);
+        assert!(huge_win && huge_fill == TOTAL_SUPPLY - ETH, 3);
+        let (last_win, last_fill) = fill_of(2);
+        assert!(!last_win && last_fill == 0, 4);
+    }
+
     // SCOUT(#217) TEST: quote_for_fill_reads_whole_usd_prices (quote_for_fill(10^18, 2000) == 2000 * 10^6; `quote_for_fill` exists only in the unwind pull request (213))
 
     // ===================== settle: named acceptance-criteria tests =====================

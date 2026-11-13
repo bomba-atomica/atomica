@@ -28,7 +28,11 @@ vi.mock("@atomica/state-proof-verifier/ibe", async (importOriginal) => {
   return { ...actual, encryptBid: vi.fn(actual.encryptBid) };
 });
 
-import { sealBid, decryptWindowBids } from "../src/aptos/sealed-bid.js";
+import {
+  sealBid,
+  decryptWindowBids,
+  getBidInfo,
+} from "../src/aptos/sealed-bid.js";
 import { decryptBid } from "../src/ibe/index.js";
 import { encryptBid } from "@atomica/state-proof-verifier/ibe";
 import { computeBidCommitment, encodeBidPlaintext } from "../src/ibe/bid.js";
@@ -109,7 +113,6 @@ function mockChain(
         return [dk];
       case "auction::get_bid_count":
         return [stored ? "1" : "0"];
-      // SCOUT(#216) EDIT: the mocked tuple gains the validity flag.
       // SCOUT(#228) EDIT: the mocked tuple loses the commitment.
       case "auction::get_bid_info":
         return [
@@ -118,6 +121,7 @@ function mockChain(
           hex(stored!.commitment),
           false,
           "0",
+          true,
         ];
       default:
         throw new Error(`unexpected view ${payload.function}`);
@@ -274,10 +278,32 @@ describe("decryptWindowBids", () => {
   });
 });
 
+describe("getBidInfo", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("getBidInfo returns the validity flag of the bid view tuple", async () => {
+    vi.mocked(config.aptos.view).mockResolvedValue([
+      BIDDER,
+      "0x01",
+      "0x02",
+      true,
+      "2010",
+      false,
+    ] as never);
+    const info = await getBidInfo(WINDOW, PAIR, 0n);
+    expect(info).toMatchObject({
+      bidder: BIDDER,
+      opened: true,
+      price: 2010n,
+      valid: false,
+    });
+
+    mockChain({ ciphertext: bytes("0x01"), commitment: bytes("0x02") });
+    expect((await getBidInfo(WINDOW, PAIR, 0n)).valid).toBe(true);
+  });
+});
+
 describe("planned tests (SCOUT)", () => {
-  it.todo(
-    "SCOUT(#216) getBidInfo returns the validity flag of the bid view tuple",
-  );
   it.todo(
     "SCOUT(#228) sealBid output decrypts with the golden key to exactly 8 bytes, the little-endian price",
   );

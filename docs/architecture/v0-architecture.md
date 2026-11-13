@@ -187,7 +187,6 @@ pair bytes. With the allowlist those bytes are always the BCS of a listed
 ### 2.5 Sealed Bid struct
 
 <!-- SCOUT(#242) DOC: Bid struct is stale: SealedBid holds one V2 ciphertext BCS(vk, U, nonce, C, sig), ct_id, a 32-byte price hash, a clear quantity, opened and price; there is no u_bytes, and the encoding follows the fork spec, not Drand tlock. -->
-<!-- SCOUT(#216) DOC: the bid stores its collateral amount and a validity flag; submit_bid aborts on zero quantity and on quantity above supply. -->
 <!-- SCOUT(#218) DOC: state the bid cap (100) and the minimum collateral per bid. -->
 <!-- SCOUT(#228) DOC: the price hash and salt leave the bid; the plaintext is the 8-byte little-endian price. -->
 
@@ -211,10 +210,18 @@ struct Bid has store {
 `u_bytes` and `ciphertext` follow the Drand tlock encoding: see
 `docs/architecture/adr-timelock-ibe.md` for the full IBE scheme.
 
+**Bid validity at submission (issue 216).** `submit_bid` aborts with
+`E_ZERO_QUANTITY` (37) on a zero quantity and with `E_QUANTITY_ABOVE_SUPPLY`
+(38) on a quantity above the window's `total_supply` at that moment. Supply
+only grows before the deadline, so an honest bid at or below the visible
+supply always passes. The bid stores the collateral amount that
+`lock_receipt::claim_for_window` returns (`SealedBid.collateral`, the same
+amount the receipt holds) and a validity flag (`SealedBid.valid`, true until
+opening judges the bid invalid, §2.6).
+
 ### 2.6 Reveal path
 
 <!-- SCOUT(#242) DOC: reveal as built: submit_cleartext_and_clear(settler, window_id, pair_bcs, cleartexts, salts) and open_bid check each (price, salt) against the 32-byte hash stored at submission, never against the ciphertext; the key getter is timelock::get_decryption_key. -->
-<!-- SCOUT(#216) DOC: an opened bid with price zero or a quote above its collateral is marked invalid without aborting. -->
 <!-- SCOUT(#228) DOC: the fork native ibe::decrypt_bid is what lets the chain check a ciphertext; until it ships no Move code can decrypt. -->
 <!-- SCOUT(#228) DOC: whole section is replaced: open_bids(window_id, pair_bcs, max_bids) decrypts in batches and clears on the last batch; submit_cleartext_and_clear, open_bid, finalize_reveal and the opening window go. -->
 
@@ -243,18 +250,30 @@ transaction runs the clearing algorithm (§2.7). If some bids stay unopened,
 clearing algorithm in that call. `clear_uniform_price` stays public: on an
 already-cleared window it changes nothing.
 
+**Invalid at opening (issue 216).** Each bid is judged once, when its price is
+opened (`open_bid` or `submit_cleartext_and_clear`). The bid is **invalid** if
+the price is zero or `quote_for_fill(quantity, price)` is above its stored
+collateral. The opening does not abort: the bid counts as opened, so nobody
+can open it again, and `BidInvalid { window_id, pair_bcs, bid_index, bidder,
+reason }` is emitted (reason 1: zero price, reason 2: collateral below the
+quote). A bad bid never stops the window. `get_bid_info` returns
+`(bidder, ciphertext, commitment, opened, price, valid)`; `valid` is true for
+an unopened bid, and the reason is only in the event.
+
 ### 2.7 Uniform-price clearing algorithm
 
-<!-- SCOUT(#216) DOC: steps 1 to 3: invalid bids are skipped like unopened ones and the fit test is qty <= supply - accumulated; the undersubscribed rule (review decision 34) stays as written: the lowest bid sets the price. -->
 <!-- SCOUT(#217) DOC: the worked example is in whole USD per whole ETH; name that unit and show the FakeUSD (6 decimals) amounts quote_for_fill gives. -->
 <!-- SCOUT(#242) DOC: step 5: on main only opened losing bids are released; an unopened bid receipt stays claimed (BidUnopened) until the Aptos unwind (194) merges. -->
 
 Steps:
-1. Sort all revealed bids descending by price.
+1. Sort all revealed bids descending by price. Unopened and invalid bids
+   (§2.6) are skipped: they never fill and never set the price.
 2. Accumulate quantity from the top until cumulative quantity reaches total
-   supply, or all bids are consumed.
+   supply, or all bids are consumed. A bid fits when
+   `qty <= supply - accumulated`, which cannot overflow for any quantity.
 3. The last bid whose cumulative quantity does not exceed supply sets the
-   **marginal (clearing) price**. All winning bids pay this price.
+   **marginal (clearing) price**. All winning bids pay this price. In an
+   undersubscribed window the lowest valid bid sets it.
 4. If the final winning bid would overfill supply, that bidder receives a
    partial fill proportional to remaining supply.
 5. Losing bids have their `collateral_lock_id` receipts released.
@@ -280,7 +299,6 @@ All winners pay 2 010 × their_fill in FakeUSD. Alice pays 8 040, Bob pays
 ### 2.8 Bidder collateral requirement
 
 <!-- SCOUT(#242) DOC: the contract does not enforce "at least bid_quantity × bid_price": submit_bid drops the receipt amount; say what is enforced today and name the bid validity issue (216) as the gap. -->
-<!-- SCOUT(#216) DOC: state the rule as enforced: collateral stored on the bid, invalid at opening when quote_for_fill(quantity, price) exceeds it, collateral returned to the depositor; the E_UNPAYABLE_FILL sentence that open pull request 213 adds to section 2.9 then no longer applies to an under-collateralised bid. -->
 <!-- SCOUT(#217) DOC: bid_quantity × bid_price needs units: quantity in wei, price in whole USD per whole token, product in FakeUSD units via quote_for_fill. -->
 <!-- SCOUT(#218) DOC: state the minimum FakeUSD collateral per bid. -->
 
@@ -289,6 +307,17 @@ locked value is at least `bid_quantity × bid_price`. The receipt's `lock_id`
 is stored in `Bid.collateral_lock_id`. This mirrors the seller-side
 `LockReceipt<Ethereum, FakeETH>` in
 `source/atomica-move-contracts/sources/lock_receipt.move`.
+
+**As enforced (issue 216).** `submit_bid` stores the claimed collateral
+amount on the bid (§2.5). At opening, a bid whose
+`quote_for_fill(quantity, price)` is above that amount, or whose price is
+zero, is invalid (§2.6). An invalid bid is skipped by clearing (§2.7) and its
+whole collateral returns to its depositor in the window's outcome, like a
+losing bid. Nothing is slashed, kept as a fee or sent to anyone else: all
+funds unwind to their origin unless the auction executes flawlessly. Spam is
+bounded by the collateral each bid must lock, not by a penalty. A valid
+winner can always pay: its own price is at or above the clearing price and
+the quote rounds down, so its payment is at most its collateral.
 
 **Receipt lifecycle (issue 194).** A receipt is `ACTIVE` (0) after
 registration. `create_auction` and `submit_bid` claim it (`CLAIMED`, 1) only
@@ -301,8 +330,8 @@ unwind then gives it one terminal state with a stored outcome record
   FakeETH to the winners' `eth_owner`. A winner's collateral pays
   `quote_for_fill` FakeUSD to the sellers' `eth_owner`.
 - `REVOKED` (2): the whole amount returns to the depositor's `eth_owner`.
-  Losing and unopened bids, refunded and unwound windows, and cancelled
-  receipts end here.
+  Losing, unopened and invalid bids, refunded and unwound windows, and
+  cancelled receipts end here.
 
 A filled lock's leftover (winner excess collateral with its rounding dust, or
 unsold seller supply) is a payout to its own depositor in the same record.
@@ -323,8 +352,11 @@ This is the canonical definition. §3 references it; §3 does not redefine it.
 
 `settle` honours the cleared fills (§2.8) and emits `AuctionSettled`. Winners
 in bid order take supply from the seller locks in `lock_ids` order. A fill
-that does not fit the locks (a payment above a winner's collateral) aborts
-`E_UNPAYABLE_FILL`; the window then unwinds after its stuck deadline.
+that does not fit the locks aborts `E_UNPAYABLE_FILL`; the window then
+unwinds after its stuck deadline. The check stays as a guard, but a bid's
+collateral can no longer trigger it: an under-collateralised bid is invalid
+at opening and never fills (§2.6), and a valid winner's payment at the
+clearing price is at most its collateral (§2.8).
 
 Whichever of `settle`, `refund_expired_window` or `unwind` finalizes a window
 first emits its one `AuctionOutcome`: the `outcome_tree` root over the payout
@@ -464,7 +496,6 @@ Each network attests one Ethereum chain id, and headers are keyed by block
 number only.
 
 <!-- SCOUT(#242) DOC: not on main: settle emits no AuctionOutcome and auction::unwind does not exist (open pull request 213 rewrites this paragraph). -->
-<!-- SCOUT(#216) DOC: invalid bids join the list of locks that go back to their depositors. -->
 <!-- SCOUT(#228) DOC: the stuck test loses "plus the opening window", and "unopened bids" become bids that do not decrypt. -->
 
 **Every auction ends in an outcome Ethereum can verify (issues 194, 199).**
@@ -482,9 +513,9 @@ fixed on every deployed network. Only the local testing chain (chain id 4)
 lets the `@atomica` account shorten it
 (`timelock_config::set_unwind_grace_us_on_test_chain`), so a live test can
 stall a window past its stuck deadline in minutes. Winning fills go to
-buyers at the clearing price. Unopened bids, losing bids, winner excess
-collateral, unsold seller supply and refunded windows go back to their
-depositors (§2.8). A receipt that never reached an auction can be cancelled by
+buyers at the clearing price. Unopened bids, invalid bids, losing bids,
+winner excess collateral, unsold seller supply and refunded windows go back to
+their depositors (§2.8). A receipt that never reached an auction can be cancelled by
 anyone after a delay, and it goes back to its depositor.
 
 <!-- SCOUT(#222) DOC: add: a short leaf pays its remainder to the depositor, and a covered lock whose leaf is unpayable goes home through reclaimUnpayable with no deadline wait. -->

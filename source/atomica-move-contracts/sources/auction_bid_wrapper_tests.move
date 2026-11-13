@@ -137,13 +137,13 @@ module atomica::auction_bid_wrapper_tests {
         framework
     }
 
-    // SCOUT(#216) EDIT: `submit_golden` fixes the quantity at 5; the zero-quantity and over-supply tests need a quantity argument.
     // SCOUT(#228) EDIT: `submit_golden` passes no commitment; the bid becomes one of the fork's price-plaintext golden ciphertexts.
-    fun submit_golden(bidder: &signer, price: u64, s: u8) {
+    // Submits the golden bid committed to `(price, salt(s))` for `quantity` wei.
+    fun submit_golden(bidder: &signer, price: u64, s: u8, quantity: u256) {
         auction::submit_bid(
             bidder, AUCTION_ID, pair(), golden_ct(),
             commitment_for(price, s, golden_bidder()),
-            GOLDEN_LOCK, 5u256,
+            GOLDEN_LOCK, quantity,
         );
     }
 
@@ -213,21 +213,23 @@ module atomica::auction_bid_wrapper_tests {
 
     // ===================== submit_bid: V2 ciphertext check =====================
 
-    // SCOUT(#216) EDIT: `submit_bid_accepts_the_golden_ciphertext` destructures `get_bid_info`; the tuple gains the validity flag.
     // SCOUT(#228) EDIT: `submit_bid_accepts_the_golden_ciphertext` destructures `get_bid_info`; the tuple loses `commitment`.
+    // The bid asks for exactly the window supply, the largest quantity `submit_bid` accepts
+    // (see `submit_bid_above_supply_aborts`).
     #[test(atomica = @atomica)]
     fun submit_bid_accepts_the_golden_ciphertext(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
 
         assert!(auction::get_bid_count(AUCTION_ID, pair()) == 1, 1);
         assert!(lock_receipt::is_lock_claimed<Ethereum, FakeUSD>(GOLDEN_LOCK), 2);
-        let (who, ct, commitment, opened, price) = auction::get_bid_info(AUCTION_ID, pair(), 0);
+        let (who, ct, commitment, opened, price, valid) = auction::get_bid_info(AUCTION_ID, pair(), 0);
         assert!(who == golden_bidder(), 3);
         assert!(ct == golden_ct(), 4);
         assert!(commitment == commitment_for(2010, 7, golden_bidder()), 5);
         assert!(!opened && price == 0, 6);
+        assert!(valid, 7);
     }
 
     // Malformed ciphertext: a flipped byte in the golden ciphertext.
@@ -352,7 +354,7 @@ module atomica::auction_bid_wrapper_tests {
         setup_window(atomica);
         timestamp::update_global_time_for_test(DEADLINE_US);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
     }
 
     // One microsecond before the deadline is accepted.
@@ -361,7 +363,7 @@ module atomica::auction_bid_wrapper_tests {
         setup_window(atomica);
         timestamp::update_global_time_for_test(DEADLINE_US - 1);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         assert!(auction::get_bid_count(AUCTION_ID, pair()) == 1, 1);
     }
 
@@ -372,7 +374,7 @@ module atomica::auction_bid_wrapper_tests {
         setup_window(atomica);
         expire_epoch_ended();
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
     }
 
     // A second bid with the same ciphertext is rejected, even with another receipt.
@@ -382,7 +384,7 @@ module atomica::auction_bid_wrapper_tests {
         setup_window(atomica);
         lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(b"usd_lock_second_32bytes_________", golden_bidder(), 1000u256, 1);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         auction::submit_bid(
             &bidder, AUCTION_ID, pair(), golden_ct(),
             commitment_for(2010, 7, golden_bidder()),
@@ -411,7 +413,7 @@ module atomica::auction_bid_wrapper_tests {
             i = i + 1;
         };
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
     }
 
     fun bcs_u64(i: u64): vector<u8> {
@@ -426,7 +428,7 @@ module atomica::auction_bid_wrapper_tests {
         lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(GOLDEN_LOCK, golden_bidder(), 1000u256, 1);
         auction::test_insert_window_with_timelock(atomica, AUCTION_ID, pair(), SUPPLY, true, 2000, TIMELOCK_ID);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
     }
 
     // SCOUT(#228) REMOVE: the 23 tests of this file that call `open_bid`, `submit_cleartext_and_clear` or `finalize_reveal` (18 in this section, 3 under "Expiry", 2 under the settle guards); the `open_bids` tests named below replace them.
@@ -443,7 +445,7 @@ module atomica::auction_bid_wrapper_tests {
     fun open_bid_aborts_before_reveal(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         timestamp::update_global_time_for_test(DEADLINE_US);
         auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
     }
@@ -454,7 +456,7 @@ module atomica::auction_bid_wrapper_tests {
         let i = 0u64;
         let n = auction::get_bid_count(AUCTION_ID, pair());
         while (i < n) {
-            let (_, _, _, _, price) = auction::get_bid_info(AUCTION_ID, pair(), i);
+            let (_, _, _, _, price, _) = auction::get_bid_info(AUCTION_ID, pair(), i);
             vector::push_back(&mut prices, price);
             i = i + 1;
         };
@@ -465,14 +467,14 @@ module atomica::auction_bid_wrapper_tests {
     fun open_bid_accepts_the_committed_price_and_finalizes(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         reveal_timelock();
 
         // Anyone can open: a relayer that decrypted the ciphertext off chain.
         let relayer = account::create_signer_for_test(@0x9999);
         auction::open_bid(&relayer, AUCTION_ID, pair(), 0, 2010, salt(7));
 
-        let (_, _, _, opened, price) = auction::get_bid_info(AUCTION_ID, pair(), 0);
+        let (_, _, _, opened, price, _) = auction::get_bid_info(AUCTION_ID, pair(), 0);
         assert!(opened && price == 2010, 1);
         let (_, reveal_final, refunded) = auction::get_window_status(AUCTION_ID, pair());
         assert!(reveal_final && !refunded, 2);
@@ -485,7 +487,7 @@ module atomica::auction_bid_wrapper_tests {
     fun open_bid_rejects_a_wrong_price(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         reveal_timelock();
         auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 9999, salt(7));
     }
@@ -495,7 +497,7 @@ module atomica::auction_bid_wrapper_tests {
     fun open_bid_rejects_a_wrong_salt(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         reveal_timelock();
         auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(8));
     }
@@ -505,7 +507,7 @@ module atomica::auction_bid_wrapper_tests {
     fun open_bid_rejects_a_short_salt(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         reveal_timelock();
         auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, x"07");
     }
@@ -515,7 +517,7 @@ module atomica::auction_bid_wrapper_tests {
     fun open_bid_rejects_an_unknown_index(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         reveal_timelock();
         auction::open_bid(&bidder, AUCTION_ID, pair(), 1, 2010, salt(7));
     }
@@ -526,7 +528,7 @@ module atomica::auction_bid_wrapper_tests {
     fun open_bid_opens_each_bid_once(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         auction::test_insert_committed_bid(atomica, AUCTION_ID, pair(), @0x2222, b"ct2", x"00", b"lock2", 1u256);
         reveal_timelock();
         auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
@@ -539,7 +541,7 @@ module atomica::auction_bid_wrapper_tests {
     fun open_bid_aborts_after_the_reveal_is_final(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         reveal_timelock();
         auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
         auction::submit_cleartext_and_clear(&bidder, AUCTION_ID, pair(), vector[2010u64], vector[salt(7)]);
@@ -559,15 +561,114 @@ module atomica::auction_bid_wrapper_tests {
         ibe_config::finalize_for_testing(TIMELOCK_ID, fixtures::timelock_basic_reconstructed_dk());
     }
 
-    // SCOUT(#216) TEST: batch_opening_with_invalid_bid_finalizes
-    // SCOUT(#216) TEST: settle_returns_invalid_bid_collateral_to_depositor
+    // ===================== Bid validity =====================
+
+    // A zero quantity aborts at submission.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 37, location = atomica::auction)] // E_ZERO_QUANTITY
+    fun submit_bid_zero_quantity_aborts(atomica: &signer) {
+        setup_window(atomica);
+        let bidder = account::create_signer_for_test(golden_bidder());
+        submit_golden(&bidder, 2010, 7, 0);
+    }
+
+    // One wei above the window supply aborts at submission. A bid of exactly the supply
+    // succeeds: `submit_bid_accepts_the_golden_ciphertext` submits SUPPLY. The golden
+    // ciphertext can be submitted once per window, so the two cases are separate tests.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 38, location = atomica::auction)] // E_QUANTITY_ABOVE_SUPPLY
+    fun submit_bid_above_supply_aborts(atomica: &signer) {
+        setup_window(atomica);
+        let (_, total_supply, _, _, _) = auction::get_auction(AUCTION_ID, pair());
+        assert!(total_supply == SUPPLY, 1);
+        let bidder = account::create_signer_for_test(golden_bidder());
+        submit_golden(&bidder, 2010, 7, total_supply + 1);
+    }
+
+    // The golden bid plus a dust-collateral bid for the whole supply at the top price and
+    // a small honest bid. The batch call opens all three without abort and finalizes.
+    #[test(atomica = @atomica)]
+    fun batch_opening_with_invalid_bid_finalizes(atomica: &signer) {
+        setup_window(atomica);
+        let bidder = account::create_signer_for_test(golden_bidder());
+        submit_golden(&bidder, 2010, 7, SUPPLY);
+        let max_price = 18_446_744_073_709_551_615u64;
+        let dust = @0x2222;
+        auction::test_insert_committed_bid(
+            atomica, AUCTION_ID, pair(), dust, b"ct2",
+            commitment_for(max_price, 9, dust), b"lock2", SUPPLY,
+        );
+        // The dust bid holds one base unit less than its quote at its own price.
+        let quote = auction::quote_for_fill(SUPPLY, max_price);
+        assert!(quote == 92_233_720, 1);
+        auction::test_set_bid_collateral(atomica, AUCTION_ID, pair(), 1, quote - 1);
+        let other = @0x3333;
+        auction::test_insert_committed_bid(
+            atomica, AUCTION_ID, pair(), other, b"ct3",
+            commitment_for(1500, 8, other), b"lock3", 1u256,
+        );
+        reveal_timelock();
+
+        auction::submit_cleartext_and_clear(
+            &bidder, AUCTION_ID, pair(),
+            vector[2010u64, max_price, 1500u64], vector[salt(7), salt(9), salt(8)],
+        );
+        let (_, reveal_final, _) = auction::get_window_status(AUCTION_ID, pair());
+        assert!(reveal_final, 2);
+        let (_, _, _, opened, _, valid) = auction::get_bid_info(AUCTION_ID, pair(), 1);
+        assert!(opened && !valid, 3);
+        let invalid = aptos_framework::event::emitted_events<auction::BidInvalid>();
+        assert!(vector::length(&invalid) == 1, 4);
+        let (window_id, pair_bcs, bid_index, who, reason) =
+            auction::test_bid_invalid_fields(vector::borrow(&invalid, 0));
+        assert!(window_id == AUCTION_ID && pair_bcs == pair() && bid_index == 1, 5);
+        assert!(who == dust && reason == 2, 6);
+
+        // The golden bid takes the whole supply at its own price; the dust bid takes nothing.
+        let (_, _, _, _, clearing_price) = auction::get_auction(AUCTION_ID, pair());
+        assert!(clearing_price == 2010, 7);
+        let results = auction::get_bid_results(AUCTION_ID, pair());
+        let (golden_win, golden_fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 0));
+        assert!(golden_win && golden_fill == SUPPLY, 8);
+        let (dust_win, dust_fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 1));
+        assert!(!dust_win && dust_fill == 0, 9);
+    }
+
+    // A golden bid whose collateral (50 base units) is below its quote at the top price
+    // (92,233,720) is invalid. `settle` succeeds and the outcome returns all 50 to the depositor.
+    #[test(atomica = @atomica)]
+    fun settle_returns_invalid_bid_collateral_to_depositor(atomica: &signer) {
+        setup();
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        lock_receipt::insert_bound_test_receipt<Ethereum, FakeUSD>(
+            GOLDEN_LOCK, golden_bidder(), 50u256, AUCTION_ID, auction::pair_hash(pair()),
+        );
+        insert_window_with_seller(atomica);
+        let max_price = 18_446_744_073_709_551_615u64;
+        let bidder = account::create_signer_for_test(golden_bidder());
+        submit_golden(&bidder, max_price, 7, SUPPLY);
+        reveal_timelock();
+        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, max_price, salt(7));
+        let (_, _, _, opened, _, valid) = auction::get_bid_info(AUCTION_ID, pair(), 0);
+        assert!(opened && !valid, 1);
+
+        auction::settle(&bidder, AUCTION_ID, pair());
+        assert!(auction::is_settled(AUCTION_ID, pair()), 2);
+        let (_, _, to, amounts) = lock_receipt::get_lock_outcome<Ethereum, FakeUSD>(GOLDEN_LOCK);
+        assert!(to == vector[lock_receipt::test_eth_owner(golden_bidder())], 3);
+        assert!(amounts == vector[50u256], 4);
+        // No fill: the seller lock goes back to the seller.
+        assert!(seller_lock_status() == lock_receipt::status_revoked(), 5);
+    }
+
     // ---- batch entry ----
 
     #[test(atomica = @atomica)]
     fun batch_open_skips_empty_salts_and_finalizes_when_all_open(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         let other = @0x2222;
         let other_ad = auction::bid_associated_data(TIMELOCK_ID, AUCTION_ID, other);
         auction::test_insert_committed_bid(
@@ -597,7 +698,7 @@ module atomica::auction_bid_wrapper_tests {
     fun batch_open_rejects_a_count_mismatch(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         reveal_timelock();
         auction::submit_cleartext_and_clear(&bidder, AUCTION_ID, pair(), vector[2010u64, 1u64], vector[salt(7)]);
     }
@@ -608,7 +709,7 @@ module atomica::auction_bid_wrapper_tests {
     fun batch_open_aborts_on_one_wrong_opening(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         reveal_timelock();
         auction::submit_cleartext_and_clear(&bidder, AUCTION_ID, pair(), vector[2011u64], vector[salt(7)]);
     }
@@ -628,7 +729,7 @@ module atomica::auction_bid_wrapper_tests {
     fun finalize_reveal_waits_for_the_opening_window(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         auction::test_insert_committed_bid(atomica, AUCTION_ID, pair(), @0x2222, b"ct2", x"00", b"lock2", 1u256);
         reveal_timelock();
         auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
@@ -641,7 +742,7 @@ module atomica::auction_bid_wrapper_tests {
     fun unopened_bid_is_invalid_and_its_collateral_goes_home(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         let ghost_lock = b"usd_lock_ghost_32bytes__________";
         lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(ghost_lock, @0x2222, 1000u256, 1);
         lock_receipt::claim<Ethereum, FakeUSD>(@0x2222, ghost_lock);
@@ -698,7 +799,7 @@ module atomica::auction_bid_wrapper_tests {
     fun setup_two_bid_window(atomica: &signer): signer {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         let other = @0x2222;
         let other_lock = b"usd_lock_other_bidder_32bytes___";
         lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(other_lock, other, 1000u256, 1);
@@ -791,7 +892,7 @@ module atomica::auction_bid_wrapper_tests {
     fun open_bid_is_impossible_after_reveal_window_elapsed(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         expire_reveal_window();
         assert!(timelock::get_status(TIMELOCK_ID) == timelock::status_expired(), 1);
         auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
@@ -802,7 +903,7 @@ module atomica::auction_bid_wrapper_tests {
     fun open_bid_is_impossible_after_epoch_ended(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         expire_epoch_ended();
         auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
     }
@@ -812,7 +913,7 @@ module atomica::auction_bid_wrapper_tests {
     fun batch_open_is_impossible_after_key_check_failed(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         expire_key_check_failed();
         auction::submit_cleartext_and_clear(&bidder, AUCTION_ID, pair(), vector[2010u64], vector[salt(7)]);
     }
@@ -828,7 +929,7 @@ module atomica::auction_bid_wrapper_tests {
         insert_golden_receipt();
         insert_window_with_seller(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
         framework
     }
 
@@ -978,7 +1079,7 @@ module atomica::auction_bid_wrapper_tests {
         );
         insert_window_with_seller(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7);
+        submit_golden(&bidder, 2010, 7, SUPPLY);
     }
 
     // ===================== settle and create_auction guards =====================

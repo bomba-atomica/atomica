@@ -106,7 +106,8 @@ export function AuctionBidder() {
 
   // ── Step 2: Submit encrypted bid ──────────────────────────────────────────
   const [windowId, setWindowId] = useState("0");
-  // SCOUT(#216) EDIT: quantity zero and quantity above the window supply now abort submit_bid; this field takes wei, defaults to 1 and has no check.
+  // Wei of FakeETH. submit_bid aborts on zero (E_ZERO_QUANTITY, 37) and above
+  // the window supply (E_QUANTITY_ABOVE_SUPPLY, 38).
   const [quantity, setQuantity] = useState("1");
   // Set on the lock step: the same bytes feed lockBinding, sealBid and submitBid.
   const [pairBcsHex, setPairBcsHex] = useState(ethers.hexlify(LAUNCH_PAIR_BCS));
@@ -210,6 +211,10 @@ export function AuctionBidder() {
       if (price <= 0n) {
         throw new Error("The bid price must be a positive whole number.");
       }
+      const bidQuantity = BigInt(quantity);
+      if (bidQuantity <= 0n) {
+        throw new Error("The bid quantity must be above zero.");
+      }
 
       // Prepare sealed-bid arguments: the pair the lock is bound to.
       const pairBcs = pairBytes(pairBcsHex);
@@ -235,7 +240,6 @@ export function AuctionBidder() {
       setStatus("Please sign the transaction...");
 
       // SCOUT(#228) EDIT: drop the sealed.commitment argument (five-argument submit_bid).
-      // SCOUT(#216) EDIT: quantity zero or above supply aborts here with the new codes; the status line shows the raw abort.
       const pendingTx = await submitBid(
         account,
         windowIdBn,
@@ -243,7 +247,7 @@ export function AuctionBidder() {
         sealed.ciphertext,
         sealed.commitment,
         collateralLockId,
-        BigInt(quantity),
+        bidQuantity,
       );
 
       // SCOUT(#217) EDIT: the stored price changes unit with the input.
@@ -257,9 +261,17 @@ export function AuctionBidder() {
       setStatus(`Bid Submitted! Tx: ${hash}`);
     } catch (error: unknown) {
       console.error(error);
-      setStatus(
-        `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      // `\b` keeps "abort 37" from matching "abort 370".
+      if (/E_QUANTITY_ABOVE_SUPPLY|abort 38\b/.test(msg)) {
+        setStatus(
+          "Error: the bid quantity is above the window supply. Bid at most the FakeETH the sellers locked.",
+        );
+      } else if (/E_ZERO_QUANTITY|abort 37\b/.test(msg)) {
+        setStatus("Error: the bid quantity must be above zero.");
+      } else {
+        setStatus(`Error: ${msg}`);
+      }
     } finally {
       setLoading(false);
     }

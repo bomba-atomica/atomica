@@ -539,17 +539,17 @@ jobs:
           aptos --version
           which aptos
 
-      # SCOUT(#216) ADD: this step has no test-count floor (the forge step below has one), so the test plan line "reports more than zero tests in the auction modules" is not enforced; a guarded form is sketched here.
-      # - name: Run Move Tests (at least N must run)
-      #   run: |
-      #     set -euo pipefail
-      #     aptos move test --package-dir source/atomica-move-contracts | tee move-test.log
-      #     total=$(grep -oE 'Test result: OK\. Total tests: [0-9]+' move-test.log | grep -oE '[0-9]+$' || echo 0)
-      #     [ "$total" -ge "$MIN_MOVE_TESTS" ] || { echo "::error::expected at least $MIN_MOVE_TESTS Move tests, $total ran"; exit 1; }
       # SCOUT(#228) TEST: the rewritten auction tests need the fork's price-plaintext golden ciphertexts and the decrypt native, so this step fails until the pins move.
-      - name: Run Move Tests
+      # Raise MIN_MOVE_TESTS when tests are added, so a silently skipped module fails the job.
+      - name: Run Move Tests (at least MIN_MOVE_TESTS must run)
+        env:
+          MIN_MOVE_TESTS: 248
         run: |
-          aptos move test --package-dir source/atomica-move-contracts
+          set -euo pipefail
+          aptos move test --package-dir source/atomica-move-contracts | tee move-test.log
+          total=$(grep -oE 'Test result: OK\. Total tests: [0-9]+' move-test.log | grep -oE '[0-9]+$' || echo 0)
+          echo "Move tests run: $total (floor $MIN_MOVE_TESTS)"
+          [ "$total" -ge "$MIN_MOVE_TESTS" ] || { echo "::error::expected at least $MIN_MOVE_TESTS Move tests, $total ran"; exit 1; }
 
   move-lint:
     name: Move Lint Warnings
@@ -625,7 +625,6 @@ jobs:
             test_files: >-
               tests/integration/07-create-auction.test.tsx
               tests/integration/08-auction-monitor.test.tsx
-          # SCOUT(#216) TEST: this chunk runs 09-submit-bid and 10-settle against the bid validity rules; helper bids must carry valid quantity, price and collateral.
           # SCOUT(#217) TEST: this chunk runs 09 and 10 with whole-USD prices.
           # SCOUT(#228) TEST: this chunk runs open_bids in 09 and 10 against the live validators.
           - chunk: bid-settle
