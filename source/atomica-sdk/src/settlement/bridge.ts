@@ -29,7 +29,7 @@ import type { Aptos } from "@aptos-labs/ts-sdk";
 export interface Pair {
   baseChain: string; // e.g. "ethereum"
   baseToken: string; // e.g. "FakeETH"
-  quoteChain: string; // e.g. "aptos"
+  quoteChain: string; // e.g. "ethereum"
   quoteToken: string; // e.g. "FakeUSD"
 }
 
@@ -107,6 +107,25 @@ export function bcsEncodePair(pair: Pair): Uint8Array {
   }
   return result;
 }
+
+/**
+ * The launch pair: FakeETH against FakeUSD, both locked on Ethereum. The
+ * auction package seeds its pair allowlist with it at publish.
+ * @see docs/architecture/v0-architecture.md §2.4
+ */
+export const LAUNCH_PAIR: Pair = {
+  baseChain: "ethereum",
+  baseToken: "FakeETH",
+  quoteChain: "ethereum",
+  quoteToken: "FakeUSD",
+};
+
+/**
+ * Move BCS of {@link LAUNCH_PAIR}: the default `pair_bcs` of every client and
+ * the bytes Ethereum locks are bound to. It equals the on-chain view
+ * `auction::launch_pair_bcs()`.
+ */
+export const LAUNCH_PAIR_BCS: Uint8Array = bcsEncodePair(LAUNCH_PAIR);
 
 /**
  * Parse a raw Aptos event JSON object into an AuctionSettledEvent.

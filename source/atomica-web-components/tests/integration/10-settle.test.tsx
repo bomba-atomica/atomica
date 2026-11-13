@@ -75,6 +75,7 @@ import {
 import { WalletContext } from "../../src/context/WalletContext";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
 // SCOUT(#217) EDIT: whole-USD prices (2000 and 1500); the $2.00 expectations below become $2000.
 // SCOUT(#216) EDIT: on main the winner bids the whole 10 FakeETH supply, far above its 500 FakeUSD collateral; pull request 213 already shrinks SUPPLY to 0.0001 FakeETH (200 FakeUSD at 2_000_000), but LOSE_QUANTITY stays 1 FakeETH, which is above that supply, so the loser's submit_bid aborts with the new over-supply code; shrink LOSE_QUANTITY too.
@@ -85,8 +86,8 @@ const LOSE_PRICE = 1_500_000n;
 // `quoteForFill`) = 200.
 const SUPPLY = ethers.parseEther("0.0001");
 const LOSE_QUANTITY = ethers.parseEther("1");
-// SCOUT(#224) EDIT: use the launch pair.
-const PAIR_BCS = new TextEncoder().encode("10-settle");
+// The launch pair: the only pair on the allowlist.
+const PAIR_BCS = LAUNCH_PAIR_BCS;
 // SCOUT(#243) EDIT: a 120 second deadline needs the test cap.
 const DEADLINE_AHEAD_US = 120_000_000n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */

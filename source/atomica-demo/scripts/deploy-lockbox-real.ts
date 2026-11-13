@@ -23,6 +23,7 @@ import {
   currentWindowId,
   lockBinding,
 } from "@atomica/sdk/ethereum/lock-binding";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { serializeProofForAptos } from "../src/lib/ethereum/proofs/index";
 import type {
   TokenContract,
@@ -155,12 +156,11 @@ async function main() {
 
     console.log("   Locking tokens...");
     // SCOUT(#221) EDIT: LockBox.lock loses the deadline argument.
-    // SCOUT(#224) EDIT: bind the lock to the launch pair, not to empty bytes.
-    // Bound to the current window, empty pair BCS, deadline
+    // Bound to the current window, the launch pair BCS, deadline
     // auction::eth_lock_deadline(window) (see @atomica/sdk lock-binding).
     const binding = lockBinding(
       currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
-      new Uint8Array(0),
+      LAUNCH_PAIR_BCS,
     );
     tx = await lockBox.lock(
       fakeETHAddress,

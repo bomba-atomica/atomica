@@ -10,6 +10,8 @@
  *   2. Amount and min price displayed in description text
  *   3. Receipt already claimed: E_RECEIPT_ALREADY_CLAIMED shown via error prop
  *   4. SIWE signature rejected: error shown via error prop
+ *   5. A second seller with the SDK launch pair joins the same window
+ *   6. Pair bytes that are not on the allowlist abort with E_PAIR_NOT_ALLOWED
  *
  * Setup:
  *   - Dual-chain testnet started in beforeAll
@@ -41,6 +43,7 @@ import {
   registerTimelockDirect,
   getWindowStatus,
   getReceiptStatus,
+  getAuctionState,
   RECEIPT_ACTIVE,
   RECEIPT_CLAIMED,
   type EthLockProofResult,
@@ -49,12 +52,19 @@ import { Step7Auction } from "../../src/components/SellFlow/steps/Step7Auction";
 import { Aptos, AptosConfig, Network, Account, Ed25519PrivateKey } from "@aptos-labs/ts-sdk";
 import { setAptosInstance, aptos as aptosGlobal } from "@atomica/sdk/aptos";
 import { ethers } from "ethers";
-import { getCreateAuctionPayload } from "@atomica/sdk/aptos";
+import {
+  getCreateAuctionPayload,
+  getLaunchPairBcs,
+  isPairAllowed,
+} from "@atomica/sdk/aptos";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { submitNativeTransaction } from "@atomica/sdk";
 
 // SCOUT(#217) EDIT: a price constant (100 raw units, shown as $0.00 below).
-// SCOUT(#224) EDIT: these bytes are not on the allowlist; use the SDK launch pair, and keep unlisted bytes only for the new abort case.
-const PAIR_BCS = new TextEncoder().encode("07-create-auction");
+// The launch pair: the only pair on the allowlist.
+const PAIR_BCS = LAUNCH_PAIR_BCS;
+/** Pair bytes that are not on the allowlist: only the abort case uses them. */
+const UNLISTED_PAIR_BCS = new TextEncoder().encode("07-create-auction");
 // SCOUT(#243) EDIT: the test no longer picks the deadline; it needs the test cap of open question 1.
 /** The timelock deadline is far enough out that the window stays open. */
 const DEADLINE_AHEAD_US = 600_000_000n;
@@ -343,8 +353,94 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     );
   }, 60_000);
 
-  it.todo("SCOUT(#224) create_auction through the UI with the SDK launch pair constant creates the window");
-  it.todo("SCOUT(#224) create_auction with bytes that are not on the allowlist fails with the new abort code");
+  // ── Test 5: the launch pair, a second seller joins the window ─────────────
+
+  it("create_auction through the UI with the SDK launch pair constant creates the window", async () => {
+    const moduleAddr = fixture.aptos.moduleAddress;
+    // The chain lists the SDK constant, and computes the same bytes.
+    expect(await isPairAllowed(LAUNCH_PAIR_BCS)).toBe(true);
+    expect(ethers.hexlify(await getLaunchPairBcs())).toBe(
+      ethers.hexlify(LAUNCH_PAIR_BCS),
+    );
+
+    // A second seller lock, bound to the launch pair (the helper default).
+    const second = await generateEthLockProof(fixture);
+    await registerLockOnAptos(aptosGlobal, deployerAccount, moduleAddr, second.proof);
+    const before = await getAuctionState(aptosGlobal, moduleAddr, {
+      windowId,
+      pairBcs: LAUNCH_PAIR_BCS,
+    });
+
+    const onCreateAuction = async () => {
+      const txHash = await createAuctionDirect(
+        aptosGlobal,
+        fixture.eth.seller,
+        second.lockId,
+        windowId,
+        LAUNCH_PAIR_BCS,
+        timelockId,
+      );
+      return { txHash };
+    };
+    render(
+      <AuctionWrapper
+        amount={ethers.parseEther("10")}
+        onCreateAuction={onCreateAuction}
+      />,
+    );
+    await waitFor(
+      () => {
+        expect(screen.getByTestId(step7Auction.auctionTxHash).textContent).toMatch(
+          /^Tx: 0x[0-9a-f]{64}$/,
+        );
+      },
+      { timeout: 60_000 },
+    );
+
+    // One pair, one window: the second lock joins the window of test 1.
+    const after = await getAuctionState(aptosGlobal, moduleAddr, {
+      windowId,
+      pairBcs: LAUNCH_PAIR_BCS,
+    });
+    expect(after.totalSupply).toBe(before.totalSupply + ethers.parseEther("10"));
+    expect(
+      await getReceiptStatus(aptosGlobal, moduleAddr, "FakeETH", second.lockId),
+    ).toBe(RECEIPT_CLAIMED);
+  }, 600_000);
+
+  // ── Test 6: unlisted pair bytes ──────────────────────────────────────────
+
+  it("create_auction with bytes that are not on the allowlist fails with the new abort code", async () => {
+    expect(await isPairAllowed(UNLISTED_PAIR_BCS)).toBe(false);
+
+    // The pair check runs before the lock claim, so any lock id shows it.
+    const onCreateAuction = async () => {
+      const txHash = await createAuctionDirect(
+        aptosGlobal,
+        fixture.eth.seller,
+        ethProof.lockId,
+        windowId,
+        UNLISTED_PAIR_BCS,
+        timelockId,
+      );
+      return { txHash };
+    };
+    render(
+      <AuctionWrapper
+        amount={ethers.parseEther("10")}
+        onCreateAuction={onCreateAuction}
+      />,
+    );
+    await waitFor(
+      () => {
+        const errorEl = document.querySelector(".text-red-400");
+        expect(errorEl?.textContent).toMatch(/E_PAIR_NOT_ALLOWED/);
+      },
+      { timeout: 60_000 },
+    );
+    expect(screen.queryByTestId(step7Auction.auctionTxHash)).toBeNull();
+  }, 90_000);
+
   it.todo("SCOUT(#243) the window timelock deadline equals the window_deadline_us view and the TimelockRegistrationEvent sender is the registrar address");
   it.todo("SCOUT(#243) the SDK registrar address equals auction::timelock_registrar_address and 0x1::ibe_config::timelock_registrar");
   it.todo("SCOUT(#243) register_timelock from the operator account fails with E_NOT_REGISTRAR");

@@ -16,6 +16,7 @@ import {
   type LockFields,
 } from "@atomica/sdk/ethereum";
 import { getChainConfig } from "@atomica/sdk/chain-config";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { getDerivedAddress, submitNativeTransaction } from "@atomica/sdk";
 import { useWallet } from "../context/WalletContext";
 import { proveLock } from "../hooks/proveLock";
@@ -83,6 +84,11 @@ function hexBytes(hex: string): Uint8Array {
   );
 }
 
+/** Pair bytes of the input. An empty input means the launch pair. */
+function pairBytes(hex: string): Uint8Array {
+  return hex.replace(/^0x/, "") === "" ? LAUNCH_PAIR_BCS : hexBytes(hex);
+}
+
 export function AuctionBidder() {
   const { account } = useWallet();
 
@@ -102,9 +108,8 @@ export function AuctionBidder() {
   const [windowId, setWindowId] = useState("0");
   // SCOUT(#216) EDIT: quantity zero and quantity above the window supply now abort submit_bid; this field takes wei, defaults to 1 and has no check.
   const [quantity, setQuantity] = useState("1");
-  // SCOUT(#224) EDIT: default to the SDK launch pair constant instead of empty bytes.
   // Set on the lock step: the same bytes feed lockBinding, sealBid and submitBid.
-  const [pairBcsHex, setPairBcsHex] = useState("");
+  const [pairBcsHex, setPairBcsHex] = useState(ethers.hexlify(LAUNCH_PAIR_BCS));
   const [collateralLockIdHex, setCollateralLockIdHex] = useState("");
   // SCOUT(#217) EDIT: price input state; the text goes through the SDK parsePrice (whole USD per whole base token).
   const [bidAmount, setBidAmount] = useState("110");
@@ -137,10 +142,9 @@ export function AuctionBidder() {
         //    current window and the pair the bid names. Step 2 starts on
         //    that window.
         // SCOUT(#221) EDIT: lockBinding and lockFakeUsd lose the caller deadline; a window id from a wrong client clock now reverts in LockBox.lock.
-        // SCOUT(#224) EDIT: bind the lock to the launch pair bytes, not to new Uint8Array(0).
         const binding = lockBinding(
           currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
-          hexBytes(pairBcsHex),
+          pairBytes(pairBcsHex),
         );
         const lockReceipt = await lockFakeUsd(provider, amountWei, binding);
         // 3. The lock id and nonce come from the Locked event.
@@ -208,8 +212,7 @@ export function AuctionBidder() {
       }
 
       // Prepare sealed-bid arguments: the pair the lock is bound to.
-      // SCOUT(#224) EDIT: fall back to the launch pair, not to empty bytes.
-      const pairBcs = hexBytes(pairBcsHex);
+      const pairBcs = pairBytes(pairBcsHex);
 
       // The LockBox lock id the lock step registered (or typed after Skip).
       if (!collateralLockIdHex) {
@@ -314,7 +317,6 @@ export function AuctionBidder() {
             />
           </div>
 
-          {/* SCOUT(#224) EDIT: the placeholder says leave empty for default; the default becomes the launch pair. */}
           <div>
             <label className="block text-zinc-500 text-sm mb-1">
               Pair BCS (0x hex, optional)
@@ -325,7 +327,7 @@ export function AuctionBidder() {
               value={pairBcsHex}
               onChange={(e) => setPairBcsHex(e.target.value)}
               disabled={unregistered !== null}
-              placeholder="0x... (leave empty for default)"
+              placeholder="0x... (leave empty for the launch pair)"
               className="w-full bg-zinc-800 text-zinc-200 rounded p-2 text-xs font-mono border border-zinc-700 focus:outline-none focus:border-zinc-500"
             />
           </div>

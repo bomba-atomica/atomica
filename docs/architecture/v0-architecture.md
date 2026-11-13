@@ -122,12 +122,22 @@ window ID matches the auction's registered window ID.
 
 <!-- SCOUT(#242) DOC: WindowState as built also holds timelock_id, min_prices, revealed_prices, reveal_final, refunded and bid_results, bids is vector<SealedBid>, and sellers contribute supply, not bids. -->
 <!-- SCOUT(#218) DOC: state the cap on seller locks per window and the minimum seller lock size. -->
-<!-- SCOUT(#224) DOC: state the pair allowlist: create_auction aborts for unlisted pair bytes and stores the listed Pair. -->
 <!-- SCOUT(#243) DOC: state that create_auction registers the window timelock itself, one per window id, and takes no timelock_id. -->
 
 The registry is keyed by `(auction_window_id, pair)`, not by seller address.
 Multiple sellers offering the same pair in the same window contribute bids to
 the same clearing pool.
+
+A window can exist only for a pair on the allowlist. `PairAllowlist` at
+`@atomica` maps pair bytes to a `Pair`, and `init_module` seeds it with the
+launch pair (section 2.4). `create_auction` aborts with `E_PAIR_NOT_ALLOWED`
+(42) when `pair_bcs` is not listed. The check runs right after the window id
+checks. A new window stores the `Pair` the allowlist holds for those bytes.
+Only the package account adds a pair, through `allow_pair` (otherwise
+`E_NOT_PACKAGE_ACCOUNT`, 43), and the contract computes the key as the BCS of
+the `Pair`. The views are `is_pair_allowed(pair_bcs)` and `launch_pair_bcs()`.
+Entries that find a window by `(window_id, pair_bcs)` abort with
+`E_AUCTION_NOT_FOUND` (1) for unlisted bytes, since no window exists for them.
 
 A window has no reserve price at launch. `create_auction` takes no minimum
 price, and `WindowState` stores none: clearing alone sets the price, as the PRD
@@ -152,19 +162,27 @@ struct WindowState has store {
 
 ### 2.4 Pair struct
 
-<!-- SCOUT(#224) DOC: the launch pair goes here; the code writes quote_chain "aptos" while FakeUSD collateral is locked on Ethereum, so fix the value before its BCS becomes the SDK constant and the Ethereum pair hash. -->
-<!-- SCOUT(#224) DOC: last sentence of 2.4: the key is bcs(window_id) followed by caller-supplied pair bytes today; with the allowlist those bytes are always the BCS of a listed Pair. -->
 
 ```move
 struct Pair has copy, drop, store {
     base_chain:    vector<u8>,   // e.g. b"ethereum"
     base_token:    vector<u8>,   // e.g. b"FakeETH"
-    quote_chain:   vector<u8>,   // e.g. b"aptos"
+    quote_chain:   vector<u8>,   // e.g. b"ethereum"
     quote_token:   vector<u8>,   // e.g. b"FakeUSD"
 }
 ```
 
-The canonical key for `AuctionRegistry` is `bcs::to_bytes(&(window_id, pair))`.
+The launch pair is `Pair { ethereum, FakeETH, ethereum, FakeUSD }`. Both
+assets are locked on Ethereum, and the token names match the receipt types
+`lock_receipt::FakeETH` and `lock_receipt::FakeUSD`. Its BCS is the 34 bytes
+`0x08657468657265756d0746616b6545544808657468657265756d0746616b65555344`: each
+field is a one-byte ULEB128 length then its bytes, in field order. The SDK
+exports the same bytes as `LAUNCH_PAIR_BCS`, built by `bcsEncodePair` in
+`source/atomica-sdk/src/settlement/bridge.ts`.
+
+The key for `AuctionRegistry` is `bcs::to_bytes(&window_id)` followed by the
+pair bytes. With the allowlist those bytes are always the BCS of a listed
+`Pair`. Ethereum locks are bound to the hash of the same bytes.
 
 ### 2.5 Sealed Bid struct
 

@@ -122,8 +122,8 @@ import {
   ethAccountAddress,
   pollUntil,
   RECEIPT_FILLED,
-  TEST_PAIR_BCS,
 } from "./helpers/auction-setup";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { Faucet } from "../../src/components/Faucet";
 import { AuctionRevealer } from "../../src/components/AuctionRevealer";
 import { SettleButton } from "../../src/components/SettleButton";
@@ -425,7 +425,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       console.log("[14-happy-path] Steps 3-7: Lock proof + auction creation (direct helpers)");
 
       // Generate ETH lock proof via Node.js-side helper
-      // SCOUT(#224) EDIT: the seller lock and the collateral lock are bound to the empty pair; bind them to the launch pair.
+      // Both locks are bound to the launch pair (generateEthLockProof default).
       const proofResult = await generateEthLockProof(fixture, LOCK_AMOUNT, MINT_AMOUNT);
       lockId = proofResult.lockId;
 
@@ -472,7 +472,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         fixture.eth.seller,
         lockId,
         windowId,
-        TEST_PAIR_BCS,
+        LAUNCH_PAIR_BCS,
         timelockId,
       );
 
@@ -481,7 +481,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         aptosClient,
         moduleAddr,
         windowId,
-        TEST_PAIR_BCS,
+        LAUNCH_PAIR_BCS,
       );
       console.log(
         `[14-happy-path] get_window_status(${windowId}): ` +
@@ -548,7 +548,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       // timelock::get_mpk from the one configured endpoint and encrypts
       // price || salt.
       // SCOUT(#228) EDIT: no salt and no commitment come back, and getBidPayload has five arguments.
-      const sealed = await sealBid(windowId, TEST_PAIR_BCS, bidder, BID_PRICE);
+      const sealed = await sealBid(windowId, LAUNCH_PAIR_BCS, bidder, BID_PRICE);
       expect(sealed.timelockId).toBe(timelockId);
       bidSalt = sealed.salt;
 
@@ -557,7 +557,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         fixture.eth.bidder,
         getBidPayload(
           windowId,
-          TEST_PAIR_BCS,
+          LAUNCH_PAIR_BCS,
           sealed.ciphertext,
           sealed.commitment,
           ethers.getBytes(collateralLockId),
@@ -567,8 +567,8 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       expect(await chainNowUs(aptosClient)).toBeLessThan(deadlineUs);
 
       // submit_bid ran ibe::verify_bid_ct on the client ciphertext and stored it.
-      expect(await getBidCount(windowId, TEST_PAIR_BCS)).toBe(1n);
-      const stored = await getBidInfo(windowId, TEST_PAIR_BCS, 0n);
+      expect(await getBidCount(windowId, LAUNCH_PAIR_BCS)).toBe(1n);
+      const stored = await getBidInfo(windowId, LAUNCH_PAIR_BCS, 0n);
       expect(stored.bidder.replace(/^0x0*/, "")).toBe(bidder.replace(/^0x0*/, ""));
       expect(stored.ciphertext).toEqual(sealed.ciphertext);
       // SCOUT(#228) REMOVE: the bid view has no commitment.
@@ -636,15 +636,15 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         aptosClient,
         deployerAccount,
         // SCOUT(#228) REMOVE: relayed submit_cleartext_and_clear; replace with open_bids sent by a third account.
-        getSubmitCleartextPayload(windowId, TEST_PAIR_BCS, [BigInt(cleartexts)], [
+        getSubmitCleartextPayload(windowId, LAUNCH_PAIR_BCS, [BigInt(cleartexts)], [
           ethers.getBytes(salts),
         ]),
       );
       // SCOUT(#216) EDIT: assert that the opened bid reads valid.
-      const opened = await getBidInfo(windowId, TEST_PAIR_BCS, 0n);
+      const opened = await getBidInfo(windowId, LAUNCH_PAIR_BCS, 0n);
       expect(opened.opened).toBe(true);
       expect(opened.price).toBe(BID_PRICE);
-      const status = await getWindowStatus(aptosClient, moduleAddr, windowId, TEST_PAIR_BCS);
+      const status = await getWindowStatus(aptosClient, moduleAddr, windowId, LAUNCH_PAIR_BCS);
       expect(status.revealFinal).toBe(true);
       console.log(`[14-happy-path] Bid decrypted off chain and opened on chain at ${opened.price}`);
     },
@@ -662,7 +662,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
     async () => {
       console.log("[14-happy-path] Steps 9-10: settle the cleared window via real SettleButton");
 
-      const results = await getBidResults(windowId, TEST_PAIR_BCS);
+      const results = await getBidResults(windowId, LAUNCH_PAIR_BCS);
       expect(results.map((r) => [r.isWinner, r.fillAmount])).toEqual([[true, BID_QUANTITY]]);
 
       // The real SettleButton signs with SIWE as the seller.
@@ -676,7 +676,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         <WalletContext.Provider value={{ account: sellerEthAddress, connect: async () => {} }}>
           <SettleButton
             windowId={windowId}
-            pairBcs={TEST_PAIR_BCS}
+            pairBcs={LAUNCH_PAIR_BCS}
             auctionEndTime={auctionEndTime}
           />
         </WalletContext.Provider>,
@@ -704,10 +704,10 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         BID_PRICE_USD,
       );
 
-      expect(await isSettled(windowId, TEST_PAIR_BCS)).toBe(true);
+      expect(await isSettled(windowId, LAUNCH_PAIR_BCS)).toBe(true);
       const state = await getAuctionState(aptosClient, moduleAddr, {
         windowId,
-        pairBcs: TEST_PAIR_BCS,
+        pairBcs: LAUNCH_PAIR_BCS,
       });
       expect(state.settled).toBe(true);
       expect(state.clearingPrice).toBe(BID_PRICE);
@@ -750,7 +750,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       withProviders(
         bidderEthAddress,
         // SCOUT(#236) REMOVE: render ReleaseButton here instead.
-        <ClaimButton windowId={windowId} pairBcs={TEST_PAIR_BCS} />,
+        <ClaimButton windowId={windowId} pairBcs={LAUNCH_PAIR_BCS} />,
       );
 
       const claimBtn = await waitFor(
@@ -792,7 +792,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         <Step8Monitor
           auctionEndTime={auctionEndTime}
           windowId={windowId}
-          pairBcs={TEST_PAIR_BCS}
+          pairBcs={LAUNCH_PAIR_BCS}
           sellerAddress={sellerAptosAddress}
           onCancelAndUnlock={async () => {}}
           loading={false}

@@ -66,6 +66,7 @@ import {
   getRefundExpiredWindowPayload,
   getSettlePayload,
   getSubmitCleartextPayload,
+  LAUNCH_PAIR_BCS,
 } from "../src/aptos/payloads.js";
 
 // ─── Shared fixtures ───────────────────────────────────────────────────────────
@@ -277,9 +278,22 @@ describe("planned tests (SCOUT)", () => {
   it.todo(
     "SCOUT(#236) the payloads module exports no getClaimMintPayload and no submitClaim",
   );
-  it.todo(
-    "SCOUT(#224) LAUNCH_PAIR_BCS equals the BCS of the launch Pair (ethereum, FakeETH, aptos, FakeUSD)",
-  );
+});
+
+describe("launch pair", () => {
+  it("LAUNCH_PAIR_BCS equals the BCS of the launch Pair (ethereum, FakeETH, ethereum, FakeUSD)", () => {
+    // Move BCS of a struct of four vector<u8>: each field is a ULEB128 length
+    // then its bytes, in field order.
+    const field = (s: string) => [s.length, ...new TextEncoder().encode(s)];
+    const expected = new Uint8Array([
+      ...field("ethereum"),
+      ...field("FakeETH"),
+      ...field("ethereum"),
+      ...field("FakeUSD"),
+    ]);
+    expect(LAUNCH_PAIR_BCS).toEqual(expected);
+    expect(LAUNCH_PAIR_BCS.length).toBe(34);
+  });
 });
 
 // ─── Permissionless unwind payloads (issue 195) ───────────────────────────────

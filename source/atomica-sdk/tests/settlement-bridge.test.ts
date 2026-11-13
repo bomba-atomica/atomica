@@ -26,6 +26,8 @@ import {
   scanAuctionOutcomeEvents,
   AptosPrunedReadError,
   bcsEncodePair,
+  LAUNCH_PAIR,
+  LAUNCH_PAIR_BCS,
   quoteForFill,
   parseBidResults,
   type BridgeConfig,
@@ -365,6 +367,19 @@ describe("bcsEncodePair", () => {
     expect(ethers.hexlify(bcsEncodePair(TEST_PAIR))).toBe(
       "0x08657468657265756d0746616b65455448056170746f730746616b65555344",
     );
+  });
+
+  it("LAUNCH_PAIR_BCS is bcsEncodePair of the launch pair", () => {
+    expect(LAUNCH_PAIR).toEqual({
+      baseChain: "ethereum",
+      baseToken: "FakeETH",
+      quoteChain: "ethereum",
+      quoteToken: "FakeUSD",
+    });
+    expect(ethers.hexlify(LAUNCH_PAIR_BCS)).toBe(
+      "0x08657468657265756d0746616b6545544808657468657265756d0746616b65555344",
+    );
+    expect(LAUNCH_PAIR_BCS).toEqual(bcsEncodePair(LAUNCH_PAIR));
   });
 });
 

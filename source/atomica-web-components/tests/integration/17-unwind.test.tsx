@@ -64,12 +64,15 @@ import { commands } from "vitest/browser";
 import { WalletContext } from "../../src/context/WalletContext";
 import { UnwindButton } from "../../src/components/UnwindButton";
 import { ReclaimLockButton } from "../../src/components/ReclaimLockButton";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
-const PAIR_BCS = new TextEncoder().encode("17-unwind");
+/** The launch pair: the only pair on the allowlist. */
+const PAIR_BCS = LAUNCH_PAIR_BCS;
 /**
  * The reclaim case binds its lock to another pair: 17-1 records an outcome
  * for (window, PAIR_BCS), and a lock of an auction with a recorded outcome
- * goes home by release, not by reclaim.
+ * goes home by release, not by reclaim. These bytes are not on the allowlist,
+ * so no window can ever claim the lock: it goes home only through reclaim.
  */
 const RECLAIM_PAIR_BCS = new TextEncoder().encode("17-reclaim");
 const DEADLINE_AHEAD_US = 120_000_000n;

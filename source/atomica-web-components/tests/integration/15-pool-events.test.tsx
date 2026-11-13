@@ -13,6 +13,7 @@ import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from "vitest
 import { render, cleanup } from "@testing-library/react";
 import React from "react";
 import { ethers } from "ethers";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import {
   setupIntegrationFixture,
   teardownIntegrationFixture,
@@ -44,14 +45,13 @@ const LOCKBOX_ABI = [
   "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) external returns (bytes32)",
 ] as const;
 
-/** Lock `amount` of `token` into the current window (empty pair BCS). */
+/** Lock `amount` of `token` into the current window of the launch pair. */
 async function lockNow(lockBox: ethers.Contract, token: string, amount: bigint) {
   const b = lockBinding(
     currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
-    new Uint8Array(0),
+    LAUNCH_PAIR_BCS,
   );
   // SCOUT(#221) EDIT: lock takes no deadline argument.
-  // SCOUT(#224) EDIT: bind to the launch pair instead of new Uint8Array(0) above.
   const tx = await lockBox.lock(token, amount, b.windowId, b.pairHash, b.deadline);
   await tx.wait();
 }

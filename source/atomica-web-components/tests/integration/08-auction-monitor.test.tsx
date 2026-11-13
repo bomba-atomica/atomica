@@ -48,10 +48,11 @@ import {
 } from "@aptos-labs/ts-sdk";
 import { setAptosInstance } from "@atomica/sdk/aptos";
 import { ethers } from "ethers";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
 // SCOUT(#217) EDIT: price constant in micro-dollar style.
-// SCOUT(#224) EDIT: use the launch pair.
-const PAIR_BCS = new TextEncoder().encode("08-auction-monitor");
+// The launch pair: the only pair on the allowlist.
+const PAIR_BCS = LAUNCH_PAIR_BCS;
 // SCOUT(#243) EDIT: a 20 second deadline is not possible when the deadline is the window close; it needs the test cap.
 /** The live window's bids close this far after creation. */
 const DEADLINE_AHEAD_US = 20_000_000n;

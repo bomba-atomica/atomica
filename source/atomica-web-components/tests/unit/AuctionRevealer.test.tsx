@@ -46,6 +46,7 @@ vi.mock("@atomica/sdk/aptos", () => ({
 }));
 
 import { AuctionRevealer } from "../../src/components/AuctionRevealer";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
 const ACCOUNT = "0x1234567890123456789012345678901234567890";
 
@@ -94,8 +95,8 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
     const status = screen.getByTestId("reveal-status");
     expect(status.textContent).toContain("Waiting for decryption key reveal");
     // The window's timelock id, not the window id, is polled.
-    // SCOUT(#224) EDIT: an empty pair input means the launch pair, so expect the SDK launch pair bytes.
-    expect(mockGetWindowTimelockId).toHaveBeenCalledWith(0n, new Uint8Array(0));
+    // An empty pair input means the launch pair.
+    expect(mockGetWindowTimelockId).toHaveBeenCalledWith(0n, LAUNCH_PAIR_BCS);
     expect(mockIsRevealed).toHaveBeenCalledWith(42n);
   });
 
@@ -146,7 +147,7 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
     expect(mockSubmitCleartextAndClear).toHaveBeenCalledWith(
       ACCOUNT,
       0n,
-      new Uint8Array(0),
+      LAUNCH_PAIR_BCS,
       [110n, 105n, 95n],
       [
         new Uint8Array(32).fill(0x11),
@@ -215,7 +216,7 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
     await waitFor(() => {
       expect(screen.getAllByTestId("decrypted-bid")).toHaveLength(2);
     });
-    expect(mockDecryptWindowBids).toHaveBeenCalledWith(0n, new Uint8Array(0));
+    expect(mockDecryptWindowBids).toHaveBeenCalledWith(0n, LAUNCH_PAIR_BCS);
     const rows = screen.getAllByTestId("decrypted-bid");
     expect(rows[0].textContent).toContain("price 200");
     expect(rows[0].textContent).toContain("matches commitment");
@@ -231,7 +232,7 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
     expect(mockSubmitCleartextAndClear).toHaveBeenCalledWith(
       ACCOUNT,
       0n,
-      new Uint8Array(0),
+      LAUNCH_PAIR_BCS,
       [200n, 0n],
       [salt, new Uint8Array(0)],
     );

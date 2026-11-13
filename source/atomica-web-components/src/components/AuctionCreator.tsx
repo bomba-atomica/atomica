@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ethers } from "ethers";
 // SCOUT(#243) REMOVE: drop the registerTimelock import.
 import { submitCreateAuction, registerTimelock } from "@atomica/sdk/aptos";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { useWallet } from "../context/WalletContext";
 
 // SCOUT(#243) EDIT: this header says the screen registers the timelock; create_auction does it.
@@ -25,8 +26,7 @@ export function AuctionCreator() {
   const { account } = useWallet();
   const [lockIdHex, setLockIdHex] = useState("");
   const [windowId, setWindowId] = useState("0");
-  // SCOUT(#224) EDIT: default to the SDK launch pair constant.
-  const [pairBcsHex, setPairBcsHex] = useState("");
+  const [pairBcsHex, setPairBcsHex] = useState(ethers.hexlify(LAUNCH_PAIR_BCS));
   // SCOUT(#217) EDIT: while the field exists, its text goes through parsePrice.
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -51,11 +51,10 @@ export function AuctionCreator() {
       // SCOUT(#243) EDIT: remove the 32 zero byte default lock id; the UI happy path issue (236) assigns it to this issue, whose text does not mention it.
       const lockId = ethers.getBytes(lockIdHex || "0x" + "00".repeat(32));
       const windowIdBn = BigInt(windowId);
-      // SCOUT(#224) EDIT: fall back to the launch pair; empty bytes are not on the allowlist.
-      // pairBcs: BCS-encoded Pair struct; demo uses empty bytes (scaffold body aborts anyway)
+      // pairBcs: must be on the pair allowlist; an empty input means the launch pair.
       const pairBcs = pairBcsHex
         ? ethers.getBytes(pairBcsHex)
-        : new Uint8Array(0);
+        : LAUNCH_PAIR_BCS;
       // SCOUT(#217) EDIT: price parse (BigInt of the text); use parsePrice while the field exists.
 
       // SCOUT(#243) EDIT: drop the timelockId argument.
@@ -92,7 +91,6 @@ export function AuctionCreator() {
             className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
           />
         </div>
-        {/* SCOUT(#224) EDIT: the hint text and the empty fallback change to the launch pair. */}
         <div>
           <label className="block text-zinc-500 text-sm mb-1">
             Pair BCS (0x hex, optional)
@@ -101,7 +99,7 @@ export function AuctionCreator() {
             type="text"
             value={pairBcsHex}
             onChange={(e) => setPairBcsHex(e.target.value)}
-            placeholder="0x... (leave empty for default)"
+            placeholder="0x... (leave empty for the launch pair)"
             className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500 font-mono text-xs"
           />
         </div>

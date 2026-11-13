@@ -49,7 +49,6 @@ describe("LockBox lock id, storage key and commitment", () => {
     expect(getLockId(USER, TOKEN, 0n)).not.toBe(getLockId(USER, TOKEN, 1n));
   });
 
-  // SCOUT(#224) EDIT: the anvil lock is bound to empty pair bytes; decide whether the shared fixture moves to the launch pair.
   it("lockCommitment matches LockBox.commitments for the anvil lock", () => {
     const binding = lockBinding(WINDOW, new Uint8Array(0));
     expect(binding.pairHash).toBe(

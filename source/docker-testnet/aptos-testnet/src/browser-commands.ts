@@ -113,6 +113,10 @@ import type { DualChainTestnetInfo } from "./dual-chain-testnet.js";
 import { ethers } from "ethers";
 import { waitForCertifiedEthBlock, waitForEthBlock } from "./eth-blocks.js";
 import { currentWindowId, lockBinding, type LockBinding } from "@atomica/sdk/ethereum/lock-binding";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
+
+/** Hex of the SDK launch pair bytes: the default pair of every test lock. */
+const LAUNCH_PAIR_BCS_HEX = ethers.hexlify(LAUNCH_PAIR_BCS);
 
 /**
  * Module augmentation to add our custom commands to Vitest's browser commands types.
@@ -176,7 +180,6 @@ declare module "vitest/browser" {
             address: string,
             amount?: number,
         ): Promise<{ success: boolean; txHash: string }>;
-        // SCOUT(#224) ADD: declare allowTestPair here once source/atomica-web-components/vitest.config.ts registers allowTestPairCommand (a file the issue text does not name).
         setupDualChainTestnet(
             siweDomain?: string,
             options?: { unwindGraceUs?: string },
@@ -370,20 +373,6 @@ export const teardownDualChainTestnetCommand: BrowserCommand<[]> = async () => {
     return { success: true };
 };
 
-/**
- * Add a test pair to the auction allowlist, signed by the package (deployer)
- * account. The Move entry takes the four `Pair` fields and computes the BCS
- * key itself. Returns the pair's BCS bytes as hex, to pass as `pair_bcs`.
- *
- * EXECUTION: Node.js (holds the deployer key)
- */
-// SCOUT(#224) ADD: deployer-signed command that adds a test pair; each browser test file that uses its own PAIR_BCS today must call it before create_auction.
-export const allowTestPairCommand: BrowserCommand<
-    [baseChain: string, baseToken: string, quoteChain: string, quoteToken: string]
-> = async (): Promise<{ pairBcsHex: string }> => {
-    throw new Error("NOT_IMPLEMENTED: SCOUT(#224) allowTestPairCommand");
-};
-
 // ---------------------------------------------------------------------------
 // Minimal ABI fragments for LockBox proof generation
 // ---------------------------------------------------------------------------
@@ -400,18 +389,18 @@ const LOCKBOX_LOCK_ABI = [
 ];
 
 // SCOUT(#221) EDIT: binding.deadline stops being a lock() argument, and LockBox then rejects a window id that is closed at block.timestamp, so the host clock, the Ethereum block time and the Aptos clock must agree on the window.
-// SCOUT(#224) EDIT: the empty pair BCS default is not on the allowlist; default to the SDK launch pair constant.
 /**
  * The binding of a test lock: the current window by the host clock (the SDK
  * `currentWindowId` mirror of `auction::current_window_id`, whose id changes
  * at 07:45 and 16:15 UTC) and the pair BCS of the window the
- * test claims the lock into (`pairBcsHex`, empty by default). Aptos claims a
+ * test claims the lock into (`pairBcsHex`, the SDK launch pair by default).
+ * Aptos claims a
  * lock only into the window and pair it is bound to (issue 194). Its deadline
  * is `auction::eth_lock_deadline(windowId)`, 72 hours past the window close
  * (the next 07:45 or 16:15 UTC),
  * so Aptos registers it and it cannot be reclaimed during a test.
  */
-export function testLockBinding(pairBcsHex: string = "0x"): LockBinding {
+export function testLockBinding(pairBcsHex: string = LAUNCH_PAIR_BCS_HEX): LockBinding {
     return lockBinding(
         currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
         ethers.getBytes(pairBcsHex),
@@ -448,7 +437,7 @@ export async function lockAndProve(
     lockAmount: bigint,
     mintAmount: bigint,
     count: number,
-    pairBcsHex: string = "0x",
+    pairBcsHex: string = LAUNCH_PAIR_BCS_HEX,
 ): Promise<EthLockProofResult[]> {
     const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
     const seller = new ethers.Wallet(sellerPrivateKey, provider);
@@ -611,7 +600,7 @@ export const generateEthLockProofCommand: BrowserCommand<
     lockBoxAddress: string,
     lockAmountWei: string = ethers.parseEther("10").toString(),
     mintAmountWei: string = ethers.parseEther("1000").toString(),
-    pairBcsHex: string = "0x",
+    pairBcsHex: string = LAUNCH_PAIR_BCS_HEX,
 ): Promise<EthLockProofResult> => {
     const [result] = await lockAndProve(
         rpcUrl,
@@ -657,7 +646,7 @@ export const generateEthLockProofsCommand: BrowserCommand<
     lockBoxAddress: string,
     lockAmountWei: string,
     count: number,
-    pairBcsHex: string = "0x",
+    pairBcsHex: string = LAUNCH_PAIR_BCS_HEX,
 ): Promise<EthLockProofResult[]> => {
     const lockAmount = BigInt(lockAmountWei);
     return lockAndProve(

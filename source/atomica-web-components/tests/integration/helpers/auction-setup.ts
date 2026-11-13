@@ -60,6 +60,7 @@ import {
   submitNativeTransaction,
 } from "@atomica/sdk";
 import { currentWindowId as windowIdAt } from "@atomica/sdk/ethereum";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { commands } from "vitest/browser";
 import type { EthLockProofResult as CommandEthLockProofResult } from "@atomica/aptos-docker-testnet/browser-commands";
 import type { IntegrationFixture } from "../fixtures/dual-chain";
@@ -129,18 +130,17 @@ export interface EthLockProofResult {
  * @param token      - ERC-20 to mint and lock (default: FakeETH)
  * @param depositor  - Ethereum account that locks (default: the seller)
  * @param pairBcs    - Pair BCS of the window the lock is bound to (default:
- *                     {@link TEST_PAIR_BCS}). Aptos claims the lock only into
- *                     that pair's current window.
+ *                     the SDK `LAUNCH_PAIR_BCS`). Aptos claims the lock only
+ *                     into that pair's current window.
  */
 // SCOUT(#218) EDIT: the default 10 FakeETH lock must stay at or above the minimum seller lock.
-// SCOUT(#224) EDIT: the lock is bound to the empty pair (testLockBinding); bind it to the launch pair (pull request 213 adds a pairBcs parameter here).
 export async function generateEthLockProof(
   fixture: IntegrationFixture,
   lockAmount: bigint = ethers.parseEther("10"),
   mintAmount: bigint = ethers.parseEther("1000"),
   token: string = fixture.eth.contracts.fakeETH,
   depositor: EthSigner = fixture.eth.seller,
-  pairBcs: Uint8Array = TEST_PAIR_BCS,
+  pairBcs: Uint8Array = LAUNCH_PAIR_BCS,
 ): Promise<EthLockProofResult> {
   const { eth } = fixture;
 
@@ -287,10 +287,6 @@ function registerLockPayload(
   }
   return payload;
 }
-
-// SCOUT(#224) EDIT: empty bytes are not on the allowlist; use the SDK launch pair constant (each test file starts its own chain, so one pair is enough).
-/** Default pair BCS bytes. Tests that need several windows pass distinct bytes. */
-export const TEST_PAIR_BCS = new Uint8Array(0);
 
 /**
  * Default FakeUSD collateral locked for one bid (6 decimals). The lock mints
@@ -555,11 +551,15 @@ export interface LiveWindow {
  * Ethereum-derivable account creates the window: only it can claim the
  * seller receipt.
  *
+ * `options.pairBcs` must be on the pair allowlist (the SDK `LAUNCH_PAIR_BCS`),
+ * or `create_auction` aborts with `E_PAIR_NOT_ALLOWED`. Each test file starts
+ * its own chain, so one pair is enough: two calls for one window id join one
+ * window.
+ *
  * Throws unless `get_window_status` reads back the new timelock with
  * `reveal_final` and `refunded` both false.
  */
 // SCOUT(#243) EDIT: stop registering a timelock; deadlineAheadUs needs the owner's answer on a test cap (open question 1), since tests use 20 to 600 seconds.
-// SCOUT(#224) EDIT: options.pairBcs must be on the allowlist.
 export async function createLiveWindow(
   fixture: IntegrationFixture,
   aptosClient: Aptos,
@@ -835,7 +835,7 @@ export async function getWindowStatus(
   aptosClient: Aptos,
   moduleAddr: string,
   windowId: bigint,
-  pairBcs: Uint8Array = TEST_PAIR_BCS,
+  pairBcs: Uint8Array = LAUNCH_PAIR_BCS,
 ): Promise<{ timelockId: bigint; revealFinal: boolean; refunded: boolean }> {
   const [timelockId, revealFinal, refunded] = await aptosClient.view({
     payload: {
@@ -907,11 +907,6 @@ export async function getReceiptStatus(
 // ---------------------------------------------------------------------------
 // Scout stubs: planned helpers. No test calls them yet.
 // ---------------------------------------------------------------------------
-
-// SCOUT(#224) ADD: add a test pair to the allowlist through a deployer-signed browser command (the command belongs to the docker testnet package and does not exist yet).
-export async function allowTestPair(_pairBcs: Uint8Array): Promise<void> {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#224) allowTestPair");
-}
 
 // SCOUT(#228) ADD: open up to maxBids bids of a window with auction::open_bids from any account; callers repeat it until the window is cleared.
 export async function openBidsDirect(

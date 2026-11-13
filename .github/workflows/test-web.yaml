@@ -620,7 +620,6 @@ jobs:
             test_files: >-
               tests/integration/01-faucet.test.tsx
               tests/integration/02-wallet-connect.test.tsx
-          # SCOUT(#224) TEST: this chunk runs 07-create-auction with the listed and unlisted pair cases.
           # SCOUT(#243) TEST: this chunk runs 07-create-auction, which registers the timelock through create_auction and checks the rejected direct registration.
           - chunk: auction
             test_files: >-

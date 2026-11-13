@@ -29,13 +29,14 @@ vi.mock("ethers", async (importOriginal) => {
     ...actual,
     ethers: {
       ...actual.ethers,
-      getBytes: vi.fn().mockReturnValue(new Uint8Array(32)),
+      getBytes: vi.fn((v: string) => actual.ethers.getBytes(v)),
     },
   };
 });
 
 import { AuctionCreator } from "../../src/components/AuctionCreator";
 import { submitCreateAuction, registerTimelock } from "@atomica/sdk/aptos";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
 const ACCOUNT = "0xAbCd1234567890123456789012345678901234Ab";
 
@@ -158,7 +159,24 @@ describe("AuctionCreator — unit", () => {
     // (account, windowId, pairBcs, lockId, timelockId): the lock id is
     // followed directly by the timelock id, with no price between them.
     const args = vi.mocked(submitCreateAuction).mock.calls[0];
-    expect(args).toEqual([ACCOUNT, 0n, new Uint8Array(0), new Uint8Array(32), 5n]);
+    expect(args).toEqual([ACCOUNT, 0n, LAUNCH_PAIR_BCS, new Uint8Array(32), 5n]);
   });
-  it.todo("SCOUT(#224) the pair defaults to the SDK launch pair constant");
+
+  it("the pair defaults to the SDK launch pair constant", async () => {
+    renderAuctionCreator();
+    const input = screen.getByPlaceholderText(/launch pair/i) as HTMLInputElement;
+    expect(input.value).toBe(
+      "0x08657468657265756d0746616b6545544808657468657265756d0746616b65555344",
+    );
+
+    // An empty input also means the launch pair.
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /Create Auction/i }));
+    await waitFor(() => {
+      expect(submitCreateAuction).toHaveBeenCalledTimes(1);
+    });
+    expect(vi.mocked(submitCreateAuction).mock.calls[0][2]).toEqual(
+      LAUNCH_PAIR_BCS,
+    );
+  });
 });

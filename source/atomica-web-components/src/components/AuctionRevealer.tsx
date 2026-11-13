@@ -7,6 +7,7 @@ import {
   submitCleartextAndClear,
   type OpenedBid,
 } from "@atomica/sdk/aptos";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { useWallet } from "../context/WalletContext";
 
 // SCOUT(#228) EDIT: rewrite this flow comment: one permissionless Open bids action, no prices and no salts.
@@ -36,8 +37,9 @@ import { useWallet } from "../context/WalletContext";
 
 const POLL_INTERVAL_MS = 5_000;
 
-// SCOUT(#224) EDIT: an empty input must mean the launch pair, not empty bytes.
+/** Pair bytes of the input. An empty input means the launch pair. */
 function parsePairBcs(hex: string): Uint8Array {
+  if (hex.replace(/^0x/, "") === "") return LAUNCH_PAIR_BCS;
   return new Uint8Array(
     (hex.replace(/^0x/, "").match(/.{1,2}/g) ?? []).map((b) => parseInt(b, 16)),
   );
@@ -254,7 +256,7 @@ export function AuctionRevealer() {
             type="text"
             value={pairBcsHex}
             onChange={(e) => setPairBcsHex(e.target.value)}
-            placeholder="0x... (leave empty for default)"
+            placeholder="0x... (leave empty for the launch pair)"
             className="w-full bg-zinc-800 text-zinc-200 rounded p-2 text-xs font-mono border border-zinc-700 focus:outline-none focus:border-zinc-500"
           />
         </div>

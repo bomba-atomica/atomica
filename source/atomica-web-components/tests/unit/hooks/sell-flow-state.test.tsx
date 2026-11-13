@@ -82,6 +82,7 @@ import {
   waitForCertifiedBlock,
 } from "@atomica/sdk/aptos";
 import { submitNativeTransaction } from "@atomica/sdk";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
 const ACCOUNT = "0x1234567890123456789012345678901234567890";
 const STORAGE_KEY = `sell-flow-${ACCOUNT.toLowerCase()}`;
@@ -412,7 +413,6 @@ describe("useSellFlow state machine", () => {
     });
 
     // SCOUT(#243) REMOVE: the timelock registration asserts and the local one hour end time.
-    // SCOUT(#224) EDIT: pairBcs equals the launch pair, not empty bytes.
     it("createAuction: registers the timelock first, then submits the 4-argument create_auction", async () => {
       vi.mocked(registerTimelock).mockResolvedValue(42n);
       vi.mocked(getCreateAuctionPayload).mockReturnValue({
@@ -457,7 +457,7 @@ describe("useSellFlow state machine", () => {
       // SCOUT(#243) EDIT: the payload loses timelockId.
       const [windowId, pairBcs, lockIdBytes, timelockId] = args;
       expect(typeof windowId).toBe("bigint");
-      expect(pairBcs).toEqual(new Uint8Array(0));
+      expect(pairBcs).toEqual(LAUNCH_PAIR_BCS);
       expect(lockIdBytes).toEqual(ethers.getBytes(EXPECTED_LOCK_ID));
       expect(timelockId).toBe(42n);
       expect(submitNativeTransaction).toHaveBeenCalledTimes(1);
