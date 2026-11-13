@@ -26,7 +26,9 @@ vi.mock("@atomica/sdk/chain-config", () => ({
 }));
 
 // Mock blockchain action modules so no real I/O happens.
-// SCOUT(#221) EDIT: the lockBinding and lockFromReceipt mocks carry a deadline; the asserts on lockFakeEth, the proof input and reclaimLock below repeat it.
+// The lockBinding and lockFromReceipt mocks carry the computed deadline,
+// ethLockDeadline(windowId): the proof input and reclaimLock need it, while
+// LockBox.lock takes none. The asserts below repeat it.
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeEth: vi.fn(),
   lockFakeEth: vi.fn(),
@@ -635,5 +637,7 @@ describe("useSellFlow state machine", () => {
     });
   });
 
-  it.todo("SCOUT(#243) createAuction submits exactly one transaction and never calls registerTimelock");
+  it.todo(
+    "SCOUT(#243) createAuction submits exactly one transaction and never calls registerTimelock",
+  );
 });

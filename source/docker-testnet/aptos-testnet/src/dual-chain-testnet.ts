@@ -18,6 +18,11 @@ import { waitForEthBlock } from "./eth-blocks.js";
 import { resolve as pathResolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
+import {
+    WINDOW_AFTERNOON_CLOSE_SECS,
+    WINDOW_DAY_SECS,
+    WINDOW_MORNING_CLOSE_SECS,
+} from "@atomica/sdk/ethereum/lock-binding";
 import { execSync } from "child_process";
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
@@ -343,11 +348,16 @@ export async function setupDualChainTestnet(
     // The type tag names the Atomica package below.
     const lightClient = await deployLightClient(deployer, aptosTestnet);
     console.log(`[Dual-Chain] ✓ AptosLightClient: ${lightClient}`);
+    // The last two arguments are the window clock LockBox freezes: the
+    // production schedule (DeployLockBox.productionWindowSchedule), two closes
+    // a day at 07:45 and 16:15 UTC, as the Aptos package uses.
     const lockBox = await deployContract(deployer, readArtifact("LockBox"), [
         fakeETH,
         fakeUSD,
         lightClient,
         auctionOutcomeTypeTag(aptosModuleAddress),
+        WINDOW_DAY_SECS,
+        [WINDOW_MORNING_CLOSE_SECS, WINDOW_AFTERNOON_CLOSE_SECS],
     ]);
     console.log(`[Dual-Chain] ✓ LockBox: ${lockBox}`);
 

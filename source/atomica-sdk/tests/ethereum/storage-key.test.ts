@@ -13,8 +13,12 @@ import {
   lockBinding,
   lockCommitment,
   pairHashOf,
+  WINDOW_AFTERNOON_CLOSE_SECS,
+  WINDOW_DAY_SECS,
+  WINDOW_MORNING_CLOSE_SECS,
   windowCloseSecs,
 } from "../../src/ethereum/lock-binding";
+import windowTable from "../fixtures/window_clock_vectors.json";
 
 /**
  * Lock id, storage key and commitment of one LockBox lock (issues 171, 203).
@@ -82,19 +86,25 @@ describe("LockBox lock id, storage key and commitment", () => {
     ).not.toBe(base);
   });
 
-  // SCOUT(#221) EDIT: the key drops the deadline, and the check that a later deadline changes the key goes.
-  it("auctionKey is keccak256(abi.encode(windowId, pairHash, deadline))", () => {
+  it("auctionKey is keccak256(abi.encode(uint64 windowId, bytes32 pairHash))", () => {
     const binding = lockBinding(WINDOW, new Uint8Array(0));
     const expected = ethers.keccak256(
       ethers.AbiCoder.defaultAbiCoder().encode(
-        ["uint256", "bytes32", "uint256"],
-        [WINDOW, binding.pairHash, binding.deadline],
+        ["uint64", "bytes32"],
+        [WINDOW, binding.pairHash],
       ),
     );
     expect(auctionKey(binding)).toBe(expected);
-    expect(
-      auctionKey({ ...binding, deadline: binding.deadline + 1n }),
-    ).not.toBe(expected);
+    // The deadline is not part of the key: it is a function of the window id.
+    expect(auctionKey({ ...binding, deadline: binding.deadline + 1n })).toBe(
+      expected,
+    );
+    expect(auctionKey(lockBinding(WINDOW + 1n, new Uint8Array(0)))).not.toBe(
+      expected,
+    );
+    expect(auctionKey(lockBinding(WINDOW, new Uint8Array([1])))).not.toBe(
+      expected,
+    );
   });
 });
 
@@ -137,11 +147,30 @@ describe("eth_lock_deadline", () => {
   });
 });
 
-describe("planned tests (SCOUT)", () => {
-  it.todo(
-    "SCOUT(#221) ethLockDeadline and windowCloseSecs return the values of the shared (window id, close, deadline) table",
-  );
-  it.todo(
-    "SCOUT(#221) auctionKey is keccak256(abi.encode(uint64 windowId, bytes32 pairHash))",
-  );
+/**
+ * The shared (window id, close, deadline) table, also checked by LockBox.t.sol
+ * (`test_windowClockMatchesSharedTable`) and eth_lock_registration_tests.move
+ * (`window_close_and_lock_deadline_match_the_shared_table`). `ethLockDeadline`
+ * must equal `LockBox.lockDeadline`, because the proof generator recomputes
+ * the lock commitment from it.
+ */
+describe("shared window clock table", () => {
+  it("ethLockDeadline and windowCloseSecs return the values of the shared (window id, close, deadline) table", () => {
+    expect(BigInt(windowTable.day_secs)).toBe(WINDOW_DAY_SECS);
+    expect(windowTable.close_offsets_secs.map(BigInt)).toEqual([
+      WINDOW_MORNING_CLOSE_SECS,
+      WINDOW_AFTERNOON_CLOSE_SECS,
+    ]);
+    expect(BigInt(windowTable.reclaim_delay_secs)).toBe(ETH_RECLAIM_DELAY_SECS);
+    expect(windowTable.rows.length).toBeGreaterThanOrEqual(8);
+    for (const row of windowTable.rows) {
+      const w = BigInt(row.window_id);
+      expect(currentWindowId(BigInt(row.at))).toBe(w);
+      expect(windowCloseSecs(w)).toBe(BigInt(row.close));
+      expect(ethLockDeadline(w)).toBe(BigInt(row.deadline));
+      expect(lockBinding(w, new Uint8Array(0)).deadline).toBe(
+        BigInt(row.deadline),
+      );
+    }
+  });
 });

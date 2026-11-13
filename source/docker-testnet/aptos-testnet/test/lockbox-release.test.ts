@@ -25,12 +25,14 @@ import { waitForCertifiedEthBlock, waitForEthBlock } from "../src/eth-blocks";
  * Live dual-chain test of the proof-gated LockBox (issue 203).
  *
  * Both chains run for real (Aptos Docker testnet + Ethereum, ETH_BACKEND).
- * Each case locks real ERC-20s in LockBox, bound to an auction window (window
- * id, pair hash, deadline = auction::eth_lock_deadline(window id)), and proves
- * the lock's commitment slot on Aptos with `lock_receipt::register_ethereum_lock`.
+ * Each case locks real ERC-20s in LockBox with `lock(token, amount, windowId,
+ * pairHash)`. LockBox computes the deadline, lockDeadline(window id) =
+ * auction::eth_lock_deadline(window id). The test proves the lock's commitment
+ * slot on Aptos with `lock_receipt::register_ethereum_lock`, which takes no
+ * deadline.
  *
  * Cases: the receipt holds the proven lock and its binding; registration
- * rejects a wrong amount and a wrong deadline; one lock gives one receipt;
+ * rejects a wrong amount; one lock gives one receipt;
  * and LockBox releases nothing without a proven outcome or before the lock
  * deadline. No relayer exists: LockBox has no relayer-only release or
  * pull-payment path. The live outcome release of a filled trade
@@ -47,7 +49,8 @@ import { waitForCertifiedEthBlock, waitForEthBlock } from "../src/eth-blocks";
  */
 
 const ERC20_ABI = ["function balanceOf(address) view returns (uint256)"];
-// SCOUT(#221) EDIT: LOCKBOX_ABI below follows the redeployed LockBox: the Lock tuple and lockCommitment keep the deadline only if the Solidity struct and helper keep it.
+// The Lock tuple and lockCommitment keep the deadline, because the commitment
+// binds it. LockBox computes it: lockDeadline(windowId).
 // SCOUT(#222) EDIT: LOCKBOX_ABI below gains reclaimUnpayable and its errors if this live test covers the new path; the NoOutcome case is unchanged.
 const LOCK_TUPLE =
     "(address depositor, address token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)";
@@ -57,6 +60,7 @@ const LOCKBOX_ABI = [
     "function lockCommitment(address depositor, address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) pure returns (bytes32)",
     `function reclaim(${LOCK_TUPLE} l, (bytes32 lockId, bytes32 payoutsHash, uint256 index, bytes32[] proof)[] neighbours)`,
     `function releaseByOutcome(${LOCK_TUPLE} l, (address recipient, uint256 amount)[] payouts, (uint256 index, bytes32[] proof) leaf)`,
+    "function lockDeadline(uint64 windowId) view returns (uint64)",
     "error DeadlineNotReached(uint64 deadline)",
     "error NoOutcome(bytes32 auctionKey)",
 ];
@@ -92,11 +96,11 @@ async function submitAsDeployer(data: InputGenerateTransactionPayloadData): Prom
     });
 }
 
-// SCOUT(#221) EDIT: register() below drops proof.deadline from the register_ethereum_lock arguments.
 /**
  * Register the lock proven at the certified block `proof.blockNumber`. Aptos
  * derives the storage key, recomputes the commitment from the lock fields and
- * checks the proof against the certified root only.
+ * the deadline `eth_lock_deadline(window_id)`, and checks the proof against
+ * the certified root only. No deadline is sent.
  */
 async function register(asset: LockAsset, proof: Proof): Promise<void> {
     const moduleAddr = info.aptos.moduleAddress;
@@ -110,7 +114,6 @@ async function register(asset: LockAsset, proof: Proof): Promise<void> {
             proof.amount,
             proof.windowId,
             ethers.getBytes(proof.pairHash),
-            proof.deadline,
             proof.accountProof.map((p: string) => ethers.getBytes(p)),
             proof.storageProof.map((p: string) => ethers.getBytes(p)),
         ],
@@ -217,7 +220,10 @@ describe.sequential("Proof-gated LockBox with Aptos lock registration (live dual
         expect(BigInt(proof.storageValue)).toBe(BigInt(commitment));
         expect(await lockBox.statuses(proof.lockId)).toBe(STATUS_OPEN);
 
-        // Aptos keeps the binding and accepts only eth_lock_deadline(window id).
+        // LockBox computed the deadline from the window id.
+        expect(await lockBox.lockDeadline(BigInt(proof.windowId))).toBe(BigInt(proof.deadline));
+
+        // Aptos keeps the binding; its eth_lock_deadline(window id) equals LockBox's.
         const moduleAddr = info.aptos.moduleAddress;
         const [windowId, pairHash] = await aptos.view({
             payload: {
@@ -240,8 +246,9 @@ describe.sequential("Proof-gated LockBox with Aptos lock registration (live dual
         expect(String(deadline)).toBe(proof.deadline);
     }, 900_000);
 
-    // SCOUT(#221) EDIT: the wrong-deadline half of this case goes with the deadline argument and E_WRONG_DEADLINE; a commitment with another deadline can no longer be created through lock().
-    it("registration rejects a wrong amount and a wrong deadline", async () => {
+    // The register call takes no deadline, and lock() cannot make a commitment
+    // with any deadline but lockDeadline(windowId), so only the amount is tampered.
+    it("registration rejects a wrong amount", async () => {
         const { proof } = await lockAndProve(
             info.eth.bidderPrivateKey,
             "FakeUSD",
@@ -251,9 +258,6 @@ describe.sequential("Proof-gated LockBox with Aptos lock registration (live dual
         await expect(
             register("FakeUSD", { ...proof, amount: (BigInt(proof.amount) - 1n).toString() }),
         ).rejects.toThrow(/E_COMMITMENT_MISMATCH/);
-        await expect(
-            register("FakeUSD", { ...proof, deadline: (BigInt(proof.deadline) + 1n).toString() }),
-        ).rejects.toThrow(/E_WRONG_DEADLINE/);
         // The true fields register.
         await register("FakeUSD", proof);
     }, 900_000);

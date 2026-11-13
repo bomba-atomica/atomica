@@ -9,6 +9,7 @@ import {FakeETH} from "../../src/tokens/FakeETH.sol";
 import {FakeUSD} from "../../src/tokens/FakeUSD.sol";
 import {MockAptosLightClient} from "../utils/MockAptosLightClient.sol";
 import {OutcomeTreeBuilder} from "../utils/OutcomeTreeBuilder.sol";
+import {DeployLockBox} from "../../script/DeployLockBox.s.sol";
 
 /**
  * @notice Drives random lock, recordOutcome, releaseByOutcome and reclaim sequences. Every call it
@@ -21,11 +22,10 @@ contract LockBoxHandler is Test {
     FakeUSD public fakeUSD;
 
     address[3] internal actors = [address(0xA11CE), address(0xB0B), address(0xCA401)];
-    // SCOUT(#221) EDIT: fixed window ids 10 and 11 no longer lock; use `lockBox.currentWindowId()` and the next window.
-    uint64[2] internal windows = [uint64(10), uint64(11)];
+    /// The current and the next window at construction, and the deadline LockBox computes for each.
+    uint64[2] internal windows;
+    uint64[2] internal deadlines;
     bytes32 internal constant PAIR = keccak256("pair");
-    // SCOUT(#221) EDIT: one shared deadline becomes one per window, `lockBox.lockDeadline(windows[w])`; the two windows close at different times.
-    uint64 public deadline;
 
     LockBox.Lock[] internal locks;
     /// Open amount per token, as the handler sees it.
@@ -44,11 +44,13 @@ contract LockBoxHandler is Test {
 
     uint256 public calls;
 
-    constructor(LockBox _lockBox, FakeETH _fakeETH, FakeUSD _fakeUSD, uint64 _deadline) {
+    constructor(LockBox _lockBox, FakeETH _fakeETH, FakeUSD _fakeUSD) {
         lockBox = _lockBox;
         fakeETH = _fakeETH;
         fakeUSD = _fakeUSD;
-        deadline = _deadline;
+        uint64 current = _lockBox.currentWindowId();
+        windows = [current, current + 1];
+        deadlines = [_lockBox.lockDeadline(current), _lockBox.lockDeadline(current + 1)];
     }
 
     function lockCount() external view returns (uint256) {
@@ -59,17 +61,18 @@ contract LockBoxHandler is Test {
         return locks[i];
     }
 
-    // SCOUT(#221) EDIT: drop the deadline argument; skip the call once the chosen window is closed, because `reclaim` warps the clock past the deadline.
+    /// Skips a closed window: `reclaim` warps the clock past both windows' closes.
     function lock(uint256 actorSeed, uint256 tokenSeed, uint256 amount, uint256 windowSeed) external {
-        if (block.timestamp >= deadline || locks.length >= 40) return;
+        uint256 w = windowSeed % 2;
+        if (windows[w] < lockBox.currentWindowId() || locks.length >= 40) return;
         address who = actors[actorSeed % 3];
         address token = tokenSeed % 2 == 0 ? address(fakeETH) : address(fakeUSD);
         amount = bound(amount, 1, token == address(fakeETH) ? 50 ether : 500e6);
-        uint64 windowId = windows[windowSeed % 2];
+        uint64 windowId = windows[w];
         uint256 nonce = lockBox.nextLockNonce();
         vm.prank(who);
-        lockBox.lock(token, amount, windowId, PAIR, deadline);
-        locks.push(LockBox.Lock(who, token, nonce, amount, windowId, PAIR, deadline));
+        lockBox.lock(token, amount, windowId, PAIR);
+        locks.push(LockBox.Lock(who, token, nonce, amount, windowId, PAIR, deadlines[w]));
         openAmount[token] += amount;
         calls++;
     }
@@ -111,7 +114,7 @@ contract LockBoxHandler is Test {
         }
         IAptosLightClient.EventProof memory p;
         p.contractEvent =
-            OutcomeTreeBuilder.outcomeBcs(windows[w], PAIR, deadline, OutcomeTreeBuilder.root(leaves), uint64(n));
+            OutcomeTreeBuilder.outcomeBcs(windows[w], PAIR, deadlines[w], OutcomeTreeBuilder.root(leaves), uint64(n));
         lockBox.recordOutcome(p);
         recorded[w] = true;
         calls++;
@@ -131,13 +134,13 @@ contract LockBoxHandler is Test {
         _exit(i);
     }
 
-    // SCOUT(#221) EDIT: warp to the deadline of this lock's own window, not to one shared deadline.
+    /// Warps to the deadline of the lock's own window.
     function reclaim(uint256 lockSeed) external {
         if (locks.length == 0) return;
         uint256 i = lockSeed % locks.length;
         uint256 w = locks[i].windowId == windows[0] ? 0 : 1;
         if (posOf[w][i] != 0 || lockBox.statuses(_id(i)) != LockBox.Status.Open) return;
-        if (block.timestamp < deadline) vm.warp(deadline);
+        if (block.timestamp < deadlines[w]) vm.warp(deadlines[w]);
         OutcomeTree.Neighbour[] memory nb;
         if (recorded[w]) nb = _absence(w, _id(i));
         lockBox.reclaim(locks[i], nb);
@@ -180,9 +183,8 @@ contract LockBoxHandler is Test {
         return lockBox.getLockId(locks[i].depositor, locks[i].token, locks[i].nonce);
     }
 
-    // SCOUT(#221) EDIT: the key drops the deadline argument.
     function _key(uint256 w) internal view returns (bytes32) {
-        return lockBox.auctionKey(windows[w], PAIR, deadline);
+        return lockBox.auctionKey(windows[w], PAIR);
     }
 }
 
@@ -201,9 +203,11 @@ contract LockBoxInvariantTest is Test {
         vm.warp(1_700_000_000);
         fakeETH = new FakeETH();
         fakeUSD = new FakeUSD();
-        lockBox = new LockBox(address(fakeETH), address(fakeUSD), new MockAptosLightClient(TYPE_TAG), TYPE_TAG);
-        // SCOUT(#221) EDIT: the handler takes no deadline; it reads the window ids and deadlines from LockBox at the warped time.
-        handler = new LockBoxHandler(lockBox, fakeETH, fakeUSD, uint64(block.timestamp + 3 days));
+        (uint64 daySecs, uint64[] memory closeOffsets) = new DeployLockBox().productionWindowSchedule();
+        lockBox = new LockBox(
+            address(fakeETH), address(fakeUSD), new MockAptosLightClient(TYPE_TAG), TYPE_TAG, daySecs, closeOffsets
+        );
+        handler = new LockBoxHandler(lockBox, fakeETH, fakeUSD);
         address[3] memory actors = [address(0xA11CE), address(0xB0B), address(0xCA401)];
         for (uint256 i = 0; i < 3; i++) {
             for (uint256 m = 0; m < 10; m++) {

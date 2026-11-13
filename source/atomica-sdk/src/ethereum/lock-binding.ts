@@ -2,9 +2,10 @@
  * Lock binding: which auction a LockBox lock belongs to, and when it can go
  * home by `reclaim`.
  *
- * Mirrors `LockBox.auctionKey` / `LockBox.lockCommitment` and the Move helpers
- * `auction::eth_lock_deadline`, `auction::auction_key` and
- * `eth_proof::lock_commitment`. Timing values are documented in
+ * Mirrors `LockBox.auctionKey` / `LockBox.lockDeadline` / `LockBox.lockCommitment`
+ * and the Move helpers `auction::eth_lock_deadline`, `auction::auction_key` and
+ * `eth_proof::lock_commitment`. LockBox computes a lock's deadline from its
+ * window id; no caller supplies one. Timing values are documented in
  * docs/specifications/auction-timing.md.
  */
 
@@ -16,20 +17,23 @@ export const WINDOW_DAY_SECS = 86_400n;
 export const WINDOW_MORNING_CLOSE_SECS = 27_900n;
 /** Second of the day of the afternoon close, 16:15:00 UTC (`eth_proof::WINDOW_AFTERNOON_CLOSE_SECS`). */
 export const WINDOW_AFTERNOON_CLOSE_SECS = 58_500n;
-// SCOUT(#221) EDIT: LockBox freezes this value; change this mirror with the Move and Solidity constants if the owner picks another reclaim delay.
 /**
  * Delay from a window's close to its Ethereum lock deadline
- * (`eth_proof::ETH_RECLAIM_DELAY_SECS`): 72 hours.
+ * (`eth_proof::ETH_RECLAIM_DELAY_SECS`, `LockBox.RECLAIM_DELAY`): 72 hours.
+ * LockBox freezes it at deploy.
  */
 export const ETH_RECLAIM_DELAY_SECS = 259_200n;
 
-// SCOUT(#221) EDIT: deadline is no longer an input of lock(); keep it only as the derived value the commitment needs.
 /** The fields that bind a lock to its auction. */
 export interface LockBinding {
   windowId: bigint;
   /** keccak256 of the window key's pair BCS (see {@link pairHashOf}) */
   pairHash: string;
-  /** Unix seconds; equals {@link ethLockDeadline}(windowId) */
+  /**
+   * Unix seconds; always {@link ethLockDeadline}(windowId). Derived, never an
+   * input of `LockBox.lock`: the lock commitment binds it, so proofs and
+   * `reclaim` need it.
+   */
   deadline: bigint;
 }
 
@@ -63,8 +67,12 @@ export function windowCloseSecs(windowId: bigint): bigint {
   );
 }
 
-// SCOUT(#221) EDIT: must return LockBox.lockDeadline(windowId) for every row of the shared (window id, close, deadline) table.
-/** `auction::eth_lock_deadline`: window close plus ETH_RECLAIM_DELAY_SECS. */
+/**
+ * `auction::eth_lock_deadline` and `LockBox.lockDeadline`: window close plus
+ * ETH_RECLAIM_DELAY_SECS. The proof generator recomputes the lock commitment
+ * from it, so it must equal `LockBox.lockDeadline` exactly
+ * (tests/fixtures/window_clock_vectors.json).
+ */
 export function ethLockDeadline(windowId: bigint): bigint {
   return windowCloseSecs(windowId) + ETH_RECLAIM_DELAY_SECS;
 }
@@ -90,13 +98,14 @@ export function lockBinding(
   };
 }
 
-// SCOUT(#221) EDIT: the key is keccak256(abi.encode(uint64 windowId, bytes32 pairHash)); drop the deadline.
-/** `LockBox.auctionKey`: keccak256(abi.encode(uint64 windowId, bytes32 pairHash, uint64 deadline)). */
-export function auctionKey(binding: LockBinding): string {
+/** `LockBox.auctionKey`: keccak256(abi.encode(uint64 windowId, bytes32 pairHash)). */
+export function auctionKey(
+  binding: Pick<LockBinding, "windowId" | "pairHash">,
+): string {
   return ethers.keccak256(
     ethers.AbiCoder.defaultAbiCoder().encode(
-      ["uint64", "bytes32", "uint64"],
-      [binding.windowId, binding.pairHash, binding.deadline],
+      ["uint64", "bytes32"],
+      [binding.windowId, binding.pairHash],
     ),
   );
 }

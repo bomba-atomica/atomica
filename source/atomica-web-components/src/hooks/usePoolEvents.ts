@@ -17,7 +17,8 @@ import { useEffect, useRef } from "react";
 import { ethers } from "ethers";
 import { getChainConfig } from "@atomica/sdk/chain-config";
 
-// SCOUT(#221) EDIT: private copy of the Locked event; the event keeps its deadline field, so no change is needed unless the event changes.
+// Private copy of the Locked event. Its deadline is the one LockBox computed,
+// lockDeadline(windowId).
 // Minimal ABI — only the event we need to subscribe to.
 const LOCKBOX_EVENT_ABI = [
   "event Locked(bytes32 indexed lockId, address indexed depositor, address indexed token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)",

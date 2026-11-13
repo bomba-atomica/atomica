@@ -90,7 +90,7 @@ export interface LockedBalanceProof {
   amount: string;
   windowId: string;
   pairHash: string;
-  // SCOUT(#221) EDIT: the proof still carries the computed deadline, but register_ethereum_lock no longer takes it.
+  /** LockBox.lockDeadline(windowId); register_ethereum_lock does not take it */
   deadline: string;
   /** Storage key of LockBox.commitments[lockId] */
   storageKey: string;
@@ -255,10 +255,10 @@ export async function submitAsEthAccount(
   }
 }
 
-// SCOUT(#221) EDIT: drop proof.deadline from the arguments.
 /**
  * `lock_receipt::register_ethereum_lock<asset>` for `proof`, built by the SDK
- * `getRegisterLockPayload` (the app's own builder). The SDK addresses its
+ * `getRegisterLockPayload` (the app's own builder), which sends no deadline:
+ * Aptos recomputes it from the window id. The SDK addresses its
  * `CONTRACT_ADDR`, so this throws if that is not `moduleAddr`.
  */
 function registerLockPayload(

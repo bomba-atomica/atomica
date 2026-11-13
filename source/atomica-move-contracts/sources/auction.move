@@ -366,10 +366,10 @@ module atomica::auction {
     // permissionless `unwind`, whichever finalizes the window first, emits it once. `dispositions_root` is the
     // `outcome_tree` root over every lock claimed into the window, and `leaf_count` its
     // number of leaves. LockBox `recordOutcome` verifies it through the Aptos light client
-    // and rebuilds the auction key `auction_key(window_id, pair_hash, eth_lock_deadline)`.
+    // and rebuilds the auction key `auction_key(window_id, pair_hash)`. It decodes
+    // `eth_lock_deadline` and ignores it: LockBox computes the deadline from the window id.
     // The field layout is pinned by the golden vectors of issue 201
     // (`0xcafe::auction::AuctionOutcome`); change it only together with those vectors.
-    // SCOUT(#221) DOC: the comment above names the old key. The key becomes `auction_key(window_id, pair_hash)`; LockBox reads `eth_lock_deadline` and ignores it.
     #[event]
     struct AuctionOutcome has drop, store {
         window_id:         u64,
@@ -395,17 +395,17 @@ module atomica::auction {
     #[view]
     /// The Ethereum lock deadline of window `window_id` (window close plus
     /// `eth_proof::eth_reclaim_delay_secs`). A pure function of the window id.
-    /// `lock_receipt::register_ethereum_lock` accepts only this deadline.
+    /// LockBox computes the same deadline for every lock of the window, and
+    /// `lock_receipt::register_ethereum_lock` proves the lock against it.
     public fun eth_lock_deadline(window_id: u64): u64 {
         eth_proof::eth_lock_deadline(window_id)
     }
 
     #[view]
     /// The auction key LockBox binds a lock to:
-    /// keccak256(abi.encode(window_id, pair_hash, eth_lock_deadline(window_id))).
-    // SCOUT(#221) EDIT: `auction_key` becomes keccak256(abi.encode(window_id, pair_hash)); the deadline leaves the key.
+    /// keccak256(abi.encode(window_id, pair_hash)).
     public fun auction_key(window_id: u64, pair_hash: vector<u8>): vector<u8> {
-        eth_proof::auction_key(window_id, pair_hash, eth_lock_deadline(window_id))
+        eth_proof::auction_key(window_id, pair_hash)
     }
 
     #[view]

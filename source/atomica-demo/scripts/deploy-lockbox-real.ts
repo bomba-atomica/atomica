@@ -22,6 +22,9 @@ import { generateLockedBalanceProof } from "../src/lib/ethereum/proofs/generator
 import {
   currentWindowId,
   lockBinding,
+  WINDOW_AFTERNOON_CLOSE_SECS,
+  WINDOW_DAY_SECS,
+  WINDOW_MORNING_CLOSE_SECS,
 } from "@atomica/sdk/ethereum/lock-binding";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { serializeProofForAptos } from "../src/lib/ethereum/proofs/index";
@@ -129,12 +132,15 @@ async function main() {
       "LockBox",
       lockBoxArtifact.abi,
       lockBoxArtifact.bytecode.object,
-      // Ethereum-only fixture run: no light client, dev Atomica address 0xcafe.
+      // Ethereum-only fixture run: no light client, dev Atomica address 0xcafe,
+      // and the production window clock (DeployLockBox.productionWindowSchedule).
       [
         fakeETHAddress,
         fakeUSDAddress,
         "0x000000000000000000000000000000000000dEaD",
         "0x07000000000000000000000000000000000000000000000000000000000000cafe0761756374696f6e0e41756374696f6e4f7574636f6d6500",
+        WINDOW_DAY_SECS,
+        [WINDOW_MORNING_CLOSE_SECS, WINDOW_AFTERNOON_CLOSE_SECS],
       ],
     );
 
@@ -155,9 +161,8 @@ async function main() {
     console.log("   ✅ Approved");
 
     console.log("   Locking tokens...");
-    // SCOUT(#221) EDIT: LockBox.lock loses the deadline argument.
-    // Bound to the current window, the launch pair BCS, deadline
-    // auction::eth_lock_deadline(window) (see @atomica/sdk lock-binding).
+    // Bound to the current window and the launch pair BCS. LockBox computes the
+    // deadline, auction::eth_lock_deadline(window) (see @atomica/sdk lock-binding).
     const binding = lockBinding(
       currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
       LAUNCH_PAIR_BCS,
@@ -167,7 +172,6 @@ async function main() {
       amount,
       binding.windowId,
       binding.pairHash,
-      binding.deadline,
     );
     const lockReceipt = await tx.wait();
     console.log("   ✅ Locked");

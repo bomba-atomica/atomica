@@ -55,16 +55,19 @@ export const APTOS_LIGHT_CLIENT_ABI = [
 // anyone may carry an outcome with recordOutcome. There is no relayer.
 // SCOUT(#222) EDIT: the comment above names two ways out of LockBox; reclaimUnpayable is a third.
 export const LOCKBOX_ABI = [
-  // SCOUT(#221) EDIT: lock takes (token, amount, windowId, pairHash); drop the deadline argument.
-  "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) returns (bytes32 lockId)",
+  "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash) returns (bytes32 lockId)",
   `function recordOutcome(${EVENT_PROOF_TUPLE} proof) returns (bytes32 key)`,
-  // SCOUT(#221) EDIT: keep or drop the deadline of the Lock tuple as LockBox.sol decides, here and in releaseByOutcome.
+  // The Lock tuple keeps its deadline: the commitment binds it. It is always lockDeadline(windowId).
   // SCOUT(#222) ADD: a reclaimUnpayable(Lock l, Payout[] payouts, Leaf leaf) fragment next to this one, with its event and errors.
   "function reclaim((address depositor, address token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) l, (bytes32 lockId, bytes32 payoutsHash, uint256 index, bytes32[] proof)[] neighbours)",
   "function releaseByOutcome((address depositor, address token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) l, (address recipient, uint256 amount)[] payouts, (uint256 index, bytes32[] proof) leaf)",
   "function getLockId(address depositor, address token, uint256 nonce) pure returns (bytes32)",
-  // SCOUT(#221) EDIT: auctionKey takes (windowId, pairHash) only; add lockDeadline(uint64), windowClose(uint64) and currentWindowId() fragments.
-  "function auctionKey(uint64 windowId, bytes32 pairHash, uint64 deadline) pure returns (bytes32)",
+  "function auctionKey(uint64 windowId, bytes32 pairHash) pure returns (bytes32)",
+  "function currentWindowId() view returns (uint64)",
+  "function windowClose(uint64 windowId) view returns (uint64)",
+  "function lockDeadline(uint64 windowId) view returns (uint64)",
+  "function windowSchedule() view returns (uint64 daySecs, uint64[] closeOffsetsSecs)",
+  "function RECLAIM_DELAY() view returns (uint64)",
   "function commitmentStorageKey(bytes32 lockId) pure returns (bytes32)",
   "function commitments(bytes32 lockId) view returns (bytes32)",
   "function statuses(bytes32 lockId) view returns (uint8)",
@@ -73,7 +76,7 @@ export const LOCKBOX_ABI = [
   "function nextLockNonce() view returns (uint256)",
   "function lightClient() view returns (address)",
   "event Locked(bytes32 indexed lockId, address indexed depositor, address indexed token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)",
-  // SCOUT(#221) EDIT: match the final event; the auction key no longer covers the deadline.
+  // `deadline` is lockDeadline(windowId); the auction key does not cover it.
   "event OutcomeRecorded(bytes32 indexed auctionKey, uint64 windowId, bytes32 pairHash, uint64 deadline, bytes32 root, uint64 leafCount, uint64 aptosVersion)",
   "event LockReleased(bytes32 indexed lockId, bytes32 indexed auctionKey)",
   "event LockReclaimed(bytes32 indexed lockId, address indexed depositor, uint256 amount)",
@@ -82,6 +85,8 @@ export const LOCKBOX_ABI = [
   "error AuctionWasReclaimed(bytes32 auctionKey)",
   "error NoOutcome(bytes32 auctionKey)",
   "error DeadlineNotReached(uint64 deadline)",
+  "error WindowClosed(uint64 windowId, uint64 current)",
+  "error WindowTooFarAhead(uint64 windowId, uint64 current)",
   "error LockInTree(bytes32 lockId)",
   "error StaleEpoch(uint64 epoch, uint64 latestEpoch)",
   "error StaleLightClient(uint64 latestEpoch, uint256 age)",

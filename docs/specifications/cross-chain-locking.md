@@ -132,14 +132,15 @@ section and [v0 Architecture §3](../architecture/v0-architecture.md#3--cross-ch
 
 ## Component 1: Ethereum LockBox Contract
 
-<!-- SCOUT(#221) DOC: current-contract note: lock takes no deadline argument. -->
 <!-- SCOUT(#222) DOC: current-contract note: add reclaimUnpayable and the remainder-to-depositor rule. -->
 
 > **Current contract (issue 203).** The design below is the original plan. The
-> shipped LockBox is proof-gated: `lock(token, amount, windowId, pairHash,
-> deadline)` stores one commitment per lock at slot 0, which Aptos proves; a
-> lock leaves only by `releaseByOutcome` on a proven Aptos `AuctionOutcome` or
-> by permissionless `reclaim` after its deadline. There is no `withdraw`,
+> shipped LockBox is proof-gated: `lock(token, amount, windowId, pairHash)`
+> stores one commitment per lock at slot 0, which Aptos proves. It takes no
+> deadline: LockBox computes `lockDeadline(windowId)` and accepts only the
+> current or the next window (issue 221). A lock leaves only by
+> `releaseByOutcome` on a proven Aptos `AuctionOutcome` or by permissionless
+> `reclaim` after its deadline. There is no `withdraw`,
 > `getLockedBalance` or settlement authority. See
 > [v0 Architecture §3](../architecture/v0-architecture.md) and
 > [auction timing](auction-timing.md).

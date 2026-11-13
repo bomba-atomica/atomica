@@ -29,19 +29,23 @@ contract LockBoxTest is Test {
     address internal carol = address(0xCA401);
     address internal stranger = address(0x5157);
 
-    // SCOUT(#221) EDIT: a fixed window id no longer locks; take `lockBox.currentWindowId()` in setUp, or warp into window 42 (it closed in 1970).
-    uint64 internal constant WINDOW = 42;
     bytes32 internal constant PAIR = keccak256("pair");
+    /// The window open at setUp's clock, and the deadline LockBox computes for it.
+    uint64 internal window;
     uint64 internal deadline;
+
+    uint64 internal daySecs;
+    uint64[] internal closeOffsets;
 
     function setUp() public {
         vm.warp(1_700_000_000);
-        // SCOUT(#221) EDIT: becomes `lockBox.lockDeadline(WINDOW)`; a deadline three days after the warp is no longer the lock deadline.
-        deadline = uint64(block.timestamp + 3 days);
         fakeETH = new FakeETH();
         fakeUSD = new FakeUSD();
         client = new MockAptosLightClient(TYPE_TAG);
-        lockBox = new LockBox(address(fakeETH), address(fakeUSD), client, TYPE_TAG);
+        (daySecs, closeOffsets) = new DeployLockBox().productionWindowSchedule();
+        lockBox = new LockBox(address(fakeETH), address(fakeUSD), client, TYPE_TAG, daySecs, closeOffsets);
+        window = lockBox.currentWindowId();
+        deadline = lockBox.lockDeadline(window);
         for (uint256 i = 0; i < 3; i++) {
             address who = [alice, bob, carol][i];
             fakeETH.mint(who, 1000 ether);
@@ -53,22 +57,21 @@ contract LockBoxTest is Test {
         }
     }
 
-    // SCOUT(#221) EDIT: every `lockBox.auctionKey(..., deadline)` call in this contract (12 calls) and every `lockBox.lock(...)` call (7 calls, one in `_lockInto`) drops the deadline argument.
     // ---------------------------------------------------------------- helpers
 
     function _lock(address who, address token, uint256 amount) internal returns (LockBox.Lock memory l) {
-        return _lockInto(who, token, amount, WINDOW, PAIR, deadline);
+        return _lockInto(who, token, amount, window, PAIR);
     }
 
-    // SCOUT(#221) EDIT: drop `dl`; the returned `Lock` takes `lockBox.lockDeadline(windowId)`, and `windowId` must be the current or the next window.
-    function _lockInto(address who, address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 dl)
+    /// `windowId` must be the current or the next window. The lock's deadline is `lockDeadline(windowId)`.
+    function _lockInto(address who, address token, uint256 amount, uint64 windowId, bytes32 pairHash)
         internal
         returns (LockBox.Lock memory l)
     {
         uint256 nonce = lockBox.nextLockNonce();
         vm.prank(who);
-        lockBox.lock(token, amount, windowId, pairHash, dl);
-        l = LockBox.Lock(who, token, nonce, amount, windowId, pairHash, dl);
+        lockBox.lock(token, amount, windowId, pairHash);
+        l = LockBox.Lock(who, token, nonce, amount, windowId, pairHash, lockBox.lockDeadline(windowId));
     }
 
     function _id(LockBox.Lock memory l) internal view returns (bytes32) {
@@ -116,7 +119,7 @@ contract LockBoxTest is Test {
     }
 
     function _record(bytes32 root, uint64 count) internal returns (bytes32) {
-        return lockBox.recordOutcome(_outcomeProof(OutcomeTreeBuilder.outcomeBcs(WINDOW, PAIR, deadline, root, count)));
+        return lockBox.recordOutcome(_outcomeProof(OutcomeTreeBuilder.outcomeBcs(window, PAIR, deadline, root, count)));
     }
 
     function _leaf(bytes32[] memory leaves, uint256 index) internal pure returns (OutcomeTree.LeafProof memory) {
@@ -173,12 +176,82 @@ contract LockBoxTest is Test {
 
     function test_constructorRejectsZeroLightClient() public {
         vm.expectRevert("Invalid light client");
-        new LockBox(address(fakeETH), address(fakeUSD), IAptosLightClient(address(0)), TYPE_TAG);
+        new LockBox(address(fakeETH), address(fakeUSD), IAptosLightClient(address(0)), TYPE_TAG, daySecs, closeOffsets);
     }
 
     function test_constructorRejectsEmptyTypeTag() public {
         vm.expectRevert("Invalid type tag");
-        new LockBox(address(fakeETH), address(fakeUSD), client, "");
+        new LockBox(address(fakeETH), address(fakeUSD), client, "", daySecs, closeOffsets);
+    }
+
+    function _offsets(uint64 a) internal pure returns (uint64[] memory o) {
+        o = new uint64[](1);
+        o[0] = a;
+    }
+
+    function _offsets(uint64 a, uint64 b) internal pure returns (uint64[] memory o) {
+        o = new uint64[](2);
+        o[0] = a;
+        o[1] = b;
+    }
+
+    function _deploy(uint64 day, uint64[] memory offsets) internal returns (LockBox) {
+        return new LockBox(address(fakeETH), address(fakeUSD), client, TYPE_TAG, day, offsets);
+    }
+
+    /// The rules of `eth_proof::set_window_schedule`: one or two offsets, strictly increasing,
+    /// the first above 0 and the last at most `daySecs`.
+    function test_constructorRejectsInvalidWindowSchedule() public {
+        uint64[] memory three = new uint64[](3);
+        (three[0], three[1], three[2]) = (100, 200, 300);
+        uint64[][6] memory bad = [
+            new uint64[](0),
+            three,
+            _offsets(58_500, 27_900),
+            _offsets(27_900, 27_900),
+            _offsets(0, 27_900),
+            _offsets(27_900, 86_401)
+        ];
+        for (uint256 i = 0; i < bad.length; i++) {
+            vm.expectRevert(LockBox.InvalidWindowSchedule.selector);
+            _deploy(86_400, bad[i]);
+        }
+        vm.expectRevert(LockBox.InvalidWindowSchedule.selector);
+        _deploy(900, _offsets(0));
+        vm.expectRevert(LockBox.InvalidWindowSchedule.selector);
+        _deploy(900, _offsets(901));
+        // The edges are valid: a last offset equal to daySecs.
+        _deploy(900, _offsets(900));
+        _deploy(86_400, _offsets(1, 86_400));
+    }
+
+    function test_deployScriptUsesProductionSchedule() public {
+        (uint64 day, uint64[] memory offsets) = new DeployLockBox().productionWindowSchedule();
+        assertEq(day, 86_400);
+        assertEq(offsets.length, 2);
+        assertEq(offsets[0], 27_900);
+        assertEq(offsets[1], 58_500);
+        (uint64 gotDay, uint64[] memory gotOffsets) = _deploy(day, offsets).windowSchedule();
+        assertEq(gotDay, 86_400);
+        assertEq(gotOffsets.length, 2);
+        assertEq(gotOffsets[0], 27_900);
+        assertEq(gotOffsets[1], 58_500);
+    }
+
+    /// The test schedule of the create_auction registers timelock issue (243): one window every
+    /// 900 seconds. Move `eth_proof::eth_lock_deadline(5)` gives 264_600 on the same schedule.
+    function test_testScheduleLockDeadlineMatchesAptos() public {
+        LockBox fast = _deploy(900, _offsets(900));
+        assertEq(fast.windowClose(5), 5_400);
+        assertEq(fast.lockDeadline(5), 264_600);
+        (uint64 day, uint64[] memory offsets) = fast.windowSchedule();
+        assertEq(day, 900);
+        assertEq(offsets.length, 1);
+        assertEq(offsets[0], 900);
+        vm.warp(5_399);
+        assertEq(fast.currentWindowId(), 5);
+        vm.warp(5_400);
+        assertEq(fast.currentWindowId(), 6);
     }
 
     // ---------------------------------------------------------------- lock
@@ -186,7 +259,7 @@ contract LockBoxTest is Test {
     function test_lockStoresCommitmentAtSlotZeroAndOpens() public {
         LockBox.Lock memory l = _lock(alice, address(fakeETH), 10 ether);
         bytes32 lockId = _id(l);
-        bytes32 expected = keccak256(abi.encode(alice, address(fakeETH), uint256(10 ether), WINDOW, PAIR, deadline));
+        bytes32 expected = keccak256(abi.encode(alice, address(fakeETH), uint256(10 ether), window, PAIR, deadline));
         bytes32 slot = keccak256(abi.encode(lockId, uint256(0)));
         assertEq(slot, lockBox.commitmentStorageKey(lockId));
         assertEq(vm.load(address(lockBox), slot), expected);
@@ -200,57 +273,134 @@ contract LockBoxTest is Test {
     function test_lockEmitsLocked() public {
         bytes32 lockId = lockBox.getLockId(alice, address(fakeUSD), 0);
         vm.expectEmit(address(lockBox));
-        emit LockBox.Locked(lockId, alice, address(fakeUSD), 0, 5e6, WINDOW, PAIR, deadline);
+        emit LockBox.Locked(lockId, alice, address(fakeUSD), 0, 5e6, window, PAIR, deadline);
         vm.prank(alice);
-        lockBox.lock(address(fakeUSD), 5e6, WINDOW, PAIR, deadline);
+        lockBox.lock(address(fakeUSD), 5e6, window, PAIR);
     }
 
-    // SCOUT(#221) EDIT: the key no longer depends on the deadline; assert keccak256(abi.encode(WINDOW, PAIR)) and that another window or pair gives another key.
-    function test_lockAuctionKeyDependsOnDeadline() public view {
-        assertTrue(lockBox.auctionKey(WINDOW, PAIR, deadline) != lockBox.auctionKey(WINDOW, PAIR, deadline + 1));
-        assertEq(lockBox.auctionKey(WINDOW, PAIR, deadline), keccak256(abi.encode(WINDOW, PAIR, deadline)));
-    }
-
-    // SCOUT(#221) REMOVE: `DeadlinePassed` is gone; the closed-window test replaces this case.
-    function test_lockRevertsOnPastDeadline() public {
-        vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(LockBox.DeadlinePassed.selector, uint64(block.timestamp - 1)));
-        lockBox.lock(address(fakeETH), 1 ether, WINDOW, PAIR, uint64(block.timestamp - 1));
-    }
-
-    // SCOUT(#221) REMOVE: `DeadlinePassed` is gone; the closed-window test replaces this case.
-    function test_lockRevertsOnDeadlineNow() public {
-        vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(LockBox.DeadlinePassed.selector, uint64(block.timestamp)));
-        lockBox.lock(address(fakeETH), 1 ether, WINDOW, PAIR, uint64(block.timestamp));
+    /// The key is (window id, pair hash): the deadline is a function of the window id.
+    function test_lockAuctionKeyIsWindowAndPair() public view {
+        assertEq(lockBox.auctionKey(window, PAIR), keccak256(abi.encode(window, PAIR)));
+        assertTrue(lockBox.auctionKey(window, PAIR) != lockBox.auctionKey(window + 1, PAIR));
+        assertTrue(lockBox.auctionKey(window, PAIR) != lockBox.auctionKey(window, keccak256("other pair")));
     }
 
     function test_lockRevertsOnUnsupportedToken() public {
         FakeETH other = new FakeETH();
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(LockBox.UnsupportedToken.selector, address(other)));
-        lockBox.lock(address(other), 1 ether, WINDOW, PAIR, deadline);
+        lockBox.lock(address(other), 1 ether, window, PAIR);
     }
 
     function test_lockRevertsOnZeroAmount() public {
         vm.prank(alice);
         vm.expectRevert(LockBox.ZeroAmount.selector);
-        lockBox.lock(address(fakeETH), 0, WINDOW, PAIR, deadline);
+        lockBox.lock(address(fakeETH), 0, window, PAIR);
     }
 
-    // SCOUT(#221) TEST: test_lockStoresComputedDeadlineAndEmitsIt
-    // SCOUT(#221) TEST: test_lockRevertsOnClosedWindow
-    // SCOUT(#221) TEST: test_lockRevertsOnWindowTwoAhead
-    // SCOUT(#221) TEST: test_lockAcceptsCurrentAndNextWindow
-    // SCOUT(#221) TEST: test_windowClockMatchesSharedTable (currentWindowId, windowClose and lockDeadline on both sides of 07:45 and 16:15 UTC, read from a new JSON table under ../atomica-sdk/tests/fixtures, a path foundry.toml already lets forge read)
+    /// The commitment and `Locked` carry `lockDeadline(windowId)`, for the current and the next window.
+    function test_lockStoresComputedDeadlineAndEmitsIt() public {
+        for (uint64 w = window; w <= window + 1; w++) {
+            uint64 dl = lockBox.windowClose(w) + 259_200;
+            assertEq(lockBox.lockDeadline(w), dl);
+            uint256 nonce = lockBox.nextLockNonce();
+            bytes32 lockId = lockBox.getLockId(alice, address(fakeETH), nonce);
+            vm.expectEmit(address(lockBox));
+            emit LockBox.Locked(lockId, alice, address(fakeETH), nonce, 1 ether, w, PAIR, dl);
+            vm.prank(alice);
+            lockBox.lock(address(fakeETH), 1 ether, w, PAIR);
+            assertEq(lockBox.commitments(lockId), lockBox.lockCommitment(alice, address(fakeETH), 1 ether, w, PAIR, dl));
+        }
+        // The next window's deadline is that window's own: later than this window's.
+        assertGt(lockBox.lockDeadline(window + 1), deadline);
+    }
+
+    function test_lockRevertsOnClosedWindow() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(LockBox.WindowClosed.selector, window - 1, window));
+        lockBox.lock(address(fakeETH), 1 ether, window - 1, PAIR);
+        // At its close second the window is the previous one.
+        vm.warp(lockBox.windowClose(window));
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(LockBox.WindowClosed.selector, window, window + 1));
+        lockBox.lock(address(fakeETH), 1 ether, window, PAIR);
+        assertEq(fakeETH.balanceOf(address(lockBox)), 0);
+    }
+
+    /// A far-future window cannot strand a lock behind a far-future deadline.
+    function test_lockRevertsOnWindowTwoAhead() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(LockBox.WindowTooFarAhead.selector, window + 2, window));
+        lockBox.lock(address(fakeETH), 1 ether, window + 2, PAIR);
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(LockBox.WindowTooFarAhead.selector, type(uint64).max, window));
+        lockBox.lock(address(fakeETH), 1 ether, type(uint64).max, PAIR);
+        assertEq(fakeETH.balanceOf(address(lockBox)), 0);
+    }
+
+    function test_lockAcceptsCurrentAndNextWindow() public {
+        _lockInto(alice, address(fakeETH), 1 ether, window, PAIR);
+        _lockInto(alice, address(fakeETH), 1 ether, window + 1, PAIR);
+        // The last second of the window still accepts it.
+        vm.warp(lockBox.windowClose(window) - 1);
+        assertEq(lockBox.currentWindowId(), window);
+        _lockInto(alice, address(fakeETH), 1 ether, window, PAIR);
+        _lockInto(alice, address(fakeETH), 1 ether, window + 1, PAIR);
+        assertEq(fakeETH.balanceOf(address(lockBox)), 4 ether);
+    }
+
+    string internal windowTable =
+        vm.readFile(string.concat(vm.projectRoot(), "/../atomica-sdk/tests/fixtures/window_clock_vectors.json"));
+
+    /// The shared (window id, close, deadline) table, also checked by the Move and SDK tests:
+    /// rows on both sides of 07:45 and 16:15 UTC.
+    function test_windowClockMatchesSharedTable() public {
+        assertEq(vm.parseJsonUint(windowTable, ".day_secs"), daySecs);
+        uint256[] memory offsets = vm.parseJsonUintArray(windowTable, ".close_offsets_secs");
+        assertEq(offsets.length, 2);
+        assertEq(offsets[0], closeOffsets[0]);
+        assertEq(offsets[1], closeOffsets[1]);
+        uint256 rows;
+        for (uint256 i = 0; vm.keyExistsJson(windowTable, _row(i)); i++) {
+            (uint64 at, uint64 w, uint64 close, uint64 dl) = _tableRow(i);
+            vm.warp(at);
+            assertEq(lockBox.currentWindowId(), w, "currentWindowId");
+            assertEq(lockBox.windowClose(w), close, "windowClose");
+            assertEq(lockBox.lockDeadline(w), dl, "lockDeadline");
+            rows++;
+        }
+        assertGe(rows, 8);
+    }
+
+    /// `RECLAIM_DELAY` equals `eth_proof::ETH_RECLAIM_DELAY_SECS` for every table row.
+    function test_reclaimDelayEqualsAptos() public view {
+        assertEq(lockBox.RECLAIM_DELAY(), 259_200);
+        assertEq(vm.parseJsonUint(windowTable, ".reclaim_delay_secs"), 259_200);
+        for (uint256 i = 0; vm.keyExistsJson(windowTable, _row(i)); i++) {
+            (, uint64 w,,) = _tableRow(i);
+            assertEq(lockBox.lockDeadline(w) - lockBox.windowClose(w), 259_200);
+        }
+    }
+
+    function _row(uint256 i) internal pure returns (string memory) {
+        return string.concat(".rows[", vm.toString(i), "]");
+    }
+
+    function _tableRow(uint256 i) internal view returns (uint64 at, uint64 w, uint64 close, uint64 dl) {
+        string memory r = _row(i);
+        at = uint64(vm.parseJsonUint(windowTable, string.concat(r, ".at")));
+        w = uint64(vm.parseJsonUint(windowTable, string.concat(r, ".window_id")));
+        close = uint64(vm.parseJsonUint(windowTable, string.concat(r, ".close")));
+        dl = uint64(vm.parseJsonUint(windowTable, string.concat(r, ".deadline")));
+    }
 
     // ---------------------------------------------------------------- recordOutcome
 
     function test_recordOutcomeStoresRootAndLeafCount() public {
         bytes32 root = keccak256("root");
-        bytes32 key = lockBox.auctionKey(WINDOW, PAIR, deadline);
+        bytes32 key = lockBox.auctionKey(window, PAIR);
         vm.expectEmit(address(lockBox));
-        emit LockBox.OutcomeRecorded(key, WINDOW, PAIR, deadline, root, 4, 77);
+        emit LockBox.OutcomeRecorded(key, window, PAIR, deadline, root, 4, 77);
         vm.prank(stranger);
         assertEq(_record(root, 4), key);
         (bytes32 storedRoot, uint64 count) = lockBox.outcomes(key);
@@ -260,7 +410,7 @@ contract LockBoxTest is Test {
 
     function test_recordOutcomeRevertsOnSecondRecord() public {
         _record(keccak256("root"), 4);
-        bytes32 key = lockBox.auctionKey(WINDOW, PAIR, deadline);
+        bytes32 key = lockBox.auctionKey(window, PAIR);
         vm.expectRevert(abi.encodeWithSelector(LockBox.OutcomeAlreadyRecorded.selector, key));
         _record(keccak256("other root"), 4);
     }
@@ -268,17 +418,17 @@ contract LockBoxTest is Test {
     function test_recordOutcomeBubblesStaleEpochAndStoresNothing() public {
         client.setLatestEpoch(3);
         IAptosLightClient.EventProof memory p =
-            _outcomeProof(OutcomeTreeBuilder.outcomeBcs(WINDOW, PAIR, deadline, keccak256("root"), 1));
+            _outcomeProof(OutcomeTreeBuilder.outcomeBcs(window, PAIR, deadline, keccak256("root"), 1));
         p.ledgerInfo.ledgerInfoWithSignatures = abi.encode(uint64(2));
         vm.expectRevert(abi.encodeWithSelector(IAptosLightClient.StaleEpoch.selector, uint64(2), uint64(3)));
         lockBox.recordOutcome(p);
-        (bytes32 root, uint64 count) = lockBox.outcomes(lockBox.auctionKey(WINDOW, PAIR, deadline));
+        (bytes32 root, uint64 count) = lockBox.outcomes(lockBox.auctionKey(window, PAIR));
         assertEq(root, bytes32(0));
         assertEq(count, 0);
     }
 
     function test_recordOutcomeRevertsOnMalformedEvent() public {
-        bytes memory data = OutcomeTreeBuilder.outcomeBcs(WINDOW, PAIR, deadline, keccak256("root"), 1);
+        bytes memory data = OutcomeTreeBuilder.outcomeBcs(window, PAIR, deadline, keccak256("root"), 1);
         vm.expectRevert(LockBox.BadOutcomeEvent.selector);
         lockBox.recordOutcome(_outcomeProof(bytes.concat(data, hex"00")));
         data[8] = bytes1(uint8(31));
@@ -293,7 +443,25 @@ contract LockBoxTest is Test {
         _record(bytes32(0), 1);
     }
 
-    // SCOUT(#221) TEST: test_recordOutcomeKeysByWindowAndPairAndIgnoresEventDeadline
+    /// The event's `eth_lock_deadline` does not enter the key: an outcome with any deadline is
+    /// recorded under `auctionKey(windowId, pairHash)`, emits `lockDeadline(windowId)`, and
+    /// releases the locks of that window and pair.
+    function test_recordOutcomeKeysByWindowAndPairAndIgnoresEventDeadline() public {
+        LockBox.Lock memory l = _lock(alice, address(fakeETH), 1 ether);
+        bytes32[] memory leaves = new bytes32[](1);
+        leaves[0] = OutcomeTreeBuilder.leafHash(_id(l), OutcomeTreeBuilder.payoutsHash(_payouts1(bob, 1 ether)));
+        bytes32 root = OutcomeTreeBuilder.root(leaves);
+        bytes32 key = lockBox.auctionKey(window, PAIR);
+        vm.expectEmit(address(lockBox));
+        emit LockBox.OutcomeRecorded(key, window, PAIR, deadline, root, 1, 77);
+        bytes32 got = lockBox.recordOutcome(_outcomeProof(OutcomeTreeBuilder.outcomeBcs(window, PAIR, 12_345, root, 1)));
+        assertEq(got, key);
+        // A second outcome for the same window and pair, with yet another deadline, is a duplicate.
+        vm.expectRevert(abi.encodeWithSelector(LockBox.OutcomeAlreadyRecorded.selector, key));
+        lockBox.recordOutcome(_outcomeProof(OutcomeTreeBuilder.outcomeBcs(window, PAIR, deadline, root, 1)));
+        lockBox.releaseByOutcome(l, _payouts1(bob, 1 ether), _leaf(leaves, 0));
+        assertEq(uint8(lockBox.statuses(_id(l))), uint8(LockBox.Status.Released));
+    }
 
     // ---------------------------------------------------------------- releaseByOutcome
 
@@ -372,7 +540,7 @@ contract LockBoxTest is Test {
 
     function test_releaseByOutcomeRevertsWithoutOutcome() public {
         LockBox.Lock memory l = _lock(alice, address(fakeETH), 1 ether);
-        bytes32 key = lockBox.auctionKey(WINDOW, PAIR, deadline);
+        bytes32 key = lockBox.auctionKey(window, PAIR);
         vm.expectRevert(abi.encodeWithSelector(LockBox.NoOutcome.selector, key));
         lockBox.releaseByOutcome(l, _payouts1(alice, 1 ether), OutcomeTree.LeafProof(0, new bytes32[](0)));
     }
@@ -386,14 +554,13 @@ contract LockBoxTest is Test {
         lockBox.releaseByOutcome(l, _payouts1(address(0), 1 ether), _leaf(leaves, 0));
     }
 
-    // SCOUT(#221) EDIT: another deadline no longer makes another auction; lock into another window or pair to keep this case.
-    /// A lock bound to another deadline is another auction: its outcome does not cover it.
+    /// A lock bound to another window is another auction: its outcome does not cover it.
     function test_releaseByOutcomeIgnoresOutcomeOfOtherAuction() public {
-        LockBox.Lock memory l = _lockInto(alice, address(fakeETH), 1 ether, WINDOW, PAIR, deadline + 1);
+        LockBox.Lock memory l = _lockInto(alice, address(fakeETH), 1 ether, window + 1, PAIR);
         bytes32[] memory leaves = new bytes32[](1);
         leaves[0] = OutcomeTreeBuilder.leafHash(_id(l), OutcomeTreeBuilder.payoutsHash(_payouts1(bob, 1 ether)));
-        _record(OutcomeTreeBuilder.root(leaves), 1); // recorded for `deadline`, not `deadline + 1`
-        bytes32 key = lockBox.auctionKey(WINDOW, PAIR, deadline + 1);
+        _record(OutcomeTreeBuilder.root(leaves), 1); // recorded for `window`, not `window + 1`
+        bytes32 key = lockBox.auctionKey(window + 1, PAIR);
         vm.expectRevert(abi.encodeWithSelector(LockBox.NoOutcome.selector, key));
         lockBox.releaseByOutcome(l, _payouts1(bob, 1 ether), _leaf(leaves, 0));
     }
@@ -424,7 +591,7 @@ contract LockBoxTest is Test {
         assertEq(fakeETH.balanceOf(stranger), 0);
         assertEq(fakeETH.balanceOf(address(lockBox)), 0);
         assertEq(uint8(lockBox.statuses(_id(l))), uint8(LockBox.Status.Reclaimed));
-        assertTrue(lockBox.auctionReclaimed(lockBox.auctionKey(WINDOW, PAIR, deadline)));
+        assertTrue(lockBox.auctionReclaimed(lockBox.auctionKey(window, PAIR)));
     }
 
     function test_reclaimTwiceReverts() public {
@@ -447,7 +614,7 @@ contract LockBoxTest is Test {
         LockBox.Lock memory l = _lock(alice, address(fakeETH), 10 ether);
         vm.warp(deadline);
         lockBox.reclaim(l, new OutcomeTree.Neighbour[](0));
-        bytes32 key = lockBox.auctionKey(WINDOW, PAIR, deadline);
+        bytes32 key = lockBox.auctionKey(window, PAIR);
         vm.expectRevert(abi.encodeWithSelector(LockBox.AuctionWasReclaimed.selector, key));
         _record(keccak256("root"), 1);
     }
@@ -571,14 +738,14 @@ contract LockBoxTest is Test {
         assertEq(uint8(lockBox.statuses(_id(b))), uint8(LockBox.Status.Reclaimed));
     }
 
-    // SCOUT(#221) EDIT: window `WINDOW + 1` gets its own, later deadline; it must be the next window at lock time, and the warp must reach `lockBox.lockDeadline(WINDOW + 1)`.
     /// A reclaim of one auction does not block the outcome of another.
     function test_reclaimOnlyVoidsItsOwnAuction() public {
-        LockBox.Lock memory early = _lockInto(alice, address(fakeETH), 1 ether, WINDOW + 1, PAIR, deadline);
-        vm.warp(deadline);
-        lockBox.reclaim(early, new OutcomeTree.Neighbour[](0));
+        LockBox.Lock memory other = _lockInto(alice, address(fakeETH), 1 ether, window + 1, PAIR);
+        vm.warp(lockBox.lockDeadline(window + 1));
+        lockBox.reclaim(other, new OutcomeTree.Neighbour[](0));
+        assertTrue(lockBox.auctionReclaimed(lockBox.auctionKey(window + 1, PAIR)));
         bytes32 key = _record(keccak256("root"), 1);
-        assertEq(key, lockBox.auctionKey(WINDOW, PAIR, deadline));
+        assertEq(key, lockBox.auctionKey(window, PAIR));
     }
 
     // SCOUT(#222) TEST: test_reclaimUnpayableOnSumAboveAmountReturnsLockToDepositor (third party, before the deadline)

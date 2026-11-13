@@ -42,15 +42,23 @@ This document is the single source of truth for Atomica auction timing.
 
 ## Ethereum Lock Deadline
 
-<!-- SCOUT(#221) DOC: "carries that window's lock deadline": LockBox computes it from the window id; the caller passes none, and lock rejects a closed window or one more than one ahead. -->
 <!-- SCOUT(#222) DOC: "Before it, only a proven Aptos AuctionOutcome releases the lock": add reclaimUnpayable for a recorded but unpayable leaf. -->
 
 Every Ethereum lock is bound to one auction window and carries that window's
-lock deadline (issue 203). After the deadline, anyone may `reclaim` an open
+lock deadline (issue 203). LockBox computes the deadline from the window id,
+`lockDeadline(windowId)`; the caller passes none (issue 221). `LockBox.lock`
+reverts `WindowClosed` for a window below the current one and
+`WindowTooFarAhead` for one more than one ahead, the same two windows Aptos
+`create_auction` accepts. So no wallet can strand a lock behind a wrong or
+far-future deadline. A lock sent in a window's last seconds may be mined in
+the next window and revert with no funds moved: clients should target the
+next window near a close. After the deadline, anyone may `reclaim` an open
 lock to its depositor on Ethereum. Before it, only a proven Aptos
 `AuctionOutcome` releases the lock.
 
-<!-- SCOUT(#221) DOC: reclaim delay bullet: the value is frozen into the immutable LockBox, so the owner fixes it first (review decision 36); third bullet: "Aptos registers a lock only with this deadline" becomes "LockBox computes it". -->
+LockBox takes its window clock as constructor immutables: seconds per day and
+one or two close offsets (`DeployLockBox.productionWindowSchedule()`:
+`86400` and `[27900, 58500]`). Nothing can change them after deploy.
 
 - **Window close.** `auction::current_window_id` changes exactly at the two
   canonical closes, 07:45 UTC (27 900 s into the UTC day) and 16:15 UTC
@@ -60,12 +68,17 @@ lock to its depositor on Ethereum. Before it, only a proven Aptos
   first second of window `w + 1` (`eth_proof::window_close_secs`). An even
   window closes at 07:45 UTC, an odd window at 16:15 UTC.
 - **`ETH_RECLAIM_DELAY_SECS = 259200` (72 hours)**
-  (`eth_proof::ETH_RECLAIM_DELAY_SECS`, SDK `ETH_RECLAIM_DELAY_SECS`).
+  (`eth_proof::ETH_RECLAIM_DELAY_SECS`, SDK `ETH_RECLAIM_DELAY_SECS`,
+  `LockBox.RECLAIM_DELAY`). The immutable LockBox freezes it, so this value is
+  final (review decision 36 settled it at 72 hours).
 - **`eth_lock_deadline(w) = close(w) + ETH_RECLAIM_DELAY_SECS`**
-  (`auction::eth_lock_deadline`). It is a pure function of the window id,
-  because a lock is made before its window or timelock exists. Aptos
-  registers a lock only with this deadline, so every lock of an auction
-  shares it.
+  (`auction::eth_lock_deadline`, `LockBox.lockDeadline`). It is a pure
+  function of the window id, because a lock is made before its window or
+  timelock exists. LockBox computes it for every lock, and
+  `register_ethereum_lock` proves the lock commitment against it, so every
+  lock of an auction shares it. The shared table
+  `source/atomica-sdk/tests/fixtures/window_clock_vectors.json` pins the
+  values that Solidity, Move and the SDK must agree on.
 
 ### Settle deadline, stuck deadline and lock deadline
 
@@ -107,7 +120,6 @@ unwind:  now >= stuck_deadline_us
 
 `auction::get_stuck_deadline_us(window_id, pair_bcs)` returns it.
 
-<!-- SCOUT(#221) DOC: budget table: the 72 h total is the reclaim delay the owner must fix before LockBox freezes it (review decision 36). -->
 <!-- SCOUT(#228) DOC: budget table: remove the "Opening window, 10 min" row. -->
 <!-- SCOUT(#243) DOC: budget table: once the timelock deadline is the window close, the first row shrinks from 23 h 50 min to the 10-minute reveal window. -->
 
@@ -118,6 +130,8 @@ unwind:  now >= stuck_deadline_us
 | Unwind grace (stuck deadline) | 24 h |
 | Carrier margin | 24 h |
 | **Total** | **at most 72 h** |
+
+The 72 h total is the reclaim delay that LockBox freezes at deploy.
 
 The unwind grace and the carrier margin are `timelock_config` values
 (`get_unwind_grace_us`, `get_carrier_margin_us`), both 24 h. Any choice must

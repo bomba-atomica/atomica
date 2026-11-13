@@ -21,6 +21,8 @@ import {FakeUSD} from "../src/tokens/FakeUSD.sol";
  *          --rpc-url http://localhost:8545 --broadcast
  *      LIGHT_CLIENT comes from script/DeployAptosLightClient.s.sol. ATOMICA_ADDRESS is the Aptos
  *      account of the `atomica` package; the outcome type tag is `<ATOMICA_ADDRESS>::auction::AuctionOutcome`.
+ *      The last two constructor arguments, `daySecs` and `closeOffsetsSecs`, are the window clock
+ *      LockBox freezes for its life. This script passes `productionWindowSchedule()`.
  */
 contract DeployLockBox is Script {
     function run() external {
@@ -35,7 +37,9 @@ contract DeployLockBox is Script {
         FakeUSD fakeUSD = new FakeUSD();
         console.log("FakeUSD deployed at:", address(fakeUSD));
 
-        LockBox lockBox = new LockBox(address(fakeETH), address(fakeUSD), lightClient, typeTag);
+        (uint64 daySecs, uint64[] memory closeOffsetsSecs) = productionWindowSchedule();
+        LockBox lockBox =
+            new LockBox(address(fakeETH), address(fakeUSD), lightClient, typeTag, daySecs, closeOffsetsSecs);
         console.log("LockBox deployed at:", address(lockBox));
 
         vm.stopBroadcast();
@@ -49,6 +53,15 @@ contract DeployLockBox is Script {
         console.log("VITE_FAKE_ETH_ADDRESS=", vm.toString(address(fakeETH)));
         console.log("VITE_FAKE_USD_ADDRESS=", vm.toString(address(fakeUSD)));
         console.log("VITE_LOCK_BOX_ADDRESS=", vm.toString(address(lockBox)));
+    }
+
+    /// @notice The production window clock: two closes a day, at 07:45 and 16:15 UTC
+    ///         (docs/specifications/auction-timing.md).
+    function productionWindowSchedule() public pure returns (uint64 daySecs, uint64[] memory closeOffsetsSecs) {
+        daySecs = 86_400;
+        closeOffsetsSecs = new uint64[](2);
+        closeOffsetsSecs[0] = 27_900;
+        closeOffsetsSecs[1] = 58_500;
     }
 
     /// @notice BCS TypeTag of `<atomica>::auction::AuctionOutcome`.

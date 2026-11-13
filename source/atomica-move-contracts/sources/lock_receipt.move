@@ -46,9 +46,8 @@ module atomica::lock_receipt {
     const E_INVALID_ADDRESS_LENGTH: u64 = 8;
     /// Asset has no pinned Ethereum token
     const E_UNSUPPORTED_ASSET: u64 = 10;
-    // SCOUT(#221) REMOVE: `E_WRONG_DEADLINE`; the deadline is no longer an argument. The unwind pull request (213) takes codes 12 to 15 right after it.
-    /// The lock deadline is not `auction::eth_lock_deadline(window_id)`
-    const E_WRONG_DEADLINE: u64 = 11;
+    // Code 11 (a caller-supplied lock deadline) is retired: LockBox computes the
+    // deadline from the window id. Codes are not renumbered.
     /// The receipt's lock is bound to another auction window or pair
     const E_WRONG_BINDING: u64 = 12;
     /// An outcome payout list Ethereum LockBox could not pay: a recipient that
@@ -209,23 +208,22 @@ module atomica::lock_receipt {
     ///
     /// This function:
     /// 1. Resolves the token of `Asset` from the pinned config
-    /// 2. Rejects a deadline other than `auction::eth_lock_deadline(window_id)`
-    ///    (eth_proof::eth_lock_deadline), so every registered lock of an
-    ///    auction shares one deadline
-    /// 3. Derives the lock id from the LockBox lock nonce and rejects a lock
+    /// 2. Derives the lock id from the LockBox lock nonce and rejects a lock
     ///    already registered, so one lock gives exactly one receipt
-    /// 4. Verifies the lock's MPT proof against the validator-certified state
+    /// 3. Verifies the lock's MPT proof against the validator-certified state
     ///    root of `block_number`: the LockBox slot `commitments[lock_id]` must
-    ///    hold the commitment of the named amount, window, pair and deadline
-    /// 5. Creates and stores a LockReceipt for the amount of that one lock
-    /// 6. Emits a LockRegistered event
+    ///    hold the commitment of the named amount, window and pair, and of the
+    ///    deadline `eth_proof::eth_lock_deadline(window_id)` that LockBox
+    ///    computed. The caller names no deadline, so every registered lock of
+    ///    an auction shares one deadline.
+    /// 4. Creates and stores a LockReceipt for the amount of that one lock
+    /// 5. Emits a LockRegistered event
     ///
     /// Any account may carry the proof: `_carrier` gains nothing. The receipt
     /// belongs to the depositor `user_address` named in the proof, through its
     /// Ethereum-derivable Aptos account (eth_proof::ethereum_account_address).
     ///
     /// Type parameter Asset determines which asset is being locked (FakeETH, FakeUSD).
-    // SCOUT(#221) EDIT: `register_ethereum_lock` drops the `deadline` argument and the `E_WRONG_DEADLINE` check; `verify_lock` commits to `eth_proof::eth_lock_deadline(window_id)` itself. Fix step 2 of the doc above.
     public entry fun register_ethereum_lock<Asset>(
         _carrier: &signer,
         block_number: u64,
@@ -234,12 +232,10 @@ module atomica::lock_receipt {
         amount: u256,
         window_id: u64,
         pair_hash: vector<u8>,
-        deadline: u64,
         account_proof: vector<vector<u8>>,
         storage_proof: vector<vector<u8>>,
     ) acquires ReceiptRegistry {
         let token = token_for<Asset>();
-        assert!(deadline == eth_proof::eth_lock_deadline(window_id), E_WRONG_DEADLINE);
 
         // 1. The depositor named in the proof owns the receipt, through the
         // Aptos account its Ethereum key controls. Whoever carries the proof
@@ -263,7 +259,6 @@ module atomica::lock_receipt {
             amount,
             window_id,
             pair_hash,
-            deadline,
             account_proof,
             storage_proof,
         );

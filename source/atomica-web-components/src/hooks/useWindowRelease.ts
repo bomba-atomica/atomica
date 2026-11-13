@@ -35,7 +35,8 @@
 // scan for the AuctionOutcome event.
 //
 // SCOUT(#222) EDIT: a leaf may pay less than the lock amount (the remainder goes to the depositor), and an unpayable leaf needs reclaimUnpayable instead of releaseByOutcome.
-// SCOUT(#221) EDIT: auctionKey drops the deadline, so the key this hook reads outcomes under changes with the LockBox redeploy.
+// The auction key is (windowId, pairHash) since the LockBox redeploy of the
+// computed lock deadline issue (221); auctionKey from the SDK builds it.
 
 /** Ethereum state of one lock of a window. */
 export type WindowLockStatus = "open" | "released" | "reclaimed" | "unknown";

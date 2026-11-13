@@ -21,8 +21,11 @@ import {
 import { calculateLockStorageKey, getLockId } from "./storage-key.js";
 import { lockCommitment, type LockBinding } from "../lock-binding.js";
 
-// SCOUT(#221) EDIT: follows LockBinding; the deadline is derived from the window id, not supplied.
-/** The lock fields Aptos checks against the proven commitment. */
+/**
+ * The lock fields Aptos checks against the proven commitment. `deadline` is
+ * the one LockBox computed, `lockDeadline(windowId)` (read it from the
+ * `Locked` event or {@link ethLockDeadline}); no caller chooses it.
+ */
 export interface LockTerms extends LockBinding {
   /** Amount of this one lock */
   amount: bigint;
@@ -58,7 +61,10 @@ export interface LockedBalanceProof {
   amount: bigint;
   windowId: bigint;
   pairHash: string;
-  // SCOUT(#221) EDIT: no longer sent to register_ethereum_lock; keep it only for the commitment check and the display.
+  /**
+   * `LockBox.lockDeadline(windowId)`. Not sent to register_ethereum_lock,
+   * which recomputes it; kept for the commitment check and the display.
+   */
   deadline: bigint;
 
   // Storage proof of commitments[lockId]

@@ -438,7 +438,7 @@ jobs:
       # (binary-52beee31a6) serves /v1/atomica, so no image step is needed.
       # ETH_BACKEND is unset, so the Ethereum side is the Docker PoS chain,
       # where Prague gives AptosLightClient its EIP-2537 precompiles.
-      # SCOUT(#221) TEST: this step runs test/lockbox-release.test.ts against the redeployed LockBox.
+      # It also runs test/lockbox-release.test.ts against the LockBox it deploys.
       # SCOUT(#243) EDIT: genesis must write timelock_registrar from the deployer address in the env block below, before the package is published.
       - name: Run Aptos Testnet SDK tests
         working-directory: source/docker-testnet/aptos-testnet
@@ -644,7 +644,6 @@ jobs:
               tests/integration/13-bid-history.test.tsx
           # SCOUT(#236) TEST: this chunk runs 14-happy-path ending with release on Ethereum; on this anvil tier that needs the anvil backend on the prague hardfork (it starts on cancun today).
           # SCOUT(#217) TEST: this chunk runs 14-happy-path with the 2000 price.
-          # SCOUT(#221) TEST: this chunk runs 14-happy-path, which locks through the new lock() call with no deadline argument.
           # SCOUT(#228) TEST: this chunk runs 14-happy-path with the on-chain open step.
           - chunk: happy-path
             test_files: >-
@@ -1029,7 +1028,6 @@ jobs:
         run: forge build
 
       # Older contracts predate forge fmt. The light client and LockBox sources are checked.
-      # SCOUT(#221) EDIT: a new forge test file for the window bounds or the shared deadline table must be added to this fmt list and must match the --match-path glob of the next step, or it never runs here.
       # SCOUT(#222) EDIT: a new forge test file for reclaimUnpayable must be added to this fmt list and must match the --match-path glob of the next step, or it never runs here.
       - name: Check light client and LockBox formatting
         working-directory: source/evm-contracts

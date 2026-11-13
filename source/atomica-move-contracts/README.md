@@ -10,7 +10,6 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 
 ### Entry points (public entry funs)
 
-<!-- SCOUT(#221) DOC: the `register_ethereum_lock<Asset>` row below says the deadline must equal `auction::eth_lock_deadline(window_id)`; the deadline is no longer an argument. -->
 <!-- SCOUT(#228) DOC: the `submit_bid` row loses "price commitment"; the `open_bid`, `submit_cleartext_and_clear`, `finalize_reveal` row becomes `open_bids`. -->
 <!-- SCOUT(#242) DOC: the `settle` row says "single highest bid; uniform-price clearing is scaffold"; the code clears at a uniform price. The unwind pull request (213) rewrites this row. -->
 <!-- SCOUT(#243) DOC: the `create_auction` row must say that the package registers the window's timelock. -->
@@ -25,7 +24,7 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 | `atomica::auction` | `settle` | live (honours the cleared fills until the stuck deadline; records every lock's outcome and emits `AuctionOutcome`) |
 | `atomica::auction` | `unwind` | live (any account, from the stuck deadline: returns every lock a window still holds; issue 194) |
 | `atomica::lock_receipt` | `initialize<Chain, Asset>` | live |
-| `atomica::lock_receipt` | `register_ethereum_lock<Asset>` | live (proves the LockBox commitment slot; deadline must equal `auction::eth_lock_deadline(window_id)`) |
+| `atomica::lock_receipt` | `register_ethereum_lock<Asset>` | live (proves the LockBox commitment slot; takes no deadline: the commitment binds `auction::eth_lock_deadline(window_id)`, which LockBox computes) |
 | `atomica::lock_receipt` | `cancel_unauctioned<Chain, Asset>` | live (any account returns an `ACTIVE` receipt after the cancel delay) |
 | `atomica::fake_eth` | `initialize` | live |
 | `atomica::fake_eth` | `mint` | live (legacy faucet) |

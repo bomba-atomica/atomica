@@ -9,7 +9,15 @@
  * All tests run in headless Chromium against a live dual-chain Docker testnet.
  */
 
-import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  afterEach,
+} from "vitest";
 import { render, cleanup } from "@testing-library/react";
 import React from "react";
 import { ethers } from "ethers";
@@ -40,9 +48,9 @@ const ERC20_ABI = [
   "function balanceOf(address account) external view returns (uint256)",
 ] as const;
 
-// SCOUT(#221) EDIT: private copy of the lock ABI with the deadline argument; this file is missing from the issue's touchpoints and runs in no CI job.
+// Private copy of the lock ABI. LockBox computes the deadline.
 const LOCKBOX_ABI = [
-  "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) external returns (bytes32)",
+  "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash) external returns (bytes32)",
 ] as const;
 
 /** Lock `amount` of `token` into the current window of the launch pair. */
@@ -51,8 +59,7 @@ async function lockNow(lockBox: ethers.Contract, token: string, amount: bigint) 
     currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
     LAUNCH_PAIR_BCS,
   );
-  // SCOUT(#221) EDIT: lock takes no deadline argument.
-  const tx = await lockBox.lock(token, amount, b.windowId, b.pairHash, b.deadline);
+  const tx = await lockBox.lock(token, amount, b.windowId, b.pairHash);
   await tx.wait();
 }
 
@@ -77,41 +84,39 @@ describe.sequential("15 — pool events (usePoolEvents)", () => {
 
   // ── Happy path: event fires on lock ────────────────────────────────────────
 
-  it(
-    "calls onEvent when a Locked event is emitted after locking FakeETH",
-    async () => {
-      const onEvent = vi.fn();
-      render(<PoolEventsHarness onEvent={onEvent} />);
+  it("calls onEvent when a Locked event is emitted after locking FakeETH", async () => {
+    const onEvent = vi.fn();
+    render(<PoolEventsHarness onEvent={onEvent} />);
 
-      // Give the effect time to subscribe
-      await new Promise((r) => setTimeout(r, 500));
+    // Give the effect time to subscribe
+    await new Promise((r) => setTimeout(r, 500));
 
-      // Lock FakeETH to trigger a Locked event
-      const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
-      const wallet = new ethers.Wallet(fixture.eth.seller.privateKey, provider);
-      const lockBoxAddress = fixture.eth.contracts.lockBox;
-      const fakeEthAddress = fixture.eth.contracts.fakeETH;
+    // Lock FakeETH to trigger a Locked event
+    const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, {
+      cacheTimeout: -1,
+    });
+    const wallet = new ethers.Wallet(fixture.eth.seller.privateKey, provider);
+    const lockBoxAddress = fixture.eth.contracts.lockBox;
+    const fakeEthAddress = fixture.eth.contracts.fakeETH;
 
-      const fakeEth = new ethers.Contract(fakeEthAddress, ERC20_ABI, wallet);
-      const lockBox = new ethers.Contract(lockBoxAddress, LOCKBOX_ABI, wallet);
+    const fakeEth = new ethers.Contract(fakeEthAddress, ERC20_ABI, wallet);
+    const lockBox = new ethers.Contract(lockBoxAddress, LOCKBOX_ABI, wallet);
 
-      // Approve and lock 1 FakeETH
-      const amount = ethers.parseEther("1");
-      const approveTx = await fakeEth.approve(lockBoxAddress, amount);
-      await approveTx.wait();
-      await lockNow(lockBox, fakeEthAddress, amount);
+    // Approve and lock 1 FakeETH
+    const amount = ethers.parseEther("1");
+    const approveTx = await fakeEth.approve(lockBoxAddress, amount);
+    await approveTx.wait();
+    await lockNow(lockBox, fakeEthAddress, amount);
 
-      // Wait for the event polling to detect the new event (ethers v6 HTTP
-      // polling interval is ~4 seconds by default)
-      await vi.waitFor(
-        () => {
-          expect(onEvent).toHaveBeenCalled();
-        },
-        { timeout: 15_000, interval: 500 },
-      );
-    },
-    30_000,
-  );
+    // Wait for the event polling to detect the new event (ethers v6 HTTP
+    // polling interval is ~4 seconds by default)
+    await vi.waitFor(
+      () => {
+        expect(onEvent).toHaveBeenCalled();
+      },
+      { timeout: 15_000, interval: 500 },
+    );
+  }, 30_000);
 
   // ── Cleanup on unmount ─────────────────────────────────────────────────────
 
@@ -126,7 +131,9 @@ describe.sequential("15 — pool events (usePoolEvents)", () => {
     unmount();
 
     // Lock another FakeETH
-    const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
+    const provider = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, {
+      cacheTimeout: -1,
+    });
     const wallet = new ethers.Wallet(fixture.eth.seller.privateKey, provider);
     const lockBoxAddress = fixture.eth.contracts.lockBox;
     const fakeEthAddress = fixture.eth.contracts.fakeETH;
