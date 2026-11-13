@@ -182,6 +182,14 @@ describe.sequential("09: Submit Bid on Auction", () => {
       PAIR_BCS,
       2,
     );
+    // The batch mints exactly what it locks. Test 4 locks more FakeUSD
+    // through the screen, so the bidder needs a balance of its own.
+    const fakeUsd = new ethers.Contract(
+      fixture.eth.contracts.fakeUSD,
+      ["function mint(address to, uint256 amount)"],
+      new ethers.Wallet(fixture.eth.bidder.privateKey, new ethers.JsonRpcProvider(fixture.eth.rpcUrl)),
+    );
+    await (await fakeUsd.mint(bidderAddress, 1_000n * 10n ** 6n)).wait();
   }, 2_400_000);
 
   afterAll(async () => {

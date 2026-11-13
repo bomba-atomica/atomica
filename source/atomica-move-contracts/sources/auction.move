@@ -109,8 +109,6 @@ module atomica::auction {
     const E_PAIR_NOT_ALLOWED: u64 = 42;
     /// `allow_pair`: only the package account may add a pair.
     const E_NOT_PACKAGE_ACCOUNT: u64 = 43;
-    /// No `create_auction` has registered a timelock for this window id yet.
-    const E_NO_WINDOW_TIMELOCK: u64 = 44;
 
     /// `ibe::verify_bid_ct` rejected the ciphertext for the associated data built on chain.
     const E_INVALID_CIPHERTEXT: u64 = 12;
@@ -1686,11 +1684,12 @@ module atomica::auction {
 
     #[view]
     /// The timelock id registered for `window_id`, shared by every pair of the window id.
-    /// Aborts with E_NO_WINDOW_TIMELOCK until a `create_auction` of the window id registered it.
+    /// Aborts with E_AUCTION_NOT_FOUND until a `create_auction` of the window id registered it:
+    /// until then no window of that id exists, for any pair.
     public fun window_timelock(window_id: u64): u64 acquires TimelockRegistrar {
-        assert!(exists<TimelockRegistrar>(@atomica), E_NO_WINDOW_TIMELOCK);
+        assert!(exists<TimelockRegistrar>(@atomica), E_AUCTION_NOT_FOUND);
         let timelocks = &borrow_global<TimelockRegistrar>(@atomica).window_timelocks;
-        assert!(table::contains(timelocks, window_id), E_NO_WINDOW_TIMELOCK);
+        assert!(table::contains(timelocks, window_id), E_AUCTION_NOT_FOUND);
         *table::borrow(timelocks, window_id)
     }
 
