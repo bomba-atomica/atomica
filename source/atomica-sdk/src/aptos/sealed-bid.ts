@@ -4,10 +4,14 @@
  * window's bids after the timelock reveal.
  *
  * Sealing reads from chain the window's timelock (`auction::get_window_status`),
- * the epoch key (`timelock::get_mpk`), the timelock identity
- * (`timelock::get_timelock_identity`) and the associated data the contract will
- * rebuild at submission (`auction::bid_associated_data`). It then encrypts the
- * plaintext `price_le8 || salt32` with the V2 wrapper and commits to the price.
+ * the chain id, the timelock epoch (`timelock::get_timelock_epoch`) and its
+ * deadline (`timelock::get_deadline`). It builds the timelock identity and the
+ * associated data the contract will rebuild at submission itself, and throws
+ * unless the node's `timelock::get_timelock_identity` and
+ * `auction::bid_associated_data` equal them. It reads the epoch key
+ * (`timelock::get_mpk`) from every configured endpoint and throws when two
+ * answers differ. It then encrypts the plaintext `price_le8 || salt32` with the
+ * V2 wrapper and commits to the price.
  *
  * Opening reads the revealed key (`timelock::get_decryption_key`) and every bid
  * (`auction::get_bid_info`), decrypts each ciphertext off chain and checks the
@@ -18,9 +22,14 @@
  */
 import { randomBytes } from "@noble/hashes/utils";
 import { decryptBid, encryptBid } from "@atomica/state-proof-verifier/ibe";
-import { CONTRACT_ADDR, aptos } from "./config.js";
+import { CONTRACT_ADDR, aptos, getExtraAptosClients } from "./config.js";
 // SCOUT(#228) EDIT: computeBidCommitment is deleted; only the 8-byte price encoder remains.
-import { computeBidCommitment, encodeBidPlaintext } from "../ibe/bid.js";
+import {
+  buildBidAd,
+  computeBidCommitment,
+  computeTimelockIdentityV2,
+  encodeBidPlaintext,
+} from "../ibe/bid.js";
 
 function hexToBytes(value: unknown): Uint8Array {
   const clean = String(value).replace(/^0x/, "");
@@ -145,21 +154,51 @@ export async function getBidCount(
   return BigInt(count as string);
 }
 
-// SCOUT(#235) ADD: reader for timelock::get_timelock_epoch.
-export async function getTimelockEpoch(_timelockId: bigint): Promise<bigint> {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#235) getTimelockEpoch");
+/** The epoch a timelock was registered in (`timelock::get_timelock_epoch`). */
+export async function getTimelockEpoch(timelockId: bigint): Promise<bigint> {
+  const [epoch] = await view(`${CONTRACT_ADDR}::timelock::get_timelock_epoch`, [
+    timelockId,
+  ]);
+  return BigInt(epoch as string);
 }
 
-// SCOUT(#235) ADD: reader for timelock::get_deadline, in microseconds.
+/** The deadline of a timelock, in microseconds (`timelock::get_deadline`). */
 export async function getTimelockDeadlineUs(
-  _timelockId: bigint,
+  timelockId: bigint,
 ): Promise<bigint> {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#235) getTimelockDeadlineUs");
+  const [deadline] = await view(`${CONTRACT_ADDR}::timelock::get_deadline`, [
+    timelockId,
+  ]);
+  return BigInt(deadline as string);
 }
 
-// SCOUT(#235) ADD: reads timelock::get_mpk from every configured Aptos endpoint and throws when two answers differ.
+/**
+ * The master public key (`timelock::get_mpk`) read from the primary Aptos
+ * endpoint and from every extra endpoint of the chain configuration. Throws
+ * when two answers differ. With no extra endpoint configured, it returns the
+ * primary node's key with no comparison.
+ */
 export async function getMpkFromAllEndpoints(): Promise<Uint8Array> {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#235) getMpkFromAllEndpoints");
+  const payload = {
+    function:
+      `${CONTRACT_ADDR}::timelock::get_mpk` as `${string}::${string}::${string}`,
+    functionArguments: [],
+  };
+  const clients = [aptos, ...getExtraAptosClients()];
+  const keys = await Promise.all(
+    clients.map(async (client) => {
+      const [mpk] = await client.view({ payload });
+      return hexToBytes(mpk);
+    }),
+  );
+  for (let i = 1; i < keys.length; i++) {
+    if (!bytesEqual(keys[0], keys[i])) {
+      throw new Error(
+        `Aptos endpoints disagree on the timelock master public key (primary and extra endpoint ${i}). Refusing to seal the bid.`,
+      );
+    }
+  }
+  return keys[0];
 }
 
 // SCOUT(#228) EDIT: drop commitment and salt.
@@ -171,7 +210,6 @@ export interface SealedBid {
   salt: Uint8Array;
 }
 
-// SCOUT(#235) EDIT: build the identity and the associated data locally, throw when the node's values differ, and compare the master public key across endpoints.
 // SCOUT(#228) EDIT: encrypt the 8-byte little-endian price only; no salt parameter and no commitment.
 // SCOUT(#217) EDIT: price is whole USD per whole base token; callers pass parsePrice output.
 /**
@@ -181,6 +219,13 @@ export interface SealedBid {
  * wallet, its derived address). The ciphertext is bound to that sender, the
  * window, the timelock, its epoch and its deadline. A fresh 32-byte salt is
  * drawn unless one is given.
+ *
+ * The identity and the associated data are built locally from the chain id,
+ * the timelock epoch and deadline, the window and the bidder. The call throws
+ * without encrypting when the node's identity or associated data differ from
+ * them, or when two configured endpoints return different master public keys.
+ * A node that lies about the chain id, the epoch or the deadline makes an
+ * associated data the chain rejects at `submit_bid`.
  */
 export async function sealBid(
   windowId: bigint,
@@ -190,15 +235,43 @@ export async function sealBid(
   salt: Uint8Array = randomBytes(32),
 ): Promise<SealedBid> {
   const timelockId = await getWindowTimelockId(windowId, pairBcs);
-  const [[mpk], identity, ad] = await Promise.all([
-    view(`${CONTRACT_ADDR}::timelock::get_mpk`, []),
-    getTimelockIdentity(timelockId),
-    getBidAssociatedData(timelockId, windowId, bidder),
-  ]);
+  const [chainId, epoch, deadlineUs, nodeIdentity, nodeAd, mpk] =
+    await Promise.all([
+      aptos.getChainId(),
+      getTimelockEpoch(timelockId),
+      getTimelockDeadlineUs(timelockId),
+      getTimelockIdentity(timelockId),
+      getBidAssociatedData(timelockId, windowId, bidder),
+      getMpkFromAllEndpoints(),
+    ]);
+  const identity = computeTimelockIdentityV2(
+    chainId,
+    epoch,
+    timelockId,
+    deadlineUs,
+  );
+  const ad = buildBidAd({
+    chainId,
+    epoch,
+    timelockId,
+    auctionId: windowId,
+    bidder,
+    deadlineUs,
+  });
+  if (!bytesEqual(identity, nodeIdentity)) {
+    throw new Error(
+      `The Aptos node returned a timelock identity for timelock ${timelockId} that differs from the one built from its chain id, epoch and deadline. Refusing to seal the bid.`,
+    );
+  }
+  if (!bytesEqual(ad, nodeAd)) {
+    throw new Error(
+      `The Aptos node returned bid associated data for window ${windowId} that differs from the one built locally. Refusing to seal the bid.`,
+    );
+  }
   const plaintext = encodeBidPlaintext(price, salt);
   return {
     timelockId,
-    ciphertext: encryptBid(hexToBytes(mpk), identity, ad, plaintext),
+    ciphertext: encryptBid(mpk, identity, ad, plaintext),
     commitment: computeBidCommitment(price, salt, ad),
     salt,
   };

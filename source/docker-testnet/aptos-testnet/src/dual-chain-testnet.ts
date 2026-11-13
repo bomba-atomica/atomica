@@ -77,7 +77,6 @@ export interface DualChainTestnetInfo {
         carrierAddress: string;
     };
     aptos: {
-        // SCOUT(#235) EDIT: expose every validator API URL here (the testnet runs four), so tests can give sealBid extra endpoints for the master public key comparison.
         nodeUrl: string;
         moduleAddress: string;
         deployerPrivateKey: string;

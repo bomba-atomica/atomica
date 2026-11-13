@@ -172,10 +172,14 @@ The canonical key for `AuctionRegistry` is `bcs::to_bytes(&(window_id, pair))`.
 <!-- SCOUT(#216) DOC: the bid stores its collateral amount and a validity flag; submit_bid aborts on zero quantity and on quantity above supply. -->
 <!-- SCOUT(#218) DOC: state the bid cap (100) and the minimum collateral per bid. -->
 <!-- SCOUT(#228) DOC: the price hash and salt leave the bid; the plaintext is the 8-byte little-endian price. -->
-<!-- SCOUT(#235) DOC: "IBE-encrypted at submission time": say that the client builds the identity and associated data itself and compares the master public key across endpoints, so no RPC node picks the key a bid is sealed to. -->
 
 Bids are IBE-encrypted at submission time. The plaintext price is never stored
-on-chain during the live auction.
+on-chain during the live auction. The client builds the timelock identity and
+the bid associated data itself, from the chain id and the timelock's epoch and
+deadline, and refuses to seal when the node's values differ. When extra Aptos
+endpoints are configured (`VITE_APTOS_EXTRA_FULLNODE_URLS`), it compares the
+master public key across them, so no single RPC node picks the key a bid is
+sealed to.
 
 ```move
 struct Bid has store {

@@ -17,7 +17,6 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-// SCOUT(#235) EDIT: this file runs in no CI job (exemptions list); the new storage cases go in tests/unit/bidStorage.test.ts.
 describe("12a: bidStorage — localStorage persistence", () => {
   const seller = "0xAABB";
   const bidder = "0xCCDD";

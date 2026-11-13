@@ -46,8 +46,6 @@ React UI component library and custom hooks for the Atomica auction interface. P
 | `NetworkConfigProvider` | `src/network/network-config-context.tsx` |
 | `useNetworkConfig` | `src/network/network-config-state.ts` |
 
-<!-- SCOUT(#235) DOC: this table gains the bid opening functions. -->
-
 ### Exported storage helpers
 
 | Export | File |

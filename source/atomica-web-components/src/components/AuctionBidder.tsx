@@ -29,11 +29,13 @@ import { saveBidPrice } from "../storage/bidStorage";
  * `BCS(vk, U, nonce, C, sig)` and a 32-byte price commitment. The contract builds
  * the associated data on chain and aborts unless `ibe::verify_bid_ct` accepts the
  * ciphertext. The client encrypts the bid itself with `sealBid` from
- // SCOUT(#235) EDIT: sealBid builds the identity and associated data locally and cross-checks the node; rewrite this sentence.
- * `@atomica/sdk/aptos`: it reads `timelock::get_mpk`, the window's
- * `timelock::get_timelock_identity` and `auction::bid_associated_data` for the
- * sender's derived Aptos address, encrypts `price_le8 || salt32` and commits to
- * the price.
+ * `@atomica/sdk/aptos`: it builds the timelock identity and the associated data
+ * for the sender's derived Aptos address locally, from the chain id and the
+ * timelock's epoch and deadline. It refuses to seal when the node's
+ * `timelock::get_timelock_identity` or `auction::bid_associated_data` differ, or
+ * when configured Aptos endpoints disagree on `timelock::get_mpk`. The status
+ * line shows that error and no `submit_bid` is sent. It encrypts
+ * `price_le8 || salt32` and commits to the price.
  *
  * Phase 3b adds a two-step flow that mirrors the seller's Step2Lock:
  *
@@ -221,7 +223,8 @@ export function AuctionBidder() {
       // the sender, so seal it for this wallet's derived Aptos address.
       setStatus("Encrypting bid to the timelock key...");
       const bidder = (await getDerivedAddress(account)).toString();
-      // SCOUT(#235) EDIT: sealBid may now throw when a node lies about the identity, the associated data or the key; keep the salt it returns.
+      // sealBid throws when a node lies about the identity, the associated
+      // data or the key; the catch below shows it and nothing is submitted.
       // SCOUT(#228) EDIT: sealBid returns no commitment and no salt.
       const sealed = await sealBid(windowIdBn, pairBcs, bidder, price);
 
@@ -240,11 +243,10 @@ export function AuctionBidder() {
         BigInt(quantity),
       );
 
-      // SCOUT(#235) EDIT: store price, salt and commitment with saveBidOpening, only after submitBid resolves.
       // SCOUT(#217) EDIT: the stored price changes unit with the input.
       // SCOUT(#228) REMOVE: nothing is stored once the salt is gone.
-      // Persist the bid price in localStorage. Nothing reads it yet; the bid
-      // identity issue (235) owns bid storage.
+      // Persist the bid price in localStorage. Nothing reads it yet; the
+      // price unit issue (217) owns the stored price.
       // Key: windowId (string) used as auction identifier in this v0 shape
       saveBidPrice(windowId, account, price);
 

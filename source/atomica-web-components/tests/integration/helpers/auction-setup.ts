@@ -729,7 +729,6 @@ export interface SubmittedBid {
 // SCOUT(#216) EDIT: quantity must be above zero and at most the window supply, and the collateral must cover price times quantity, or the bid is invalid at opening.
 // SCOUT(#217) EDIT: price is whole USD per whole FakeETH.
 // SCOUT(#228) EDIT: getBidPayload loses the commitment argument and sealBid returns no salt.
-// SCOUT(#235) EDIT: sealBid adds node cross-checks; one configured endpoint must keep working here.
 export async function submitBidDirect(
   aptosClient: Aptos,
   bidder: EthSigner,

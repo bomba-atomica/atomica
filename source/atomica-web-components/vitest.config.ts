@@ -16,6 +16,26 @@ const testEnv = loadEnv("test", resolve(__dirname, ".."), "");
 // Assign to process.env so browser commands (which run server-side) see these vars
 Object.assign(process.env, testEnv);
 
+// One same-origin proxy per extra Aptos endpoint: /aptos-api-<n> reaches the
+// n-th URL of VITE_APTOS_EXTRA_FULLNODE_URLS, with the prefix stripped. The SDK
+// (buildExtraAptosFullnodeUrls) points extra endpoint n at /aptos-api-<n>/v1.
+const extraAptosProxies = Object.fromEntries(
+  (process.env.VITE_APTOS_EXTRA_FULLNODE_URLS ?? "")
+    .split(",")
+    .map((url) => url.trim())
+    .filter((url) => url.length > 0)
+    .map((url, i) => {
+      const prefix = `/aptos-api-${i + 1}`;
+      return [
+        prefix,
+        {
+          target: new URL(url).origin,
+          rewrite: (path: string) => path.replace(new RegExp(`^${prefix}`), ""),
+        },
+      ];
+    }),
+);
+
 export default defineConfig(async () => {
   // Dynamic import to avoid ESM bundling issues in config
   const {
@@ -49,6 +69,9 @@ export default defineConfig(async () => {
     // that the production app uses.
     server: {
       proxy: {
+        // Vite takes the first key that prefixes the request path, so the
+        // /aptos-api-<n> entries must come before /aptos-api.
+        ...extraAptosProxies,
         "/aptos-api": {
           target: "http://127.0.0.1:8080",
           rewrite: (path: string) => path.replace(/^\/aptos-api/, ""),

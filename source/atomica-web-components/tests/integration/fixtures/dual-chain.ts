@@ -148,7 +148,6 @@ export async function setupIntegrationFixture(
     },
   };
 
-  // SCOUT(#235) EDIT: the chain config gains optional extra Aptos endpoints; this fixture has one node URL.
   // Configure the app to use testnet addresses
   (
     window as unknown as {

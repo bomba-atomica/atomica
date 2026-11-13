@@ -81,7 +81,6 @@ export function buildEthRpcUrl(host: string): string {
   return url.toString();
 }
 
-// SCOUT(#235) EDIT: a browser gets one proxied endpoint here; extra endpoints need their own proxy paths or direct URLs.
 /**
  * Returns the Aptos fullnode URL.
  *
@@ -106,4 +105,29 @@ export function buildAptosFullnodeUrl(host: string): string {
   const url = ensurePort(parseTargetHost(host), port);
   url.pathname = "/v1";
   return url.toString();
+}
+
+/**
+ * Returns the URLs the extra Aptos fullnode clients use.
+ *
+ * In a browser, extra endpoint `n` (1-based, in list order) is reached through
+ * the same-origin proxy path `/aptos-api-<n>`, so this returns
+ * `<origin>/aptos-api-<n>/v1`. The dev server proxies that path to the
+ * endpoint's origin and strips the prefix. Outside a browser it returns the
+ * URLs unchanged.
+ *
+ * @param urls The extra fullnode URLs, each ending in `/v1`.
+ * @param origin The page origin. Defaults to `window.location.origin` in a
+ *   browser and to `null` (no proxy) elsewhere.
+ */
+export function buildExtraAptosFullnodeUrls(
+  urls: string[],
+  origin: string | null = typeof window !== "undefined"
+    ? window.location.origin
+    : null,
+): string[] {
+  if (origin === null) {
+    return [...urls];
+  }
+  return urls.map((_, i) => `${origin}/aptos-api-${i + 1}/v1`);
 }
