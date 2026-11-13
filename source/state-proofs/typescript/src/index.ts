@@ -32,10 +32,6 @@ export { verifyAccountProof, verifyStorageProof, decodeAccountState } from "./ve
 export { verifyTransactionProof } from "./transaction";
 export { verifyReceiptProof } from "./receipt";
 
-// Re-export beacon/light client functions
-// SCOUT(#237) REMOVE: the beacon re-export and the comment line above it.
-export * from "./beacon";
-
 // Re-export IBE (Identity-Based Encryption) functions
 export * from "./ibe";
 

@@ -22,11 +22,6 @@ This package provides the cryptographic primitives needed for:
 - **Receipt Verification**: Validate transaction receipts against state root
 - **Account State**: Verify account balance, nonce, storage
 
-<!-- SCOUT(#237) DOC: remove the Beacon Chain section. -->
-### Beacon Chain
-- **Consensus verification**: Verify beacon chain blocks
-- **Validator data**: Process validator state
-
 ## Architecture
 
 ### IBE Implementation
@@ -40,9 +35,8 @@ Uses BLS12-381 curve for pairing-based encryption:
 Identity → Hash → Point on curve → Pair with MPK → Encryption key
 ```
 
-<!-- SCOUT(#237) DOC: step 1 of the flow below fetches the state root from the beacon chain; the root now comes from the validator-certified headers on Aptos. -->
 ### State Proof Flow
-1. Fetch Ethereum state root from beacon chain
+1. Take the Ethereum state root from a validator-certified header on Aptos
 2. Generate Merkle proof for specific account/storage
 3. Verify proof against state root
 4. Extract verified data
@@ -120,9 +114,8 @@ bun test
 - **Identity collisions**: Use domain separation (e.g., "auction:123")
 - **Randomness**: Uses cryptographically secure random for key generation
 
-<!-- SCOUT(#237) DOC: the first bullet below names a light client as the source of the state root. -->
 ### State Proofs
-- **State root must be trusted**: Verify source of state root (e.g., light client)
+- **State root must be trusted**: On Aptos it comes from validator-certified headers. The `eth-verify` CLI uses the root from its RPC, so it trusts that RPC
 - **Proof completeness**: Ensure all required nodes are in proof
 - **Block finality**: Only verify against finalized blocks
 

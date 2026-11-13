@@ -42,7 +42,6 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 <!-- SCOUT(#224) DOC: multi-pair row: "single pair hard-coded" becomes an allowlist seeded with one launch pair. -->
 <!-- SCOUT(#228) DOC: sealed-bids row: describes submit_cleartext_and_clear and finalize_reveal with a price hash; on-chain opening replaces them with open_bids. -->
 <!-- SCOUT(#236) DOC: settle and claim row: ClaimButton (a faucet mint) is removed for a release action; AuctionRevealer and SellFlow get exported. -->
-<!-- SCOUT(#237) DOC: state-proof SDK row: the package loses its beacon light client. -->
 <!-- SCOUT(#238) DOC: rebate rows (on-chain and UI): the "no uniform-price anchor" reason is stale and the scaffolding, hook and FeeRebateDisplay are deleted; drop or reword both rows. -->
 <!-- SCOUT(#239) DOC: orchestrator row: the script lives in atomica-demo/scripts and its Aptos testnet import is repointed. -->
 <!-- SCOUT(#239) DOC: ZK row: the ZK scaffold crate is deleted; the acceptance grep also hits three v1.0 rows and one v2.0 row below. -->
@@ -77,7 +76,7 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 | **Dual-chain testnet orchestrator** | `docker-testnet/`, `atomica-web/scripts/dual-testnet-orchestrator.ts` | `live` |
 | **Browser integration test suite** | `atomica-web/tests/`, `atomica-web-ui/tests/` | `live` |
 | **Move unit + integration tests** | `atomica-move-contracts/sources/*_tests.move` | `live` |
-| **Ethereum state-proof SDK** | `state-proofs/` | `live` |
+| **Ethereum state-proof SDK** | `state-proofs/` | `live` — proof fetching, MPT verification and IBE; the off-chain beacon light client was removed (issue 237) |
 | **ZK auction verification (`atomica-zkp`)** | `atomica-zkp/src/` | `missing` — `lib.rs` is 2 lines |
 
 See [`docs/architecture/v0-architecture.md`](architecture/v0-architecture.md) (authored in #83) for the component interaction diagram.

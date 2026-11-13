@@ -2,40 +2,6 @@
 
 A self-sufficient TypeScript library and CLI tool for fetching and cryptographically verifying Ethereum state proofs using Merkle-Patricia Trie (MPT) verification.
 
-<!-- SCOUT(#237) DOC: remove the "Live Demo" and "Local Docker Demo" sections: the demo scripts and the light client they start are deleted. -->
-
-## 🚀 Quick Start: Live Demo (Sepolia)
-
-Run a complete end-to-end verification demo on Sepolia testnet:
-
-```bash
-# 1. Install dependencies
-bun install
-
-# 2. Run the demo
-bun run demo
-```
-
-This demo initializes a trustless light client, syncs to the head of Sepolia, and cryptographically verifies an account state.
-
-### 🐳 Local Docker Demo
-
-You can also run the demo using a local Docker-based Ethereum cluster:
-
-```bash
-bun run demo:docker
-```
-
-This will automatically start a local 4-validator Ethereum testnet, initialize a light client, perform a transaction, and verify the resulting state. (Requires Docker)
-
-### Overriding Defaults
-
-You can override the default RPC and Beacon endpoints using environment variables:
-
-```bash
-SEPOLIA_RPC_URL="your_rpc_url" BEACON_API_URL="your_beacon_url" bun run demo
-```
-
 ## Overview
 
 This tool implements **EIP-1186** (`eth_getProof`) proof verification, allowing you to:
@@ -261,20 +227,6 @@ if (result.valid) {
     const lockedBalance = result.accountState.balance;
     // Relay to target chain with cryptographic proof
 }
-```
-
-<!-- SCOUT(#237) DOC: remove the "Light Clients" use case: the state root comes from the same RPC as the proof, so nothing is trusted less; Aptos reads validator-certified headers. -->
-
-### Light Clients
-
-Verify account state without downloading full blockchain:
-
-```typescript
-// Verify against finalized block
-const proof = await fetchProof(rpcUrl, address, [], 'finalized');
-const result = await verifyAccountProof(proof.accountProof, proof.stateRoot, address);
-
-// Trust the account state without trusting the RPC provider
 ```
 
 ### Auditing & Forensics

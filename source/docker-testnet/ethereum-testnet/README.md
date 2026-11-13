@@ -1,6 +1,6 @@
 # Ethereum PoS Docker Testnet
 
-A mainnet-like Ethereum Proof-of-Stake testnet for local development and testing. Designed for cross-chain state proof verification and light client synchronization.
+A mainnet-like Ethereum Proof-of-Stake testnet for local development and testing. Designed for cross-chain state proof verification.
 
 ## Architecture
 
@@ -90,29 +90,28 @@ Pre-funded accounts with 1000 ETH each:
 
 ## State Proof Verification
 
-<!-- SCOUT(#237) DOC: the flow below (beacon header signed by the sync committee, then the execution state root) is the off-chain beacon light client model that issue 237 deletes; Aptos reads validator-certified headers. The getLightClientBootstrap and getLightClientUpdates helpers named in this README have no caller. -->
+Atomica does not run an off-chain beacon light client. Aptos takes the Ethereum
+state root from validator-certified headers. A test reads the same root from the
+execution block header, then checks a proof against it:
 
-For cross-chain bridge verification, use this data flow:
-
-1. **Get Beacon Header**: `getBeaconHeader("finalized")` - signed by sync committee
-2. **Extract Execution State Root**: `beaconBlock.body.execution_payload.state_root`
-3. **Get Account Proof**: `getProof(address, storageKeys, blockNumber)`
-4. **Verify on Target Chain**: MPT proof verification against state root
+1. **Get Block**: `getBlock(blockNumber)` gives the execution `stateRoot`
+2. **Get Account Proof**: `getProof(address, storageKeys, blockNumber)`
+3. **Verify**: MPT proof verification against that state root
 
 ```typescript
-// Complete verification chain
-const beaconBlock = await testnet.getBeaconBlock("finalized");
-const stateRoot = beaconBlock.message.body.execution_payload.state_root;
-const blockNumber = beaconBlock.message.body.execution_payload.block_number;
+const block = await testnet.getBlock(blockNumber);
 
 const proof = await testnet.getProof(
     contractAddress,
     ["0x0", "0x1"],  // storage slots
-    `0x${parseInt(blockNumber).toString(16)}`
+    block.number,    // hex block number from the header
 );
 
-// proof.accountProof + proof.storageProof can be verified against stateRoot
+// proof.accountProof + proof.storageProof can be verified against block.stateRoot
 ```
+
+The beacon light client helpers below (`getLightClientBootstrap`,
+`getLightClientUpdates`) have no caller in this repo.
 
 ## API Reference
 
