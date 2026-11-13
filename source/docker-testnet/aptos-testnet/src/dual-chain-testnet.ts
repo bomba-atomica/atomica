@@ -52,7 +52,6 @@ export interface DualChainTestnetInfo {
     eth: {
         rpcUrl: string;
         chainId: number;
-        // SCOUT(#219) EDIT: contracts gains aptosLightClient, the AptosLightClient that LockBox was deployed with.
         contracts: {
             fakeETH: string;
             fakeUSD: string;
@@ -66,7 +65,9 @@ export interface DualChainTestnetInfo {
         /** Bidder account (testnet account 1) */
         bidderPrivateKey: string;
         bidderAddress: string;
-        // SCOUT(#219) EDIT: the comment below is stale (LockBox has no settlementAuthority); this account is the natural outcome carrier, neither a depositor nor the Aptos deployer, and a second bidder (test account 3) must be added beside it.
+        /** Second bidder account (testnet account 3) */
+        secondBidderPrivateKey: string;
+        secondBidderAddress: string;
         /**
          * Carrier account (testnet account 2). It holds no special rights:
          * LockBox has no settlement authority, so it carries outcome proofs
@@ -138,12 +139,6 @@ function readArtifact(contractName: string): {
 }
 
 /**
- * Wait for block 1. On geth this also means the transaction indexer is ready
- * (eth_getTransactionReceipt returns -32000 "transaction indexing is in
- * progress" for a short window after startup). On anvil it mines block 1.
- */
-// SCOUT(#219) REMOVE: NO_LIGHT_CLIENT goes when setup deploys a real AptosLightClient.
-/**
  * `maxEpochAge` of the testnet light client: half the docker testnet's 24 h
  * stake lockup (`recurring_lockup_duration_secs`), the deploy script default.
  */
@@ -203,18 +198,10 @@ export function auctionOutcomeTypeTag(atomicaAddress: string): string {
 }
 
 /**
- * Deploy AptosLightClient from the Aptos node's genesis LedgerInfo and waypoint
- * (`/v1/atomica/epoch_change_proof?start_epoch=0&end_epoch=1` and
- * `/v1/atomica/genesis_waypoint`) and return its address.
+ * Wait for block 1. On geth this also means the transaction indexer is ready
+ * (eth_getTransactionReceipt returns -32000 "transaction indexing is in
+ * progress" for a short window after startup). On anvil it mines block 1.
  */
-// SCOUT(#219) ADD: deploy AptosLightClient with ethers from the forge artifact, as script/DeployAptosLightClient.s.sol does with forge; remove the leading underscores when wired.
-export async function deployAptosLightClient(
-    _deployer: ethers.Signer,
-    _aptosNodeUrl: string,
-): Promise<string> {
-    throw new Error("NOT_IMPLEMENTED: SCOUT(#219) deployAptosLightClient");
-}
-
 async function waitForFirstBlock(provider: ethers.JsonRpcProvider): Promise<void> {
     console.log("[Dual-Chain] Waiting for first block...");
     await waitForEthBlock(provider, 1, 60, "Dual-Chain");
@@ -269,7 +256,9 @@ export async function setupDualChainTestnet(
     console.log("[Dual-Chain] Starting dual-chain testnet...");
 
     // ── Ethereum ──────────────────────────────────────────────────────────────
-    // SCOUT(#219) EDIT: on ETH_BACKEND=anvil this chain runs the cancun hardfork, which has no EIP-2537 precompiles, so AptosLightClient cannot verify a signature there until the Ethereum testnet SDK starts anvil on prague.
+    // AptosLightClient needs the EIP-2537 BLS12-381 precompiles (Prague). The
+    // Docker PoS chain runs Prague. On ETH_BACKEND=anvil set
+    // ETH_ANVIL_HARDFORK=prague, or recordOutcome reverts.
     // SCOUT(#236) EDIT: the happy-path release step needs the same prague change on the anvil tier.
     ethTestnet = await EthereumDockerTestnet.start(4);
     await ethTestnet.waitForHealthy(180);
@@ -286,6 +275,8 @@ export async function setupDualChainTestnet(
     const bidderAddress = new ethers.Wallet(bidderPrivateKey).address;
     const carrierPrivateKey = accounts[2].privateKey;
     const carrierAddress = new ethers.Wallet(carrierPrivateKey).address;
+    const secondBidderPrivateKey = accounts[3].privateKey;
+    const secondBidderAddress = new ethers.Wallet(secondBidderPrivateKey).address;
 
     // ethers caches eth_getTransactionCount for 250 ms by default. Anvil mines
     // instantly, so back-to-back deploys would reuse a stale nonce.
@@ -305,13 +296,12 @@ export async function setupDualChainTestnet(
     await waitForFirstBlock(provider);
     ensureCompiled();
 
-    // SCOUT(#219) EDIT: also fund a second bidder (test account 3) with gas ETH here; the round trip needs a seller, a winner, a loser and a carrier.
-    // Gas for the bidder and the carrier (they sign their own transactions).
-    for (const to of [bidderAddress, carrierAddress]) {
+    // Gas for both bidders and the carrier (they sign their own transactions).
+    for (const to of [bidderAddress, secondBidderAddress, carrierAddress]) {
         const tx = await deployer.sendTransaction({ to, value: ethers.parseEther("10") });
         await provider.waitForTransaction(tx.hash, 1);
     }
-    console.log(`[Dual-Chain] ✓ Funded bidder and carrier with ETH`);
+    console.log(`[Dual-Chain] ✓ Funded both bidders and the carrier with ETH`);
 
     // FakeETH and FakeUSD share the same deployer signer, so they must be
     // deployed sequentially to avoid nonce collisions.
@@ -320,8 +310,6 @@ export async function setupDualChainTestnet(
 
     const fakeUSD = await deployContract(deployer, readArtifact("FakeUSD"));
     console.log(`[Dual-Chain] ✓ FakeUSD: ${fakeUSD}`);
-
-    // SCOUT(#219) EDIT: deploy AptosLightClient and pass its address in place of NO_LIGHT_CLIENT; that needs the Aptos genesis, so the Aptos testnet start below must move above this deploy (the validators still need the Ethereum RPC up first).
 
     // Fund seller and bidder with FakeETH so tests can lock tokens immediately.
     const fakeETHArtifact = readArtifact("FakeETH");
@@ -343,7 +331,6 @@ export async function setupDualChainTestnet(
     console.log(`[Dual-Chain] ✓ Minted FakeETH to bidder`);
 
     // ── Aptos ─────────────────────────────────────────────────────────────────
-    // SCOUT(#219) EDIT: this start moves above the LockBox deploy (see the marker there).
     // The timelock DKG needs 4 validators (see localnet.ts setupLocalnet).
     aptosTestnet = await DockerTestnet.new(4);
     setTestnet(aptosTestnet);
@@ -431,6 +418,8 @@ export async function setupDualChainTestnet(
             deployerAddress,
             bidderPrivateKey,
             bidderAddress,
+            secondBidderPrivateKey,
+            secondBidderAddress,
             carrierPrivateKey,
             carrierAddress,
         },

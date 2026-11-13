@@ -378,6 +378,37 @@ If you have access to the private atomica repository:
 
 ---
 
+### `lockbox-release.test.ts`
+
+**Purpose**: Proof-gated LockBox with Aptos lock registration, on the live dual-chain testnet
+**What it tests**: A lock in LockBox is proven on Aptos with `lock_receipt::register_ethereum_lock` at a validator-certified Ethereum block
+
+**Key assertions**:
+
+- The receipt holds the proven amount, the window binding and the depositor
+- Registration rejects a wrong amount and a wrong deadline
+- One lock gives one receipt: the same lock proven at a later block is rejected
+- LockBox releases nothing before the deadline or without a recorded outcome (`NoOutcome`)
+
+---
+
+### `auction-round-trip.test.ts`
+
+**Purpose**: Live cross-chain round trip of one filled trade: lock, auction, outcome, release
+**What it tests**: A seller locks FakeETH and two bidders lock FakeUSD in LockBox. Each lock is proven on Aptos. The seller and the bidders sign `create_auction` and `submit_bid` as their Ethereum-derivable accounts (`src/eth-derivable-account.ts`). After the timelock reveal the bids are opened and `auction::settle` emits one `AuctionOutcome`. A carrier account with no rights carries it with the SDK `carryOutcome` through `AptosLightClient` to `LockBox.recordOutcome` and releases all three locks with `releaseByOutcome`.
+
+**Key assertions**:
+
+- `LockBox.outcomes(auctionKey)` holds the event's root and leaf count, and `AptosLightClient.maxEpochAge()` is 43 200 s
+- A release with a changed payout amount reverts
+- The seller gains clearing price times filled quantity in FakeUSD, the winner gains the filled FakeETH and gets its excess collateral back, and the loser gets its whole collateral back
+- LockBox holds nothing at the end and every lock reads Released
+- The carrier is neither a depositor nor the Aptos package deployer
+
+**Requirements**: Docker, the Aptos CLI and forge output (`forge build` in `source/evm-contracts`). It runs on the Docker PoS Ethereum chain, where Prague gives the light client its BLS precompiles. The CI job fails unless all seven cases pass.
+
+---
+
 ## Running the Tests
 
 **IMPORTANT**: These tests run **sequentially** (one at a time), not in parallel. This is enforced by the vitest configuration (`fileParallelism: false`). Each test starts its own localnet instance on ports 8080/8081, so running multiple tests simultaneously would cause port conflicts.
@@ -403,47 +434,6 @@ npm run test:meta tests/meta/deploy-contract.test.ts
 npm run test:meta tests/meta/deploy-atomica-contracts.test.ts
 npm run test:meta tests/meta/secp256k1-account.test.ts
 ```
-
-<!-- SCOUT(#219) DOC: add an entry for auction-round-trip.test.ts; sections 9 and 10 below describe test files that do not exist, and lockbox-release.test.ts has no entry. -->
-
-### 9. `cross-chain/lock-receipt-e2e.test.ts`
-
-**Purpose**: End-to-end cross-chain lock receipt verification
-**What it tests**: Full protocol flow between Ethereum and Aptos:
-
-1. Ethereum user locks assets in LockBox
-2. User generates MPT state proof
-3. User submits proof to Aptos
-4. Aptos verifies proof and issues lock receipt
-
-**Key assertions**:
-
-- Ethereum contracts (LockBox, Tokens) deploy correctly
-- Assets are locked on Ethereum and events emitted
-- MPT proof is generated with correct storage keys
-- Aptos `lock_receipt` module verifies proof successfully
-- Receipt is issued to the correct user for the correct amount
-
-**Requirements**:
-
-- Both Ethereum and Aptos testnets running (started by test)
-- Forge (Foundry) installed on host for contract compilation
-
----
-
-### 10. `dual-testnet/dual-testnet-startup.test.ts`
-
-**Purpose**: Dual-network infrastructure validation
-**What it tests**: Verifies that both Ethereum (Geth/Lighthouse) and Aptos testnets can run simultaneously on the same host without port conflicts.
-
-**Key assertions**:
-
-- Ethereum testnet starts on 8545 (RPC) / 5052 (Beacon)
-- Aptos testnet starts on 8080 (API) / 8081 (Faucet)
-- Both networks produce blocks simultaneously
-- Pre-funded accounts are available on both chains
-
----
 
 ### Debug a specific test
 

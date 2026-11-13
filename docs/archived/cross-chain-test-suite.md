@@ -1,6 +1,10 @@
-<!-- SCOUT(#219) DOC: wholly superseded: the source/atomica-web suite it describes is deleted and it stops before release; archive it or rewrite it around the live round-trip test this issue adds. -->
-
 # Cross-Chain Test Suite
+
+> [!IMPORTANT]
+> Archived. The `source/atomica-web` suite this file describes is deleted, and it stopped before release.
+> The live cross-chain round trip (lock, auction, outcome, release) is
+> `source/docker-testnet/aptos-testnet/test/auction-round-trip.test.ts`. See
+> `source/docker-testnet/aptos-testnet/test/README.md`.
 
 This document describes the structure, responsibilities, and usage patterns of the Ethereum ↔ Aptos cross-chain test suite in `source/atomica-web/tests/meta/cross-chain/`.
 

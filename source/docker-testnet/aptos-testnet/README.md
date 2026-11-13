@@ -64,12 +64,12 @@ const provider = wallet.getProvider();
 
 ## Architecture
 
-<!-- SCOUT(#219) DOC: add outcome-carrier.ts and eth-derivable-account.ts to the list below, and the round-trip test to Test coverage. -->
-
 **Node.js Side** (Test Infrastructure):
 - `localnet.ts`: Docker container management
 - `genesis.ts`: Genesis block creation
 - `probe.ts`: Network health checks
+- `dual-chain-testnet.ts`: Ethereum and Aptos testnets together, with FakeETH, FakeUSD, AptosLightClient and LockBox deployed
+- `eth-derivable-account.ts`: SIWE signing as an Ethereum-derivable Aptos account from Node (`submitAsEthAccount`)
 
 **Browser Side** (Test Utilities):
 - `browser-index.ts`: Browser-safe SDK utilities
@@ -93,6 +93,8 @@ Test coverage:
 - Account creation and funding
 - Contract deployment (simple and Atomica contracts)
 - Multi-validator network progress
+- Proof-gated LockBox lock registration (`lockbox-release.test.ts`)
+- Live cross-chain round trip of a filled trade: lock, auction, outcome carried with the SDK `carryOutcome`, release (`auction-round-trip.test.ts`)
 
 Run tests:
 ```bash

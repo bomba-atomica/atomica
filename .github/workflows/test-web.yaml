@@ -336,9 +336,10 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
     runs-on: ubuntu-latest
-    # SCOUT(#219) EDIT: this job took 20.8 of its 45 minutes on main (run 43093915182); the round-trip file adds a dual-chain boot, three locks and a timelock reveal, so the limit needs review.
-    # test/timelock-genesis.test.ts adds one 4-validator boot and an epoch 2 wait (a few minutes); the job ran 20-21 minutes on main before it, so 45 keeps ample headroom.
-    timeout-minutes: 45
+    # The job ran 20-21 minutes on main before test/auction-round-trip.test.ts,
+    # which adds a dual-chain boot, three locks and proofs, a timelock reveal
+    # and the outcome carry. 60 keeps headroom for it.
+    timeout-minutes: 60
     env:
       CI_CLASS: system-correctness
     permissions:
@@ -432,8 +433,11 @@ jobs:
         run: forge build
 
       # ── Aptos Testnet SDK Tests ────────────────────────────────────────────
-      # SCOUT(#219) TEST: this step runs test/auction-round-trip.test.ts; no image step is needed, because the compose default image is validator:binary-52beee31a6, which already serves /v1/atomica.
-      # SCOUT(#219) EDIT: ETH_BACKEND is unset here, so the Ethereum side is the Docker PoS chain (Prague active); the anvil backend starts on cancun and cannot run AptosLightClient.
+      # This step runs test/auction-round-trip.test.ts, the live lock, auction,
+      # outcome and release round trip. The compose default validator image
+      # (binary-52beee31a6) serves /v1/atomica, so no image step is needed.
+      # ETH_BACKEND is unset, so the Ethereum side is the Docker PoS chain,
+      # where Prague gives AptosLightClient its EIP-2537 precompiles.
       # SCOUT(#221) TEST: this step runs test/lockbox-release.test.ts against the redeployed LockBox.
       # SCOUT(#243) EDIT: genesis must write timelock_registrar from the deployer address in the env block below, before the package is published.
       - name: Run Aptos Testnet SDK tests
@@ -451,7 +455,15 @@ jobs:
           APTOS_VALIDATOR_4_SEED: "0000000000000000000000000000000000000000000000000000000000000005"
           APTOS_VALIDATOR_5_SEED: "0000000000000000000000000000000000000000000000000000000000000006"
           APTOS_VALIDATOR_6_SEED: "0000000000000000000000000000000000000000000000000000000000000007"
-        run: bun run test
+          # The SDK payload builders address this package (auction-round-trip.test.ts).
+          VITE_CONTRACT_ADDRESS: "0x44eb548f999d11ff192192a7e689837e3d7a77626720ff86725825216fcbd8aa"
+        run: bun run test -- --reporter=default --reporter=json --outputFile=vitest-report.json
+
+      # A skipped or missing round-trip case fails the job: all seven must pass.
+      - name: All seven round-trip cases passed
+        working-directory: source/docker-testnet/aptos-testnet
+        run: |
+          jq -e '[.testResults[] | select(.name | endswith("auction-round-trip.test.ts")) | .assertionResults[] | select(.status == "passed")] | length == 7' vitest-report.json
 
   # ── Move contracts (formerly move-ci.yml) ─────────────────────────────────
   move-framework-pin:
@@ -1057,7 +1069,6 @@ jobs:
       CI_CLASS: system-correctness
       # SCOUT(#228) EDIT: APTOS_PROOF_RELEASE, APTOS_PROOF_COMMIT (full SHA) and the IMAGE_NAME tag below must move with APTOS_VERSION.
       # SCOUT(#243) EDIT: APTOS_PROOF_RELEASE, APTOS_PROOF_COMMIT (full SHA) and the IMAGE_NAME tag below must move with APTOS_VERSION.
-      # SCOUT(#219) EDIT: this job builds its own image because the compose default once lacked /v1/atomica; the default is now binary-52beee31a6, so the round-trip job needs no such build.
       APTOS_PROOF_RELEASE: binary-52beee31a6
       APTOS_PROOF_COMMIT: 52beee31a6ec0a64f2471971d202e6b0e2392440
       IMAGE_NAME: atomica-validator:52beee31a6
@@ -1207,7 +1218,6 @@ jobs:
       matrix:
         check: ["Required Checks", "Web Tests (unit)"]
     steps:
-      # SCOUT(#219) TEST: the gate list below already holds "Aptos Testnet SDK (docker)" in the docker tier, so the round-trip test is gated from ready-for-review on and skipped on drafts.
       # SCOUT(#236) EDIT: a new or renamed browser chunk must be added to both Browser Tests lines of the gate list below, or the gate fails on an unknown job.
       - name: Wait for every gated job, fail unless each succeeded
         run: |

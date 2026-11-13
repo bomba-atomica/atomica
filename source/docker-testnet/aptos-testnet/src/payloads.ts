@@ -116,7 +116,6 @@ export async function requestTestTokens(_ethAddress: string) {
     return { hash: "noop" };
 }
 
-// SCOUT(#219) EDIT: getBidPayload and submitBid below are stale (submit_bid takes six arguments on main, not two) and nothing imports them; the round-trip test should use the SDK builders in @atomica/sdk/aptos, not a third copy of the auction ABI here.
 // SCOUT(#228) EDIT: submit_bid changes shape again (no commitment argument), so any builder kept here is one more call site to update.
 export function getBidPayload(
     sellerAddr: string,

@@ -21,7 +21,6 @@ import {
 import { generateEthLockProofCommand, type EthLockProofResult } from "../src/browser-commands";
 import { waitForCertifiedEthBlock, waitForEthBlock } from "../src/eth-blocks";
 
-// SCOUT(#219) EDIT: the header comment below says outcome release is covered only by forge tests; test/auction-round-trip.test.ts adds the live release, and setup then deploys a real light client, so the NoOutcome case below still holds but recordOutcome no longer reverts on this testnet.
 /**
  * Live dual-chain test of the proof-gated LockBox (issue 203).
  *
@@ -34,8 +33,10 @@ import { waitForCertifiedEthBlock, waitForEthBlock } from "../src/eth-blocks";
  * rejects a wrong amount and a wrong deadline; one lock gives one receipt;
  * and LockBox releases nothing without a proven outcome or before the lock
  * deadline. No relayer exists: LockBox has no relayer-only release or
- * pull-payment path. Outcome release (releaseByOutcome) and reclaim are covered
- * by the forge LockBox unit, invariant and light client integration tests.
+ * pull-payment path. The live outcome release of a filled trade
+ * (recordOutcome, releaseByOutcome) is test/auction-round-trip.test.ts. The
+ * live unwind and reclaim are
+ * source/atomica-web-components/tests/integration/17-unwind.test.tsx.
  *
  * Every proof is checked against a header the Aptos validators certified
  * (0x1::ethereum_headers). No one submits a header. The registering account

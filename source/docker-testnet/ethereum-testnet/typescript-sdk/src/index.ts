@@ -225,11 +225,11 @@ export class EthereumDockerTestnet {
       "10",
       "--balance",
       "1000",
-      // SCOUT(#219) EDIT: the comment below is stale (the Docker genesis has ELECTRA_FORK_EPOCH=0, Prague on the EL); anvil must start on prague for the EIP-2537 precompiles that AptosLightClient needs.
       // SCOUT(#236) EDIT: the happy-path release step on the anvil tier needs anvil on prague; neither issue text names this file.
-      // The Docker chain runs Deneb with Electra disabled, which is Cancun on the EL.
-      // ETH_ANVIL_HARDFORK=prague turns on the EIP-2537 BLS12-381 precompiles
-      // that the Aptos light client needs (the browser unwind chunk sets it).
+      // The Docker chain's genesis sets ELECTRA_FORK_EPOCH=0, which is Prague on
+      // the EL. ETH_ANVIL_HARDFORK=prague turns on the same EIP-2537 BLS12-381
+      // precompiles that the Aptos light client needs (the browser unwind chunk
+      // sets it).
       "--hardfork",
       anvilHardfork(),
     ];
