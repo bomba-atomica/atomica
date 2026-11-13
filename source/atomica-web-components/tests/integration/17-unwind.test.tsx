@@ -128,7 +128,6 @@ describe.sequential("17: permissionless unwind and reclaim", () => {
     // pre-lock balance is the balance after the lock plus the locked amount.
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
-      minPrice: 1n,
       deadlineAheadUs: DEADLINE_AHEAD_US,
       lockAmount: LOCK_AMOUNT,
     });

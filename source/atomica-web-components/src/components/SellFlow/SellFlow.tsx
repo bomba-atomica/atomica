@@ -68,16 +68,12 @@ export function SellFlow() {
           loading={flow.loading}
           error={flow.error}
           amount={flow.amount}
-          // SCOUT(#241) REMOVE: minPrice prop.
-          minPrice={flow.minPrice}
           onCreateAuction={flow.createAuction}
           unlockTime={flow.unlockTime}
         />
       ) : (
         <Step8Monitor
           amount={flow.amount}
-          // SCOUT(#241) REMOVE: minPrice prop.
-          minPrice={flow.minPrice}
           auctionEndTime={flow.auctionEndTime}
           unlockTime={flow.unlockTime}
           // SCOUT(#236) EDIT: pass windowId and pairBcs; without them Step8Monitor never renders the settle or release step.

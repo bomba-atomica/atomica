@@ -28,7 +28,6 @@ exemptions:
     files:
       - source/atomica-web-components/tests/integration/01-faucet.test.tsx
       - source/atomica-web-components/tests/integration/02-wallet-connect.test.tsx
-      # SCOUT(#241) TEST: this file is exempt and in no browser chunk, so its minimum price edits never run in CI.
       - source/atomica-web-components/tests/integration/03-approve-and-lock.test.tsx
       - source/atomica-web-components/tests/integration/04-lock-confirmation.test.tsx
       - source/atomica-web-components/tests/integration/05-proof-generation.test.tsx
@@ -46,7 +45,6 @@ exemptions:
       - source/atomica-web-components/tests/integration/16-settle-100-bids.test.tsx
       - source/atomica-web-components/tests/integration/17-unwind.test.tsx
       # SCOUT(#236) TEST: this file is exempt and in no browser chunk, so its claim and release selector asserts never run in CI.
-      # SCOUT(#241) TEST: this file is exempt and in no browser chunk, so its minimum price selector edits never run in CI.
       - source/atomica-web-components/tests/integration/selectors.test.tsx
       - source/atomica-web-components/tests/integration/wallet-mock-smoke.test.tsx
 

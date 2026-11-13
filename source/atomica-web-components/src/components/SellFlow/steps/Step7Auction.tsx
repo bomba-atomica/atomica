@@ -4,8 +4,6 @@ interface Props {
   loading: boolean;
   error?: string;
   amount?: bigint;
-  // SCOUT(#241) REMOVE: minPrice prop.
-  minPrice?: bigint;
   unlockTime?: number;
   txHash?: string;
   onCreateAuction: () => Promise<void>;
@@ -15,7 +13,6 @@ export function Step7Auction({
   loading,
   error,
   amount,
-  minPrice,
   unlockTime: _unlockTime,
   txHash,
   onCreateAuction,
@@ -32,17 +29,12 @@ export function Step7Auction({
     ? (Number(amount) / 1e18).toFixed(4) + " FETH"
     : "…";
   // SCOUT(#217) EDIT: price display divides by 1e6; use formatPrice while it exists.
-  // SCOUT(#241) REMOVE: priceFormatted and the min price text below.
-  const priceFormatted = minPrice
-    ? "$" + (Number(minPrice) / 1e6).toFixed(2)
-    : "…";
 
   return (
     <div className="flex flex-col gap-4">
-      {/* SCOUT(#241) EDIT: drop the min price half of this sentence. */}
       <p className="text-sm text-zinc-400">
-        Creating auction for {amountFormatted} with min price {priceFormatted}.
-        Sign the SIWE message in MetaMask.
+        Creating auction for {amountFormatted}. Sign the SIWE message in
+        MetaMask.
       </p>
 
       {!error && (

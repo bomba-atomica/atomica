@@ -57,7 +57,7 @@ module atomica::integration_tests {
                 lock_id, who, *vector::borrow(&seller_amounts, i), window_id, pair_hash,
             );
             let seller = aptos_framework::account::create_signer_for_test(who);
-            auction::create_auction(&seller, window_id, pair, lock_id, 1000, timelock_id);
+            auction::create_auction(&seller, window_id, pair, lock_id, timelock_id);
             i = i + 1;
         };
 

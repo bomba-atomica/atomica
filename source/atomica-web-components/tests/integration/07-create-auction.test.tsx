@@ -52,9 +52,7 @@ import { ethers } from "ethers";
 import { getCreateAuctionPayload } from "@atomica/sdk/aptos";
 import { submitNativeTransaction } from "@atomica/sdk";
 
-// SCOUT(#241) REMOVE: MIN_PRICE and every minPrice argument and prop in this file.
 // SCOUT(#217) EDIT: a price constant (100 raw units, shown as $0.00 below).
-const MIN_PRICE = 100n;
 // SCOUT(#224) EDIT: these bytes are not on the allowlist; use the SDK launch pair, and keep unlisted bytes only for the new abort case.
 const PAIR_BCS = new TextEncoder().encode("07-create-auction");
 // SCOUT(#243) EDIT: the test no longer picks the deadline; it needs the test cap of open question 1.
@@ -73,11 +71,9 @@ interface WrapperState {
 
 function AuctionWrapper({
   amount,
-  minPrice,
   onCreateAuction,
 }: {
   amount: bigint;
-  minPrice: bigint;
   onCreateAuction: () => Promise<{ txHash?: string }>;
 }) {
   const [state, setState] = useState<WrapperState>({ loading: false });
@@ -101,7 +97,6 @@ function AuctionWrapper({
       error={state.error}
       txHash={state.txHash}
       amount={amount}
-      minPrice={minPrice}
       onCreateAuction={handleCreate}
     />
   );
@@ -196,13 +191,11 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     ).toBe(RECEIPT_ACTIVE);
 
     const onCreateAuction = async () => {
-      // SCOUT(#241) EDIT: drop MIN_PRICE here and in the third case.
       // SCOUT(#243) EDIT: drop timelockId here and in the third case.
       const txHash = await createAuctionDirect(
         aptosGlobal,
         fixture.eth.seller,
         ethProof.lockId,
-        MIN_PRICE,
         windowId,
         PAIR_BCS,
         timelockId,
@@ -213,7 +206,6 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     render(
       <AuctionWrapper
         amount={ethers.parseEther("10")}
-        minPrice={MIN_PRICE}
         onCreateAuction={onCreateAuction}
       />,
     );
@@ -240,24 +232,22 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     ).toBe(RECEIPT_CLAIMED);
   }, 90_000);
 
-  // ── Test 2: amount and min price displayed ─────────────────────────────────
+  // ── Test 2: amount displayed, no reserve price ─────────────────────────────
 
-  // SCOUT(#241) REMOVE: the min price half of this case.
   // SCOUT(#217) EDIT: it asserts $0.00 for a price of 100 raw units.
-  it("shows formatted amount and min price in description text", () => {
+  it("shows formatted amount and no min price in description text", () => {
     render(
       <Step7Auction
         loading={true}
         amount={ethers.parseEther("10")}
-        minPrice={MIN_PRICE}
         onCreateAuction={async () => {}}
       />,
     );
 
     const text = document.body.textContent ?? "";
     expect(text).toContain("10.0000 FETH");
-    // MIN_PRICE = 100n (raw FUSD units, 6 decimals) → $0.00
-    expect(text).toContain("$0.00");
+    expect(text).not.toMatch(/min price/i);
+    expect(text).not.toContain("$");
   });
 
   // ── Test 3: the claimed receipt cannot back a second auction ─────────────
@@ -268,7 +258,6 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
         aptosGlobal,
         fixture.eth.seller,
         ethProof.lockId,
-        MIN_PRICE,
         windowId,
         PAIR_BCS,
         timelockId,
@@ -279,7 +268,6 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     render(
       <AuctionWrapper
         amount={ethers.parseEther("10")}
-        minPrice={MIN_PRICE}
         onCreateAuction={onCreateAuction}
       />,
     );
@@ -326,14 +314,12 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     const lockIdBytes = ethers.getBytes(ethProof.lockId);
 
     const onCreateAuction = async () => {
-      // SCOUT(#241) EDIT: no minPrice argument.
       // SCOUT(#243) EDIT: no timelockId argument.
-      // getCreateAuctionPayload(windowId, pairBcs, lockId, minPrice, timelockId)
+      // getCreateAuctionPayload(windowId, pairBcs, lockId, timelockId)
       const payload = getCreateAuctionPayload(
         0n,                // windowId
         new Uint8Array(0), // pairBcs (empty — the wallet rejects before submission)
         lockIdBytes,
-        MIN_PRICE,
         0n,                // timelockId
       );
       const result = await submitNativeTransaction(aptosGlobal, sellerAddress, payload);
@@ -343,7 +329,6 @@ describe.sequential("07: Create Auction from LockReceipt", () => {
     render(
       <AuctionWrapper
         amount={ethers.parseEther("10")}
-        minPrice={MIN_PRICE}
         onCreateAuction={onCreateAuction}
       />,
     );

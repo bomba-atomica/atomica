@@ -135,7 +135,6 @@ describe("SellFlow localStorage resume", () => {
     expect(screen.getByText(/Waiting for/i)).toBeTruthy();
   });
 
-  // SCOUT(#241) EDIT: saved state with minPrice must still resume.
   it("resumes to creating-auction step when localStorage has creating-auction step", async () => {
     // When the creating-auction step loads, Step7Auction auto-calls onCreateAuction.
     // With mocked submitNativeTransaction (no-op), it transitions to monitoring immediately.
@@ -145,7 +144,6 @@ describe("SellFlow localStorage resume", () => {
         step: "creating-auction",
         lockId: "0x" + "ab".repeat(32),
         amount: "1000000000000000000",
-        minPrice: "100",
       }),
     );
     await act(async () => {
@@ -161,7 +159,6 @@ describe("SellFlow localStorage resume", () => {
       JSON.stringify({
         step: "monitoring",
         amount: "1000000000000000000",
-        minPrice: "2000000000",
         auctionEndTime: Math.floor(Date.now() / 1000) + 3600,
       }),
     );
@@ -247,7 +244,6 @@ describe("SellFlow localStorage resume", () => {
     );
   });
 
-  // SCOUT(#241) EDIT: this case reaches monitoring only because the saved state has minPrice; createAuction returns early without it today.
   // SCOUT(#243) EDIT: still two Aptos transactions (register lock, create auction) and no timelock registration.
   it("auto-progresses proof → submit proof → create auction → monitor on successful Aptos transactions", async () => {
     const proof = {
@@ -275,7 +271,6 @@ describe("SellFlow localStorage resume", () => {
         lockNonce: "5",
         windowId: "41538",
         amount: "1000000000000000000",
-        minPrice: "2000000000",
       }),
     );
     await act(async () => {
@@ -329,5 +324,29 @@ describe("SellFlow localStorage resume", () => {
     expect(persisted.txHash).toBeUndefined();
   });
 
-  it.todo("SCOUT(#241) saved sell flow state that contains a minimum price resumes at the saved step and ignores the price");
+  it("saved sell flow state that contains a minimum price resumes at the saved step and ignores the price", async () => {
+    // State saved by a build that still had the reserve price field.
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        step: "monitoring",
+        amount: "1000000000000000000",
+        minPrice: "2000000000",
+        auctionEndTime: Math.floor(Date.now() / 1000) + 3600,
+      }),
+    );
+    await act(async () => {
+      renderSellFlow();
+    });
+    expect(screen.getByText(/Locked amount/i)).toBeTruthy();
+    expect(screen.queryByText(/Min price/i)).toBeNull();
+    expect(screen.queryByText(/\$2000\.00/)).toBeNull();
+    // The price is not written back.
+    const persisted = JSON.parse(
+      localStorage.getItem(STORAGE_KEY) || "{}",
+    ) as Record<string, unknown>;
+    expect(persisted.step).toBe("monitoring");
+    expect(persisted.amount).toBe("1000000000000000000");
+    expect(persisted).not.toHaveProperty("minPrice");
+  });
 });

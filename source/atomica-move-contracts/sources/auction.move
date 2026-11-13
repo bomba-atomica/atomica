@@ -267,7 +267,6 @@ module atomica::auction {
 
     // SCOUT(#217) DOC: state the unit of `WindowState.clearing_price`.
     // SCOUT(#228) EDIT: `WindowState` gains the opening cursor of `open_bids`; `reveal_final` then means every bid is opened.
-    // SCOUT(#241) REMOVE: `WindowState.min_prices` and the "index-aligned with min_prices" note on `lock_ids`.
     /// Per-window clearing state within the global registry.
     /// @see docs/architecture/v0-architecture.md §2.3
     struct WindowState has store {
@@ -282,8 +281,7 @@ module atomica::auction {
         bids:             vector<SealedBid>,
         settled:          bool,
         clearing_price:   u64,
-        lock_ids:         vector<vector<u8>>, // seller LockReceipt IDs consumed (index-aligned with min_prices)
-        min_prices:       vector<u64>,        // per-seller minimum acceptable clearing price
+        lock_ids:         vector<vector<u8>>, // seller LockReceipt IDs consumed
         /// True once `finalize_reveal` ran. Openings are closed and clearing may run.
         reveal_final:     bool,
         /// True once the window was refunded because its timelock expired.
@@ -522,8 +520,8 @@ module atomica::auction {
     ///
     /// Multiple sellers may call `create_auction` with the same `(window_id,
     /// pair_bcs)`. Each call claims its `lock_id` receipt, adds the locked amount
-    /// to `total_supply`, and appends the `lock_id` and `min_price` to the
-    /// parallel vectors `lock_ids` / `min_prices`.
+    /// to `total_supply`, and appends the `lock_id` to `lock_ids`. There is no
+    /// reserve price: clearing alone sets the price.
     ///
     /// `timelock_id` is the on-chain timelock registered via
     /// `ibe_config::register_timelock` that controls IBE key release for this
@@ -531,19 +529,17 @@ module atomica::auction {
     /// epoch (E_TIMELOCK_WRONG_EPOCH), `Pending` (E_TIMELOCK_NOT_PENDING), and its
     /// deadline must be in the future (E_TIMELOCK_DEADLINE_PASSED).
     ///
-    /// Arguments after the signer: (window_id, pair_bcs, lock_id, min_price, timelock_id).
+    /// Arguments after the signer: (window_id, pair_bcs, lock_id, timelock_id).
     ///
     /// @see docs/architecture/v0-architecture.md §2.3
     // SCOUT(#218) EDIT: `create_auction` aborts when the window holds `MAX_SELLER_LOCKS_PER_WINDOW` locks, or when the claimed lock is below `MIN_SELLER_LOCK_AMOUNT`.
     // SCOUT(#224) EDIT: `create_auction` aborts unless `pair_bcs` is on the allowlist; a new window stores the listed `Pair`.
-    // SCOUT(#241) REMOVE: the `min_price` argument of `create_auction` and its doc lines above.
     // SCOUT(#243) EDIT: `create_auction` drops `timelock_id`; the first call for a window id registers its timelock with deadline `eth_proof::window_close_secs(window_id)`, later calls join it.
     public entry fun create_auction(
         seller:      &signer,
         window_id:   u64,
         pair_bcs:    vector<u8>,
         lock_id:     vector<u8>,
-        min_price:   u64,
         timelock_id: u64,
     ) acquires AuctionRegistry {
         // 1. Validate window_id: reject stale (< current) and far-future (> current + 1).
@@ -597,8 +593,6 @@ module atomica::auction {
                 settled:         false,
                 clearing_price:  0,
                 lock_ids:        vector::singleton(lock_id),
-                // SCOUT(#241) REMOVE: the `min_prices` entry of a new window.
-                min_prices:      vector::singleton(min_price),
                 reveal_final:    false,
                 refunded:        false,
                 bid_results:     vector::empty(),
@@ -609,8 +603,6 @@ module atomica::auction {
             state.total_supply = state.total_supply + (locked_amount as u256);
             // SCOUT(#218) EDIT: check the seller lock cap before this push.
             vector::push_back(&mut state.lock_ids, lock_id);
-            // SCOUT(#241) REMOVE: the `min_prices` push of a joining seller.
-            vector::push_back(&mut state.min_prices, min_price);
         };
     }
 
@@ -1803,7 +1795,6 @@ module atomica::auction {
     // which timelock_id is associated with the window.
     #[test_only]
     // SCOUT(#224) EDIT: the hardcoded `Pair` in `test_insert_window_with_timelock` bypasses the allowlist.
-    // SCOUT(#241) REMOVE: the `min_prices` entry in `test_insert_window_with_timelock`; the unwind pull request (213) also adds `test_add_seller_lock(.., min_price)`.
     // SCOUT(#243) EDIT: `test_insert_window_with_timelock` must also record the window id's timelock in `TimelockRegistrar`, or a later `create_auction` registers a second one.
     public fun test_insert_window_with_timelock(
         atomica:        &signer,
@@ -1837,7 +1828,6 @@ module atomica::auction {
             settled,
             clearing_price,
             lock_ids:        vector::empty(),
-            min_prices:      vector::empty(),
             reveal_final:    false,
             refunded:        false,
             bid_results:     vector::empty(),
@@ -1852,12 +1842,10 @@ module atomica::auction {
         window_id: u64,
         pair_bcs:  vector<u8>,
         lock_id:   vector<u8>,
-        min_price: u64,
     ) acquires AuctionRegistry {
         let registry = borrow_global_mut<AuctionRegistry>(signer::address_of(atomica));
         let state = table::borrow_mut(&mut registry.windows, make_window_key(window_id, pair_bcs));
         vector::push_back(&mut state.lock_ids, lock_id);
-        vector::push_back(&mut state.min_prices, min_price);
     }
 
     // Mark a window settled without finalizing its receipts (test-only): the state a

@@ -42,7 +42,6 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 <!-- SCOUT(#224) DOC: multi-pair row: "single pair hard-coded" becomes an allowlist seeded with one launch pair. -->
 <!-- SCOUT(#228) DOC: sealed-bids row: describes submit_cleartext_and_clear and finalize_reveal with a price hash; on-chain opening replaces them with open_bids. -->
 <!-- SCOUT(#236) DOC: settle and claim row: ClaimButton (a faucet mint) is removed for a release action; AuctionRevealer and SellFlow get exported. -->
-<!-- SCOUT(#241) DOC: auction creation UI row: loses the minimum price field. -->
 <!-- SCOUT(#243) DOC: windows row: after this issue the window timelock closes at the window close, not at a seller-picked time; the auction creation UI row loses the register-timelock step. -->
 
 | Capability | Owning module(s) under `source/` | Status |
@@ -65,7 +64,7 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 | **Distance-to-clearing fee rebates** | — | `missing` — not designed (PRD open question); the zero-returning scaffolding in Move, the SDK and the UI was deleted (issue 238) |
 | **Sell flow wizard (8-step UI)** | `atomica-web-ui/src/components/SellFlow/` | `live` |
 | **Bid submission UI** | `atomica-web-components/src/components/AuctionBidder.tsx` | `live` |
-| **Auction creation UI** | `atomica-web-ui/src/components/AuctionCreator.tsx` | `live` |
+| **Auction creation UI** | `atomica-web-ui/src/components/AuctionCreator.tsx` | `live` — takes the window id, pair and lock id; no minimum price field, since launch has no reserve price (issue 241) |
 | **Bid history UI** | `atomica-web-ui/src/components/BidHistory.tsx` | `live` |
 | **Settle / Claim UI** | `atomica-web-ui/src/components/SettleButton.tsx`, `ClaimButton.tsx` | `live` — Demo-phase payout; lifetime bounded by real cross-chain settlement |
 | **Network / contract status UI** | `atomica-web-ui/src/components/NetworkStatus.tsx`, `ContractStatus.tsx` | `live` |

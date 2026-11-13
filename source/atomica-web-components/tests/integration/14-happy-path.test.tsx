@@ -176,8 +176,6 @@ import { ethers } from "ethers";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-// SCOUT(#241) REMOVE: MIN_PRICE and the createAuctionDirect argument; this file is missing from the issue's touchpoints.
-const MIN_PRICE = 1_000_000n;
 const LOCK_AMOUNT = ethers.parseEther("10");
 const MINT_AMOUNT = ethers.parseEther("1000");
 // SCOUT(#217) EDIT: bid 2000 whole USD and expect $2000; size the collateral with quoteForFill.
@@ -468,13 +466,11 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       // must succeed, so no catch.
       const auctionCreatedAt = Math.floor(Date.now() / 1000);
       windowId = await currentWindowId(aptosClient);
-      // SCOUT(#241) EDIT: drop MIN_PRICE.
       // SCOUT(#243) EDIT: drop timelockId.
       await createAuctionDirect(
         aptosClient,
         fixture.eth.seller,
         lockId,
-        MIN_PRICE,
         windowId,
         TEST_PAIR_BCS,
         timelockId,

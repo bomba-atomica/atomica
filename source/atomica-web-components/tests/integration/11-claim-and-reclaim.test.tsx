@@ -66,8 +66,6 @@ import { WalletContext } from "../../src/context/WalletContext";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
 
-// SCOUT(#241) REMOVE: MIN_PRICE and the minPrice option below.
-const MIN_PRICE = 1_000_000n;
 // SCOUT(#217) EDIT: bid 2000 whole USD.
 // SCOUT(#216) EDIT: on main, 1 FakeETH at this price needs 2,000,000 FakeUSD and the 500 FakeUSD default makes the bid invalid; pull request 213 already shrinks BID_QUANTITY to 0.0001 FakeETH (200 FakeUSD), so after 213 the bid stays valid.
 const BID_PRICE = 2_000_000n;
@@ -130,7 +128,6 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
     collateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
-      minPrice: MIN_PRICE,
       deadlineAheadUs: DEADLINE_AHEAD_US,
     });
     await submitBidDirect(aptosClient, fixture.eth.bidder, auction, BID_PRICE, collateral, BID_QUANTITY);

@@ -76,8 +76,6 @@ import { WalletContext } from "../../src/context/WalletContext";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
 
-// SCOUT(#241) REMOVE: MIN_PRICE and the minPrice option below.
-const MIN_PRICE = 1_000_000n;
 // SCOUT(#217) EDIT: whole-USD prices (2000 and 1500); the $2.00 expectations below become $2000.
 // SCOUT(#216) EDIT: on main the winner bids the whole 10 FakeETH supply, far above its 500 FakeUSD collateral; pull request 213 already shrinks SUPPLY to 0.0001 FakeETH (200 FakeUSD at 2_000_000), but LOSE_QUANTITY stays 1 FakeETH, which is above that supply, so the loser's submit_bid aborts with the new over-supply code; shrink LOSE_QUANTITY too.
 const WIN_PRICE = 2_000_000n;
@@ -146,7 +144,6 @@ describe.sequential("10: Settle Auction", () => {
 
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
-      minPrice: MIN_PRICE,
       deadlineAheadUs: DEADLINE_AHEAD_US,
       // SCOUT(#218) EDIT: pull request 213 sets SUPPLY to 0.0001 FakeETH, below the proposed 0.01 FakeETH minimum seller lock, so create_auction aborts; raise SUPPLY and size collateral with whole-USD prices (217).
       lockAmount: SUPPLY,

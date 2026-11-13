@@ -4,20 +4,18 @@ import { ethers } from "ethers";
 import { submitCreateAuction, registerTimelock } from "@atomica/sdk/aptos";
 import { useWallet } from "../context/WalletContext";
 
-// SCOUT(#241) EDIT: this header lists the minimum price; it goes.
 // SCOUT(#243) EDIT: this header says the screen registers the timelock; create_auction does it.
 /**
  * UI panel for creating a new sealed-bid auction on Aptos (v0 Beta).
  *
- * Collects the LockBox `lock_id`, window ID, pair BCS bytes, and minimum
- * price from the seller, registers the window timelock with
+ * Collects the LockBox `lock_id`, window ID and pair BCS bytes from the
+ * seller, registers the window timelock with
  * `ibe_config::register_timelock`, then calls `auction::create_auction` via
  * the SIWE-authenticated Aptos transaction flow.
  *
  * `create_auction` takes
- // SCOUT(#241) EDIT: min_price leaves this argument list.
  // SCOUT(#243) EDIT: timelock_id leaves this argument list.
- * `(window_id, pair_bcs, lock_id, min_price, timelock_id)`.
+ * `(window_id, pair_bcs, lock_id, timelock_id)`. There is no reserve price.
  *
  * Requires {@link WalletContext} to be mounted above this component.
  *
@@ -29,9 +27,7 @@ export function AuctionCreator() {
   const [windowId, setWindowId] = useState("0");
   // SCOUT(#224) EDIT: default to the SDK launch pair constant.
   const [pairBcsHex, setPairBcsHex] = useState("");
-  // SCOUT(#241) REMOVE: the minimum price state, its input and its argument.
   // SCOUT(#217) EDIT: while the field exists, its text goes through parsePrice.
-  const [minPrice, setMinPrice] = useState("100");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -61,17 +57,13 @@ export function AuctionCreator() {
         ? ethers.getBytes(pairBcsHex)
         : new Uint8Array(0);
       // SCOUT(#217) EDIT: price parse (BigInt of the text); use parsePrice while the field exists.
-      // SCOUT(#241) REMOVE: minPriceBn.
-      const minPriceBn = BigInt(minPrice);
 
-      // SCOUT(#241) EDIT: drop the minPriceBn argument.
       // SCOUT(#243) EDIT: drop the timelockId argument.
       const pendingTx = await submitCreateAuction(
         account,
         windowIdBn,
         pairBcs,
         lockId,
-        minPriceBn,
         timelockId,
       );
 
@@ -125,19 +117,7 @@ export function AuctionCreator() {
             className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500 font-mono text-xs"
           />
         </div>
-        {/* SCOUT(#241) REMOVE: the Min Price field. */}
         {/* SCOUT(#217) EDIT: price input in whole USD, while it exists. */}
-        <div>
-          <label className="block text-zinc-500 text-sm mb-1">
-            Min Price (USD)
-          </label>
-          <input
-            type="number"
-            value={minPrice}
-            onChange={(e) => setMinPrice(e.target.value)}
-            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
-          />
-        </div>
         <button
           onClick={handleCreateAuction}
           disabled={loading}

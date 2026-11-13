@@ -84,10 +84,9 @@ bun run test:ui
 
 ### 3. Auction System
 
-<!-- SCOUT(#241) DOC: Create Auction no longer sets a minimum price. -->
 <!-- SCOUT(#236) DOC: this list gains open, settle and release, and loses the faucet claim. -->
 
-- **Create Auction**: Lock FAKEETH and set minimum price
+- **Create Auction**: Lock FAKEETH into an auction window (no minimum price)
 - **Place Bid**: Submit encrypted bids using IBE
 - **Sealed-Bid**: Bids hidden until reveal phase
 

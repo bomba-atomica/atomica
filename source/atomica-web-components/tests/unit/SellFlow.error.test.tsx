@@ -52,12 +52,12 @@ describe("SellFlow error display", () => {
       expect(screen.getByText(/Waiting for MetaMask/i)).toBeTruthy();
     });
 
-    // SCOUT(#241) EDIT: assert that onLock is called with the amount only.
     it("calls onLock when button is clicked", () => {
       const onLock = vi.fn();
       render(<Step2Lock onLock={onLock} loading={false} />);
       fireEvent.click(screen.getByRole("button"));
       expect(onLock).toHaveBeenCalledOnce();
+      expect(onLock).toHaveBeenCalledWith(1_000_000_000_000_000_000n);
     });
 
     it("shows no error when error prop is not set", () => {
@@ -126,14 +126,12 @@ describe("SellFlow error display", () => {
   });
 
   describe("Step7Auction", () => {
-    // SCOUT(#241) EDIT: drop the minPrice prop below.
     it("shows error message when error prop is set", () => {
       render(
         <Step7Auction
           onCreateAuction={vi.fn()}
           loading={false}
           amount={1_000_000_000_000_000_000n}
-          minPrice={2_000_000_000n}
           error="auction::create_auction failed"
         />,
       );
@@ -181,5 +179,16 @@ describe("SellFlow error display", () => {
     });
   });
 
-  it.todo("SCOUT(#241) Step2Lock renders no element with test id min-price-input and calls onLock with the amount only");
+  it("Step2Lock renders no element with test id min-price-input and calls onLock with the amount only", () => {
+    const onLock = vi.fn();
+    render(<Step2Lock onLock={onLock} loading={false} />);
+    expect(screen.queryByTestId("min-price-input")).toBeNull();
+    expect(screen.queryByText(/minimum price/i)).toBeNull();
+    fireEvent.change(screen.getByTestId("lock-amount-input"), {
+      target: { value: "2.5" },
+    });
+    fireEvent.click(screen.getByTestId("approve-lock-button"));
+    expect(onLock).toHaveBeenCalledTimes(1);
+    expect(onLock.mock.calls[0]).toEqual([2_500_000_000_000_000_000n]);
+  });
 });

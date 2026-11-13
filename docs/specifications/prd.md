@@ -63,7 +63,6 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 <!-- SCOUT(#242) DOC: the 07:45 and 16:15 UTC closes are the target; on main window ids change at 00:00, 07:55, 12:00 and 19:55 UTC until the window id issue (220) lands; say so or land that first. -->
 <!-- SCOUT(#242) DOC: "All trading pairs clear simultaneously": one FakeETH and FakeUSD pair is hardcoded; label multi-pair clearing as a later-phase item (the pair allowlist issue (224) adds one launch pair). -->
 <!-- SCOUT(#242) DOC: "Sellers ... with quote assets wanting base assets" and "Bidders: Base asset holders" are inverted against the code: sellers lock the base token (FakeETH) and bidders lock the quote token (FakeUSD). -->
-<!-- SCOUT(#241) DOC: "No reserve prices at launch" becomes true in code with this issue: create_auction still takes min_price and the sell flow shows it today; no text change is needed afterwards. -->
 <!-- SCOUT(#242) DOC: "Settlement: 1-3 hours post-auction" (also Executive Summary, Core Properties, "Why 1-3 Hour Settlement", Key Tradeoffs): no code times settlement; on main no outcome reaches Ethereum and a lock goes home by reclaim after 72 h. -->
 
 **Structure:**
@@ -309,7 +308,6 @@ Atomica prioritizes:
 
 ## Open Questions
 
-<!-- SCOUT(#241) DOC: question 3 (reserve price mechanics): this issue takes the "no reserve at launch" answer (review decision 33); keep the question only as a later item. -->
 <!-- SCOUT(#218) DOC: question 6 (DoS prevention): partly answered by the seller-lock cap, the bid cap and the minimum lock sizes; name the values the owner picks. -->
 <!-- SCOUT(#243) DOC: question 6 also covers timelock registration spam: closed when only the auction package registers a timelock, one per window. -->
 <!-- SCOUT(#216) DOC: question 7 (griefing bounds): a dust bid can no longer cancel a window once invalid bids are skipped. -->
@@ -317,7 +315,7 @@ Atomica prioritizes:
 
 1. Optimal settlement delay within 1-3 hour range
 2. Distance-to-clearing-price rebate curve calibration
-3. Reserve price mechanics if needed (RMS deviation fee structure)
+3. Later phase: reserve price mechanics if needed (RMS deviation fee structure). Launch has no reserve price (review decision 33).
 4. Fraud proof latency windows and impact on finality/UX
 5. Validator incentives for submitting away-chain headers
 6. DoS prevention (spam bids/commitments)

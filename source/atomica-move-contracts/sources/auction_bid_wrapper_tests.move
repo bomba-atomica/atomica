@@ -123,7 +123,7 @@ module atomica::auction_bid_wrapper_tests {
         );
         lock_receipt::claim<Ethereum, FakeETH>(@atomica, SELLER_LOCK);
         auction::test_insert_window_with_timelock(atomica, AUCTION_ID, pair(), SUPPLY, false, 0, TIMELOCK_ID);
-        auction::test_add_seller_lock(atomica, AUCTION_ID, pair(), SELLER_LOCK, 2000);
+        auction::test_add_seller_lock(atomica, AUCTION_ID, pair(), SELLER_LOCK);
     }
 
     // Registry plus an auction window bound to timelock 11 with one seller lock, and one
@@ -996,11 +996,10 @@ module atomica::auction_bid_wrapper_tests {
         lock_receipt::insert_test_receipt<Ethereum, FakeETH>(SELLER_LOCK, @atomica, 5u256, 1);
     }
 
-    // SCOUT(#241) EDIT: drop the price argument of `create_auction` in `create_with_timelock` and in `setup_funded_window`.
     // SCOUT(#243) EDIT: `create_with_timelock` cannot pick a timelock by id any more; the five `create_auction_rejects_*` and `review_create_auction_*` tests below need a new shape.
     fun create_with_timelock(atomica: &signer, timelock_id: u64) {
         auction::create_auction(
-            atomica, auction::current_window_id(), pair(), SELLER_LOCK, 2000, timelock_id,
+            atomica, auction::current_window_id(), pair(), SELLER_LOCK, timelock_id,
         );
     }
 
