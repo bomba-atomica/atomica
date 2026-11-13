@@ -647,12 +647,15 @@ export class EthereumDockerTestnet {
     throw new Error(`Timeout waiting for block ${targetBlock}`);
   }
 
-  // SCOUT(#221) EDIT: anvil_mine with a 12 second interval moves anvil's clock ahead of the host clock for good; once LockBox.lock checks the window id against block.timestamp, that drift decides which window is open on Ethereum.
   /**
    * Advance the chain by `count` blocks.
    *
    * On anvil this mines them at once, each 12 s apart like Docker slots. On
    * docker it waits for the validators to produce them.
+   *
+   * On anvil this moves the chain clock ahead of the host clock for good.
+   * LockBox.lock checks the window id against block.timestamp, so that drift
+   * decides which window is open on Ethereum.
    */
   async mineBlocks(count: number, timeoutSecs: number = 60): Promise<void> {
     if (count <= 0) return;

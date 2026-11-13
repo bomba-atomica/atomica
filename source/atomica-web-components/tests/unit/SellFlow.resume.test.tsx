@@ -31,7 +31,7 @@ vi.mock("@atomica/sdk/chain-config", () => ({
     aptos: {},
   }),
 }));
-// SCOUT(#221) EDIT: the lockBinding mock returns a deadline.
+// lockBinding returns the computed deadline, ethLockDeadline(windowId); LockBox.lock takes none.
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeEth: vi.fn(),
   lockFakeEth: vi.fn(),

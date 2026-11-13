@@ -155,8 +155,11 @@ export interface EthLockProofResult {
         windowId: string;
         /** keccak256 of the window's pair BCS */
         pairHash: string;
-        // SCOUT(#221) EDIT: deadline stays in the proven commitment but stops being a register_ethereum_lock argument; keep or drop this field in step with the SDK LockedBalanceProof type.
-        /** decimal string of the lock deadline: auction::eth_lock_deadline(windowId) */
+        /**
+         * decimal string of the lock deadline LockBox computed,
+         * lockDeadline(windowId) = auction::eth_lock_deadline(windowId). The
+         * commitment binds it; register_ethereum_lock does not take it.
+         */
         deadline: string;
         /** storage key of LockBox.commitments[lockId] (slot 0) */
         storageKey: string;
@@ -382,23 +385,27 @@ const ERC20_MINT_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
 ];
 
-// SCOUT(#221) EDIT: lock() loses its deadline argument; the Locked event keeps the deadline field.
+// LockBox computes the deadline; the Locked event carries it.
 const LOCKBOX_LOCK_ABI = [
-    "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) returns (bytes32)",
+    "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash) returns (bytes32)",
     "event Locked(bytes32 indexed lockId, address indexed depositor, address indexed token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)",
 ];
 
-// SCOUT(#221) EDIT: binding.deadline stops being a lock() argument, and LockBox then rejects a window id that is closed at block.timestamp, so the host clock, the Ethereum block time and the Aptos clock must agree on the window.
 /**
  * The binding of a test lock: the current window by the host clock (the SDK
  * `currentWindowId` mirror of `auction::current_window_id`, whose id changes
  * at 07:45 and 16:15 UTC) and the pair BCS of the window the
  * test claims the lock into (`pairBcsHex`, the SDK launch pair by default).
- * Aptos claims a
- * lock only into the window and pair it is bound to (issue 194). Its deadline
- * is `auction::eth_lock_deadline(windowId)`, 72 hours past the window close
- * (the next 07:45 or 16:15 UTC),
- * so Aptos registers it and it cannot be reclaimed during a test.
+ * Aptos claims a lock only into the window and pair it is bound to (issue
+ * 194). LockBox computes its deadline, `lockDeadline(windowId)` =
+ * `auction::eth_lock_deadline(windowId)`, 72 hours past the window close (the
+ * next 07:45 or 16:15 UTC), so it cannot be reclaimed during a test.
+ * `binding.deadline` is that value; `lock()` does not take it.
+ *
+ * LockBox.lock rejects a window that is closed at `block.timestamp`
+ * (`WindowClosed`), so the host clock, the Ethereum block time and the Aptos
+ * clock must agree on the window. A lock sent near a close can fail here. The
+ * create_auction registers timelock issue (243) syncs the anvil clock.
  */
 export function testLockBinding(pairBcsHex: string = LAUNCH_PAIR_BCS_HEX): LockBinding {
     return lockBinding(
@@ -464,17 +471,15 @@ export async function lockAndProve(
     const binding = testLockBinding(pairBcsHex);
     const lockHashes: string[] = [];
     for (let i = 0; i < count; i++) {
-        // SCOUT(#221) EDIT: the lock call below drops the deadline parameter and the binding.deadline argument.
         const lockTx = await (
             lockBox.lock as (
                 token: string,
                 amount: bigint,
                 windowId: bigint,
                 pairHash: string,
-                deadline: bigint,
                 opts: { nonce: number },
             ) => Promise<ethers.ContractTransactionResponse>
-        )(tokenAddress, lockAmount, binding.windowId, binding.pairHash, binding.deadline, {
+        )(tokenAddress, lockAmount, binding.windowId, binding.pairHash, {
             nonce: nonce++,
         });
         lockHashes.push(lockTx.hash);
@@ -494,8 +499,10 @@ export async function lockAndProve(
         proofBlockNumber = Math.max(proofBlockNumber, receipt.blockNumber);
     }
 
-    // SCOUT(#221) EDIT: on anvil each proof mines 12 blocks 12 seconds apart, which pushes block.timestamp ahead of the host and Aptos clocks; with a window check inside LockBox.lock that drift can close the window early on Ethereum.
-    // Wait for archive proof availability (12 blocks). Mines them on anvil.
+    // Wait for archive proof availability (12 blocks). Mines them on anvil,
+    // 12 seconds apart, which moves block.timestamp ahead of the host and
+    // Aptos clocks. A later lock near a window close can then revert
+    // WindowClosed on Ethereum (the timelock issue (243) syncs the clocks).
     await waitForEthBlock(provider, proofBlockNumber + 12, 300, "Lock Proof");
 
     // Prove at a block the validators certified that includes every lock.

@@ -140,8 +140,8 @@ export function AuctionBidder() {
 
         // 2. Lock FakeUSD in LockBox as collateral margin, bound to the
         //    current window and the pair the bid names. Step 2 starts on
-        //    that window.
-        // SCOUT(#221) EDIT: lockBinding and lockFakeUsd lose the caller deadline; a window id from a wrong client clock now reverts in LockBox.lock.
+        //    that window. LockBox computes the lock deadline, and reverts
+        //    (WindowClosed) if the window closed before the lock is mined.
         const binding = lockBinding(
           currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
           pairBytes(pairBcsHex),

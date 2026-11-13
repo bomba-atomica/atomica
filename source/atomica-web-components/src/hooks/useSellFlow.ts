@@ -284,10 +284,11 @@ export function useSellFlow(
         setState((s) => ({ ...s, loading: true }));
         await approveFakeEth(provider, amount);
 
-        // SCOUT(#221) EDIT: the binding loses the caller deadline; LockBox.lock reverts for a closed window or one more than one ahead, so a wrong client clock fails here.
-        // Step 2: Lock into the current window. Its deadline is
-        // auction::eth_lock_deadline(windowId): after it, anyone may
-        // reclaim the lock to the seller.
+        // Step 2: Lock into the current window. LockBox computes its
+        // deadline, lockDeadline(windowId) = auction::eth_lock_deadline:
+        // after it, anyone may reclaim the lock to the seller. LockBox
+        // reverts (WindowClosed) if the window closed by the time the lock
+        // is mined, so a wrong client clock fails here with no funds moved.
         const binding = lockBinding(
           currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
           LAUNCH_PAIR_BCS,
@@ -295,7 +296,6 @@ export function useSellFlow(
         const receipt = await lockFakeEth(provider, amount, binding);
         const lock = lockFromReceipt(receipt);
         const lockNonce = lock.nonce;
-        // SCOUT(#221) EDIT: the Locked event still carries the computed deadline; no change if lockFromReceipt keeps the field.
         const unlockTime = Number(lock.deadline);
 
         setState((s) => ({
@@ -335,14 +335,13 @@ export function useSellFlow(
     try {
       // Prove at a certified block that covers the lock (shared with the
       // bidder's FakeUSD lock step).
-      // SCOUT(#221) EDIT: lockBinding spreads a deadline into the proof input; follow the SDK shape.
       const proof = await proveLock(
         {
           depositor: account,
           token: getChainConfig().ethereum.fakeETH,
           nonce: state.lockNonce,
           amount: state.amount,
-          // SCOUT(#221) EDIT: the proof input takes the lock fields; follow the SDK lockBinding shape once the caller deadline goes.
+          // lockBinding carries the computed deadline the commitment binds.
           ...lockBinding(state.windowId, LAUNCH_PAIR_BCS),
         },
         state.lockBlock,
@@ -380,7 +379,6 @@ export function useSellFlow(
     try {
       const proof = proofRef.current;
       // The asset defaults to FakeETH: the seller's receipt type.
-      // SCOUT(#221) EDIT: the payload drops the deadline argument inside the SDK; no change here.
       const payload = getRegisterLockPayload(proof);
       await submitNativeTransaction(aptos, account, payload);
 
@@ -461,7 +459,6 @@ export function useSellFlow(
 
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
-      // SCOUT(#221) EDIT: reclaim still takes the full lock struct with its deadline; follow the SDK lockBinding shape.
       // SCOUT(#222) EDIT: reclaim keeps its rule; a lock whose leaf is unpayable needs reclaimUnpayable, which no UI calls.
       // Reverts before the lock deadline (DeadlineNotReached), and once the
       // window's outcome is recorded on Ethereum (that path is releaseByOutcome).
@@ -470,7 +467,7 @@ export function useSellFlow(
         token: getChainConfig().ethereum.fakeETH,
         nonce: state.lockNonce,
         amount: state.amount,
-        // SCOUT(#221) EDIT: reclaim passes the full Lock struct; its deadline is the computed lockDeadline(windowId), which lockBinding must still return.
+        // The Lock struct's deadline is LockBox.lockDeadline(windowId), as lockBinding returns it.
         // The same pair bytes as the lock binding.
         ...lockBinding(state.windowId, LAUNCH_PAIR_BCS),
       });

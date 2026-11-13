@@ -54,7 +54,7 @@ vi.mock("@atomica/sdk", () => ({
   submitNativeTransaction: vi.fn().mockResolvedValue({ hash: "0xregister" }),
 }));
 
-// SCOUT(#221) EDIT: the lockBinding mock returns a deadline.
+// lockBinding returns the computed deadline, ethLockDeadline(windowId); LockBox.lock takes none.
 vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeUsd: vi.fn().mockResolvedValue({ hash: "0xapprove" }),
   lockFakeUsd: vi
