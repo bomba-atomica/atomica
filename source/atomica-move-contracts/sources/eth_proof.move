@@ -78,10 +78,10 @@ module atomica::eth_proof {
     const WINDOW_MORNING_CLOSE_SECS: u64 = 27900;
     /// Second of the day of the afternoon close, 16:15:00 UTC.
     const WINDOW_AFTERNOON_CLOSE_SECS: u64 = 58500;
-    // SCOUT(#221) EDIT: LockBox freezes `ETH_RECLAIM_DELAY_SECS` as its reclaim delay; the owner decides the value first (review decision 36).
     /// Delay from a window's close to the Ethereum lock deadline of its locks:
     /// 72 hours. The auction's stuck deadline plus the outcome carrier margin
-    /// must end before it (docs/specifications/auction-timing.md).
+    /// must end before it (docs/specifications/auction-timing.md). LockBox
+    /// freezes the same value as `RECLAIM_DELAY`.
     const ETH_RECLAIM_DELAY_SECS: u64 = 259200;
 
     /// The pinned Ethereum side: the LockBox, the token behind each asset, and
@@ -223,14 +223,13 @@ module atomica::eth_proof {
     }
 
     /// The auction a lock is bound to:
-    /// keccak256(abi.encode(uint64 window_id, bytes32 pair_hash, uint64 deadline)).
-    /// Equals `LockBox.auctionKey`.
-    // SCOUT(#221) EDIT: `eth_proof::auction_key` drops the `deadline` argument: keccak256(abi.encode(uint64 window_id, bytes32 pair_hash)).
-    public fun auction_key(window_id: u64, pair_hash: vector<u8>, deadline: u64): vector<u8> {
+    /// keccak256(abi.encode(uint64 window_id, bytes32 pair_hash)).
+    /// Equals `LockBox.auctionKey`. The deadline is not part of the key: it is
+    /// a function of the window id (`eth_lock_deadline`).
+    public fun auction_key(window_id: u64, pair_hash: vector<u8>): vector<u8> {
         assert!(vector::length(&pair_hash) == 32, E_INVALID_PAIR_HASH);
         let data = u256_be((window_id as u256));
         vector::append(&mut data, pair_hash);
-        vector::append(&mut data, u256_be((deadline as u256)));
         keccak256(data)
     }
 
@@ -260,7 +259,8 @@ module atomica::eth_proof {
 
     /// The Ethereum lock deadline of every lock of window `window_id`: window
     /// close plus ETH_RECLAIM_DELAY_SECS. A pure function of the window id,
-    /// because a lock is made before its window or timelock exists.
+    /// because a lock is made before its window or timelock exists. Equals
+    /// `LockBox.lockDeadline`, which computes it for every lock.
     public fun eth_lock_deadline(window_id: u64): u64 {
         window_close_secs(window_id) + ETH_RECLAIM_DELAY_SECS
     }
@@ -279,8 +279,7 @@ module atomica::eth_proof {
     /// not certified the block, aborts if either proof does not match, aborts
     /// with `E_EMPTY_LOCK` for a zero amount, and aborts with
     /// `E_COMMITMENT_MISMATCH` if the slot does not hold the commitment of
-    /// (user, token, amount, window_id, pair_hash, deadline).
-    // SCOUT(#221) EDIT: `verify_lock` drops the `deadline` argument and commits to `eth_lock_deadline(window_id)`.
+    /// (user, token, amount, window_id, pair_hash, eth_lock_deadline(window_id)).
     public fun verify_lock(
         block_number: u64,
         user: vector<u8>,
@@ -289,12 +288,11 @@ module atomica::eth_proof {
         amount: u256,
         window_id: u64,
         pair_hash: vector<u8>,
-        deadline: u64,
         account_proof: vector<vector<u8>>,
         storage_proof: vector<vector<u8>>,
     ) acquires EthereumConfig {
         assert!(amount > 0, E_EMPTY_LOCK);
-        let expected = lock_commitment(user, token, amount, window_id, pair_hash, deadline);
+        let expected = lock_commitment(user, token, amount, window_id, pair_hash, eth_lock_deadline(window_id));
         assert!(vector::length(&account_proof) > 0, E_INVALID_PROOF);
         assert!(vector::length(&storage_proof) > 0, E_INVALID_PROOF);
         let state_root = get_state_root(block_number);

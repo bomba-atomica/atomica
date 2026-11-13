@@ -129,11 +129,10 @@ module atomica::eth_lock_registration_tests {
         lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
     }
 
-    // SCOUT(#221) EDIT: `register_6`, its 14 callers, the 4 direct `register_ethereum_lock` calls and the `verify_lock` call of this file drop the deadline argument.
     /// Register the fixture lock with the given fields, proven at block 6.
-    fun register_6(carrier: &signer, amount: u256, window_id: u64, pair_hash: vector<u8>, deadline: u64) {
+    fun register_6(carrier: &signer, amount: u256, window_id: u64, pair_hash: vector<u8>) {
         lock_receipt::register_ethereum_lock<FakeETH>(
-            carrier, 6, USER, 0, amount, window_id, pair_hash, deadline, account_proof_6(), storage_proof_6()
+            carrier, 6, USER, 0, amount, window_id, pair_hash, account_proof_6(), storage_proof_6()
         );
     }
 
@@ -150,7 +149,39 @@ module atomica::eth_lock_registration_tests {
         assert!(auction::pair_hash(b"") == PAIR_HASH, 3);
     }
 
-    // SCOUT(#221) TEST: window_close_and_lock_deadline_match_the_shared_table (the same table as the forge and SDK tests)
+    // The shared (window id, close, deadline) table
+    // `source/atomica-sdk/tests/fixtures/window_clock_vectors.json`, also
+    // checked by `LockBox.t.sol` and the SDK `storage-key.test.ts`. Each row is
+    // (at, window_id, close, deadline). Move cannot read JSON, so the rows are
+    // copied here; the SDK test checks this copy against the file.
+    #[test]
+    fun window_close_and_lock_deadline_match_the_shared_table() {
+        let rows = vector[
+            vector[0, 0, 27900, 287100],
+            vector[27899, 0, 27900, 287100],
+            vector[1794383099, 41536, 1794383100, 1794642300],
+            vector[1794383100, 41537, 1794413700, 1794672900],
+            vector[1794413699, 41537, 1794413700, 1794672900],
+            vector[1794413700, 41538, 1794469500, 1794728700],
+            vector[1794441599, 41538, 1794469500, 1794728700],
+            vector[1794441600, 41538, 1794469500, 1794728700],
+            vector[1794469499, 41538, 1794469500, 1794728700],
+            vector[1794469500, 41539, 1794500100, 1794759300],
+        ];
+        let i = 0;
+        while (i < std::vector::length(&rows)) {
+            let r = std::vector::borrow(&rows, i);
+            let w = *std::vector::borrow(r, 1);
+            let close = *std::vector::borrow(r, 2);
+            let deadline = *std::vector::borrow(r, 3);
+            assert!(eth_proof::window_id_at(*std::vector::borrow(r, 0)) == w, i);
+            assert!(eth_proof::window_close_secs(w) == close, 100 + i);
+            assert!(eth_proof::eth_lock_deadline(w) == deadline, 200 + i);
+            assert!(auction::eth_lock_deadline(w) - eth_proof::window_close_secs(w) == 259200, 300 + i);
+            i = i + 1;
+        };
+    }
+
     #[test]
     fun eth_lock_deadline_is_window_close_plus_delay() {
         // Window 41538 is the even window of day 20769: it closes at 07:45 UTC.
@@ -178,19 +209,18 @@ module atomica::eth_lock_registration_tests {
         setup(framework, atomica);
         certify(6, root_6());
         eth_proof::verify_lock(
-            6, USER, FAKE_ETH, 0, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE, account_proof_6(), storage_proof_6()
+            6, USER, FAKE_ETH, 0, TEN_ETH, WINDOW_ID, PAIR_HASH, account_proof_6(), storage_proof_6()
         );
     }
 
     // ==================== register_ethereum_lock ====================
 
-    // SCOUT(#221) EDIT: the `auction_key` assert at the end of `registers_lock_proven_at_certified_header` loses the deadline argument.
     #[test(framework = @0x1, atomica = @atomica, carrier = @0x123)]
     fun registers_lock_proven_at_certified_header(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
         certify(6, root_6());
 
-        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE);
+        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH);
 
         let lock_id = eth_proof::lock_id(USER, FAKE_ETH, 0);
         assert!(lock_receipt::is_lock_claimed<Ethereum, FakeETH>(lock_id), 0);
@@ -208,7 +238,7 @@ module atomica::eth_lock_registration_tests {
         let (window_id, pair_hash) = lock_receipt::get_receipt_binding<Ethereum, FakeETH>(lock_id);
         assert!(window_id == WINDOW_ID, 8);
         assert!(pair_hash == PAIR_HASH, 9);
-        assert!(auction::auction_key(window_id, pair_hash) == eth_proof::auction_key(WINDOW_ID, PAIR_HASH, DEADLINE), 10);
+        assert!(auction::auction_key(window_id, pair_hash) == eth_proof::auction_key(WINDOW_ID, PAIR_HASH), 10);
     }
 
     // Wrong amount: the slot holds the commitment of 10 FakeETH, not 9.
@@ -217,41 +247,47 @@ module atomica::eth_lock_registration_tests {
     fun rejects_wrong_amount(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
         certify(6, root_6());
-        register_6(carrier, TEN_ETH - 1, WINDOW_ID, PAIR_HASH, DEADLINE);
+        register_6(carrier, TEN_ETH - 1, WINDOW_ID, PAIR_HASH);
     }
 
-    // SCOUT(#221) EDIT: `rejects_wrong_deadline` becomes a commitment mismatch in `verify_lock`. It needs a proof of a commitment made with another deadline, and the new LockBox cannot make one: keep today's fixture for it.
-    // Wrong deadline: any deadline but eth_lock_deadline(window_id) is refused,
-    // so every registered lock of an auction shares one deadline.
+    // Wrong deadline: a proven commitment whose deadline is not
+    // eth_lock_deadline(window_id). The caller names no deadline, so
+    // verify_lock recomputes the commitment with eth_lock_deadline(window_id)
+    // and refuses it: every registered lock of an auction shares one deadline.
     #[test(framework = @0x1, atomica = @atomica, carrier = @0x123)]
-    #[expected_failure(abort_code = 11, location = atomica::lock_receipt)] // E_WRONG_DEADLINE
+    #[expected_failure(abort_code = 14, location = atomica::eth_proof)] // E_COMMITMENT_MISMATCH
     fun rejects_wrong_deadline(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
-        certify(6, root_6());
-        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE + 1);
+        assert_wrong_deadline_fixture();
+        certify(6, wrong_deadline_root_6());
+        lock_receipt::register_ethereum_lock<FakeETH>(
+            carrier, 6, USER, 0, TEN_ETH, WRONG_DEADLINE_WINDOW_ID, PAIR_HASH,
+            wrong_deadline_account_proof_6(), wrong_deadline_storage_proof_6()
+        );
     }
 
-    // A proven commitment whose deadline is not eth_lock_deadline(window_id):
-    // the proof holds against its certified root, and registration refuses it.
-    #[test(framework = @0x1, atomica = @atomica, carrier = @0x123)]
-    #[expected_failure(abort_code = 11, location = atomica::lock_receipt)] // E_WRONG_DEADLINE
-    fun rejects_proven_lock_with_another_deadline(framework: &signer, atomica: &signer, carrier: &signer) {
+    // The same refusal comes from verify_lock itself.
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 14, location = atomica::eth_proof)] // E_COMMITMENT_MISMATCH
+    fun rejects_proven_lock_with_another_deadline(framework: &signer, atomica: &signer) {
         setup(framework, atomica);
+        assert_wrong_deadline_fixture();
+        certify(6, wrong_deadline_root_6());
+        eth_proof::verify_lock(
+            6, USER, FAKE_ETH, 0, TEN_ETH, WRONG_DEADLINE_WINDOW_ID, PAIR_HASH,
+            wrong_deadline_account_proof_6(), wrong_deadline_storage_proof_6()
+        );
+    }
+
+    /// The wrong deadline fixture holds a commitment to WRONG_DEADLINE, which is
+    /// not eth_lock_deadline(WRONG_DEADLINE_WINDOW_ID).
+    fun assert_wrong_deadline_fixture() {
         assert!(eth_proof::eth_lock_deadline(WRONG_DEADLINE_WINDOW_ID) != WRONG_DEADLINE, 100);
         assert!(
             eth_proof::lock_commitment(
                 USER, FAKE_ETH, TEN_ETH, WRONG_DEADLINE_WINDOW_ID, PAIR_HASH, WRONG_DEADLINE
             ) == WRONG_DEADLINE_COMMITMENT,
             101
-        );
-        certify(6, wrong_deadline_root_6());
-        eth_proof::verify_lock(
-            6, USER, FAKE_ETH, 0, TEN_ETH, WRONG_DEADLINE_WINDOW_ID, PAIR_HASH, WRONG_DEADLINE,
-            wrong_deadline_account_proof_6(), wrong_deadline_storage_proof_6()
-        );
-        lock_receipt::register_ethereum_lock<FakeETH>(
-            carrier, 6, USER, 0, TEN_ETH, WRONG_DEADLINE_WINDOW_ID, PAIR_HASH, WRONG_DEADLINE,
-            wrong_deadline_account_proof_6(), wrong_deadline_storage_proof_6()
         );
     }
 
@@ -261,7 +297,7 @@ module atomica::eth_lock_registration_tests {
     fun rejects_other_window(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
         certify(6, root_6());
-        register_6(carrier, TEN_ETH, WINDOW_ID + 1, PAIR_HASH, eth_proof::eth_lock_deadline(WINDOW_ID + 1));
+        register_6(carrier, TEN_ETH, WINDOW_ID + 1, PAIR_HASH);
     }
 
     // Another pair: the lock commits to keccak256("").
@@ -270,7 +306,7 @@ module atomica::eth_lock_registration_tests {
     fun rejects_other_pair(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
         certify(6, root_6());
-        register_6(carrier, TEN_ETH, WINDOW_ID, auction::pair_hash(b"other pair"), DEADLINE);
+        register_6(carrier, TEN_ETH, WINDOW_ID, auction::pair_hash(b"other pair"));
     }
 
     // Bad root: the proof is for block 6, but the certified root of block 6 is
@@ -280,7 +316,7 @@ module atomica::eth_lock_registration_tests {
     fun rejects_proof_against_other_certified_root(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
         certify(6, root_7());
-        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE);
+        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH);
     }
 
     // The validators have not certified the proof block: nothing to verify
@@ -290,7 +326,7 @@ module atomica::eth_lock_registration_tests {
     fun rejects_block_without_certified_header(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
         certify(7, root_7());
-        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE);
+        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH);
     }
 
     // Duplicate lock: the same lock proven again at a later block (a new
@@ -301,9 +337,9 @@ module atomica::eth_lock_registration_tests {
         setup(framework, atomica);
         certify(6, root_6());
         certify(7, root_7());
-        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE);
+        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH);
         lock_receipt::register_ethereum_lock<FakeETH>(
-            carrier, 7, USER, 0, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE, account_proof_7(), storage_proof_7()
+            carrier, 7, USER, 0, TEN_ETH, WINDOW_ID, PAIR_HASH, account_proof_7(), storage_proof_7()
         );
     }
 
@@ -314,7 +350,7 @@ module atomica::eth_lock_registration_tests {
         setup(framework, atomica);
         certify(7, root_7());
         lock_receipt::register_ethereum_lock<FakeETH>(
-            carrier, 7, USER, 0, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE, account_proof_7(), storage_proof_7()
+            carrier, 7, USER, 0, TEN_ETH, WINDOW_ID, PAIR_HASH, account_proof_7(), storage_proof_7()
         );
         assert!(lock_receipt::get_receipt_count<Ethereum, FakeETH>() == 1, 0);
     }
@@ -327,7 +363,7 @@ module atomica::eth_lock_registration_tests {
         setup(framework, atomica);
         certify(6, root_6());
         lock_receipt::register_ethereum_lock<FakeUSD>(
-            carrier, 6, USER, 0, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE, account_proof_6(), storage_proof_6()
+            carrier, 6, USER, 0, TEN_ETH, WINDOW_ID, PAIR_HASH, account_proof_6(), storage_proof_6()
         );
     }
 
@@ -338,7 +374,7 @@ module atomica::eth_lock_registration_tests {
         setup(framework, atomica);
         certify(6, root_6());
         lock_receipt::register_ethereum_lock<FakeETH>(
-            carrier, 6, USER, 1, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE, account_proof_6(), storage_proof_6()
+            carrier, 6, USER, 1, TEN_ETH, WINDOW_ID, PAIR_HASH, account_proof_6(), storage_proof_6()
         );
     }
 
@@ -348,7 +384,7 @@ module atomica::eth_lock_registration_tests {
         setup(framework, atomica);
         certify(6, root_6());
         let depositor = aptos_framework::account::create_signer_for_test(USER_ACCOUNT);
-        register_6(&depositor, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE);
+        register_6(&depositor, TEN_ETH, WINDOW_ID, PAIR_HASH);
         let (user, _, _, _, _) =
             lock_receipt::get_receipt<Ethereum, FakeETH>(eth_proof::lock_id(USER, FAKE_ETH, 0));
         assert!(user == USER_ACCOUNT, 0);
@@ -363,7 +399,7 @@ module atomica::eth_lock_registration_tests {
     fun atomica_cannot_claim_registered_receipt(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
         certify(6, root_6());
-        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE);
+        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH);
         lock_receipt::claim<Ethereum, FakeETH>(@atomica, eth_proof::lock_id(USER, FAKE_ETH, 0));
     }
 
@@ -371,7 +407,7 @@ module atomica::eth_lock_registration_tests {
     fun derived_owner_claims_registered_receipt(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
         certify(6, root_6());
-        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE);
+        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH);
         let amount = lock_receipt::claim<Ethereum, FakeETH>(
             USER_ACCOUNT, eth_proof::lock_id(USER, FAKE_ETH, 0)
         );
@@ -388,7 +424,7 @@ module atomica::eth_lock_registration_tests {
     fun fake_eth_mint_from_lock_is_retired(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
         certify(6, root_6());
-        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE);
+        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH);
         let lock_id = eth_proof::lock_id(USER, FAKE_ETH, 0);
         assert!(lock_receipt::get_receipt_status<Ethereum, FakeETH>(lock_id) == lock_receipt::status_active(), 100);
         let depositor = aptos_framework::account::create_signer_for_test(USER_ACCOUNT);
@@ -400,7 +436,7 @@ module atomica::eth_lock_registration_tests {
     fun fake_usd_mint_from_lock_is_retired(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
         certify(6, root_6());
-        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE);
+        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH);
         let lock_id = eth_proof::lock_id(USER, FAKE_ETH, 0);
         assert!(lock_receipt::get_receipt_status<Ethereum, FakeETH>(lock_id) == lock_receipt::status_active(), 100);
         let depositor = aptos_framework::account::create_signer_for_test(USER_ACCOUNT);
@@ -413,7 +449,7 @@ module atomica::eth_lock_registration_tests {
     fun registered_receipt_stays_active_until_auction_claim(framework: &signer, atomica: &signer, carrier: &signer) {
         setup(framework, atomica);
         certify(6, root_6());
-        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH, DEADLINE);
+        register_6(carrier, TEN_ETH, WINDOW_ID, PAIR_HASH);
         let lock_id = eth_proof::lock_id(USER, FAKE_ETH, 0);
         assert!(lock_receipt::get_receipt_status<Ethereum, FakeETH>(lock_id) == lock_receipt::status_active(), 0);
         assert!(lock_receipt::claim<Ethereum, FakeETH>(USER_ACCOUNT, lock_id) == TEN_ETH, 1);

@@ -11,6 +11,7 @@ import {FakeUSD} from "../../src/tokens/FakeUSD.sol";
 import {AptosVectors} from "../unit/aptos/AptosVectors.sol";
 import {AptosTestChain} from "../unit/aptos/AptosTestChain.sol";
 import {OutcomeTreeBuilder} from "../utils/OutcomeTreeBuilder.sol";
+import {DeployLockBox} from "../../script/DeployLockBox.s.sol";
 
 /**
  * @notice LockBox with the real AptosLightClient (no mock).
@@ -52,15 +53,20 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
         }
     }
 
-    // SCOUT(#221) EDIT: drop `d`; the returned `Lock` takes `lockBox.lockDeadline(w)`.
-    function _lock(LockBox lockBox, address who, address token, uint256 amount, uint64 w, bytes32 p, uint64 d)
+    /// A LockBox on the production window schedule.
+    function _lockBox(IAptosLightClient client) internal returns (LockBox) {
+        (uint64 daySecs, uint64[] memory closeOffsets) = new DeployLockBox().productionWindowSchedule();
+        return new LockBox(address(fakeETH), address(fakeUSD), client, tag, daySecs, closeOffsets);
+    }
+
+    function _lock(LockBox lockBox, address who, address token, uint256 amount, uint64 w, bytes32 p)
         internal
         returns (LockBox.Lock memory l)
     {
         uint256 nonce = lockBox.nextLockNonce();
         vm.prank(who);
-        lockBox.lock(token, amount, w, p, d);
-        l = LockBox.Lock(who, token, nonce, amount, w, p, d);
+        lockBox.lock(token, amount, w, p);
+        l = LockBox.Lock(who, token, nonce, amount, w, p, lockBox.lockDeadline(w));
     }
 
     // ---------------------------------------------------------------- golden vector
@@ -82,7 +88,7 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
             )
         );
 
-        LockBox lockBox = new LockBox(address(fakeETH), address(fakeUSD), client, tag);
+        LockBox lockBox = _lockBox(client);
         _approveAll(lockBox);
 
         uint64 windowId = uint64(vm.parseJsonUint(vectors, ".event.auction_outcome.window_id"));
@@ -95,21 +101,24 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
             _hex(".event.event_data"), OutcomeTreeBuilder.outcomeBcs(windowId, pairHash, deadline, root, leafCount)
         );
 
-        // SCOUT(#221) EDIT: the golden event pairs window 42 with deadline 1767225600, which no window formula gives; warp into window 42 (it closes at second 1842300) to lock, and expect the key without the deadline.
-        // The golden deadline (2026-01-01) must lie ahead when locking, also on a live chain.
-        vm.warp(deadline - 1 days);
-        LockBox.Lock memory l = _lock(lockBox, seller, address(fakeETH), 1 ether, windowId, pairHash, deadline);
+        // The golden event pairs window 42 with deadline 1767225600, which no window formula gives.
+        // LockBox ignores it: lock inside window 42 (it closes at second 1842300), and the key and
+        // the lock deadline come from the window id alone.
+        assertEq(lockBox.windowClose(windowId), 1_842_300);
+        vm.warp(1_842_299);
+        LockBox.Lock memory l = _lock(lockBox, seller, address(fakeETH), 1 ether, windowId, pairHash);
+        assertEq(l.deadline, 2_101_500);
 
         // Carry the proof while the light client is fresh: within MAX_EPOCH_AGE of the golden
         // epoch change (LedgerInfo time 1_700_000_100). The lock above needed a later clock.
         vm.warp(1_700_000_200);
-        bytes32 key = lockBox.auctionKey(windowId, pairHash, deadline);
+        bytes32 key = lockBox.auctionKey(windowId, pairHash);
         vm.expectEmit(address(lockBox));
         emit LockBox.OutcomeRecorded(
             key,
             windowId,
             pairHash,
-            deadline,
+            l.deadline,
             root,
             leafCount,
             uint64(vm.parseJsonUint(vectors, ".transaction.version"))
@@ -127,8 +136,7 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
         bytes32[] memory proof = new bytes32[](2);
         vm.expectRevert(LockBox.InvalidProof.selector);
         lockBox.releaseByOutcome(l, _one(winner, 1 ether), OutcomeTree.LeafProof(0, proof));
-        // SCOUT(#221) EDIT: warp to `l.deadline`, which is `lockBox.lockDeadline(windowId)`, not the golden event's deadline.
-        vm.warp(deadline);
+        vm.warp(l.deadline);
         vm.expectRevert(
             abi.encodeWithSelector(LockBox.LockInTree.selector, lockBox.getLockId(seller, address(fakeETH), 0))
         );
@@ -145,17 +153,15 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
             MAX_EPOCH_AGE
         );
         client.advanceEpoch(_goldenEpochChange());
-        LockBox lockBox = new LockBox(address(fakeETH), address(fakeUSD), client, tag);
+        LockBox lockBox = _lockBox(client);
         IAptosLightClient.EventProof memory p = _goldenEventProof();
         p.ledgerInfo = _goldenOutcomeLedgerInfo(1); // validators 0 and 2: 7 of 11, quorum 8
         vm.expectRevert(abi.encodeWithSelector(IAptosLightClient.InsufficientVotingPower.selector, 7, 8));
         lockBox.recordOutcome(p);
         (bytes32 root,) = lockBox.outcomes(
-            // SCOUT(#221) EDIT: the key drops the deadline argument.
             lockBox.auctionKey(
                 uint64(vm.parseJsonUint(vectors, ".event.auction_outcome.window_id")),
-                _b32(".event.auction_outcome.pair_hash"),
-                uint64(vm.parseJsonUint(vectors, ".event.auction_outcome.eth_lock_deadline"))
+                _b32(".event.auction_outcome.pair_hash")
             )
         );
         assertEq(root, bytes32(0));
@@ -209,20 +215,19 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
         // The client anchors its genesis epoch at deploy time, so deploy at the test's clock.
         vm.warp(1_700_000_000);
         AptosLightClient client = new AptosLightClient(liws, wpVersion, wpHash, MAX_EPOCH_AGE);
-        LockBox lockBox = new LockBox(address(fakeETH), address(fakeUSD), client, tag);
+        LockBox lockBox = _lockBox(client);
         _approveAll(lockBox);
 
-        // SCOUT(#221) EDIT: window 7 is closed at the warped time; take `lockBox.currentWindowId()` and `lockBox.lockDeadline(windowId)`, and keep that deadline in the signed event.
-        uint64 windowId = 7;
+        uint64 windowId = lockBox.currentWindowId();
         bytes32 pairHash = keccak256("pair bcs");
-        uint64 deadline = uint64(block.timestamp + 3 days);
+        uint64 deadline = lockBox.lockDeadline(windowId);
 
         // Seller sells 2 FakeETH to the winner for 3_000 USD. The winner gets 1_000 USD of excess
         // collateral back. The loser's collateral goes home.
         LockBox.Lock[] memory locks = new LockBox.Lock[](3);
-        locks[0] = _lock(lockBox, seller, address(fakeETH), 2 ether, windowId, pairHash, deadline);
-        locks[1] = _lock(lockBox, winner, address(fakeUSD), 4_000e6, windowId, pairHash, deadline);
-        locks[2] = _lock(lockBox, loser, address(fakeUSD), 2_500e6, windowId, pairHash, deadline);
+        locks[0] = _lock(lockBox, seller, address(fakeETH), 2 ether, windowId, pairHash);
+        locks[1] = _lock(lockBox, winner, address(fakeUSD), 4_000e6, windowId, pairHash);
+        locks[2] = _lock(lockBox, loser, address(fakeUSD), 2_500e6, windowId, pairHash);
         OutcomeTree.Payout[][] memory payouts = new OutcomeTree.Payout[][](3);
         payouts[0] = _one(winner, 2 ether);
         payouts[1] = new OutcomeTree.Payout[](2);
@@ -265,7 +270,35 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
         assertEq(fakeUSD.balanceOf(address(lockBox)), 0);
     }
 
-    // SCOUT(#221) TEST: test_recordOutcomeIgnoresEventDeadlineOfSignedOutcome (a signed event whose deadline differs from `lockDeadline(windowId)` still records under `auctionKey(windowId, pairHash)`)
+    /// A signed event whose deadline differs from `lockDeadline(windowId)` still records under
+    /// `auctionKey(windowId, pairHash)`, and its lock releases.
+    function test_recordOutcomeIgnoresEventDeadlineOfSignedOutcome() public {
+        ValidatorSet memory set1 = makeSet(1, 4, 1, 1);
+        (bytes memory liws, uint64 wpVersion, bytes32 wpHash) = genesis(set1);
+        vm.warp(1_700_000_000);
+        AptosLightClient client = new AptosLightClient(liws, wpVersion, wpHash, MAX_EPOCH_AGE);
+        LockBox lockBox = _lockBox(client);
+        _approveAll(lockBox);
+
+        uint64 windowId = lockBox.currentWindowId();
+        bytes32 pairHash = keccak256("pair bcs");
+        LockBox.Lock memory l = _lock(lockBox, seller, address(fakeETH), 2 ether, windowId, pairHash);
+        bytes32[] memory leaves = new bytes32[](1);
+        leaves[0] = OutcomeTreeBuilder.leafHash(
+            lockBox.getLockId(seller, address(fakeETH), l.nonce), OutcomeTreeBuilder.payoutsHash(_one(winner, 2 ether))
+        );
+        uint64 otherDeadline = l.deadline + 1 days;
+        bytes memory data = OutcomeTreeBuilder.outcomeBcs(windowId, pairHash, otherDeadline, leaves[0], 1);
+
+        bytes32 key = lockBox.auctionKey(windowId, pairHash);
+        vm.expectEmit(address(lockBox));
+        emit LockBox.OutcomeRecorded(key, windowId, pairHash, l.deadline, leaves[0], 1, 9);
+        assertEq(lockBox.recordOutcome(_signedEventProof(set1, data)), key);
+
+        uint256 winnerEth = fakeETH.balanceOf(winner);
+        lockBox.releaseByOutcome(l, _one(winner, 2 ether), OutcomeTree.LeafProof(0, new bytes32[](0)));
+        assertEq(fakeETH.balanceOf(winner), winnerEth + 2 ether);
+    }
 
     // ---------------------------------------------------------------- helpers
 

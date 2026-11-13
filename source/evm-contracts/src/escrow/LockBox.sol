@@ -6,7 +6,6 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IAptosLightClient} from "../aptos/IAptosLightClient.sol";
 import {OutcomeTree} from "./OutcomeTree.sol";
 
-// SCOUT(#221) DOC: "Auction binding" in the comment below becomes `auctionKey(windowId, pairHash)`, and LockBox computes the deadline itself.
 // SCOUT(#222) DOC: "Every lock ends in one of two ways" below gains `reclaimUnpayable`, and a leaf means "these payouts, the remainder to the depositor".
 // SCOUT(#222) DOC: "All or nothing" below no longer holds for a short or unpayable leaf: that lock goes home while other locks of the auction still release.
 // SCOUT(#242) DOC: "no admin, relayer, owner or upgrade key" below cites the decision record; say here too that a recorded outcome trusts the Aptos package upgrade key, if the owner names it (decision 30).
@@ -20,9 +19,10 @@ import {OutcomeTree} from "./OutcomeTree.sol";
  *        the auction's recorded outcome covers the lock.
  *      There is no admin, relayer, owner or upgrade key (docs/decisions/trustless-v0-1-unwinding.md).
  *
- *      Auction binding. A lock names its auction: `auctionKey(windowId, pairHash, deadline)`.
- *      Aptos accepts only `deadline == auction::eth_lock_deadline(windowId)`, so every registered
- *      lock of an auction shares one deadline.
+ *      Auction binding. A lock names its auction: `auctionKey(windowId, pairHash)`. LockBox computes
+ *      the lock's deadline itself, `lockDeadline(windowId)`, from the window clock frozen at deploy
+ *      (equal to `eth_proof::eth_lock_deadline`). No caller supplies a deadline, so every lock of an
+ *      auction shares one deadline, and no lock can be stranded behind a far-future one.
  *
  *      All or nothing. If any lock of an auction is reclaimed before that auction has a recorded
  *      outcome, `auctionReclaimed` is set and no outcome can be recorded for it afterwards. So an
@@ -61,7 +61,7 @@ contract LockBox {
         uint256 amount;
         uint64 windowId;
         bytes32 pairHash;
-        // SCOUT(#221) EDIT: the field stays, because the commitment binds it, but its only valid value becomes `lockDeadline(windowId)`.
+        /// Always `lockDeadline(windowId)`; kept because the commitment binds it.
         uint64 deadline;
     }
 
@@ -98,13 +98,19 @@ contract LockBox {
     /// @notice BCS length of an AuctionOutcome: u64, vector<u8>(32), u64, vector<u8>(32), u64.
     uint256 private constant OUTCOME_BCS_LEN = 8 + 1 + 32 + 8 + 1 + 32 + 8;
 
-    // SCOUT(#221) ADD: the window clock this contract freezes at deploy; it must equal `eth_proof.move` and the SDK `lock-binding.ts`; the three constants become public.
-    uint64 internal constant WINDOW_DAY_SECS = 86_400;
-    uint64 internal constant MORNING_CLOSE_SECS = 27_900;
-    uint64 internal constant AFTERNOON_CLOSE_SECS = 58_500;
+    /// @notice Seconds from a window's close to the deadline of its locks (72 hours). Equals
+    ///         `eth_proof::ETH_RECLAIM_DELAY_SECS` and the SDK `ETH_RECLAIM_DELAY_SECS`.
+    uint64 public constant RECLAIM_DELAY = 259_200;
 
-    // SCOUT(#221) ADD: seconds from a window's close to its reclaim deadline, equal to `eth_proof::ETH_RECLAIM_DELAY_SECS`; the value waits for owner decision 36; becomes public.
-    uint64 internal constant RECLAIM_DELAY = 259_200;
+    // Window clock, frozen at deploy (docs/specifications/auction-timing.md). Each day of
+    // `windowDaySecs` seconds holds `windowCount` windows (one or two); window `w` closes at
+    // `(w / windowCount) * windowDaySecs + closeOffset[w % windowCount]`. Mirrors
+    // `eth_proof::window_close_secs` and `eth_proof::window_id_at`. Immutables cannot hold an
+    // array, so the offsets are two scalars (`closeOffset1` is unused with one window a day).
+    uint64 private immutable windowDaySecs;
+    uint64 private immutable windowCount;
+    uint64 private immutable closeOffset0;
+    uint64 private immutable closeOffset1;
 
     // ==================== Events ====================
 
@@ -119,7 +125,7 @@ contract LockBox {
         uint64 deadline
     );
 
-    // SCOUT(#221) EDIT: `deadline` is no longer part of the key; emit `lockDeadline(windowId)` here or drop the field (dropping it changes topic0 and the SDK ABI).
+    /// @dev `deadline` is `lockDeadline(windowId)`, not the event's `eth_lock_deadline`.
     event OutcomeRecorded(
         bytes32 indexed auctionKey,
         uint64 windowId,
@@ -144,8 +150,6 @@ contract LockBox {
 
     error UnsupportedToken(address token);
     error ZeroAmount();
-    // SCOUT(#221) REMOVE: no caller-supplied deadline is left to check.
-    error DeadlinePassed(uint64 deadline);
     error LockMismatch(bytes32 lockId);
     error LockNotOpen(bytes32 lockId, Status status);
     error OutcomeAlreadyRecorded(bytes32 auctionKey);
@@ -159,13 +163,14 @@ contract LockBox {
     error DeadlineNotReached(uint64 deadline);
     error LockInTree(bytes32 lockId);
 
-    // SCOUT(#221) REMOVE: scout scaffolding; delete it with the last stub of this contract.
     // SCOUT(#222) REMOVE: scout scaffolding; delete it with the last stub of this contract.
     error NotImplemented();
-    // SCOUT(#221) ADD: `lock` names a window below `currentWindowId()`.
+    /// @notice `lock` names a window below `currentWindowId()`.
     error WindowClosed(uint64 windowId, uint64 current);
-    // SCOUT(#221) ADD: `lock` names a window above `currentWindowId() + 1`.
+    /// @notice `lock` names a window above `currentWindowId() + 1`.
     error WindowTooFarAhead(uint64 windowId, uint64 current);
+    /// @notice The constructor's window schedule breaks the `eth_proof::set_window_schedule` rules.
+    error InvalidWindowSchedule();
     // SCOUT(#222) ADD: `reclaimUnpayable` was called for a leaf that `releaseByOutcome` can pay.
     error LeafPayable(bytes32 lockId);
 
@@ -176,16 +181,37 @@ contract LockBox {
      * @param _fakeUSD FakeUSD token
      * @param _lightClient Aptos light client that proves AuctionOutcome events
      * @param _outcomeTypeTag BCS TypeTag of `<atomica>::auction::AuctionOutcome`
+     * @param daySecs Seconds per window day (production: 86_400)
+     * @param closeOffsetsSecs One or two window closes as seconds into the day, strictly
+     *        increasing, the first above 0 and the last at most `daySecs`
+     *        (production: [27_900, 58_500], 07:45 and 16:15 UTC). Reverts `InvalidWindowSchedule`.
      */
-    constructor(address _fakeETH, address _fakeUSD, IAptosLightClient _lightClient, bytes memory _outcomeTypeTag) {
+    constructor(
+        address _fakeETH,
+        address _fakeUSD,
+        IAptosLightClient _lightClient,
+        bytes memory _outcomeTypeTag,
+        uint64 daySecs,
+        uint64[] memory closeOffsetsSecs
+    ) {
         require(_fakeETH != address(0), "Invalid FakeETH address");
         require(_fakeUSD != address(0), "Invalid FakeUSD address");
         require(address(_lightClient) != address(0), "Invalid light client");
         require(_outcomeTypeTag.length > 0, "Invalid type tag");
+        uint256 n = closeOffsetsSecs.length;
+        if (n == 0 || n > 2 || closeOffsetsSecs[0] == 0 || closeOffsetsSecs[n - 1] > daySecs) {
+            revert InvalidWindowSchedule();
+        }
+        if (n == 2 && closeOffsetsSecs[1] <= closeOffsetsSecs[0]) revert InvalidWindowSchedule();
         fakeETH = IERC20(_fakeETH);
         fakeUSD = IERC20(_fakeUSD);
         lightClient = _lightClient;
         outcomeTypeTag = _outcomeTypeTag;
+        windowDaySecs = daySecs;
+        // forge-lint: disable-next-line(unsafe-typecast)
+        windowCount = uint64(n); // n is 1 or 2
+        closeOffset0 = closeOffsetsSecs[0];
+        closeOffset1 = n == 2 ? closeOffsetsSecs[1] : 0;
     }
 
     // ==================== Pure helpers ====================
@@ -195,25 +221,46 @@ contract LockBox {
         return keccak256(abi.encodePacked(depositor, token, nonce));
     }
 
-    // SCOUT(#221) EDIT: becomes `auctionKey(uint64 windowId, bytes32 pairHash)` = keccak256(abi.encode(windowId, pairHash)); `eth_proof::auction_key` and the SDK `auctionKey` change with it.
-    /// @notice The auction a lock is bound to. Mirrored by `auction::auction_key`.
-    function auctionKey(uint64 windowId, bytes32 pairHash, uint64 deadline) public pure returns (bytes32) {
-        return keccak256(abi.encode(windowId, pairHash, deadline));
+    /// @notice The auction a lock is bound to: keccak256(abi.encode(windowId, pairHash)).
+    ///         Mirrored by `auction::auction_key` and `eth_proof::auction_key`.
+    function auctionKey(uint64 windowId, bytes32 pairHash) public pure returns (bytes32) {
+        return keccak256(abi.encode(windowId, pairHash));
     }
 
-    // SCOUT(#221) ADD: `currentWindowId()`, the window id at `block.timestamp` (mirror of `auction::current_window_id`); becomes `public view`, not virtual.
-    function currentWindowId() internal view virtual returns (uint64) {
-        revert NotImplemented();
+    // ==================== Window clock ====================
+
+    /// @notice The window id at `block.timestamp`. Mirrors `eth_proof::window_id_at`.
+    function currentWindowId() public view returns (uint64) {
+        // forge-lint: disable-next-line(unsafe-typecast)
+        uint64 t = uint64(block.timestamp);
+        // forge-lint: disable-next-line(divide-before-multiply)
+        uint64 id = (t / windowDaySecs) * windowCount; // whole days, floored
+        uint64 s = t % windowDaySecs;
+        if (s >= closeOffset0) id++;
+        if (windowCount == 2 && s >= closeOffset1) id++;
+        return id;
     }
 
-    // SCOUT(#221) ADD: `windowClose(uint64 windowId)`, the first second of window `windowId + 1` (mirror of `eth_proof::window_close_secs`); becomes `public pure`.
-    function windowClose(uint64) internal pure returns (uint64) {
-        revert NotImplemented();
+    /// @notice Unix second at which `windowId` closes, the first second of window `windowId + 1`.
+    ///         Mirrors `eth_proof::window_close_secs`. Reverts on uint64 overflow (window ids near 2^64).
+    function windowClose(uint64 windowId) public view returns (uint64) {
+        uint64 offset = windowId % windowCount == 0 ? closeOffset0 : closeOffset1;
+        // forge-lint: disable-next-line(divide-before-multiply)
+        return (windowId / windowCount) * windowDaySecs + offset; // whole days, floored
     }
 
-    // SCOUT(#221) ADD: `lockDeadline(uint64 windowId)` = `windowClose(windowId) + RECLAIM_DELAY` (mirror of `eth_proof::eth_lock_deadline`); becomes `public pure`.
-    function lockDeadline(uint64) internal pure returns (uint64) {
-        revert NotImplemented();
+    /// @notice The deadline of every lock of `windowId`: `windowClose(windowId) + RECLAIM_DELAY`.
+    ///         Mirrors `eth_proof::eth_lock_deadline`. Reverts on uint64 overflow.
+    function lockDeadline(uint64 windowId) public view returns (uint64) {
+        return windowClose(windowId) + RECLAIM_DELAY;
+    }
+
+    /// @notice The window clock frozen at deploy: seconds per day and the close offsets.
+    function windowSchedule() external view returns (uint64 daySecs, uint64[] memory closeOffsetsSecs) {
+        daySecs = windowDaySecs;
+        closeOffsetsSecs = new uint64[](windowCount);
+        closeOffsetsSecs[0] = closeOffset0;
+        if (windowCount == 2) closeOffsetsSecs[1] = closeOffset1;
     }
 
     /// @notice The value stored at slot 0 for a lock. Mirrored by `eth_proof::lock_commitment`.
@@ -235,22 +282,23 @@ contract LockBox {
 
     // ==================== Lock ====================
 
-    // SCOUT(#221) EDIT: becomes `lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash)`; the commitment and `Locked` carry `lockDeadline(windowId)`.
     /**
-     * @notice Lock `amount` of `token` into the auction (windowId, pairHash, deadline).
-     * @dev The token must be approved first. Aptos registers the lock only when `deadline` equals
-     *      `auction::eth_lock_deadline(windowId)`. A lock Aptos never registers still goes home
-     *      by `reclaim` after `deadline`.
+     * @notice Lock `amount` of `token` into the auction (windowId, pairHash).
+     * @dev The token must be approved first. `windowId` must be the current window or the next
+     *      one, the two windows Aptos `create_auction` accepts. The commitment and `Locked` carry
+     *      the computed `lockDeadline(windowId)`. A lock Aptos never registers still goes home by
+     *      `reclaim` after that deadline. A lock sent in a window's last seconds may be mined in
+     *      the next window and revert `WindowClosed`; clients should target the next window near
+     *      a close.
      * @return lockId The lock's id (its Aptos receipt id)
      */
-    function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)
-        external
-        returns (bytes32 lockId)
-    {
+    function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash) external returns (bytes32 lockId) {
         if (token != address(fakeETH) && token != address(fakeUSD)) revert UnsupportedToken(token);
         if (amount == 0) revert ZeroAmount();
-        // SCOUT(#221) EDIT: replace this check with the window bounds: revert `WindowClosed` below `currentWindowId()` and `WindowTooFarAhead` above `currentWindowId() + 1`.
-        if (deadline <= block.timestamp) revert DeadlinePassed(deadline);
+        uint64 current = currentWindowId();
+        if (windowId < current) revert WindowClosed(windowId, current);
+        if (windowId > current + 1) revert WindowTooFarAhead(windowId, current);
+        uint64 deadline = lockDeadline(windowId);
 
         uint256 nonce = nextLockNonce++;
         lockId = getLockId(msg.sender, token, nonce);
@@ -270,16 +318,16 @@ contract LockBox {
      */
     function recordOutcome(IAptosLightClient.EventProof calldata proof) external returns (bytes32 key) {
         (uint64 version, bytes memory data) = lightClient.verifyEvent(proof, outcomeTypeTag);
-        (uint64 windowId, bytes32 pairHash, uint64 deadline, bytes32 root, uint64 leafCount) = _decodeOutcome(data);
+        (uint64 windowId, bytes32 pairHash,, bytes32 root, uint64 leafCount) = _decodeOutcome(data);
         if (root == bytes32(0) || leafCount == 0) revert BadOutcomeEvent();
 
-        // SCOUT(#221) EDIT: the key becomes `auctionKey(windowId, pairHash)`; the event's `eth_lock_deadline` is decoded and ignored (the golden vector pairs window 42 with a deadline no formula gives).
-        key = auctionKey(windowId, pairHash, deadline);
+        // The event's `eth_lock_deadline` is ignored: the deadline is a function of the window id.
+        key = auctionKey(windowId, pairHash);
         if (outcomes[key].root != bytes32(0)) revert OutcomeAlreadyRecorded(key);
         if (auctionReclaimed[key]) revert AuctionWasReclaimed(key);
 
         outcomes[key] = Outcome(root, leafCount);
-        emit OutcomeRecorded(key, windowId, pairHash, deadline, root, leafCount, version);
+        emit OutcomeRecorded(key, windowId, pairHash, lockDeadline(windowId), root, leafCount, version);
     }
 
     // SCOUT(#222) EDIT: the `payouts` text below changes: the list may sum to less than the lock amount, and the remainder goes to the depositor.
@@ -295,8 +343,7 @@ contract LockBox {
         OutcomeTree.LeafProof calldata leaf
     ) external {
         bytes32 lockId = _openLock(l);
-        // SCOUT(#221) EDIT: the key becomes `auctionKey(l.windowId, l.pairHash)`.
-        bytes32 key = auctionKey(l.windowId, l.pairHash, l.deadline);
+        bytes32 key = auctionKey(l.windowId, l.pairHash);
         Outcome memory o = outcomes[key];
         if (o.root == bytes32(0)) revert NoOutcome(key);
 
@@ -333,8 +380,7 @@ contract LockBox {
         bytes32 lockId = _openLock(l);
         if (block.timestamp < l.deadline) revert DeadlineNotReached(l.deadline);
 
-        // SCOUT(#221) EDIT: the key becomes `auctionKey(l.windowId, l.pairHash)`.
-        bytes32 key = auctionKey(l.windowId, l.pairHash, l.deadline);
+        bytes32 key = auctionKey(l.windowId, l.pairHash);
         Outcome memory o = outcomes[key];
         if (o.root == bytes32(0)) {
             auctionReclaimed[key] = true;
@@ -371,9 +417,9 @@ contract LockBox {
         revert NotImplemented();
     }
 
-    // SCOUT(#221) EDIT: the BCS layout stays, because the fork golden vectors pin it; `deadline` at offset 41 is still decoded but no longer enters the auction key.
     /// @dev BCS of `AuctionOutcome { window_id: u64, pair_hash: vector<u8>, eth_lock_deadline: u64,
-    ///      dispositions_root: vector<u8>, leaf_count: u64 }` with 32-byte vectors.
+    ///      dispositions_root: vector<u8>, leaf_count: u64 }` with 32-byte vectors. The fork golden
+    ///      vectors pin this layout. `eth_lock_deadline` (offset 41) is decoded, and `recordOutcome` ignores it.
     function _decodeOutcome(bytes memory d)
         private
         pure
