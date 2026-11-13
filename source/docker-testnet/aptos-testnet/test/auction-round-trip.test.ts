@@ -7,7 +7,6 @@ import {
     AptosConfig,
     Ed25519PrivateKey,
     Network,
-    Serializer,
     type CommittedTransactionResponse,
     type InputGenerateTransactionPayloadData,
 } from "@aptos-labs/ts-sdk";
@@ -42,6 +41,8 @@ import {
     type CarryResult,
 } from "@atomica/sdk/settlement/outcome-carrier";
 import { buildOutcomeTree, outcomeProof } from "@atomica/sdk/settlement/outcome-tree";
+// The launch pair { ethereum, FakeETH, ethereum, FakeUSD }: the only pair on the allowlist.
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import {
     setupDualChainTestnet,
     teardownDualChainTestnet,
@@ -75,15 +76,6 @@ import { fundAccount } from "../src/localnet";
  * Unwind and reclaim are covered by 17-unwind.test.tsx and the forge suites.
  * Fails loudly when Docker, the Aptos CLI or forge output is missing.
  */
-
-/** Pair { ethereum, FakeETH, aptos, FakeUSD } in BCS: the launch pair. */
-const LAUNCH_PAIR_BCS = (() => {
-    const s = new Serializer();
-    for (const field of ["ethereum", "FakeETH", "aptos", "FakeUSD"]) {
-        s.serializeBytes(new TextEncoder().encode(field));
-    }
-    return s.toUint8Array();
-})();
 
 const ETH = 10n ** 18n;
 const USD = 10n ** 6n;
