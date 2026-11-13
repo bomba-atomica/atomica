@@ -50,17 +50,18 @@ export const APTOS_LIGHT_CLIENT_ABI = [
 ] as const;
 
 // LockBox ABI - proof-gated escrow (source/evm-contracts/src/escrow/LockBox.sol).
-// A lock leaves only by releaseByOutcome (a proven Aptos AuctionOutcome) or by
-// reclaim to its depositor after its deadline. Anyone may call either, and
+// A lock leaves only by releaseByOutcome (its leaf in a proven Aptos
+// AuctionOutcome: the payouts, then the remainder to the depositor), by
+// reclaimUnpayable (its recorded leaf is unpayable, so it goes home at once), or
+// by reclaim to its depositor after its deadline. Anyone may call each, and
 // anyone may carry an outcome with recordOutcome. There is no relayer.
-// SCOUT(#222) EDIT: the comment above names two ways out of LockBox; reclaimUnpayable is a third.
 export const LOCKBOX_ABI = [
   "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash) returns (bytes32 lockId)",
   `function recordOutcome(${EVENT_PROOF_TUPLE} proof) returns (bytes32 key)`,
   // The Lock tuple keeps its deadline: the commitment binds it. It is always lockDeadline(windowId).
-  // SCOUT(#222) ADD: a reclaimUnpayable(Lock l, Payout[] payouts, Leaf leaf) fragment next to this one, with its event and errors.
   "function reclaim((address depositor, address token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) l, (bytes32 lockId, bytes32 payoutsHash, uint256 index, bytes32[] proof)[] neighbours)",
   "function releaseByOutcome((address depositor, address token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) l, (address recipient, uint256 amount)[] payouts, (uint256 index, bytes32[] proof) leaf)",
+  "function reclaimUnpayable((address depositor, address token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline) l, (address recipient, uint256 amount)[] payouts, (uint256 index, bytes32[] proof) leaf)",
   "function getLockId(address depositor, address token, uint256 nonce) pure returns (bytes32)",
   "function auctionKey(uint64 windowId, bytes32 pairHash) pure returns (bytes32)",
   "function currentWindowId() view returns (uint64)",
@@ -80,6 +81,7 @@ export const LOCKBOX_ABI = [
   "event OutcomeRecorded(bytes32 indexed auctionKey, uint64 windowId, bytes32 pairHash, uint64 deadline, bytes32 root, uint64 leafCount, uint64 aptosVersion)",
   "event LockReleased(bytes32 indexed lockId, bytes32 indexed auctionKey)",
   "event LockReclaimed(bytes32 indexed lockId, address indexed depositor, uint256 amount)",
+  "event LockReclaimedUnpayable(bytes32 indexed lockId, bytes32 indexed auctionKey, address indexed depositor, uint256 amount)",
   "error LockNotOpen(bytes32 lockId, uint8 status)",
   "error OutcomeAlreadyRecorded(bytes32 auctionKey)",
   "error AuctionWasReclaimed(bytes32 auctionKey)",
@@ -88,12 +90,16 @@ export const LOCKBOX_ABI = [
   "error WindowClosed(uint64 windowId, uint64 current)",
   "error WindowTooFarAhead(uint64 windowId, uint64 current)",
   "error LockInTree(bytes32 lockId)",
+  "error InvalidProof()",
+  // A sum above the lock amount, or an overflow (sum is then 2^256 - 1).
+  "error PayoutSumMismatch(uint256 sum, uint256 amount)",
+  "error ZeroRecipient()",
+  "error LeafPayable(bytes32 lockId)",
   "error StaleEpoch(uint64 epoch, uint64 latestEpoch)",
   "error StaleLightClient(uint64 latestEpoch, uint256 age)",
 ] as const;
 
-// SCOUT(#222) EDIT: confirm reclaimUnpayable ends a lock as Reclaimed (3); add a status here if LockBox adds one.
-/** `LockBox.Status`: a lock leaves Open once. */
+/** `LockBox.Status`: a lock leaves Open once. `reclaim` and `reclaimUnpayable` both end in Reclaimed. */
 export const LOCK_STATUS = {
   None: 0,
   Open: 1,

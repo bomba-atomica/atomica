@@ -51,7 +51,6 @@ import { waitForCertifiedEthBlock, waitForEthBlock } from "../src/eth-blocks";
 const ERC20_ABI = ["function balanceOf(address) view returns (uint256)"];
 // The Lock tuple and lockCommitment keep the deadline, because the commitment
 // binds it. LockBox computes it: lockDeadline(windowId).
-// SCOUT(#222) EDIT: LOCKBOX_ABI below gains reclaimUnpayable and its errors if this live test covers the new path; the NoOutcome case is unchanged.
 const LOCK_TUPLE =
     "(address depositor, address token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)";
 const LOCKBOX_ABI = [

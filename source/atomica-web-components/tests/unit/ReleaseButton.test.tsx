@@ -27,6 +27,6 @@ describe("ReleaseButton — planned", () => {
     "SCOUT(#236) works for a wallet that is neither the seller nor a bidder",
   );
   it.todo(
-    "SCOUT(#222) falls back to reclaimUnpayable when the leaf of a lock is unpayable",
+    "SCOUT(#236) calls reclaimUnpayable for a lock whose leaf is unpayable",
   );
 });

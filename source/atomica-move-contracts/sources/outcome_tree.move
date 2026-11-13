@@ -1,9 +1,10 @@
-// SCOUT(#222) DOC: the header sentence "Each leaf pays the lock's full amount" becomes "these payouts, and the remainder to the depositor"; hashes and vectors do not change.
 /// Outcome tree: the keccak Merkle tree an `auction::AuctionOutcome` commits to.
 ///
-/// One leaf per lock claimed into the auction window, sorted by lock id. Each
-/// leaf pays the lock's full amount to (Ethereum recipient, amount) payouts.
-/// Ethereum LockBox verifies leaves and non-membership against the root.
+/// One leaf per lock claimed into the auction window, sorted by lock id. A leaf
+/// means: these (Ethereum recipient, amount) payouts, and the remainder of the
+/// lock to its depositor. Ethereum LockBox verifies leaves and non-membership
+/// against the root, and returns a lock whose leaf it cannot pay (a sum above
+/// the lock amount, or a zero recipient) to its depositor.
 ///
 /// Mirrors, byte for byte, `source/evm-contracts/src/escrow/OutcomeTree.sol`
 /// and `source/atomica-sdk/src/settlement/outcome-tree.ts`. The shared fixture

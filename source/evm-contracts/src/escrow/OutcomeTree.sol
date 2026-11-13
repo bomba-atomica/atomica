@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-// SCOUT(#222) DOC: the comment below must say what a leaf means: its payouts, then the remainder of the lock to the depositor; no hash changes, so the shared fixture stays valid.
 /**
  * @title OutcomeTree
  * @notice Keccak Merkle tree over an auction's dispositions: one leaf per lock, sorted by lock id.
@@ -16,6 +15,11 @@ pragma solidity ^0.8.20;
  *      node without a partner moves up unchanged. The root of one leaf is that leaf. A proof lists
  *      the siblings from the leaf up and skips the levels where the node moves up alone, so the
  *      verifier needs the leaf index and the leaf count.
+ *
+ *      A leaf means: these payouts, then the remainder of the lock to its depositor. The payouts may
+ *      sum below the lock amount, and an empty list returns the whole lock. A sum above the amount
+ *      or a zero recipient makes the leaf unpayable, and LockBox returns that lock whole
+ *      (`reclaimUnpayable`). The hashes above do not depend on this rule.
  */
 library OutcomeTree {
     /// @notice One payout of a lock: `amount` of the lock's token to `recipient`.

@@ -6,17 +6,18 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IAptosLightClient} from "../aptos/IAptosLightClient.sol";
 import {OutcomeTree} from "./OutcomeTree.sol";
 
-// SCOUT(#222) DOC: "Every lock ends in one of two ways" below gains `reclaimUnpayable`, and a leaf means "these payouts, the remainder to the depositor".
-// SCOUT(#222) DOC: "All or nothing" below no longer holds for a short or unpayable leaf: that lock goes home while other locks of the auction still release.
 // SCOUT(#242) DOC: "no admin, relayer, owner or upgrade key" below cites the decision record; say here too that a recorded outcome trusts the Aptos package upgrade key, if the owner names it (decision 30).
 /**
  * @title LockBox
  * @notice Escrow for FakeETH and FakeUSD locked into Atomica auctions.
- * @dev Every lock ends in one of two ways, and anyone can trigger either:
+ * @dev Every lock ends in one of three ways, and anyone can trigger each:
  *      - `releaseByOutcome`: the Aptos `AuctionOutcome` of the lock's auction, proven through the
  *        Aptos light client and stored by `recordOutcome`, pays the lock out per its leaf.
  *      - `reclaim`: after the lock's deadline the whole amount goes back to its depositor, unless
  *        the auction's recorded outcome covers the lock.
+ *      - `reclaimUnpayable`: the recorded outcome covers the lock with a leaf LockBox cannot pay,
+ *        so the whole amount goes back to its depositor at once.
+ *      A lock that cannot be paid as recorded goes home.
  *      There is no admin, relayer, owner or upgrade key (docs/decisions/trustless-v0-1-unwinding.md).
  *
  *      Auction binding. A lock names its auction: `auctionKey(windowId, pairHash)`. LockBox computes
@@ -24,9 +25,16 @@ import {OutcomeTree} from "./OutcomeTree.sol";
  *      (equal to `eth_proof::eth_lock_deadline`). No caller supplies a deadline, so every lock of an
  *      auction shares one deadline, and no lock can be stranded behind a far-future one.
  *
- *      All or nothing. If any lock of an auction is reclaimed before that auction has a recorded
- *      outcome, `auctionReclaimed` is set and no outcome can be recorded for it afterwards. So an
- *      auction settles on Ethereum fully or not at all.
+ *      No outcome after a reclaim. If any lock of an auction is reclaimed before that auction has a
+ *      recorded outcome, `auctionReclaimed` is set and no outcome can be recorded for it
+ *      afterwards. Once an outcome is recorded, each lock in it closes on its own: a lock whose
+ *      leaf is unpayable goes home by `reclaimUnpayable` while the other locks still release.
+ *
+ *      Leaf rule. A leaf means: these payouts, and the remainder to the depositor. Payouts that sum
+ *      below the lock amount send `amount - sum` to the depositor; an empty list returns the whole
+ *      lock. A leaf is unpayable when its payouts sum above the lock amount, when the sum
+ *      overflows, or when a recipient is the zero address. The leaf hash binds the payout list,
+ *      so nobody can shorten a certified leaf to steer a remainder.
  *
  *      Outcome tree. `OutcomeTree` (mirrored by `atomica::outcome_tree` and the SDK's
  *      settlement/outcome-tree.ts) commits to one leaf per lock, sorted by lock id. A lock outside
@@ -136,12 +144,12 @@ contract LockBox {
         uint64 aptosVersion
     );
 
-    // SCOUT(#222) EDIT: a release may now also send a remainder to the depositor; decide whether this event carries that amount.
+    /// @dev A remainder sent to the depositor is not in the event; it is `amount` minus the leaf's sum.
     event LockReleased(bytes32 indexed lockId, bytes32 indexed auctionKey);
 
     event LockReclaimed(bytes32 indexed lockId, address indexed depositor, uint256 amount);
 
-    // SCOUT(#222) ADD: emitted by `reclaimUnpayable`; or reuse `LockReclaimed` and delete this.
+    /// @notice Emitted by `reclaimUnpayable`: the lock's leaf is unpayable, so `amount` went home.
     event LockReclaimedUnpayable(
         bytes32 indexed lockId, bytes32 indexed auctionKey, address indexed depositor, uint256 amount
     );
@@ -157,21 +165,20 @@ contract LockBox {
     error BadOutcomeEvent();
     error NoOutcome(bytes32 auctionKey);
     error InvalidProof();
-    // SCOUT(#222) EDIT: raised only when the payouts sum above the lock amount or overflow; a short sum is paid.
+    /// @notice The leaf's payouts sum above the lock amount, or overflow (`sum` is then `type(uint256).max`).
+    ///         A short sum is paid, with the remainder to the depositor.
     error PayoutSumMismatch(uint256 sum, uint256 amount);
     error ZeroRecipient();
     error DeadlineNotReached(uint64 deadline);
     error LockInTree(bytes32 lockId);
 
-    // SCOUT(#222) REMOVE: scout scaffolding; delete it with the last stub of this contract.
-    error NotImplemented();
     /// @notice `lock` names a window below `currentWindowId()`.
     error WindowClosed(uint64 windowId, uint64 current);
     /// @notice `lock` names a window above `currentWindowId() + 1`.
     error WindowTooFarAhead(uint64 windowId, uint64 current);
     /// @notice The constructor's window schedule breaks the `eth_proof::set_window_schedule` rules.
     error InvalidWindowSchedule();
-    // SCOUT(#222) ADD: `reclaimUnpayable` was called for a leaf that `releaseByOutcome` can pay.
+    /// @notice `reclaimUnpayable` was called for a leaf that `releaseByOutcome` can pay.
     error LeafPayable(bytes32 lockId);
 
     // ==================== Constructor ====================
@@ -330,11 +337,13 @@ contract LockBox {
         emit OutcomeRecorded(key, windowId, pairHash, lockDeadline(windowId), root, leafCount, version);
     }
 
-    // SCOUT(#222) EDIT: the `payouts` text below changes: the list may sum to less than the lock amount, and the remainder goes to the depositor.
     /**
      * @notice Pay a lock out per its leaf in the recorded outcome of its auction. Permissionless.
+     * @dev Reverts `ZeroRecipient` or `PayoutSumMismatch` on an unpayable leaf; that lock goes home
+     *      by `reclaimUnpayable`.
      * @param l The lock's fields (checked against its commitment)
-     * @param payouts The leaf's (recipient, amount) list; it must sum to the lock amount
+     * @param payouts The leaf's (recipient, amount) list. It may sum below the lock amount: the
+     *        remainder goes to the depositor after the payouts. An empty list returns the whole lock.
      * @param leaf The leaf's index and Merkle proof
      */
     function releaseByOutcome(
@@ -347,13 +356,13 @@ contract LockBox {
         Outcome memory o = outcomes[key];
         if (o.root == bytes32(0)) revert NoOutcome(key);
 
-        // SCOUT(#222) EDIT: replace this loop and the sum check with the shared unpayable test (`_leafUnpayable`): revert on a zero recipient, a sum above `l.amount` or an overflow, and accept a short sum.
-        uint256 sum;
-        for (uint256 i = 0; i < payouts.length; i++) {
-            if (payouts[i].recipient == address(0)) revert ZeroRecipient();
-            sum += payouts[i].amount;
+        (bool unpayable, uint256 sum) = _leafUnpayable(l.amount, payouts);
+        if (unpayable) {
+            for (uint256 i = 0; i < payouts.length; i++) {
+                if (payouts[i].recipient == address(0)) revert ZeroRecipient();
+            }
+            revert PayoutSumMismatch(sum, l.amount);
         }
-        if (sum != l.amount) revert PayoutSumMismatch(sum, l.amount);
         bytes32 leafHash = OutcomeTree.leafHash(lockId, OutcomeTree.payoutsHash(payouts));
         if (!OutcomeTree.verify(leafHash, leaf.index, o.leafCount, leaf.proof, o.root)) revert InvalidProof();
 
@@ -362,7 +371,7 @@ contract LockBox {
         for (uint256 i = 0; i < payouts.length; i++) {
             if (payouts[i].amount > 0) IERC20(l.token).safeTransfer(payouts[i].recipient, payouts[i].amount);
         }
-        // SCOUT(#222) ADD: after the payouts, send `l.amount - sum` to `l.depositor` when the sum is below the lock amount.
+        if (sum < l.amount) IERC20(l.token).safeTransfer(l.depositor, l.amount - sum);
     }
 
     // ==================== Reclaim ====================
@@ -393,12 +402,34 @@ contract LockBox {
         IERC20(l.token).safeTransfer(l.depositor, l.amount);
     }
 
-    // SCOUT(#222) ADD: `reclaimUnpayable(Lock calldata l, OutcomeTree.Payout[] calldata payouts, OutcomeTree.LeafProof calldata leaf)`; becomes `external`, not virtual; proves the leaf against the recorded outcome, requires it to be unpayable, and returns the whole lock to its depositor with no deadline wait.
-    function reclaimUnpayable(Lock calldata, OutcomeTree.Payout[] calldata, OutcomeTree.LeafProof calldata)
-        internal
-        virtual
-    {
-        revert NotImplemented();
+    /**
+     * @notice Return a lock to its depositor when its leaf in the recorded outcome is unpayable.
+     *         Permissionless, with no deadline wait: a recorded outcome is final, so that leaf can
+     *         never be released.
+     * @dev Checks in order: the lock is open, its auction has a recorded outcome (`NoOutcome`), the
+     *      leaf's proof holds (`InvalidProof`), and the leaf is unpayable (`LeafPayable`). It does
+     *      not set `auctionReclaimed`: the other locks of the auction still release.
+     * @param l The lock's fields (checked against its commitment)
+     * @param payouts The leaf's (recipient, amount) list
+     * @param leaf The leaf's index and Merkle proof
+     */
+    function reclaimUnpayable(
+        Lock calldata l,
+        OutcomeTree.Payout[] calldata payouts,
+        OutcomeTree.LeafProof calldata leaf
+    ) external {
+        bytes32 lockId = _openLock(l);
+        bytes32 key = auctionKey(l.windowId, l.pairHash);
+        Outcome memory o = outcomes[key];
+        if (o.root == bytes32(0)) revert NoOutcome(key);
+        bytes32 leafHash = OutcomeTree.leafHash(lockId, OutcomeTree.payoutsHash(payouts));
+        if (!OutcomeTree.verify(leafHash, leaf.index, o.leafCount, leaf.proof, o.root)) revert InvalidProof();
+        (bool unpayable,) = _leafUnpayable(l.amount, payouts);
+        if (!unpayable) revert LeafPayable(lockId);
+
+        statuses[lockId] = Status.Reclaimed;
+        emit LockReclaimedUnpayable(lockId, key, l.depositor, l.amount);
+        IERC20(l.token).safeTransfer(l.depositor, l.amount);
     }
 
     // ==================== Internal ====================
@@ -412,9 +443,24 @@ contract LockBox {
         if (s != Status.Open) revert LockNotOpen(lockId, s);
     }
 
-    // SCOUT(#222) ADD: `_leafUnpayable(uint256 amount, OutcomeTree.Payout[] calldata payouts)` returns (unpayable, sum); unpayable means a zero recipient, a sum above `amount`, or a sum that overflows; it must not revert on overflow.
-    function _leafUnpayable(uint256, OutcomeTree.Payout[] calldata) internal pure returns (bool, uint256) {
-        revert NotImplemented();
+    /// @dev Whether a leaf is unpayable for a lock of `amount`, and the sum of its payouts. Unpayable
+    ///      means a zero recipient, a sum above `amount`, or a sum that overflows. It never reverts:
+    ///      a panic here would freeze the lock. On overflow `sum` is `type(uint256).max`.
+    function _leafUnpayable(uint256 amount, OutcomeTree.Payout[] calldata payouts)
+        internal
+        pure
+        returns (bool unpayable, uint256 sum)
+    {
+        for (uint256 i = 0; i < payouts.length; i++) {
+            if (payouts[i].recipient == address(0)) unpayable = true;
+            unchecked {
+                uint256 next = sum + payouts[i].amount;
+                // forge-lint: disable-next-line(boolean-cst)
+                if (next < sum) return (true, type(uint256).max); // overflow: unpayable
+                sum = next;
+            }
+        }
+        if (sum > amount) unpayable = true;
     }
 
     /// @dev BCS of `AuctionOutcome { window_id: u64, pair_hash: vector<u8>, eth_lock_deadline: u64,
