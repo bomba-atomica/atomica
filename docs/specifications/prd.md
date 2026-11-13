@@ -9,7 +9,6 @@
 **How:** Users lock native assets on their home chains and participate in twice-daily sealed-bid batch auctions. Assets settle 1-3 hours after auction close. Cross-chain atomic trades execute without bridges or custodians.
 
 <!-- SCOUT(#242) DOC: "Non-custodial with minimal lock time" bullet: on main a lock leaves LockBox only by reclaim, 72 h after its window closes, so say what the lock time is today. -->
-<!-- SCOUT(#228) DOC: "Timelock IBE cryptography" bullet: bids open by a submitted (price, salt) pair today; "no interactive reveal phase" holds only once open_bids decrypts on chain. -->
 <!-- SCOUT(#242) DOC: "Encrypted mempools" bullet: only the price is sealed; the bid quantity is a clear argument of submit_bid and no encrypted mempool is used; say so. -->
 <!-- SCOUT(#242) DOC: "Double verification pathways" bullet: label the ZK half as a later-phase item, in the wording the acceptance check greps for. -->
 <!-- SCOUT(#242) DOC: "Zero operator fees" bullet: no fee or rebate exists on chain and Bitcoin is not supported; label the deal-breaker rebate as a later-phase item. -->
@@ -18,7 +17,7 @@
 - **Non-custodial with minimal lock time**: Assets locked only for the auction period—no prolonged custody risk
 - **True cross-chain atomic trades**: Native assets move between chains without bridges, wrapped tokens, or custodians
 - **Twice-daily liquidity concentration**: Two auctions per day aggregate global liquidity rather than fragmenting across time
-- **Timelock IBE cryptography**: Identity-Based Encryption enables sealed bids that automatically decrypt at auction deadline—no interactive reveal phase
+- **Timelock IBE cryptography**: Identity-Based Encryption enables sealed bids that automatically decrypt at auction deadline—no interactive reveal phase. Once the validators release the key, any account calls `open_bids` and the chain decrypts every bid itself; no bidder submits a price or a salt, so none can withhold one
 - **Encrypted mempools**: Bid contents hidden from validators until decryption, eliminating front-running and MEV extraction
 - **High-throughput blockchain**: Built on Aptos-core infrastructure (Move VM, BLS signatures, parallel execution) for scalable auction processing
 - **Double verification pathways**: BLS threshold signatures for consensus (v0.1 Beta), with ZK proofs for independent computation verification (v1.0+)—both must agree for settlement in v1.0
@@ -76,14 +75,13 @@ Atomica introduces **Atomic Auctions**: trustless cross-chain execution combined
 - Settlement: 1-3 hours post-auction
 
 <!-- SCOUT(#242) DOC: timeline: no code opens bidding at 12:15 or delays settlement to 17:15; bids run from create_auction to the window timelock deadline, and settle is callable from the reveal. -->
-<!-- SCOUT(#228) DOC: "automatic decryption" at the close needs open_bids; today each bid needs a submitted price and salt. -->
 <!-- SCOUT(#231) DOC: "12:15 UTC Bid window opens": bids can start only in the chain epoch that holds the close, so the opening time depends on the epoch ends the owner picks. -->
 
 **Example Timeline (16:15 UTC Auction):**
 ```
 12:15 UTC  Bid window opens (users lock assets on away chains)
 12:15-16:15 UTC  Bid submission window (sealed bids)
-16:15 UTC  Auction close & automatic decryption (all assets simultaneously)
+16:15 UTC  Auction close & automatic decryption on chain (open_bids, all assets simultaneously)
 16:15 UTC  Clearing price determined for each pair (uniform price auction)
 16:15-17:15 UTC  Settlement window (verification & hedging)
 17:15 UTC  Settlement (native assets delivered atomically)
@@ -142,7 +140,6 @@ No trusted oracles or bridges.
 
 <!-- SCOUT(#242) DOC: Sealed Bid Implementation: only the validator timelock layer exists; label the onion layers, the seller DKG layer and the Drand layer as later-phase items. -->
 <!-- SCOUT(#242) DOC: the 67 percent sentence (owner decision 31): the fork keeps bids secret only against at most one half of stake and needs two thirds to reveal; the seller-set 33 percent is unbuilt. -->
-<!-- SCOUT(#228) DOC: after on-chain opening, a ciphertext that does not decrypt to an 8-byte price is also an invalid bid. -->
 
 **N-Layer "Onion" Timelock Encryption:** Bids encrypted using pluggable, configurable layers.
 
@@ -150,7 +147,7 @@ No trusted oracles or bridges.
 1. **Outer Layer:** Atomica Validator Timelock (BLS12-381) - Decrypts at auction deadline
 2. **Inner Layer:** Seller Group DKG (BLS12-381) - Decrypts only if Sellers (stake-weighted) participate
 
-This prevents "Invisible Handshake" attacks where validators collude off-chain. Decryption requires cooperation from BOTH the Validator Set (>67%) AND the Seller Set (>33%). Invalid bids are filtered when their price is opened: a bid with a zero price, or whose collateral does not cover its quantity at its own price, is invalid, never fills, and gets its whole collateral back. A bid with a zero quantity or a quantity above the window supply is refused at submission.
+This prevents "Invisible Handshake" attacks where validators collude off-chain. Decryption requires cooperation from BOTH the Validator Set (>67%) AND the Seller Set (>33%). Invalid bids are filtered when the chain opens them: a bid whose ciphertext does not decrypt to an 8-byte price, a bid with a zero price, or whose collateral does not cover its quantity at its own price, is invalid, never fills, and gets its whole collateral back. A bid with a zero quantity or a quantity above the window supply is refused at submission.
 
 **Orthogonal Key Generation:** How each layer generates its keys (DKG, beacon, threshold) is independent of the onion encryption structure. Layers can be composed freely:
 - Validators only, Validators + Drand, Validators + Sellers, Validators + Drand + Sellers, etc.

@@ -87,17 +87,17 @@ one or two close offsets (`DeployLockBox.productionWindowSchedule()`:
 ### Settle deadline, stuck deadline and lock deadline
 
 <!-- SCOUT(#242) DOC: the settle and stuck deadline bullets describe open pull request 213: main has no stuck deadline, no unwind and no time limit on settle. -->
-<!-- SCOUT(#228) DOC: stuck deadline bullet: drop "plus the 10-minute opening window (OPENING_WINDOW_US)", and drop OPENING_WINDOW_US from the stuck_deadline_us block that open pull request 213 adds below. -->
 
 The owner decision of 2026-11-11 (issue 194) keeps two Aptos deadlines apart
 from the Ethereum lock deadline:
 
 - **Settle.** From reveal onward, any account may call `settle`. It honours
   the cleared fills and stays callable until the window's stuck deadline.
-- **Stuck deadline** (issue 194): the reveal deadline plus the 10-minute
-  opening window (`OPENING_WINDOW_US`) plus the unwind grace. After it, any
-  account may `unwind` the window, and every coin it still holds goes back to
-  its depositor.
+- **Stuck deadline** (issues 194, 228): the reveal deadline plus the unwind
+  grace. There is no opening window: the chain opens bids itself with
+  `open_bids` once the key is revealed. A window whose bids nobody opens by the
+  stuck deadline unwinds. After it, any account may `unwind` the window, and
+  every coin it still holds goes back to its depositor.
 - **Carrier margin:** the time any user needs to fetch the outcome proof from
   an Atomica node and call `LockBox.recordOutcome` on Ethereum, including any
   light client epoch advance.
@@ -117,22 +117,19 @@ and the configured values never change after `create_auction`.
 On Aptos (all times in microseconds):
 
 ```
-stuck_deadline_us = timelock reveal expiry + OPENING_WINDOW_US + unwind grace
+stuck_deadline_us = timelock reveal expiry + unwind grace
 settle:  timelock deadline <= now < stuck_deadline_us
 unwind:  now >= stuck_deadline_us
 ```
 
 `auction::get_stuck_deadline_us(window_id, pair_bcs)` returns it.
 
-<!-- SCOUT(#228) DOC: budget table: remove the "Opening window, 10 min" row. -->
-
 | Segment | Budget within the 72 h delay |
 | --- | --- |
 | Window close to reveal deadline (key release) | 10 min (reveal window) |
-| Opening window | 10 min |
 | Unwind grace (stuck deadline) | 24 h |
 | Carrier margin | 24 h |
-| **Total** | **48 h 20 min, within 72 h** |
+| **Total** | **48 h 10 min, within 72 h** |
 
 The 72 h reclaim delay that LockBox freezes at deploy bounds the total. The
 timelock deadline is the window close, so the first row is only the reveal

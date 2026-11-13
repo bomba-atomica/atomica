@@ -580,7 +580,7 @@ jobs:
     runs-on: ubuntu-latest
     # On the 900:900 test window schedule a chunk waits up to one 900-second
     # window for its close. The unwind chunk then waits about 25 more minutes
-    # for the stuck deadline (reveal window, opening window, shortened grace).
+    # for the stuck deadline (reveal window, shortened grace).
     timeout-minutes: ${{ matrix.chunk == 'unwind' && 90 || 75 }}
     env:
       CI_CLASS: feature-correctness
