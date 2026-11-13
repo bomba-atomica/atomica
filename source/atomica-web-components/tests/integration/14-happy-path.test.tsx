@@ -854,17 +854,22 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         (window as unknown as { ethereum: ethers.Eip1193Provider }).ethereum,
       );
       const rpc = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
-      const head = await rpc.getBlock("latest");
       // The window clock is the chain's: the test schedule on the testnet.
       const schedule = await getChainWindowSchedule(aptosClient, moduleAddr);
       const amount = 1_000_000n;
       await approveFakeUsd(provider, amount);
+      // Bind to the window 60 s past the later of the anvil head and the host
+      // clock. A 900 s window can close between this read and the lock block;
+      // LockBox accepts the current and the next window, so the lock still
+      // lands in an open window.
+      const head = await rpc.getBlock("latest");
+      const nowSecs = BigInt(Math.max(head!.timestamp, Math.floor(Date.now() / 1000)));
       const lock = lockFromReceipt(
         await lockFakeUsd(
           provider,
           amount,
           lockBinding(
-            hostWindowId(BigInt(head!.timestamp), schedule),
+            hostWindowId(nowSecs + 60n, schedule),
             new TextEncoder().encode("14-pin"),
             schedule,
           ),
