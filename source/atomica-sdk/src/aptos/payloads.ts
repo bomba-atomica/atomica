@@ -7,6 +7,7 @@ import { CONTRACT_ADDR, aptos } from "./config.js";
 import { getDerivedAddress } from "../siwe.js";
 import { submitNativeTransaction } from "../transaction.js";
 import type { LockedBalanceProof } from "../ethereum/proofs/generator.js";
+import { LAUNCH_PAIR_BCS } from "../settlement/bridge.js";
 import {
   setPinnedEthereumConfigReader,
   type PinnedEthereumConfig,
@@ -138,15 +139,39 @@ export async function areCoreContractsDeployed(): Promise<boolean> {
   }
 }
 
-// SCOUT(#224) ADD: export LAUNCH_PAIR_BCS here, the BCS of Pair { ethereum, FakeETH, aptos, FakeUSD } (0x08657468657265756d0746616b65455448056170746f730746616b65555344), as the default pairBcs of every client.
-// SCOUT(#224) ADD: reader for the allowlist view that tells whether pair bytes are allowed.
-export async function isPairAllowed(_pairBcs: Uint8Array): Promise<boolean> {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#224) isPairAllowed");
+/** The launch pair bytes, the default `pairBcs` of every client. */
+export { LAUNCH_PAIR_BCS };
+
+/**
+ * Query `auction::is_pair_allowed`: whether a window may be created for these
+ * pair bytes.
+ *
+ * @see docs/architecture/v0-architecture.md §2.3
+ */
+export async function isPairAllowed(pairBcs: Uint8Array): Promise<boolean> {
+  const result = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::auction::is_pair_allowed`,
+      functionArguments: [pairBcs],
+    },
+  });
+  return result[0] as boolean;
 }
 
-// SCOUT(#224) ADD: reader for the view that returns the launch pair bytes.
+/**
+ * Query `auction::launch_pair_bcs`: the launch pair bytes as the chain
+ * computes them. They equal {@link LAUNCH_PAIR_BCS}.
+ *
+ * @see docs/architecture/v0-architecture.md §2.4
+ */
 export async function getLaunchPairBcs(): Promise<Uint8Array> {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#224) getLaunchPairBcs");
+  const result = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::auction::launch_pair_bcs`,
+      functionArguments: [],
+    },
+  });
+  return ethers.getBytes(result[0] as string);
 }
 
 // SCOUT(#243) EDIT: drop the timelockId parameter and argument; create_auction registers the window's timelock itself.
@@ -156,8 +181,8 @@ export async function getLaunchPairBcs(): Promise<Uint8Array> {
  *
  *   create_auction(seller, window_id, pair_bcs, lock_id, timelock_id)
  *
- * `pairBcs` is the BCS-encoded Pair struct; callers can compute it with
- * `bcs.serialize` or pass a pre-encoded byte array.
+ * `pairBcs` must be on the pair allowlist (`E_PAIR_NOT_ALLOWED` otherwise);
+ * pass {@link LAUNCH_PAIR_BCS}.
  * There is no reserve price: clearing alone sets the price.
  * `timelockId` is the id that `ibe_config::register_timelock` returned for the
  * window's deadline. Register it first with {@link registerTimelock}.

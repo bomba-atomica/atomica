@@ -33,6 +33,7 @@ import { decryptBid } from "../src/ibe/index.js";
 import { encryptBid } from "@atomica/state-proof-verifier/ibe";
 import { computeBidCommitment, encodeBidPlaintext } from "../src/ibe/bid.js";
 import * as config from "../src/aptos/config.js";
+import { LAUNCH_PAIR_BCS } from "../src/settlement/bridge.js";
 
 const MPK =
   "0x90292b69a7de0fcb812677b5ff6a1cce5e6675d44c3417946bba5c105c5dfd9c93ad4141fad344c53d7ef6064c6ef58515b82c5db29ce4adf611f88dcd5d80b1f296e469088bd7f5c541c8591652590fbcf75acd409b6d7cb97f62ba9d1154e1";
@@ -50,8 +51,7 @@ const CHAIN_ID = 7;
 const EPOCH = 3n;
 const DEADLINE_US = 1_700_000_000_000_000n;
 const WINDOW = 5n;
-// SCOUT(#224) EDIT: use LAUNCH_PAIR_BCS; empty pair bytes name no window once the allowlist exists.
-const PAIR = new Uint8Array(0);
+const PAIR = LAUNCH_PAIR_BCS;
 const TIMELOCK = 11n;
 
 function bytes(h: string): Uint8Array {

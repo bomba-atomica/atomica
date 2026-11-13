@@ -69,8 +69,11 @@ export function ethLockDeadline(windowId: bigint): bigint {
   return windowCloseSecs(windowId) + ETH_RECLAIM_DELAY_SECS;
 }
 
-// SCOUT(#224) EDIT: callers must pass the allowlisted pair bytes (LAUNCH_PAIR_BCS); a lock bound to other bytes cannot join a window.
-/** Pair hash of a window: keccak256 of its pair BCS (the window key's pair bytes). */
+/**
+ * Pair hash of a window: keccak256 of its pair BCS (the window key's pair
+ * bytes). Callers pass listed pair bytes (`LAUNCH_PAIR_BCS`): a lock bound to
+ * other bytes can never join a window and goes home through reclaim.
+ */
 export function pairHashOf(pairBcs: Uint8Array): string {
   return ethers.keccak256(pairBcs);
 }

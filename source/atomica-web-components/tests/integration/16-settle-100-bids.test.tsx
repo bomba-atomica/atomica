@@ -55,6 +55,7 @@ import {
 } from "@atomica/sdk/aptos";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
 // SCOUT(#218) EDIT: fill the same window to the seller cap as well (proposed 100 seller locks).
 const BID_COUNT = 100;
@@ -73,8 +74,8 @@ const SUPPLY = BID_QUANTITY * 50n;
 const COLLATERAL = 50n * 10n ** 6n;
 // SCOUT(#216) EDIT: COLLATERAL above: on main each bid needs quoteForFill(0.1 FakeETH, price), up to 199,000 FakeUSD, against 50 FakeUSD locked; pull request 213 already shrinks BID_QUANTITY to 0.00002 FakeETH (at most 39.8 FakeUSD), so after 213 every bid is valid.
 // SCOUT(#218) EDIT: COLLATERAL above (50 FakeUSD per bid) must stay at or above the minimum collateral.
-// SCOUT(#224) EDIT: use the launch pair.
-const PAIR_BCS = new TextEncoder().encode("16-settle-100-bids");
+// The launch pair: the only pair on the allowlist.
+const PAIR_BCS = LAUNCH_PAIR_BCS;
 // SCOUT(#243) EDIT: a 300 second deadline needs the test cap.
 const DEADLINE_AHEAD_US = 300_000_000n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */

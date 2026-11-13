@@ -11,6 +11,8 @@
  *   - getMpk         → timelock::get_mpk    → Uint8Array
  *   - isRevealed     → timelock::is_revealed → boolean
  *   - getPinnedEthereumConfig → eth_proof::get_config → { lockBox, fakeETH, fakeUSD }
+ *   - isPairAllowed  → auction::is_pair_allowed   → boolean
+ *   - getLaunchPairBcs → auction::launch_pair_bcs → Uint8Array
  *
  * @see source/atomica-sdk/src/aptos/payloads.ts
  * @see docs/architecture/v0-architecture.md §2 — sealed-bid reveal path
@@ -47,6 +49,9 @@ import {
   getMpk,
   isRevealed,
   getPinnedEthereumConfig,
+  isPairAllowed,
+  getLaunchPairBcs,
+  LAUNCH_PAIR_BCS,
 } from "../src/aptos/payloads.js";
 import * as config from "../src/aptos/config.js";
 
@@ -268,12 +273,40 @@ describe("areCoreContractsDeployed", () => {
   });
 });
 
+describe("pair allowlist views", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("isPairAllowed and getLaunchPairBcs read the allowlist views", async () => {
+    vi.mocked(config.aptos.view).mockResolvedValueOnce([true]);
+    await expect(isPairAllowed(LAUNCH_PAIR_BCS)).resolves.toBe(true);
+    expect(config.aptos.view).toHaveBeenLastCalledWith({
+      payload: {
+        function: "0xdeadbeef::auction::is_pair_allowed",
+        functionArguments: [LAUNCH_PAIR_BCS],
+      },
+    });
+
+    vi.mocked(config.aptos.view).mockResolvedValueOnce([false]);
+    await expect(isPairAllowed(PAIR_BCS)).resolves.toBe(false);
+
+    vi.mocked(config.aptos.view).mockResolvedValueOnce([
+      "0x08657468657265756d0746616b6545544808657468657265756d0746616b65555344",
+    ]);
+    await expect(getLaunchPairBcs()).resolves.toEqual(LAUNCH_PAIR_BCS);
+    expect(config.aptos.view).toHaveBeenLastCalledWith({
+      payload: {
+        function: "0xdeadbeef::auction::launch_pair_bcs",
+        functionArguments: [],
+      },
+    });
+  });
+});
+
 describe("planned tests (SCOUT)", () => {
   it.todo(
     "SCOUT(#218) getWindowLimits reads the limits view and returns the bid cap, the seller cap and the two minimums",
-  );
-  it.todo(
-    "SCOUT(#224) isPairAllowed and getLaunchPairBcs read the allowlist views",
   );
   it.todo(
     "SCOUT(#243) getWindowTimelock and getWindowDeadlineUs read the new window views",

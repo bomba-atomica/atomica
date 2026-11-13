@@ -41,7 +41,7 @@ module atomica::integration_tests {
         auction::init_for_test(atomica);
         lock_receipt::initialize<Ethereum, FakeETH>(atomica);
         lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
-        let pair = b"e2e-unwind-pair";
+        let pair = auction::launch_pair_bcs();
         let window_id = auction::current_window_id();
         let pair_hash = auction::pair_hash(pair);
         let timelock_id = atomica::auction_bid_wrapper_tests::register_live_timelock();

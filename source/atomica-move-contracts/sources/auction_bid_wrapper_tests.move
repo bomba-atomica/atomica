@@ -34,10 +34,10 @@ module atomica::auction_bid_wrapper_tests {
     const TIMELOCK_ID: u64 = 11;
     const AUCTION_ID: u64 = 5;
     // SCOUT(#218) EDIT: the 5 wei seller locks (SUPPLY) and the 1000-unit FakeUSD receipts of this file are below the proposed minimums; 56 of the 63 tests of this file go through `submit_bid` or `create_auction` and need new amounts.
-    // SCOUT(#224) EDIT: `pair()` is not the BCS of a `Pair`; use the launch pair bytes or add this test pair to the allowlist.
     const SUPPLY: u256 = 5u256;
 
-    fun pair(): vector<u8> { b"eth-fakeusd" }
+    // The launch pair bytes, on the allowlist after `init_module`.
+    fun pair(): vector<u8> { auction::launch_pair_bcs() }
 
     const GOLDEN_LOCK: vector<u8> = b"usd_lock_golden_bidder_32bytes__";
     const SELLER_LOCK: vector<u8> = b"eth_lock_seller_32bytes_________";
@@ -989,8 +989,10 @@ module atomica::auction_bid_wrapper_tests {
     // attacks and pin the abort code that now stops each one.
 
 
-    // Lock registries plus one FakeETH seller receipt of 5 at @atomica.
+    // The published auction package (registry and pair allowlist), lock registries, and one
+    // FakeETH seller receipt of 5 at @atomica.
     fun setup_seller_receipt(atomica: &signer) {
+        auction::init_for_test(atomica);
         lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
         lock_receipt::initialize<Ethereum, FakeETH>(atomica);
         lock_receipt::insert_test_receipt<Ethereum, FakeETH>(SELLER_LOCK, @atomica, 5u256, 1);

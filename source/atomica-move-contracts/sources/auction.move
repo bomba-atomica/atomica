@@ -85,7 +85,6 @@ module atomica::auction {
     const E_WINDOW_ALREADY_SETTLED: u64 = 11;
 
     /// Scout stub sentinel. These stubs abort with it until their issues build them:
-    /// `allow_pair`, `is_pair_allowed` and `launch_pair_bcs` (pair allowlist, 224),
     /// `get_window_limits` (caps, 218), `open_bids` (ciphertext opening, 228), and
     /// `timelock_registrar_address`, `window_timelock` and `window_deadline_us`
     /// (timelock registration, 243). The issue that builds the last stub deletes it.
@@ -107,11 +106,9 @@ module atomica::auction {
     // SCOUT(#218) ADD: `submit_bid` aborts with `E_COLLATERAL_TOO_SMALL` when the claimed collateral is below `MIN_BID_COLLATERAL`.
     /// The bid collateral is below the minimum collateral size.
     const E_COLLATERAL_TOO_SMALL: u64 = 41;
-    // SCOUT(#224) ADD: `create_auction` aborts with `E_PAIR_NOT_ALLOWED` when `pair_bcs` is not on the allowlist.
-    /// The pair is not on the allowlist.
+    /// `create_auction`: the pair bytes are not on the allowlist.
     const E_PAIR_NOT_ALLOWED: u64 = 42;
-    // SCOUT(#224) ADD: `allow_pair` aborts with `E_NOT_PACKAGE_ACCOUNT` for a signer other than `@atomica`.
-    /// Only the package account may add a pair.
+    /// `allow_pair`: only the package account may add a pair.
     const E_NOT_PACKAGE_ACCOUNT: u64 = 43;
 
     /// `ibe::verify_bid_ct` rejected the ciphertext for the associated data built on chain.
@@ -212,12 +209,14 @@ module atomica::auction {
     struct Pair has copy, drop, store {
         base_chain:  vector<u8>,   // e.g. b"ethereum"
         base_token:  vector<u8>,   // e.g. b"FakeETH"
-        quote_chain: vector<u8>,   // e.g. b"aptos"
+        quote_chain: vector<u8>,   // e.g. b"ethereum"
         quote_token: vector<u8>,   // e.g. b"FakeUSD"
     }
 
-    // SCOUT(#224) ADD: the pair allowlist stored at `@atomica`: pair bytes to `Pair`. `init_module` seeds the launch pair.
-    /// Pairs a window may be created for. Key: the BCS bytes of the `Pair`.
+    /// Pairs a window may be created for, stored at `@atomica`. Key: the BCS bytes of the
+    /// `Pair`, so the key is always `bcs::to_bytes` of its value. `init_module` seeds the
+    /// launch pair, and `allow_pair` adds more.
+    /// @see docs/architecture/v0-architecture.md §2.4
     struct PairAllowlist has key {
         pairs: Table<vector<u8>, Pair>,
     }
@@ -477,10 +476,24 @@ module atomica::auction {
 
     /// Publish the global AuctionRegistry at @atomica when the package is
     /// published, so the first `create_auction` may come from any seller.
-    // SCOUT(#224) EDIT: `init_module` also publishes `PairAllowlist` with the launch pair.
+    /// Also publish the `PairAllowlist`, seeded with the launch pair.
     // SCOUT(#243) EDIT: `init_module` also creates the registrar object and stores `TimelockRegistrar`.
     fun init_module(atomica: &signer) {
         move_to(atomica, AuctionRegistry { windows: table::new() });
+        let pairs = table::new();
+        table::add(&mut pairs, launch_pair_bcs(), launch_pair());
+        move_to(atomica, PairAllowlist { pairs });
+    }
+
+    /// The launch pair: FakeETH against FakeUSD, both locked on Ethereum. The token names
+    /// match the receipt types `lock_receipt::FakeETH` and `lock_receipt::FakeUSD`.
+    fun launch_pair(): Pair {
+        Pair {
+            base_chain:  b"ethereum",
+            base_token:  b"FakeETH",
+            quote_chain: b"ethereum",
+            quote_token: b"FakeUSD",
+        }
     }
 
     #[test_only]
@@ -508,6 +521,9 @@ module atomica::auction {
     /// calling this for the same `(window_id, pair)` accumulate into the same
     /// clearing pool.
     ///
+    /// Pair: `pair_bcs` must be on the allowlist (E_PAIR_NOT_ALLOWED). A new window stores
+    /// the `Pair` the allowlist holds for those bytes.
+    ///
     /// Timing: the timelock's stuck deadline plus the carrier margin must be before
     /// `eth_lock_deadline(window_id)` (E_STUCK_AFTER_LOCK_DEADLINE). The seller lock must be
     /// bound to `(window_id, pair_hash(pair_bcs))` (lock_receipt E_WRONG_BINDING).
@@ -533,7 +549,6 @@ module atomica::auction {
     ///
     /// @see docs/architecture/v0-architecture.md §2.3
     // SCOUT(#218) EDIT: `create_auction` aborts when the window holds `MAX_SELLER_LOCKS_PER_WINDOW` locks, or when the claimed lock is below `MIN_SELLER_LOCK_AMOUNT`.
-    // SCOUT(#224) EDIT: `create_auction` aborts unless `pair_bcs` is on the allowlist; a new window stores the listed `Pair`.
     // SCOUT(#243) EDIT: `create_auction` drops `timelock_id`; the first call for a window id registers its timelock with deadline `eth_proof::window_close_secs(window_id)`, later calls join it.
     public entry fun create_auction(
         seller:      &signer,
@@ -541,11 +556,15 @@ module atomica::auction {
         pair_bcs:    vector<u8>,
         lock_id:     vector<u8>,
         timelock_id: u64,
-    ) acquires AuctionRegistry {
+    ) acquires AuctionRegistry, PairAllowlist {
         // 1. Validate window_id: reject stale (< current) and far-future (> current + 1).
         let current = current_window_id();
         assert!(window_id >= current, E_STALE_WINDOW_ID);
         assert!(window_id <= current + 1, E_STALE_WINDOW_ID);
+
+        // 1a. The pair must be on the allowlist. A new window stores the listed `Pair`.
+        assert!(is_pair_allowed(pair_bcs), E_PAIR_NOT_ALLOWED);
+        let listed_pair = *table::borrow(&borrow_global<PairAllowlist>(@atomica).pairs, pair_bcs);
 
         // 1b. The timelock must be able to take bids: registered, current epoch, `Pending`,
         //     deadline in the future. Otherwise the seller lock would back a window that can
@@ -577,15 +596,8 @@ module atomica::auction {
 
         if (!table::contains(&registry.windows, key)) {
             // First seller for this (window_id, pair) — create a fresh WindowState.
-            // SCOUT(#224) EDIT: take the `Pair` from the allowlist instead of this hardcoded one (its `quote_chain` says "aptos", but bidders lock FakeUSD on Ethereum).
-            let base_pair = Pair {
-                base_chain:  b"ethereum",
-                base_token:  b"FakeETH",
-                quote_chain: b"aptos",
-                quote_token: b"FakeUSD",
-            };
             table::add(&mut registry.windows, key, WindowState {
-                pair:            base_pair,
+                pair:            listed_pair,
                 window_id,
                 timelock_id,
                 total_supply:    (locked_amount as u256),
@@ -606,16 +618,23 @@ module atomica::auction {
         };
     }
 
-    // SCOUT(#224) ADD: the package account adds a pair from its four fields; the contract computes the BCS key itself.
-    /// Adds a pair to the allowlist. Only `@atomica` may call it.
+    /// Adds a pair to the allowlist from its four fields. Only `@atomica` may call it
+    /// (E_NOT_PACKAGE_ACCOUNT). The contract computes the key, `bcs::to_bytes` of the `Pair`.
+    /// Adding a pair that is already listed is a no-op.
     public entry fun allow_pair(
-        _atomica:     &signer,
-        _base_chain:  vector<u8>,
-        _base_token:  vector<u8>,
-        _quote_chain: vector<u8>,
-        _quote_token: vector<u8>,
-    ) {
-        abort E_NOT_IMPLEMENTED
+        atomica:     &signer,
+        base_chain:  vector<u8>,
+        base_token:  vector<u8>,
+        quote_chain: vector<u8>,
+        quote_token: vector<u8>,
+    ) acquires PairAllowlist {
+        assert!(signer::address_of(atomica) == @atomica, E_NOT_PACKAGE_ACCOUNT);
+        let pair = Pair { base_chain, base_token, quote_chain, quote_token };
+        let key = bcs::to_bytes(&pair);
+        let allowlist = borrow_global_mut<PairAllowlist>(@atomica);
+        if (!table::contains(&allowlist.pairs, key)) {
+            table::add(&mut allowlist.pairs, key, pair);
+        };
     }
 
     #[view]
@@ -1582,16 +1601,18 @@ module atomica::auction {
         abort E_NOT_IMPLEMENTED
     }
 
-    // SCOUT(#224) ADD: whether `pair_bcs` is on the allowlist.
     #[view]
-    public fun is_pair_allowed(_pair_bcs: vector<u8>): bool {
-        abort E_NOT_IMPLEMENTED
+    /// Whether `pair_bcs` is on the allowlist.
+    public fun is_pair_allowed(pair_bcs: vector<u8>): bool acquires PairAllowlist {
+        exists<PairAllowlist>(@atomica)
+            && table::contains(&borrow_global<PairAllowlist>(@atomica).pairs, pair_bcs)
     }
 
-    // SCOUT(#224) ADD: the BCS bytes of the launch pair; the SDK exports the same bytes as a constant.
     #[view]
+    /// The BCS bytes of the launch pair (computed, reads no storage). The SDK exports the
+    /// same bytes as `LAUNCH_PAIR_BCS`.
     public fun launch_pair_bcs(): vector<u8> {
-        abort E_NOT_IMPLEMENTED
+        bcs::to_bytes(&launch_pair())
     }
 
     // SCOUT(#243) ADD: the registrar's address, `object::create_object_address(&@atomica, TIMELOCK_REGISTRAR_SEED)`.
@@ -1768,6 +1789,29 @@ module atomica::auction {
         state.bid_results
     }
 
+    // BCS of a `Pair` built from its four fields (test-only).
+    #[test_only]
+    public fun test_pair_bcs(
+        base_chain:  vector<u8>,
+        base_token:  vector<u8>,
+        quote_chain: vector<u8>,
+        quote_token: vector<u8>,
+    ): vector<u8> {
+        bcs::to_bytes(&Pair { base_chain, base_token, quote_chain, quote_token })
+    }
+
+    // Return the stored Pair of a window as (base_chain, base_token, quote_chain, quote_token)
+    // (test-only).
+    #[test_only]
+    public fun test_get_window_pair(
+        window_id: u64,
+        pair_bcs:  vector<u8>,
+    ): (vector<u8>, vector<u8>, vector<u8>, vector<u8>) acquires AuctionRegistry {
+        let registry = borrow_global<AuctionRegistry>(@atomica);
+        let pair = table::borrow(&registry.windows, make_window_key(window_id, pair_bcs)).pair;
+        (pair.base_chain, pair.base_token, pair.quote_chain, pair.quote_token)
+    }
+
     // Destructure a BidResult into (is_winner, fill_amount, clearing_price).
     // Allows tests to inspect fields without requiring BidResult to have `drop` in scope.
     #[test_only]
@@ -1786,7 +1830,7 @@ module atomica::auction {
         total_supply:   u256,
         settled:        bool,
         clearing_price: u64,
-    ) acquires AuctionRegistry {
+    ) acquires AuctionRegistry, PairAllowlist {
         test_insert_window_with_timelock(atomica, window_id, pair_bcs, total_supply, settled, clearing_price, 0)
     }
 
@@ -1794,7 +1838,8 @@ module atomica::auction {
     // Use this variant when testing submit_cleartext_and_clear to control
     // which timelock_id is associated with the window.
     #[test_only]
-    // SCOUT(#224) EDIT: the hardcoded `Pair` in `test_insert_window_with_timelock` bypasses the allowlist.
+    // It bypasses the allowlist check: it stores the listed `Pair` when `pair_bcs` is listed,
+    // and the launch `Pair` otherwise.
     // SCOUT(#243) EDIT: `test_insert_window_with_timelock` must also record the window id's timelock in `TimelockRegistrar`, or a later `create_auction` registers a second one.
     public fun test_insert_window_with_timelock(
         atomica:        &signer,
@@ -1804,23 +1849,22 @@ module atomica::auction {
         settled:        bool,
         clearing_price: u64,
         timelock_id:    u64,
-    ) acquires AuctionRegistry {
+    ) acquires AuctionRegistry, PairAllowlist {
         let addr = signer::address_of(atomica);
         if (!exists<AuctionRegistry>(addr)) {
             move_to(atomica, AuctionRegistry {
                 windows: table::new(),
             });
         };
+        let pair = if (is_pair_allowed(pair_bcs)) {
+            *table::borrow(&borrow_global<PairAllowlist>(@atomica).pairs, pair_bcs)
+        } else {
+            launch_pair()
+        };
         let key = make_window_key(window_id, pair_bcs);
         let registry = borrow_global_mut<AuctionRegistry>(addr);
-        let base_pair = Pair {
-            base_chain:  b"ethereum",
-            base_token:  b"FakeETH",
-            quote_chain: b"aptos",
-            quote_token: b"FakeUSD",
-        };
         table::add(&mut registry.windows, key, WindowState {
-            pair:            base_pair,
+            pair,
             window_id,
             timelock_id,
             total_supply,

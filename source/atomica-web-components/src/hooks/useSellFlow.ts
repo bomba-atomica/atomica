@@ -21,6 +21,7 @@ import {
   reclaimLock,
 } from "@atomica/sdk/ethereum";
 import { getChainConfig } from "@atomica/sdk/chain-config";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 // SCOUT(#243) REMOVE: drop the registerTimelock import.
 import {
   assertSiweDomain,
@@ -96,10 +97,6 @@ export interface SellFlowActions {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const CONFIRMATION_TARGET = 1; // Demo: 1 block; MVP: 64
-
-// SCOUT(#224) EDIT: SELL_PAIR_BCS becomes the SDK launch pair constant; a lock made with the empty bytes cannot join a window.
-/** Pair BCS of the sell flow's window (scaffold: empty, as in createAuction). */
-const SELL_PAIR_BCS = new Uint8Array(0);
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
 
@@ -293,7 +290,7 @@ export function useSellFlow(
         // reclaim the lock to the seller.
         const binding = lockBinding(
           currentWindowId(BigInt(Math.floor(Date.now() / 1000))),
-          SELL_PAIR_BCS,
+          LAUNCH_PAIR_BCS,
         );
         const receipt = await lockFakeEth(provider, amount, binding);
         const lock = lockFromReceipt(receipt);
@@ -346,8 +343,7 @@ export function useSellFlow(
           nonce: state.lockNonce,
           amount: state.amount,
           // SCOUT(#221) EDIT: the proof input takes the lock fields; follow the SDK lockBinding shape once the caller deadline goes.
-          // SCOUT(#224) EDIT: SELL_PAIR_BCS becomes the launch pair, so this binding and the lock stay equal.
-          ...lockBinding(state.windowId, SELL_PAIR_BCS),
+          ...lockBinding(state.windowId, LAUNCH_PAIR_BCS),
         },
         state.lockBlock,
       );
@@ -420,9 +416,8 @@ export function useSellFlow(
       const windowId =
         state.windowId ??
         currentWindowId(BigInt(Math.floor(Date.now() / 1000)));
-      // SCOUT(#224) EDIT: use the launch pair.
-      // pairBcs: empty bytes for scaffold
-      const pairBcs = SELL_PAIR_BCS;
+      // The window's pair: the launch pair, the bytes the lock is bound to.
+      const pairBcs = LAUNCH_PAIR_BCS;
       // SCOUT(#243) REMOVE: registerTimelock and the local one hour auctionEndTime; read the window deadline from the new view instead.
       // SCOUT(#225) EDIT: this call aborts with E_NOT_REGISTRAR once the validator image has the registrar check.
       // create_auction records the timelock that opens the window's bids, so
@@ -476,8 +471,8 @@ export function useSellFlow(
         nonce: state.lockNonce,
         amount: state.amount,
         // SCOUT(#221) EDIT: reclaim passes the full Lock struct; its deadline is the computed lockDeadline(windowId), which lockBinding must still return.
-        // SCOUT(#224) EDIT: the reclaim binding must use the same pair bytes as the lock, so change both together.
-        ...lockBinding(state.windowId, SELL_PAIR_BCS),
+        // The same pair bytes as the lock binding.
+        ...lockBinding(state.windowId, LAUNCH_PAIR_BCS),
       });
 
       if (account) clearState(account);

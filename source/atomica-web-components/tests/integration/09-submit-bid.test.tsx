@@ -77,13 +77,14 @@ import {
   getDerivedAddress,
 } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
 // SCOUT(#217) EDIT: bid 2000 whole USD, not 2_000_000.
 // SCOUT(#216) EDIT: 1 FakeETH at this price needs 2,000,000 FakeUSD of collateral and the helper locks 500; the bid would be invalid once opened (this file never opens it, and pull request 213 does not shrink this quantity).
 const BID_PRICE = 2_000_000n;
 const BID_QUANTITY = ethers.parseEther("1");
-// SCOUT(#224) EDIT: use the launch pair.
-const PAIR_BCS = new TextEncoder().encode("09-submit-bid");
+// The launch pair: the only pair on the allowlist.
+const PAIR_BCS = LAUNCH_PAIR_BCS;
 // SCOUT(#243) EDIT: a 360 second deadline needs the test cap.
 /**
  * Bids close 360 s after the window is created: tests 1-4 run before that.

@@ -32,11 +32,16 @@ module atomica::auction_tests {
     // The registered timelock of `auction_bid_wrapper_tests::setup`.
     const TIMELOCK_ID: u64 = 11;
 
-    // SCOUT(#224) EDIT: `default_pair_bcs` is not the BCS of a `Pair`; every `create_auction` call of this file needs the launch pair bytes or a test pair added to the allowlist.
-    // Canonical pair BCS encoding: matches Pair { b"ethereum", b"FakeETH", b"aptos", b"FakeUSD" }
-    // In tests we use a simple byte vector; real callers BCS-encode the Pair struct.
+    // The launch pair bytes: BCS of Pair { b"ethereum", b"FakeETH", b"ethereum", b"FakeUSD" }.
+    // `init_module` puts them on the allowlist.
     fun default_pair_bcs(): vector<u8> {
-        b"eth-fakeusd"
+        auction::launch_pair_bcs()
+    }
+
+    // BCS of Pair { ethereum, FakeETH, ethereum, OtherUSD }: a second pair that tests add
+    // with `allow_pair`.
+    fun other_pair_bcs(): vector<u8> {
+        auction::test_pair_bcs(b"ethereum", b"FakeETH", b"ethereum", b"OtherUSD")
     }
 
 
@@ -376,6 +381,7 @@ module atomica::auction_tests {
     #[expected_failure(abort_code = 5, location = atomica::lock_receipt)] // E_NOT_RECEIPT_OWNER
     fun test_create_auction_atomica_cannot_claim_users_receipt(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
         let lock_id = b"eth_lock_receipt_of_derived_user";
         insert_eth_receipt(atomica, lock_id, DERIVED_OWNER, 1_000_000_000_000_000_000u256);
         auction::create_auction(
@@ -484,9 +490,10 @@ module atomica::auction_tests {
         assert!(supply == expected, 1);
     }
 
-    // create_auction never publishes the AuctionRegistry: without init_module it aborts.
+    // create_auction never publishes the AuctionRegistry or the pair allowlist: without
+    // init_module no pair is listed, so it aborts before it claims the lock.
     #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 1, location = atomica::auction)] // E_AUCTION_NOT_FOUND
+    #[expected_failure(abort_code = 42, location = atomica::auction)] // E_PAIR_NOT_ALLOWED
     fun create_auction_without_registry_aborts(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
         let lock_id = b"eth_lock_receipt_no_registry_pad";
@@ -523,11 +530,6 @@ module atomica::auction_tests {
     // SCOUT(#218) TEST: create_auction_at_seller_cap_aborts
     // SCOUT(#218) TEST: create_auction_below_min_lock_aborts
     // SCOUT(#218) TEST: create_auction_at_min_lock_succeeds
-    // SCOUT(#224) TEST: launch_pair_is_allowed_at_publish
-    // SCOUT(#224) TEST: create_auction_unlisted_pair_aborts
-    // SCOUT(#224) TEST: create_auction_stores_listed_pair
-    // SCOUT(#224) TEST: allow_pair_only_package_account
-    // SCOUT(#224) TEST: sellers_join_one_window_per_pair
     // SCOUT(#243) TEST: first_create_auction_registers_the_window_timelock
     // SCOUT(#243) TEST: second_seller_joins_the_stored_timelock
     // SCOUT(#243) TEST: two_pairs_of_one_window_share_a_timelock (waits for open question 2)
@@ -536,6 +538,122 @@ module atomica::auction_tests {
     // SCOUT(#243) TEST: create_auction_aborts_when_close_is_inside_the_epoch_guard (framework `E_DEADLINE_AFTER_EPOCH_END`)
     // SCOUT(#243) TEST: joining_an_expired_window_timelock_aborts
     // SCOUT(#243) TEST: timelock_registrar_address_is_the_named_object_address
+
+    // ===================== Pair allowlist =====================
+
+    // The launch pair is on the allowlist after publish, and its bytes are the 34-byte BCS
+    // of Pair { ethereum, FakeETH, ethereum, FakeUSD }.
+    #[test(atomica = @atomica)]
+    fun launch_pair_is_allowed_at_publish(atomica: &signer) {
+        auction::init_for_test(atomica);
+        assert!(auction::is_pair_allowed(auction::launch_pair_bcs()), 1);
+        assert!(
+            auction::launch_pair_bcs()
+                == x"08657468657265756d0746616b6545544808657468657265756d0746616b65555344",
+            2
+        );
+        assert!(!auction::is_pair_allowed(b"eth-fakeusd"), 3);
+        assert!(!auction::is_pair_allowed(vector::empty()), 4);
+    }
+
+    // Pair bytes that are not on the allowlist cannot open a window.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 42, location = atomica::auction)] // E_PAIR_NOT_ALLOWED
+    fun create_auction_unlisted_pair_aborts(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        let unlisted = b"eth-fakeusd";
+        let lock_id = b"unlisted_pair_seller_lock_32byt_";
+        let window_id = auction::current_window_id();
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        lock_receipt::insert_bound_test_receipt<Ethereum, FakeETH>(
+            lock_id, @atomica, ETH, window_id, auction::pair_hash(unlisted),
+        );
+        auction::create_auction(
+            atomica, window_id, unlisted, lock_id, auction_bid_wrapper_tests::register_live_timelock(),
+        );
+    }
+
+    // A new window stores the `Pair` the allowlist holds for its bytes.
+    #[test(atomica = @atomica)]
+    fun create_auction_stores_listed_pair(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        let lock_id = b"listed_pair_seller_lock_32bytes_";
+        insert_eth_receipt(atomica, lock_id, @atomica, ETH);
+        let window_id = auction::current_window_id();
+        auction::create_auction(
+            atomica, window_id, default_pair_bcs(), lock_id,
+            auction_bid_wrapper_tests::register_live_timelock(),
+        );
+        assert!(auction::auction_exists(window_id, default_pair_bcs()), 1);
+        let (base_chain, base_token, quote_chain, quote_token) =
+            auction::test_get_window_pair(window_id, default_pair_bcs());
+        assert!(base_chain == b"ethereum", 2);
+        assert!(base_token == b"FakeETH", 3);
+        assert!(quote_chain == b"ethereum", 4);
+        assert!(quote_token == b"FakeUSD", 5);
+    }
+
+    // Another signer cannot add a pair.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 43, location = atomica::auction)] // E_NOT_PACKAGE_ACCOUNT
+    fun allow_pair_only_package_account(atomica: &signer) {
+        auction::init_for_test(atomica);
+        let stranger = aptos_framework::account::create_signer_for_test(DERIVED_OWNER);
+        auction::allow_pair(&stranger, b"ethereum", b"FakeETH", b"ethereum", b"OtherUSD");
+    }
+
+    // The same call from @atomica lists the pair, and `create_auction` then accepts the new
+    // pair's BCS and stores its `Pair`. Adding a listed pair again is a no-op.
+    #[test(atomica = @atomica)]
+    fun allow_pair_from_package_account_lists_the_pair(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        let other = other_pair_bcs();
+        assert!(!auction::is_pair_allowed(other), 1);
+        auction::allow_pair(atomica, b"ethereum", b"FakeETH", b"ethereum", b"OtherUSD");
+        auction::allow_pair(atomica, b"ethereum", b"FakeETH", b"ethereum", b"OtherUSD");
+        assert!(auction::is_pair_allowed(other), 2);
+        assert!(auction::is_pair_allowed(default_pair_bcs()), 3);
+
+        let lock_id = b"other_pair_listed_seller_lock_32";
+        let window_id = auction::current_window_id();
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        lock_receipt::insert_bound_test_receipt<Ethereum, FakeETH>(
+            lock_id, @atomica, ETH, window_id, auction::pair_hash(other),
+        );
+        auction::create_auction(
+            atomica, window_id, other, lock_id, auction_bid_wrapper_tests::register_live_timelock(),
+        );
+        let (_, _, quote_chain, quote_token) = auction::test_get_window_pair(window_id, other);
+        assert!(quote_chain == b"ethereum", 4);
+        assert!(quote_token == b"OtherUSD", 5);
+    }
+
+    // Two sellers with the launch pair for one window id join one window, and its
+    // `total_supply` is the sum of their locks.
+    #[test(atomica = @atomica)]
+    fun sellers_join_one_window_per_pair(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        let window_id = auction::current_window_id();
+        let timelock_id = auction_bid_wrapper_tests::register_live_timelock();
+        let lock_a = b"one_window_seller_lock_a_32byte_";
+        let lock_b = b"one_window_seller_lock_b_32byte_";
+        insert_eth_receipt(atomica, lock_a, DERIVED_OWNER, 2 * ETH);
+        lock_receipt::insert_bound_test_receipt<Ethereum, FakeETH>(
+            lock_b, @atomica, 3 * ETH, window_id, auction::pair_hash(default_pair_bcs()),
+        );
+        let owner = aptos_framework::account::create_signer_for_test(DERIVED_OWNER);
+        auction::create_auction(&owner, window_id, default_pair_bcs(), lock_a, timelock_id);
+        auction::create_auction(atomica, window_id, default_pair_bcs(), lock_b, timelock_id);
+
+        let (_, supply, _, _, _) = auction::get_auction(window_id, default_pair_bcs());
+        assert!(supply == 5 * ETH, 1);
+        let (lock_ids, _) = auction::get_window_lock_ids(window_id, default_pair_bcs());
+        assert!(vector::length(&lock_ids) == 2, 2);
+    }
 
     // ===================== Bidder collateral claim path (Phase 3b) =====================
     //
@@ -1584,6 +1702,7 @@ module atomica::auction_tests {
     #[expected_failure(abort_code = 32, location = atomica::auction)] // E_STUCK_AFTER_LOCK_DEADLINE
     fun create_auction_rejects_stuck_deadline_after_lock_deadline(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
         let lock_id = b"timing_seller_lock_32bytes______";
         insert_eth_receipt(atomica, lock_id, @atomica, ETH);
         auction::create_auction(
@@ -1596,6 +1715,7 @@ module atomica::auction_tests {
     #[expected_failure(abort_code = 12, location = atomica::lock_receipt)] // E_WRONG_BINDING
     fun create_auction_rejects_a_lock_bound_to_another_window(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
         let lock_id = b"next_window_seller_lock_32bytes_";
         insert_bound_eth_receipt(atomica, lock_id, @atomica, ETH, auction::current_window_id() + 1);
         auction::create_auction(
@@ -1604,15 +1724,17 @@ module atomica::auction_tests {
         );
     }
 
-    // A lock bound to another pair cannot back this window.
+    // A lock bound to another pair cannot back this window, even when both pairs are listed.
     #[test(atomica = @atomica)]
     #[expected_failure(abort_code = 12, location = atomica::lock_receipt)] // E_WRONG_BINDING
     fun create_auction_rejects_a_lock_bound_to_another_pair(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        auction::allow_pair(atomica, b"ethereum", b"FakeETH", b"ethereum", b"OtherUSD");
         let lock_id = b"other_pair_seller_lock_32bytes__";
         insert_eth_receipt(atomica, lock_id, @atomica, ETH);
         auction::create_auction(
-            atomica, auction::current_window_id(), b"another-pair", lock_id,
+            atomica, auction::current_window_id(), other_pair_bcs(), lock_id,
             auction_bid_wrapper_tests::register_live_timelock(),
         );
     }
