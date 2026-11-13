@@ -513,7 +513,6 @@ This falls under the same security threshold as a consensus takeover. If >2/3 va
 
 **Status:** proposed
 
-<!-- SCOUT(#225) DOC: "ibe_config::register_timelock needs deadline <= epoch_end - 15 minutes": add that only the stored registrar may call it. -->
 <!-- SCOUT(#231) DOC: "Not decided here: the epoch policy of a production network" is the open questions 1 to 3 of this issue; record the answer here and in the timing spec. -->
 <!-- SCOUT(#243) DOC: the 24 h docker epoch holds the next window close, but tests cannot wait hours for it: record how tests reach a window close (open question 1 of this issue). -->
 
@@ -521,6 +520,7 @@ This falls under the same security threshold as a consensus takeover. If >2/3 va
 
 **Why:**
 - A timelock lives inside one epoch. `ibe_config::register_timelock` needs `deadline <= epoch_end - 15 minutes`, and an epoch change expires every pending timelock of the old epoch.
+- Only the stored registrar (`ibe_config::timelock_registrar`) may call `ibe_config::register_timelock`. Every other signer aborts with `E_NOT_REGISTRAR` (17), and every signer does while no registrar is set.
 - The PRD bid window runs 4 hours (12:15 to 16:15 UTC). A 2-hour epoch can never hold it. A 24-hour epoch holds it for any auction that starts in the first 19 hours 45 minutes of the epoch.
 - Genesis time is 0, so the first epoch ends at the first block. Its reconfiguration runs the timelock DKG, and epoch 2 has the key within minutes of start-up. No test waits a full epoch.
 - A test session never crosses an epoch boundary after epoch 2. So no test timelock expires with the reason `epoch-ended` by accident.
