@@ -90,11 +90,9 @@ module atomica::auction {
     /// (timelock registration, 243). The issue that builds the last stub deletes it.
     const E_NOT_IMPLEMENTED: u64 = 99;
 
-    // New abort codes. The open unwind pull request (213) takes 32 to 36, so these start at 37.
-    // SCOUT(#216) ADD: `submit_bid` aborts with `E_ZERO_QUANTITY` when `quantity` is zero.
+    // New abort codes. The unwind pull request (213) took 32 to 36, so these start at 37.
     /// A bid quantity must be above zero.
     const E_ZERO_QUANTITY: u64 = 37;
-    // SCOUT(#216) ADD: `submit_bid` aborts with `E_QUANTITY_ABOVE_SUPPLY` when `quantity` is above the window's `total_supply`.
     /// A bid quantity must not be above the window's supply at submission.
     const E_QUANTITY_ABOVE_SUPPLY: u64 = 38;
     // SCOUT(#218) ADD: `create_auction` aborts with `E_SELLER_LOCKS_FULL` when the window holds `MAX_SELLER_LOCKS_PER_WINDOW` locks.
@@ -197,6 +195,10 @@ module atomica::auction {
     // SCOUT(#228) REMOVE: `OPENING_WINDOW_US`; the stuck deadline of the unwind pull request (213) drops this term.
     /// Time after the registry's `reveal_expiry_us` during which unopened bids can still be opened.
     const OPENING_WINDOW_US: u64 = 600_000_000;
+    /// `BidInvalid` reason: the opened price is zero.
+    const INVALID_ZERO_PRICE: u8 = 1;
+    /// `BidInvalid` reason: `quote_for_fill(quantity, price)` is above the bid's collateral.
+    const INVALID_COLLATERAL_BELOW_QUOTE: u8 = 2;
     /// FakeUSD base units per whole FakeUSD (6 decimals).
     const QUOTE_UNIT: u256 = 1_000_000;
     /// FakeETH wei per whole FakeETH (18 decimals).
@@ -228,7 +230,6 @@ module atomica::auction {
         window_timelocks: Table<u64, u64>,
     }
 
-    // SCOUT(#216) EDIT: `SealedBid` gains the collateral amount claimed at submission and a validity flag set at opening. The receipt table already holds that amount (`lock_receipt::get_receipt`, read by `settle_locks` in the unwind pull request (213)), so only the flag strictly needs a new field.
     // SCOUT(#217) DOC: state the unit of `SealedBid.price`: whole USD per whole base token, no decimal shift.
     // SCOUT(#228) REMOVE: `SealedBid.commitment`; `open_bids` sets `opened` and `price` from the decrypted 8-byte plaintext.
     /// IBE sealed bid — plaintext price never stored on-chain during live window.
@@ -243,10 +244,17 @@ module atomica::auction {
         commitment:         vector<u8>,
         collateral_lock_id: vector<u8>,   // FakeUSD LockReceipt ID held as margin
         quantity:           u256,         // bid quantity in wei (FakeETH base token)
+        /// FakeUSD base units `claim_for_window` returned at submission. The receipt holds
+        /// the same amount; storing it saves a cross-module read at opening.
+        collateral:         u256,
         /// True once a cleartext matching `commitment` was accepted.
         opened:             bool,
         /// The opened price. Zero until `opened`.
         price:              u64,
+        /// False once opening found a zero price or `quote_for_fill(quantity, price)` above
+        /// `collateral`. An invalid bid never fills and its whole collateral goes back to
+        /// its depositor. True for an unopened bid.
+        valid:              bool,
     }
 
     // SCOUT(#217) DOC: state the unit of `BidResult.clearing_price`; the issue text does not list this struct.
@@ -379,7 +387,9 @@ module atomica::auction {
         leaf_count:        u64,
     }
 
-    // SCOUT(#216) ADD: emitted when a bid is judged invalid at opening. Reasons: 1 zero price, 2 collateral below the quote at the bid's own price. It carries the pair bytes like `AuctionRefunded` of the unwind pull request (213), because a window id alone does not name a window.
+    // Emitted when opening judges a bid invalid. `reason` is 1 for a zero price and 2 for
+    // collateral below `quote_for_fill(quantity, price)` at the bid's own price. It carries
+    // the window key's pair bytes, because a window id alone does not name a window.
     // SCOUT(#228) EDIT: `open_bids` adds a `BidInvalid` reason for a ciphertext that does not decrypt to exactly 8 bytes.
     #[event]
     struct BidInvalid has drop, store {
@@ -698,7 +708,12 @@ module atomica::auction {
     ///     registry and the sender (`bid_associated_data`). A ciphertext made for another
     ///     bidder, auction, epoch, timelock or deadline is rejected;
     ///   - no bid with the same `H(vk, AD)` is in the window;
-    ///   - the collateral lock is bound to `(window_id, pair_hash(pair_bcs))`.
+    ///   - the collateral lock is bound to `(window_id, pair_hash(pair_bcs))`;
+    ///   - `quantity` is above zero (`E_ZERO_QUANTITY`) and at most the window's
+    ///     `total_supply` now (`E_QUANTITY_ABOVE_SUPPLY`). Supply only grows before the
+    ///     deadline, so a bid at or below the visible supply always passes.
+    ///
+    /// The claimed collateral amount is stored on the bid. Opening judges the bid against it.
     ///
     /// The timing order (stuck deadline plus carrier margin before the Ethereum lock
     /// deadline) holds for every window: `create_auction` checked it for the window's
@@ -707,7 +722,6 @@ module atomica::auction {
     /// `quantity` is the bid quantity in wei (FakeETH base token).
     ///
     /// @see docs/architecture/v0-architecture.md §2.5
-    // SCOUT(#216) EDIT: `submit_bid` aborts on a zero quantity and on a quantity above `total_supply`, and stores the claimed collateral amount on the bid (today `_collateral_amount` is dropped; the unwind pull request (213) drops the return of `claim_for_window` at its step 6).
     // SCOUT(#218) EDIT: `submit_bid` aborts when the claimed collateral is below `MIN_BID_COLLATERAL`.
     // SCOUT(#228) EDIT: `submit_bid` drops the `commitment` argument, its 32-byte check and the stored field.
     public entry fun submit_bid(
@@ -752,12 +766,15 @@ module atomica::auction {
         };
 
         // 6. Consume the bidder's FakeUSD LockReceipt bound to this window as collateral.
-        lock_receipt::claim_for_window<Ethereum, FakeUSD>(
+        let collateral = lock_receipt::claim_for_window<Ethereum, FakeUSD>(
             bidder_addr, collateral_lock_id, window_id, pair_hash(pair_bcs),
         );
 
-        // 7. Store the sealed bid. Zero-quantity and over-supply bids are allowed:
-        //    the clearing step handles both.
+        // 7. Bid checks. A bounded quantity keeps `quote_for_fill` and clearing in range.
+        assert!(quantity > 0, E_ZERO_QUANTITY);
+        assert!(quantity <= state.total_supply, E_QUANTITY_ABOVE_SUPPLY);
+
+        // 8. Store the sealed bid.
         vector::push_back(&mut state.bids, SealedBid {
             bidder: bidder_addr,
             ciphertext,
@@ -765,8 +782,10 @@ module atomica::auction {
             commitment,
             collateral_lock_id,
             quantity,
+            collateral,
             opened: false,
             price: 0,
+            valid: true,
         });
     }
 
@@ -787,9 +806,11 @@ module atomica::auction {
     }
 
     /// Checks `(price, salt)` against the commitment of bid `idx` and marks it opened.
-    // SCOUT(#216) EDIT: `open_one` marks the bid opened and invalid, without aborting, when the price is zero or `quote_for_fill(quantity, price)` is above the stored collateral, and emits `BidInvalid`. `quote_for_fill` exists only in the unwind pull request (213).
+    /// The bid becomes invalid, without aborting, when the price is zero or
+    /// `quote_for_fill(quantity, price)` is above its collateral, and `BidInvalid` is
+    /// emitted. `quantity` is at most `total_supply`, so the quote cannot overflow.
     // SCOUT(#228) REMOVE: `open_one`; the decrypt step of `open_bids` replaces it and takes over the validity rule of the bid validity issue (216).
-    fun open_one(state: &mut WindowState, idx: u64, price: u64, salt: vector<u8>) {
+    fun open_one(state: &mut WindowState, pair_bcs: &vector<u8>, idx: u64, price: u64, salt: vector<u8>) {
         assert!(idx < vector::length(&state.bids), E_BID_INDEX_OUT_OF_RANGE);
         assert!(vector::length(&salt) == 32, E_INVALID_SALT);
         let window_id = state.window_id;
@@ -802,6 +823,15 @@ module atomica::auction {
         bid.opened = true;
         bid.price = price;
         event::emit(BidOpened { window_id, bid_index: idx, bidder: bid.bidder, price });
+        let reason = if (price == 0) {
+            INVALID_ZERO_PRICE
+        } else if (quote_for_fill(bid.quantity, price) > bid.collateral) {
+            INVALID_COLLATERAL_BELOW_QUOTE
+        } else {
+            return
+        };
+        bid.valid = false;
+        event::emit(BidInvalid { window_id, pair_bcs: *pair_bcs, bid_index: idx, bidder: bid.bidder, reason });
     }
 
     // SCOUT(#228) REMOVE: `count_opened`; the opening cursor replaces this scan.
@@ -851,7 +881,7 @@ module atomica::auction {
         let state = table::borrow_mut(&mut registry.windows, key);
 
         assert_openings_allowed(state);
-        open_one(state, bid_index, price, salt);
+        open_one(state, &pair_bcs, bid_index, price, salt);
         if (count_opened(state) == vector::length(&state.bids)) {
             finalize_internal(state);
         };
@@ -892,7 +922,7 @@ module atomica::auction {
         while (i < bid_count) {
             let salt = *vector::borrow(&salts, i);
             if (!vector::is_empty(&salt)) {
-                open_one(state, i, *vector::borrow(&cleartexts, i), salt);
+                open_one(state, &pair_bcs, i, *vector::borrow(&cleartexts, i), salt);
             };
             i = i + 1;
         };
@@ -905,7 +935,7 @@ module atomica::auction {
     /// Closes openings once every bid is opened or the opening window has elapsed.
     ///
     /// The opening window ends `OPENING_WINDOW_US` after the registry's `reveal_expiry_us`.
-    /// Unopened bids become invalid: no fill, and `settle` does not release their collateral.
+    /// Unopened bids never fill, and `settle` returns their whole collateral.
     /// The window clears at the uniform price in the same call.
     // SCOUT(#228) REMOVE: `finalize_reveal`.
     public entry fun finalize_reveal(
@@ -1129,6 +1159,7 @@ module atomica::auction {
     /// Algorithm (§2.7):
     ///   1. Build an index array sorted descending by `bids[i].price`.
     ///   2. Walk sorted indices, accumulating quantity until total_supply is met.
+    ///      Unopened and invalid bids are skipped: they never fill or set the price.
     ///   3. The last bid whose cumulative quantity does not exceed supply sets
     ///      the clearing price. If that bid would overfill, it gets a partial
     ///      fill equal to the remaining supply. All bids at higher prices win
@@ -1140,7 +1171,6 @@ module atomica::auction {
     /// Callers: `finalize_internal` and `clear_uniform_price`.
     ///
     /// @see docs/architecture/v0-architecture.md §2.7
-    // SCOUT(#216) EDIT: `clear_internal` skips an invalid bid like an unopened one, and compares `qty <= supply - accumulated` so a huge quantity cannot overflow.
     fun clear_internal(state: &mut WindowState) {
         let bid_count = vector::length(&state.bids);
 
@@ -1195,9 +1225,8 @@ module atomica::auction {
         let s = 0u64;
         while (s < bid_count) {
             let orig_idx = *vector::borrow(&sorted_idx, s);
-            // SCOUT(#216) EDIT: a bid marked invalid at opening is skipped here too.
-            if (!vector::borrow(&state.bids, orig_idx).opened) {
-                // Invalid bid: never fills.
+            if (!can_fill(vector::borrow(&state.bids, orig_idx))) {
+                // Unopened or invalid bid: never fills.
                 s = s + 1;
                 continue
             };
@@ -1205,8 +1234,9 @@ module atomica::auction {
             let qty = vector::borrow(&state.bids, orig_idx).quantity;
             let price = vector::borrow(&state.bids, orig_idx).price;
 
-            // SCOUT(#216) EDIT: `accumulated + qty` aborts on overflow; compare `qty <= supply - accumulated`.
-            if (accumulated + qty <= supply) {
+            // accumulated <= supply here, so the subtraction cannot underflow and a huge
+            // quantity cannot overflow.
+            if (qty <= supply - accumulated) {
                 // Full fill — this bid fits entirely.
                 accumulated = accumulated + qty;
                 clearing_price = price;
@@ -1253,6 +1283,10 @@ module atomica::auction {
         let w = 0u64;
         while (winner_found && w <= marginal_sorted_pos) {
             let orig_idx = *vector::borrow(&sorted_idx, w);
+            if (!can_fill(vector::borrow(&state.bids, orig_idx))) {
+                w = w + 1;
+                continue
+            };
             let result = vector::borrow_mut(&mut results, orig_idx);
             result.is_winner = true;
             if (w < marginal_sorted_pos) {
@@ -1266,6 +1300,11 @@ module atomica::auction {
         // 5. Commit results.
         state.bid_results = results;
         state.clearing_price = clearing_price;
+    }
+
+    /// True when bid `bid` takes part in clearing: opened and valid.
+    fun can_fill(bid: &SealedBid): bool {
+        bid.opened && bid.valid
     }
 
     /// Settle the window: honour the cleared fills and give every lock its terminal outcome.
@@ -1290,8 +1329,8 @@ module atomica::auction {
     ///      take supply from the seller locks in `lock_ids` order. Each chunk pays the
     ///      chunk of FakeETH to the winner's `eth_owner` and `quote_for_fill(chunk)` FakeUSD
     ///      to the seller's `eth_owner`. A winner's unused collateral (rounding dust
-    ///      included), each seller's unsold supply, and the whole collateral of a losing or
-    ///      unopened bid go back to the depositor. A fill that does not fit the locks aborts
+    ///      included), each seller's unsold supply, and the whole collateral of a losing,
+    ///      unopened or invalid bid go back to the depositor. A fill that does not fit the locks aborts
     ///      E_UNPAYABLE_FILL.
     ///   4. Record each lock's outcome (`lock_receipt::record_outcome`), which refuses a
     ///      payout list LockBox could not pay.
@@ -1299,7 +1338,6 @@ module atomica::auction {
     ///   6. Mark the window settled.
     ///
     /// @see docs/architecture/v0-architecture.md §2.8 and §2.9
-    // SCOUT(#216) EDIT: in `settle` an invalid bid gets no fill and its whole collateral goes back to its depositor. After the unwind pull request (213) `settle_locks` already returns a non-winner's whole collateral, so only `clear_internal` changes, and its `E_UNPAYABLE_FILL` check can no longer fire on collateral.
     // SCOUT(#228) EDIT: `settle` aborts until `open_bids` has opened every bid; no `finalize_reveal` is left to close a partly opened window.
     public entry fun settle(
         _caller:   &signer,
@@ -1481,17 +1519,17 @@ module atomica::auction {
         (w.window_id, w.total_supply, vector::length(&w.bids), w.settled, w.clearing_price)
     }
 
-    // Return (bidder, ciphertext, commitment, opened, price) of bid `bid_index`.
+    // Return (bidder, ciphertext, commitment, opened, price, valid) of bid `bid_index`.
+    // `valid` is false once opening judged the bid invalid, and true for an unopened bid.
     // Off-chain relayers read ciphertexts here, decrypt them with the revealed key and
     // open the bids. Aborts with E_AUCTION_NOT_FOUND or E_BID_INDEX_OUT_OF_RANGE.
     #[view]
-    // SCOUT(#216) EDIT: the `get_bid_info` tuple gains the validity flag; the SDK `getBidInfo` destructures the tuple by position.
     // SCOUT(#228) EDIT: the `get_bid_info` tuple loses `commitment`, a second positional break for the same SDK reader.
     public fun get_bid_info(
         window_id: u64,
         pair_bcs:  vector<u8>,
         bid_index: u64,
-    ): (address, vector<u8>, vector<u8>, bool, u64) acquires AuctionRegistry {
+    ): (address, vector<u8>, vector<u8>, bool, u64, bool) acquires AuctionRegistry {
         assert!(exists<AuctionRegistry>(@atomica), E_AUCTION_NOT_FOUND);
         let registry = borrow_global<AuctionRegistry>(@atomica);
         let key = make_window_key(window_id, pair_bcs);
@@ -1499,7 +1537,7 @@ module atomica::auction {
         let w = table::borrow(&registry.windows, key);
         assert!(bid_index < vector::length(&w.bids), E_BID_INDEX_OUT_OF_RANGE);
         let b = vector::borrow(&w.bids, bid_index);
-        (b.bidder, b.ciphertext, b.commitment, b.opened, b.price)
+        (b.bidder, b.ciphertext, b.commitment, b.opened, b.price, b.valid)
     }
 
     // Return the per-bid fill results of a window, index-aligned to bids. Empty until
@@ -1695,7 +1733,6 @@ module atomica::auction {
 
     // Append a SealedBid with an explicit commitment (test-only).
     #[test_only]
-    // SCOUT(#216) EDIT: `test_insert_committed_bid` builds a `SealedBid`, so it must set the collateral and validity fields; the huge-quantity test inserts through it.
     // SCOUT(#228) REMOVE: the `commitment` argument of `test_insert_committed_bid`; fold the helper into `test_insert_bid_with_qty`.
     public fun test_insert_committed_bid(
         atomica:            &signer,
@@ -1718,16 +1755,40 @@ module atomica::auction {
             commitment,
             collateral_lock_id,
             quantity,
+            collateral: 0,
             opened: false,
             price: 0,
+            valid: true,
         });
+    }
+
+    // Set the stored collateral of bid `bid_index` (test-only). Inserted bids hold zero.
+    #[test_only]
+    public fun test_set_bid_collateral(
+        atomica:    &signer,
+        window_id:  u64,
+        pair_bcs:   vector<u8>,
+        bid_index:  u64,
+        collateral: u256,
+    ) acquires AuctionRegistry {
+        let key = make_window_key(window_id, pair_bcs);
+        let registry = borrow_global_mut<AuctionRegistry>(signer::address_of(atomica));
+        let state = table::borrow_mut(&mut registry.windows, key);
+        vector::borrow_mut(&mut state.bids, bid_index).collateral = collateral;
+    }
+
+    // Destructure a BidInvalid event into (window_id, pair_bcs, bid_index, bidder, reason)
+    // (test-only).
+    #[test_only]
+    public fun test_bid_invalid_fields(e: &BidInvalid): (u64, vector<u8>, u64, address, u8) {
+        (e.window_id, e.pair_bcs, e.bid_index, e.bidder, e.reason)
     }
 
     // Mark every bid opened with the given prices and close the reveal (test-only).
     // Use after inserting bids to set the prices that clear_uniform_price will read.
-    // `prices` is index-aligned to the bids.
+    // `prices` is index-aligned to the bids. Like `test_set_openings`, it bypasses the
+    // validity rule of `open_one`: every bid it opens stays valid, whatever its collateral.
     #[test_only]
-    // SCOUT(#216) EDIT: decide whether `test_set_revealed_prices` applies the validity rule; 13 clearing and settle tests on `main` open bids through it, and so does the `E_UNPAYABLE_FILL` test of the unwind pull request (213).
     public fun test_set_revealed_prices(
         atomica:   &signer,
         window_id: u64,
@@ -1745,6 +1806,7 @@ module atomica::auction {
 
     // Close the reveal with bid `i` opened at `prices[i]` when `opened[i]`, and unopened
     // (revealed price 0) otherwise (test-only). Both vectors are index-aligned to the bids.
+    // It bypasses the validity rule: no collateral or zero-price check, no `BidInvalid`.
     #[test_only]
     public fun test_set_openings(
         atomica:   &signer,

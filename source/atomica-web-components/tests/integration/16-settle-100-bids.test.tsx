@@ -72,7 +72,6 @@ const SUPPLY = BID_QUANTITY * 50n;
  * `quoteForFill`): at most 0.00002 * 1_990_000 = 39.8 FakeUSD.
  */
 const COLLATERAL = 50n * 10n ** 6n;
-// SCOUT(#216) EDIT: COLLATERAL above: on main each bid needs quoteForFill(0.1 FakeETH, price), up to 199,000 FakeUSD, against 50 FakeUSD locked; pull request 213 already shrinks BID_QUANTITY to 0.00002 FakeETH (at most 39.8 FakeUSD), so after 213 every bid is valid.
 // SCOUT(#218) EDIT: COLLATERAL above (50 FakeUSD per bid) must stay at or above the minimum collateral.
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
@@ -226,8 +225,9 @@ describe.sequential("16: Settle a 100-bid window", () => {
       // The opening call cleared the window: bid results exist before settle.
       const cleared = await getAuctionState(aptosClient, moduleAddr, auction);
       expect(cleared.settled).toBe(false);
-      // SCOUT(#216) EDIT: also assert the clearing price equals the lowest valid winning price.
-      expect(cleared.clearingPrice).toBeGreaterThan(0n);
+      // Every bid is valid, so the 50 highest win and the lowest of them,
+      // bid 50 of the ladder, sets the clearing price.
+      expect(cleared.clearingPrice).toBe(BASE_PRICE + PRICE_STEP * 50n);
       expect(await getBidResults(auction.windowId, PAIR_BCS)).toHaveLength(
         BID_COUNT,
       );
@@ -250,7 +250,8 @@ describe.sequential("16: Settle a 100-bid window", () => {
       expect(state.bidCount).toBe(BigInt(BID_COUNT));
       const results = await getBidResults(auction.windowId, PAIR_BCS);
       expect(results).toHaveLength(BID_COUNT);
-      // SCOUT(#216) EDIT: 50 winners only if every bid is valid; with main's quantities all 100 bids would be invalid, with pull request 213's quantities all are valid.
+      // 50 winners only if every bid is valid: each holds COLLATERAL, above
+      // its quote at its own price.
       const winners = results.filter((r) => r.isWinner);
       expect(winners).toHaveLength(BID_COUNT / 2);
       expect(winners.reduce((sum, r) => sum + r.fillAmount, 0n)).toBe(SUPPLY);

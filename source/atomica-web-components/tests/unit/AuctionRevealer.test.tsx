@@ -194,6 +194,7 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
         index: 0,
         bidder: "0x" + "0a".repeat(32),
         alreadyOpened: false,
+        valid: true,
         price: 200n,
         salt,
         matchesCommitment: true,
@@ -202,6 +203,7 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
         index: 1,
         bidder: "0x" + "0b".repeat(32),
         alreadyOpened: false,
+        valid: true,
         matchesCommitment: false,
         error: "bad signature",
       },
@@ -240,5 +242,39 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
 
   it.todo("SCOUT(#236) the open step sends one open-and-clear transaction built from decryptWindowBids, with no price or salt typed by the user");
   it.todo("SCOUT(#228) Open bids calls openBids until every bid is opened and shows the count");
-  it.todo("SCOUT(#216) an opened bid that the chain marks invalid is shown as invalid");
+
+  it("an opened bid that the chain marks invalid is shown as invalid", async () => {
+    mockIsRevealed.mockResolvedValue(true);
+    mockDecryptWindowBids.mockResolvedValue([
+      {
+        index: 0,
+        bidder: "0x" + "0a".repeat(32),
+        alreadyOpened: true,
+        valid: true,
+        price: 200n,
+        matchesCommitment: true,
+      },
+      {
+        index: 1,
+        bidder: "0x" + "0b".repeat(32),
+        alreadyOpened: true,
+        valid: false,
+        price: 300n,
+        matchesCommitment: true,
+      },
+    ]);
+    renderRevealer();
+    fireEvent.click(screen.getByTestId("start-polling-button"));
+    await waitFor(() => {
+      expect(screen.getByTestId("decrypt-bids-button")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId("decrypt-bids-button"));
+    await waitFor(() => {
+      expect(screen.getAllByTestId("decrypted-bid")).toHaveLength(2);
+    });
+    const rows = screen.getAllByTestId("decrypted-bid");
+    expect(rows[0].textContent).toContain("already opened");
+    expect(rows[0].textContent).not.toContain("invalid");
+    expect(rows[1].textContent).toContain("already opened, invalid");
+  });
 });

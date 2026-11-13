@@ -139,7 +139,6 @@ No trusted oracles or bridges.
 
 <!-- SCOUT(#242) DOC: Sealed Bid Implementation: only the validator timelock layer exists; label the onion layers, the seller DKG layer and the Drand layer as later-phase items. -->
 <!-- SCOUT(#242) DOC: the 67 percent sentence (owner decision 31): the fork keeps bids secret only against at most one half of stake and needs two thirds to reveal; the seller-set 33 percent is unbuilt. -->
-<!-- SCOUT(#216) DOC: "Invalid bids filtered post-decryption": nothing is filtered today; after this issue a zero-price or under-collateralised bid is invalid at opening and never fills. -->
 <!-- SCOUT(#228) DOC: after on-chain opening, a ciphertext that does not decrypt to an 8-byte price is also an invalid bid. -->
 
 **N-Layer "Onion" Timelock Encryption:** Bids encrypted using pluggable, configurable layers.
@@ -148,7 +147,7 @@ No trusted oracles or bridges.
 1. **Outer Layer:** Atomica Validator Timelock (BLS12-381) - Decrypts at auction deadline
 2. **Inner Layer:** Seller Group DKG (BLS12-381) - Decrypts only if Sellers (stake-weighted) participate
 
-This prevents "Invisible Handshake" attacks where validators collude off-chain. Decryption requires cooperation from BOTH the Validator Set (>67%) AND the Seller Set (>33%). Invalid bids filtered post-decryption.
+This prevents "Invisible Handshake" attacks where validators collude off-chain. Decryption requires cooperation from BOTH the Validator Set (>67%) AND the Seller Set (>33%). Invalid bids are filtered when their price is opened: a bid with a zero price, or whose collateral does not cover its quantity at its own price, is invalid, never fills, and gets its whole collateral back. A bid with a zero quantity or a quantity above the window supply is refused at submission.
 
 **Orthogonal Key Generation:** How each layer generates its keys (DKG, beacon, threshold) is independent of the onion encryption structure. Layers can be composed freely:
 - Validators only, Validators + Drand, Validators + Sellers, Validators + Drand + Sellers, etc.
@@ -161,9 +160,9 @@ This prevents "Invisible Handshake" attacks where validators collude off-chain. 
 
 <!-- SCOUT(#242) DOC: "sealed bids (quantity + price)": only the price is sealed; the quantity is public at submission. -->
 <!-- SCOUT(#217) DOC: the example prices (2000, 1980, 1950) are whole USD per whole base token, the one unit this issue pins; say the unit here. -->
-<!-- SCOUT(#216) DOC: "clearing price set at lowest qualifying bid": the rule for an undersubscribed window (review decision 34) is not stated; today the lowest opened bid sets the price, even at zero. -->
+<!-- The rule for an undersubscribed window (review decision 34) is still open: today the lowest valid bid sets the price. A zero-price bid is invalid, so the price is never zero. -->
 
-Bidders submit sealed bids (quantity + price). Bids sorted, clearing price set at lowest qualifying bid. All winners pay same uniform price (regardless of bid).
+Bidders submit sealed bids (quantity + price). Bids sorted, clearing price set at lowest qualifying bid. A qualifying bid is a valid one: invalid bids are skipped. All winners pay same uniform price (regardless of bid).
 
 **Example:** Auction for 100 ETH with bids: A (40@$2000), B (30@$1980), C (40@$1950) → All clear at $1950
 
@@ -310,7 +309,6 @@ Atomica prioritizes:
 
 <!-- SCOUT(#218) DOC: question 6 (DoS prevention): partly answered by the seller-lock cap, the bid cap and the minimum lock sizes; name the values the owner picks. -->
 <!-- SCOUT(#243) DOC: question 6 also covers timelock registration spam: closed when only the auction package registers a timelock, one per window. -->
-<!-- SCOUT(#216) DOC: question 7 (griefing bounds): a dust bid can no longer cancel a window once invalid bids are skipped. -->
 <!-- SCOUT(#242) DOC: question 5: headers are validator transactions now; the open incentive question is who pays the outcome carrier's gas (review K-2). Question 9: the package upgrade-key is the governance question that matters (owner decision 30). -->
 
 1. Optimal settlement delay within 1-3 hour range
@@ -319,7 +317,7 @@ Atomica prioritizes:
 4. Fraud proof latency windows and impact on finality/UX
 5. Validator incentives for submitting away-chain headers
 6. DoS prevention (spam bids/commitments)
-7. Economic bounds on griefing attacks
+7. Economic bounds on griefing attacks. Partly answered: a dust bid can no longer win supply or cancel a window, because an under-collateralised bid is invalid at opening and skipped. Its collateral still goes back in full (no slash), so spam is bounded by the collateral a bid must lock.
 8. Away-chain reorganization detection/resolution
 9. Governance for parameter changes and upgrades
 10. State growth management (multiple auctions, commitment storage)

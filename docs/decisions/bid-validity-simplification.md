@@ -10,9 +10,9 @@
 
 **We will NOT require zero-knowledge proofs of bid validity (balance sufficiency) at submission time.**
 
-<!-- SCOUT(#216) DOC: this accepted record slashes a griefing deposit for invalid bids; the bid validity issue returns the whole collateral and leaves any penalty out of scope: the owner must say which wins (closest open item: review decision 35, the cost of an unopened bid). -->
+> **Amendment (2026-11-13, issue 216).** The griefing deposit penalty in this record is superseded by the owner axiom: all funds unwind to their origin unless the auction executes flawlessly. As built, an invalid bid is skipped by clearing and its whole collateral returns to its depositor. Nothing is forfeited, kept as a fee or sent to anyone else. Spam is bounded by the collateral each bid must lock, not by a penalty. The sections below that describe a deposit penalty are kept as history and marked superseded. The rules as built are in "Post-Decryption Validation" and in `docs/architecture/v0-architecture.md` §2.5 to §2.8.
 
-Instead, bids will be validated post-decryption by checking balance and filtering out invalid bids. Invalid bids that waste auction resources will incur a griefing deposit penalty.
+Instead, bids will be validated post-decryption by checking balance and filtering out invalid bids. An invalid bid is skipped, and its whole collateral goes back to its depositor (the deposit penalty first proposed here is superseded by the owner axiom).
 
 This significantly simplifies the cryptographic stack while maintaining auction integrity through economic incentives rather than cryptographic guarantees.
 
@@ -91,14 +91,14 @@ A comprehensive ZK proof system where every bid submission included:
 
 **Economic approach (simplified):**
 - Require small deposit (e.g., $1-5)
-- Slash deposit if bid is invalid/malformed
+- Slash deposit if bid is invalid/malformed (superseded by the owner axiom: an invalid bid's collateral returns in full)
 - Return deposit if bid is valid
 
 **Comparison:**
 
 | Dimension | ZK Proof Approach | Economic Deposit |
 |-----------|------------------|------------------|
-| Implementation complexity | Very high (circuits, proving, verification) | Low (deposit tracking, slashing) |
+| Implementation complexity | Very high (circuits, proving, verification) | Low (deposit tracking; slashing superseded by the owner axiom) |
 | Development time | Months (design, audit, test) | Weeks (simple smart contract logic) |
 | Client burden | 100-500ms proving time | 0ms (just deposit) |
 | Gas costs | ~150K gas (ETH) / near-zero (Solana) | Minimal (deposit tracking) |
@@ -108,6 +108,8 @@ A comprehensive ZK proof system where every bid submission included:
 | Circuit audit risk | High (bugs in circuit = broken guarantees) | None (no circuits) |
 
 **Conclusion:** Economic incentives achieve the same goal (prevent spam/griefing) with 1/100th the complexity.
+
+As built (issue 216), the economic bound is the collateral itself, not a forfeited deposit: a bid must lock collateral that covers its quantity at its own price, or it is invalid and never fills. Its collateral still returns in full.
 
 ### Problem 4: Encryption Scheme Mismatch
 
@@ -172,9 +174,17 @@ Client workflow:
 
 ### Post-Decryption Validation
 
-<!-- SCOUT(#216) DOC: rules as built differ: no deposit and no 3-sigma price or units filter; a bid is invalid when its price is zero or its quote exceeds its collateral, and zero or over-supply quantity aborts at submission. -->
-<!-- SCOUT(#218) DOC: spam is bounded by a minimum collateral size and per-window caps, not by a slashed deposit. -->
-<!-- SCOUT(#228) DOC: steps a and b: a ciphertext that does not decrypt to an 8-byte price is invalid and its collateral returns; nothing is slashed. -->
+**Rules as built (issue 216).** There is no separate deposit and no 3-sigma price or units filter. The bid's FakeUSD collateral lock is the only stake:
+
+1. `submit_bid` aborts on a zero quantity (`E_ZERO_QUANTITY`, 37) and on a quantity above the window's supply (`E_QUANTITY_ABOVE_SUPPLY`, 38). It stores the claimed collateral amount on the bid.
+2. When a bid's price is opened, the bid is invalid if the price is zero or `quote_for_fill(quantity, price)` is above its collateral. The opening does not abort, and `BidInvalid` is emitted.
+3. Clearing skips an invalid bid like an unopened one. It never fills and never sets the clearing price.
+4. The whole collateral of an invalid bid returns to its depositor in the window's outcome, the same as a losing bid.
+
+The original rules below are history. Their deposit forfeits are superseded by the owner axiom.
+
+<!-- SCOUT(#218) DOC: spam is bounded by a minimum collateral size and per-window caps, not by a forfeited deposit. -->
+<!-- SCOUT(#228) DOC: steps a and b: a ciphertext that does not decrypt to an 8-byte price is invalid and its collateral returns; nothing is forfeited. -->
 
 ```
 1. Auction closes at time T
@@ -183,28 +193,30 @@ Client workflow:
 4. For each ciphertext, validate:
 
    a) Decryption succeeds?
-      - If NO → slash deposit (malformed ciphertext)
+      - If NO → forfeit deposit (malformed ciphertext) [superseded]
 
    b) Decrypted data is valid bid format?
-      - If NO → slash deposit (corrupted/malicious data)
+      - If NO → forfeit deposit (corrupted/malicious data) [superseded]
 
    c) Price is within reasonable range (RMS)?
-      - If price deviates > 3σ from median → slash deposit (spam bid)
+      - If price deviates > 3σ from median → forfeit deposit (spam bid) [superseded]
 
    d) Units are within reasonable range (RMS)?
-      - If units deviate > 3σ from median → slash deposit (spam bid)
+      - If units deviate > 3σ from median → forfeit deposit (spam bid) [superseded]
 
    e) Balance ≥ bid amount?
       - If NO → exclude from auction (NO PENALTY - just invalid)
 
 5. Valid bids proceed to uniform price auction
-6. Invalid bids (a-d) forfeit deposit
+6. Invalid bids (a-d) forfeit deposit [superseded: every invalid bid's collateral returns in full]
 7. Insufficient balance bids (e) excluded but deposit returned
 ```
 
 ### Griefing Deposit Criteria
 
-**Deposits are SLASHED (forfeited) for:**
+> Superseded by the owner axiom (2026-11-13, issue 216). No deposit is forfeited. An invalid bid is skipped and its whole collateral returns to its depositor. The criteria below are history.
+
+**Deposits were to be forfeited for (superseded):**
 
 1. **Decryption Failure**
    - Ciphertext cannot be decrypted using revealed drand key
@@ -213,13 +225,13 @@ Client workflow:
 
 2. **Price Out of Range (Root Mean Square deviation)**
    - Calculate RMS of all decrypted prices
-   - If bid price > RMS + 3σ → slash deposit
+   - If bid price > RMS + 3σ → forfeit deposit
    - Example: Median price $2000, RMS $2050, bid price $10,000 → spam
    - Penalty: Prevents noise attacks on price discovery
 
 3. **Units Out of Range (Root Mean Square deviation)**
    - Calculate RMS of all decrypted units
-   - If bid units > RMS + 3σ → slash deposit
+   - If bid units > RMS + 3σ → forfeit deposit
    - Example: Median 10 ETH, RMS 15 ETH, bid 10,000 ETH → spam
    - Penalty: Prevents auction disruption
 
@@ -241,11 +253,11 @@ Client workflow:
 - High enough to make spam economically unviable
 - Adjustable via governance
 
-**Slash Destination:**
+**Penalty Destination (superseded):**
 - Option A: Burn (reduce token supply)
 - Option B: Protocol treasury
 - Option C: Distribute to valid bidders (reward good behavior)
-- Decision: TBD during implementation
+- Decision: none. The owner axiom forbids sending a bidder's funds anywhere but back to the bidder, unless the auction executes.
 
 ### Client Software Safeguards
 
@@ -328,9 +340,9 @@ let bid: Bid = deserialize(&plaintext_bytes);
 // Validate bid
 if validate(bid) {
     include_in_auction(bid);
-    return_deposit(bidder);
 } else {
-    slash_deposit(bidder);
+    // As built: skip the bid. Its whole collateral returns to its depositor.
+    exclude_from_auction(bid);
 }
 ```
 
@@ -498,7 +510,7 @@ if validate(bid) {
    - Add deposit requirement to bid submission
    - Implement post-decryption validation logic
    - Add RMS calculation for price/units spam detection
-   - Implement slashing logic
+   - Implement the deposit penalty (superseded by the owner axiom; not built)
 2. Client software changes:
    - Add balance warnings before submission
    - Add price/units range warnings
@@ -506,8 +518,7 @@ if validate(bid) {
    - Simplify to drand tlock encryption only
 3. Testing:
    - Test deposit return for valid bids
-   - Test slashing for malformed ciphertexts
-   - Test slashing for out-of-range prices/units
+   - Test the penalty for malformed ciphertexts or out-of-range prices/units (superseded; not built)
    - Test insufficient balance handling
 
 ### Phase 3: Integration Testing (Week 5)

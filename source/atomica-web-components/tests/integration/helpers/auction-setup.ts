@@ -290,13 +290,13 @@ function registerLockPayload(
 
 /**
  * Default FakeUSD collateral locked for one bid (6 decimals). The lock mints
- * 20x this, which must fit FakeUSD's 10,000 FakeUSD MAX_MINT_AMOUNT. Aptos
- * `settle` pays a winner's fill from its collateral at `quote_for_fill`
- * (clearing price in USD per whole FakeETH, SDK `quoteForFill`), so tests
- * bid small quantities: 0.0001 FakeETH at 2_000_000 costs 200 FakeUSD.
+ * 20x this, which must fit FakeUSD's 10,000 FakeUSD MAX_MINT_AMOUNT, so 500
+ * FakeUSD is also the ceiling. A bid is invalid at opening unless its
+ * collateral covers `quote_for_fill(quantity, price)` (SDK `quoteForFill`,
+ * price in USD per whole FakeETH), so tests bid small quantities: 0.0001
+ * FakeETH at 2_000_000 costs 200 FakeUSD.
  */
 export const DEFAULT_COLLATERAL = 500n * 10n ** 6n;
-// SCOUT(#216) EDIT: DEFAULT_COLLATERAL above must cover quoteForFill(quantity, price) of the bid that uses it; 500 FakeUSD covers no bid of main's tests, and pull request 213 keeps 500 but shrinks every bid quantity so it does.
 // SCOUT(#217) EDIT: DEFAULT_COLLATERAL above: size it with quoteForFill at whole-USD prices; FakeUSD mint is capped at 10,000 per call and lockBidCollateral mints amount times 20, so 500 is also the ceiling.
 // SCOUT(#218) EDIT: DEFAULT_COLLATERAL above must stay at or above the minimum bid collateral.
 
@@ -629,13 +629,16 @@ export async function createLiveWindow(
   };
 }
 
-// SCOUT(#216) EDIT: callers must lock at least quoteForFill(quantity, price); the mint is amount times 20 and FakeUSD mint is capped at 10,000, so amount cannot exceed 500 without changing the multiplier.
 // The Node-side path: 09-submit-bid also locks and registers one bid through AuctionBidder.
 /**
  * Lock FakeUSD collateral on Ethereum as `bidder`, bound to the current
  * window of `pairBcs`, and register its receipt on Aptos (the operator
  * carries the proof). The receipt belongs to the bidder's Ethereum-derivable
  * account. Returns the lock id that `submit_bid` claims.
+ *
+ * Lock at least `quoteForFill(quantity, price)` or the bid is invalid at
+ * opening. The mint is `amount` times 20 and FakeUSD mints at most 10,000
+ * per call, so `amount` cannot exceed 500 FakeUSD.
  */
 export async function lockBidCollateral(
   fixture: IntegrationFixture,
@@ -663,12 +666,14 @@ export async function lockBidCollateral(
   return lockId;
 }
 
-// SCOUT(#216) EDIT: mints amount times count in one call; 100 locks share the 10,000 FakeUSD mint cap, so each bid has at most 100 FakeUSD of collateral.
 /**
  * Lock FakeUSD collateral `count` times as `bidder` in a few Ethereum blocks,
  * bound to the current window of `pairBcs`, prove them all at one certified
  * block, and register every receipt (the operator carries the proofs).
  * Returns the lock ids in lock order.
+ *
+ * It mints `amount` times `count` in one call. 100 locks share the 10,000
+ * FakeUSD mint cap, so each bid has at most 100 FakeUSD of collateral.
  */
 export async function lockBidCollaterals(
   fixture: IntegrationFixture,
@@ -723,10 +728,13 @@ export interface SubmittedBid {
  * The bidder's Ethereum-derivable account signs (SIWE): only it can claim
  * the bidder's collateral receipt.
  *
+ * `quantity` must be above zero and at most the window supply, or
+ * `submit_bid` aborts (37, 38). The collateral must cover
+ * `quoteForFill(quantity, price)`, or the bid is invalid at opening.
+ *
  * The SDK's Aptos instance must point at the testnet (`setAptosInstance`).
  * Throws if the transaction aborts.
  */
-// SCOUT(#216) EDIT: quantity must be above zero and at most the window supply, and the collateral must cover price times quantity, or the bid is invalid at opening.
 // SCOUT(#217) EDIT: price is whole USD per whole FakeETH.
 // SCOUT(#228) EDIT: getBidPayload loses the commitment argument and sealBid returns no salt.
 export async function submitBidDirect(
@@ -775,12 +783,13 @@ export async function waitForReveal(
 }
 
 // SCOUT(#228) REMOVE: replace with openBidsDirect (stub at the end of this file): any account calls open_bids in batches.
-// SCOUT(#216) EDIT: an under-collateralized or zero-price bid opens without abort and reads invalid; this helper checks only the commitment.
 /**
  * Decrypt every bid of a window with the revealed key (`decryptWindowBids`)
  * and open them all in one `submit_cleartext_and_clear`. Opening the last bid
  * finalizes the reveal and clears the window, so `settle` can follow directly.
  * Throws unless every bid decrypts to an opening that matches its commitment.
+ * An under-collateralized or zero-price bid still opens without abort: the
+ * chain marks it invalid (`getBidInfo(...).valid`) and it never fills.
  */
 export async function openWindowBidsDirect(
   aptosClient: Aptos,

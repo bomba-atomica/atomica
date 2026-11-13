@@ -10,6 +10,9 @@
  *   3. AuctionBidder on a window that does not exist shows E_AUCTION_NOT_FOUND
  *   4. A bidder approves, locks and registers FakeUSD through AuctionBidder,
  *      then bids against the registered lock id
+ *   4b. A zero quantity aborts with E_ZERO_QUANTITY, and 4c. a quantity above
+ *      the window supply aborts with E_QUANTITY_ABOVE_SUPPLY; both leave the
+ *      spare collateral receipt active
  *   5. A bid after the timelock deadline aborts and leaves its receipt active
  *
  * Setup:
@@ -80,9 +83,12 @@ import { ethers } from "ethers";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
 // SCOUT(#217) EDIT: bid 2000 whole USD, not 2_000_000.
-// SCOUT(#216) EDIT: 1 FakeETH at this price needs 2,000,000 FakeUSD of collateral and the helper locks 500; the bid would be invalid once opened (this file never opens it, and pull request 213 does not shrink this quantity).
 const BID_PRICE = 2_000_000n;
-const BID_QUANTITY = ethers.parseEther("1");
+// quoteForFill(0.0001 FakeETH, 2_000_000) is 200 FakeUSD, within the 500
+// FakeUSD the helper locks, so the bid would be valid once opened.
+const BID_QUANTITY = ethers.parseEther("0.0001");
+// createLiveWindow locks 10 FakeETH for the seller.
+const WINDOW_SUPPLY = ethers.parseEther("10");
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
 // SCOUT(#243) EDIT: a 360 second deadline needs the test cap.
@@ -130,6 +136,8 @@ describe.sequential("09: Submit Bid on Auction", () => {
   let bidderAptosAddress: string;
   let auction: LiveWindow;
   let firstCollateral: string;
+  // Backs the two aborting quantity cases; each abort rolls its claim back.
+  let spareCollateral: string;
 
   beforeAll(async () => {
     fixture = await setupIntegrationFixture();
@@ -155,6 +163,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
 
     // Collateral first: the timelock deadline starts counting at createLiveWindow.
     firstCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
+    spareCollateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
     auction = await createLiveWindow(fixture, aptosClient, operator, {
       pairBcs: PAIR_BCS,
       deadlineAheadUs: DEADLINE_AHEAD_US,
@@ -187,7 +196,6 @@ describe.sequential("09: Submit Bid on Auction", () => {
     );
 
     expect(await getBidCount(auction.windowId, PAIR_BCS)).toBe(1n);
-    // SCOUT(#216) EDIT: the bid view gains a validity flag; assert it.
     // SCOUT(#228) EDIT: the commitment field asserted below leaves the bid view.
     const stored = await getBidInfo(auction.windowId, PAIR_BCS, 0n);
     expect(stored.bidder.replace(/^0x0*/, "")).toBe(
@@ -197,6 +205,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
     expect(stored.commitment).toEqual(bid.commitment);
     expect(stored.opened).toBe(false);
     expect(stored.price).toBe(0n);
+    expect(stored.valid).toBe(true);
 
     expect(
       await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", firstCollateral),
@@ -333,6 +342,45 @@ describe.sequential("09: Submit Bid on Auction", () => {
     ).toBe(RECEIPT_CLAIMED);
   }, 300_000);
 
+  // ── Tests 4b and 4c: quantity bounds of submit_bid ────────────────────────
+
+  it("submit_bid with quantity zero aborts with the new zero-quantity code", async () => {
+    const before = await getBidCount(auction.windowId, PAIR_BCS);
+    await expect(
+      submitBidDirect(
+        aptosClient,
+        fixture.eth.bidder,
+        auction,
+        BID_PRICE,
+        spareCollateral,
+        0n,
+      ),
+    ).rejects.toThrow(/E_ZERO_QUANTITY/);
+    expect(await getBidCount(auction.windowId, PAIR_BCS)).toBe(before);
+    expect(
+      await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", spareCollateral),
+    ).toBe(RECEIPT_ACTIVE);
+  }, 120_000);
+
+  it("submit_bid with quantity above the window supply aborts with the new over-supply code", async () => {
+    const state = await getAuctionState(aptosClient, moduleAddr, auction);
+    expect(state.totalSupply).toBe(WINDOW_SUPPLY);
+    await expect(
+      submitBidDirect(
+        aptosClient,
+        fixture.eth.bidder,
+        auction,
+        BID_PRICE,
+        spareCollateral,
+        state.totalSupply + 1n,
+      ),
+    ).rejects.toThrow(/E_QUANTITY_ABOVE_SUPPLY/);
+    expect(await getBidCount(auction.windowId, PAIR_BCS)).toBe(state.bidCount);
+    expect(
+      await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", spareCollateral),
+    ).toBe(RECEIPT_ACTIVE);
+  }, 120_000);
+
   // ── Test 5: bids close at the timelock deadline ───────────────────────────
 
   // SCOUT(#243) EDIT: this waits for auction.deadlineUs, which becomes the window close or the test cap.
@@ -363,6 +411,4 @@ describe.sequential("09: Submit Bid on Auction", () => {
     expect(state.settled).toBe(false);
   }, 900_000);
 
-  it.todo("SCOUT(#216) submit_bid with quantity zero aborts with the new zero-quantity code");
-  it.todo("SCOUT(#216) submit_bid with quantity above the window supply aborts with the new over-supply code");
 });

@@ -171,6 +171,34 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     expect(submitBid).not.toHaveBeenCalled();
   });
 
+  it("rejects a zero quantity without sealing or submitting", async () => {
+    const { submitBid, sealBid } = await import("@atomica/sdk/aptos");
+    renderBidder();
+    fireEvent.click(screen.getByTestId("skip-to-bid-button"));
+    fireEvent.change(screen.getByTestId("bid-quantity-input"), {
+      target: { value: "0" },
+    });
+    fireEvent.click(screen.getByTestId("submit-bid-button"));
+    const status = await screen.findByTestId("bid-status");
+    expect(status.textContent).toContain("quantity must be above zero");
+    expect(sealBid).not.toHaveBeenCalled();
+    expect(submitBid).not.toHaveBeenCalled();
+  });
+
+  it("explains the over-supply abort (38) of submit_bid", async () => {
+    const { submitBid } = await import("@atomica/sdk/aptos");
+    vi.mocked(submitBid).mockRejectedValueOnce(
+      new Error("Move abort in 0xa7::auction: E_QUANTITY_ABOVE_SUPPLY(0x26)"),
+    );
+    renderBidder();
+    fireEvent.click(screen.getByTestId("skip-to-bid-button"));
+    fireEvent.change(screen.getByTestId("collateral-lock-id-input"), {
+      target: { value: "0x" + "cd".repeat(32) },
+    });
+    fireEvent.click(screen.getByTestId("submit-bid-button"));
+    await screen.findByText(/above the window supply/);
+  });
+
   // SCOUT(#228) EDIT: the submitBid arguments shift (no commitment at index 4).
   // SCOUT(#217) EDIT: this types 200 and expects 200n; add the 2000 case.
   it("seals the bid for the derived address and submits ciphertext, commitment, lock id and quantity", async () => {

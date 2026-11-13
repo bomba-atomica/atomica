@@ -162,7 +162,8 @@ export function AuctionRevealer() {
   // ── Submit handler ─────────────────────────────────────────────────────────
   // SCOUT(#228) REMOVE: replace with openBids(account, windowId, pairBcs, maxBids), repeated until every bid is opened.
   // SCOUT(#236) EDIT: one open-and-clear transaction with no typed input.
-  // SCOUT(#216) EDIT: an invalid bid no longer aborts this call; show the validity flag of the bid view.
+  // An invalid bid (zero price, or collateral below its quote) does not abort
+  // this call: the chain marks it invalid and it never fills.
   const handleSubmitCleartexts = async () => {
     if (!account) return;
     setSubmitting(true);
@@ -357,14 +358,15 @@ export function AuctionRevealer() {
               >
                 {decrypted.length === 0 && <li>No bids in this window.</li>}
                 {/* SCOUT(#217) EDIT: price shown as a raw integer; route it through formatPrice. */}
-                {/* SCOUT(#216) EDIT: show whether an opened bid is valid. */}
                 {/* SCOUT(#228) EDIT: the matches-commitment wording goes. */}
                 {decrypted.map((b) => (
                   <li key={b.index} data-testid="decrypted-bid">
                     #{b.index} {b.bidder.slice(0, 10)}…{" "}
                     {b.price !== undefined ? `price ${b.price}` : "unreadable"}
                     {b.alreadyOpened
-                      ? " (already opened)"
+                      ? b.valid
+                        ? " (already opened)"
+                        : " (already opened, invalid: never fills, collateral returned)"
                       : b.matchesCommitment
                         ? " (matches commitment)"
                         : ` (cannot open: ${b.error ?? "commitment mismatch"})`}

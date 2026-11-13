@@ -68,7 +68,6 @@ import { ethers } from "ethers";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
 // SCOUT(#217) EDIT: bid 2000 whole USD.
-// SCOUT(#216) EDIT: on main, 1 FakeETH at this price needs 2,000,000 FakeUSD and the 500 FakeUSD default makes the bid invalid; pull request 213 already shrinks BID_QUANTITY to 0.0001 FakeETH (200 FakeUSD), so after 213 the bid stays valid.
 const BID_PRICE = 2_000_000n;
 // Small enough that the winner's quote fits the 500 FakeUSD collateral:
 // 0.0001 FakeETH at BID_PRICE (USD per whole FakeETH, `quoteForFill`) = 200.

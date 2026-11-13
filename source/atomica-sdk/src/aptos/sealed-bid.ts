@@ -110,7 +110,6 @@ export async function getBidAssociatedData(
   return hexToBytes(ad);
 }
 
-// SCOUT(#216) EDIT: add the validity flag the bid view returns.
 // SCOUT(#228) EDIT: drop commitment.
 /** One stored bid (`auction::get_bid_info`). */
 export interface BidInfo {
@@ -119,9 +118,14 @@ export interface BidInfo {
   commitment: Uint8Array;
   opened: boolean;
   price: bigint;
+  /**
+   * False once opening judged the bid invalid (zero price, or collateral below
+   * `quote_for_fill(quantity, price)`). An invalid bid never fills and its
+   * whole collateral goes back to its depositor. True for an unopened bid.
+   */
+  valid: boolean;
 }
 
-// SCOUT(#216) EDIT: read the validity element the get_bid_info tuple gains.
 // SCOUT(#228) EDIT: the tuple is positional; without commitment, opened and price move up one place.
 /** Bid `bidIndex` of a window (`auction::get_bid_info`). */
 export async function getBidInfo(
@@ -129,7 +133,7 @@ export async function getBidInfo(
   pairBcs: Uint8Array,
   bidIndex: bigint,
 ): Promise<BidInfo> {
-  const [bidder, ciphertext, commitment, opened, price] = await view(
+  const [bidder, ciphertext, commitment, opened, price, valid] = await view(
     `${CONTRACT_ADDR}::auction::get_bid_info`,
     [windowId, pairBcs, bidIndex],
   );
@@ -139,6 +143,7 @@ export async function getBidInfo(
     commitment: hexToBytes(commitment),
     opened: Boolean(opened),
     price: BigInt(price as string),
+    valid: Boolean(valid),
   };
 }
 
@@ -284,6 +289,8 @@ export interface OpenedBid {
   bidder: string;
   /** True when the bid was already opened on chain. */
   alreadyOpened: boolean;
+  /** The chain's validity flag. False once opening judged the bid invalid. */
+  valid: boolean;
   /** Decrypted price and salt. Absent when the bid did not decrypt. */
   price?: bigint;
   salt?: Uint8Array;
@@ -319,6 +326,7 @@ export async function decryptWindowBids(
       index: i,
       bidder: info.bidder,
       alreadyOpened: info.opened,
+      valid: info.valid,
       matchesCommitment: false,
     };
     try {
