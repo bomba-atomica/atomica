@@ -48,6 +48,7 @@
         "@atomica/ethereum-docker-testnet": "../../docker-testnet/ethereum-testnet/typescript-sdk",
         "@atomica/sdk": "../../atomica-sdk",
         "@noble/bls12-381": "^1.4.0",
+        "@noble/ciphers": "^1.3.0",
         "aptos": "1.22.1",
         "dotenv": "^16.3.1",
         "ethers": "^6.16.0"
