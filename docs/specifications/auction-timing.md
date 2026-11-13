@@ -42,8 +42,6 @@ This document is the single source of truth for Atomica auction timing.
 
 ## Ethereum Lock Deadline
 
-<!-- SCOUT(#222) DOC: "Before it, only a proven Aptos AuctionOutcome releases the lock": add reclaimUnpayable for a recorded but unpayable leaf. -->
-
 Every Ethereum lock is bound to one auction window and carries that window's
 lock deadline (issue 203). LockBox computes the deadline from the window id,
 `lockDeadline(windowId)`; the caller passes none (issue 221). `LockBox.lock`
@@ -54,7 +52,8 @@ far-future deadline. A lock sent in a window's last seconds may be mined in
 the next window and revert with no funds moved: clients should target the
 next window near a close. After the deadline, anyone may `reclaim` an open
 lock to its depositor on Ethereum. Before it, only a proven Aptos
-`AuctionOutcome` releases the lock.
+`AuctionOutcome` closes the lock: `releaseByOutcome` pays its leaf, or
+`reclaimUnpayable` returns it whole when that leaf is unpayable (issue 222).
 
 LockBox takes its window clock as constructor immutables: seconds per day and
 one or two close offsets (`DeployLockBox.productionWindowSchedule()`:

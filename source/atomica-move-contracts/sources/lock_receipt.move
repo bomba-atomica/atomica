@@ -50,9 +50,10 @@ module atomica::lock_receipt {
     // deadline from the window id. Codes are not renumbered.
     /// The receipt's lock is bound to another auction window or pair
     const E_WRONG_BINDING: u64 = 12;
-    /// An outcome payout list Ethereum LockBox could not pay: a recipient that
-    /// is not a nonzero 20-byte address, mismatched lengths, or a sum other
-    /// than the lock amount
+    /// An outcome payout list this module refuses: a recipient that is not a
+    /// nonzero 20-byte address, mismatched lengths, or a sum other than the
+    /// lock amount. LockBox would pay a short sum (the remainder to the
+    /// depositor), so the exact sum is stricter than Ethereum needs.
     const E_UNPAYABLE_OUTCOME: u64 = 13;
     /// The receipt is younger than the cancel delay
     const E_CANCEL_TOO_EARLY: u64 = 14;
@@ -376,9 +377,10 @@ module atomica::lock_receipt {
     /// `outcome_tree::payouts_hash`.
     ///
     /// Aborts E_UNPAYABLE_OUTCOME unless every recipient is a nonzero 20-byte
-    /// address and the amounts sum to the lock amount, the checks LockBox
-    /// `releaseByOutcome` runs. A certified leaf LockBox cannot pay would
-    /// leave the lock open forever, because reclaim refuses a lock in the tree.
+    /// address and the amounts sum exactly to the lock amount. LockBox
+    /// `releaseByOutcome` pays a short sum (the remainder to the depositor) and
+    /// returns a lock with an unpayable leaf whole by `reclaimUnpayable`, so no
+    /// leaf freezes a lock. The exact sum keeps every leaf a full disposition.
     ///
     /// The status becomes STATUS_REVOKED when the only payout is the whole
     /// amount to the depositor, and STATUS_FILLED otherwise. Stores a
@@ -433,7 +435,8 @@ module atomica::lock_receipt {
         finalize<Chain, Asset>(lock_id, vector[eth_owner], vector[amount], STATUS_ACTIVE);
     }
 
-    /// Moves a receipt in status `from` to its terminal state. See `record_outcome`.
+    /// Moves a receipt in status `from` to its terminal state, with the exact-sum
+    /// payout check of `record_outcome` (stricter than LockBox's leaf rule).
     fun finalize<Chain, Asset>(
         lock_id: vector<u8>,
         recipients: vector<vector<u8>>,

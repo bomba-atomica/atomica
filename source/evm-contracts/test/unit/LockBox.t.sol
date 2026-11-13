@@ -516,10 +516,10 @@ contract LockBoxTest is Test {
         lockBox.releaseByOutcome(s.locks[0], _payouts1(stranger, 10 ether), _leaf(s.leaves, s.pos[0]));
     }
 
-    // SCOUT(#222) EDIT: 9 of 10 ether becomes a payable short sum, so this call reaches the proof check and reverts `InvalidProof`; keep the sum error with an over-sum leaf that is in the tree.
-    function test_releaseByOutcomeRevertsOnPayoutSumMismatch() public {
+    /// A short sum that is not the signed leaf still fails the proof: nobody can shorten a leaf.
+    function test_releaseByOutcomeRevertsOnShortenedLeaf() public {
         Settled memory s = _settledAuction();
-        vm.expectRevert(abi.encodeWithSelector(LockBox.PayoutSumMismatch.selector, 9 ether, 10 ether));
+        vm.expectRevert(LockBox.InvalidProof.selector);
         lockBox.releaseByOutcome(s.locks[0], _payouts1(bob, 9 ether), _leaf(s.leaves, s.pos[0]));
     }
 
@@ -565,10 +565,73 @@ contract LockBoxTest is Test {
         lockBox.releaseByOutcome(l, _payouts1(bob, 1 ether), _leaf(leaves, 0));
     }
 
-    // SCOUT(#222) TEST: test_releaseByOutcomeShortLeafPaysRemainderToDepositor
-    // SCOUT(#222) TEST: test_releaseByOutcomeEmptyPayoutsReturnsWholeLockToDepositor
-    // SCOUT(#222) TEST: test_releaseByOutcomeExactSumSendsNoRemainder
-    // SCOUT(#222) TEST: test_releaseByOutcomeRevertsOnSumAboveAmount
+    /// Alice locks 1 ether into the current window, whose recorded one-leaf tree carries `payouts`.
+    function _lockWithLeaf(OutcomeTree.Payout[] memory payouts)
+        internal
+        returns (LockBox.Lock memory l, bytes32[] memory leaves)
+    {
+        return _lockWithLeafInto(window, payouts);
+    }
+
+    function _overflowPayouts() internal view returns (OutcomeTree.Payout[] memory) {
+        return _payouts2(bob, type(uint256).max, carol, 1);
+    }
+
+    function test_releaseByOutcomeShortLeafPaysRemainderToDepositor() public {
+        OutcomeTree.Payout[] memory p = _payouts1(bob, 1 ether - 1);
+        (LockBox.Lock memory l, bytes32[] memory leaves) = _lockWithLeaf(p);
+        uint256 aliceBefore = fakeETH.balanceOf(alice);
+        uint256 bobBefore = fakeETH.balanceOf(bob);
+        vm.prank(stranger);
+        lockBox.releaseByOutcome(l, p, _leaf(leaves, 0));
+        assertEq(fakeETH.balanceOf(bob), bobBefore + 1 ether - 1);
+        assertEq(fakeETH.balanceOf(alice), aliceBefore + 1);
+        assertEq(fakeETH.balanceOf(address(lockBox)), 0);
+        assertEq(uint8(lockBox.statuses(_id(l))), uint8(LockBox.Status.Released));
+    }
+
+    function test_releaseByOutcomeEmptyPayoutsReturnsWholeLockToDepositor() public {
+        OutcomeTree.Payout[] memory p = new OutcomeTree.Payout[](0);
+        (LockBox.Lock memory l, bytes32[] memory leaves) = _lockWithLeaf(p);
+        uint256 aliceBefore = fakeETH.balanceOf(alice);
+        vm.expectEmit(address(lockBox));
+        emit LockBox.LockReleased(_id(l), lockBox.auctionKey(window, PAIR));
+        vm.prank(stranger);
+        lockBox.releaseByOutcome(l, p, _leaf(leaves, 0));
+        assertEq(fakeETH.balanceOf(alice), aliceBefore + 1 ether);
+        assertEq(fakeETH.balanceOf(address(lockBox)), 0);
+        assertEq(uint8(lockBox.statuses(_id(l))), uint8(LockBox.Status.Released));
+    }
+
+    function test_releaseByOutcomeExactSumSendsNoRemainder() public {
+        OutcomeTree.Payout[] memory p = _payouts1(bob, 1 ether);
+        (LockBox.Lock memory l, bytes32[] memory leaves) = _lockWithLeaf(p);
+        uint256 aliceBefore = fakeETH.balanceOf(alice);
+        uint256 bobBefore = fakeETH.balanceOf(bob);
+        vm.recordLogs();
+        lockBox.releaseByOutcome(l, p, _leaf(leaves, 0));
+        // LockReleased and one Transfer to bob: no second transfer to the depositor.
+        assertEq(vm.getRecordedLogs().length, 2);
+        assertEq(fakeETH.balanceOf(bob), bobBefore + 1 ether);
+        assertEq(fakeETH.balanceOf(alice), aliceBefore);
+    }
+
+    /// An over-sum leaf that is in the tree keeps the sum error, and the lock stays open.
+    function test_releaseByOutcomeRevertsOnSumAboveAmount() public {
+        OutcomeTree.Payout[] memory p = _payouts1(bob, 1 ether + 1);
+        (LockBox.Lock memory l, bytes32[] memory leaves) = _lockWithLeaf(p);
+        vm.expectRevert(abi.encodeWithSelector(LockBox.PayoutSumMismatch.selector, 1 ether + 1, 1 ether));
+        lockBox.releaseByOutcome(l, p, _leaf(leaves, 0));
+        assertEq(uint8(lockBox.statuses(_id(l))), uint8(LockBox.Status.Open));
+    }
+
+    /// A sum that overflows reverts with the sum error, not a panic.
+    function test_releaseByOutcomeRevertsOnSumOverflow() public {
+        OutcomeTree.Payout[] memory p = _overflowPayouts();
+        (LockBox.Lock memory l, bytes32[] memory leaves) = _lockWithLeaf(p);
+        vm.expectRevert(abi.encodeWithSelector(LockBox.PayoutSumMismatch.selector, type(uint256).max, 1 ether));
+        lockBox.releaseByOutcome(l, p, _leaf(leaves, 0));
+    }
 
     // ---------------------------------------------------------------- reclaim
 
@@ -748,13 +811,102 @@ contract LockBoxTest is Test {
         assertEq(key, lockBox.auctionKey(window, PAIR));
     }
 
-    // SCOUT(#222) TEST: test_reclaimUnpayableOnSumAboveAmountReturnsLockToDepositor (third party, before the deadline)
-    // SCOUT(#222) TEST: test_reclaimUnpayableOnSumOverflowReturnsLockToDepositor
-    // SCOUT(#222) TEST: test_reclaimUnpayableOnZeroRecipientReturnsLockToDepositor
-    // SCOUT(#222) TEST: test_reclaimUnpayableRevertsOnPayableLeaf
-    // SCOUT(#222) TEST: test_reclaimUnpayableRevertsOnWrongProof
-    // SCOUT(#222) TEST: test_reclaimUnpayableRevertsWithoutOutcome
-    // SCOUT(#222) TEST: test_reclaimUnpayableRevertsOnSecondCall
+    // ---------------------------------------------------------------- reclaimUnpayable
+
+    /// A stranger returns a lock with an unpayable leaf to its depositor before the deadline. The
+    /// auction is not marked reclaimed, and its other locks still release.
+    function _assertReclaimUnpayable(OutcomeTree.Payout[] memory bad) internal {
+        LockBox.Lock memory l = _lock(alice, address(fakeETH), 1 ether);
+        LockBox.Lock memory other = _lock(bob, address(fakeETH), 2 ether);
+        bytes32[] memory ids = new bytes32[](2);
+        ids[0] = _id(l);
+        ids[1] = _id(other);
+        OutcomeTree.Payout[][] memory payouts = new OutcomeTree.Payout[][](2);
+        payouts[0] = bad;
+        payouts[1] = _payouts1(carol, 2 ether);
+        (bytes32[] memory leaves, uint256[] memory pos,,) = _tree(ids, payouts);
+        bytes32 key = _record(OutcomeTreeBuilder.root(leaves), 2);
+        assertLt(block.timestamp, deadline);
+
+        uint256 aliceBefore = fakeETH.balanceOf(alice);
+        vm.expectEmit(address(lockBox));
+        emit LockBox.LockReclaimedUnpayable(_id(l), key, alice, 1 ether);
+        vm.prank(stranger);
+        lockBox.reclaimUnpayable(l, bad, _leaf(leaves, pos[0]));
+        assertEq(fakeETH.balanceOf(alice), aliceBefore + 1 ether);
+        assertEq(fakeETH.balanceOf(stranger), 0);
+        assertEq(uint8(lockBox.statuses(_id(l))), uint8(LockBox.Status.Reclaimed));
+        assertFalse(lockBox.auctionReclaimed(key));
+
+        lockBox.releaseByOutcome(other, payouts[1], _leaf(leaves, pos[1]));
+        assertEq(fakeETH.balanceOf(address(lockBox)), 0);
+    }
+
+    function test_reclaimUnpayableOnSumAboveAmountReturnsLockToDepositor() public {
+        _assertReclaimUnpayable(_payouts1(bob, 1 ether + 1));
+    }
+
+    function test_reclaimUnpayableOnSumOverflowReturnsLockToDepositor() public {
+        _assertReclaimUnpayable(_overflowPayouts());
+    }
+
+    function test_reclaimUnpayableOnZeroRecipientReturnsLockToDepositor() public {
+        _assertReclaimUnpayable(_payouts2(bob, 0.5 ether, address(0), 0.5 ether));
+    }
+
+    function test_reclaimUnpayableRevertsOnPayableLeaf() public {
+        Settled memory s = _settledAuction();
+        vm.expectRevert(abi.encodeWithSelector(LockBox.LeafPayable.selector, _id(s.locks[0])));
+        lockBox.reclaimUnpayable(s.locks[0], s.payouts[0], _leaf(s.leaves, s.pos[0]));
+        // A short leaf is payable too.
+        OutcomeTree.Payout[] memory p = _payouts1(bob, 1);
+        (LockBox.Lock memory l, bytes32[] memory leaves) = _lockWithLeafInto(window + 1, p);
+        vm.expectRevert(abi.encodeWithSelector(LockBox.LeafPayable.selector, _id(l)));
+        lockBox.reclaimUnpayable(l, p, _leaf(leaves, 0));
+    }
+
+    /// An unpayable list that is not the recorded leaf is refused: a payable lock cannot be sent home.
+    function test_reclaimUnpayableRevertsOnWrongProof() public {
+        Settled memory s = _settledAuction();
+        vm.expectRevert(LockBox.InvalidProof.selector);
+        lockBox.reclaimUnpayable(s.locks[0], _payouts1(bob, 11 ether), _leaf(s.leaves, s.pos[0]));
+        OutcomeTree.Payout[] memory bad = _payouts1(bob, 2 ether);
+        (LockBox.Lock memory l, bytes32[] memory leaves) = _lockWithLeafInto(window + 1, bad);
+        OutcomeTree.LeafProof memory leaf = _leaf(leaves, 0);
+        leaf.index = 1;
+        vm.expectRevert(LockBox.InvalidProof.selector);
+        lockBox.reclaimUnpayable(l, bad, leaf);
+    }
+
+    function test_reclaimUnpayableRevertsWithoutOutcome() public {
+        LockBox.Lock memory l = _lock(alice, address(fakeETH), 1 ether);
+        bytes32 key = lockBox.auctionKey(window, PAIR);
+        vm.expectRevert(abi.encodeWithSelector(LockBox.NoOutcome.selector, key));
+        lockBox.reclaimUnpayable(l, _payouts1(bob, 2 ether), OutcomeTree.LeafProof(0, new bytes32[](0)));
+    }
+
+    function test_reclaimUnpayableRevertsOnSecondCall() public {
+        OutcomeTree.Payout[] memory bad = _payouts1(bob, 2 ether);
+        (LockBox.Lock memory l, bytes32[] memory leaves) = _lockWithLeaf(bad);
+        lockBox.reclaimUnpayable(l, bad, _leaf(leaves, 0));
+        vm.expectRevert(abi.encodeWithSelector(LockBox.LockNotOpen.selector, _id(l), LockBox.Status.Reclaimed));
+        lockBox.reclaimUnpayable(l, bad, _leaf(leaves, 0));
+        vm.warp(deadline);
+        vm.expectRevert(abi.encodeWithSelector(LockBox.LockNotOpen.selector, _id(l), LockBox.Status.Reclaimed));
+        lockBox.reclaim(l, new OutcomeTree.Neighbour[](0));
+    }
+
+    /// Alice locks 1 ether into `windowId` (the current or the next window), whose recorded
+    /// one-leaf tree carries `payouts`.
+    function _lockWithLeafInto(uint64 windowId, OutcomeTree.Payout[] memory payouts)
+        internal
+        returns (LockBox.Lock memory l, bytes32[] memory leaves)
+    {
+        l = _lockInto(alice, address(fakeETH), 1 ether, windowId, PAIR);
+        leaves = new bytes32[](1);
+        leaves[0] = OutcomeTreeBuilder.leafHash(_id(l), OutcomeTreeBuilder.payoutsHash(payouts));
+        lockBox.recordOutcome(_outcomeProof(OutcomeTreeBuilder.outcomeBcs(windowId, PAIR, 0, leaves[0], 1)));
+    }
 }
 
 /**
@@ -810,8 +962,18 @@ contract OutcomeTreeVectorsTest is Test {
             _checkPayoutHashes(base, n);
             cases++;
         }
-        // SCOUT(#222) TEST: test_emptyPayoutsHashIsKeccakOfEmpty, a separate test: an empty list becomes a real leaf, but the issue keeps this fixture unchanged, so do not add a case here (it would change this count of 4, the four Move case tests and the SDK length check).
+        // The empty payout list is covered by `test_emptyPayoutsHashIsKeccakOfEmpty`, not by a case
+        // here: the count of 4 is pinned by the Move case tests and the SDK length check.
         assertEq(cases, 4);
+    }
+
+    /// An empty payout list is a real leaf (the whole lock to the depositor): its hash is keccak of
+    /// no bytes, in OutcomeTree.sol and the test builder alike.
+    function test_emptyPayoutsHashIsKeccakOfEmpty() public view {
+        OutcomeTree.Payout[] memory none = new OutcomeTree.Payout[](0);
+        assertEq(this.payoutsHashOf(none), keccak256(""));
+        assertEq(OutcomeTreeBuilder.payoutsHash(none), keccak256(""));
+        assertEq(keccak256(""), 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470);
     }
 
     /// Every entry's payouts hash, computed by OutcomeTree.payoutsHash, appears among the leaves.

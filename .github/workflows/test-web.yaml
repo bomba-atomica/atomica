@@ -1027,7 +1027,6 @@ jobs:
         run: forge build
 
       # Older contracts predate forge fmt. The light client and LockBox sources are checked.
-      # SCOUT(#222) EDIT: a new forge test file for reclaimUnpayable must be added to this fmt list and must match the --match-path glob of the next step, or it never runs here.
       - name: Check light client and LockBox formatting
         working-directory: source/evm-contracts
         run: >-

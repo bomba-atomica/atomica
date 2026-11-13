@@ -34,7 +34,7 @@
 // Nothing on chain stores them, so a wallet that did not send settle has to
 // scan for the AuctionOutcome event.
 //
-// SCOUT(#222) EDIT: a leaf may pay less than the lock amount (the remainder goes to the depositor), and an unpayable leaf needs reclaimUnpayable instead of releaseByOutcome.
+// SCOUT(#236) EDIT: a leaf may pay less than the lock amount (LockBox sends the remainder to the depositor), and an unpayable leaf needs reclaimUnpayable instead of releaseByOutcome.
 // The auction key is (windowId, pairHash) since the LockBox redeploy of the
 // computed lock deadline issue (221); auctionKey from the SDK builds it.
 

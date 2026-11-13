@@ -17,7 +17,7 @@
 // unwind the same release loop pays every lock back, so both buttons should
 // share the hook stub in ../hooks/useWindowRelease.ts.
 //
-// SCOUT(#222) EDIT: releaseByOutcome will revert on an unpayable leaf, so this button needs the reclaimUnpayable fallback, which issue 222 puts out of scope and no other issue owns.
+// SCOUT(#236) EDIT: releaseByOutcome reverts on an unpayable leaf; for that lock call LockBox.reclaimUnpayable (the leaf rule issue (222)), chosen by planWindowReleases.
 // SCOUT(#217) EDIT: any price shown beside a lock goes through the SDK formatPrice.
 
 /** Props of the planned ReleaseButton. */

@@ -1,4 +1,3 @@
-// SCOUT(#222) EDIT: the header below names two ways out of LockBox; reclaimUnpayable is a third.
 /**
  * LockBox Contract Helpers
  *
@@ -7,11 +6,13 @@
  *
  * Every lock names its auction (window id, pair hash; see lock-binding.ts).
  * LockBox computes the lock's deadline from the window id and accepts only the
- * current or the next window. A lock leaves LockBox in one of two ways, and anyone may
- * trigger either: `releaseByOutcome` pays it out per a proven Aptos
+ * current or the next window. A lock leaves LockBox in one of three ways, and anyone may
+ * trigger each: `releaseByOutcome` pays it out per its leaf in a proven Aptos
  * `AuctionOutcome` (recorded with `recordOutcome` by any carrier, see
- * settlement/outcome-carrier.ts), or `reclaim` returns it to its depositor
- * after its deadline. There is no relayer and no settlement authority.
+ * settlement/outcome-carrier.ts), with any remainder to its depositor;
+ * `reclaimUnpayable` returns it to its depositor at once when that leaf is
+ * unpayable; or `reclaim` returns it to its depositor after its deadline when no
+ * recorded outcome covers it. There is no relayer and no settlement authority.
  */
 
 import { ethers, type TransactionReceipt } from "ethers";

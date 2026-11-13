@@ -15,15 +15,12 @@ v0.1 Beta is trustless. It trusts only the 2/3 Aptos validator threshold. No rel
 
 The owner set three axioms:
 
-<!-- SCOUT(#222) DOC: axiom 1: "Every other path returns the full amount to the depositor" fails on Ethereum for a leaf that does not sum (frozen for good) until this issue; record the leaf rule: payouts, then the remainder to the depositor, and an unpayable leaf reclaims. -->
-
-1. **All funds unwind to their origin unless the auction executes flawlessly.** A lock pays out to counterparties only on a proven, complete auction outcome. Every other path returns the full amount to the depositor.
+1. **All funds unwind to their origin unless the auction executes flawlessly.** A lock pays out to counterparties only on a proven, complete auction outcome. Every other path returns the full amount to the depositor. On Ethereum a leaf means: these payouts, and the remainder of the lock to its depositor. A leaf that LockBox cannot pay (payouts that sum above the lock amount or overflow, or a zero recipient) returns the whole lock to its depositor through `reclaimUnpayable`, with no deadline wait (issue 222). A lock that cannot be paid as recorded goes home.
 2. **No relayer is trusted.** A relayer may carry data. It never decides anything. Every byte it carries is checked on chain against the validator threshold.
 3. **Any user can send a transaction to a finished or stuck auction to unwind it.** Unwinding needs no special account and no operator action.
 
 The axioms force four mechanisms:
 
-<!-- SCOUT(#222) DOC: per-lock deadline row: add reclaimUnpayable beside reclaim. -->
 <!-- SCOUT(#228) DOC: unwind row: "stuck" no longer waits for an opening window. -->
 <!-- SCOUT(#242) DOC: unwind row: not on main; open pull request 213 (194) and the SDK and UI unwind (195) implement it. -->
 
@@ -31,7 +28,7 @@ The axioms force four mechanisms:
 | --- | --- | --- |
 | **Validator-attested Ethereum headers.** Aptos validators certify Ethereum block headers with a 2/3+ voting-power quorum. Anyone may carry a certified header. No entry function writes headers. | The admin-only `eth_proof::submit_header` relayer. | 196, 197 |
 | **Verified Aptos outcome proof releases Ethereum locks.** Ethereum checks a validator-signed Aptos LedgerInfo with real BLS12-381 (EIP-2537) and an event inclusion proof. Anyone may submit it. | The `settlementAuthority` EOA and the `BLSVerifierTestnet` trusted-EOA verifier. Real BLS verification moves from v1 into v0.1. | 201, 202, 203 |
-| **Per-lock deadline with permissionless reclaim.** Every Ethereum lock carries a deadline, and all locks of one auction share it: LockBox computes it from the window id, `lockDeadline(windowId)`, equal to `auction::eth_lock_deadline(window_id)`. No caller supplies one, and `lock` accepts only the current or the next window, so a wrong or far-future deadline cannot strand a lock. After the deadline, anyone may return an open lock to its depositor, unless the auction's recorded outcome covers that lock. A reclaim before any outcome is recorded voids that auction's outcome on Ethereum, so an auction settles on Ethereum fully or not at all. | "Abandoned locks are frozen." | 203, 221 |
+| **Per-lock deadline with permissionless reclaim.** Every Ethereum lock carries a deadline, and all locks of one auction share it: LockBox computes it from the window id, `lockDeadline(windowId)`, equal to `auction::eth_lock_deadline(window_id)`. No caller supplies one, and `lock` accepts only the current or the next window, so a wrong or far-future deadline cannot strand a lock. After the deadline, anyone may return an open lock to its depositor, unless the auction's recorded outcome covers that lock. A reclaim before any outcome is recorded voids that auction's outcome on Ethereum, so no outcome can release a partly reclaimed auction. A lock the recorded outcome covers with an unpayable leaf goes home at once by `reclaimUnpayable`, while the other locks still release. | "Abandoned locks are frozen." | 203, 221, 222 |
 | **One permissionless unwind entry per auction on Aptos.** Any account may call the unwind entry on a finished or stuck window. It gives every receipt of the window a terminal state and emits an outcome Ethereum can verify. A never-auctioned receipt can be cancelled by anyone after a delay. | Relayer-driven refunds and the open recovery question on issue 170. | 194, 195 |
 
 This ADR names the mechanisms. The implementing issues specify the exact proof formats.

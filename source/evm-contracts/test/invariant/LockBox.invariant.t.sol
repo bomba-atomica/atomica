@@ -12,9 +12,9 @@ import {OutcomeTreeBuilder} from "../utils/OutcomeTreeBuilder.sol";
 import {DeployLockBox} from "../../script/DeployLockBox.s.sol";
 
 /**
- * @notice Drives random lock, recordOutcome, releaseByOutcome and reclaim sequences. Every call it
- *         makes is valid by construction, so a revert is a bug (fail-on-revert). It tracks the
- *         open amount per token and every status change.
+ * @notice Drives random lock, recordOutcome, releaseByOutcome, reclaim and reclaimUnpayable
+ *         sequences. Every call it makes is valid by construction, so a revert is a bug
+ *         (fail-on-revert). It tracks the open amount per token and every status change.
  */
 contract LockBoxHandler is Test {
     LockBox public lockBox;
@@ -41,6 +41,19 @@ contract LockBoxHandler is Test {
     mapping(uint256 => mapping(uint256 => OutcomeTree.Payout[])) internal payoutsOf;
     mapping(uint256 => mapping(uint256 => uint256)) internal posOf; // window => lock index => tree index + 1
     mapping(uint256 => bool) public recorded;
+
+    /// Leaf kinds, cycled over every leaf built so any 6 leaves cover them all. The first three
+    /// are payable, the last three unpayable.
+    uint256 internal constant EXACT = 0;
+    uint256 internal constant SHORT = 1;
+    uint256 internal constant EMPTY = 2;
+    uint256 internal constant OVER = 3;
+    uint256 internal constant OVERFLOW = 4;
+    uint256 internal constant ZERO_RECIPIENT = 5;
+    uint256 internal constant KINDS = 6;
+    uint256 public leavesBuilt;
+    mapping(uint256 => uint256) public leavesOfKind;
+    mapping(uint256 => bool) internal unpayable; // lock index => its leaf is unpayable
 
     uint256 public calls;
 
@@ -77,9 +90,10 @@ contract LockBoxHandler is Test {
         calls++;
     }
 
-    // SCOUT(#222) EDIT: also build short leaves (remainder to the depositor), empty leaves and unpayable leaves (sum above the amount, overflow, zero recipient), and remember which kind each lock got.
-    /// Records an outcome over every open lock of a window. Each lock pays part to another actor
-    /// and the rest to its depositor.
+    /// Records an outcome over every open lock of a window. Each leaf takes the next kind: an
+    /// exact split between another actor and the depositor, a short leaf (remainder to the
+    /// depositor), an empty leaf, or an unpayable leaf (sum above the amount, overflow, zero
+    /// recipient).
     function recordOutcome(uint256 windowSeed, uint256 splitSeed) external {
         uint256 w = windowSeed % 2;
         if (recorded[w] || lockBox.auctionReclaimed(_key(w))) return;
@@ -95,10 +109,7 @@ contract LockBoxHandler is Test {
         for (uint256 k = 0; k < n; k++) {
             uint256 i = members[k];
             ids[k] = _id(i);
-            uint256 part = uint256(keccak256(abi.encode(splitSeed, i))) % (locks[i].amount + 1);
-            address other = actors[(uint256(keccak256(abi.encode(splitSeed, i, "to"))) % 3)];
-            payoutsOf[w][i].push(OutcomeTree.Payout(other, part));
-            payoutsOf[w][i].push(OutcomeTree.Payout(locks[i].depositor, locks[i].amount - part));
+            _buildLeaf(w, i, splitSeed);
         }
         uint256[] memory order = OutcomeTreeBuilder.sortedOrder(ids);
         bytes32[] memory leaves = new bytes32[](n);
@@ -120,18 +131,65 @@ contract LockBoxHandler is Test {
         calls++;
     }
 
-    // SCOUT(#222) EDIT: skip a lock whose leaf is unpayable; every handler call must stay valid (fail-on-revert).
+    function _buildLeaf(uint256 w, uint256 i, uint256 splitSeed) internal {
+        uint256 kind = leavesBuilt++ % KINDS;
+        leavesOfKind[kind]++;
+        unpayable[i] = kind >= OVER;
+        uint256 amount = locks[i].amount;
+        uint256 part = uint256(keccak256(abi.encode(splitSeed, i))) % (amount + 1);
+        address other = actors[(uint256(keccak256(abi.encode(splitSeed, i, "to"))) % 3)];
+        OutcomeTree.Payout[] storage p = payoutsOf[w][i];
+        if (kind == EXACT) {
+            p.push(OutcomeTree.Payout(other, part));
+            p.push(OutcomeTree.Payout(locks[i].depositor, amount - part));
+        } else if (kind == SHORT) {
+            p.push(OutcomeTree.Payout(other, part % amount)); // at most amount - 1
+        } else if (kind == OVER) {
+            p.push(OutcomeTree.Payout(other, amount - part));
+            p.push(OutcomeTree.Payout(other, part + 1));
+        } else if (kind == OVERFLOW) {
+            p.push(OutcomeTree.Payout(other, type(uint256).max));
+            p.push(OutcomeTree.Payout(locks[i].depositor, 1));
+        } else if (kind == ZERO_RECIPIENT) {
+            p.push(OutcomeTree.Payout(address(0), part));
+        }
+        // EMPTY pushes nothing: the whole lock returns to the depositor.
+    }
+
+    /// The lock, payouts and leaf proof that close an in-tree lock, and whether its leaf is
+    /// unpayable. `inTree` is false for a lock outside every recorded tree.
+    function closeArgs(uint256 i)
+        public
+        view
+        returns (
+            bool inTree,
+            bool isUnpayable,
+            LockBox.Lock memory l,
+            OutcomeTree.Payout[] memory payouts,
+            OutcomeTree.LeafProof memory leaf
+        )
+    {
+        uint256 w = locks[i].windowId == windows[0] ? 0 : 1;
+        uint256 pos = posOf[w][i];
+        if (pos == 0) return (false, false, l, payouts, leaf);
+        return (
+            true,
+            unpayable[i],
+            locks[i],
+            payoutsOf[w][i],
+            OutcomeTree.LeafProof(pos - 1, OutcomeTreeBuilder.proof(treeLeaves[w], pos - 1))
+        );
+    }
+
+    /// Skips a lock whose leaf is unpayable: that call would revert.
     function releaseByOutcome(uint256 lockSeed) external {
         if (locks.length == 0) return;
         uint256 i = lockSeed % locks.length;
-        uint256 w = locks[i].windowId == windows[0] ? 0 : 1;
-        uint256 pos = posOf[w][i];
-        if (pos == 0 || lockBox.statuses(_id(i)) != LockBox.Status.Open) return;
-        bytes32[] memory leaves = treeLeaves[w];
-        lockBox.releaseByOutcome(
-            locks[i], payoutsOf[w][i], OutcomeTree.LeafProof(pos - 1, OutcomeTreeBuilder.proof(leaves, pos - 1))
-        );
-        _exit(i);
+        (bool inTree, bool isUnpayable,, OutcomeTree.Payout[] memory p, OutcomeTree.LeafProof memory leaf) =
+            closeArgs(i);
+        if (!inTree || isUnpayable || lockBox.statuses(_id(i)) != LockBox.Status.Open) return;
+        lockBox.releaseByOutcome(locks[i], p, leaf);
+        _exit(i, false);
     }
 
     /// Warps to the deadline of the lock's own window.
@@ -144,10 +202,19 @@ contract LockBoxHandler is Test {
         OutcomeTree.Neighbour[] memory nb;
         if (recorded[w]) nb = _absence(w, _id(i));
         lockBox.reclaim(locks[i], nb);
-        _exit(i);
+        _exit(i, false);
     }
 
-    // SCOUT(#222) TEST: handler function `reclaimUnpayable(uint256 lockSeed)`: closes an in-tree lock whose leaf is unpayable, before the deadline, and counts it in `_exit`.
+    /// Returns an in-tree lock whose leaf is unpayable, with no warp to its deadline.
+    function reclaimUnpayable(uint256 lockSeed) external {
+        if (locks.length == 0) return;
+        uint256 i = lockSeed % locks.length;
+        (bool inTree, bool isUnpayable,, OutcomeTree.Payout[] memory p, OutcomeTree.LeafProof memory leaf) =
+            closeArgs(i);
+        if (!inTree || !isUnpayable || lockBox.statuses(_id(i)) != LockBox.Status.Open) return;
+        lockBox.reclaimUnpayable(locks[i], p, leaf);
+        _exit(i, true);
+    }
 
     function _absence(uint256 w, bytes32 id) internal view returns (OutcomeTree.Neighbour[] memory nb) {
         bytes32[] memory ids = treeIds[w];
@@ -169,9 +236,11 @@ contract LockBoxHandler is Test {
 
     uint256 public releases;
     uint256 public reclaims;
+    uint256 public unpayableReclaims;
 
-    function _exit(uint256 i) internal {
-        if (lockBox.statuses(_id(i)) == LockBox.Status.Released) releases++;
+    function _exit(uint256 i, bool byUnpayable) internal {
+        if (byUnpayable) unpayableReclaims++;
+        else if (lockBox.statuses(_id(i)) == LockBox.Status.Released) releases++;
         else reclaims++;
         bytes32 id = _id(i);
         exits[id]++;
@@ -224,10 +293,18 @@ contract LockBoxInvariantTest is Test {
         targetContract(address(handler));
     }
 
-    // SCOUT(#222) EDIT: count unpayable reclaims too, and require that the run built at least one short and one unpayable leaf.
-    /// Guards against a vacuous run: once locks exist, the sequence ends some of them.
+    /// Guards against a vacuous run: once locks exist, the sequence ends some of them, and once
+    /// enough leaves exist, short and unpayable leaves are among them.
     function afterInvariant() public view {
-        if (handler.lockCount() > 5) assertGt(handler.releases() + handler.reclaims(), 0);
+        if (handler.lockCount() > 5) {
+            assertGt(handler.releases() + handler.reclaims() + handler.unpayableReclaims(), 0);
+        }
+        if (handler.leavesBuilt() >= 6) {
+            assertGt(handler.leavesOfKind(1), 0, "no short leaf"); // SHORT
+            assertGt(
+                handler.leavesOfKind(3) + handler.leavesOfKind(4) + handler.leavesOfKind(5), 0, "no unpayable leaf"
+            );
+        }
     }
 
     /// The LockBox token balance equals the sum of open lock amounts.
@@ -258,7 +335,26 @@ contract LockBoxInvariantTest is Test {
         }
     }
 
-    // SCOUT(#222) TEST: invariant_everyInTreeLockCanClose: after an outcome is recorded, each open in-tree lock closes by `releaseByOutcome` or `reclaimUnpayable` (check on a state snapshot).
+    /// Every open lock in a recorded tree can close now: by `releaseByOutcome` when its leaf is
+    /// payable, by `reclaimUnpayable` when not. Checked on a snapshot that is then dropped.
+    function invariant_everyInTreeLockCanClose() public {
+        uint256 snap = vm.snapshotState();
+        for (uint256 i = 0; i < handler.lockCount(); i++) {
+            (
+                bool inTree,
+                bool isUnpayable,
+                LockBox.Lock memory l,
+                OutcomeTree.Payout[] memory payouts,
+                OutcomeTree.LeafProof memory leaf
+            ) = handler.closeArgs(i);
+            bytes32 id = lockBox.getLockId(l.depositor, l.token, l.nonce);
+            if (!inTree || lockBox.statuses(id) != LockBox.Status.Open) continue;
+            if (isUnpayable) lockBox.reclaimUnpayable(l, payouts, leaf);
+            else lockBox.releaseByOutcome(l, payouts, leaf);
+            assertTrue(lockBox.statuses(id) != LockBox.Status.Open, "in-tree lock stayed open");
+        }
+        vm.revertToState(snap);
+    }
 
     /// Value is conserved: tokens held by actors plus LockBox never change.
     function invariant_supplyConserved() public view {

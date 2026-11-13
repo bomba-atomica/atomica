@@ -459,9 +459,9 @@ export function useSellFlow(
 
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
-      // SCOUT(#222) EDIT: reclaim keeps its rule; a lock whose leaf is unpayable needs reclaimUnpayable, which no UI calls.
       // Reverts before the lock deadline (DeadlineNotReached), and once the
-      // window's outcome is recorded on Ethereum (that path is releaseByOutcome).
+      // window's outcome covers the lock (that path is releaseByOutcome, or
+      // reclaimUnpayable when its leaf is unpayable).
       await reclaimLock(provider, {
         depositor: account,
         token: getChainConfig().ethereum.fakeETH,
