@@ -135,7 +135,7 @@ export interface EthLockProofResult {
  *                     the SDK `LAUNCH_PAIR_BCS`). Aptos claims the lock only
  *                     into that pair's current window.
  */
-// SCOUT(#218) EDIT: the default 10 FakeETH lock must stay at or above the minimum seller lock.
+// The default 10 FakeETH lock is above the 0.01 FakeETH minimum seller lock.
 export async function generateEthLockProof(
   fixture: IntegrationFixture,
   lockAmount: bigint = ethers.parseEther("10"),
@@ -300,7 +300,7 @@ function registerLockPayload(
  */
 export const DEFAULT_COLLATERAL = 500n * 10n ** 6n;
 // SCOUT(#217) EDIT: DEFAULT_COLLATERAL above: size it with quoteForFill at whole-USD prices; FakeUSD mint is capped at 10,000 per call and lockBidCollateral mints amount times 20, so 500 is also the ceiling.
-// SCOUT(#218) EDIT: DEFAULT_COLLATERAL above must stay at or above the minimum bid collateral.
+// DEFAULT_COLLATERAL is above the 10 FakeUSD minimum bid collateral (auction::get_window_limits).
 
 /**
  * `lock_receipt` status codes (`status_active`, `status_claimed`,
@@ -962,6 +962,55 @@ export async function getReceiptStatus(
   return Number(status);
 }
 
+/**
+ * Join `count` more seller locks of `lockAmount` FakeETH wei into an existing
+ * window, to fill it to the seller cap. The seller locks `count` times in a
+ * few Ethereum blocks (`generateEthLockProofs`), the operator registers the
+ * receipts in batches, and the seller's Ethereum-derivable account calls
+ * `create_auction` for each. `lockAmount` must be at least the minimum seller
+ * lock, and the window must still be the current one. Returns the lock ids.
+ */
+export async function joinWindowAsSellers(
+  fixture: IntegrationFixture,
+  aptosClient: Aptos,
+  operator: Account,
+  window: LiveWindow,
+  count: number,
+  lockAmount: bigint,
+): Promise<string[]> {
+  const moduleAddr = fixture.aptos.moduleAddress;
+  const results: CommandEthLockProofResult[] =
+    await commands.generateEthLockProofs(
+      fixture.eth.rpcUrl,
+      fixture.aptos.nodeUrl,
+      fixture.eth.seller.privateKey,
+      fixture.eth.contracts.fakeETH,
+      fixture.eth.contracts.lockBox,
+      lockAmount.toString(),
+      count,
+      ethers.hexlify(window.pairBcs),
+    );
+  const proofs: LockedBalanceProof[] = results.map((r) => ({
+    ...r.proof,
+    storageValue: BigInt(r.proof.storageValue),
+  }));
+  await submitManyDirect(
+    aptosClient,
+    operator,
+    proofs.map((p) => registerLockPayload(moduleAddr, p, "FakeETH")),
+  );
+  for (const { lockId } of results) {
+    await createAuctionDirect(
+      aptosClient,
+      fixture.eth.seller,
+      lockId,
+      window.windowId,
+      window.pairBcs,
+    );
+  }
+  return results.map((r) => r.lockId);
+}
+
 // ---------------------------------------------------------------------------
 // Window timelock reads
 // ---------------------------------------------------------------------------
@@ -1016,16 +1065,4 @@ export async function openBidsDirect(
   _maxBids: number,
 ): Promise<string> {
   throw new Error("NOT_IMPLEMENTED: SCOUT(#228) openBidsDirect");
-}
-
-// SCOUT(#218) ADD: lock, register and join count more seller locks into an existing window, to fill it to the seller cap.
-export async function joinWindowAsSellers(
-  _fixture: IntegrationFixture,
-  _aptosClient: Aptos,
-  _operator: Account,
-  _window: LiveWindow,
-  _count: number,
-  _lockAmount: bigint,
-): Promise<string[]> {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#218) joinWindowAsSellers");
 }

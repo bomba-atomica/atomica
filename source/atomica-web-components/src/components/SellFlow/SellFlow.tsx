@@ -47,6 +47,7 @@ export function SellFlow() {
           fakeEthBalance={ethBalances?.ethFakeETH}
           loading={flow.loading}
           error={flow.error}
+          minSellerLockAmount={flow.minSellerLockAmount}
         />
       ) : flow.step === "confirming" ? (
         <Step3Confirm txHash={flow.txHash} lockBlock={flow.lockBlock} />

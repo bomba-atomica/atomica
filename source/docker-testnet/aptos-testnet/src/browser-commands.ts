@@ -651,11 +651,13 @@ export const generateEthLockProofCommand: BrowserCommand<
     return result;
 };
 
-// SCOUT(#218) EDIT: the seller-cap test reuses this batch for 100 FakeETH seller locks; lockAmountWei must meet the new minimum lock sizes.
 /**
  * Lock `count` times in a few blocks and prove every lock at one block.
  *
- * A 100-bid window needs 100 collateral locks. One lock at a time takes about
+ * A 100-bid window needs 100 collateral locks, and a window at the seller cap
+ * needs 100 seller locks. `lockAmountWei` must meet the Aptos minimums
+ * (`auction::get_window_limits`): 0.01 FakeETH per seller lock, 10 FakeUSD
+ * per bid collateral. One lock at a time takes about
  * 15 slots each on the Docker chain; this takes about 15 slots in total.
  * Mints exactly `count * lockAmount`.
  *

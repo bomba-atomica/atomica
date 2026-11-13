@@ -142,7 +142,6 @@ window ID matches the auction's registered window ID.
 ### 2.3 AuctionRegistry
 
 <!-- SCOUT(#242) DOC: WindowState as built also holds timelock_id, min_prices, revealed_prices, reveal_final, refunded and bid_results, bids is vector<SealedBid>, and sellers contribute supply, not bids. -->
-<!-- SCOUT(#218) DOC: state the cap on seller locks per window and the minimum seller lock size. -->
 
 The registry is keyed by `(auction_window_id, pair)`, not by seller address.
 Multiple sellers offering the same pair in the same window contribute bids to
@@ -176,6 +175,20 @@ Only the package account adds a pair, through `allow_pair` (otherwise
 the `Pair`. The views are `is_pair_allowed(pair_bcs)` and `launch_pair_bcs()`.
 Entries that find a window by `(window_id, pair_bcs)` abort with
 `E_AUCTION_NOT_FOUND` (1) for unlisted bytes, since no window exists for them.
+
+**Seller limits (issue 218).** A window holds at most
+`MAX_SELLER_LOCKS_PER_WINDOW` = 100 seller locks. `create_auction` aborts with
+`E_SELLER_LOCKS_FULL` (39) when a seller joins a window that already holds 100.
+Each seller lock must be at least `MIN_SELLER_LOCK_AMOUNT` = 0.01 FakeETH
+(`10_000_000_000_000_000` wei), or `create_auction` aborts with
+`E_SELLER_LOCK_TOO_SMALL` (40). Settle, refund and unwind loop over every
+seller lock, so the cap keeps one window finishable in one transaction. The
+view `get_window_limits()` returns `(max bids, max seller locks, min seller
+lock amount, min bid collateral)`, and the SDK reads it with
+`getWindowLimits()`. LockBox on Ethereum accepts any nonzero amount: a lock
+Aptos refuses waits for its reclaim deadline. The UI reads the limits and the
+window's fill before it locks, and refuses a lock Aptos would refuse. That
+check is advisory, since a window can fill between the check and the lock.
 
 A window has no reserve price at launch. `create_auction` takes no minimum
 price, and `WindowState` stores none: clearing alone sets the price, as the PRD
@@ -225,7 +238,6 @@ pair bytes. With the allowlist those bytes are always the BCS of a listed
 ### 2.5 Sealed Bid struct
 
 <!-- SCOUT(#242) DOC: Bid struct is stale: SealedBid holds one V2 ciphertext BCS(vk, U, nonce, C, sig), ct_id, a 32-byte price hash, a clear quantity, opened and price; there is no u_bytes, and the encoding follows the fork spec, not Drand tlock. -->
-<!-- SCOUT(#218) DOC: state the bid cap (100) and the minimum collateral per bid. -->
 <!-- SCOUT(#228) DOC: the price hash and salt leave the bid; the plaintext is the 8-byte little-endian price. -->
 
 Bids are IBE-encrypted at submission time. The plaintext price is never stored
@@ -247,6 +259,13 @@ struct Bid has store {
 
 `u_bytes` and `ciphertext` follow the Drand tlock encoding: see
 `docs/architecture/adr-timelock-ibe.md` for the full IBE scheme.
+
+**Bid limits (issue 218).** A window holds at most `MAX_BIDS_PER_WINDOW` =
+100 bids (`E_WINDOW_FULL`, 25). A bid's claimed FakeUSD collateral must be at
+least `MIN_BID_COLLATERAL` = 10 FakeUSD (`10_000_000` base units), or
+`submit_bid` aborts with `E_COLLATERAL_TOO_SMALL` (41). Filling the 100 slots
+therefore locks at least 1 000 FakeUSD, which bounds a dust attack that
+closes a window.
 
 **Bid validity at submission (issue 216).** `submit_bid` aborts with
 `E_ZERO_QUANTITY` (37) on a zero quantity and with `E_QUANTITY_ABOVE_SUPPLY`
@@ -338,10 +357,10 @@ All winners pay 2 010 × their_fill in FakeUSD. Alice pays 8 040, Bob pays
 
 <!-- SCOUT(#242) DOC: the contract does not enforce "at least bid_quantity × bid_price": submit_bid drops the receipt amount; say what is enforced today and name the bid validity issue (216) as the gap. -->
 <!-- SCOUT(#217) DOC: bid_quantity × bid_price needs units: quantity in wei, price in whole USD per whole token, product in FakeUSD units via quote_for_fill. -->
-<!-- SCOUT(#218) DOC: state the minimum FakeUSD collateral per bid. -->
-
 Each bidder must hold an active FakeUSD `LockReceipt` on Ethereum whose
-locked value is at least `bid_quantity × bid_price`. The receipt's `lock_id`
+locked value is at least `bid_quantity × bid_price`, and never below the
+10 FakeUSD minimum bid collateral (`submit_bid` aborts with
+`E_COLLATERAL_TOO_SMALL`, 41). The receipt's `lock_id`
 is stored in `Bid.collateral_lock_id`. This mirrors the seller-side
 `LockReceipt<Ethereum, FakeETH>` in
 `source/atomica-move-contracts/sources/lock_receipt.move`.

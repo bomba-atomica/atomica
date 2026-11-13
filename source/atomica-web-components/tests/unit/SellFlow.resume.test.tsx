@@ -57,6 +57,14 @@ vi.mock("@atomica/sdk/aptos", () => ({
     closeOffsetsSecs: [27_900n, 58_500n],
   })),
   waitForCertifiedBlock: vi.fn(async (minBlock: number) => minBlock),
+  getWindowLimits: vi.fn(async () => ({
+    maxBidsPerWindow: 100n,
+    maxSellerLocksPerWindow: 100n,
+    minSellerLockAmount: 10_000_000_000_000_000n,
+    minBidCollateral: 10_000_000n,
+  })),
+  getWindowLockIds: vi.fn(async () => ({ sellers: [], collateral: [] })),
+  getBidCount: vi.fn(async () => 0n),
   aptos: { mock: "aptos-client" },
 }));
 vi.mock("@atomica/sdk", () => ({
