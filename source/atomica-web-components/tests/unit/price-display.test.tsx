@@ -156,13 +156,23 @@ describe("price display", () => {
     };
     walk(srcDir);
     expect(files.length).toBeGreaterThan(10);
-    // A division by 1e6, 1_000_000, 1000000 or 10 ** 6 (number or bigint).
+    // A division by 1e6, 1_000_000, 1000000 or 10 ** 6 (number or bigint) on
+    // a line that names a price. Microsecond to second conversions name no
+    // price and are allowed.
     const divideByMillion =
       /\/\s*\(?\s*(1e6|1_000_000n?|1000000n?|10n?\s*\*\*\s*6n?)\b/;
-    const offenders = files.filter((f) =>
-      divideByMillion.test(readFileSync(f, "utf8")),
+    const offenders = files.flatMap((f) =>
+      readFileSync(f, "utf8")
+        .split("\n")
+        .filter((line) => /price/i.test(line) && divideByMillion.test(line))
+        .map((line) => `${f}: ${line.trim()}`),
     );
     expect(offenders).toEqual([]);
+    // The old SettleButton display would be caught.
+    expect(
+      /price/i.test("(Number(clearingPrice) / 1e6).toFixed(2)") &&
+        divideByMillion.test("(Number(clearingPrice) / 1e6).toFixed(2)"),
+    ).toBe(true);
     // formatUsd (the old million divider) is gone from BidHistory.
     expect(
       readFileSync(join(srcDir, "components/BidHistory.tsx"), "utf8"),
