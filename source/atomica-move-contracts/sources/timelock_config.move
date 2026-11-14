@@ -1,4 +1,3 @@
-// SCOUT(#228) EDIT: once the unwind pull request (213) is in, its `unwind_grace_us` row and its budget test in this file drop the 10 minute opening window. Nothing here names it on `main`.
 // SCOUT(#242) DOC: the 67 percent reveal threshold in this header has no caller and disagrees with the fork's thresholds (review decision 31); the issue text lists only the five canonical docs.
 /// Atomica Timelock Configuration module.
 ///
@@ -21,13 +20,13 @@
 /// | `max_timelock_duration_us` | 30 days | Maximum allowed timelock duration |
 /// | `reveal_threshold_numerator` | 67 | Numerator of threshold fraction |
 /// | `reveal_threshold_denominator` | 100 | Denominator of threshold fraction |
-/// | `unwind_grace_us` | 24 hours | Stuck deadline: reveal expiry + opening window + this grace. Only the local testing chain (chain id 4) may shorten it, for live unwind tests |
+/// | `unwind_grace_us` | 24 hours | Stuck deadline: reveal expiry + this grace. Only the local testing chain (chain id 4) may shorten it, for live unwind tests |
 /// | `carrier_margin_us` | 24 hours | Time to carry an `AuctionOutcome` to Ethereum after the stuck deadline |
 /// | `receipt_cancel_delay_us` | 24 hours | Age after which anyone may cancel a never-auctioned receipt |
 ///
 /// The unwind grace and the carrier margin must fit in the Ethereum lock
 /// delay (`eth_proof::ETH_RECLAIM_DELAY_SECS`, 72 hours) together with the
-/// time to the reveal and the opening window. `auction::create_auction`
+/// time to the reveal. `auction::create_auction`
 /// enforces `stuck deadline + carrier margin < eth_lock_deadline(window_id)`
 /// (docs/specifications/auction-timing.md).
 ///
@@ -73,7 +72,7 @@ module atomica::timelock_config {
     /// Default reveal threshold denominator (100).
     const DEFAULT_THRESHOLD_DENOMINATOR: u64 = 100;
 
-    /// Unwind grace after the opening window: 24 hours in microseconds.
+    /// Unwind grace after the reveal expiry: 24 hours in microseconds.
     const DEFAULT_UNWIND_GRACE_US: u64 = 86_400_000_000;
 
     /// Carrier margin after the stuck deadline: 24 hours in microseconds.
@@ -151,7 +150,7 @@ module atomica::timelock_config {
 
     #[view]
     /// Returns the unwind grace in microseconds. A window's stuck deadline is its
-    /// reveal expiry plus the opening window plus this grace (`auction::unwind`).
+    /// reveal expiry plus this grace (`auction::unwind`).
     /// It is the 24 h default, except on the local testing chain after
     /// `set_unwind_grace_us_on_test_chain`.
     public fun get_unwind_grace_us(): u64 acquires TimelockConfig {
@@ -305,13 +304,12 @@ module atomica::timelock_config {
 
     #[test]
     /// The 72-hour Ethereum lock delay covers at most 23 h 50 min to the reveal
-    /// deadline, the 10-minute opening window, the unwind grace and the carrier
-    /// margin (docs/specifications/auction-timing.md).
+    /// deadline, the unwind grace and the carrier margin
+    /// (docs/specifications/auction-timing.md).
     fun test_grace_and_margin_fit_the_lock_delay() acquires TimelockConfig {
         let budget_us = 259_200_000_000; // eth_proof::ETH_RECLAIM_DELAY_SECS
         let to_reveal_us = 85_800_000_000; // 23 h 50 min
-        let opening_us = 600_000_000;
-        assert!(to_reveal_us + opening_us + get_unwind_grace_us() + get_carrier_margin_us() <= budget_us, 1);
+        assert!(to_reveal_us + get_unwind_grace_us() + get_carrier_margin_us() <= budget_us, 1);
     }
 
     #[test]

@@ -2,7 +2,8 @@
 #
 # This compose file sets up a single-node or multi-node testnet using validator images.
 #
-# SCOUT(#228) EDIT: the default validator image digest (this header and the four services below) must move to the image built from the fork commit with the decrypt native; no CI check ties it to APTOS_VERSION.
+# No CI check ties the digest below to APTOS_VERSION: move both together
+# (see README.md, "Moving the Fork Pin").
 # Image Configuration:
 #   - Defaults to ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:f8dc4a3a74d1ad23384c5f279d8863fec606bde9930de19380a4ce8232674087
 #   - Override with IMAGE_NAME environment variable

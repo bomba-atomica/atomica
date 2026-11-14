@@ -218,13 +218,12 @@ describe.sequential("09: Submit Bid on Auction", () => {
     );
 
     expect(await getBidCount(auction.windowId, PAIR_BCS)).toBe(1n);
-    // SCOUT(#228) EDIT: the commitment field asserted below leaves the bid view.
     const stored = await getBidInfo(auction.windowId, PAIR_BCS, 0n);
     expect(stored.bidder.replace(/^0x0*/, "")).toBe(
       bidderAptosAddress.replace(/^0x0*/, ""),
     );
     expect(stored.ciphertext).toEqual(bid.ciphertext);
-    expect(stored.commitment).toEqual(bid.commitment);
+    expect(Object.keys(stored)).not.toContain("commitment");
     expect(stored.opened).toBe(false);
     expect(stored.price).toBe(0n);
     expect(stored.valid).toBe(true);

@@ -93,7 +93,7 @@ const BID_PRICE = 2000n;
 const BID_QUANTITY = ethers.parseEther("0.1");
 /**
  * The window close (up to one 900 s test window away), then the reveal
- * window, opening window and grace after it, plus slack.
+ * window and grace after it, plus slack.
  */
 const STALL_TIMEOUT_SECS = 2_700;
 const ERC20 = ["function balanceOf(address) view returns (uint256)"];

@@ -14,6 +14,7 @@
 // @see docs/architecture/v0-architecture.md §2
 #[test_only]
 module atomica::auction_tests {
+    use std::bcs;
     use std::vector;
     use aptos_framework::account;
     use aptos_framework::event;
@@ -1098,51 +1099,39 @@ module atomica::auction_tests {
 
     // ===================== Bid validity at opening =====================
     //
-    // These tests open bids through `submit_cleartext_and_clear`, so the validity rule of
-    // `open_one` runs. The submit-time quantity checks live in auction_bid_wrapper_tests.move.
+    // These tests open bids through `auction::test_open_with_plaintexts`, which runs the
+    // validity rule of `open_bids` with given plaintexts in place of the decryption, and clear
+    // through `finalize_window`. The decryption itself and the submit-time quantity checks
+    // live in auction_bid_wrapper_tests.move.
     //
     // @see docs/architecture/v0-architecture.md §2.6 to §2.8
 
     const MAX_PRICE: u64 = 18_446_744_073_709_551_615;
 
-    fun salt32(b: u8): vector<u8> {
-        let s = vector::empty<u8>();
-        let i = 0;
-        while (i < 32) {
-            vector::push_back(&mut s, b);
-            i = i + 1;
-        };
-        s
-    }
-
-    // Inserts a bid committed to `(price, salt32(s))` holding `collateral`.
-    fun insert_open_able_bid(
-        atomica: &signer, bidder: address, price: u64, s: u8, quantity: u256, collateral: u256,
-    ) {
+    // Inserts a bid of `quantity` holding `collateral`.
+    fun insert_open_able_bid(atomica: &signer, bidder: address, quantity: u256, collateral: u256) {
         let pair_bcs = default_pair_bcs();
-        let ad = auction::bid_associated_data(TIMELOCK_ID, WINDOW_ID, bidder);
-        auction::test_insert_committed_bid(
-            atomica, WINDOW_ID, pair_bcs, bidder, vector[s],
-            auction::compute_bid_commitment(price, salt32(s), ad), vector[s], quantity,
-        );
+        let id = bcs::to_bytes(&bidder);
+        auction::test_insert_bid_with_qty(atomica, WINDOW_ID, pair_bcs, bidder, id, id, quantity);
         let index = auction::get_bid_count(WINDOW_ID, pair_bcs) - 1;
         auction::test_set_bid_collateral(atomica, WINDOW_ID, pair_bcs, index, collateral);
     }
 
-    // Opens every bid in one call. `prices[i]` opens bid i with salt32(i + 1).
+    // Opens every bid, bid i decrypting to the 8-byte price `prices[i]`, then clears.
     fun open_all(prices: vector<u64>) {
-        let salts = vector::empty<vector<u8>>();
+        let plaintexts = vector::empty<vector<u8>>();
         let i = 0u64;
         while (i < vector::length(&prices)) {
-            vector::push_back(&mut salts, salt32(((i + 1) as u8)));
+            vector::push_back(&mut plaintexts, auction::test_price_plaintext(*vector::borrow(&prices, i)));
             i = i + 1;
         };
+        auction::test_open_with_plaintexts(WINDOW_ID, default_pair_bcs(), plaintexts);
         let caller = account::create_signer_for_test(@0x9999);
-        auction::submit_cleartext_and_clear(&caller, WINDOW_ID, default_pair_bcs(), prices, salts);
+        auction::finalize_window(&caller, WINDOW_ID, default_pair_bcs());
     }
 
     fun bid_valid(index: u64): bool {
-        let (_, _, _, opened, _, valid) = auction::get_bid_info(WINDOW_ID, default_pair_bcs(), index);
+        let (_, _, opened, _, valid) = auction::get_bid_info(WINDOW_ID, default_pair_bcs(), index);
         assert!(opened, 900);
         valid
     }
@@ -1168,8 +1157,8 @@ module atomica::auction_tests {
     #[test(atomica = @atomica)]
     fun undercollateralized_bid_is_invalid_and_does_not_fill(atomica: &signer) {
         revealed_window(atomica, TOTAL_SUPPLY);
-        insert_open_able_bid(atomica, @0xA11CE, 2000, 1, ETH, auction::quote_for_fill(ETH, 2000));
-        insert_open_able_bid(atomica, @0xD057, MAX_PRICE, 2, TOTAL_SUPPLY, 1);
+        insert_open_able_bid(atomica, @0xA11CE, ETH, auction::quote_for_fill(ETH, 2000));
+        insert_open_able_bid(atomica, @0xD057, TOTAL_SUPPLY, 1);
         open_all(vector[2000, MAX_PRICE]);
 
         assert!(bid_valid(0), 1);
@@ -1189,9 +1178,9 @@ module atomica::auction_tests {
     #[test(atomica = @atomica)]
     fun zero_price_bid_is_invalid(atomica: &signer) {
         revealed_window(atomica, TOTAL_SUPPLY);
-        insert_open_able_bid(atomica, @0xA11CE, 2100, 1, ETH, auction::quote_for_fill(ETH, 2100));
-        insert_open_able_bid(atomica, @0xB0B, 2000, 2, ETH, auction::quote_for_fill(ETH, 2000));
-        insert_open_able_bid(atomica, @0x2E40, 0, 3, ETH, auction::quote_for_fill(ETH, 2100));
+        insert_open_able_bid(atomica, @0xA11CE, ETH, auction::quote_for_fill(ETH, 2100));
+        insert_open_able_bid(atomica, @0xB0B, ETH, auction::quote_for_fill(ETH, 2000));
+        insert_open_able_bid(atomica, @0x2E40, ETH, auction::quote_for_fill(ETH, 2100));
         open_all(vector[2100, 2000, 0]);
 
         assert!(!bid_valid(2), 1);
@@ -1210,8 +1199,8 @@ module atomica::auction_tests {
         revealed_window(atomica, TOTAL_SUPPLY);
         let quote = auction::quote_for_fill(ETH, 2000);
         assert!(quote == 2_000_000_000, 1);
-        insert_open_able_bid(atomica, @0xA11CE, 2000, 1, ETH, quote);
-        insert_open_able_bid(atomica, @0xB0B, 2000, 2, ETH, quote - 1);
+        insert_open_able_bid(atomica, @0xA11CE, ETH, quote);
+        insert_open_able_bid(atomica, @0xB0B, ETH, quote - 1);
         open_all(vector[2000, 2000]);
 
         assert!(bid_valid(0), 2);
@@ -1227,9 +1216,9 @@ module atomica::auction_tests {
     // Review finding A-2: a `2^256 - 1` quantity behind a filled bid made `accumulated + qty`
     // overflow and froze the window. `submit_bid` now bounds the quantity; this inserts it
     // through the test helper and opens it through the bypass helper (opening it through
-    // `open_one` would overflow `quote_for_fill`). The bypass closes the reveal, so the test
+    // `open_bids` would overflow `quote_for_fill`). The bypass closes the reveal, so the test
     // runs the clearing through `clear_uniform_price`, the same `clear_internal` that
-    // `finalize_reveal` runs.
+    // `finalize_window` runs.
     #[test(atomica = @atomica)]
     fun huge_quantity_does_not_overflow_clearing(atomica: &signer) {
         revealed_window(atomica, TOTAL_SUPPLY);
@@ -1562,43 +1551,6 @@ module atomica::auction_tests {
         assert!(CLEARING_PRICE_FIXTURE == 2010, 1);
         assert!(SUPPLY_FIXTURE == 10u256, 2);
     }
-
-    // SCOUT(#228) REMOVE: the two comment-only sections below; they describe `submit_cleartext_and_clear` tests that no longer exist.
-    // SCOUT(#240) DOC: the first section below names the fork native `reconstruct_ibe_dk_internal`, which the fork cleanup removes.
-    // ===================== submit_cleartext_and_clear: IBE pairing tests =====================
-    //
-    // Uses the V2 golden vectors from `ibe_golden_vector_fixtures`:
-    //   - identity, mpk and the reconstructed 48-byte G1 key (`timelock_basic_mpk`,
-    //     `timelock_basic_reconstructed_dk`) of the seeded chunky DKG dealing.
-    //   - The bid ciphertext is built in-test by `golden_bid` (see its comment):
-    //     the V2 fixture ciphertexts use an AES-GCM wrapper that Move cannot open,
-    //     while the contract's cleartext check still uses the Boneh-Franklin XOR
-    //     scheme. The key is the real golden key, so the pairing check is real.
-    //   - The expected cleartext is GOLDEN_PRICE (2010).
-    //
-    // Note: the production path uses `submit_cleartext_and_clear` which calls
-    // `timelock::get_decryption_key` internally. The tests use the test-only
-    // variant `test_submit_cleartext_with_dk` to inject the DK directly,
-    // bypassing the IBE DK reconstruction native (`reconstruct_ibe_dk_internal`)
-    // which is not available in the Move test VM. The pairing-based IBE
-    // decryption logic is identical in both paths.
-    //
-    // @see docs/architecture/v0-architecture.md §2.6
-
-    // ===================== submit_cleartext_and_clear: multi-bid and edge-case tests =====================
-    //
-    // Issue #130: grade B→A coverage for submit_cleartext_and_clear.
-    // Four new tests cover:
-    //   1. Partial batch failure: atomicity guarantee — any invalid cleartext
-    //      aborts the whole call and no bid price is written.
-    //   2. Decryption key not yet revealed: timelock expired but DK not submitted
-    //      by validators → abort from ibe_config with E_DECRYPTION_KEY_NOT_REVEALED.
-    //   3. Auction not found: non-existent (window_id, pair) → E_AUCTION_NOT_FOUND.
-    //   4. Idempotency: calling submit_cleartext_and_clear twice on the same window
-    //      overwrites the bid prices and returns successfully (not idempotent by
-    //      spec, but the second call does not corrupt state when cleartexts match).
-    //
-    // @see docs/architecture/v0-architecture.md §2.6
 
     // ===================== settle: end-to-end tests =====================
     //
@@ -1982,7 +1934,7 @@ module atomica::auction_tests {
         mixed_window(atomica, true);
         let stuck = auction::get_stuck_deadline_us(WINDOW_ID, default_pair_bcs());
         assert!(
-            stuck == aptos_framework::ibe_config::get_reveal_expiry(TIMELOCK_ID) + 600_000_000
+            stuck == aptos_framework::ibe_config::get_reveal_expiry(TIMELOCK_ID)
                 + atomica::timelock_config::get_unwind_grace_us(),
             1
         );

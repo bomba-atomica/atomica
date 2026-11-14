@@ -39,7 +39,7 @@ import {
   lockBidCollateral,
   submitBidDirect,
   waitForReveal,
-  openWindowBidsDirect,
+  openAndFinalizeWindowDirect,
   settleAuctionDirect,
   getAuctionState,
   getReceiptStatus,
@@ -190,8 +190,7 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
         auction.timelockId,
         TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS,
       );
-      // SCOUT(#228) EDIT: open with open_bids.
-      await openWindowBidsDirect(aptosClient, operator, auction);
+      await openAndFinalizeWindowDirect(aptosClient, operator, auction);
       await settleAuctionDirect(aptosClient, operator, auction);
 
       const state = await getAuctionState(aptosClient, moduleAddr, auction);

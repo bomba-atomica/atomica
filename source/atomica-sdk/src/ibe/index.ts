@@ -21,13 +21,10 @@ export {
 } from "@atomica/state-proof-verifier/ibe";
 export type { BidCiphertext } from "@atomica/state-proof-verifier/ibe";
 export { computeIdentity } from "./identity.js";
-// SCOUT(#228) EDIT: drop BID_COMMIT_TAG and computeBidCommitment from the list below.
 export {
   BID_AD_TAG,
-  BID_COMMIT_TAG,
   TIMELOCK_IDENTITY_TAG,
   buildBidAd,
-  computeBidCommitment,
   computeTimelockIdentityV2,
   encodeBidPlaintext,
 } from "./bid.js";

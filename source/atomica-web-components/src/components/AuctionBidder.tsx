@@ -26,14 +26,12 @@ import {
 import { useWallet } from "../context/WalletContext";
 import { proveLock } from "../hooks/proveLock";
 import { bidCollateralRefusal } from "../hooks/lockPrecheck";
-import { saveBidPrice } from "../storage/bidStorage";
 
-// SCOUT(#228) EDIT: this header describes the commitment and the price_le8 || salt32 plaintext; rewrite it for the 8-byte price and the five-argument submit_bid.
 /**
  * UI panel for submitting a sealed bid on an active auction (v0 Beta).
  *
  * V2 bid wrapper: `auction::submit_bid` takes a V2 bid ciphertext
- * `BCS(vk, U, nonce, C, sig)` and a 32-byte price commitment. The contract builds
+ * `BCS(vk, U, nonce, C, sig)` and no commitment. The contract builds
  * the associated data on chain and aborts unless `ibe::verify_bid_ct` accepts the
  * ciphertext. The client encrypts the bid itself with `sealBid` from
  * `@atomica/sdk/aptos`: it builds the timelock identity and the associated data
@@ -41,8 +39,9 @@ import { saveBidPrice } from "../storage/bidStorage";
  * timelock's epoch and deadline. It refuses to seal when the node's
  * `timelock::get_timelock_identity` or `auction::bid_associated_data` differ, or
  * when configured Aptos endpoints disagree on `timelock::get_mpk`. The status
- * line shows that error and no `submit_bid` is sent. It encrypts
- * `price_le8 || salt32` and commits to the price.
+ * line shows that error and no `submit_bid` is sent. It encrypts the 8-byte
+ * little-endian price and nothing else. The chain opens the bid itself with
+ * `auction::open_bids` after the reveal, so the client keeps nothing.
  *
  * Phase 3b adds a two-step flow that mirrors the seller's Step2Lock:
  *
@@ -60,12 +59,11 @@ import { saveBidPrice } from "../storage/bidStorage";
  *
  *   Step 2 — Submit Encrypted Bid:
  *     Calls `auction::submit_bid` via the SIWE-authenticated Aptos transaction
- *     flow with the V2 ciphertext, the price commitment, the lock ID as
- *     collateral margin and the bid quantity.  Persists the bid price to
- *     localStorage (`saveBidPrice`).
+ *     flow with the V2 ciphertext, the lock ID as collateral margin and the
+ *     bid quantity. Nothing is stored in the browser.
  *
  * `submit_bid` takes
- * `(window_id, pair_bcs, ciphertext, commitment, collateral_lock_id, quantity)`.
+ * `(window_id, pair_bcs, ciphertext, collateral_lock_id, quantity)`.
  *
  * Requires {@link WalletContext} to be mounted above this component.
  *
@@ -256,27 +254,19 @@ export function AuctionBidder() {
       const bidder = (await getDerivedAddress(account)).toString();
       // sealBid throws when a node lies about the identity, the associated
       // data or the key; the catch below shows it and nothing is submitted.
-      // SCOUT(#228) EDIT: sealBid returns no commitment and no salt.
       const sealed = await sealBid(windowIdBn, pairBcs, bidder, price);
 
       // Submit
       setStatus("Please sign the transaction...");
 
-      // SCOUT(#228) EDIT: drop the sealed.commitment argument (five-argument submit_bid).
       const pendingTx = await submitBid(
         account,
         windowIdBn,
         pairBcs,
         sealed.ciphertext,
-        sealed.commitment,
         collateralLockId,
         bidQuantity,
       );
-
-      // SCOUT(#228) REMOVE: nothing is stored once the salt is gone.
-      // Persist the bid price (whole USD per whole FakeETH) in localStorage.
-      // Key: windowId (string) used as auction identifier in this v0 shape
-      saveBidPrice(windowId, account, price);
 
       const hash = (pendingTx as { hash?: string }).hash || "submitted";
       setStatus(`Bid Submitted! Tx: ${hash}`);

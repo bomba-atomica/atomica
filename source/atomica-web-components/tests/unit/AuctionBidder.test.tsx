@@ -8,7 +8,8 @@
  *   4. The collateral_lock_id, price and quantity fields are present in Step 2.
  *   5. Submitting seals the bid in the client (`sealBid` reads the timelock key,
  *      identity and associated data from chain) for the wallet's derived Aptos
- *      address, then sends the sealed ciphertext and commitment to `submitBid`.
+ *      address, then sends the sealed ciphertext, with no commitment, to
+ *      `submitBid`. Nothing is written to localStorage.
  *
  * Uses vi.mock to stub `@atomica/sdk/*` so tests run without a blockchain.
  *
@@ -27,15 +28,12 @@ import {
 import { WalletContext } from "../../src/context/WalletContext";
 
 // Stub SDK modules so no blockchain calls are made.
-// SCOUT(#228) EDIT: the sealBid mock returns no commitment and no salt.
 vi.mock("@atomica/sdk/aptos", () => ({
   assertSiweDomain: vi.fn().mockResolvedValue(undefined),
   submitBid: vi.fn().mockResolvedValue({ hash: "0xabc123" }),
   sealBid: vi.fn().mockResolvedValue({
     timelockId: 11n,
     ciphertext: new Uint8Array([0x20, 0x13, 0xab]),
-    commitment: new Uint8Array(32).fill(0xab),
-    salt: new Uint8Array(32).fill(1),
   }),
   getRegisterLockPayload: vi.fn((_proof: unknown, asset: string) => ({
     function: "0xa::lock_receipt::register_ethereum_lock",
@@ -107,10 +105,6 @@ vi.mock("@atomica/sdk/chain-config", () => ({
   })),
 }));
 
-vi.mock("../../src/storage/bidStorage", () => ({
-  saveBidPrice: vi.fn(),
-}));
-
 import { AuctionBidder } from "../../src/components/AuctionBidder";
 import { assertSiweDomain, getBidCount } from "@atomica/sdk/aptos";
 import { approveFakeUsd, lockFakeUsd } from "@atomica/sdk/ethereum";
@@ -132,6 +126,7 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it("renders the FakeUSD lock step (Step 1) by default", () => {
@@ -213,8 +208,7 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     await screen.findByText(/above the window supply/);
   });
 
-  // SCOUT(#228) EDIT: the submitBid arguments shift (no commitment at index 4).
-  it("seals the bid for the derived address and submits ciphertext, commitment, lock id and quantity", async () => {
+  it("submitBid is called with no commitment", async () => {
     const { submitBid, sealBid } = await import("@atomica/sdk/aptos");
     renderBidder();
     fireEvent.click(screen.getByTestId("skip-to-bid-button"));
@@ -243,10 +237,14 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     const args = vi.mocked(submitBid).mock.calls[0];
     expect(args[0]).toBe(ACCOUNT);
     expect(args[1]).toBe(9n);
+    // (account, window id, pair bytes, ciphertext, lock id, quantity).
+    expect(args).toHaveLength(6);
     expect(Array.from(args[3])).toEqual([0x20, 0x13, 0xab]);
-    expect(args[4]).toEqual(new Uint8Array(32).fill(0xab));
-    expect(args[5]).toHaveLength(32);
-    expect(args[6]).toBe(7n);
+    expect(args[4]).toHaveLength(32);
+    expect(args[4]).toEqual(new Uint8Array(32).fill(0xcd));
+    expect(args[5]).toBe(7n);
+    // The bid stores nothing in the browser.
+    expect(localStorage.length).toBe(0);
   });
 
   it("with a checksummed account and the real getDerivedAddress, sealBid receives the address derived from the lowercase account", async () => {
@@ -279,7 +277,6 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
 
   it("when sealBid throws, AuctionBidder shows the error and never calls submitBid", async () => {
     const { submitBid, sealBid } = await import("@atomica/sdk/aptos");
-    const { saveBidPrice } = await import("../../src/storage/bidStorage");
     vi.mocked(sealBid).mockRejectedValueOnce(
       new Error(
         "The Aptos node returned a timelock identity for timelock 11 that differs from the one built from its chain id, epoch and deadline. Refusing to seal the bid.",
@@ -302,7 +299,6 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     );
     expect(sealBid).toHaveBeenCalledTimes(1);
     expect(submitBid).not.toHaveBeenCalled();
-    expect(saveBidPrice).not.toHaveBeenCalled();
     expect(screen.queryByText(/Bid Submitted/)).toBeNull();
   });
 
@@ -356,9 +352,8 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     await screen.findByText(/Bid Submitted/);
     expect(vi.mocked(sealBid).mock.calls[0][3]).toBe(2000n);
     expect(submitBid).toHaveBeenCalledTimes(1);
-    // The stored price is the same whole-USD value.
-    const { saveBidPrice } = await import("../../src/storage/bidStorage");
-    expect(vi.mocked(saveBidPrice).mock.calls[0][2]).toBe(2000n);
+    // The bid stores nothing in the browser: the chain opens it.
+    expect(localStorage.length).toBe(0);
   });
 
   it.each(["2000.5", "-1", ""])(
@@ -382,7 +377,6 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
       expect(submitBid).not.toHaveBeenCalled();
     },
   );
-  it.todo("SCOUT(#228) submitBid is called with no commitment");
   it("refuses the FakeUSD lock on another host and shows the expected SIWE domain", async () => {
     (window as unknown as { ethereum: object }).ethereum = {};
     vi.mocked(assertSiweDomain).mockRejectedValueOnce(
@@ -549,7 +543,7 @@ describe("AuctionBidder — FakeUSD lock registration", () => {
     expect(vi.mocked(submitBid).mock.calls[0][2]).toEqual(locked);
     // The bid consumes the registered lock.
     expect(
-      Array.from(vi.mocked(submitBid).mock.calls[0][5] as Uint8Array),
+      Array.from(vi.mocked(submitBid).mock.calls[0][4] as Uint8Array),
     ).toEqual(Array(32).fill(0x1d));
   });
 

@@ -49,8 +49,6 @@ curl http://localhost:8080/v1/blocks/by_height/100 | jq
 
 **Primary config**: `source/atomica-web/.env` (gitignored)
 
-<!-- SCOUT(#228) DOC: the image settings below are stale: docker-compose.yaml reads IMAGE_NAME and defaults to a pinned digest, and VALIDATOR_IMAGE_REPO with IMAGE_TAG is only a late fallback in genesis.ts; an implementer who moves the pin needs the real steps. -->
-
 ### Validator Image (Default)
 
 `docker-compose.yaml` runs every validator from `${IMAGE_NAME:-<pinned digest>}`:
@@ -168,12 +166,11 @@ Docker images are built and published by the [atomica-aptos](https://github.com/
 - **GitHub Workflow**: `.github/workflows/build-validator-image.yml` (in atomica-aptos repo)
 - **Published to**: `ghcr.io/bomba-atomica/atomica-aptos/validator`
 
-<!-- SCOUT(#228) DOC: the trigger list below is stale: the fork cuts a binary-<sha> release on a push to dev-atomica that changes Rust or Cargo files (about 73 minutes), and the validator image is then built by a manual dispatch of build-validator-image.yml. -->
-
-Images are automatically built on:
-- Push to `main` or `dev-atomica` branches
-- Pull requests
-- Manual workflow dispatch
+A push to `dev-atomica` that changes `*.rs`, `Cargo.toml` or `Cargo.lock`
+cuts a `binary-<hash>` release (`build-aptos-binary.yml`, about 73 minutes).
+The release event starts no workflow, so the validator image of that revision
+is built by a manual dispatch of `build-validator-image.yml`. See "Moving the
+Fork Pin" above for the steps that follow.
 
 ## CI/CD Example
 

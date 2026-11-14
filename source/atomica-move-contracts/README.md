@@ -10,7 +10,6 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 
 ### Entry points (public entry funs)
 
-<!-- SCOUT(#228) DOC: the `submit_bid` row loses "price commitment"; the `open_bid`, `submit_cleartext_and_clear`, `finalize_reveal` row becomes `open_bids`. -->
 <!-- SCOUT(#242) DOC: the `settle` row says "single highest bid; uniform-price clearing is scaffold"; the code clears at a uniform price. The unwind pull request (213) rewrites this row. -->
 
 | Module | Function | Status |
@@ -18,8 +17,9 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 | `atomica::auction` | `create_auction` | live (aborts `E_PAIR_NOT_ALLOWED` unless `pair_bcs` is on the pair allowlist; takes no timelock id: the first call of a window id registers its one timelock through the package's registrar object, with the window close as deadline, and later sellers of any pair join it; at most 100 seller locks per window, each at least 0.01 FakeETH) |
 | `atomica::auction` | `allow_pair` | live (package account only; adds a pair from its four fields) |
 | `atomica::eth_proof` | `set_window_schedule` | test chain only (package account, chain id 4, once: stores a short window clock such as `900, [900]`) |
-| `atomica::auction` | `submit_bid` | live (V2 bid ciphertext checked with `ibe::verify_bid_ct`, price commitment; at most 100 bids per window, collateral at least 10 FakeUSD) |
-| `atomica::auction` | `open_bid`, `submit_cleartext_and_clear`, `finalize_reveal` | live (openings checked against the commitment; needs registry status `Revealed`) |
+| `atomica::auction` | `submit_bid` | live (V2 bid ciphertext of the 8-byte price, checked with `ibe::verify_bid_ct`; no commitment; at most 100 bids per window, collateral at least 10 FakeUSD) |
+| `atomica::auction` | `open_bids` | live (any account, registry status `Revealed`: decrypts up to `MAX_OPEN_BIDS_PER_CALL` (12) bids from the window's cursor with `ibe::decrypt_bid`; never clears; issue 228) |
+| `atomica::auction` | `finalize_window` | live (any account, once every bid is opened: sets `reveal_final` and clears at the uniform price) |
 | `atomica::auction` | `refund_expired_window` | live (returns every receipt and emits the all-refund `AuctionOutcome` once the timelock is `Expired`) |
 | `atomica::auction` | `settle` | live (honours the cleared fills until the stuck deadline; records every lock's outcome and emits `AuctionOutcome`) |
 | `atomica::auction` | `unwind` | live (any account, from the stuck deadline: returns every lock a window still holds; issue 194) |
@@ -36,11 +36,9 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 
 ### View functions
 
-<!-- SCOUT(#228) DOC: remove `compute_bid_commitment` from the `atomica::auction` row. -->
-
 | Module | Function |
 |---|---|
-| `atomica::auction` | `get_auction`, `get_bid_count`, `get_bid_info`, `get_window_status`, `bid_associated_data`, `compute_bid_commitment`, `is_settled`, `auction_exists`, `get_settlement`, `get_stuck_deadline_us`, `quote_for_fill`, `is_pair_allowed`, `launch_pair_bcs`, `timelock_registrar_address`, `window_timelock`, `window_deadline_us`, `get_window_limits` (max bids, max seller locks, min seller lock in FakeETH wei, min bid collateral in FakeUSD base units) |
+| `atomica::auction` | `get_auction`, `get_bid_count`, `get_bid_info`, `get_window_status`, `get_open_cursor`, `get_max_open_bids`, `bid_associated_data`, `is_settled`, `auction_exists`, `get_settlement`, `get_stuck_deadline_us`, `quote_for_fill`, `is_pair_allowed`, `launch_pair_bcs`, `timelock_registrar_address`, `window_timelock`, `window_deadline_us`, `get_window_limits` (max bids, max seller locks, min seller lock in FakeETH wei, min bid collateral in FakeUSD base units) |
 | `atomica::eth_proof` | `get_window_schedule` (the window clock in force: 07:45 and 16:15 UTC unless a test chain stored another) |
 | `atomica::lock_receipt` | `is_lock_claimed`, `get_total_locked`, `get_receipt_count`, `get_receipt`, `get_receipt_binding`, `get_lock_outcome`, `is_registry_initialized` |
 | `atomica::fake_eth` | `get_metadata`, `balance` |

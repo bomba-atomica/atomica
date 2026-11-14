@@ -1,18 +1,20 @@
 /**
- * UI component tests for AuctionRevealer (Phase 3e IBE wiring closure).
+ * UI component tests for AuctionRevealer.
  *
  * Verifies that:
  *   1. The component renders the polling controls.
  *   2. The revealer reads the window's timelock id and polls `is_revealed` for it.
- *   3. The cleartext submission section is shown when `is_revealed` returns true.
- *   4. The submitted cleartext count is displayed after submission.
- *   5. "Decrypt Bids" opens the bids off chain (`decryptWindowBids`, which reads
- *      `timelock::get_decryption_key`) and fills in the prices and salts.
+ *   3. The open section is shown when `is_revealed` returns true. It has no
+ *      price or salt input.
+ *   4. "Open bids" sends `openBids` with `MAX_OPEN_BIDS_PER_CALL` until
+ *      `getOpenCursor` reports every bid opened, shows the count, then sends
+ *      `finalizeWindow` once.
+ *   5. "Preview bids" decrypts the bids off chain (`decryptWindowBids`) and
+ *      only shows them.
  *
  * Uses vi.mock to stub `@atomica/sdk/aptos` so no blockchain calls are made.
  *
- * @see docs/architecture/v0-architecture.md §2.6 — cleartext submission
- * @see #90 — Phase 3e IBE wiring closure
+ * @see docs/architecture/v0-architecture.md §2.6 — on-chain opening
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -27,20 +29,26 @@ import { WalletContext } from "../../src/context/WalletContext";
 
 const {
   mockIsRevealed,
-  mockSubmitCleartextAndClear,
+  mockOpenBids,
+  mockFinalizeWindow,
+  mockGetOpenCursor,
   mockGetWindowTimelockId,
   mockDecryptWindowBids,
 } = vi.hoisted(() => ({
   mockIsRevealed: vi.fn(),
-  mockSubmitCleartextAndClear: vi.fn(),
+  mockOpenBids: vi.fn(),
+  mockFinalizeWindow: vi.fn(),
+  mockGetOpenCursor: vi.fn(),
   mockGetWindowTimelockId: vi.fn(),
   mockDecryptWindowBids: vi.fn(),
 }));
 
-// SCOUT(#228) EDIT: mock openBids instead of submitCleartextAndClear.
 vi.mock("@atomica/sdk/aptos", () => ({
+  MAX_OPEN_BIDS_PER_CALL: 12n,
   isRevealed: mockIsRevealed,
-  submitCleartextAndClear: mockSubmitCleartextAndClear,
+  openBids: mockOpenBids,
+  finalizeWindow: mockFinalizeWindow,
+  getOpenCursor: mockGetOpenCursor,
   getWindowTimelockId: mockGetWindowTimelockId,
   decryptWindowBids: mockDecryptWindowBids,
 }));
@@ -58,9 +66,7 @@ function renderRevealer(account: string | null = ACCOUNT) {
   );
 }
 
-// SCOUT(#228) EDIT: rewrite this suite for the single Open bids action.
-// SCOUT(#236) EDIT: the same suite asserts one open-and-clear transaction with no typed price or salt.
-describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => {
+describe("AuctionRevealer — polling and the Open bids action", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -99,94 +105,123 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
     expect(mockIsRevealed).toHaveBeenCalledWith(42n);
   });
 
-  it("shows cleartext submission section when is_revealed returns true", async () => {
+  it("shows the Open bids action, with no price or salt input, when is_revealed returns true", async () => {
     mockIsRevealed.mockResolvedValue(true);
     renderRevealer();
 
     fireEvent.click(screen.getByTestId("start-polling-button"));
 
     await waitFor(() => {
-      expect(screen.getByTestId("cleartext-submission-section")).toBeTruthy();
+      expect(screen.getByTestId("open-bids-section")).toBeTruthy();
     });
 
     const status = screen.getByTestId("reveal-status");
     expect(status.textContent).toContain("REVEALED");
-    expect(screen.getByTestId("submit-cleartexts-button")).toBeTruthy();
-    expect(screen.getByTestId("cleartexts-input")).toBeTruthy();
+    expect(screen.getByTestId("open-bids-button").textContent).toBe(
+      "Open bids",
+    );
+    expect(screen.queryByTestId("cleartexts-input")).toBeNull();
+    expect(screen.queryByTestId("salts-input")).toBeNull();
   });
 
-  // SCOUT(#228) REMOVE: this case.
-  it("calls submitCleartextAndClear and shows submitted count", async () => {
+  it("Open bids calls openBids until every bid is opened, shows the count, then calls finalizeWindow once", async () => {
     mockIsRevealed.mockResolvedValue(true);
-    mockSubmitCleartextAndClear.mockResolvedValue({ hash: "0xsubmit" });
+    // 25 bids: batches of 12, 12 and 1.
+    mockGetOpenCursor
+      .mockResolvedValueOnce({ next: 0n, total: 25n })
+      .mockResolvedValueOnce({ next: 12n, total: 25n })
+      .mockResolvedValueOnce({ next: 24n, total: 25n })
+      .mockResolvedValueOnce({ next: 25n, total: 25n });
+    mockOpenBids.mockResolvedValue({ hash: "0xopen" });
+    mockFinalizeWindow.mockResolvedValue({ hash: "0xfinal" });
     renderRevealer();
-
     fireEvent.click(screen.getByTestId("start-polling-button"));
-
     await waitFor(() => {
-      expect(screen.getByTestId("cleartext-submission-section")).toBeTruthy();
+      expect(screen.getByTestId("open-bids-button")).toBeTruthy();
     });
 
-    // Enter cleartext prices (whole USD per whole FakeETH). The third bid
-    // has an empty salt, so it is skipped and its price is not parsed.
-    fireEvent.change(screen.getByTestId("cleartexts-input"), {
-      target: { value: "2000, 1990, 1950" },
-    });
-    const salt = "0x" + "11".repeat(32);
-    fireEvent.change(screen.getByTestId("salts-input"), {
-      target: { value: `${salt}, ${salt}, ` },
-    });
-
-    fireEvent.click(screen.getByTestId("submit-cleartexts-button"));
-
+    fireEvent.click(screen.getByTestId("open-bids-button"));
     await waitFor(() => {
-      expect(screen.getByTestId("submitted-count")).toBeTruthy();
+      expect(screen.getByTestId("open-status").textContent).toContain(
+        "cleared the window",
+      );
     });
 
-    expect(mockSubmitCleartextAndClear).toHaveBeenCalledWith(
+    expect(mockOpenBids).toHaveBeenCalledTimes(3);
+    for (const call of mockOpenBids.mock.calls) {
+      expect(call).toEqual([ACCOUNT, 0n, LAUNCH_PAIR_BCS, 12n]);
+    }
+    expect(mockGetOpenCursor).toHaveBeenCalledWith(0n, LAUNCH_PAIR_BCS);
+    expect(mockFinalizeWindow).toHaveBeenCalledTimes(1);
+    expect(mockFinalizeWindow).toHaveBeenCalledWith(
       ACCOUNT,
       0n,
       LAUNCH_PAIR_BCS,
-      [2000n, 1990n, 0n],
-      [
-        new Uint8Array(32).fill(0x11),
-        new Uint8Array(32).fill(0x11),
-        new Uint8Array(0),
-      ],
     );
-
-    const count = screen.getByTestId("submitted-count");
-    expect(count.textContent).toContain("3");
+    // finalize_window comes after the last open_bids.
+    expect(mockFinalizeWindow.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mockOpenBids.mock.invocationCallOrder[2],
+    );
+    expect(screen.getByTestId("opened-count").textContent).toContain(
+      "25 of 25",
+    );
   });
 
-  // SCOUT(#228) REMOVE: this case.
-  it("rejects a salt count that does not match the cleartexts", async () => {
+  it("a window whose bids are all opened only sends finalizeWindow", async () => {
     mockIsRevealed.mockResolvedValue(true);
+    mockGetOpenCursor.mockResolvedValue({ next: 3n, total: 3n });
+    mockFinalizeWindow.mockResolvedValue({ hash: "0xfinal" });
     renderRevealer();
     fireEvent.click(screen.getByTestId("start-polling-button"));
     await waitFor(() => {
-      expect(screen.getByTestId("cleartext-submission-section")).toBeTruthy();
+      expect(screen.getByTestId("open-bids-button")).toBeTruthy();
     });
-    fireEvent.change(screen.getByTestId("cleartexts-input"), {
-      target: { value: "110, 105" },
-    });
-    fireEvent.change(screen.getByTestId("salts-input"), {
-      target: { value: "0x" + "11".repeat(32) },
-    });
-    fireEvent.click(screen.getByTestId("submit-cleartexts-button"));
+    fireEvent.click(screen.getByTestId("open-bids-button"));
     await waitFor(() => {
-      expect(screen.getByTestId("submit-status").textContent).toContain(
-        "one salt per cleartext",
-      );
+      expect(mockFinalizeWindow).toHaveBeenCalledTimes(1);
     });
-    expect(mockSubmitCleartextAndClear).not.toHaveBeenCalled();
+    expect(mockOpenBids).not.toHaveBeenCalled();
   });
 
-  // SCOUT(#228) EDIT: decrypt is a preview only, with no salts.
-  it("decrypts the bids with the revealed key and fills in prices and salts", async () => {
+  it("a window with no bids sends nothing", async () => {
     mockIsRevealed.mockResolvedValue(true);
-    mockSubmitCleartextAndClear.mockResolvedValue({ hash: "0xsubmit" });
-    const salt = new Uint8Array(32).fill(0x22);
+    mockGetOpenCursor.mockResolvedValue({ next: 0n, total: 0n });
+    renderRevealer();
+    fireEvent.click(screen.getByTestId("start-polling-button"));
+    await waitFor(() => {
+      expect(screen.getByTestId("open-bids-button")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId("open-bids-button"));
+    await waitFor(() => {
+      expect(screen.getByTestId("open-status").textContent).toContain(
+        "No bids",
+      );
+    });
+    expect(mockOpenBids).not.toHaveBeenCalled();
+    expect(mockFinalizeWindow).not.toHaveBeenCalled();
+  });
+
+  it("stops and shows the error when open_bids fails, without finalizing", async () => {
+    mockIsRevealed.mockResolvedValue(true);
+    mockGetOpenCursor.mockResolvedValue({ next: 0n, total: 5n });
+    mockOpenBids.mockRejectedValueOnce(new Error("Move abort 20"));
+    renderRevealer();
+    fireEvent.click(screen.getByTestId("start-polling-button"));
+    await waitFor(() => {
+      expect(screen.getByTestId("open-bids-button")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId("open-bids-button"));
+    await waitFor(() => {
+      expect(screen.getByTestId("open-status").textContent).toContain(
+        "Move abort 20",
+      );
+    });
+    expect(mockOpenBids).toHaveBeenCalledTimes(1);
+    expect(mockFinalizeWindow).not.toHaveBeenCalled();
+  });
+
+  it("Preview bids decrypts the bids off chain and only shows them", async () => {
+    mockIsRevealed.mockResolvedValue(true);
     mockDecryptWindowBids.mockResolvedValue([
       {
         index: 0,
@@ -194,16 +229,13 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
         alreadyOpened: false,
         valid: true,
         price: 2000n,
-        salt,
-        matchesCommitment: true,
       },
       {
         index: 1,
         bidder: "0x" + "0b".repeat(32),
         alreadyOpened: false,
         valid: true,
-        matchesCommitment: false,
-        error: "bad signature",
+        error: "bid plaintext is not an 8-byte price",
       },
     ]);
     renderRevealer();
@@ -219,31 +251,11 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
     expect(mockDecryptWindowBids).toHaveBeenCalledWith(0n, LAUNCH_PAIR_BCS);
     const rows = screen.getAllByTestId("decrypted-bid");
     expect(rows[0].textContent).toContain("price $2000");
-    expect(rows[0].textContent).toContain("matches commitment");
-    expect(rows[1].textContent).toContain("cannot open");
-    expect(
-      (screen.getByTestId("cleartexts-input") as HTMLInputElement).value,
-    ).toBe("2000, 0");
-
-    fireEvent.click(screen.getByTestId("submit-cleartexts-button"));
-    await waitFor(() => {
-      expect(screen.getByTestId("submitted-count")).toBeTruthy();
-    });
-    expect(mockSubmitCleartextAndClear).toHaveBeenCalledWith(
-      ACCOUNT,
-      0n,
-      LAUNCH_PAIR_BCS,
-      [2000n, 0n],
-      [salt, new Uint8Array(0)],
-    );
+    expect(rows[0].textContent).toContain("not opened yet");
+    expect(rows[1].textContent).toContain("8-byte price");
+    expect(mockOpenBids).not.toHaveBeenCalled();
+    expect(mockFinalizeWindow).not.toHaveBeenCalled();
   });
-
-  it.todo(
-    "SCOUT(#236) the open step sends one open-and-clear transaction built from decryptWindowBids, with no price or salt typed by the user",
-  );
-  it.todo(
-    "SCOUT(#228) Open bids calls openBids until every bid is opened and shows the count",
-  );
 
   it("an opened bid that the chain marks invalid is shown as invalid", async () => {
     mockIsRevealed.mockResolvedValue(true);
@@ -253,8 +265,7 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
         bidder: "0x" + "0a".repeat(32),
         alreadyOpened: true,
         valid: true,
-        price: 200n,
-        matchesCommitment: true,
+        price: 2000n,
       },
       {
         index: 1,
@@ -262,7 +273,6 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
         alreadyOpened: true,
         valid: false,
         price: 300n,
-        matchesCommitment: true,
       },
     ]);
     renderRevealer();
@@ -275,8 +285,8 @@ describe("AuctionRevealer — Phase 3e polling and cleartext submission", () => 
       expect(screen.getAllByTestId("decrypted-bid")).toHaveLength(2);
     });
     const rows = screen.getAllByTestId("decrypted-bid");
-    expect(rows[0].textContent).toContain("already opened");
+    expect(rows[0].textContent).toContain("(opened)");
     expect(rows[0].textContent).not.toContain("invalid");
-    expect(rows[1].textContent).toContain("already opened, invalid");
+    expect(rows[1].textContent).toContain("opened, invalid");
   });
 });

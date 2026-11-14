@@ -13,7 +13,7 @@ import {
 import { simulateMaxGasAmount } from "@atomica/sdk";
 import {
     CONTRACT_ADDR,
-    decryptWindowBids,
+    MAX_OPEN_BIDS_PER_CALL,
     getBidPayload,
     getCreateAuctionPayload,
     getLockOutcome,
@@ -23,7 +23,9 @@ import {
     getWindowDeadlineUs,
     getWindowSchedule,
     getWindowTimelock,
-    getSubmitCleartextPayload,
+    getFinalizeWindowPayload,
+    getOpenBidsPayload,
+    getOpenCursor,
     isRevealed,
     sealBid,
     setAptosInstance,
@@ -404,31 +406,26 @@ describe.sequential("Live cross-chain round trip: lock, auction, outcome, releas
                     windowId,
                     LAUNCH_PAIR_BCS,
                     sealed.ciphertext,
-                    sealed.commitment,
                     ethers.getBytes(bidder.proof.lockId),
                     SUPPLY,
                 ),
             );
         }
 
-        // 5. Bids close, the validators reveal the key, the bids are opened
-        //    (which clears the window) and the window settles.
+        // 5. Bids close, the validators reveal the key, the operator opens the
+        //    bids on chain (open_bids decrypts them), clears the window with
+        //    finalize_window, and the window settles.
         await pollUntil("the bid deadline", Number(schedule.daySecs) + 300, async () =>
             (await chainNowUs()) >= bidDeadlineUs ? true : undefined,
         );
         await pollUntil(`timelock ${timelockId} reveal`, 900, async () =>
             (await isRevealed(timelockId)) ? true : undefined,
         );
-        const opened = await decryptWindowBids(windowId, LAUNCH_PAIR_BCS);
-        expect(opened.map((b) => b.matchesCommitment)).toEqual([true, true]);
         await submitAsOperator(
-            getSubmitCleartextPayload(
-                windowId,
-                LAUNCH_PAIR_BCS,
-                opened.map((b) => b.price!),
-                opened.map((b) => b.salt!),
-            ),
+            getOpenBidsPayload(windowId, LAUNCH_PAIR_BCS, MAX_OPEN_BIDS_PER_CALL),
         );
+        expect(await getOpenCursor(windowId, LAUNCH_PAIR_BCS)).toEqual({ next: 2n, total: 2n });
+        await submitAsOperator(getFinalizeWindowPayload(windowId, LAUNCH_PAIR_BCS));
         const settled = await submitAsOperator(getSettlePayload(windowId, LAUNCH_PAIR_BCS));
 
         // 6. The carrier finds the AuctionOutcome and carries it to LockBox.

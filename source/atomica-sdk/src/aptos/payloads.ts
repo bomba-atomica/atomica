@@ -408,17 +408,17 @@ export async function waitForCertifiedBlock(
   );
 }
 
-// SCOUT(#228) EDIT: drop the commitment parameter; submit_bid takes five arguments.
 /**
  * Build payload for auction::submit_bid (V2 bid wrapper).
  *
- *   submit_bid(bidder, window_id, pair_bcs, ciphertext, commitment,
- *              collateral_lock_id, quantity)
+ *   submit_bid(bidder, window_id, pair_bcs, ciphertext, collateral_lock_id,
+ *              quantity)
  *
- * `ciphertext` is the V2 bid ciphertext `BCS(vk, U, nonce, C, sig)`. The contract
- * builds the associated data on chain (see `buildBidAd`) and aborts unless
- * `ibe::verify_bid_ct` accepts the ciphertext for it.
- * `commitment` is the 32-byte price commitment (see `computeBidCommitment`).
+ * `ciphertext` is the V2 bid ciphertext `BCS(vk, U, nonce, C, sig)` of the
+ * 8-byte little-endian price (see `sealBid`). The contract builds the
+ * associated data on chain (see `buildBidAd`) and aborts unless
+ * `ibe::verify_bid_ct` accepts the ciphertext for it. `open_bids` decrypts it
+ * on chain once the timelock is revealed.
  * `collateralLockId` is the FakeUSD LockReceipt ID held as margin.
  * `quantity` is the bid quantity in wei (u256).
  *
@@ -428,7 +428,6 @@ export function getBidPayload(
   windowId: bigint,
   pairBcs: Uint8Array,
   ciphertext: Uint8Array,
-  commitment: Uint8Array,
   collateralLockId: Uint8Array,
   quantity: bigint,
 ): InputGenerateTransactionPayloadData {
@@ -438,34 +437,24 @@ export function getBidPayload(
       windowId,
       pairBcs,
       ciphertext,
-      commitment,
       collateralLockId,
       quantity,
     ],
   };
 }
 
-// SCOUT(#228) EDIT: drop the commitment parameter.
 export async function submitBid(
   ethAddress: string,
   windowId: bigint,
   pairBcs: Uint8Array,
   ciphertext: Uint8Array,
-  commitment: Uint8Array,
   collateralLockId: Uint8Array,
   quantity: bigint,
 ) {
   return await submitNativeTransaction(
     aptos,
     ethAddress,
-    getBidPayload(
-      windowId,
-      pairBcs,
-      ciphertext,
-      commitment,
-      collateralLockId,
-      quantity,
-    ),
+    getBidPayload(windowId, pairBcs, ciphertext, collateralLockId, quantity),
   );
 }
 
@@ -773,128 +762,100 @@ export async function getTimelockStatus(
   return { status: "expired", reason: reasons[Number(reasonResult[0]) - 1] };
 }
 
-// SCOUT(#228) REMOVE: submit_cleartext_and_clear is deleted.
 /**
- * Build payload for `auction::submit_cleartext_and_clear`.
- *
- * Called after the timelock status is `Revealed` and bids were decrypted off
- * chain with the revealed key. Index-aligned to the window's bids.
- * `cleartexts[i]` and `salts[i]` open bid `i`. An empty salt skips bid `i`.
- * Each cleartext is a price in whole USD per whole base token (`parsePrice`).
- * The contract checks every opening against the commitment made at submission,
- * so a relayer cannot change a price.
- *
- * @see atomica/docs/decisions/auction-v2-bid-wrapper.md
+ * Most bids one `auction::open_bids` call opens: `MAX_OPEN_BIDS_PER_CALL` in
+ * `auction.move` (B - 1, with B = 13 the largest decrypt batch that fits
+ * `max_execution_gas`). The default batch size of `openBids` callers.
+ * `getMaxOpenBids` reads the same value from chain.
  */
-export function getSubmitCleartextPayload(
+export const MAX_OPEN_BIDS_PER_CALL = 12n;
+
+/** `auction::get_max_open_bids`: the chain's `MAX_OPEN_BIDS_PER_CALL`. */
+export async function getMaxOpenBids(): Promise<bigint> {
+  const [max] = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::auction::get_max_open_bids`,
+      functionArguments: [],
+    },
+  });
+  return BigInt(String(max));
+}
+
+/**
+ * `auction::get_open_cursor`: `next` is the index of the next bid `open_bids`
+ * opens and `total` the window's bid count. Every bid is opened when they are
+ * equal; then `finalizeWindow` clears the window.
+ */
+export async function getOpenCursor(
   windowId: bigint,
   pairBcs: Uint8Array,
-  cleartexts: bigint[],
-  salts: Uint8Array[],
+): Promise<{ next: bigint; total: bigint }> {
+  const [next, total] = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::auction::get_open_cursor`,
+      functionArguments: [windowId, pairBcs],
+    },
+  });
+  return { next: BigInt(String(next)), total: BigInt(String(total)) };
+}
+
+/**
+ * Build payload for `auction::open_bids(window_id, pair_bcs, max_bids)`. Any
+ * account may send it once the timelock is revealed. The chain decrypts up to
+ * `max_bids` bids from the opening cursor, clamped to `MAX_OPEN_BIDS_PER_CALL`.
+ * It never clears.
+ */
+export function getOpenBidsPayload(
+  windowId: bigint,
+  pairBcs: Uint8Array,
+  maxBids: bigint,
 ): InputGenerateTransactionPayloadData {
   return {
-    function: `${CONTRACT_ADDR}::auction::submit_cleartext_and_clear`,
-    functionArguments: [windowId, pairBcs, cleartexts, salts],
+    function: `${CONTRACT_ADDR}::auction::open_bids`,
+    functionArguments: [windowId, pairBcs, maxBids],
   };
 }
 
-// SCOUT(#228) REMOVE: AuctionRevealer calls this today.
-// SCOUT(#236) EDIT: the single open action sends this one transaction until the commit and reveal removal (228) replaces it with openBids.
-export async function submitCleartextAndClear(
+/** Sends `open_bids`; any account may call it once the timelock is revealed. */
+export async function openBids(
   ethAddress: string,
   windowId: bigint,
   pairBcs: Uint8Array,
-  cleartexts: bigint[],
-  salts: Uint8Array[],
-) {
+  maxBids: bigint,
+): Promise<{ hash: string }> {
   return await submitNativeTransaction(
     aptos,
     ethAddress,
-    getSubmitCleartextPayload(windowId, pairBcs, cleartexts, salts),
+    getOpenBidsPayload(windowId, pairBcs, maxBids),
   );
 }
 
-// SCOUT(#228) REMOVE: open_bid is deleted.
 /**
- * Build payload for `auction::open_bid` (one bid, any caller). `price` is
- * whole USD per whole base token (`parsePrice`).
+ * Build payload for `auction::finalize_window(window_id, pair_bcs)`: clear a
+ * window whose bids are all opened. Any account may send it, once, after the
+ * `open_bids` call that brings the cursor to the bid count.
  */
-export function getOpenBidPayload(
-  windowId: bigint,
-  pairBcs: Uint8Array,
-  bidIndex: bigint,
-  price: bigint,
-  salt: Uint8Array,
-): InputGenerateTransactionPayloadData {
-  return {
-    function: `${CONTRACT_ADDR}::auction::open_bid`,
-    functionArguments: [windowId, pairBcs, bidIndex, price, salt],
-  };
-}
-
-// SCOUT(#228) REMOVE: no component calls it.
-// SCOUT(#236) EDIT: still has no caller after the single open action; delete it here or leave it to the commit and reveal removal (228).
-export async function openBid(
-  ethAddress: string,
-  windowId: bigint,
-  pairBcs: Uint8Array,
-  bidIndex: bigint,
-  price: bigint,
-  salt: Uint8Array,
-) {
-  return await submitNativeTransaction(
-    aptos,
-    ethAddress,
-    getOpenBidPayload(windowId, pairBcs, bidIndex, price, salt),
-  );
-}
-
-// SCOUT(#228) REMOVE: finalize_reveal is deleted.
-/**
- * Build payload for `auction::finalize_reveal`: close openings once every bid
- * is open or the opening window ended. Unopened bids become invalid.
- */
-export function getFinalizeRevealPayload(
+export function getFinalizeWindowPayload(
   windowId: bigint,
   pairBcs: Uint8Array,
 ): InputGenerateTransactionPayloadData {
   return {
-    function: `${CONTRACT_ADDR}::auction::finalize_reveal`,
+    function: `${CONTRACT_ADDR}::auction::finalize_window`,
     functionArguments: [windowId, pairBcs],
   };
 }
 
-// SCOUT(#228) REMOVE: no component calls it.
-// SCOUT(#236) EDIT: still has no caller after the single open action; delete it here or leave it to the commit and reveal removal (228).
-export async function finalizeReveal(
+/** Sends `finalize_window`. */
+export async function finalizeWindow(
   ethAddress: string,
   windowId: bigint,
   pairBcs: Uint8Array,
-) {
+): Promise<{ hash: string }> {
   return await submitNativeTransaction(
     aptos,
     ethAddress,
-    getFinalizeRevealPayload(windowId, pairBcs),
+    getFinalizeWindowPayload(windowId, pairBcs),
   );
-}
-
-// SCOUT(#228) ADD: payload for auction::open_bids(window_id, pair_bcs, max_bids).
-export function getOpenBidsPayload(
-  _windowId: bigint,
-  _pairBcs: Uint8Array,
-  _maxBids: bigint,
-): InputGenerateTransactionPayloadData {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#228) getOpenBidsPayload");
-}
-
-// SCOUT(#228) ADD: sends open_bids; any account may call it once the timelock is revealed.
-export async function openBids(
-  _ethAddress: string,
-  _windowId: bigint,
-  _pairBcs: Uint8Array,
-  _maxBids: bigint,
-): Promise<{ hash: string }> {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#228) openBids");
 }
 
 /**

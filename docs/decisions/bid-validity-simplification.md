@@ -177,15 +177,13 @@ Client workflow:
 **Rules as built (issue 216).** There is no separate deposit and no 3-sigma price or units filter. The bid's FakeUSD collateral lock is the only stake:
 
 1. `submit_bid` aborts on a zero quantity (`E_ZERO_QUANTITY`, 37) and on a quantity above the window's supply (`E_QUANTITY_ABOVE_SUPPLY`, 38). It stores the claimed collateral amount on the bid.
-2. When a bid's price is opened, the bid is invalid if the price is zero or `quote_for_fill(quantity, price)` is above its collateral. The opening does not abort, and `BidInvalid` is emitted.
+2. When `auction::open_bids` decrypts a bid on chain (issue 228), the bid is invalid if its ciphertext does not decrypt to exactly 8 bytes (the little-endian price), the price is zero, or `quote_for_fill(quantity, price)` is above its collateral. The opening does not abort, and `BidInvalid` is emitted. Nothing is forfeited.
 3. Clearing skips an invalid bid like an unopened one. It never fills and never sets the clearing price.
 4. The whole collateral of an invalid bid returns to its depositor in the window's outcome, the same as a losing bid.
 
 The original rules below are history. Their deposit forfeits are superseded by the owner axiom.
 
 Spam is bounded by minimum sizes and per-window caps, not by a forfeited deposit (issue 218): at most 100 bids and 100 seller locks per window, at least 10 FakeUSD collateral per bid and 0.01 FakeETH per seller lock.
-
-<!-- SCOUT(#228) DOC: steps a and b: a ciphertext that does not decrypt to an 8-byte price is invalid and its collateral returns; nothing is forfeited. -->
 
 ```
 1. Auction closes at time T
@@ -194,10 +192,13 @@ Spam is bounded by minimum sizes and per-window caps, not by a forfeited deposit
 4. For each ciphertext, validate:
 
    a) Decryption succeeds?
-      - If NO → forfeit deposit (malformed ciphertext) [superseded]
+      - If NO → forfeit deposit (malformed ciphertext) [superseded: the bid is
+        invalid and its collateral returns in full]
 
    b) Decrypted data is valid bid format?
-      - If NO → forfeit deposit (corrupted/malicious data) [superseded]
+      - If NO → forfeit deposit (corrupted/malicious data) [superseded: a
+        plaintext that is not an 8-byte price makes the bid invalid and its
+        collateral returns in full]
 
    c) Price is within reasonable range (RMS)?
       - If price deviates > 3σ from median → forfeit deposit (spam bid) [superseded]

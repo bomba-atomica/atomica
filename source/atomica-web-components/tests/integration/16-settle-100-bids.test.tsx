@@ -3,9 +3,14 @@
  *
  * Live gas test: one window filled to MAX_BIDS_PER_WINDOW = 100 sealed bids
  * is opened and settled on the dual-chain testnet, and the gas_used of each
- * step is logged. Opening the last bid finalizes the reveal and clears the
- * window in the same `submit_cleartext_and_clear` transaction, so its gas
- * includes the clearing and `settle` needs no separate clearing call.
+ * step is logged. The operator, which bid nothing, opens the bids on chain
+ * with `open_bids` in batches of `MAX_OPEN_BIDS_PER_CALL` (the chain decrypts
+ * each one), then clears the window with one `finalize_window`. `open_bids`
+ * never clears, so every batch costs about the same.
+ *
+ * A second window holds exactly 2 * MAX_OPEN_BIDS_PER_CALL bids, so both
+ * `open_bids` calls are full batches: the worst batch runs on the live
+ * validators, not a short last one. A cap above the real gas limit fails here.
  *
  * Gas feature version 53 charges 10x the gas of the old schedule, and the
  * ts-sdk default maxGasAmount stays at 200,000 units. The settle goes through
@@ -39,7 +44,10 @@ import {
   submitAsEthAccount,
   ethAccountAddress,
   waitForReveal,
-  openWindowBidsDirect,
+  openBidsDirect,
+  openAndFinalizeWindowDirect,
+  finalizeWindowDirect,
+  settleAuctionDirect,
   getAuctionState,
   TEST_WINDOW_SECS,
   type LiveWindow,
@@ -54,6 +62,7 @@ import {
 } from "@aptos-labs/ts-sdk";
 import { getGasLimits, submitNativeTransaction } from "@atomica/sdk";
 import {
+  MAX_OPEN_BIDS_PER_CALL,
   setAptosInstance,
   sealBid,
   getBidPayload,
@@ -61,6 +70,8 @@ import {
   getBidResults,
   getWindowLimits,
   getWindowLockIds,
+  getMaxOpenBids,
+  getOpenCursor,
 } from "@atomica/sdk/aptos";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
@@ -104,6 +115,7 @@ async function logGas(
   aptosClient: Aptos,
   step: string,
   hash: string,
+  bidCount: number = BID_COUNT,
 ): Promise<UserTransactionResponse> {
   const tx = (await aptosClient.getTransactionByHash({
     transactionHash: hash,
@@ -112,7 +124,7 @@ async function logGas(
     new RegExp(`::auction::${step}$`),
   );
   console.log(
-    `[gas] ${step} (${BID_COUNT} bids): gas_used=${tx.gas_used} max_gas_amount=${tx.max_gas_amount} success=${tx.success}`,
+    `[gas] ${step} (${bidCount} bids): gas_used=${tx.gas_used} max_gas_amount=${tx.max_gas_amount} success=${tx.success}`,
   );
   return tx;
 }
@@ -194,7 +206,6 @@ describe.sequential("16: Settle a 100-bid window", () => {
     for (let i = 0; i < BID_COUNT; i++) {
       const price = BASE_PRICE + PRICE_STEP * BigInt(i);
       prices.push(price);
-      // SCOUT(#228) EDIT: five-argument getBidPayload with no commitment.
       const sealed = await sealBid(
         auction.windowId,
         PAIR_BCS,
@@ -206,7 +217,6 @@ describe.sequential("16: Settle a 100-bid window", () => {
           auction.windowId,
           PAIR_BCS,
           sealed.ciphertext,
-          sealed.commitment,
           ethers.getBytes(collateral[i]),
           BID_QUANTITY,
         ),
@@ -229,35 +239,45 @@ describe.sequential("16: Settle a 100-bid window", () => {
     await teardownIntegrationFixture();
   });
 
-  // SCOUT(#228) EDIT: open the 100 bids in batches with open_bids and log the gas of each batch.
   it(
-    "opens and clears 100 bids in one call and logs gas_used",
+    "100 bids are opened in batches by an account that is not the bidder, and the window settles",
     async () => {
+      // The chain's cap equals the SDK constant every batch passes.
+      expect(await getMaxOpenBids()).toBe(MAX_OPEN_BIDS_PER_CALL);
+
       await waitForReveal(
         auction.timelockId,
         TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS,
       );
 
-      // The opening is the operator's next transaction: find it by sequence number.
-      const { sequence_number: openSequence } =
-        await aptosClient.getAccountInfo({
-          accountAddress: operator.accountAddress,
-        });
-      const opened = await openWindowBidsDirect(aptosClient, operator, auction);
-      expect(opened.map((b) => b.price)).toEqual(prices);
-      const [openTx] = await aptosClient.getAccountTransactions({
-        accountAddress: operator.accountAddress,
-        options: { offset: Number(openSequence), limit: 1 },
-      });
-      // SCOUT(#228) EDIT: the entry function name that logGas checks becomes open_bids.
-      const openTxResponse = await logGas(
+      const { openHashes, finalizeHash } = await openAndFinalizeWindowDirect(
         aptosClient,
-        "submit_cleartext_and_clear",
-        openTx.hash,
+        operator,
+        auction,
       );
-      expect(openTxResponse.success).toBe(true);
+      // ceil(100 / 12) = 9 batches.
+      expect(openHashes).toHaveLength(
+        Math.ceil(BID_COUNT / Number(MAX_OPEN_BIDS_PER_CALL)),
+      );
+      for (const hash of openHashes) {
+        const tx = await logGas(aptosClient, "open_bids", hash);
+        expect(tx.success).toBe(true);
+        expect((tx.payload as { arguments: unknown[] }).arguments[2]).toBe(
+          MAX_OPEN_BIDS_PER_CALL.toString(),
+        );
+      }
+      const finalizeTx = await logGas(
+        aptosClient,
+        "finalize_window",
+        finalizeHash,
+      );
+      expect(finalizeTx.success).toBe(true);
+      expect(await getOpenCursor(auction.windowId, PAIR_BCS)).toEqual({
+        next: BigInt(BID_COUNT),
+        total: BigInt(BID_COUNT),
+      });
 
-      // The opening call cleared the window: bid results exist before settle.
+      // finalize_window cleared the window: bid results exist before settle.
       const cleared = await getAuctionState(aptosClient, moduleAddr, auction);
       expect(cleared.settled).toBe(false);
       // Every bid is valid, so the 50 highest win and the lowest of them,
@@ -302,7 +322,93 @@ describe.sequential("16: Settle a 100-bid window", () => {
     expect(winners.reduce((sum, r) => sum + r.fillAmount, 0n)).toBe(SUPPLY);
   }, 300_000);
 
-  it.todo(
-    "SCOUT(#228) 100 bids are opened in batches by an account that is not the bidder, and the window settles",
+  it(
+    "a window of exactly 2 * MAX_OPEN_BIDS_PER_CALL bids opens in full batches, then finalize_window clears it",
+    async () => {
+      const n = 2 * Number(MAX_OPEN_BIDS_PER_CALL);
+      // Half the bids fill the supply.
+      const supply = BID_QUANTITY * BigInt(n / 2);
+      // A later window: the first one is past its close. One seller lock,
+      // 24 collaterals and 24 bids need far less than the 840 s of the first.
+      const full = await createLiveWindow(fixture, aptosClient, operator, {
+        pairBcs: PAIR_BCS,
+        minWindowLeftSecs: 600n,
+        lockAmount: supply,
+      });
+      expect(full.windowId).not.toBe(auction.windowId);
+      const bidderAptosAddress = await ethAccountAddress(fixture.eth.bidder);
+      const collateral = await lockBidCollaterals(
+        fixture,
+        aptosClient,
+        operator,
+        PAIR_BCS,
+        n,
+        COLLATERAL,
+      );
+      for (let i = 0; i < n; i++) {
+        const sealed = await sealBid(
+          full.windowId,
+          PAIR_BCS,
+          bidderAptosAddress,
+          BASE_PRICE + PRICE_STEP * BigInt(i),
+        );
+        await submitAsEthAccount(
+          aptosClient,
+          fixture.eth.bidder,
+          getBidPayload(
+            full.windowId,
+            PAIR_BCS,
+            sealed.ciphertext,
+            ethers.getBytes(collateral[i]),
+            BID_QUANTITY,
+          ),
+        );
+      }
+      expect(await getOpenCursor(full.windowId, PAIR_BCS)).toEqual({
+        next: 0n,
+        total: BigInt(n),
+      });
+
+      await waitForReveal(
+        full.timelockId,
+        TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS,
+      );
+
+      // Both calls are full batches of MAX_OPEN_BIDS_PER_CALL.
+      for (const expectedNext of [MAX_OPEN_BIDS_PER_CALL, BigInt(n)]) {
+        const hash = await openBidsDirect(aptosClient, operator, full);
+        const tx = await logGas(aptosClient, "open_bids", hash, n);
+        expect(tx.success).toBe(true);
+        expect(await getOpenCursor(full.windowId, PAIR_BCS)).toEqual({
+          next: expectedNext,
+          total: BigInt(n),
+        });
+      }
+      const finalizeTx = await logGas(
+        aptosClient,
+        "finalize_window",
+        await finalizeWindowDirect(aptosClient, operator, full),
+        n,
+      );
+      expect(finalizeTx.success).toBe(true);
+
+      const settleTx = await logGas(
+        aptosClient,
+        "settle",
+        await settleAuctionDirect(aptosClient, operator, full),
+        n,
+      );
+      expect(settleTx.success).toBe(true);
+      const state = await getAuctionState(aptosClient, moduleAddr, full);
+      expect(state.settled).toBe(true);
+      expect(state.clearingPrice).toBe(BASE_PRICE + PRICE_STEP * BigInt(n / 2));
+      const winners = (await getBidResults(full.windowId, PAIR_BCS)).filter(
+        (r) => r.isWinner,
+      );
+      expect(winners).toHaveLength(n / 2);
+      expect(winners.reduce((sum, r) => sum + r.fillAmount, 0n)).toBe(supply);
+    },
+    (3 * TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 600) * 1000,
   );
+
 });

@@ -1,39 +1,38 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-// SCOUT(#228) EDIT: replace submitCleartextAndClear with the SDK openBids; decryptWindowBids stays as a read-only preview.
 import {
+  MAX_OPEN_BIDS_PER_CALL,
   decryptWindowBids,
+  finalizeWindow,
+  getOpenCursor,
   getWindowTimelockId,
   isRevealed,
-  submitCleartextAndClear,
+  openBids,
   type OpenedBid,
 } from "@atomica/sdk/aptos";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
-import { formatPrice, parsePrice } from "@atomica/sdk";
+import { formatPrice } from "@atomica/sdk";
 import { useWallet } from "../context/WalletContext";
 
-// SCOUT(#228) EDIT: rewrite this flow comment: one permissionless Open bids action, no prices and no salts.
 // SCOUT(#236) EDIT: this component gets exported and mounted, so it needs windowId and pairBcs props instead of free-text inputs.
 /**
- * AuctionRevealer — monitors decryption key availability and triggers
- * cleartext submission for a sealed-bid auction window (v0 Beta, Phase 3e).
+ * AuctionRevealer — monitors decryption key availability and opens the bids
+ * of a sealed-bid auction window on chain (v0 Beta).
  *
  * Flow:
- *   1. Reads the window's timelock id (`auction::get_window_status`) and polls
+ *   1. Reads the window's timelock id (`auction::window_timelock`) and polls
  *      `timelock::is_revealed(timelockId)` every `POLL_INTERVAL_MS` milliseconds.
- *   2. On `true`: "Decrypt Bids" reads the revealed key with
- *      `timelock::get_decryption_key`, decrypts every bid ciphertext off chain
- *      with the V2 decryptor (`decryptWindowBids`) and fills in the prices and
- *      salts. A bid that does not decrypt, or whose plaintext does not match its
- *      commitment, is skipped (empty salt): only its bidder can open it.
- *   3. Calls `auction::submit_cleartext_and_clear` with the prices and salts.
- *      The contract checks every opening against the commitment made at
- *      submission.
- *   4. Displays reveal status and submitted cleartext count.
+ *   2. On `true`: one permissionless "Open bids" action. Any account may send
+ *      it. It sends `auction::open_bids` with `MAX_OPEN_BIDS_PER_CALL` until
+ *      `auction::get_open_cursor` reports every bid opened, showing the opened
+ *      count, then sends `auction::finalize_window` once to clear the window.
+ *      The chain decrypts every bid itself. Nobody types a price or a salt.
+ *   3. "Preview bids" decrypts the bids off chain with the revealed key
+ *      (`decryptWindowBids`). It is read-only.
  *
  * Requires {@link WalletContext} to be mounted above this component.
  *
- * @see docs/architecture/v0-architecture.md §2.6 — cleartext submission
- * @see source/atomica-move-contracts/sources/auction.move — submit_cleartext_and_clear
+ * @see docs/architecture/v0-architecture.md §2.6 — on-chain opening
+ * @see source/atomica-move-contracts/sources/auction.move — open_bids, finalize_window
  */
 
 const POLL_INTERVAL_MS = 5_000;
@@ -46,23 +45,12 @@ function parsePairBcs(hex: string): Uint8Array {
   );
 }
 
-function toHex(bytes: Uint8Array): string {
-  return (
-    "0x" + Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")
-  );
-}
-
-// SCOUT(#236) EDIT: make the open step one action, built from decryptWindowBids before on-chain decryption (228) and from openBids after it.
 export function AuctionRevealer() {
   const { account } = useWallet();
 
   // ── Inputs ─────────────────────────────────────────────────────────────────
   const [windowId, setWindowId] = useState("0");
   const [pairBcsHex, setPairBcsHex] = useState("");
-  // SCOUT(#228) REMOVE: hand-typed cleartext prices and salts.
-  // SCOUT(#236) REMOVE: the user types no price and no salt.
-  const [cleartextsRaw, setCleartextsRaw] = useState("");
-  const [saltsRaw, setSaltsRaw] = useState("");
 
   // ── Poll state ─────────────────────────────────────────────────────────────
   const [polling, setPolling] = useState(false);
@@ -74,10 +62,12 @@ export function AuctionRevealer() {
   const [decrypted, setDecrypted] = useState<OpenedBid[] | null>(null);
   const [decryptError, setDecryptError] = useState<string | null>(null);
 
-  // ── Submit state ───────────────────────────────────────────────────────────
-  const [submitting, setSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState<string | null>(null);
-  const [submittedCount, setSubmittedCount] = useState<number | null>(null);
+  // ── Open state ─────────────────────────────────────────────────────────────
+  const [opening, setOpening] = useState(false);
+  const [openStatus, setOpenStatus] = useState<string | null>(null);
+  const [cursor, setCursor] = useState<{ next: bigint; total: bigint } | null>(
+    null,
+  );
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -100,7 +90,7 @@ export function AuctionRevealer() {
     setPolling(true);
     setRevealed(null);
     setPollError(null);
-    setSubmitStatus(null);
+    setOpenStatus(null);
     checkRevealed();
     intervalRef.current = setInterval(checkRevealed, POLL_INTERVAL_MS);
   }, [polling, checkRevealed]);
@@ -129,28 +119,15 @@ export function AuctionRevealer() {
     };
   }, []);
 
-  // ── Decrypt handler ────────────────────────────────────────────────────────
-  // SCOUT(#228) EDIT: decrypt becomes a preview only; the 8-byte plaintext has no salt and nothing to match against a commitment.
+  // ── Preview handler ────────────────────────────────────────────────────────
+  // Read-only: decrypts the bids off chain with the revealed key. The chain
+  // opens them itself with open_bids.
   const handleDecrypt = async () => {
     setDecrypting(true);
     setDecryptError(null);
     try {
-      const bids = await decryptWindowBids(
-        BigInt(windowId),
-        parsePairBcs(pairBcsHex),
-      );
-      setDecrypted(bids);
-      // Index-aligned openings. Skip (empty salt) a bid already opened or one
-      // whose decryption does not match its commitment.
-      const usable = (b: OpenedBid) =>
-        b.matchesCommitment && !b.alreadyOpened && b.salt !== undefined;
-      // Prices are whole USD per whole base token, typed back as plain digits
-      // that parsePrice reads.
-      setCleartextsRaw(
-        bids.map((b) => (usable(b) ? b.price!.toString() : "0")).join(", "),
-      );
-      setSaltsRaw(
-        bids.map((b) => (usable(b) ? toHex(b.salt!) : "")).join(", "),
+      setDecrypted(
+        await decryptWindowBids(BigInt(windowId), parsePairBcs(pairBcsHex)),
       );
     } catch (err) {
       setDecryptError(err instanceof Error ? err.message : "Decrypt failed");
@@ -159,78 +136,48 @@ export function AuctionRevealer() {
     }
   };
 
-  // ── Submit handler ─────────────────────────────────────────────────────────
-  // SCOUT(#228) REMOVE: replace with openBids(account, windowId, pairBcs, maxBids), repeated until every bid is opened.
-  // SCOUT(#236) EDIT: one open-and-clear transaction with no typed input.
-  // An invalid bid (zero price, or collateral below its quote) does not abort
-  // this call: the chain marks it invalid and it never fills.
-  const handleSubmitCleartexts = async () => {
+  // ── Open handler ───────────────────────────────────────────────────────────
+  // Sends open_bids in batches of MAX_OPEN_BIDS_PER_CALL until the cursor
+  // reaches the bid count, then finalize_window once. A bid that does not
+  // decrypt to an 8-byte price, or whose collateral is below its quote, does
+  // not abort a batch: the chain marks it invalid and it never fills.
+  const handleOpenBids = async () => {
     if (!account) return;
-    setSubmitting(true);
-    setSubmitStatus("Submitting cleartexts...");
+    setOpening(true);
+    setOpenStatus("Reading the opening cursor...");
     try {
       const windowIdBn = BigInt(windowId);
       const pairBcs = parsePairBcs(pairBcsHex);
-
-      // Comma-separated cleartext bid prices, whole USD per whole base token.
-      // They go through parsePrice once the salts are known (below).
-      const cleartextTexts: string[] = cleartextsRaw
-        .split(",")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-
-      if (cleartextTexts.length === 0) {
-        setSubmitStatus("Error: enter at least one cleartext bid price.");
+      let current = await getOpenCursor(windowIdBn, pairBcs);
+      setCursor(current);
+      if (current.total === 0n) {
+        setOpenStatus("No bids in this window: nothing to open or clear.");
         return;
       }
-
-      // Parse comma-separated 32-byte salts (0x hex), index-aligned to the
-      // cleartexts. An empty entry skips that bid.
-      const salts: Uint8Array[] = saltsRaw.split(",").map((s) => {
-        const hex = s.trim().replace(/^0x/, "");
-        return new Uint8Array(
-          (hex.match(/.{1,2}/g) ?? []).map((b) => parseInt(b, 16)),
+      while (current.next < current.total) {
+        setOpenStatus(
+          `Please sign open_bids (${current.next} of ${current.total} opened)...`,
         );
-      });
-      if (salts.length !== cleartextTexts.length) {
-        setSubmitStatus(
-          "Error: enter one salt per cleartext (leave an entry empty to skip a bid).",
-        );
-        return;
+        await openBids(account, windowIdBn, pairBcs, MAX_OPEN_BIDS_PER_CALL);
+        const after = await getOpenCursor(windowIdBn, pairBcs);
+        if (after.next <= current.next) {
+          throw new Error("open_bids did not move the opening cursor.");
+        }
+        current = after;
+        setCursor(current);
       }
-      if (salts.some((salt) => salt.length !== 0 && salt.length !== 32)) {
-        setSubmitStatus(
-          "Error: every salt must be 32 bytes (64 hex characters).",
-        );
-        return;
-      }
-      // A bid with an empty salt is skipped, so its price placeholder is not
-      // parsed. Every other price goes through parsePrice.
-      const cleartexts: bigint[] = cleartextTexts.map((text, i) =>
-        salts[i].length === 0 ? 0n : parsePrice(text),
-      );
-
-      setSubmitStatus("Please sign the transaction...");
-      // SCOUT(#228) REMOVE: submitCleartextAndClear is deleted from the SDK.
-      await submitCleartextAndClear(
-        account,
-        windowIdBn,
-        pairBcs,
-        cleartexts,
-        salts,
-      );
-
-      setSubmittedCount(cleartexts.length);
-      setSubmitStatus(
-        `Submitted ${cleartexts.length} cleartext(s) and triggered clearing.`,
+      setOpenStatus("Every bid is opened. Please sign finalize_window...");
+      await finalizeWindow(account, windowIdBn, pairBcs);
+      setOpenStatus(
+        `Opened ${current.total} bid(s) and cleared the window with finalize_window.`,
       );
     } catch (err) {
       console.error(err);
-      setSubmitStatus(
+      setOpenStatus(
         `Error: ${err instanceof Error ? err.message : "Unknown error"}`,
       );
     } finally {
-      setSubmitting(false);
+      setOpening(false);
     }
   };
 
@@ -305,7 +252,7 @@ export function AuctionRevealer() {
             }`}
           >
             {revealed
-              ? "Decryption key is REVEALED. You may now submit cleartexts."
+              ? "Decryption key is REVEALED. Anyone may now open the bids."
               : "Waiting for decryption key reveal..."}
           </div>
         )}
@@ -319,19 +266,50 @@ export function AuctionRevealer() {
           </div>
         )}
 
-        {/* Cleartext submission — only shown once key is revealed */}
+        {/* On-chain opening — only shown once key is revealed */}
         {revealed === true && (
           <div
-            data-testid="cleartext-submission-section"
+            data-testid="open-bids-section"
             className="space-y-3 pt-2 border-t border-zinc-700"
           >
             <p className="text-xs text-zinc-500">
-              Decrypt the bids off chain with the revealed key. Each bid
-              plaintext is price (8 bytes, little-endian) then a 32-byte salt.
-              The prices and salts below are in bid-submission order. The
-              contract checks each opening against the bid's commitment, so a
-              wrong value aborts the call.
+              The chain decrypts every bid itself. Open bids sends open_bids in
+              batches of {MAX_OPEN_BIDS_PER_CALL.toString()} until every bid is
+              opened, then finalize_window to clear the window. Any account may
+              send them.
             </p>
+
+            <button
+              data-testid="open-bids-button"
+              onClick={handleOpenBids}
+              disabled={opening || !account}
+              className={`w-full py-2 rounded font-bold transition-colors ${
+                opening || !account
+                  ? "bg-zinc-800 cursor-not-allowed text-zinc-600 border border-zinc-700"
+                  : "bg-zinc-100 hover:bg-white text-zinc-900"
+              }`}
+            >
+              {opening ? "Opening..." : "Open bids"}
+            </button>
+
+            {cursor !== null && (
+              <div
+                data-testid="opened-count"
+                className="text-xs text-zinc-500 font-mono"
+              >
+                Opened bids: {cursor.next.toString()} of{" "}
+                {cursor.total.toString()}
+              </div>
+            )}
+
+            {openStatus && (
+              <div
+                data-testid="open-status"
+                className="text-sm font-mono text-zinc-400 break-all p-2 bg-zinc-950 rounded border border-zinc-800"
+              >
+                {openStatus}
+              </div>
+            )}
 
             <button
               data-testid="decrypt-bids-button"
@@ -343,7 +321,7 @@ export function AuctionRevealer() {
                   : "bg-zinc-700 hover:bg-zinc-600 text-zinc-200"
               }`}
             >
-              {decrypting ? "Decrypting..." : "Decrypt Bids with Revealed Key"}
+              {decrypting ? "Decrypting..." : "Preview bids (off chain)"}
             </button>
 
             {decryptError && (
@@ -361,7 +339,6 @@ export function AuctionRevealer() {
                 className="text-xs font-mono text-zinc-400 space-y-1"
               >
                 {decrypted.length === 0 && <li>No bids in this window.</li>}
-                {/* SCOUT(#228) EDIT: the matches-commitment wording goes. */}
                 {decrypted.map((b) => (
                   <li key={b.index} data-testid="decrypted-bid">
                     #{b.index} {b.bidder.slice(0, 10)}…{" "}
@@ -370,75 +347,14 @@ export function AuctionRevealer() {
                       : "unreadable"}
                     {b.alreadyOpened
                       ? b.valid
-                        ? " (already opened)"
-                        : " (already opened, invalid: never fills, collateral returned)"
-                      : b.matchesCommitment
-                        ? " (matches commitment)"
-                        : ` (cannot open: ${b.error ?? "commitment mismatch"})`}
+                        ? " (opened)"
+                        : " (opened, invalid: never fills, collateral returned)"
+                      : b.error !== undefined
+                        ? ` (invalid when opened: ${b.error})`
+                        : " (not opened yet)"}
                   </li>
                 ))}
               </ul>
-            )}
-            {/* SCOUT(#228) REMOVE: the cleartext price input and the salt input below it. */}
-            <div>
-              <label className="block text-zinc-500 text-sm mb-1">
-                Cleartext Bid Prices (comma-separated, whole USD per whole
-                FakeETH)
-              </label>
-              <input
-                data-testid="cleartexts-input"
-                type="text"
-                value={cleartextsRaw}
-                onChange={(e) => setCleartextsRaw(e.target.value)}
-                placeholder="e.g. 2000, 1990, 1950"
-                className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500 font-mono text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-zinc-500 text-sm mb-1">
-                Salts (comma-separated 0x hex, 32 bytes each)
-              </label>
-              <input
-                data-testid="salts-input"
-                type="text"
-                value={saltsRaw}
-                onChange={(e) => setSaltsRaw(e.target.value)}
-                placeholder="0x..., 0x..."
-                className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500 font-mono text-xs"
-              />
-            </div>
-
-            {/* SCOUT(#228) EDIT: this becomes the Open bids button. */}
-            <button
-              data-testid="submit-cleartexts-button"
-              onClick={handleSubmitCleartexts}
-              disabled={submitting || !account}
-              className={`w-full py-2 rounded font-bold transition-colors ${
-                submitting || !account
-                  ? "bg-zinc-800 cursor-not-allowed text-zinc-600 border border-zinc-700"
-                  : "bg-zinc-100 hover:bg-white text-zinc-900"
-              }`}
-            >
-              {submitting ? "Submitting..." : "Submit Cleartexts & Clear"}
-            </button>
-
-            {submittedCount !== null && (
-              <div
-                data-testid="submitted-count"
-                className="text-xs text-zinc-500 font-mono"
-              >
-                Submitted cleartext count: {submittedCount}
-              </div>
-            )}
-
-            {submitStatus && (
-              <div
-                data-testid="submit-status"
-                className="text-sm font-mono text-zinc-400 break-all p-2 bg-zinc-950 rounded border border-zinc-800"
-              >
-                {submitStatus}
-              </div>
             )}
           </div>
         )}

@@ -3,13 +3,11 @@
  * (`aptos_framework::ibe_golden_vector_fixtures`) and the Move contract:
  *   - `buildBidAd` equals `bid_ad()` byte for byte.
  *   - `computeTimelockIdentityV2` equals the fixture identity for (7, 3, 11, 1.7e15).
- *   - `computeBidCommitment` equals the known answer pinned in
- *     `auction_bid_wrapper_tests.move` (`commitment_known_answer_matches_sdk`).
+ *   - `encodeBidPlaintext` is the 8-byte little-endian price `open_bids` reads.
  */
 import { describe, it, expect } from "vitest";
 import {
   buildBidAd,
-  computeBidCommitment,
   computeTimelockIdentityV2,
   encodeBidPlaintext,
 } from "../src/ibe/bid";
@@ -65,36 +63,14 @@ describe("V2 bid helpers", () => {
     );
   });
 
-  // SCOUT(#228) REMOVE: the commitment and its Move known answer are deleted.
-  it("computeBidCommitment equals the Move known answer", () => {
-    const ad = buildBidAd({
-      chainId: 7,
-      epoch: 3n,
-      timelockId: 11n,
-      auctionId: 5n,
-      bidder: GOLDEN_BIDDER,
-      deadlineUs: DEADLINE,
-    });
-    const salt = new Uint8Array(32).fill(7);
-    expect(hex(computeBidCommitment(2010n, salt, ad))).toBe(
-      "ad4005855d20995dfe6a36716d9550844b9565ae1a0713f1c0e77128a7b7e8ee",
-    );
-  });
-
-  // SCOUT(#228) EDIT: the plaintext is the 8-byte price.
-  it("encodeBidPlaintext is price_le8 || salt32", () => {
-    const salt = new Uint8Array(32).fill(7);
-    const pt = encodeBidPlaintext(2010n, salt);
-    expect(pt.length).toBe(40);
+  it("encodeBidPlaintext is the 8-byte little-endian price", () => {
+    const pt = encodeBidPlaintext(2010n);
+    expect(pt.length).toBe(8);
     expect(new DataView(pt.buffer).getBigUint64(0, true)).toBe(2010n);
-    expect(pt.slice(8)).toEqual(salt);
   });
 
-  // SCOUT(#228) REMOVE: there is no salt.
-  it("rejects a salt that is not 32 bytes", () => {
-    expect(() => encodeBidPlaintext(1n, new Uint8Array(31))).toThrow();
-    expect(() =>
-      computeBidCommitment(1n, new Uint8Array(33), new Uint8Array(0)),
-    ).toThrow();
+  it("rejects a price outside u64", () => {
+    expect(() => encodeBidPlaintext(-1n)).toThrow();
+    expect(() => encodeBidPlaintext(1n << 64n)).toThrow();
   });
 });

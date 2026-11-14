@@ -5,10 +5,10 @@
 // deadline 1_700_000_000_000_000 us. `setup` rebuilds exactly that chain state, so the
 // golden ciphertext passes `ibe::verify_bid_ct` through `auction::submit_bid`.
 //
-// The pairing and AES-GCM wrapper are not opened here: Move cannot decrypt the wrapper. The
-// contract opens a bid against its price commitment, so the tests open bids with
-// `(price, salt)` pairs they commit to themselves. The golden ciphertext only has to pass
-// the submission check.
+// The price bids of the fork's golden vectors (version 3.1.0, `price_bid_*`) carry the
+// 8-byte little-endian price as plaintext. They are bound to auction id 9 and open with the
+// golden key through `auction::open_bids`, which calls the fork native `ibe::decrypt_bid`.
+// Golden bid 0 of window 5 opens to a 21-byte plaintext, so `open_bids` marks it invalid.
 //
 // Design: atomica/docs/decisions/auction-v2-bid-wrapper.md
 #[test_only]
@@ -16,6 +16,7 @@ module atomica::auction_bid_wrapper_tests {
     use std::vector;
     use aptos_framework::account;
     use aptos_framework::chain_id;
+    use aptos_framework::event;
     use aptos_framework::ibe_config;
     use aptos_framework::ibe_golden_vector_fixtures as fixtures;
     use aptos_framework::reconfiguration;
@@ -50,24 +51,8 @@ module atomica::auction_bid_wrapper_tests {
         @0x0101010101010101010101010101010101010101010101010101010101010101
     }
 
-    fun salt(b: u8): vector<u8> {
-        let s = vector::empty<u8>();
-        let i = 0;
-        while (i < 32) {
-            vector::push_back(&mut s, b);
-            i = i + 1;
-        };
-        s
-    }
-
     fun golden_ct(): vector<u8> {
         *vector::borrow(&fixtures::bid_case_cts(), 0)
-    }
-
-    // SCOUT(#228) REMOVE: `commitment_for` and `salt` above.
-    fun commitment_for(price: u64, s: u8, bidder: address): vector<u8> {
-        let ad = auction::bid_associated_data(TIMELOCK_ID, AUCTION_ID, bidder);
-        auction::compute_bid_commitment(price, salt(s), ad)
     }
 
     // SCOUT(#231) EDIT: if epoch ends become UTC anchored, the epoch config and the golden deadline of `setup` must still pass the 15 minute guard after the pin bump.
@@ -144,14 +129,10 @@ module atomica::auction_bid_wrapper_tests {
         framework
     }
 
-    // SCOUT(#228) EDIT: `submit_golden` passes no commitment; the bid becomes one of the fork's price-plaintext golden ciphertexts.
-    // Submits the golden bid committed to `(price, salt(s))` for `quantity` wei.
-    fun submit_golden(bidder: &signer, price: u64, s: u8, quantity: u256) {
-        auction::submit_bid(
-            bidder, AUCTION_ID, pair(), golden_ct(),
-            commitment_for(price, s, golden_bidder()),
-            GOLDEN_LOCK, quantity,
-        );
+    // Submits golden bid 0 of window 5 for `quantity` wei. It passes the submission check.
+    // Its plaintext is not an 8-byte price, so `open_bids` marks it invalid.
+    fun submit_golden(bidder: &signer, quantity: u256) {
+        auction::submit_bid(bidder, AUCTION_ID, pair(), golden_ct(), GOLDEN_LOCK, quantity);
     }
 
     // ---- registry drivers ----
@@ -205,35 +186,21 @@ module atomica::auction_bid_wrapper_tests {
         assert!(ibe::verify_bid_ct(golden_ct(), ad), 2);
     }
 
-    // SCOUT(#228) REMOVE: `commitment_known_answer_matches_sdk`, and its twin in the SDK `ibe-bid.test.ts`.
-    // Known answer shared with the TypeScript SDK test (`ibe-bid.test.ts`): the commitment of
-    // price 2010 with salt 0x07 * 32 under the golden associated data.
-    #[test]
-    fun commitment_known_answer_matches_sdk() {
-        assert!(
-            auction::compute_bid_commitment(2010, salt(7), fixtures::bid_ad())
-                == x"ad4005855d20995dfe6a36716d9550844b9565ae1a0713f1c0e77128a7b7e8ee",
-            1
-        );
-    }
-
     // ===================== submit_bid: V2 ciphertext check =====================
 
-    // SCOUT(#228) EDIT: `submit_bid_accepts_the_golden_ciphertext` destructures `get_bid_info`; the tuple loses `commitment`.
     // The bid asks for exactly the window supply, the largest quantity `submit_bid` accepts
     // (see `submit_bid_above_supply_aborts`).
     #[test(atomica = @atomica)]
     fun submit_bid_accepts_the_golden_ciphertext(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
+        submit_golden(&bidder, SUPPLY);
 
         assert!(auction::get_bid_count(AUCTION_ID, pair()) == 1, 1);
         assert!(lock_receipt::is_lock_claimed<Ethereum, FakeUSD>(GOLDEN_LOCK), 2);
-        let (who, ct, commitment, opened, price, valid) = auction::get_bid_info(AUCTION_ID, pair(), 0);
+        let (who, ct, opened, price, valid) = auction::get_bid_info(AUCTION_ID, pair(), 0);
         assert!(who == golden_bidder(), 3);
         assert!(ct == golden_ct(), 4);
-        assert!(commitment == commitment_for(2010, 7, golden_bidder()), 5);
         assert!(!opened && price == 0, 6);
         assert!(valid, 7);
     }
@@ -248,7 +215,6 @@ module atomica::auction_bid_wrapper_tests {
         assert!(!*vector::borrow(&fixtures::bid_case_verifies(), 2), 1);
         auction::submit_bid(
             &bidder, AUCTION_ID, pair(), bad,
-            commitment_for(2010, 7, golden_bidder()),
             GOLDEN_LOCK, 5u256,
         );
     }
@@ -263,7 +229,6 @@ module atomica::auction_bid_wrapper_tests {
         assert!(!*vector::borrow(&fixtures::bid_case_verifies(), 13), 1);
         auction::submit_bid(
             &bidder, AUCTION_ID, pair(), bad,
-            commitment_for(2010, 7, golden_bidder()),
             GOLDEN_LOCK, 5u256,
         );
     }
@@ -276,7 +241,6 @@ module atomica::auction_bid_wrapper_tests {
         let bidder = account::create_signer_for_test(golden_bidder());
         auction::submit_bid(
             &bidder, AUCTION_ID, pair(), vector::empty<u8>(),
-            commitment_for(2010, 7, golden_bidder()),
             GOLDEN_LOCK, 5u256,
         );
     }
@@ -291,9 +255,6 @@ module atomica::auction_bid_wrapper_tests {
         let thief = account::create_signer_for_test(thief_addr);
         auction::submit_bid(
             &thief, AUCTION_ID, pair(), golden_ct(),
-            auction::compute_bid_commitment(
-                2010, salt(7), auction::bid_associated_data(TIMELOCK_ID, AUCTION_ID, thief_addr)
-            ),
             b"usd_lock_thief_32bytes__________", 5u256,
         );
     }
@@ -307,7 +268,6 @@ module atomica::auction_bid_wrapper_tests {
         let bidder = account::create_signer_for_test(golden_bidder());
         auction::submit_bid(
             &bidder, AUCTION_ID + 1, pair(), golden_ct(),
-            commitment_for(2010, 7, golden_bidder()),
             GOLDEN_LOCK, 5u256,
         );
     }
@@ -322,7 +282,6 @@ module atomica::auction_bid_wrapper_tests {
         let bidder = account::create_signer_for_test(golden_bidder());
         auction::submit_bid(
             &bidder, AUCTION_ID + 1, pair(), golden_ct(),
-            commitment_for(2010, 7, golden_bidder()),
             GOLDEN_LOCK, 5u256,
         );
     }
@@ -346,7 +305,6 @@ module atomica::auction_bid_wrapper_tests {
         let bidder = account::create_signer_for_test(golden_bidder());
         auction::submit_bid(
             &bidder, AUCTION_ID, b"epoch4", golden_ct(),
-            commitment_for(2010, 7, golden_bidder()),
             GOLDEN_LOCK, 5u256,
         );
     }
@@ -360,7 +318,7 @@ module atomica::auction_bid_wrapper_tests {
         setup_window(atomica);
         timestamp::update_global_time_for_test(DEADLINE_US);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
+        submit_golden(&bidder, SUPPLY);
     }
 
     // One microsecond before the deadline is accepted.
@@ -369,7 +327,7 @@ module atomica::auction_bid_wrapper_tests {
         setup_window(atomica);
         timestamp::update_global_time_for_test(DEADLINE_US - 1);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
+        submit_golden(&bidder, SUPPLY);
         assert!(auction::get_bid_count(AUCTION_ID, pair()) == 1, 1);
     }
 
@@ -380,7 +338,7 @@ module atomica::auction_bid_wrapper_tests {
         setup_window(atomica);
         expire_epoch_ended();
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
+        submit_golden(&bidder, SUPPLY);
     }
 
     // A second bid with the same ciphertext is rejected, even with another receipt.
@@ -390,22 +348,10 @@ module atomica::auction_bid_wrapper_tests {
         setup_window(atomica);
         lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(b"usd_lock_second_32bytes_________", golden_bidder(), COLLATERAL, 1);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
+        submit_golden(&bidder, SUPPLY);
         auction::submit_bid(
             &bidder, AUCTION_ID, pair(), golden_ct(),
-            commitment_for(2010, 7, golden_bidder()),
             b"usd_lock_second_32bytes_________", 5u256,
-        );
-    }
-
-    #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 26, location = atomica::auction)] // E_INVALID_COMMITMENT
-    fun submit_bid_rejects_short_commitment(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        auction::submit_bid(
-            &bidder, AUCTION_ID, pair(), golden_ct(), x"00",
-            GOLDEN_LOCK, 5u256,
         );
     }
 
@@ -419,7 +365,7 @@ module atomica::auction_bid_wrapper_tests {
             i = i + 1;
         };
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
+        submit_golden(&bidder, SUPPLY);
     }
 
     fun bcs_u64(i: u64): vector<u8> {
@@ -434,140 +380,10 @@ module atomica::auction_bid_wrapper_tests {
         lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(GOLDEN_LOCK, golden_bidder(), COLLATERAL, 1);
         auction::test_insert_window_with_timelock(atomica, AUCTION_ID, pair(), SUPPLY, true, 2000, TIMELOCK_ID);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
+        submit_golden(&bidder, SUPPLY);
     }
 
-    // SCOUT(#228) REMOVE: the 23 tests of this file that call `open_bid`, `submit_cleartext_and_clear` or `finalize_reveal` (18 in this section, 3 under "Expiry", 2 under the settle guards); the `open_bids` tests named below replace them.
-    // SCOUT(#228) TEST: open_bids_clears_three_golden_price_bids
-    // SCOUT(#228) TEST: open_bids_marks_undecryptable_and_wrong_length_bids_invalid
-    // SCOUT(#228) TEST: open_bids_in_batches_equals_one_full_call
-    // SCOUT(#228) TEST: open_bids_aborts_in_a_wrong_state (pending, expired, refunded, every bid opened)
-    // SCOUT(#228) TEST: settle_aborts_until_every_bid_is_opened
-    // ===================== Reveal: opening against the commitment =====================
-
-    // Before the registry reveals, nothing opens.
-    #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 16, location = atomica::auction)] // E_TIMELOCK_NOT_REVEALED
-    fun open_bid_aborts_before_reveal(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        timestamp::update_global_time_for_test(DEADLINE_US);
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
-    }
-
-    // The opened price of every bid of the window, from `get_bid_info` (zero when unopened).
-    fun bid_prices(): vector<u64> {
-        let prices = vector::empty<u64>();
-        let i = 0u64;
-        let n = auction::get_bid_count(AUCTION_ID, pair());
-        while (i < n) {
-            let (_, _, _, _, price, _) = auction::get_bid_info(AUCTION_ID, pair(), i);
-            vector::push_back(&mut prices, price);
-            i = i + 1;
-        };
-        prices
-    }
-
-    #[test(atomica = @atomica)]
-    fun open_bid_accepts_the_committed_price_and_finalizes(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        reveal_timelock();
-
-        // Anyone can open: a relayer that decrypted the ciphertext off chain.
-        let relayer = account::create_signer_for_test(@0x9999);
-        auction::open_bid(&relayer, AUCTION_ID, pair(), 0, 2010, salt(7));
-
-        let (_, _, _, opened, price, _) = auction::get_bid_info(AUCTION_ID, pair(), 0);
-        assert!(opened && price == 2010, 1);
-        let (_, reveal_final, refunded) = auction::get_window_status(AUCTION_ID, pair());
-        assert!(reveal_final && !refunded, 2);
-        assert!(bid_prices() == vector[2010u64], 3);
-    }
-
-    // A relayer cannot lie about a price: the commitment pins it.
-    #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 10, location = atomica::auction)] // E_INVALID_CLEARTEXT
-    fun open_bid_rejects_a_wrong_price(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        reveal_timelock();
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 9999, salt(7));
-    }
-
-    #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 10, location = atomica::auction)] // E_INVALID_CLEARTEXT
-    fun open_bid_rejects_a_wrong_salt(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        reveal_timelock();
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(8));
-    }
-
-    #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 18, location = atomica::auction)] // E_INVALID_SALT
-    fun open_bid_rejects_a_short_salt(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        reveal_timelock();
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, x"07");
-    }
-
-    #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 19, location = atomica::auction)] // E_BID_INDEX_OUT_OF_RANGE
-    fun open_bid_rejects_an_unknown_index(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        reveal_timelock();
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 1, 2010, salt(7));
-    }
-
-    // One opening per bid. With two bids the window stays open after the first opening.
-    #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 17, location = atomica::auction)] // E_BID_ALREADY_OPENED
-    fun open_bid_opens_each_bid_once(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        auction::test_insert_committed_bid(atomica, AUCTION_ID, pair(), @0x2222, b"ct2", x"00", b"lock2", 1u256);
-        reveal_timelock();
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
-    }
-
-    // One reveal per timelock: once openings finalize, no opening runs again.
-    #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 20, location = atomica::auction)] // E_REVEAL_FINAL
-    fun open_bid_aborts_after_the_reveal_is_final(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        reveal_timelock();
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
-        auction::submit_cleartext_and_clear(&bidder, AUCTION_ID, pair(), vector[2010u64], vector[salt(7)]);
-    }
-
-    // The registry never reopens: a revealed timelock stays revealed after its window, and a
-    // second reveal aborts in the registry.
-    #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 11, location = aptos_framework::ibe_config)] // E_NOT_PENDING
-    fun registry_reveals_a_timelock_once(atomica: &signer) {
-        setup_window(atomica);
-        reveal_timelock();
-        assert!(timelock::get_status(TIMELOCK_ID) == timelock::status_revealed(), 1);
-        expire_reveal_window();
-        assert!(timelock::get_status(TIMELOCK_ID) == timelock::status_revealed(), 2);
-        assert!(timelock::get_expiry_reason(TIMELOCK_ID) == 0, 3);
-        ibe_config::finalize_for_testing(TIMELOCK_ID, fixtures::timelock_basic_reconstructed_dk());
-    }
-
-    // ===================== Bid validity =====================
+    // ===================== Bid validity at submission =====================
 
     // A zero quantity aborts at submission.
     #[test(atomica = @atomica)]
@@ -575,7 +391,7 @@ module atomica::auction_bid_wrapper_tests {
     fun submit_bid_zero_quantity_aborts(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, 0);
+        submit_golden(&bidder, 0);
     }
 
     // One wei above the window supply aborts at submission. A bid of exactly the supply
@@ -588,7 +404,7 @@ module atomica::auction_bid_wrapper_tests {
         let (_, total_supply, _, _, _) = auction::get_auction(AUCTION_ID, pair());
         assert!(total_supply == SUPPLY, 1);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, total_supply + 1);
+        submit_golden(&bidder, total_supply + 1);
     }
 
     // A window with one seller lock, and a golden receipt holding `collateral` FakeUSD units.
@@ -610,7 +426,7 @@ module atomica::auction_bid_wrapper_tests {
         assert!(min_collateral == MIN_COLLATERAL, 1);
         setup_window_with_collateral(atomica, MIN_COLLATERAL - 1);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, 1);
+        submit_golden(&bidder, 1);
     }
 
     // Collateral exactly at the minimum bid collateral is accepted.
@@ -618,342 +434,449 @@ module atomica::auction_bid_wrapper_tests {
     fun submit_bid_at_min_collateral_succeeds(atomica: &signer) {
         setup_window_with_collateral(atomica, MIN_COLLATERAL);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, 1);
+        submit_golden(&bidder, 1);
         assert!(auction::get_bid_count(AUCTION_ID, pair()) == 1, 1);
         assert!(lock_receipt::is_lock_claimed<Ethereum, FakeUSD>(GOLDEN_LOCK), 2);
     }
 
-    // The golden bid plus a dust-collateral bid for the whole supply at the top price and
-    // a small honest bid. The batch call opens all three without abort and finalizes.
+    // The registry never reopens: a revealed timelock stays revealed after its window, and a
+    // second reveal aborts in the registry.
     #[test(atomica = @atomica)]
-    fun batch_opening_with_invalid_bid_finalizes(atomica: &signer) {
+    #[expected_failure(abort_code = 11, location = aptos_framework::ibe_config)] // E_NOT_PENDING
+    fun registry_reveals_a_timelock_once(atomica: &signer) {
         setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        let max_price = 18_446_744_073_709_551_615u64;
-        let dust = @0x2222;
-        auction::test_insert_committed_bid(
-            atomica, AUCTION_ID, pair(), dust, b"ct2",
-            commitment_for(max_price, 9, dust), b"lock2", SUPPLY,
-        );
-        // The dust bid holds one base unit less than its quote at its own price.
-        let quote = auction::quote_for_fill(SUPPLY, max_price);
-        assert!(quote == 184_467_440_737_095_516_150_000, 1);
-        auction::test_set_bid_collateral(atomica, AUCTION_ID, pair(), 1, quote - 1);
-        let other = @0x3333;
-        auction::test_insert_committed_bid(
-            atomica, AUCTION_ID, pair(), other, b"ct3",
-            commitment_for(1500, 8, other), b"lock3", 1u256,
-        );
         reveal_timelock();
-
-        auction::submit_cleartext_and_clear(
-            &bidder, AUCTION_ID, pair(),
-            vector[2010u64, max_price, 1500u64], vector[salt(7), salt(9), salt(8)],
-        );
-        let (_, reveal_final, _) = auction::get_window_status(AUCTION_ID, pair());
-        assert!(reveal_final, 2);
-        let (_, _, _, opened, _, valid) = auction::get_bid_info(AUCTION_ID, pair(), 1);
-        assert!(opened && !valid, 3);
-        let invalid = aptos_framework::event::emitted_events<auction::BidInvalid>();
-        assert!(vector::length(&invalid) == 1, 4);
-        let (window_id, pair_bcs, bid_index, who, reason) =
-            auction::test_bid_invalid_fields(vector::borrow(&invalid, 0));
-        assert!(window_id == AUCTION_ID && pair_bcs == pair() && bid_index == 1, 5);
-        assert!(who == dust && reason == 2, 6);
-
-        // The golden bid takes the whole supply at its own price; the dust bid takes nothing.
-        let (_, _, _, _, clearing_price) = auction::get_auction(AUCTION_ID, pair());
-        assert!(clearing_price == 2010, 7);
-        let results = auction::get_bid_results(AUCTION_ID, pair());
-        let (golden_win, golden_fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 0));
-        assert!(golden_win && golden_fill == SUPPLY, 8);
-        let (dust_win, dust_fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 1));
-        assert!(!dust_win && dust_fill == 0, 9);
+        assert!(timelock::get_status(TIMELOCK_ID) == timelock::status_revealed(), 1);
+        expire_reveal_window();
+        assert!(timelock::get_status(TIMELOCK_ID) == timelock::status_revealed(), 2);
+        assert!(timelock::get_expiry_reason(TIMELOCK_ID) == 0, 3);
+        ibe_config::finalize_for_testing(TIMELOCK_ID, fixtures::timelock_basic_reconstructed_dk());
     }
 
-    // A golden bid whose collateral (the 10 FakeUSD minimum) is below its quote at the top
-    // price is invalid. `settle` succeeds and the outcome returns all of it to the depositor.
-    #[test(atomica = @atomica)]
-    fun settle_returns_invalid_bid_collateral_to_depositor(atomica: &signer) {
+    // ===================== open_bids and finalize_window =====================
+    //
+    // The price window is window 9 bound to timelock 11, as the fork's price bids are. It
+    // holds 3 ETH of supply. The price bids ask 1, 2 and 2 ETH at the fixture prices
+    // 1_000_000, 2_500_000_000 and 7_000_000_000_000. Sorted by price: 0xc3 fills 2 ETH,
+    // 0xb2 takes the last 1 ETH and sets the clearing price 2_500_000_000, 0xa1 loses.
+
+    const PRICE_WINDOW: u64 = 9;
+    const ETH: u256 = 1_000_000_000_000_000_000;
+    const PRICE_SUPPLY: u256 = 3_000_000_000_000_000_000;
+    const PRICE_SELLER_LOCK: vector<u8> = b"eth_lock_price_seller_32bytes___";
+    const PRICE_COLLATERAL: u256 = 100_000_000_000_000_000_000;
+    const EXPECTED_CLEARING_PRICE: u64 = 2_500_000_000;
+    const MAX_OPEN_BIDS: u64 = 12;
+    const U64_MAX: u64 = 18_446_744_073_709_551_615;
+
+    fun price_quantities(): vector<u256> { vector[ETH, 2 * ETH, 2 * ETH] }
+
+    // The 32-byte collateral lock id of bidder index `i` (0 to 3).
+    fun price_lock(i: u64): vector<u8> {
+        let id = b"usd_lock_price_bidder_32bytes__";
+        vector::push_back(&mut id, (48 + i as u8));
+        id
+    }
+
+    // The price window with its claimed seller lock, inside the `setup` chain state.
+    fun insert_price_window(atomica: &signer) {
+        lock_receipt::insert_bound_test_receipt<Ethereum, FakeETH>(
+            PRICE_SELLER_LOCK, @atomica, PRICE_SUPPLY, PRICE_WINDOW, auction::pair_hash(pair()),
+        );
+        lock_receipt::claim<Ethereum, FakeETH>(@atomica, PRICE_SELLER_LOCK);
+        auction::test_insert_window_with_timelock(
+            atomica, PRICE_WINDOW, pair(), PRICE_SUPPLY, false, 0, TIMELOCK_ID,
+        );
+        auction::test_add_seller_lock(atomica, PRICE_WINDOW, pair(), PRICE_SELLER_LOCK);
+    }
+
+    // Submits a ciphertext of the fork's price section through `submit_bid` from `bidder`.
+    fun submit_price_ct(bidder: address, ct: vector<u8>, lock_index: u64, quantity: u256) {
+        lock_receipt::insert_bound_test_receipt<Ethereum, FakeUSD>(
+            price_lock(lock_index), bidder, PRICE_COLLATERAL, PRICE_WINDOW, auction::pair_hash(pair()),
+        );
+        let signer = account::create_signer_for_test(bidder);
+        auction::submit_bid(&signer, PRICE_WINDOW, pair(), ct, price_lock(lock_index), quantity);
+    }
+
+    // `setup` plus the price window holding the three golden price bids, submitted through
+    // `submit_bid`, and the timelock revealed.
+    fun setup_price_bids(atomica: &signer) {
         setup();
         lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
         lock_receipt::initialize<Ethereum, FakeETH>(atomica);
-        lock_receipt::insert_bound_test_receipt<Ethereum, FakeUSD>(
-            GOLDEN_LOCK, golden_bidder(), MIN_COLLATERAL, AUCTION_ID, auction::pair_hash(pair()),
-        );
+        insert_price_window(atomica);
+        let bidders = fixtures::price_bid_bidders();
+        let cts = fixtures::price_bid_cts();
+        let i = 0;
+        while (i < 3) {
+            submit_price_ct(*bidders.borrow(i), *cts.borrow(i), i, *price_quantities().borrow(i));
+            i = i + 1;
+        };
+        reveal_timelock();
+    }
+
+    // The price window of `setup_price_bids` with `n` more bids whose ciphertexts do not
+    // decrypt, inserted with the test helper.
+    fun insert_junk_bids(atomica: &signer, n: u64) {
+        let i = 0;
+        while (i < n) {
+            auction::test_insert_bid_with_qty(
+                atomica, PRICE_WINDOW, pair(), @0x7000, bcs_u64(i), b"junk", 1u256,
+            );
+            i = i + 1;
+        };
+    }
+
+    fun open_cursor(): (u64, u64) {
+        auction::get_open_cursor(PRICE_WINDOW, pair())
+    }
+
+    fun relayer(): signer {
+        account::create_signer_for_test(@0x9999)
+    }
+
+    // Every price bid is opened at its fixture price and valid.
+    fun assert_price_bids_opened() {
+        let prices = fixtures::price_bid_prices();
+        let i = 0;
+        while (i < 3) {
+            let (who, _, opened, price, valid) = auction::get_bid_info(PRICE_WINDOW, pair(), i);
+            assert!(who == *fixtures::price_bid_bidders().borrow(i), 100 + i);
+            assert!(opened && valid, 110 + i);
+            assert!(price == *prices.borrow(i), 120 + i);
+            i = i + 1;
+        };
+    }
+
+    // The window is final and cleared as the fixtures predict: 0xc3 fills 2 ETH, 0xb2 the
+    // last 1 ETH at 2_500_000_000, 0xa1 nothing.
+    fun assert_price_window_cleared() {
+        let (_, reveal_final, _) = auction::get_window_status(PRICE_WINDOW, pair());
+        assert!(reveal_final, 130);
+        let (_, _, _, _, clearing_price) = auction::get_auction(PRICE_WINDOW, pair());
+        assert!(clearing_price == EXPECTED_CLEARING_PRICE, 131);
+        let results = auction::get_bid_results(PRICE_WINDOW, pair());
+        let (w0, f0, p0) = auction::test_bid_result_fields(results.borrow(0));
+        let (w1, f1, p1) = auction::test_bid_result_fields(results.borrow(1));
+        let (w2, f2, p2) = auction::test_bid_result_fields(results.borrow(2));
+        assert!(!w0 && f0 == 0, 132);
+        assert!(w1 && f1 == ETH && p1 == EXPECTED_CLEARING_PRICE, 133);
+        assert!(w2 && f2 == 2 * ETH && p2 == EXPECTED_CLEARING_PRICE, 134);
+        assert!(p0 == EXPECTED_CLEARING_PRICE, 135);
+    }
+
+    // Three golden price bids from three bidders: a relayer that bid nothing opens them in
+    // one `open_bids` call and clears with `finalize_window`.
+    #[test(atomica = @atomica)]
+    fun open_bids_then_finalize_window_clears_three_golden_price_bids(atomica: &signer) {
+        setup_price_bids(atomica);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), MAX_OPEN_BIDS);
+        assert_price_bids_opened();
+        auction::finalize_window(&relayer(), PRICE_WINDOW, pair());
+        assert_price_window_cleared();
+        assert!(event::emitted_events<auction::BidInvalid>().length() == 0, 1);
+    }
+
+    // The call that opens the last bid only moves the cursor: nothing is final or cleared.
+    // `settle` still aborts (`settle_aborts_until_every_bid_is_opened_and_the_window_is_finalized_*`)
+    // and so does another `open_bids` (`open_bids_aborts_in_a_wrong_state_every_bid_opened`).
+    #[test(atomica = @atomica)]
+    fun open_bids_does_not_clear_the_window(atomica: &signer) {
+        setup_price_bids(atomica);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), 2);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), 2);
+        let (next, total) = open_cursor();
+        assert!(next == 3 && total == 3, 1);
+        let (_, reveal_final, _) = auction::get_window_status(PRICE_WINDOW, pair());
+        assert!(!reveal_final, 2);
+        assert!(auction::get_bid_results(PRICE_WINDOW, pair()).length() == 0, 3);
+        let (_, _, _, _, clearing_price) = auction::get_auction(PRICE_WINDOW, pair());
+        assert!(clearing_price == 0, 4);
+    }
+
+    // Once every bid is opened, a relayer's `finalize_window` sets `reveal_final` and fills
+    // the bid results at the expected clearing price.
+    #[test(atomica = @atomica)]
+    fun finalize_window_clears_after_all_bids_opened(atomica: &signer) {
+        setup_price_bids(atomica);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), 3);
+        auction::finalize_window(&relayer(), PRICE_WINDOW, pair());
+        assert_price_window_cleared();
+    }
+
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 44, location = atomica::auction)] // E_BIDS_NOT_ALL_OPENED
+    fun finalize_window_clears_after_all_bids_opened_aborts_while_a_bid_is_unopened(atomica: &signer) {
+        setup_price_bids(atomica);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), 2);
+        auction::finalize_window(&relayer(), PRICE_WINDOW, pair());
+    }
+
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 20, location = atomica::auction)] // E_REVEAL_FINAL
+    fun finalize_window_clears_after_all_bids_opened_aborts_on_a_second_call(atomica: &signer) {
+        setup_price_bids(atomica);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), 3);
+        auction::finalize_window(&relayer(), PRICE_WINDOW, pair());
+        auction::finalize_window(&relayer(), PRICE_WINDOW, pair());
+    }
+
+    // Golden case 11 (re-signed body: it verifies but does not decrypt) in window 5, and the
+    // bad-length price case (11-byte plaintext) in the price window. Both are invalid with
+    // reason 3, never fill, and neither aborts `open_bids`. The honest price bids still clear.
+    #[test(atomica = @atomica)]
+    fun open_bids_marks_undecryptable_and_wrong_length_bids_invalid(atomica: &signer) {
+        setup();
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        insert_golden_receipt();
         insert_window_with_seller(atomica);
-        let max_price = 18_446_744_073_709_551_615u64;
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, max_price, 7, SUPPLY);
+        insert_price_window(atomica);
+        // Window 5: golden case 11.
+        assert!(*fixtures::bid_case_verifies().borrow(11), 1);
+        assert!(!*fixtures::bid_case_opens().borrow(11), 2);
+        let golden = account::create_signer_for_test(golden_bidder());
+        auction::submit_bid(
+            &golden, AUCTION_ID, pair(), *fixtures::bid_case_cts().borrow(11), GOLDEN_LOCK, SUPPLY,
+        );
+        // Price window: the three price bids, then the bad-length bid.
+        let bidders = fixtures::price_bid_bidders();
+        let cts = fixtures::price_bid_cts();
+        let i = 0;
+        while (i < 3) {
+            submit_price_ct(*bidders.borrow(i), *cts.borrow(i), i, *price_quantities().borrow(i));
+            i = i + 1;
+        };
+        let bad_bidder = @0xd4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4;
+        assert!(
+            auction::bid_associated_data(TIMELOCK_ID, PRICE_WINDOW, bad_bidder) == fixtures::bad_length_bid_ad(),
+            3,
+        );
+        submit_price_ct(bad_bidder, fixtures::bad_length_bid_ct(), 3, PRICE_SUPPLY);
         reveal_timelock();
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, max_price, salt(7));
-        let (_, _, _, opened, _, valid) = auction::get_bid_info(AUCTION_ID, pair(), 0);
-        assert!(opened && !valid, 1);
 
-        auction::settle(&bidder, AUCTION_ID, pair());
-        assert!(auction::is_settled(AUCTION_ID, pair()), 2);
-        let (_, _, to, amounts) = lock_receipt::get_lock_outcome<Ethereum, FakeUSD>(GOLDEN_LOCK);
-        assert!(to == vector[lock_receipt::test_eth_owner(golden_bidder())], 3);
-        assert!(amounts == vector[MIN_COLLATERAL], 4);
-        // No fill: the seller lock goes back to the seller.
-        assert!(seller_lock_status() == lock_receipt::status_revoked(), 5);
+        auction::open_bids(&relayer(), AUCTION_ID, pair(), MAX_OPEN_BIDS);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), MAX_OPEN_BIDS);
+
+        let (_, _, opened, price, valid) = auction::get_bid_info(AUCTION_ID, pair(), 0);
+        assert!(opened && price == 0 && !valid, 4);
+        let (_, _, opened, price, valid) = auction::get_bid_info(PRICE_WINDOW, pair(), 3);
+        assert!(opened && price == 0 && !valid, 5);
+        assert_price_bids_opened();
+
+        let events = event::emitted_events<auction::BidInvalid>();
+        assert!(events.length() == 2, 6);
+        let (w0, _, i0, b0, r0) = auction::test_bid_invalid_fields(events.borrow(0));
+        assert!(w0 == AUCTION_ID && i0 == 0 && b0 == golden_bidder() && r0 == 3, 7);
+        let (w1, _, i1, b1, r1) = auction::test_bid_invalid_fields(events.borrow(1));
+        assert!(w1 == PRICE_WINDOW && i1 == 3 && b1 == bad_bidder && r1 == 3, 8);
+
+        auction::finalize_window(&relayer(), AUCTION_ID, pair());
+        let results = auction::get_bid_results(AUCTION_ID, pair());
+        let (win, fill, _) = auction::test_bid_result_fields(results.borrow(0));
+        assert!(!win && fill == 0, 9);
+
+        // The bad-length bid asks for the whole supply. It takes nothing.
+        auction::finalize_window(&relayer(), PRICE_WINDOW, pair());
+        assert_price_window_cleared();
+        let results = auction::get_bid_results(PRICE_WINDOW, pair());
+        let (win, fill, _) = auction::test_bid_result_fields(results.borrow(3));
+        assert!(!win && fill == 0, 10);
     }
 
-    // ---- batch entry ----
-
+    // Opening one bid per call, then the rest, ends in the same bid states and clearing as
+    // one full call (`open_bids_then_finalize_window_clears_three_golden_price_bids`).
     #[test(atomica = @atomica)]
-    fun batch_open_skips_empty_salts_and_finalizes_when_all_open(atomica: &signer) {
+    fun open_bids_in_batches_equals_one_full_call(atomica: &signer) {
+        setup_price_bids(atomica);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), 1);
+        let (_, _, opened, _, _) = auction::get_bid_info(PRICE_WINDOW, pair(), 1);
+        assert!(!opened, 1);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), 1);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), 1);
+        assert_price_bids_opened();
+        auction::finalize_window(&relayer(), PRICE_WINDOW, pair());
+        assert_price_window_cleared();
+    }
+
+    // Before the reveal nothing opens.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 16, location = atomica::auction)] // E_TIMELOCK_NOT_REVEALED
+    fun open_bids_aborts_in_a_wrong_state_pending(atomica: &signer) {
         setup_window(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        let other = @0x2222;
-        let other_ad = auction::bid_associated_data(TIMELOCK_ID, AUCTION_ID, other);
-        auction::test_insert_committed_bid(
-            atomica, AUCTION_ID, pair(), other, b"ct2",
-            auction::compute_bid_commitment(1500, salt(9), other_ad), b"lock2", 1u256,
-        );
-        reveal_timelock();
+        submit_golden(&bidder, SUPPLY);
+        timestamp::update_global_time_for_test(DEADLINE_US);
+        auction::open_bids(&relayer(), AUCTION_ID, pair(), MAX_OPEN_BIDS);
+    }
 
-        // First call opens bid 0 only. Bid 1 is skipped with an empty salt.
-        auction::submit_cleartext_and_clear(
-            &bidder, AUCTION_ID, pair(), vector[2010u64, 0u64], vector[salt(7), vector::empty<u8>()],
-        );
-        let (_, reveal_final, _) = auction::get_window_status(AUCTION_ID, pair());
-        assert!(!reveal_final, 1);
+    // An expired timelock never releases a key.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 27, location = atomica::auction)] // E_TIMELOCK_EXPIRED
+    fun open_bids_aborts_in_a_wrong_state_expired(atomica: &signer) {
+        setup_window(atomica);
+        let bidder = account::create_signer_for_test(golden_bidder());
+        submit_golden(&bidder, SUPPLY);
+        expire_key_check_failed();
+        auction::open_bids(&relayer(), AUCTION_ID, pair(), MAX_OPEN_BIDS);
+    }
 
-        // Second call skips the opened bid and opens the other: the reveal finalizes.
-        auction::submit_cleartext_and_clear(
-            &bidder, AUCTION_ID, pair(), vector[0u64, 1500u64], vector[vector::empty<u8>(), salt(9)],
-        );
-        let (_, reveal_final, _) = auction::get_window_status(AUCTION_ID, pair());
-        assert!(reveal_final, 2);
-        assert!(bid_prices() == vector[2010u64, 1500u64], 3);
+    // A refunded window opens nothing.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 24, location = atomica::auction)] // E_WINDOW_REFUNDED
+    fun open_bids_aborts_in_a_wrong_state_refunded(atomica: &signer) {
+        setup_funded_window(atomica);
+        expire_reveal_window();
+        assert_refunded(2);
+        auction::open_bids(&relayer(), AUCTION_ID, pair(), MAX_OPEN_BIDS);
+    }
+
+    // Every bid is opened: another call aborts, before and after `finalize_window`.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 20, location = atomica::auction)] // E_REVEAL_FINAL
+    fun open_bids_aborts_in_a_wrong_state_every_bid_opened(atomica: &signer) {
+        setup_price_bids(atomica);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), MAX_OPEN_BIDS);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), MAX_OPEN_BIDS);
     }
 
     #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 9, location = atomica::auction)] // E_CLEARTEXT_COUNT_MISMATCH
-    fun batch_open_rejects_a_count_mismatch(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        reveal_timelock();
-        auction::submit_cleartext_and_clear(&bidder, AUCTION_ID, pair(), vector[2010u64, 1u64], vector[salt(7)]);
+    #[expected_failure(abort_code = 20, location = atomica::auction)] // E_REVEAL_FINAL
+    fun open_bids_aborts_in_a_wrong_state_finalized(atomica: &signer) {
+        setup_price_bids(atomica);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), MAX_OPEN_BIDS);
+        auction::finalize_window(&relayer(), PRICE_WINDOW, pair());
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), MAX_OPEN_BIDS);
     }
 
-    // A wrong opening aborts the whole batch: no partial state.
+    // `settle` aborts while bids are unopened.
     #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 10, location = atomica::auction)] // E_INVALID_CLEARTEXT
-    fun batch_open_aborts_on_one_wrong_opening(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        reveal_timelock();
-        auction::submit_cleartext_and_clear(&bidder, AUCTION_ID, pair(), vector[2011u64], vector[salt(7)]);
+    #[expected_failure(abort_code = 21, location = atomica::auction)] // E_REVEAL_NOT_FINAL
+    fun settle_aborts_until_every_bid_is_opened_and_the_window_is_finalized_unopened(atomica: &signer) {
+        setup_price_bids(atomica);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), 1);
+        auction::settle(&relayer(), PRICE_WINDOW, pair());
+    }
+
+    // `settle` aborts with every bid opened before `finalize_window`.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 21, location = atomica::auction)] // E_REVEAL_NOT_FINAL
+    fun settle_aborts_until_every_bid_is_opened_and_the_window_is_finalized_opened(atomica: &signer) {
+        setup_price_bids(atomica);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), MAX_OPEN_BIDS);
+        auction::settle(&relayer(), PRICE_WINDOW, pair());
+    }
+
+    // After `finalize_window`, `settle` succeeds: the winners fill and the loser's
+    // collateral goes back to its depositor.
+    #[test(atomica = @atomica)]
+    fun settle_aborts_until_every_bid_is_opened_and_the_window_is_finalized_then_settles(atomica: &signer) {
+        setup_price_bids(atomica);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), MAX_OPEN_BIDS);
+        auction::finalize_window(&relayer(), PRICE_WINDOW, pair());
+        auction::settle(&relayer(), PRICE_WINDOW, pair());
+        assert!(auction::is_settled(PRICE_WINDOW, pair()), 1);
+        assert!(
+            lock_receipt::get_receipt_status<Ethereum, FakeUSD>(price_lock(0)) == lock_receipt::status_revoked(),
+            2,
+        );
+        assert!(
+            lock_receipt::get_receipt_status<Ethereum, FakeUSD>(price_lock(2)) == lock_receipt::status_filled(),
+            3,
+        );
+        assert!(
+            lock_receipt::get_receipt_status<Ethereum, FakeETH>(PRICE_SELLER_LOCK) == lock_receipt::status_filled(),
+            4,
+        );
+    }
+
+    #[test(atomica = @atomica)]
+    fun get_open_cursor_tracks_batches(atomica: &signer) {
+        setup_price_bids(atomica);
+        let (next, total) = open_cursor();
+        assert!(next == 0 && total == 3, 1);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), 2);
+        let (next, total) = open_cursor();
+        assert!(next == 2 && total == 3, 2);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), 2);
+        let (next, total) = open_cursor();
+        assert!(next == 3 && total == 3, 3);
     }
 
     #[test]
     #[expected_failure(abort_code = 1, location = atomica::auction)] // E_AUCTION_NOT_FOUND
-    fun batch_open_aborts_when_auction_not_found() {
-        let settler = account::create_signer_for_test(@0x9999);
-        auction::submit_cleartext_and_clear(&settler, AUCTION_ID, pair(), vector::empty<u64>(), vector::empty<vector<u8>>());
+    fun get_open_cursor_aborts_for_an_unknown_window() {
+        setup();
+        auction::get_open_cursor(PRICE_WINDOW, pair());
     }
 
-    // ---- finalize_reveal and unopened bids ----
-
-    // Some bids are unopened: openings stay open until the opening window ends.
+    // Five bids opened with `max_bids = 3`: two calls, two `BidsOpened` events.
     #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 22, location = atomica::auction)] // E_OPENING_WINDOW_OPEN
-    fun finalize_reveal_waits_for_the_opening_window(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        auction::test_insert_committed_bid(atomica, AUCTION_ID, pair(), @0x2222, b"ct2", x"00", b"lock2", 1u256);
-        reveal_timelock();
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
-        auction::finalize_reveal(&bidder, AUCTION_ID, pair());
+    fun open_bids_emits_one_bids_opened_event_per_call(atomica: &signer) {
+        setup_price_bids(atomica);
+        insert_junk_bids(atomica, 2);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), 3);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), 3);
+        let events = event::emitted_events<auction::BidsOpened>();
+        assert!(events.length() == 2, 1);
+        let (w0, p0, from0, to0) = auction::test_bids_opened_fields(events.borrow(0));
+        assert!(w0 == PRICE_WINDOW && p0 == pair() && from0 == 0 && to0 == 3, 2);
+        let (w1, p1, from1, to1) = auction::test_bids_opened_fields(events.borrow(1));
+        assert!(w1 == PRICE_WINDOW && p1 == pair() && from1 == 3 && to1 == 5, 3);
     }
 
-    // After the opening window an unopened bid is invalid: it never fills and settle returns
-    // its collateral to the depositor.
+    // A window of MAX + 1 bids that do not decrypt: `max_bids = u64::MAX` opens MAX of them
+    // without aborting. A bid that does not decrypt still moves the cursor.
     #[test(atomica = @atomica)]
-    fun unopened_bid_is_invalid_and_its_collateral_goes_home(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        let ghost_lock = b"usd_lock_ghost_32bytes__________";
-        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(ghost_lock, @0x2222, COLLATERAL, 1);
-        lock_receipt::claim<Ethereum, FakeUSD>(@0x2222, ghost_lock);
-        auction::test_insert_committed_bid(atomica, AUCTION_ID, pair(), @0x2222, b"ct2", x"00", ghost_lock, SUPPLY);
+    fun open_bids_clamps_max_bids_above_the_cap(atomica: &signer) {
+        setup();
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        insert_price_window(atomica);
+        insert_junk_bids(atomica, MAX_OPEN_BIDS + 1);
         reveal_timelock();
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
-
-        // Opening window: reveal_expiry (deadline + 10 min) plus 10 min.
-        timestamp::update_global_time_for_test(DEADLINE_US + 20 * MIN);
-        auction::finalize_reveal(&bidder, AUCTION_ID, pair());
-        assert!(bid_prices() == vector[2010u64, 0u64], 1);
-
-        auction::clear_uniform_price(AUCTION_ID, pair());
-        let results = auction::test_get_bid_results(AUCTION_ID, pair());
-        let (win0, fill0, price0) = auction::test_bid_result_fields(vector::borrow(&results, 0));
-        let (win1, fill1, _) = auction::test_bid_result_fields(vector::borrow(&results, 1));
-        assert!(win0 && fill0 == SUPPLY && price0 == 2010, 2);
-        assert!(!win1 && fill1 == 0, 3);
-
-        auction::settle(&bidder, AUCTION_ID, pair());
-        assert!(auction::is_settled(AUCTION_ID, pair()), 4);
-        // The ghost bid never opened: its collateral goes back to its depositor.
-        assert!(lock_receipt::get_receipt_status<Ethereum, FakeUSD>(ghost_lock) == lock_receipt::status_revoked(), 5);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), U64_MAX);
+        let (next, total) = open_cursor();
+        assert!(next == MAX_OPEN_BIDS && total == MAX_OPEN_BIDS + 1, 1);
+        assert!(auction::get_max_open_bids() == MAX_OPEN_BIDS, 2);
     }
 
-    // With no valid bid at all nobody wins, even when invalid bids exist.
-    #[test(atomica = @atomica)]
-    fun clearing_with_only_unopened_bids_has_no_winner(atomica: &signer) {
-        setup_window(atomica);
-        let caller = account::create_signer_for_test(@0x9999);
-        auction::test_insert_committed_bid(atomica, AUCTION_ID, pair(), @0x2222, b"ct2", x"00", b"lock2", 5u256);
-        reveal_timelock();
-        timestamp::update_global_time_for_test(DEADLINE_US + 20 * MIN);
-        auction::finalize_reveal(&caller, AUCTION_ID, pair());
-        auction::clear_uniform_price(AUCTION_ID, pair());
-        let results = auction::test_get_bid_results(AUCTION_ID, pair());
-        let (win, fill, _) = auction::test_bid_result_fields(vector::borrow(&results, 0));
-        assert!(!win && fill == 0, 1);
+    // The fork test `largest_decrypt_batch_fits_max_execution_gas` (decrypt native issue 227,
+    // fork revision 245937376b) asserts B = 13 decrypts fit `max_execution_gas` and 14 do not;
+    // the doc of `ibe::decrypt_bid` names it ("largest batch: 13"). The cap is B - 1.
+    #[test]
+    fun max_open_bids_is_one_below_the_decrypt_batch_limit() {
+        let largest_decrypt_batch = 13;
+        assert!(auction::get_max_open_bids() == largest_decrypt_batch - 1, 1);
+        assert!(auction::get_max_open_bids() == 12, 2);
     }
 
-    // Clearing needs closed openings when the window has bids.
+    // ---- clearing and unopened bids ----
+
+    // Clearing needs a finalized window when the window has bids.
     #[test(atomica = @atomica)]
     #[expected_failure(abort_code = 21, location = atomica::auction)] // E_REVEAL_NOT_FINAL
     fun clearing_aborts_before_the_reveal_is_final(atomica: &signer) {
         setup_window(atomica);
-        auction::test_insert_committed_bid(atomica, AUCTION_ID, pair(), @0x2222, b"ct2", x"00", b"lock2", 5u256);
+        auction::test_insert_bid_with_qty(atomica, AUCTION_ID, pair(), @0x2222, b"ct2", b"lock2", 5u256);
         auction::clear_uniform_price(AUCTION_ID, pair());
-    }
-
-    // ---- clearing runs when the reveal finalizes (decision D3) ----
-
-    // Two bids on a supply of 5: the golden bid (2010, qty 5) and a second bid (1500, qty 1)
-    // whose collateral receipt is real and claimed, so `settle` can release it.
-    fun setup_two_bid_window(atomica: &signer): signer {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        let other = @0x2222;
-        let other_lock = b"usd_lock_other_bidder_32bytes___";
-        lock_receipt::insert_test_receipt<Ethereum, FakeUSD>(other_lock, other, COLLATERAL, 1);
-        lock_receipt::claim<Ethereum, FakeUSD>(other, other_lock);
-        let other_ad = auction::bid_associated_data(TIMELOCK_ID, AUCTION_ID, other);
-        auction::test_insert_committed_bid(
-            atomica, AUCTION_ID, pair(), other, b"ct2",
-            auction::compute_bid_commitment(1500, salt(9), other_ad), other_lock, 1u256,
-        );
-        reveal_timelock();
-        bidder
-    }
-
-    // Opening every bid in one batch call finalizes the reveal and clears in that call.
-    // `settle` then succeeds with no `clear_uniform_price` call.
-    #[test(atomica = @atomica)]
-    fun batch_open_of_every_bid_clears_and_settle_needs_no_clearing_call(atomica: &signer) {
-        let bidder = setup_two_bid_window(atomica);
-        let (_, _, _, _, before) = auction::get_auction(AUCTION_ID, pair());
-        assert!(before == 0 && auction::test_get_bid_results(AUCTION_ID, pair()).length() == 0, 1);
-
-        auction::submit_cleartext_and_clear(
-            &bidder, AUCTION_ID, pair(), vector[2010u64, 1500u64], vector[salt(7), salt(9)],
-        );
-
-        let (_, reveal_final, _) = auction::get_window_status(AUCTION_ID, pair());
-        assert!(reveal_final, 2);
-        let (_, _, _, _, clearing_price) = auction::get_auction(AUCTION_ID, pair());
-        assert!(clearing_price == 2010, 3);
-        let results = auction::test_get_bid_results(AUCTION_ID, pair());
-        assert!(results.length() == 2, 4);
-        let (win0, fill0, price0) = auction::test_bid_result_fields(vector::borrow(&results, 0));
-        let (win1, fill1, _) = auction::test_bid_result_fields(vector::borrow(&results, 1));
-        assert!(win0 && fill0 == SUPPLY && price0 == 2010, 5);
-        assert!(!win1 && fill1 == 0, 6);
-
-        auction::settle(&bidder, AUCTION_ID, pair());
-        assert!(auction::is_settled(AUCTION_ID, pair()), 7);
-        assert!(
-            lock_receipt::get_receipt_status<Ethereum, FakeUSD>(b"usd_lock_other_bidder_32bytes___")
-                == lock_receipt::status_revoked(),
-            8,
-        );
-    }
-
-    // finalize_reveal on a partly opened window clears it: the unopened bid gets no fill.
-    #[test(atomica = @atomica)]
-    fun finalize_reveal_clears_a_partly_opened_window(atomica: &signer) {
-        let bidder = setup_two_bid_window(atomica);
-        // Open only the second bid. The golden bid stays unopened.
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 1, 1500, salt(9));
-        timestamp::update_global_time_for_test(DEADLINE_US + 20 * MIN);
-        auction::finalize_reveal(&bidder, AUCTION_ID, pair());
-
-        let (_, _, _, _, clearing_price) = auction::get_auction(AUCTION_ID, pair());
-        assert!(clearing_price == 1500, 1);
-        let results = auction::test_get_bid_results(AUCTION_ID, pair());
-        assert!(results.length() == 2, 2);
-        let (win0, fill0, _) = auction::test_bid_result_fields(vector::borrow(&results, 0));
-        let (win1, fill1, price1) = auction::test_bid_result_fields(vector::borrow(&results, 1));
-        assert!(!win0 && fill0 == 0, 3);
-        assert!(win1 && fill1 == 1 && price1 == 1500, 4);
-
-        auction::settle(&bidder, AUCTION_ID, pair());
-        assert!(auction::is_settled(AUCTION_ID, pair()), 5);
     }
 
     // clear_uniform_price on an already-cleared window does not abort and changes nothing.
     #[test(atomica = @atomica)]
     fun clear_uniform_price_is_a_no_op_on_a_cleared_window(atomica: &signer) {
-        let bidder = setup_two_bid_window(atomica);
-        auction::submit_cleartext_and_clear(
-            &bidder, AUCTION_ID, pair(), vector[2010u64, 1500u64], vector[salt(7), salt(9)],
-        );
-        let (_, _, _, _, price_before) = auction::get_auction(AUCTION_ID, pair());
-        let results_before = auction::test_get_bid_results(AUCTION_ID, pair());
+        setup_price_bids(atomica);
+        auction::open_bids(&relayer(), PRICE_WINDOW, pair(), MAX_OPEN_BIDS);
+        auction::finalize_window(&relayer(), PRICE_WINDOW, pair());
+        let results_before = auction::get_bid_results(PRICE_WINDOW, pair());
 
-        auction::clear_uniform_price(AUCTION_ID, pair());
-        auction::clear_uniform_price(AUCTION_ID, pair());
+        auction::clear_uniform_price(PRICE_WINDOW, pair());
+        auction::clear_uniform_price(PRICE_WINDOW, pair());
 
-        let (_, _, _, _, price_after) = auction::get_auction(AUCTION_ID, pair());
-        assert!(price_after == price_before && price_after == 2010, 1);
-        assert!(auction::test_get_bid_results(AUCTION_ID, pair()) == results_before, 2);
-    }
-
-    // ===================== Expiry: no reveal after Expired =====================
-
-    #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 27, location = atomica::auction)] // E_TIMELOCK_EXPIRED
-    fun open_bid_is_impossible_after_reveal_window_elapsed(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        expire_reveal_window();
-        assert!(timelock::get_status(TIMELOCK_ID) == timelock::status_expired(), 1);
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
-    }
-
-    #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 27, location = atomica::auction)] // E_TIMELOCK_EXPIRED
-    fun open_bid_is_impossible_after_epoch_ended(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        expire_epoch_ended();
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
-    }
-
-    #[test(atomica = @atomica)]
-    #[expected_failure(abort_code = 27, location = atomica::auction)] // E_TIMELOCK_EXPIRED
-    fun batch_open_is_impossible_after_key_check_failed(atomica: &signer) {
-        setup_window(atomica);
-        let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
-        expire_key_check_failed();
-        auction::submit_cleartext_and_clear(&bidder, AUCTION_ID, pair(), vector[2010u64], vector[salt(7)]);
+        let (_, _, _, _, price_after) = auction::get_auction(PRICE_WINDOW, pair());
+        assert!(price_after == EXPECTED_CLEARING_PRICE, 1);
+        assert!(auction::get_bid_results(PRICE_WINDOW, pair()) == results_before, 2);
     }
 
     // ===================== Refund after Expired =====================
@@ -966,7 +889,7 @@ module atomica::auction_bid_wrapper_tests {
         insert_golden_receipt();
         insert_window_with_seller(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
+        submit_golden(&bidder, SUPPLY);
         framework
     }
 
@@ -1074,7 +997,6 @@ module atomica::auction_bid_wrapper_tests {
         let bidder = account::create_signer_for_test(golden_bidder());
         auction::submit_bid(
             &bidder, AUCTION_ID, pair(), golden_ct(),
-            commitment_for(2010, 7, golden_bidder()),
             b"usd_lock_late_32bytes___________", 5u256,
         );
     }
@@ -1116,7 +1038,7 @@ module atomica::auction_bid_wrapper_tests {
         );
         insert_window_with_seller(atomica);
         let bidder = account::create_signer_for_test(golden_bidder());
-        submit_golden(&bidder, 2010, 7, SUPPLY);
+        submit_golden(&bidder, SUPPLY);
     }
 
     // ===================== settle and create_auction guards =====================
@@ -1214,26 +1136,28 @@ module atomica::auction_bid_wrapper_tests {
     }
 
     // No valid bid fills: the seller lock goes back to the seller even though bids exist.
+    // Golden bid 0 opens to a 21-byte plaintext, so it is invalid.
     #[test(atomica = @atomica)]
     fun settle_without_fill_releases_the_seller_lock(atomica: &signer) {
         setup_funded_window(atomica);
         reveal_timelock();
-        timestamp::update_global_time_for_test(DEADLINE_US + 20 * MIN);
         let caller = account::create_signer_for_test(@0x9999);
-        auction::finalize_reveal(&caller, AUCTION_ID, pair());
+        auction::open_bids(&caller, AUCTION_ID, pair(), 1);
+        auction::finalize_window(&caller, AUCTION_ID, pair());
         auction::clear_uniform_price(AUCTION_ID, pair());
         auction::settle(&caller, AUCTION_ID, pair());
         assert!(seller_lock_status() == lock_receipt::status_revoked(), 1);
     }
 
-    // A filled window marks the seller lock filled: the supply goes to the winner.
+    // A filled window marks the seller lock filled: the supply goes to the winner. The test
+    // helper stands in for the decryption of the bid to the price 2010.
     #[test(atomica = @atomica)]
     fun settle_with_fill_marks_the_seller_lock_filled(atomica: &signer) {
         setup_funded_window(atomica);
         reveal_timelock();
         let bidder = account::create_signer_for_test(golden_bidder());
-        auction::open_bid(&bidder, AUCTION_ID, pair(), 0, 2010, salt(7));
-        auction::clear_uniform_price(AUCTION_ID, pair());
+        auction::test_open_with_plaintexts(AUCTION_ID, pair(), vector[auction::test_price_plaintext(2010)]);
+        auction::finalize_window(&bidder, AUCTION_ID, pair());
         auction::settle(&bidder, AUCTION_ID, pair());
         assert!(auction::is_settled(AUCTION_ID, pair()), 1);
         assert!(seller_lock_status() == lock_receipt::status_filled(), 2);

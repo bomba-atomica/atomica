@@ -144,7 +144,6 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
         const configDir = pathResolve(workspaceDir, "..", "config");
         const composeImage = extractImageFromCompose(configDir);
 
-        // SCOUT(#228) EDIT: the fallback digest below must move with the compose default to the image of the fork commit with the decrypt native.
         const genesisImage =
             process.env.IMAGE_NAME_GENESIS ||
             process.env.IMAGE_NAME ||

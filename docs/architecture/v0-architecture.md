@@ -238,10 +238,10 @@ pair bytes. With the allowlist those bytes are always the BCS of a listed
 ### 2.5 Sealed Bid struct
 
 <!-- SCOUT(#242) DOC: Bid struct is stale: SealedBid holds one V2 ciphertext BCS(vk, U, nonce, C, sig), ct_id, a 32-byte price hash, a clear quantity, opened and price; there is no u_bytes, and the encoding follows the fork spec, not Drand tlock. -->
-<!-- SCOUT(#228) DOC: the price hash and salt leave the bid; the plaintext is the 8-byte little-endian price. -->
 
-Bids are IBE-encrypted at submission time. The plaintext price is never stored
-on-chain during the live auction. The client builds the timelock identity and
+Bids are IBE-encrypted at submission time. The plaintext is the 8-byte
+little-endian `u64` price and nothing else: no salt and no price hash. The
+plaintext price is never stored on-chain during the live auction. The client builds the timelock identity and
 the bid associated data itself, from the chain id and the timelock's epoch and
 deadline, and refuses to seal when the node's values differ. When extra Aptos
 endpoints are configured (`VITE_APTOS_EXTRA_FULLNODE_URLS`), it compares the
@@ -249,16 +249,23 @@ master public key across them, so no single RPC node picks the key a bid is
 sealed to.
 
 ```move
-struct Bid has store {
+struct SealedBid has store {
     bidder:             address,
-    u_bytes:            vector<u8>,   // IBE ephemeral point U = rG (48-byte G1)
-    ciphertext:         vector<u8>,   // AES-GCM ciphertext of plaintext price
+    ciphertext:         vector<u8>,   // V2 ciphertext BCS(vk, U, nonce, C, sig) of the 8-byte price
+    ct_id:              vector<u8>,   // H(vk, AD): rejects a duplicate ciphertext
     collateral_lock_id: vector<u8>,   // FakeUSD LockReceipt ID held as margin
+    quantity:           u256,         // clear bid quantity (FakeETH wei)
+    collateral:         u256,         // FakeUSD the claimed receipt holds
+    opened:             bool,         // true once open_bids passed the bid
+    price:              u64,          // the decrypted price
+    valid:              bool,
 }
 ```
 
-`u_bytes` and `ciphertext` follow the Drand tlock encoding: see
-`docs/architecture/adr-timelock-ibe.md` for the full IBE scheme.
+`submit_bid(window_id, pair_bcs, ciphertext, collateral_lock_id, quantity)`
+takes no commitment. The ciphertext encoding is the fork spec's V2 wrapper
+(`atomica-aptos: atomica/docs/decisions/aptos-upgrade-ibe-chunky-spec.md`,
+section 6). See `docs/architecture/adr-timelock-ibe.md` for the scheme.
 
 **Bid limits (issue 218).** A window holds at most `MAX_BIDS_PER_WINDOW` =
 100 bids (`E_WINDOW_FULL`, 25). A bid's claimed FakeUSD collateral must be at
@@ -279,43 +286,51 @@ opening judges the bid invalid, §2.6).
 ### 2.6 Reveal path
 
 <!-- SCOUT(#242) DOC: reveal as built: submit_cleartext_and_clear(settler, window_id, pair_bcs, cleartexts, salts) and open_bid check each (price, salt) against the 32-byte hash stored at submission, never against the ciphertext; the key getter is timelock::get_decryption_key. -->
-<!-- SCOUT(#228) DOC: the fork native ibe::decrypt_bid is what lets the chain check a ciphertext; until it ships no Move code can decrypt. -->
-<!-- SCOUT(#228) DOC: whole section is replaced: open_bids(window_id, pair_bcs, max_bids) decrypts in batches and clears on the last batch; submit_cleartext_and_clear, open_bid, finalize_reveal and the opening window go. -->
-
-After the window closes the on-chain DKG releases a decryption key for the
-window's timelock identity. The settlement transaction calls:
+After the window closes the validators release the verified decryption key of
+the window's timelock (`timelock::get_decryption_key`, status `Revealed`). The
+chain then opens every bid itself with the fork native `ibe::decrypt_bid`
+(issue 228). Nobody submits a price or a salt, so nobody can withhold one.
 
 ```move
-// 1. Fetch the 48-byte G1 decryption key for this window's timelock
-let dk: vector<u8> = timelock_config::get_decryption_key(timelock_id);
+// Any account. Decrypts up to max_bids bids from the window's opening cursor,
+// clamped to MAX_OPEN_BIDS_PER_CALL. Never clears.
+public entry fun open_bids(caller: &signer, window_id: u64, pair_bcs: vector<u8>, max_bids: u64)
 
-// 2. For each Bid, call submit_cleartext_and_clear
-//    (entry function signature — Phase 3a implementation target)
-public entry fun submit_cleartext_and_clear(
-    settler:   &signer,
-    window_id: u64,
-    pair_bcs:  vector<u8>,
-    cleartexts: vector<u64>,  // revealed prices, index-aligned to bids
-) acquires AuctionRegistry { ... }
+// Any account, once every bid is opened. Sets reveal_final and clears (§2.7).
+public entry fun finalize_window(caller: &signer, window_id: u64, pair_bcs: vector<u8>)
 ```
 
-The entry function verifies each cleartext against the corresponding
-`(u_bytes, ciphertext)` using `timelock_config::get_decryption_key`. When the
-call opens the last unopened bid, the reveal becomes final and the same
-transaction runs the clearing algorithm (§2.7). If some bids stay unopened,
-`finalize_reveal` closes the openings after the opening window and runs the
-clearing algorithm in that call. `clear_uniform_price` stays public: on an
-already-cleared window it changes nothing.
+`open_bids` reads the key and the identity from the timelock registry, rebuilds
+each bid's associated data with `bid_associated_data`, and decrypts the bids in
+bid order from a per-window cursor. It emits one `BidsOpened { window_id,
+pair_bcs, from, to }` per call. The call that opens the last bid only moves the
+cursor to the bid count; a further call aborts `E_REVEAL_FINAL`. A client reads
+the cursor with `get_open_cursor(window_id, pair_bcs): (next, total)`.
+`MAX_OPEN_BIDS_PER_CALL` is 12 (`get_max_open_bids`): B - 1, where B = 13 is the
+largest decrypt batch that fits `max_execution_gas` in the fork test
+`largest_decrypt_batch_fits_max_execution_gas`. The one decrypt of headroom pays
+for the associated data, the validity check and the writes of every bid in the
+batch. Opening 100 bids takes nine calls.
 
-**Invalid at opening (issue 216).** Each bid is judged once, when its price is
-opened (`open_bid` or `submit_cleartext_and_clear`). The bid is **invalid** if
-the price is zero or `quote_for_fill(quantity, price)` is above its stored
-collateral. The opening does not abort: the bid counts as opened, so nobody
-can open it again, and `BidInvalid { window_id, pair_bcs, bid_index, bidder,
-reason }` is emitted (reason 1: zero price, reason 2: collateral below the
-quote). A bad bid never stops the window. `get_bid_info` returns
-`(bidder, ciphertext, commitment, opened, price, valid)`; `valid` is true for
-an unopened bid, and the reason is only in the event.
+`finalize_window` aborts `E_BIDS_NOT_ALL_OPENED` while the cursor is below the
+bid count. It then sets `reveal_final` and runs the clearing algorithm (§2.7)
+in the same call. It decrypts nothing. `settle` aborts `E_REVEAL_NOT_FINAL`
+until it ran on a window with bids. A window with no bids needs no
+`finalize_window`. `clear_uniform_price` stays public: on an already-cleared
+window it changes nothing. A window whose bids nobody opens by its stuck
+deadline unwinds (§2.9).
+
+**Invalid at opening (issues 216, 228).** Each bid is judged once, when
+`open_bids` decrypts it. The bid is **invalid** if its ciphertext does not
+decrypt to exactly 8 bytes, the price is zero, or
+`quote_for_fill(quantity, price)` is above its stored collateral. The opening
+does not abort: the bid counts as opened, the cursor moves past it, and
+`BidInvalid { window_id, pair_bcs, bid_index, bidder, reason }` is emitted
+(reason 1: zero price, reason 2: collateral below the quote, reason 3: not an
+8-byte price). An invalid bid never fills and its collateral goes back to its
+depositor. A bad bid never stops the window. `get_bid_info` returns
+`(bidder, ciphertext, opened, price, valid)`; `valid` is true for an unopened
+bid, and the reason is only in the event.
 
 ### 2.7 Uniform-price clearing algorithm
 
@@ -562,14 +577,13 @@ Each network attests one Ethereum chain id, and headers are keyed by block
 number only.
 
 <!-- SCOUT(#242) DOC: not on main: settle emits no AuctionOutcome and auction::unwind does not exist (open pull request 213 rewrites this paragraph). -->
-<!-- SCOUT(#228) DOC: the stuck test loses "plus the opening window", and "unopened bids" become bids that do not decrypt. -->
 
 **Every auction ends in an outcome Ethereum can verify (issues 194, 199).**
 Aptos emits one `AuctionOutcome` per auction, from `settle`,
 `refund_expired_window` or the permissionless
 `auction::unwind(window_id, pair_bcs)`, whichever finalizes the window first.
 `settle` runs from the reveal until the window's stuck deadline (the reveal
-expiry plus the 10-minute opening window plus the 24 h unwind grace,
+expiry plus the 24 h unwind grace,
 `auction::get_stuck_deadline_us`). From the stuck deadline on, any account
 may call `unwind`. On a window that never settled, whatever its reveal state,
 it returns every lock to its depositor and emits an all-refund outcome. On a
@@ -579,7 +593,7 @@ fixed on every deployed network. Only the local testing chain (chain id 4)
 lets the `@atomica` account shorten it
 (`timelock_config::set_unwind_grace_us_on_test_chain`), so a live test can
 stall a window past its stuck deadline in minutes. Winning fills go to
-buyers at the clearing price. Unopened bids, invalid bids, losing bids,
+buyers at the clearing price. Bids that do not decrypt, invalid bids, losing bids,
 winner excess collateral, unsold seller supply and refunded windows go back to
 their depositors (§2.8). A receipt that never reached an auction can be cancelled by
 anyone after a delay, and it goes back to its depositor.

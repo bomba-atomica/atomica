@@ -15,16 +15,13 @@ However, further research into the **Drand** beacon (industry standard for rando
 ## Decision
 We will implement **Identity-Based Encryption (IBE)** functionality on the **BLS12-381** curve using the `aptos_std::bls12381_algebra` and `crypto_algebra` modules.
 
-<!-- SCOUT(#228) DOC: Scheme Details, decryption bullet: no Move code decrypts today; the fork native ibe::decrypt_bid does it (pairing in Rust, AES-128-GCM), not bls12381_algebra in the contract; the identity is the hash of chain id, epoch, timelock id and deadline, not an epoch id. -->
-<!-- SCOUT(#228) DOC: Scheme Details, decryption bullet: auction::open_bids is the contract call that decrypts each bid. -->
-
 ### Scheme Details
 We adopt the "Hashed IBE" variant (similar to Drand's approach):
 *   **Curve**: BLS12-381 (`G1`, `G2`, `Gt` from `aptos_std`).
 *   **Master Key**: Validators generate a threshold BLS Master Public Key ($P_{pub} \in G_1$ or $G_2$).
 *   **Identity**: The Auction Round (Epoch) ID is mapped to a curve point ($Q_{id} = H(ID)$).
 *   **Encryption**: The sender computes a shared secret $K = e(P_{pub}, Q_{id})^r$ and encrypts the message with a symmetric key derived from $K$. They publish $U = rG$.
-*   **Decryption**: Validators reveal/sign the identity: $Sig = s \cdot Q_{id}$. The contract computes $K = e(U, Sig)$ and derives the symmetric key to decrypt.
+*   **Decryption**: Validators reveal/sign the identity: $Sig = s \cdot Q_{id}$ (the verified key `timelock::get_decryption_key`). The contract call `auction::open_bids` decrypts each bid on chain with the fork native `ibe::decrypt_bid`, which runs the pairing $K = e(U, Sig)$ in Rust, derives the symmetric key and opens the AES-128-GCM body. The identity is the hash of the chain id, epoch, timelock id and deadline (`ibe_config::compute_identity`), not an epoch id. The bid plaintext is the 8-byte little-endian price.
 
 ## Consequences
 
