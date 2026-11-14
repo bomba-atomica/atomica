@@ -18,7 +18,11 @@ import {
 } from "@atomica/sdk/ethereum";
 import { getChainConfig } from "@atomica/sdk/chain-config";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
-import { getDerivedAddress, submitNativeTransaction } from "@atomica/sdk";
+import {
+  getDerivedAddress,
+  parsePrice,
+  submitNativeTransaction,
+} from "@atomica/sdk";
 import { useWallet } from "../context/WalletContext";
 import { proveLock } from "../hooks/proveLock";
 import { bidCollateralRefusal } from "../hooks/lockPrecheck";
@@ -114,8 +118,8 @@ export function AuctionBidder() {
   // Set on the lock step: the same bytes feed lockBinding, sealBid and submitBid.
   const [pairBcsHex, setPairBcsHex] = useState(ethers.hexlify(LAUNCH_PAIR_BCS));
   const [collateralLockIdHex, setCollateralLockIdHex] = useState("");
-  // SCOUT(#217) EDIT: price input state; the text goes through the SDK parsePrice (whole USD per whole base token).
-  const [bidAmount, setBidAmount] = useState("110");
+  // Price text: whole USD per whole FakeETH, parsed with the SDK parsePrice.
+  const [bidAmount, setBidAmount] = useState("2000");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -227,12 +231,9 @@ export function AuctionBidder() {
     try {
       const windowIdBn = BigInt(windowId);
 
-      // SCOUT(#217) EDIT: price parse; use the SDK parsePrice, which throws on empty, signed, decimal, zero and above u64.
-      const price = BigInt(bidAmount);
-      // SCOUT(#217) EDIT: price comparison; parsePrice makes it redundant, and a unit test expects the word positive in its message.
-      if (price <= 0n) {
-        throw new Error("The bid price must be a positive whole number.");
-      }
+      // Whole USD per whole FakeETH. parsePrice throws on an empty, signed,
+      // decimal, zero or above-u64 price, so nothing is sealed or submitted.
+      const price = parsePrice(bidAmount);
       const bidQuantity = BigInt(quantity);
       if (bidQuantity <= 0n) {
         throw new Error("The bid quantity must be above zero.");
@@ -272,10 +273,8 @@ export function AuctionBidder() {
         bidQuantity,
       );
 
-      // SCOUT(#217) EDIT: the stored price changes unit with the input.
       // SCOUT(#228) REMOVE: nothing is stored once the salt is gone.
-      // Persist the bid price in localStorage. Nothing reads it yet; the
-      // price unit issue (217) owns the stored price.
+      // Persist the bid price (whole USD per whole FakeETH) in localStorage.
       // Key: windowId (string) used as auction identifier in this v0 shape
       saveBidPrice(windowId, account, price);
 
@@ -442,14 +441,15 @@ export function AuctionBidder() {
               placeholder="0x... (pre-filled from Step 1)"
             />
           </div>
-          {/* SCOUT(#217) EDIT: price input; type number accepts decimals that parsePrice rejects, and the label must say whole USD per whole FakeETH. */}
           <div>
             <label className="block text-zinc-500 text-sm mb-1">
-              Bid Price (USD, encrypted until the reveal)
+              Bid Price (whole USD per whole FakeETH, encrypted until the
+              reveal)
             </label>
             <input
               data-testid="bid-amount-input"
-              type="number"
+              type="text"
+              inputMode="numeric"
               value={bidAmount}
               onChange={(e) => setBidAmount(e.target.value)}
               className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"

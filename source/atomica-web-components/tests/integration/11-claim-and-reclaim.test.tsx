@@ -68,11 +68,14 @@ import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
-// SCOUT(#217) EDIT: bid 2000 whole USD.
-const BID_PRICE = 2_000_000n;
+/** Whole USD per whole FakeETH. */
+const BID_PRICE = 2000n;
 // Small enough that the winner's quote fits the 500 FakeUSD collateral:
-// 0.0001 FakeETH at BID_PRICE (USD per whole FakeETH, `quoteForFill`) = 200.
-const BID_QUANTITY = ethers.parseEther("0.0001");
+// 0.1 FakeETH at BID_PRICE (`quoteForFill`) = 200 FakeUSD.
+const BID_QUANTITY = ethers.parseEther("0.1");
+// The Demo ClaimButton self-mints the clearing price number as FakeETH base
+// units (wei). It is a faucet amount, not a price: 2000 wei, not 2000 USD.
+const CLAIM_MINT_WEI = BID_PRICE;
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
 /**
@@ -240,8 +243,7 @@ describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase 
       );
       const balanceAfter = await getFakeEthBalance(derivedAddress);
       // SCOUT(#236) REMOVE: the faucet mint of the clearing price; assert ERC-20 balances on Ethereum after release.
-      // SCOUT(#217) EDIT: this compares a FakeETH balance change with a price.
-      expect(balanceAfter - balanceBefore).toBe(BID_PRICE);
+      expect(balanceAfter - balanceBefore).toBe(CLAIM_MINT_WEI);
     },
     (TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 180) * 1000,
   );

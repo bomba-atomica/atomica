@@ -60,7 +60,9 @@ vi.mock("@atomica/sdk/aptos", () => ({
 
 // getDerivedAddress is stubbed by default. The checksummed account case swaps
 // in the real implementation (vi.importActual) for one call.
-vi.mock("@atomica/sdk", () => ({
+// parsePrice and formatPrice stay real: the price unit is under test here.
+vi.mock("@atomica/sdk", async () => ({
+  ...(await vi.importActual<typeof import("@atomica/sdk")>("@atomica/sdk")),
   getDerivedAddress: vi
     .fn()
     .mockResolvedValue({ toString: () => "0x" + "0d".repeat(32) }),
@@ -169,7 +171,6 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     expect(screen.getByTestId("bid-quantity-input")).toBeTruthy();
   });
 
-  // SCOUT(#217) EDIT: parsePrice rejects 0; the assert on the word positive depends on its message.
   it("rejects a price that is not positive without sealing or submitting", async () => {
     const { submitBid, sealBid } = await import("@atomica/sdk/aptos");
     renderBidder();
@@ -213,7 +214,6 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
   });
 
   // SCOUT(#228) EDIT: the submitBid arguments shift (no commitment at index 4).
-  // SCOUT(#217) EDIT: this types 200 and expects 200n; add the 2000 case.
   it("seals the bid for the derived address and submits ciphertext, commitment, lock id and quantity", async () => {
     const { submitBid, sealBid } = await import("@atomica/sdk/aptos");
     renderBidder();
@@ -340,11 +340,47 @@ describe("AuctionBidder — Phase 3e IBE wiring", () => {
     expect(bidButton.textContent).toContain("Submit Encrypted Bid");
   });
 
-  it.todo(
-    "SCOUT(#217) typing 2000 in the price field makes sealBid receive 2000n",
-  );
-  it.todo(
-    "SCOUT(#217) a price of 2000.5, -1 or an empty field shows an error and neither seals nor submits",
+  it("typing 2000 in the price field makes sealBid receive 2000n", async () => {
+    const { submitBid, sealBid } = await import("@atomica/sdk/aptos");
+    renderBidder();
+    fireEvent.click(screen.getByTestId("skip-to-bid-button"));
+    const input = screen.getByTestId("bid-amount-input") as HTMLInputElement;
+    expect(input.type).toBe("text");
+    expect(input.inputMode).toBe("numeric");
+    expect(screen.getByText(/whole USD per whole FakeETH/)).toBeTruthy();
+    fireEvent.change(input, { target: { value: "2000" } });
+    fireEvent.change(screen.getByTestId("collateral-lock-id-input"), {
+      target: { value: "0x" + "cd".repeat(32) },
+    });
+    fireEvent.click(screen.getByTestId("submit-bid-button"));
+    await screen.findByText(/Bid Submitted/);
+    expect(vi.mocked(sealBid).mock.calls[0][3]).toBe(2000n);
+    expect(submitBid).toHaveBeenCalledTimes(1);
+    // The stored price is the same whole-USD value.
+    const { saveBidPrice } = await import("../../src/storage/bidStorage");
+    expect(vi.mocked(saveBidPrice).mock.calls[0][2]).toBe(2000n);
+  });
+
+  it.each(["2000.5", "-1", ""])(
+    "a price of %j shows an error and neither seals nor submits",
+    async (bad) => {
+      const { submitBid, sealBid } = await import("@atomica/sdk/aptos");
+      renderBidder();
+      fireEvent.click(screen.getByTestId("skip-to-bid-button"));
+      fireEvent.change(screen.getByTestId("bid-amount-input"), {
+        target: { value: bad },
+      });
+      fireEvent.change(screen.getByTestId("collateral-lock-id-input"), {
+        target: { value: "0x" + "cd".repeat(32) },
+      });
+      fireEvent.click(screen.getByTestId("submit-bid-button"));
+      const status = await screen.findByTestId("bid-status");
+      expect(status.textContent).toContain(
+        "positive whole number of USD per whole base token",
+      );
+      expect(sealBid).not.toHaveBeenCalled();
+      expect(submitBid).not.toHaveBeenCalled();
+    },
   );
   it.todo("SCOUT(#228) submitBid is called with no commitment");
   it("refuses the FakeUSD lock on another host and shows the expected SIWE domain", async () => {

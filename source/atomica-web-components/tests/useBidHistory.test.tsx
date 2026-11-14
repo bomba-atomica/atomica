@@ -50,11 +50,11 @@ function TestHarness({ walletAddress }: { walletAddress: string | null }) {
       </div>
       <button
         data-testid="record-btn"
-        onClick={() => recordSettlement("0xseller1", 100_000_000n)}
+        onClick={() => recordSettlement("0xseller1", 100n)}
       />
       <button
         data-testid="record-btn-2"
-        onClick={() => recordSettlement("0xseller2", 200_000_000n)}
+        onClick={() => recordSettlement("0xseller2", 200n)}
       />
       <button
         data-testid="record-dup"
@@ -91,8 +91,8 @@ describe("useBidHistory", () => {
       screen.getByTestId("entries-json").textContent!,
     );
     expect(entries[0].auctionId).toBe("0xseller1");
-    // SCOUT(#217) EDIT: recorded price fixture in micro-dollar style.
-    expect(entries[0].clearingPrice).toBe("100000000");
+    // Whole USD per whole base token.
+    expect(entries[0].clearingPrice).toBe("100");
   });
 
   it("deduplicates by seller address", async () => {
@@ -132,7 +132,7 @@ describe("useBidHistory", () => {
     screen.getByTestId("record-btn").click();
     await new Promise((r) => setTimeout(r, 50));
 
-    const raw = localStorage.getItem("bid-history-0xwallet1");
+    const raw = localStorage.getItem("bid-history-v2-0xwallet1");
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw!);
     expect(parsed).toHaveLength(1);

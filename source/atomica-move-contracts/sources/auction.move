@@ -1,4 +1,3 @@
-// SCOUT(#217) DOC: state the price unit in this header: whole USD per whole base token, an unsigned integer with no decimal shift.
 // SCOUT(#228) DOC: rewrite "Bid lifecycle" steps 2, 4 and 5 and delete the "Cleartext" section: the chain opens bids with `ibe::decrypt_bid`, with no commitment, salt or opening window.
 /// Auction module: global-registry sealed-bid batch auction with V2 timelock bids.
 ///
@@ -27,6 +26,14 @@
 ///    stuck deadline) finalizes the window: every claimed lock gets a terminal outcome
 ///    record (`lock_receipt::record_outcome`) and the window emits its one `AuctionOutcome`,
 ///    the `outcome_tree` root Ethereum LockBox releases the locks by.
+///
+/// ## Price unit
+///
+/// Every price in this module (`SealedBid.price`, `BidOpened.price`, every `clearing_price`)
+/// is whole USD per whole base token, as an unsigned integer with no decimal shift. A price
+/// of 2000 means 2000 USD per whole FakeETH. `quote_for_fill` alone turns a price into
+/// FakeUSD base units (6 decimals). The SDK `parsePrice`, `formatPrice` and `quoteForFill`
+/// use the same unit.
 ///
 /// ## Deadlines (docs/specifications/auction-timing.md)
 ///
@@ -224,7 +231,6 @@ module atomica::auction {
         window_timelocks: Table<u64, u64>,
     }
 
-    // SCOUT(#217) DOC: state the unit of `SealedBid.price`: whole USD per whole base token, no decimal shift.
     // SCOUT(#228) REMOVE: `SealedBid.commitment`; `open_bids` sets `opened` and `price` from the decrypted 8-byte plaintext.
     /// IBE sealed bid — plaintext price never stored on-chain during live window.
     /// @see docs/architecture/v0-architecture.md §2.5
@@ -243,7 +249,8 @@ module atomica::auction {
         collateral:         u256,
         /// True once a cleartext matching `commitment` was accepted.
         opened:             bool,
-        /// The opened price. Zero until `opened`.
+        /// The opened price, in whole USD per whole base token (no decimal shift). Zero
+        /// until `opened`.
         price:              u64,
         /// False once opening found a zero price or `quote_for_fill(quantity, price)` above
         /// `collateral`. An invalid bid never fills and its whole collateral goes back to
@@ -251,7 +258,6 @@ module atomica::auction {
         valid:              bool,
     }
 
-    // SCOUT(#217) DOC: state the unit of `BidResult.clearing_price`; the issue text does not list this struct.
     /// Per-bid fill result written by clear_uniform_price.
     ///
     /// After clearing, each bid in the window is assigned a BidResult recording
@@ -263,10 +269,9 @@ module atomica::auction {
         bidder:         address,
         is_winner:      bool,
         fill_amount:    u256,   // wei allocated to this bidder (0 for losers)
-        clearing_price: u64,    // uniform clearing price all winners pay
+        clearing_price: u64,    // uniform clearing price all winners pay, whole USD per whole base token
     }
 
-    // SCOUT(#217) DOC: state the unit of `WindowState.clearing_price`.
     // SCOUT(#228) EDIT: `WindowState` gains the opening cursor of `open_bids`; `reveal_final` then means every bid is opened.
     /// Per-window clearing state within the global registry.
     /// @see docs/architecture/v0-architecture.md §2.3
@@ -281,7 +286,7 @@ module atomica::auction {
         total_supply:     u256,               // sum of all seller lock amounts (FakeETH wei)
         bids:             vector<SealedBid>,
         settled:          bool,
-        clearing_price:   u64,
+        clearing_price:   u64,                // whole USD per whole base token, no decimal shift
         lock_ids:         vector<vector<u8>>, // seller LockReceipt IDs consumed
         /// True once `finalize_reveal` ran. Openings are closed and clearing may run.
         reveal_final:     bool,
@@ -303,7 +308,6 @@ module atomica::auction {
 
     // ===================== Events =====================
 
-    // SCOUT(#217) DOC: state the unit of `AuctionSettled.clearing_price`.
     // Emitted when settlement is complete for a window.
     // The Ethereum settlement contract (or off-chain relayer) reads this to
     // transfer assets on the cross-chain side.
@@ -313,13 +317,12 @@ module atomica::auction {
         window_id:      u64,
         pair:           Pair,
         pair_bcs:       vector<u8>,         // window key pair bytes (see AuctionRefunded)
-        clearing_price: u64,
+        clearing_price: u64,                // whole USD per whole base token, no decimal shift
         total_filled:   u256,               // wei of base token allocated to winners
         winner_count:   u64,
         lock_ids:       vector<vector<u8>>, // seller receipt IDs consumed
     }
 
-    // SCOUT(#217) DOC: state the unit of `BidOpened.price`.
     // SCOUT(#228) REMOVE: `BidOpened`. The issue names no event for a bid that `open_bids` opens.
     // Emitted when a bid cleartext matching its commitment is accepted.
     #[event]
@@ -327,7 +330,7 @@ module atomica::auction {
         window_id:  u64,
         bid_index:  u64,
         bidder:     address,
-        price:      u64,
+        price:      u64,    // whole USD per whole base token, no decimal shift
     }
 
     // SCOUT(#228) REMOVE: `RevealFinalized`.
@@ -419,8 +422,9 @@ module atomica::auction {
     }
 
     #[view]
-    /// FakeUSD base units a winner pays for `base_amount` FakeETH wei at `clearing_price`
-    /// (USD per whole FakeETH). Rounds down. Mirrors the SDK `quoteForFill`.
+    /// FakeUSD base units (6 decimals) a winner pays for `base_amount` FakeETH wei at
+    /// `clearing_price`, a price in whole USD per whole base token with no decimal shift.
+    /// Rounds down. Mirrors the SDK `quoteForFill`.
     public fun quote_for_fill(base_amount: u256, clearing_price: u64): u256 {
         base_amount * (clearing_price as u256) * QUOTE_UNIT / BASE_UNIT
     }

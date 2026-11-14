@@ -197,7 +197,6 @@ describe("useSellFlow state machine", () => {
     expect(result.current.lockBlock).toBe(42);
   });
 
-  // SCOUT(#217) EDIT: the minPrice fixture is micro-dollars.
   it("resumes bigint fields (amount) from stringified localStorage and ignores an old minPrice", async () => {
     localStorage.setItem(
       STORAGE_KEY,

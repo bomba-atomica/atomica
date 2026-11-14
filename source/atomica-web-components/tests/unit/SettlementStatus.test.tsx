@@ -52,7 +52,8 @@ const PAIR: Pair = {
 
 const WINDOW_ID = 1n;
 
-// SCOUT(#217) EDIT: clearingPrice fixture 1000; this file now runs in the Unit Tests job, so the $2000 case can go here or in tests/unit/price-display.test.tsx.
+// clearingPrice is whole USD per whole base token. The $2000 display case is
+// in tests/unit/price-display.test.tsx.
 const MOCK_EVENT: AuctionSettledEvent = {
   windowId: WINDOW_ID,
   pair: PAIR,
@@ -114,6 +115,7 @@ describe("SettlementStatus", () => {
 
     const settled = screen.getByTestId("settlement-status-settled");
     expect(settled.textContent).toContain("2");
+    expect(settled.textContent).toContain("clearing price $1000");
   });
 
   it("queries Aptos with the SDK node and package, and no relayer key", async () => {

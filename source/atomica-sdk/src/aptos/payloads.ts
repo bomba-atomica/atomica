@@ -177,7 +177,6 @@ export async function getLaunchPairBcs(): Promise<Uint8Array> {
   return ethers.getBytes(result[0] as string);
 }
 
-// SCOUT(#217) EDIT: minPrice is a whole-USD price for as long as the reserve price exists.
 /**
  * Build payload for auction::create_auction (v0 Beta global-registry).
  *
@@ -521,11 +520,12 @@ export async function isSettled(
   return result[0] as boolean;
 }
 
-// SCOUT(#217) EDIT: clearingPrice is whole USD per whole base token; say so in the doc.
 /**
  * Query `auction::get_settlement` view function (v0 Beta window-keyed).
  *
- * Returns { clearingPrice, totalFilled } after settlement. `totalFilled` is
+ * Returns { clearingPrice, totalFilled } after settlement. `clearingPrice` is
+ * whole USD per whole base token, with no decimal shift (show it with
+ * `formatPrice`). `totalFilled` is
  * the sum of the winners' fills, not the window supply. Both are 0 before the
  * window settles. Aborts if no window exists for (windowId, pairBcs).
  *
@@ -774,13 +774,13 @@ export async function getTimelockStatus(
 }
 
 // SCOUT(#228) REMOVE: submit_cleartext_and_clear is deleted.
-// SCOUT(#217) EDIT: cleartexts are whole-USD prices.
 /**
  * Build payload for `auction::submit_cleartext_and_clear`.
  *
  * Called after the timelock status is `Revealed` and bids were decrypted off
  * chain with the revealed key. Index-aligned to the window's bids.
  * `cleartexts[i]` and `salts[i]` open bid `i`. An empty salt skips bid `i`.
+ * Each cleartext is a price in whole USD per whole base token (`parsePrice`).
  * The contract checks every opening against the commitment made at submission,
  * so a relayer cannot change a price.
  *
@@ -815,8 +815,10 @@ export async function submitCleartextAndClear(
 }
 
 // SCOUT(#228) REMOVE: open_bid is deleted.
-// SCOUT(#217) EDIT: price is a whole-USD price.
-/** Build payload for `auction::open_bid` (one bid, any caller). */
+/**
+ * Build payload for `auction::open_bid` (one bid, any caller). `price` is
+ * whole USD per whole base token (`parsePrice`).
+ */
 export function getOpenBidPayload(
   windowId: bigint,
   pairBcs: Uint8Array,

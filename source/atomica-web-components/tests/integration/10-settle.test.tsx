@@ -2,13 +2,12 @@
  * 10-settle.test.tsx
  *
  * Live settlement tests for SettleButton on one window of the dual-chain
- * testnet. Three sealed bids compete for the seller's 0.01 FakeETH (the
- * minimum seller lock):
+ * testnet. Three sealed bids compete for the seller's 0.1 FakeETH. Prices are
+ * whole USD per whole FakeETH:
  *
- // SCOUT(#217) EDIT: header prices read 2.00 and 1.50; they become 2000 and 1500 whole USD.
- *   winner  — price 0.02, quantity 0.01 FakeETH (fills the whole supply)
- *   loser   — price 0.015, quantity 0.01 FakeETH
- *   invalid — price 0.03, quantity 0.01 FakeETH, 100 FakeUSD collateral
+ *   winner  — price 2000, quantity 0.1 FakeETH (fills the whole supply)
+ *   loser   — price 1500, quantity 0.1 FakeETH
+ *   invalid — price 3000, quantity 0.1 FakeETH, 100 FakeUSD collateral
  *             against a 300 FakeUSD quote: invalid at opening, never fills
  *
  * Scenarios:
@@ -85,18 +84,17 @@ import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
 import { LAUNCH_PAIR_BCS, quoteForFill } from "@atomica/sdk/settlement/bridge";
 
-// SCOUT(#217) EDIT: whole-USD prices (2000 and 1500); the $2.00 expectations below become $2000.
-const WIN_PRICE = 20_000n;
-const LOSE_PRICE = 15_000n;
-// The supply is the 0.01 FakeETH minimum seller lock. The winner bids the
-// whole supply. Its quote must fit the 500 FakeUSD collateral: 0.01 FakeETH
-// at WIN_PRICE (USD per whole FakeETH, `quoteForFill`) = 200.
-const SUPPLY = ethers.parseEther("0.01");
+// Whole USD per whole FakeETH.
+const WIN_PRICE = 2000n;
+const LOSE_PRICE = 1500n;
+// The winner bids the whole supply. Its quote must fit the 500 FakeUSD
+// collateral: 0.1 FakeETH at WIN_PRICE (`quoteForFill`) = 200 FakeUSD.
+const SUPPLY = ethers.parseEther("0.1");
 // submit_bid aborts on a quantity above the window supply.
 const LOSE_QUANTITY = SUPPLY;
 // Above WIN_PRICE, so it would win if it were valid. Its quote at its own
 // price is 300 FakeUSD, above the 100 FakeUSD it locks: invalid at opening.
-const INVALID_PRICE = 30_000n;
+const INVALID_PRICE = 3000n;
 const INVALID_COLLATERAL = 100n * 10n ** 6n;
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
@@ -301,8 +299,7 @@ describe.sequential("10: Settle Auction", () => {
       expect(settleResult.contains(screen.getByTestId(settleButton.settleClearingPrice))).toBe(
         true,
       );
-      // SCOUT(#217) EDIT: the displayed clearing price becomes $2000.
-      expect(screen.getByTestId(settleButton.settleClearingPrice).textContent).toBe("$0.02");
+      expect(screen.getByTestId(settleButton.settleClearingPrice).textContent).toBe("$2000");
 
       const state = await getAuctionState(aptosClient, moduleAddr, auction);
       expect(state.settled).toBe(true);
@@ -350,8 +347,7 @@ describe.sequential("10: Settle Auction", () => {
     );
     const btn = screen.getByTestId(settleButton.settleButton) as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
-    // SCOUT(#217) EDIT: the displayed clearing price becomes $2000.
-    expect(screen.getByTestId(settleButton.settleClearingPrice).textContent).toBe("$0.02");
+    expect(screen.getByTestId(settleButton.settleClearingPrice).textContent).toBe("$2000");
   }, 60_000);
 
   // ── Test 5: Step8Monitor shows the settled window ──────────────────────────
@@ -383,8 +379,7 @@ describe.sequential("10: Settle Auction", () => {
         const rows = screen.getAllByTestId(bidHistory.bidHistoryRow);
         expect(rows).toHaveLength(1);
         expect(rows[0].textContent).toContain(auction.windowId.toString());
-        // SCOUT(#217) EDIT: the bid history price becomes $2000.
-        expect(rows[0].textContent).toContain("$0.02");
+        expect(rows[0].textContent).toContain("$2000");
       },
       { timeout: 15_000 },
     );

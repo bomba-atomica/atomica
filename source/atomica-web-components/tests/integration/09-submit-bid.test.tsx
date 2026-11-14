@@ -85,11 +85,11 @@ import {
 import { ethers } from "ethers";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
-// SCOUT(#217) EDIT: bid 2000 whole USD, not 2_000_000.
-const BID_PRICE = 2_000_000n;
-// quoteForFill(0.0001 FakeETH, 2_000_000) is 200 FakeUSD, within the 500
-// FakeUSD the helper locks, so the bid would be valid once opened.
-const BID_QUANTITY = ethers.parseEther("0.0001");
+/** Whole USD per whole FakeETH. */
+const BID_PRICE = 2000n;
+// quoteForFill(0.1 FakeETH, 2000) is 200 FakeUSD, within the 500 FakeUSD the
+// helper locks, so the bid would be valid once opened.
+const BID_QUANTITY = ethers.parseEther("0.1");
 // createLiveWindow locks 10 FakeETH for the seller.
 const WINDOW_SUPPLY = ethers.parseEther("10");
 // The launch pair: the only pair on the allowlist.
@@ -277,7 +277,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
     fireEvent.change(screen.getByTestId(auctionBidder.collateralLockIdInput), {
       target: { value: firstCollateral },
     });
-    // SCOUT(#217) EDIT: this types the price into the bidder screen.
+    // The bidder screen takes whole USD per whole FakeETH.
     fireEvent.change(screen.getByTestId(auctionBidder.bidAmountInput), {
       target: { value: BID_PRICE.toString() },
     });
@@ -338,7 +338,7 @@ describe.sequential("09: Submit Bid on Auction", () => {
     ).toBe(RECEIPT_ACTIVE);
 
     // Step 2: bid against the registered lock.
-    // SCOUT(#217) EDIT: this types the price into the bidder screen.
+    // The bidder screen takes whole USD per whole FakeETH.
     fireEvent.change(screen.getByTestId(auctionBidder.bidAmountInput), {
       target: { value: BID_PRICE.toString() },
     });

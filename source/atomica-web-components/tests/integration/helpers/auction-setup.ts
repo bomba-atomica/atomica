@@ -54,6 +54,7 @@ import {
 } from "@atomica/sdk/aptos";
 import {
   getDerivedAddress,
+  quoteForFill,
   simulateMaxGasAmount,
   submitNativeTransaction,
 } from "@atomica/sdk";
@@ -295,11 +296,11 @@ function registerLockPayload(
  * 20x this, which must fit FakeUSD's 10,000 FakeUSD MAX_MINT_AMOUNT, so 500
  * FakeUSD is also the ceiling. A bid is invalid at opening unless its
  * collateral covers `quote_for_fill(quantity, price)` (SDK `quoteForFill`,
- * price in USD per whole FakeETH), so tests bid small quantities: 0.0001
- * FakeETH at 2_000_000 costs 200 FakeUSD.
+ * price in whole USD per whole FakeETH). It is sized as the quote of the
+ * largest test bid: 0.25 FakeETH at 2000 is 500 FakeUSD, and the usual
+ * 0.1 FakeETH at 2000 costs 200 FakeUSD.
  */
-export const DEFAULT_COLLATERAL = 500n * 10n ** 6n;
-// SCOUT(#217) EDIT: DEFAULT_COLLATERAL above: size it with quoteForFill at whole-USD prices; FakeUSD mint is capped at 10,000 per call and lockBidCollateral mints amount times 20, so 500 is also the ceiling.
+export const DEFAULT_COLLATERAL = quoteForFill(ethers.parseEther("0.25"), 2000n);
 // DEFAULT_COLLATERAL is above the 10 FakeUSD minimum bid collateral (auction::get_window_limits).
 
 /**
@@ -779,13 +780,13 @@ export interface SubmittedBid {
  * the bidder's collateral receipt.
  *
  * `quantity` must be above zero and at most the window supply, or
- * `submit_bid` aborts (37, 38). The collateral must cover
+ * `submit_bid` aborts (37, 38). `price` is whole USD per whole FakeETH
+ * (`parsePrice` unit). The collateral must cover
  * `quoteForFill(quantity, price)`, or the bid is invalid at opening.
  *
  * The SDK's Aptos instance must point at the testnet (`setAptosInstance`).
  * Throws if the transaction aborts.
  */
-// SCOUT(#217) EDIT: price is whole USD per whole FakeETH.
 // SCOUT(#228) EDIT: getBidPayload loses the commitment argument and sealBid returns no salt.
 export async function submitBidDirect(
   aptosClient: Aptos,
@@ -910,9 +911,9 @@ export async function getWindowStatus(
 
 /**
  * Read `auction::get_auction(window_id, pair_bcs)`: supply, bid count, the
- * settled flag and the clearing price. Throws when the window does not exist.
+ * settled flag and the clearing price (whole USD per whole base token).
+ * Throws when the window does not exist.
  */
-// SCOUT(#217) EDIT: the clearing price read from get_auction is whole USD.
 export async function getAuctionState(
   aptosClient: Aptos,
   moduleAddr: string,

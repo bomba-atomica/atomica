@@ -222,7 +222,6 @@ jobs:
           cargo run --quiet
           git diff --exit-code -- ../atomica-sdk/tests/fixtures/golden_vectors.json
 
-      # SCOUT(#217) TEST: the new SDK price test file runs here with no workflow edit; vitest.config.ts includes tests/**/*.test.ts.
       - name: Run atomica-sdk tests
         working-directory: source/atomica-sdk
         run: bun run test
@@ -530,7 +529,7 @@ jobs:
       # Raise MIN_MOVE_TESTS when tests are added, so a silently skipped module fails the job.
       - name: Run Move Tests (at least MIN_MOVE_TESTS must run)
         env:
-          MIN_MOVE_TESTS: 270
+          MIN_MOVE_TESTS: 271
         run: |
           set -euo pipefail
           aptos move test --package-dir source/atomica-move-contracts | tee move-test.log
@@ -613,7 +612,6 @@ jobs:
             test_files: >-
               tests/integration/07-create-auction.test.tsx
               tests/integration/08-auction-monitor.test.tsx
-          # SCOUT(#217) TEST: this chunk runs 09 and 10 with whole-USD prices.
           # SCOUT(#228) TEST: this chunk runs open_bids in 09 and 10 against the live validators.
           - chunk: bid-settle
             test_files: >-
@@ -630,7 +628,6 @@ jobs:
               tests/integration/11-claim-and-reclaim.test.tsx
               tests/integration/13-bid-history.test.tsx
           # SCOUT(#236) TEST: this chunk runs 14-happy-path ending with release on Ethereum; on this anvil tier that needs the anvil backend on the prague hardfork (it starts on cancun today).
-          # SCOUT(#217) TEST: this chunk runs 14-happy-path with the 2000 price.
           # SCOUT(#228) TEST: this chunk runs 14-happy-path with the on-chain open step.
           - chunk: happy-path
             test_files: >-

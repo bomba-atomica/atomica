@@ -319,7 +319,6 @@ an unopened bid, and the reason is only in the event.
 
 ### 2.7 Uniform-price clearing algorithm
 
-<!-- SCOUT(#217) DOC: the worked example is in whole USD per whole ETH; name that unit and show the FakeUSD (6 decimals) amounts quote_for_fill gives. -->
 <!-- SCOUT(#242) DOC: step 5: on main only opened losing bids are released; an unopened bid receipt stays claimed (BidUnopened) until the Aptos unwind (194) merges. -->
 
 Steps:
@@ -337,9 +336,9 @@ Steps:
 
 **Worked numeric example:**
 
-Supply = 10 ETH.
+Prices are whole USD per whole ETH, the one price unit (§2.9). Supply = 10 ETH.
 
-| Bidder | Price (USD/ETH) | Quantity (ETH) | Cumulative |
+| Bidder | Price (whole USD per whole ETH) | Quantity (ETH) | Cumulative |
 |---|---|---|---|
 | Alice | 2 100 | 4 | 4 |
 | Bob | 2 050 | 3 | 7 |
@@ -351,16 +350,20 @@ to 12 but supply is 10, so Carol gets a partial fill of 3 ETH. Clearing price
 = 2 010 (Carol's marginal price). Dave's receipt is released.
 
 All winners pay 2 010 × their_fill in FakeUSD. Alice pays 8 040, Bob pays
-6 030, Carol pays 6 030.
+6 030, Carol pays 6 030. In FakeUSD base units (6 decimals),
+`quote_for_fill(4 × 10^18, 2010)` is 8 040 000 000 for Alice and
+`quote_for_fill(3 × 10^18, 2010)` is 6 030 000 000 for Bob and Carol.
 
 ### 2.8 Bidder collateral requirement
 
 <!-- SCOUT(#242) DOC: the contract does not enforce "at least bid_quantity × bid_price": submit_bid drops the receipt amount; say what is enforced today and name the bid validity issue (216) as the gap. -->
-<!-- SCOUT(#217) DOC: bid_quantity × bid_price needs units: quantity in wei, price in whole USD per whole token, product in FakeUSD units via quote_for_fill. -->
 Each bidder must hold an active FakeUSD `LockReceipt` on Ethereum whose
 locked value is at least `bid_quantity × bid_price`, and never below the
 10 FakeUSD minimum bid collateral (`submit_bid` aborts with
-`E_COLLATERAL_TOO_SMALL`, 41). The receipt's `lock_id`
+`E_COLLATERAL_TOO_SMALL`, 41). Here `bid_quantity` is in FakeETH wei,
+`bid_price` is whole USD per whole FakeETH, and the product is in FakeUSD
+base units (6 decimals), computed as
+`quote_for_fill(bid_quantity, bid_price)`. The receipt's `lock_id`
 is stored in `Bid.collateral_lock_id`. This mirrors the seller-side
 `LockReceipt<Ethereum, FakeETH>` in
 `source/atomica-move-contracts/sources/lock_receipt.move`.
@@ -428,14 +431,19 @@ struct AuctionSettled has drop, store {
     window_id:      u64,
     pair:           Pair,
     pair_bcs:       vector<u8>, // window key pair bytes passed to create_auction
-    clearing_price: u64,        // USD per base token, no decimal shift
+    clearing_price: u64,        // whole USD per whole base token, no decimal shift
     total_filled:   u256,       // wei of base token transferred to winners
     winner_count:   u64,
     lock_ids:       vector<vector<u8>>,  // seller receipt IDs consumed
 }
 ```
 
-<!-- SCOUT(#217) DOC: section 2.9: the clearing_price comment "USD per base token, no decimal shift" is the unit; sections 2.7 and 2.8 and every client must match it. -->
+Price unit: every price (bid price, clearing price) is whole USD per whole base
+token, as an unsigned integer with no decimal shift. Sections 2.7 and 2.8 and
+every client use it. The SDK parses and shows prices with `parsePrice` and
+`formatPrice` (`formatPrice(2000n)` is `$2000`), and only `quote_for_fill`
+(SDK `quoteForFill`) turns a price into FakeUSD base units.
+
 <!-- SCOUT(#242) DOC: section 2.9: Ethereum settlement is driven by AuctionOutcome, which settle does not emit on main; AuctionSettled is no longer what section 3 uses. -->
 
 ---

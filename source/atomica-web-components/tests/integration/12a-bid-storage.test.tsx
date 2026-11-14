@@ -22,10 +22,10 @@ describe("12a: bidStorage — localStorage persistence", () => {
   const bidder = "0xCCDD";
 
   it("saves and loads a bid price", () => {
-    // SCOUT(#217) EDIT: stored prices in micro-dollar style.
-    saveBidPrice(seller, bidder, 110_000_000n);
+    // Whole USD per whole base token.
+    saveBidPrice(seller, bidder, 2000n);
     const result = loadBidPrice(seller, bidder);
-    expect(result).toBe(110_000_000n);
+    expect(result).toBe(2000n);
   });
 
   it("returns null when no bid is stored", () => {
@@ -33,7 +33,7 @@ describe("12a: bidStorage — localStorage persistence", () => {
   });
 
   it("clears a stored bid price", () => {
-    saveBidPrice(seller, bidder, 50_000_000n);
+    saveBidPrice(seller, bidder, 1500n);
     clearBidPrice(seller, bidder);
     expect(loadBidPrice(seller, bidder)).toBeNull();
   });

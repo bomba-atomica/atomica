@@ -127,7 +127,6 @@ export function Step8Monitor({
   const amountFormatted = amount
     ? (Number(amount) / 1e18).toFixed(4) + " FETH"
     : "—";
-  // SCOUT(#217) EDIT: price display divides by 1e6.
 
   return (
     <div className="flex flex-col gap-4">

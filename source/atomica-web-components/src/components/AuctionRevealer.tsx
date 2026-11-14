@@ -8,6 +8,7 @@ import {
   type OpenedBid,
 } from "@atomica/sdk/aptos";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
+import { formatPrice, parsePrice } from "@atomica/sdk";
 import { useWallet } from "../context/WalletContext";
 
 // SCOUT(#228) EDIT: rewrite this flow comment: one permissionless Open bids action, no prices and no salts.
@@ -143,7 +144,8 @@ export function AuctionRevealer() {
       // whose decryption does not match its commitment.
       const usable = (b: OpenedBid) =>
         b.matchesCommitment && !b.alreadyOpened && b.salt !== undefined;
-      // SCOUT(#217) EDIT: prices formatted to text as raw integers; this file is missing from the price unit issue's touchpoints.
+      // Prices are whole USD per whole base token, typed back as plain digits
+      // that parsePrice reads.
       setCleartextsRaw(
         bids.map((b) => (usable(b) ? b.price!.toString() : "0")).join(", "),
       );
@@ -170,15 +172,14 @@ export function AuctionRevealer() {
       const windowIdBn = BigInt(windowId);
       const pairBcs = parsePairBcs(pairBcsHex);
 
-      // Parse comma-separated cleartext bid prices (u64 values)
-      // SCOUT(#217) EDIT: prices parsed from text with BigInt.
-      const cleartexts: bigint[] = cleartextsRaw
+      // Comma-separated cleartext bid prices, whole USD per whole base token.
+      // They go through parsePrice once the salts are known (below).
+      const cleartextTexts: string[] = cleartextsRaw
         .split(",")
         .map((s) => s.trim())
-        .filter((s) => s.length > 0)
-        .map((s) => BigInt(s));
+        .filter((s) => s.length > 0);
 
-      if (cleartexts.length === 0) {
+      if (cleartextTexts.length === 0) {
         setSubmitStatus("Error: enter at least one cleartext bid price.");
         return;
       }
@@ -191,7 +192,7 @@ export function AuctionRevealer() {
           (hex.match(/.{1,2}/g) ?? []).map((b) => parseInt(b, 16)),
         );
       });
-      if (salts.length !== cleartexts.length) {
+      if (salts.length !== cleartextTexts.length) {
         setSubmitStatus(
           "Error: enter one salt per cleartext (leave an entry empty to skip a bid).",
         );
@@ -203,6 +204,11 @@ export function AuctionRevealer() {
         );
         return;
       }
+      // A bid with an empty salt is skipped, so its price placeholder is not
+      // parsed. Every other price goes through parsePrice.
+      const cleartexts: bigint[] = cleartextTexts.map((text, i) =>
+        salts[i].length === 0 ? 0n : parsePrice(text),
+      );
 
       setSubmitStatus("Please sign the transaction...");
       // SCOUT(#228) REMOVE: submitCleartextAndClear is deleted from the SDK.
@@ -355,12 +361,13 @@ export function AuctionRevealer() {
                 className="text-xs font-mono text-zinc-400 space-y-1"
               >
                 {decrypted.length === 0 && <li>No bids in this window.</li>}
-                {/* SCOUT(#217) EDIT: price shown as a raw integer; route it through formatPrice. */}
                 {/* SCOUT(#228) EDIT: the matches-commitment wording goes. */}
                 {decrypted.map((b) => (
                   <li key={b.index} data-testid="decrypted-bid">
                     #{b.index} {b.bidder.slice(0, 10)}…{" "}
-                    {b.price !== undefined ? `price ${b.price}` : "unreadable"}
+                    {b.price !== undefined
+                      ? `price ${formatPrice(b.price)}`
+                      : "unreadable"}
                     {b.alreadyOpened
                       ? b.valid
                         ? " (already opened)"
@@ -373,17 +380,17 @@ export function AuctionRevealer() {
               </ul>
             )}
             {/* SCOUT(#228) REMOVE: the cleartext price input and the salt input below it. */}
-            {/* SCOUT(#217) EDIT: price input (comma-separated raw integers) until on-chain decryption removes it. */}
             <div>
               <label className="block text-zinc-500 text-sm mb-1">
-                Cleartext Bid Prices (comma-separated)
+                Cleartext Bid Prices (comma-separated, whole USD per whole
+                FakeETH)
               </label>
               <input
                 data-testid="cleartexts-input"
                 type="text"
                 value={cleartextsRaw}
                 onChange={(e) => setCleartextsRaw(e.target.value)}
-                placeholder="e.g. 110, 105, 95"
+                placeholder="e.g. 2000, 1990, 1950"
                 className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500 font-mono text-sm"
               />
             </div>

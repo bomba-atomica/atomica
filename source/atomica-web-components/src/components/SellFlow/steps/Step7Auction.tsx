@@ -28,7 +28,6 @@ export function Step7Auction({
   const amountFormatted = amount
     ? (Number(amount) / 1e18).toFixed(4) + " FETH"
     : "…";
-  // SCOUT(#217) EDIT: price display divides by 1e6; use formatPrice while it exists.
 
   return (
     <div className="flex flex-col gap-4">

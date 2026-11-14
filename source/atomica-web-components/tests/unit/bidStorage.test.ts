@@ -1,18 +1,59 @@
 /**
- * Planned unit tests for the bid price storage (src/storage/bidStorage.ts).
+ * Unit tests for the bid price storage (src/storage/bidStorage.ts) and the
+ * bid history storage (src/hooks/useBidHistory.ts).
  *
- * Scout stub: every case is a todo. The existing storage cases live in
- * tests/integration/12a-bid-storage.test.tsx, which no CI job runs. New cases
- * go here so the Unit Tests (atomica-sdk, atomica-web-components) job runs
- * them through vitest.unit.config.ts.
+ * Prices are whole USD per whole base token. The v2 keys mark that unit; an
+ * entry under an old unversioned key may hold another unit, so it is dropped
+ * on load, not migrated.
+ *
+ * Runs in the Unit Tests (atomica-sdk, atomica-web-components) job through
+ * vitest.unit.config.ts.
  */
 
-import { describe, it } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import { renderHook } from "@testing-library/react";
+import { loadBidPrice, saveBidPrice } from "../../src/storage/bidStorage";
+import { useBidHistory } from "../../src/hooks/useBidHistory";
 
-describe("bidStorage — planned", () => {
-  it.todo(
-    "SCOUT(#217) a stored price is read back in whole USD per whole base token",
-  );
+const SELLER = "0xSeLLeR0000000000000000000000000000000001";
+const BIDDER = "0xBiDDeR0000000000000000000000000000000002";
+const WALLET = "0xWaLLeT0000000000000000000000000000000003";
+
+describe("bidStorage", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("a stored price is read back in whole USD per whole base token", () => {
+    saveBidPrice(SELLER, BIDDER, 2000n);
+    expect(
+      localStorage.getItem(
+        `atomica:bid:v2:${SELLER.toLowerCase()}:${BIDDER.toLowerCase()}`,
+      ),
+    ).toBe("2000");
+    expect(loadBidPrice(SELLER, BIDDER)).toBe(2000n);
+  });
+
+  it("an old-unit bid price under the unversioned key reads as null and is removed", () => {
+    const oldKey = `atomica:bid:${SELLER.toLowerCase()}:${BIDDER.toLowerCase()}`;
+    localStorage.setItem(oldKey, "2000000");
+    expect(loadBidPrice(SELLER, BIDDER)).toBeNull();
+    expect(localStorage.getItem(oldKey)).toBeNull();
+  });
+
+  it("old-unit bid history under the unversioned key is dropped on load", () => {
+    const oldKey = `bid-history-${WALLET.toLowerCase()}`;
+    localStorage.setItem(
+      oldKey,
+      JSON.stringify([
+        { auctionId: SELLER, clearingPrice: "2000000000", settledAt: 1 },
+      ]),
+    );
+    const { result } = renderHook(() => useBidHistory(WALLET));
+    expect(result.current.entries).toEqual([]);
+    expect(localStorage.getItem(oldKey)).toBeNull();
+  });
+
   it.todo(
     "SCOUT(#228) the opening storage is gone and no salt is written to localStorage",
   );

@@ -76,6 +76,8 @@ export function formatETHBalance(balance: bigint): string {
 
 /**
  * Format FakeUSD balance for display
+ * A FakeUSD token amount helper. It never takes a price: show prices with
+ * `formatPrice` from `@atomica/sdk`.
  * @param balance Balance in smallest units (6 decimals)
  * @returns Formatted string (e.g., "10000.00")
  */
@@ -103,6 +105,8 @@ export function parseETHAmount(amount: string): bigint {
 
 /**
  * Parse USD amount from string
+ * A FakeUSD token amount helper. It never takes a price: parse prices with
+ * `parsePrice` from `@atomica/sdk`.
  * @param amount Amount as string (e.g., "10000.50")
  * @returns Amount in smallest units (6 decimals)
  */

@@ -162,12 +162,11 @@ This prevents "Invisible Handshake" attacks where validators collude off-chain. 
 ### Uniform Price Auction Mechanism
 
 <!-- SCOUT(#242) DOC: "sealed bids (quantity + price)": only the price is sealed; the quantity is public at submission. -->
-<!-- SCOUT(#217) DOC: the example prices (2000, 1980, 1950) are whole USD per whole base token, the one unit this issue pins; say the unit here. -->
 <!-- The rule for an undersubscribed window (review decision 34) is still open: today the lowest valid bid sets the price. A zero-price bid is invalid, so the price is never zero. -->
 
 Bidders submit sealed bids (quantity + price). Bids sorted, clearing price set at lowest qualifying bid. A qualifying bid is a valid one: invalid bids are skipped. All winners pay same uniform price (regardless of bid).
 
-**Example:** Auction for 100 ETH with bids: A (40@$2000), B (30@$1980), C (40@$1950) → All clear at $1950
+**Example:** Auction for 100 ETH with bids: A (40@$2000), B (30@$1980), C (40@$1950) → All clear at $1950. Prices are whole USD per whole base token (here USD per ETH), the one price unit across the contracts, SDK and UI.
 
 **Why:** Revenue equivalence to Vickrey auctions, incentive compatibility, MEV resistance, tolerates public information post-decryption
 

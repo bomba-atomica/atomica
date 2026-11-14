@@ -52,7 +52,6 @@ import { setAptosInstance } from "@atomica/sdk/aptos";
 import { ethers } from "ethers";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
-// SCOUT(#217) EDIT: price constant in micro-dollar style.
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
 /** Budget past the window close, as in the reveal tests (seconds). */

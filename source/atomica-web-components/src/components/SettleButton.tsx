@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { submitSettle, isSettled, getSettlement } from "@atomica/sdk/aptos";
+import { formatPrice } from "@atomica/sdk";
 import { useWallet } from "../context/WalletContext";
 
 interface Props {
@@ -64,7 +65,8 @@ export function SettleButton({
         if (cancelled) return;
         setSettled(s);
         if (s) {
-          // SCOUT(#217) EDIT: result.clearingPrice is whole USD per whole base token; it is stored here and passed to onSettled unchanged.
+          // clearingPrice is whole USD per whole base token; it is stored
+          // and passed to onSettled unchanged.
           const result = await getSettlement(windowId, pairBcs);
           if (cancelled) return;
           setClearingPrice(result.clearingPrice);
@@ -142,11 +144,10 @@ export function SettleButton({
           data-testid="settle-result"
           className="text-xs font-mono p-2 bg-zinc-950 rounded border border-zinc-800 flex flex-col gap-1"
         >
-          {/* SCOUT(#217) EDIT: clearing price display divides by 1e6; use the SDK formatPrice. */}
           <div className="flex justify-between">
             <span className="text-zinc-500">Clearing price</span>
             <span data-testid="settle-clearing-price" className="text-zinc-300">
-              {`$${(Number(clearingPrice) / 1e6).toFixed(2)}`}
+              {formatPrice(clearingPrice)}
             </span>
           </div>
           {/* get_settlement returns the sum of the winners' fills, not the window supply. */}

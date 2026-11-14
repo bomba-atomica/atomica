@@ -37,7 +37,6 @@ export function Step2Lock({
 
   const handleLock = () => {
     const amountWei = ethers.parseEther(amount || "0");
-    // SCOUT(#217) EDIT: price parsed as micro-dollars (parseUnits with 6 decimals); the unit is whole USD through parsePrice, while the field exists.
     onLock(amountWei);
   };
 
@@ -78,8 +77,6 @@ export function Step2Lock({
             className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500 text-sm"
           />
         </div>
-
-        {/* SCOUT(#217) EDIT: price input in whole USD, while it exists. */}
       </div>
 
       <button

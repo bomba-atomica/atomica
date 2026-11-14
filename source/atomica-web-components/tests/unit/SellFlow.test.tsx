@@ -136,7 +136,6 @@ describe("SellFlow step rendering", () => {
     expect(screen.getAllByText(/proof/i).length).toBeGreaterThan(0);
   });
 
-  // SCOUT(#217) EDIT: the minPrice fixture 2_000_000_000 is micro-dollars.
   it("shows Step7Auction at creating-auction step", () => {
     vi.mocked(useSellFlow).mockReturnValue({
       ...BASE_FLOW,

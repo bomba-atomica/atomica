@@ -1,3 +1,5 @@
+import { formatPrice } from "@atomica/sdk";
+
 /**
  * A single auction entry in the bid history table.
  *
@@ -7,8 +9,7 @@
 export interface BidHistoryEntry {
   /** Seller address used as the auction identifier. */
   auctionId: string;
-  // SCOUT(#217) EDIT: the unit comment becomes whole USD per whole base token.
-  /** Clearing price in USD micro-units (6 decimals). */
+  /** Clearing price in whole USD per whole base token (no decimal shift). */
   clearingPrice: bigint;
   /** Unix timestamp (seconds) when the auction was settled. */
   settledAt: number;
@@ -30,11 +31,6 @@ interface Props {
   entries?: BidHistoryEntry[];
 }
 
-// SCOUT(#217) REMOVE: formatUsd divides by 1e6; replace it with the SDK formatPrice.
-function formatUsd(amount: bigint): string {
-  return (Number(amount) / 1e6).toFixed(2);
-}
-
 function formatTimestamp(ts: number): string {
   return new Date(ts * 1000).toLocaleString();
 }
@@ -43,7 +39,7 @@ function formatTimestamp(ts: number): string {
  * Table displaying the user's settled auction history.
  *
  * Renders one row per {@link BidHistoryEntry} with auction ID, clearing
- * price (formatted as USD), and settlement timestamp. Shows an empty-state
+ * price (`formatPrice`, whole USD per whole base token), and settlement timestamp. Shows an empty-state
  * message when `entries` is empty.
  *
  * @see docs/specifications/prd.md
@@ -88,9 +84,8 @@ export function BidHistory({ entries = [] }: Props) {
               <td className="py-2 px-3 font-mono text-xs text-zinc-400 truncate max-w-[120px]">
                 {entry.auctionId}
               </td>
-              {/* SCOUT(#217) EDIT: price display; formatPrice already returns the dollar sign. */}
               <td className="py-2 px-3 text-right font-mono text-xs text-zinc-200">
-                ${formatUsd(entry.clearingPrice)}
+                {formatPrice(entry.clearingPrice)}
               </td>
               <td className="py-2 px-3 text-right text-xs text-zinc-500">
                 {formatTimestamp(entry.settledAt)}

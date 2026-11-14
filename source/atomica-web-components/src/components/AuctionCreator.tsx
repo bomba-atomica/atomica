@@ -25,7 +25,6 @@ export function AuctionCreator() {
   const [lockIdHex, setLockIdHex] = useState("");
   const [windowId, setWindowId] = useState("0");
   const [pairBcsHex, setPairBcsHex] = useState(ethers.hexlify(LAUNCH_PAIR_BCS));
-  // SCOUT(#217) EDIT: while the field exists, its text goes through parsePrice.
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -46,7 +45,6 @@ export function AuctionCreator() {
       const pairBcs = pairBcsHex
         ? ethers.getBytes(pairBcsHex)
         : LAUNCH_PAIR_BCS;
-      // SCOUT(#217) EDIT: price parse (BigInt of the text); use parsePrice while the field exists.
 
       const pendingTx = await submitCreateAuction(
         account,
@@ -104,7 +102,6 @@ export function AuctionCreator() {
             className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500 font-mono text-xs"
           />
         </div>
-        {/* SCOUT(#217) EDIT: price input in whole USD, while it exists. */}
         <button
           onClick={handleCreateAuction}
           disabled={loading}
