@@ -1,6 +1,7 @@
 name: Test Web UI (Browser Integration)
 
-# The happy-path browser test runs in two tiers. Only ETH_BACKEND differs.
+# The happy-path browser test runs in two tiers. Only the Ethereum backend
+# differs (anvil runs the Prague hardfork, like the docker PoS chain).
 # - anvil: fast JSON-RPC Ethereum chain. Runs on draft PRs (feature-correctness).
 # - docker: full Geth + Lighthouse PoS chain. Runs from ready-for-review
 #   onward and on main (system-correctness).
@@ -27,6 +28,9 @@ jobs:
       CI_CLASS: feature-correctness
       ETH_BACKEND: anvil
       ATOMICA_TEST_WINDOW_SCHEDULE: "900:900"
+      # The happy path ends with release on Ethereum: the Aptos light client
+      # needs the EIP-2537 precompiles of Prague (the docker PoS chain runs it).
+      ETH_ANVIL_HARDFORK: prague
     permissions:
       packages: read
       contents: read
