@@ -7,7 +7,8 @@
  * Scenarios:
  *   1. Active countdown displayed when endTime is in the future
  *   2. Status badge reads "Active" while auction is open
- *   3. Status badge transitions to "Settled" (i.e. "Ended") after expiry
+ *   3. Status badge transitions to "Closed" after expiry. It reads
+ *      "Settled" only once `auction::is_settled` says so (no window here).
  *   4. A live window created on chain reads back from get_window_status and
  *      Step8Monitor counts down to its window close (`window_deadline_us`),
  *      at most one test window (900 s) away
@@ -167,10 +168,10 @@ describe.sequential("08: Auction Monitor countdown and status", () => {
     expect(initial).not.toBe(updated);
   }, 15_000);
 
-  // ── Test 5: status badge transitions to Settled after expiry ──────────────
+  // ── Test 5: status badge transitions to Closed after expiry ───────────────
 
   it(
-    "status badge transitions to 'Settled' once AUCTION_DURATION_SHORT elapses",
+    "status badge transitions to 'Closed' once AUCTION_DURATION_SHORT elapses",
     async () => {
       // Use AUCTION_DURATION_SHORT (2 s) so the test doesn't take too long.
       // Set endTime 2 s in the future.
@@ -190,13 +191,13 @@ describe.sequential("08: Auction Monitor countdown and status", () => {
         "Active",
       );
 
-      // After expiry the component re-renders with "Settled" (Step8Monitor
-      // calls the state "Settled" when ended — see the JSX: ended ? "Settled" : "Active")
+      // After expiry the badge reads "Closed": with no window id there is no
+      // chain settlement to read, so it never says "Settled".
       await waitFor(
         () => {
           expect(
             screen.getByTestId(step8Monitor.auctionStatusBadge).textContent,
-          ).toBe("Settled");
+          ).toBe("Closed");
         },
         { timeout: 10_000 },
       );
@@ -253,11 +254,12 @@ describe.sequential("08: Auction Monitor countdown and status", () => {
       expect(screen.getByTestId(step8Monitor.auctionStatusBadge).textContent).toBe(
         "Active",
       );
+      // Closed, not Settled: nobody opened or settled the window.
       await waitFor(
         () => {
           expect(
             screen.getByTestId(step8Monitor.auctionStatusBadge).textContent,
-          ).toBe("Settled");
+          ).toBe("Closed");
         },
         { timeout: (remainingSecs + 10) * 1000 },
       );

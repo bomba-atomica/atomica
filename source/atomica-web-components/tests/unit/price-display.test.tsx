@@ -21,12 +21,15 @@ import {
 import type { AuctionSettledEvent, Pair } from "@atomica/sdk/settlement/bridge";
 import { WalletContext } from "../../src/context/WalletContext";
 
-const { mockQueryAuctionSettledEvents, mockIsRevealed, mockDecryptWindowBids } =
-  vi.hoisted(() => ({
-    mockQueryAuctionSettledEvents: vi.fn(),
-    mockIsRevealed: vi.fn(),
-    mockDecryptWindowBids: vi.fn(),
-  }));
+const {
+  mockQueryAuctionSettledEvents,
+  mockGetTimelockStatus,
+  mockDecryptWindowBids,
+} = vi.hoisted(() => ({
+  mockQueryAuctionSettledEvents: vi.fn(),
+  mockGetTimelockStatus: vi.fn(),
+  mockDecryptWindowBids: vi.fn(),
+}));
 
 vi.mock("@atomica/sdk/settlement/bridge", async () => ({
   ...(await vi.importActual<typeof import("@atomica/sdk/settlement/bridge")>(
@@ -48,7 +51,7 @@ vi.mock("@atomica/sdk/chain-config", () => ({
 }));
 
 vi.mock("@atomica/sdk/aptos", () => ({
-  isRevealed: mockIsRevealed,
+  getTimelockStatus: mockGetTimelockStatus,
   MAX_OPEN_BIDS_PER_CALL: 12n,
   openBids: vi.fn(),
   finalizeWindow: vi.fn(),
@@ -116,7 +119,7 @@ describe("price display", () => {
   });
 
   it("AuctionRevealer lists a decrypted bid of 2000n as $2000", async () => {
-    mockIsRevealed.mockResolvedValue(true);
+    mockGetTimelockStatus.mockResolvedValue({ status: "revealed" });
     mockDecryptWindowBids.mockResolvedValue([
       {
         index: 0,
@@ -130,7 +133,7 @@ describe("price display", () => {
       <WalletContext.Provider
         value={{ account: "0x" + "12".repeat(20), connect: vi.fn() }}
       >
-        <AuctionRevealer />
+        <AuctionRevealer windowId={0n} pairBcs={new Uint8Array([1])} />
       </WalletContext.Provider>,
     );
     fireEvent.click(screen.getByTestId("start-polling-button"));

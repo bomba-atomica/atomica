@@ -54,7 +54,6 @@ export default defineConfig(async () => {
   return {
     // No Node polyfills: the proof generator (viem getProof, ethers) loads and
     // runs in the page as is. 09-submit-bid proves a lock through AuctionBidder.
-    // SCOUT(#236) EDIT: the same limit keeps SellFlow out of the browser suite (see 14-happy-path.test.tsx).
     plugins: [react()],
     // Point Vite at source/.env.test so VITE_* vars are available via
     // import.meta.env (used by e.g. src/lib/aptos/config.ts for CONTRACT_ADDR).

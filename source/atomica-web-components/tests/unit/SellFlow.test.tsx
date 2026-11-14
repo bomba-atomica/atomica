@@ -31,6 +31,39 @@ vi.mock("../../src/hooks/useAptosBalances", () => ({
   }),
 }));
 
+// The trade steps the monitoring step mounts: stubs that show their props.
+vi.mock("../../src/components/AuctionRevealer", () => ({
+  AuctionRevealer: (p: { windowId: bigint; pairBcs: Uint8Array }) => (
+    <div
+      data-testid="stub-open"
+      data-window={p.windowId.toString()}
+      data-pair={p.pairBcs.length}
+    />
+  ),
+}));
+vi.mock("../../src/components/SettleButton", () => ({
+  SettleButton: (p: { windowId: bigint; pairBcs: Uint8Array }) => (
+    <div
+      data-testid="stub-settle"
+      data-window={p.windowId.toString()}
+      data-pair={p.pairBcs.length}
+    />
+  ),
+}));
+vi.mock("../../src/components/ReleaseButton", () => ({
+  ReleaseButton: (p: { windowId: bigint; pairBcs: Uint8Array }) => (
+    <div
+      data-testid="stub-release"
+      data-window={p.windowId.toString()}
+      data-pair={p.pairBcs.length}
+    />
+  ),
+}));
+vi.mock("@atomica/sdk/aptos", () => ({
+  getWindowDeadlineUs: vi.fn().mockRejectedValue(new Error("no timelock")),
+  isSettled: vi.fn().mockResolvedValue(false),
+}));
+
 // Mock useSellFlow so we can control the displayed step. The factory keeps
 // vitest from loading the real hook and its SDK imports.
 vi.mock("../../src/hooks/useSellFlow", () => ({ useSellFlow: vi.fn() }));
@@ -38,6 +71,7 @@ vi.mock("../../src/hooks/useSellFlow", () => ({ useSellFlow: vi.fn() }));
 import { useSellFlow } from "../../src/hooks/useSellFlow";
 import { SellFlow } from "../../src/components/SellFlow/SellFlow";
 import { BalancesProvider } from "../../src/context/BalancesContext";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
 const ACCOUNT = "0x1234567890123456789012345678901234567890";
 
@@ -183,7 +217,34 @@ describe("SellFlow step rendering", () => {
     expect(screen.queryByText("Auction")).toBeFalsy();
   });
 
-  it.todo(
-    "SCOUT(#236) the monitoring step passes windowId and pairBcs, so the settle and release steps render",
-  );
+  it("the monitoring step passes windowId and pairBcs, so the settle and release steps render", () => {
+    vi.mocked(useSellFlow).mockReturnValue({
+      ...BASE_FLOW,
+      step: "monitoring",
+      amount: 1_000_000_000_000_000_000n,
+      windowId: 4242n,
+      // The window closed: the trade steps follow.
+      auctionEndTime: Math.floor(Date.now() / 1000) - 10,
+    });
+    renderSellFlow();
+    const steps = ["stub-open", "stub-settle", "stub-release"].map((id) =>
+      screen.getByTestId(id),
+    );
+    for (const step of steps) {
+      expect(step.getAttribute("data-window")).toBe("4242");
+      // LAUNCH_PAIR_BCS is 34 bytes.
+      expect(step.getAttribute("data-pair")).toBe(
+        String(LAUNCH_PAIR_BCS.length),
+      );
+    }
+    // Open, then settle, then release.
+    expect(
+      steps[0].compareDocumentPosition(steps[1]) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      steps[1].compareDocumentPosition(steps[2]) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });

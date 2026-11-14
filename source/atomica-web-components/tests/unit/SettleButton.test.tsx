@@ -22,10 +22,20 @@ vi.mock("@atomica/sdk/aptos", () => ({
   submitSettle: vi.fn(),
   isSettled: vi.fn(),
   getSettlement: vi.fn(),
+  getOpenCursor: vi.fn(),
+  getTimelockStatus: vi.fn(),
+  getWindowTimelockId: vi.fn(),
 }));
 
 import { SettleButton } from "../../src/components/SettleButton";
-import { submitSettle, isSettled, getSettlement } from "@atomica/sdk/aptos";
+import {
+  submitSettle,
+  isSettled,
+  getSettlement,
+  getOpenCursor,
+  getTimelockStatus,
+  getWindowTimelockId,
+} from "@atomica/sdk/aptos";
 
 const ACCOUNT = "0xAbCd1234567890123456789012345678901234Ab";
 const WINDOW_ID = 7n;
@@ -141,7 +151,53 @@ describe("SettleButton — unit", () => {
     const price = await screen.findByTestId("settle-clearing-price");
     expect(price.textContent).toBe("$2000");
   });
-  it.todo(
-    "SCOUT(#236) enables from chain state when no auctionEndTime prop is passed",
-  );
+  it("enables from chain state when no auctionEndTime prop is passed", async () => {
+    vi.mocked(getWindowTimelockId).mockResolvedValue(42n);
+    vi.mocked(getTimelockStatus).mockResolvedValue({ status: "revealed" });
+    // Two of three bids opened: not ready yet.
+    vi.mocked(getOpenCursor).mockResolvedValue({ next: 2n, total: 3n });
+    render(
+      <WalletContext.Provider value={{ account: ACCOUNT, connect: vi.fn() }}>
+        <SettleButton
+          windowId={WINDOW_ID}
+          pairBcs={PAIR_BCS}
+          pollIntervalMs={20}
+        />
+      </WalletContext.Provider>,
+    );
+    const button = await screen.findByTestId("settle-button");
+    await waitFor(() =>
+      expect(getOpenCursor).toHaveBeenCalledWith(WINDOW_ID, PAIR_BCS),
+    );
+    expect(button.hasAttribute("disabled")).toBe(true);
+
+    // Every bid opened, timelock revealed, not settled: enabled.
+    vi.mocked(getOpenCursor).mockResolvedValue({ next: 3n, total: 3n });
+    await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
+    expect(getWindowTimelockId).toHaveBeenCalledWith(WINDOW_ID);
+
+    // A window that settled meanwhile disables it again.
+    vi.mocked(isSettled).mockResolvedValue(true);
+    await waitFor(() => expect(button.hasAttribute("disabled")).toBe(true));
+  });
+
+  it("stays disabled from chain state while the window does not exist", async () => {
+    vi.mocked(getOpenCursor).mockRejectedValue(
+      new Error("E_AUCTION_NOT_FOUND"),
+    );
+    render(
+      <WalletContext.Provider value={{ account: ACCOUNT, connect: vi.fn() }}>
+        <SettleButton
+          windowId={WINDOW_ID}
+          pairBcs={PAIR_BCS}
+          pollIntervalMs={20}
+        />
+      </WalletContext.Provider>,
+    );
+    const button = await screen.findByTestId("settle-button");
+    await waitFor(() =>
+      expect(vi.mocked(getOpenCursor).mock.calls.length).toBeGreaterThan(1),
+    );
+    expect(button.hasAttribute("disabled")).toBe(true);
+  });
 });

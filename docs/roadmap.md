@@ -35,7 +35,6 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 <!-- SCOUT(#242) DOC: collateral row: the status text is stale: submit_bid claims a FakeUSD receipt and drops its amount. -->
 <!-- SCOUT(#242) DOC: settlement row: stale: the Aptos light client (202) and proof-gated LockBox (203) are merged and BLSVerifier.sol is retired; missing are the Aptos outcome (194), the carrier (195) and a live round trip (219). -->
 <!-- SCOUT(#242) DOC: unwind row: LockBox reclaim is live (203); the Aptos unwind is open pull request 213 (194); the SDK and UI half (195) is open. -->
-<!-- SCOUT(#236) DOC: settle and claim row: ClaimButton (a faucet mint) is removed for a release action; AuctionRevealer and SellFlow get exported. -->
 
 | Capability | Owning module(s) under `source/` | Status |
 |---|---|---|
@@ -59,7 +58,7 @@ Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ether
 | **Bid submission UI** | `atomica-web-components/src/components/AuctionBidder.tsx` | `live` |
 | **Auction creation UI** | `atomica-web-ui/src/components/AuctionCreator.tsx` | `live` — takes the window id, pair and lock id and sends one `create_auction` transaction; no minimum price field, since launch has no reserve price (issue 241), and no timelock registration step (issue 243) |
 | **Bid history UI** | `atomica-web-ui/src/components/BidHistory.tsx` | `live` |
-| **Settle / Claim UI** | `atomica-web-ui/src/components/SettleButton.tsx`, `ClaimButton.tsx` | `live` — Demo-phase payout; lifetime bounded by real cross-chain settlement |
+| **Open / settle / release UI** | `atomica-web-components/src/components/AuctionRevealer.tsx`, `SettleButton.tsx`, `ReleaseButton.tsx` | `live` — the faucet `ClaimButton` is removed. A user finishes a trade in three actions: Open bids, Settle, then Release, which carries the outcome to LockBox and pays each lock on Ethereum (`reclaimUnpayable` for an unpayable leaf). `AuctionRevealer`, `SellFlow` and `ReleaseButton` are exported, and the demo mounts all three steps (issue 236) |
 | **Network / contract status UI** | `atomica-web-ui/src/components/NetworkStatus.tsx`, `ContractStatus.tsx` | `live` |
 | **Dual-chain testnet orchestrator** | `docker-testnet/aptos-testnet/`, `atomica-demo/scripts/orchestrator.ts` | `live` |
 | **Browser integration test suite** | `atomica-web/tests/`, `atomica-web-ui/tests/` | `live` |

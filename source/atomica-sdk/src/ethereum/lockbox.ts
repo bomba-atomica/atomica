@@ -311,6 +311,28 @@ export function releaseByOutcomeCall(
 }
 
 /**
+ * Call data of `LockBox.reclaimUnpayable`: return a lock whose recorded leaf
+ * is unpayable (a zero recipient, or payouts that sum above the lock amount
+ * or overflow) to its depositor at once. LockBox checks the leaf against the
+ * recorded root first. `releaseByOutcome` reverts on such a leaf.
+ */
+export function reclaimUnpayableCall(
+  lockBoxAddress: string,
+  lock: Omit<LockFields, "lockId">,
+  payouts: OutcomePayout[],
+  leaf: { index: number; proof: string[] },
+): LockBoxCall {
+  return {
+    to: lockBoxAddress,
+    data: LOCKBOX_INTERFACE.encodeFunctionData("reclaimUnpayable", [
+      lockTuple(lock),
+      payouts.map((p) => [p.recipient, p.amount]),
+      [leaf.index, leaf.proof],
+    ]),
+  };
+}
+
+/**
  * Call data of `LockBox.reclaim`: return an open lock to its depositor after
  * its deadline. `neighbours` is empty while the auction has no recorded
  * outcome, else a non-membership proof (`nonMembershipProof`).
@@ -356,7 +378,6 @@ export async function releaseByOutcome(
   );
 }
 
-// SCOUT(#236) EDIT: ReleaseButton calls recordOutcome and releaseByOutcome bindings that do not exist yet; the SDK unwind issue (195) adds them to this file.
 /**
  * Return an open lock to its depositor after its deadline (`LockBox.reclaim`).
  * Anyone may send it. Without `neighbours` it works only while the lock's

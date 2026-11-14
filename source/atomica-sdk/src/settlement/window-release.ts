@@ -18,7 +18,7 @@ import {
   type ReceiptAsset,
 } from "../aptos/payloads.js";
 import { getChainConfig } from "../chain-config.js";
-import { LOCK_STATUS } from "../ethereum/abis.js";
+import { LOCK_STATUS, LOCKBOX_ABI } from "../ethereum/abis.js";
 import { pairHashOf } from "../ethereum/lock-binding.js";
 import {
   getLockById,
@@ -50,12 +50,18 @@ export interface WindowReleaseResult {
   carry?: CarryResult;
   /** Hashes of the `releaseByOutcome` transactions sent */
   released: string[];
+  /** Hashes of the `reclaimUnpayable` transactions sent (unpayable leaves) */
+  reclaimed: string[];
 }
+
+const RECLAIM_UNPAYABLE_SELECTOR = new ethers.Interface(
+  LOCKBOX_ABI,
+).getFunction("reclaimUnpayable")!.selector;
 
 /**
  * Record the window's `AuctionOutcome` on LockBox when it is not yet there,
- * then send `releaseByOutcome` for each lock of the window that is still
- * open. Pass `outcomeAt` when the caller knows the event (for example from
+ * then close each lock of the window that is still open: `releaseByOutcome`,
+ * or `reclaimUnpayable` when its leaf is unpayable (`planWindowReleases`). Pass `outcomeAt` when the caller knows the event (for example from
  * its own `unwind` transaction); otherwise the carrier scans for it.
  *
  * Stops after carrying when the outcome is unprovable or the light client is
@@ -77,7 +83,7 @@ export async function carryAndReleaseWindow(input: {
     ...ids.sellers.map((id) => ({ id, asset: "FakeETH" as const })),
     ...ids.collateral.map((id) => ({ id, asset: "FakeUSD" as const })),
   ];
-  if (all.length === 0) return { released: [] };
+  if (all.length === 0) return { released: [], reclaimed: [] };
 
   const locks: LockFields[] = [];
   for (const { id } of all) {
@@ -86,7 +92,7 @@ export async function carryAndReleaseWindow(input: {
     locks.push(lock);
   }
 
-  let result: WindowReleaseResult = { released: [] };
+  let result: WindowReleaseResult = { released: [], reclaimed: [] };
   let outcome = await getRecordedOutcome(input.provider, locks[0]);
   if (!outcome.recorded) {
     const at =
@@ -108,7 +114,7 @@ export async function carryAndReleaseWindow(input: {
       at.version,
       at.eventIndex,
     );
-    result = { carry, released: [] };
+    result = { carry, released: [], reclaimed: [] };
     if (carry.status !== "recorded" && carry.status !== "already-recorded") {
       return result;
     }
@@ -135,7 +141,12 @@ export async function carryAndReleaseWindow(input: {
     recordedRoot: outcome.root,
   });
   for (const call of calls) {
-    result.released.push((await sendLockBoxCall(input.signer, call)).hash);
+    const hash = (await sendLockBoxCall(input.signer, call)).hash;
+    if (call.data.startsWith(RECLAIM_UNPAYABLE_SELECTOR)) {
+      result.reclaimed.push(hash);
+    } else {
+      result.released.push(hash);
+    }
   }
   return result;
 }

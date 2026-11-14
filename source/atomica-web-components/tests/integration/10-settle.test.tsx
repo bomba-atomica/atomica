@@ -378,7 +378,15 @@ describe.sequential("10: Settle Auction", () => {
       </SettleProviders>,
     );
 
-    expect(screen.getByTestId(step8Monitor.auctionStatusBadge).textContent).toBe("Settled");
+    // The badge reads the settlement from chain.
+    await waitFor(
+      () => {
+        expect(screen.getByTestId(step8Monitor.auctionStatusBadge).textContent).toBe(
+          "Settled",
+        );
+      },
+      { timeout: 15_000 },
+    );
     await waitFor(
       () => {
         expect(screen.getByTestId(settleButton.settleStatus).textContent).toBe(

@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { getWindowDeadlineUs } from "@atomica/sdk/aptos";
+import { getWindowDeadlineUs, isSettled } from "@atomica/sdk/aptos";
+import { AuctionRevealer } from "../../AuctionRevealer";
 import { SettleButton } from "../../SettleButton";
-// SCOUT(#236) REMOVE: ClaimButton import; import the open step and ReleaseButton.
-import { ClaimButton } from "../../ClaimButton";
+import { ReleaseButton } from "../../ReleaseButton";
 import { BidHistory } from "../../BidHistory";
 import { useBidHistory } from "../../../hooks/useBidHistory";
 
@@ -66,6 +66,39 @@ function useWindowDeadline(windowId?: bigint | null, fallback?: number) {
   return deadline ?? fallback;
 }
 
+/**
+ * Whether the window settled on Aptos (`auction::is_settled`), re-read every
+ * 5 s until it has. False without a window id.
+ */
+function useChainSettled(
+  windowId?: bigint | null,
+  pairBcs?: Uint8Array | null,
+) {
+  const [settled, setSettled] = useState(false);
+
+  useEffect(() => {
+    if (windowId == null || pairBcs == null || settled) return;
+    let cancelled = false;
+    const check = () => {
+      isSettled(windowId, pairBcs)
+        .then((s) => {
+          if (!cancelled && s) setSettled(true);
+        })
+        .catch(() => {
+          // No window yet: not settled.
+        });
+    };
+    check();
+    const id = setInterval(check, 5_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [windowId, pairBcs, settled]);
+
+  return settled;
+}
+
 function useIsUnlocked(unlockTime?: number) {
   const [isUnlocked, setIsUnlocked] = useState(() => {
     if (!unlockTime || unlockTime <= 0) return false;
@@ -118,8 +151,12 @@ export function Step8Monitor({
   const endTime = useWindowDeadline(windowId, auctionEndTime);
   const remaining = useCountdown(endTime);
   const canUnlock = useIsUnlocked(unlockTime);
-  // SCOUT(#236) EDIT: the badge says Settled as soon as the local clock ends; drive open, settle and release from chain state.
   const ended = remaining === 0 && endTime !== undefined;
+  // The badge reads Settled only once the chain says so. A window whose
+  // close passed is Closed until then: its bids still need opening and
+  // settling.
+  const chainSettled = useChainSettled(windowId, pairBcs);
+  const badge = chainSettled ? "Settled" : ended ? "Closed" : "Active";
   const { entries: bidHistoryEntries, recordSettlement } = useBidHistory(
     sellerAddress ?? null,
   );
@@ -162,31 +199,28 @@ export function Step8Monitor({
           <span
             data-testid="auction-status-badge"
             className={`text-xs px-2 py-0.5 rounded ${
-              ended ? "bg-zinc-700 text-zinc-400" : "bg-zinc-800 text-zinc-300"
+              badge === "Active"
+                ? "bg-zinc-800 text-zinc-300"
+                : "bg-zinc-700 text-zinc-400"
             }`}
           >
-            {ended ? "Settled" : "Active"}
+            {badge}
           </span>
         </div>
       </div>
 
-      {/* SCOUT(#236) EDIT: SellFlow passes no windowId and no pairBcs, so this never renders in the sell flow; add the open step before settle. */}
-      {ended && windowId != null && pairBcs != null && (
-        <SettleButton
-          windowId={windowId}
-          pairBcs={pairBcs}
-          auctionEndTime={auctionEndTime}
-          onSettled={(wid, cp) => recordSettlement(wid.toString(), cp)}
-        />
-      )}
-
-      {/* SCOUT(#236) REMOVE: ClaimButton; mount ReleaseButton here. */}
-      {ended && windowId != null && pairBcs != null && (
-        <ClaimButton
-          windowId={windowId}
-          pairBcs={pairBcs}
-          sellerAddress={sellerAddress ?? undefined}
-        />
+      {/* The trade after the close, in order: open, settle, release. Each
+          step enables itself from chain state, and anyone may press it. */}
+      {(ended || chainSettled) && windowId != null && pairBcs != null && (
+        <div data-testid="trade-steps" className="flex flex-col gap-3">
+          <AuctionRevealer windowId={windowId} pairBcs={pairBcs} />
+          <SettleButton
+            windowId={windowId}
+            pairBcs={pairBcs}
+            onSettled={(wid, cp) => recordSettlement(wid.toString(), cp)}
+          />
+          <ReleaseButton windowId={windowId} pairBcs={pairBcs} />
+        </div>
       )}
 
       {/* Bid History — always visible in monitoring step */}

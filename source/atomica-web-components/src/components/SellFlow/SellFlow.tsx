@@ -9,8 +9,13 @@ import { Step4Proof } from "./steps/Step4Proof";
 import { Step5Submit } from "./steps/Step5Submit";
 import { Step7Auction } from "./steps/Step7Auction";
 import { Step8Monitor } from "./steps/Step8Monitor";
+import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
-// SCOUT(#236) EDIT: SellFlow gets exported from the package index and mounted in the demo.
+/**
+ * SellFlow — the seller's path: lock FakeETH, prove the lock on Aptos,
+ * create the auction, then monitor it. The monitoring step carries the trade
+ * to its end: open, settle and release.
+ */
 export function SellFlow() {
   const { account, connect } = useWallet();
   const { ethBalances } = useBalances();
@@ -77,7 +82,9 @@ export function SellFlow() {
           amount={flow.amount}
           auctionEndTime={flow.auctionEndTime}
           unlockTime={flow.unlockTime}
-          // SCOUT(#236) EDIT: pass windowId and pairBcs; without them Step8Monitor never renders the settle or release step.
+          windowId={flow.windowId ?? null}
+          // useSellFlow binds every lock to the launch pair.
+          pairBcs={LAUNCH_PAIR_BCS}
           sellerAddress={account}
           onCancelAndUnlock={flow.cancelAndUnlock}
           loading={flow.loading}

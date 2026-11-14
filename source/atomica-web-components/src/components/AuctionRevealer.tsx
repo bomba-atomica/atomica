@@ -4,23 +4,26 @@ import {
   decryptWindowBids,
   finalizeWindow,
   getOpenCursor,
+  getTimelockStatus,
   getWindowTimelockId,
-  isRevealed,
   openBids,
   type OpenedBid,
+  type TimelockExpiryReason,
 } from "@atomica/sdk/aptos";
-import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 import { formatPrice } from "@atomica/sdk";
 import { useWallet } from "../context/WalletContext";
 
-// SCOUT(#236) EDIT: this component gets exported and mounted, so it needs windowId and pairBcs props instead of free-text inputs.
 /**
- * AuctionRevealer — monitors decryption key availability and opens the bids
- * of a sealed-bid auction window on chain (v0 Beta).
+ * AuctionRevealer — the open step of a trade (open, settle, release): it
+ * monitors decryption key availability and opens the bids of one auction
+ * window on chain. The window comes from the `windowId` and `pairBcs` props.
  *
  * Flow:
  *   1. Reads the window's timelock id (`auction::window_timelock`) and polls
- *      `timelock::is_revealed(timelockId)` every `POLL_INTERVAL_MS` milliseconds.
+ *      its status (`timelock::get_status`) every `POLL_INTERVAL_MS`
+ *      milliseconds. An expired timelock can never open the bids: the
+ *      revealer says so, stops polling and points to the Unwind action of
+ *      UnwindButton, which returns every lock to its depositor.
  *   2. On `true`: one permissionless "Open bids" action. Any account may send
  *      it. It sends `auction::open_bids` with `MAX_OPEN_BIDS_PER_CALL` until
  *      `auction::get_open_cursor` reports every bid opened, showing the opened
@@ -37,24 +40,28 @@ import { useWallet } from "../context/WalletContext";
 
 const POLL_INTERVAL_MS = 5_000;
 
-/** Pair bytes of the input. An empty input means the launch pair. */
-function parsePairBcs(hex: string): Uint8Array {
-  if (hex.replace(/^0x/, "") === "") return LAUNCH_PAIR_BCS;
-  return new Uint8Array(
-    (hex.replace(/^0x/, "").match(/.{1,2}/g) ?? []).map((b) => parseInt(b, 16)),
-  );
+const EXPIRY_TEXT: Record<TimelockExpiryReason, string> = {
+  "epoch-ended": "the validator epoch ended before the key was revealed",
+  "reveal-window-elapsed": "the reveal window elapsed without a key",
+  "key-check-failed": "the revealed key failed its check",
+};
+
+export interface AuctionRevealerProps {
+  /** Auction window id. */
+  windowId: bigint;
+  /** Pair bytes of the window key. */
+  pairBcs: Uint8Array;
 }
 
-export function AuctionRevealer() {
+export function AuctionRevealer({ windowId, pairBcs }: AuctionRevealerProps) {
   const { account } = useWallet();
-
-  // ── Inputs ─────────────────────────────────────────────────────────────────
-  const [windowId, setWindowId] = useState("0");
-  const [pairBcsHex, setPairBcsHex] = useState("");
 
   // ── Poll state ─────────────────────────────────────────────────────────────
   const [polling, setPolling] = useState(false);
   const [revealed, setRevealed] = useState<boolean | null>(null);
+  const [expired, setExpired] = useState<
+    TimelockExpiryReason | "unknown" | null
+  >(null);
   const [pollError, setPollError] = useState<string | null>(null);
 
   // ── Decrypt state ──────────────────────────────────────────────────────────
@@ -72,13 +79,15 @@ export function AuctionRevealer() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Poll logic ─────────────────────────────────────────────────────────────
-  // SCOUT(#236) EDIT: only is_revealed is polled, so an expired timelock waits forever; report it and hand over to Unwind (SDK unwind issue (195)).
   const checkRevealed = useCallback(async () => {
     try {
       // One timelock per window id, shared by every pair.
-      const timelockId = await getWindowTimelockId(BigInt(windowId));
-      const result = await isRevealed(timelockId);
-      setRevealed(result);
+      const timelockId = await getWindowTimelockId(windowId);
+      const result = await getTimelockStatus(timelockId);
+      setRevealed(result.status === "revealed");
+      setExpired(
+        result.status === "expired" ? (result.reason ?? "unknown") : null,
+      );
       setPollError(null);
     } catch (err) {
       setPollError(err instanceof Error ? err.message : "Poll failed");
@@ -89,6 +98,7 @@ export function AuctionRevealer() {
     if (polling) return;
     setPolling(true);
     setRevealed(null);
+    setExpired(null);
     setPollError(null);
     setOpenStatus(null);
     checkRevealed();
@@ -103,12 +113,15 @@ export function AuctionRevealer() {
     setPolling(false);
   }, []);
 
-  // Stop polling when key is revealed
+  // Stop polling once the timelock is final: revealed or expired.
   useEffect(() => {
-    if (revealed === true && intervalRef.current !== null) {
+    if (
+      (revealed === true || expired !== null) &&
+      intervalRef.current !== null
+    ) {
       stopPolling();
     }
-  }, [revealed, stopPolling]);
+  }, [revealed, expired, stopPolling]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -126,9 +139,7 @@ export function AuctionRevealer() {
     setDecrypting(true);
     setDecryptError(null);
     try {
-      setDecrypted(
-        await decryptWindowBids(BigInt(windowId), parsePairBcs(pairBcsHex)),
-      );
+      setDecrypted(await decryptWindowBids(windowId, pairBcs));
     } catch (err) {
       setDecryptError(err instanceof Error ? err.message : "Decrypt failed");
     } finally {
@@ -146,9 +157,7 @@ export function AuctionRevealer() {
     setOpening(true);
     setOpenStatus("Reading the opening cursor...");
     try {
-      const windowIdBn = BigInt(windowId);
-      const pairBcs = parsePairBcs(pairBcsHex);
-      let current = await getOpenCursor(windowIdBn, pairBcs);
+      let current = await getOpenCursor(windowId, pairBcs);
       setCursor(current);
       if (current.total === 0n) {
         setOpenStatus("No bids in this window: nothing to open or clear.");
@@ -158,8 +167,8 @@ export function AuctionRevealer() {
         setOpenStatus(
           `Please sign open_bids (${current.next} of ${current.total} opened)...`,
         );
-        await openBids(account, windowIdBn, pairBcs, MAX_OPEN_BIDS_PER_CALL);
-        const after = await getOpenCursor(windowIdBn, pairBcs);
+        await openBids(account, windowId, pairBcs, MAX_OPEN_BIDS_PER_CALL);
+        const after = await getOpenCursor(windowId, pairBcs);
         if (after.next <= current.next) {
           throw new Error("open_bids did not move the opening cursor.");
         }
@@ -167,7 +176,7 @@ export function AuctionRevealer() {
         setCursor(current);
       }
       setOpenStatus("Every bid is opened. Please sign finalize_window...");
-      await finalizeWindow(account, windowIdBn, pairBcs);
+      await finalizeWindow(account, windowId, pairBcs);
       setOpenStatus(
         `Opened ${current.total} bid(s) and cleared the window with finalize_window.`,
       );
@@ -184,35 +193,14 @@ export function AuctionRevealer() {
   return (
     <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-800">
       <h2 className="text-xl font-bold mb-4 text-zinc-300">Auction Revealer</h2>
+      <p
+        data-testid="revealer-window"
+        className="text-xs text-zinc-500 font-mono mb-4"
+      >
+        Window {windowId.toString()}
+      </p>
 
       <div className="space-y-4">
-        {/* Window ID */}
-        <div>
-          <label className="block text-zinc-500 text-sm mb-1">Window ID</label>
-          <input
-            data-testid="revealer-window-id-input"
-            type="number"
-            value={windowId}
-            onChange={(e) => setWindowId(e.target.value)}
-            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 border border-zinc-700 focus:outline-none focus:border-zinc-500"
-          />
-        </div>
-
-        {/* Pair BCS */}
-        <div>
-          <label className="block text-zinc-500 text-sm mb-1">
-            Pair BCS (0x hex, optional)
-          </label>
-          <input
-            data-testid="revealer-pair-bcs-input"
-            type="text"
-            value={pairBcsHex}
-            onChange={(e) => setPairBcsHex(e.target.value)}
-            placeholder="0x... (leave empty for the launch pair)"
-            className="w-full bg-zinc-800 text-zinc-200 rounded p-2 text-xs font-mono border border-zinc-700 focus:outline-none focus:border-zinc-500"
-          />
-        </div>
-
         {/* Poll controls */}
         <div className="flex gap-2">
           <button
@@ -242,7 +230,7 @@ export function AuctionRevealer() {
         </div>
 
         {/* Reveal status */}
-        {revealed !== null && (
+        {revealed !== null && expired === null && (
           <div
             data-testid="reveal-status"
             className={`text-sm font-mono p-2 rounded border ${
@@ -254,6 +242,18 @@ export function AuctionRevealer() {
             {revealed
               ? "Decryption key is REVEALED. Anyone may now open the bids."
               : "Waiting for decryption key reveal..."}
+          </div>
+        )}
+
+        {expired !== null && (
+          <div
+            data-testid="timelock-expired"
+            className="text-sm p-2 rounded border bg-amber-950 border-amber-800 text-amber-300"
+          >
+            The window&apos;s timelock expired (
+            {expired === "unknown" ? "no reason given" : EXPIRY_TEXT[expired]}
+            ), so its bids can never be opened. Use the Unwind action to return
+            every lock to its depositor.
           </div>
         )}
 

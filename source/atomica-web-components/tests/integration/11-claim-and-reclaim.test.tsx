@@ -1,20 +1,26 @@
-// SCOUT(#236) EDIT: this file becomes the release test; a rename also needs the claim-reclaim file list of test-web.yaml (both tiers) and the exemptions list changed.
 /**
  * @file 11-claim-and-reclaim.test.tsx
- * @description Live ClaimButton tests on one window of the dual-chain testnet.
+ * @description Live ReleaseButton tests on one window of the dual-chain
+ * testnet: the release step of a trade (open, settle, release). The file
+ * keeps its old name, so the claim-reclaim chunk and the coverage exemption
+ * list need no change.
  *
- * One sealed bid (price 2.00, 1 FakeETH of the seller's 10) is placed by the
- * bidder's Ethereum-derivable account, the only account that can claim the
- * bidder's collateral receipt. The ClaimButton signs through SIWE with the
- * bidder wallet mock.
+ * One sealed bid (price 2000, 0.1 FakeETH of the seller's lock) is placed by
+ * the bidder's Ethereum-derivable account. The release is pressed by the
+ * carrier wallet, which is neither the seller nor the bidder: it carries the
+ * validator-signed AuctionOutcome to the LockBox through the real
+ * AptosLightClient, then releases each lock per its leaf. This needs the
+ * BLS12-381 precompiles: the anvil tier runs Prague (ETH_ANVIL_HARDFORK).
  *
  * Scenarios:
- *   1. Before settlement: ClaimButton shows "Auction not yet settled" and both
- *      buttons are disabled; is_settled is false and the bid is on chain
- *   2. After reveal, opening, clearing and settle: ClaimButton reads the
- *      settlement, the claim mints the clearing price in FakeETH (the Demo-phase
- *      payout) and the receipts keep their settled statuses
- *   3. The reclaim button stays disabled: the Demo phase has no reclaim path
+ *   1. Before settlement: ReleaseButton is disabled and says release opens
+ *      once the window settles.
+ *   2. After reveal, opening and settle: the carrier presses Release. The
+ *      winner's FakeETH and the seller's FakeUSD ERC-20 balances on Ethereum
+ *      rise by the amounts the outcome names. The carrier's tokens do not move.
+ *   3. LockBox.statuses reads Released for the seller lock and the winner's
+ *      collateral lock.
+ *   4. A second press finds no open lock and sends no transaction.
  */
 
 import React from "react";
@@ -26,7 +32,6 @@ import {
   fireEvent,
   cleanup,
 } from "@testing-library/react";
-import { commands } from "vitest/browser";
 import {
   setupIntegrationFixture,
   teardownIntegrationFixture,
@@ -42,13 +47,10 @@ import {
   openAndFinalizeWindowDirect,
   settleAuctionDirect,
   getAuctionState,
-  getReceiptStatus,
-  RECEIPT_FILLED,
   TEST_WINDOW_SECS,
   type LiveWindow,
 } from "./helpers/auction-setup";
-// SCOUT(#236) REMOVE: import ReleaseButton instead.
-import { ClaimButton } from "../../src/components/ClaimButton";
+import { ReleaseButton } from "../../src/components/ReleaseButton";
 import {
   Aptos,
   AptosConfig,
@@ -61,10 +63,11 @@ import {
   isSettled,
   getBidCount,
   getBidResults,
-  getFakeEthBalance,
+  getLockOutcome,
 } from "@atomica/sdk/aptos";
+import { getLockStatus, LOCK_STATUS } from "@atomica/sdk/ethereum";
+import { quoteForFill } from "@atomica/sdk";
 import { WalletContext } from "../../src/context/WalletContext";
-import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
 
@@ -73,9 +76,6 @@ const BID_PRICE = 2000n;
 // Small enough that the winner's quote fits the 500 FakeUSD collateral:
 // 0.1 FakeETH at BID_PRICE (`quoteForFill`) = 200 FakeUSD.
 const BID_QUANTITY = ethers.parseEther("0.1");
-// The Demo ClaimButton self-mints the clearing price number as FakeETH base
-// units (wei). It is a faucet amount, not a price: 2000 wei, not 2000 USD.
-const CLAIM_MINT_WEI = BID_PRICE;
 // The launch pair: the only pair on the allowlist.
 const PAIR_BCS = LAUNCH_PAIR_BCS;
 /**
@@ -87,8 +87,9 @@ const PAIR_BCS = LAUNCH_PAIR_BCS;
 const MIN_WINDOW_LEFT_SECS = 540n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
 const REVEAL_TIMEOUT_SECS = 300;
+const ERC20 = ["function balanceOf(address) view returns (uint256)"];
 
-function ClaimProviders({
+function ReleaseProviders({
   account,
   children,
 }: {
@@ -102,174 +103,249 @@ function ClaimProviders({
   );
 }
 
-describe.sequential("11: ClaimButton — settlement-aware claim with Demo-phase mint", () => {
-  let fixture: IntegrationFixture;
-  let aptosClient: Aptos;
-  let moduleAddr: string;
-  let operator: Account;
-  let ethAddress: string;
-  let derivedAddress: string;
-  let auction: LiveWindow;
-  let collateral: string;
+/** Sum of the payouts a lock's leaf names for `recipient`. */
+function paidTo(
+  outcome: { recipients: string[]; amounts: bigint[] },
+  recipient: string,
+): bigint {
+  return outcome.recipients.reduce(
+    (sum, r, i) =>
+      r.toLowerCase() === recipient.toLowerCase()
+        ? sum + outcome.amounts[i]
+        : sum,
+    0n,
+  );
+}
 
-  beforeAll(async () => {
-    fixture = await setupIntegrationFixture();
-    moduleAddr = fixture.aptos.moduleAddress;
+describe.sequential(
+  "11: ReleaseButton — anyone releases a settled window on Ethereum",
+  () => {
+    let fixture: IntegrationFixture;
+    let aptosClient: Aptos;
+    let moduleAddr: string;
+    let operator: Account;
+    let carrierAccount: string;
+    let auction: LiveWindow;
+    let collateral: string;
+    let rpc: ethers.JsonRpcProvider;
+    let fakeEth: ethers.Contract;
+    let fakeUsd: ethers.Contract;
 
-    aptosClient = new Aptos(
-      new AptosConfig({ network: Network.LOCAL, fullnode: fixture.aptos.nodeUrl }),
-    );
-    setAptosInstance(aptosClient);
+    beforeAll(async () => {
+      fixture = await setupIntegrationFixture();
+      moduleAddr = fixture.aptos.moduleAddress;
 
-    operator = Account.fromPrivateKey({
-      privateKey: new Ed25519PrivateKey(fixture.aptos.deployerPrivateKey),
+      aptosClient = new Aptos(
+        new AptosConfig({
+          network: Network.LOCAL,
+          fullnode: fixture.aptos.nodeUrl,
+        }),
+      );
+      setAptosInstance(aptosClient);
+
+      operator = Account.fromPrivateKey({
+        privateKey: new Ed25519PrivateKey(fixture.aptos.deployerPrivateKey),
+      });
+      rpc = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, {
+        cacheTimeout: -1,
+      });
+      fakeEth = new ethers.Contract(fixture.eth.contracts.fakeETH, ERC20, rpc);
+      fakeUsd = new ethers.Contract(fixture.eth.contracts.fakeUSD, ERC20, rpc);
+
+      // The window first: the collateral locks into the window open then.
+      auction = await createLiveWindow(fixture, aptosClient, operator, {
+        pairBcs: PAIR_BCS,
+        minWindowLeftSecs: MIN_WINDOW_LEFT_SECS,
+      });
+      collateral = await lockBidCollateral(
+        fixture,
+        aptosClient,
+        operator,
+        PAIR_BCS,
+      );
+      await submitBidDirect(
+        aptosClient,
+        fixture.eth.bidder,
+        auction,
+        BID_PRICE,
+        collateral,
+        BID_QUANTITY,
+      );
+
+      // The carrier presses Release. It is neither the seller nor the bidder,
+      // and it holds ETH for gas only.
+      carrierAccount = (
+        await setupWalletMock({
+          privateKey: fixture.eth.carrier.privateKey,
+          rpcUrl: fixture.eth.rpcUrl,
+          chainId: fixture.eth.chainId,
+        })
+      ).toLowerCase();
+      expect(carrierAccount).not.toBe(fixture.eth.seller.address.toLowerCase());
+      expect(carrierAccount).not.toBe(fixture.eth.bidder.address.toLowerCase());
+    }, 2_400_000);
+
+    afterAll(async () => {
+      await teardownIntegrationFixture();
     });
 
-    // The ClaimButton signs with SIWE: fund the bidder's derived Aptos address.
-    ethAddress = await setupWalletMock({
-      privateKey: fixture.eth.bidder.privateKey,
-      rpcUrl: fixture.eth.rpcUrl,
-      chainId: fixture.eth.chainId,
+    afterEach(() => {
+      cleanup();
     });
-    derivedAddress = (await getDerivedAddress(ethAddress.toLowerCase())).toString();
-    await commands.fundAccount(derivedAddress, 500_000_000);
 
-    // The window first: the collateral locks into the window open then.
-    auction = await createLiveWindow(fixture, aptosClient, operator, {
-      pairBcs: PAIR_BCS,
-      minWindowLeftSecs: MIN_WINDOW_LEFT_SECS,
-    });
-    collateral = await lockBidCollateral(fixture, aptosClient, operator, PAIR_BCS);
-    await submitBidDirect(aptosClient, fixture.eth.bidder, auction, BID_PRICE, collateral, BID_QUANTITY);
-  }, 2_400_000);
+    // ── 11-1: before settlement ────────────────────────────────────────────────
 
-  afterAll(async () => {
-    await teardownIntegrationFixture();
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
-
-  // ── 11-1: before settlement ────────────────────────────────────────────────
-
-  it(
-    "unsettled window: both buttons disabled, status shows 'not yet settled'",
-    async () => {
+    it("unsettled window: release is disabled until the window settles", async () => {
       expect(await getBidCount(auction.windowId, PAIR_BCS)).toBe(1n);
       expect(await isSettled(auction.windowId, PAIR_BCS)).toBe(false);
 
       render(
-        <ClaimProviders account={ethAddress}>
-          <ClaimButton windowId={auction.windowId} pairBcs={PAIR_BCS} />
-        </ClaimProviders>,
+        <ReleaseProviders account={carrierAccount}>
+          <ReleaseButton windowId={auction.windowId} pairBcs={PAIR_BCS} />
+        </ReleaseProviders>,
       );
-
-      await waitFor(
-        () => {
-          const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
-          expect(status.textContent).toBe("Auction not yet settled");
-        },
-        { timeout: 15_000 },
-      );
-
-      const claimBtn = screen.getByTestId(SELECTORS.claimButton.claimButton);
-      const reclaimBtn = screen.getByTestId(SELECTORS.claimButton.reclaimButton);
-      expect((claimBtn as HTMLButtonElement).disabled).toBe(true);
-      expect((reclaimBtn as HTMLButtonElement).disabled).toBe(true);
-    },
-    60_000,
-  );
-
-  // ── 11-2: settled window — claim mints the clearing price ──────────────────
-
-  it(
-    "settled window: claim enables and mints the clearing price in FakeETH",
-    async () => {
-      await waitForReveal(
-        auction.timelockId,
-        TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS,
-      );
-      await openAndFinalizeWindowDirect(aptosClient, operator, auction);
-      await settleAuctionDirect(aptosClient, operator, auction);
-
-      const state = await getAuctionState(aptosClient, moduleAddr, auction);
-      expect(state.settled).toBe(true);
-      expect(state.clearingPrice).toBe(BID_PRICE);
-      const results = await getBidResults(auction.windowId, PAIR_BCS);
-      expect(results.map((r) => [r.isWinner, r.fillAmount])).toEqual([
-        [true, BID_QUANTITY],
-      ]);
-      // The winner's collateral pays the seller and the partly filled seller
-      // lock pays the winner: both are filled (issue 194).
-      expect(
-        await getReceiptStatus(aptosClient, moduleAddr, "FakeUSD", collateral),
-      ).toBe(RECEIPT_FILLED);
-      expect(
-        await getReceiptStatus(aptosClient, moduleAddr, "FakeETH", auction.sellerLockId),
-      ).toBe(RECEIPT_FILLED);
-
-      const balanceBefore = await getFakeEthBalance(derivedAddress);
-
-      render(
-        <ClaimProviders account={ethAddress}>
-          <ClaimButton windowId={auction.windowId} pairBcs={PAIR_BCS} />
-        </ClaimProviders>,
-      );
-
-      const claimBtn = await waitFor(
-        () => {
-          const status = screen.getByTestId(SELECTORS.claimButton.claimStatus);
-          expect(status.textContent).toMatch(/^Settled/);
-          const b = screen.getByTestId(SELECTORS.claimButton.claimButton) as HTMLButtonElement;
-          expect(b.disabled).toBe(false);
-          return b;
-        },
-        { timeout: 15_000 },
-      );
-      fireEvent.click(claimBtn);
 
       await waitFor(
         () => {
           expect(
-            screen.getByTestId(SELECTORS.claimButton.claimStatus).textContent,
-          ).toBe("Claimed");
+            screen.getByTestId(SELECTORS.releaseButton.releaseNote).textContent,
+          ).toContain("once the window settles");
+          // The seller lock and the collateral lock, both open on Ethereum.
+          expect(
+            screen
+              .getAllByTestId(SELECTORS.releaseButton.releaseLock)
+              .map((r) => r.getAttribute("data-status")),
+          ).toEqual(["open", "open"]);
         },
-        { timeout: 60_000 },
+        { timeout: 30_000 },
       );
-      expect(screen.getByTestId(SELECTORS.claimButton.claimButton).textContent).toBe(
-        "Claimed",
-      );
-      const balanceAfter = await getFakeEthBalance(derivedAddress);
-      // SCOUT(#236) REMOVE: the faucet mint of the clearing price; assert ERC-20 balances on Ethereum after release.
-      expect(balanceAfter - balanceBefore).toBe(CLAIM_MINT_WEI);
-    },
-    (TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 180) * 1000,
-  );
+      expect(
+        screen.getByTestId(SELECTORS.releaseButton.releaseButton),
+      ).toBeDisabled();
+    }, 60_000);
 
-  // ── 11-3: reclaim is not available in the Demo phase ───────────────────────
+    // ── 11-2: settled window — a third party releases ──────────────────────────
 
-  it("reclaim button stays disabled on a settled window (no Demo-phase reclaim)", async () => {
-    render(
-      <ClaimProviders account={ethAddress}>
-        <ClaimButton windowId={auction.windowId} pairBcs={PAIR_BCS} />
-      </ClaimProviders>,
-    );
+    it(
+      "release pressed by a wallet that is neither seller nor bidder pays the winner FakeETH and the seller FakeUSD on Ethereum",
+      async () => {
+        await waitForReveal(
+          auction.timelockId,
+          TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS,
+        );
+        await openAndFinalizeWindowDirect(aptosClient, operator, auction);
+        await settleAuctionDirect(aptosClient, operator, auction);
 
-    await waitFor(
-      () => {
+        const state = await getAuctionState(aptosClient, moduleAddr, auction);
+        expect(state.settled).toBe(true);
+        expect(state.clearingPrice).toBe(BID_PRICE);
+        const results = await getBidResults(auction.windowId, PAIR_BCS);
+        expect(results.map((r) => [r.isWinner, r.fillAmount])).toEqual([
+          [true, BID_QUANTITY],
+        ]);
+
+        const seller = fixture.eth.seller.address;
+        const winner = fixture.eth.bidder.address;
+        const sellerOutcome = await getLockOutcome(
+          "FakeETH",
+          auction.sellerLockId,
+        );
+        const collateralOutcome = await getLockOutcome("FakeUSD", collateral);
+        // The seller lock pays the winner its fill; the collateral pays the
+        // seller the quote.
+        expect(paidTo(sellerOutcome, winner)).toBe(BID_QUANTITY);
+        expect(paidTo(collateralOutcome, seller)).toBe(
+          quoteForFill(BID_QUANTITY, BID_PRICE),
+        );
+
+        const before = {
+          winnerEth: (await fakeEth.balanceOf(winner)) as bigint,
+          sellerUsd: (await fakeUsd.balanceOf(seller)) as bigint,
+          carrierEth: (await fakeEth.balanceOf(carrierAccount)) as bigint,
+          carrierUsd: (await fakeUsd.balanceOf(carrierAccount)) as bigint,
+        };
+
+        render(
+          <ReleaseProviders account={carrierAccount}>
+            <ReleaseButton
+              windowId={auction.windowId}
+              pairBcs={PAIR_BCS}
+              pollIntervalMs={2_000}
+            />
+          </ReleaseProviders>,
+        );
+        const button = await waitFor(
+          () => {
+            const b = screen.getByTestId(SELECTORS.releaseButton.releaseButton);
+            expect(b).not.toBeDisabled();
+            return b;
+          },
+          { timeout: 60_000 },
+        );
+        fireEvent.click(button);
+
+        await waitFor(
+          () => {
+            expect(
+              screen.getByTestId(SELECTORS.releaseButton.releaseStatus)
+                .textContent,
+            ).toBe("Released 2 lock(s).");
+          },
+          { timeout: 300_000 },
+        );
+
+        // The winner's FakeETH rises by its payout in the seller lock's leaf,
+        // the seller's FakeUSD by its payout in the collateral lock's leaf.
         expect(
-          screen.getByTestId(SELECTORS.claimButton.claimStatus).textContent,
-        ).toMatch(/^Settled/);
+          ((await fakeEth.balanceOf(winner)) as bigint) - before.winnerEth,
+        ).toBe(paidTo(sellerOutcome, winner));
+        expect(
+          ((await fakeUsd.balanceOf(seller)) as bigint) - before.sellerUsd,
+        ).toBe(paidTo(collateralOutcome, seller));
+        expect(await fakeEth.balanceOf(carrierAccount)).toBe(before.carrierEth);
+        expect(await fakeUsd.balanceOf(carrierAccount)).toBe(before.carrierUsd);
       },
-      { timeout: 15_000 },
+      (TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 600) * 1000,
     );
-    const reclaimBtn = screen.getByTestId(SELECTORS.claimButton.reclaimButton);
-    expect((reclaimBtn as HTMLButtonElement).disabled).toBe(true);
-    expect(reclaimBtn.textContent).toBe("Not applicable (Demo)");
-  }, 30_000);
 
-  it.todo("SCOUT(#236) release pressed by a wallet that is neither seller nor bidder pays the winner FakeETH and the seller FakeUSD on Ethereum");
-  it.todo("SCOUT(#236) LockBox.statuses reads released for the seller lock and the winner collateral lock");
-  it.todo("SCOUT(#236) a second press finds no open lock and sends no transaction");
-});
+    // ── 11-3: both locks are released on LockBox ───────────────────────────────
+
+    it("LockBox.statuses reads released for the seller lock and the winner collateral lock", async () => {
+      expect(await getLockStatus(rpc, auction.sellerLockId)).toBe(
+        LOCK_STATUS.Released,
+      );
+      expect(await getLockStatus(rpc, collateral)).toBe(LOCK_STATUS.Released);
+    }, 30_000);
+
+    // ── 11-4: a second press sends nothing ─────────────────────────────────────
+
+    it("a second press finds no open lock and sends no transaction", async () => {
+      const nonceBefore = await rpc.getTransactionCount(carrierAccount);
+      render(
+        <ReleaseProviders account={carrierAccount}>
+          <ReleaseButton windowId={auction.windowId} pairBcs={PAIR_BCS} />
+        </ReleaseProviders>,
+      );
+      await waitFor(
+        () => {
+          expect(
+            screen.getByTestId(SELECTORS.releaseButton.releaseNote).textContent,
+          ).toContain("Every lock of this window is closed");
+        },
+        { timeout: 30_000 },
+      );
+      const button = screen.getByTestId(SELECTORS.releaseButton.releaseButton);
+      expect(button).toBeDisabled();
+      fireEvent.click(button);
+      expect(
+        screen
+          .getAllByTestId(SELECTORS.releaseButton.releaseLock)
+          .map((r) => r.getAttribute("data-status")),
+      ).toEqual(["released", "released"]);
+      expect(
+        screen.queryByTestId(SELECTORS.releaseButton.releaseStatus),
+      ).toBeNull();
+      expect(await rpc.getTransactionCount(carrierAccount)).toBe(nonceBefore);
+    }, 60_000);
+  },
+);

@@ -199,10 +199,17 @@ describe("open, finalize and refund payloads", () => {
   });
 });
 
-describe("planned tests (SCOUT)", () => {
-  it.todo(
-    "SCOUT(#236) the payloads module exports no getClaimMintPayload and no submitClaim",
-  );
+describe("no faucet claim", () => {
+  it("the payloads module exports no getClaimMintPayload and no submitClaim", async () => {
+    const payloads = await import("../src/aptos/payloads.js");
+    for (const name of [
+      "getClaimMintPayload",
+      "submitClaim",
+      "getFakeEthBalance",
+    ]) {
+      expect(Object.keys(payloads)).not.toContain(name);
+    }
+  });
 });
 
 describe("launch pair", () => {

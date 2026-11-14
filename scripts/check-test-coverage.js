@@ -303,7 +303,6 @@ function coveredFiles() {
     const jobs = (doc && doc.jobs) || {};
     for (const [jobId, job] of Object.entries(jobs)) {
       const defaultDir = job?.defaults?.run?.["working-directory"] || ".";
-      // SCOUT(#236) EDIT: `${{ matrix.test_files }}` is not expanded here, so a browser integration file counts as run only through an exemption entry; the renamed release test needs either that entry or matrix expansion from job.strategy.matrix.include.
       for (const step of job.steps || []) {
         if (typeof step.run !== "string") continue;
         let cwd = resolve(ROOT, step["working-directory"] || defaultDir);

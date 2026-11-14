@@ -1,17 +1,29 @@
 import { useState, useEffect, useCallback } from "react";
-import { submitSettle, isSettled, getSettlement } from "@atomica/sdk/aptos";
+import {
+  submitSettle,
+  isSettled,
+  getSettlement,
+  getOpenCursor,
+  getTimelockStatus,
+  getWindowTimelockId,
+} from "@atomica/sdk/aptos";
 import { formatPrice } from "@atomica/sdk";
 import { useWallet } from "../context/WalletContext";
 
 interface Props {
   windowId: bigint;
   pairBcs: Uint8Array;
+  /**
+   * Client-clock end of the window, unix seconds. Without it the button
+   * enables from chain state instead.
+   */
   auctionEndTime?: number;
+  /** How often to re-read chain state without `auctionEndTime`. Defaults to 5 000 ms. */
+  pollIntervalMs?: number;
   /** Called when a settlement is observed (either fresh or already settled). */
   onSettled?: (windowId: bigint, clearingPrice: bigint) => void;
 }
 
-// SCOUT(#236) EDIT: the button is gated on a client-clock auctionEndTime prop and stays disabled without one; gate it on chain state so the demo can mount it.
 /**
  * SettleButton — calls `auction::settle` on-chain (v0 Beta global-registry).
  *
@@ -24,9 +36,14 @@ interface Props {
  *
  * The button is disabled when:
  * - the connected wallet is missing
- * - the auction window has not yet ended (current time <= auctionEndTime)
+ * - the auction window has not yet ended: with `auctionEndTime`, the current
+ *   time is at or before it; without it, chain state says the window cannot
+ *   settle yet (it must exist, its timelock must be revealed, and every bid
+ *   must be opened: `get_open_cursor` next equals total)
  * - the window is already settled on-chain
  * - a transaction is in flight
+ *
+ * It is the settle step of a trade (open, settle, release).
  *
  * @see docs/architecture/v0-architecture.md#§2-auction-mechanism-v01-beta
  */
@@ -34,6 +51,7 @@ export function SettleButton({
   windowId,
   pairBcs,
   auctionEndTime,
+  pollIntervalMs = 5_000,
   onSettled,
 }: Props) {
   const { account } = useWallet();
@@ -43,6 +61,7 @@ export function SettleButton({
   const [clearingPrice, setClearingPrice] = useState<bigint | null>(null);
   const [totalFilled, setTotalFilled] = useState<bigint | null>(null);
   const [auctionEnded, setAuctionEnded] = useState(false);
+  const [chainReady, setChainReady] = useState(false);
 
   // Poll whether auction window time has passed
   useEffect(() => {
@@ -55,6 +74,38 @@ export function SettleButton({
     const id = setInterval(check, 1000);
     return () => clearInterval(id);
   }, [auctionEndTime]);
+
+  // Without a client clock end, read from chain whether the window can settle:
+  // it exists, its timelock is revealed and every bid is opened.
+  useEffect(() => {
+    if (auctionEndTime || settled) return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const cursor = await getOpenCursor(windowId, pairBcs);
+        const timelock = await getTimelockStatus(
+          await getWindowTimelockId(windowId),
+        );
+        const settledNow = await isSettled(windowId, pairBcs);
+        if (!cancelled) {
+          setChainReady(
+            timelock.status === "revealed" &&
+              cursor.next === cursor.total &&
+              !settledNow,
+          );
+        }
+      } catch {
+        // No window yet (get_open_cursor aborts): not ready.
+        if (!cancelled) setChainReady(false);
+      }
+    };
+    check();
+    const id = setInterval(check, pollIntervalMs);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [auctionEndTime, settled, windowId, pairBcs, pollIntervalMs]);
 
   // Check initial settled state
   useEffect(() => {
@@ -115,7 +166,8 @@ export function SettleButton({
     }
   }, [account, windowId, pairBcs, onSettled]);
 
-  const disabled = loading || settled || !auctionEnded || !account;
+  const ended = auctionEndTime ? auctionEnded : chainReady;
+  const disabled = loading || settled || !ended || !account;
 
   return (
     <div className="flex flex-col gap-2">

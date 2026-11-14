@@ -16,7 +16,8 @@
  *   3. `LockBox.recordOutcome(proof)`. A `StaleEpoch` revert means the
  *      validators changed epoch meanwhile: fetch a fresh proof once and retry.
  *   4. `LockBox.releaseByOutcome` per open lock, with the leaf built from the
- *      per-lock outcomes Aptos stores (`lock_receipt::get_lock_outcome`).
+ *      per-lock outcomes Aptos stores (`lock_receipt::get_lock_outcome`), or
+ *      `LockBox.reclaimUnpayable` for a lock whose leaf is unpayable.
  *
  * Encodings (BCS parsing, EIP-2537 key and signature encodings) follow
  * source/evm-contracts/src/aptos/IAptosLightClient.sol. The golden vector
@@ -31,6 +32,7 @@ import { ethers } from "ethers";
 import { bls12_381 } from "@noble/curves/bls12-381";
 import { APTOS_LIGHT_CLIENT_ABI, LOCKBOX_ABI } from "../ethereum/abis.js";
 import {
+  reclaimUnpayableCall,
   releaseByOutcomeCall,
   type LockBoxCall,
   type LockFields,
@@ -39,6 +41,7 @@ import {
   buildOutcomeTree,
   outcomeProof,
   type OutcomeEntry,
+  type OutcomePayout,
   type OutcomeTree,
 } from "./outcome-tree.js";
 
@@ -653,8 +656,32 @@ export function windowOutcomeTree(outcomes: WindowLockOutcome[]): OutcomeTree {
   return buildOutcomeTree(entries);
 }
 
+/** 2^256: a payout sum at or above it overflows LockBox's uint256 sum. */
+const UINT256_LIMIT = 1n << 256n;
+
 /**
- * The `releaseByOutcome` calls that pay out every open lock of an auction.
+ * Whether LockBox treats a leaf as unpayable (`LockBox._leafUnpayable`): a
+ * zero recipient, or payouts that sum above the lock amount or overflow
+ * uint256. `releaseByOutcome` reverts on such a leaf, and
+ * `reclaimUnpayable` sends the whole lock to its depositor instead. A sum
+ * below the amount is payable: the remainder goes to the depositor.
+ */
+export function isLeafUnpayable(
+  amount: bigint,
+  payouts: OutcomePayout[],
+): boolean {
+  let sum = 0n;
+  for (const p of payouts) {
+    if (BigInt(p.recipient) === 0n) return true;
+    sum += p.amount;
+  }
+  return sum >= UINT256_LIMIT || sum > amount;
+}
+
+/**
+ * The calls that close every open lock of an auction: `releaseByOutcome`
+ * for a payable leaf, `reclaimUnpayable` for an unpayable one
+ * ({@link isLeafUnpayable}).
  *
  * `outcomes` lists every lock of the auction (the tree has one leaf per
  * lock). `openLocks` are the locks still open on Ethereum, with their fields
@@ -680,14 +707,16 @@ export function planWindowReleases(input: {
     const outcome = input.outcomes.find(
       (o) => ethers.hexlify(ethers.getBytes(o.lockId)) === id,
     )!;
-    return releaseByOutcomeCall(
-      input.lockBoxAddress,
-      lock,
-      outcome.recipients.map((recipient, i) => ({
-        recipient,
-        amount: outcome.amounts[i],
-      })),
-      { index, proof: outcomeProof(tree, index) },
-    );
+    const payouts = outcome.recipients.map((recipient, i) => ({
+      recipient,
+      amount: outcome.amounts[i],
+    }));
+    const call = isLeafUnpayable(lock.amount, payouts)
+      ? reclaimUnpayableCall
+      : releaseByOutcomeCall;
+    return call(input.lockBoxAddress, lock, payouts, {
+      index,
+      proof: outcomeProof(tree, index),
+    });
   });
 }

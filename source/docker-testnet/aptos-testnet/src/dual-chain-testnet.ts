@@ -259,7 +259,6 @@ export async function setupDualChainTestnet(
     // AptosLightClient needs the EIP-2537 BLS12-381 precompiles (Prague). The
     // Docker PoS chain runs Prague. On ETH_BACKEND=anvil set
     // ETH_ANVIL_HARDFORK=prague, or recordOutcome reverts.
-    // SCOUT(#236) EDIT: the happy-path release step needs the same prague change on the anvil tier.
     ethTestnet = await EthereumDockerTestnet.start(4);
     await ethTestnet.waitForHealthy(180);
 

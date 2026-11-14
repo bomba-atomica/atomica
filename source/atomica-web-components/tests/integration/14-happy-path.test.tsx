@@ -2,7 +2,7 @@
  * @file 14-happy-path.test.tsx
  * @description Full demo happy-path end-to-end browser smoke test.
  *
- * Runs the complete seller -> bidder -> settle -> claim chain in a single
+ * Runs the complete seller -> bidder -> open -> settle -> release chain in a single
  * sequential test suite against live Aptos and Ethereum local testnets.
  *
  * NO vi.mock() calls for useContractStatuses, useEthereumBalances, or
@@ -28,16 +28,20 @@
  *        The bidder's Ethereum-derivable account bids (SIWE): only it can
  *        claim the bidder's FakeUSD collateral receipt (lock_receipt::claim).
  *   Reveal:
- *    8b. The validators reveal the timelock key after the deadline.
- *        AuctionRevealer shows the reveal. A third account (the deployer,
- *        neither seller nor bidder) sends open_bids, which decrypts the bid on
- *        chain, then finalize_window, which clears the window.
- *   Settlement:
- *   9-10. finalize_window already cleared the window, so the real
- *        SettleButton settles it with no separate clearing call. is_settled, the clearing price and
- *        the collateral and seller receipt statuses are asserted on chain
- *    11. ClaimButton — click real component, verify the FakeETH balance change
- *    12. BidHistory — Step8Monitor records the settled window and its price
+ *   Open, settle, release (each step one click on a real component):
+ *    8b. The validators reveal the timelock key after the deadline. A third
+ *        account (the carrier wallet, neither seller nor bidder) clicks Open
+ *        bids on AuctionRevealer: open_bids decrypts the bid on chain, then
+ *        finalize_window clears the window.
+ *   9-10. SettleButton, with no client clock, enables from chain state and
+ *        settles the cleared window. is_settled, the clearing price and the
+ *        collateral and seller receipt statuses are asserted on chain.
+ *    11. ReleaseButton — the carrier wallet clicks Release: the outcome goes
+ *        to LockBox through the Aptos light client (anvil runs Prague), both
+ *        locks are released, and the winner's FakeETH and the seller's
+ *        FakeUSD ERC-20 balances rise by the outcome amounts.
+ *    12. BidHistory — Step8Monitor reads the settled window from chain and
+ *        records its price
  *
  * Two wallet mocks are used (seller and bidder) — swapped between phases.
  * All on-chain ops use the dual-chain Docker testnet via setupIntegrationFixture().
@@ -103,7 +107,7 @@ import {
   step8Monitor,
   auctionRevealer,
   settleButton,
-  claimButton,
+  releaseButton,
   bidHistory,
 } from "./helpers/selectors";
 import {
@@ -119,8 +123,6 @@ import {
   waitForTimelockKey,
   waitForWindowTimeLeft,
   chainNowUs,
-  openBidsDirect,
-  finalizeWindowDirect,
   submitAsEthAccount,
   ethAccountAddress,
   pollUntil,
@@ -132,8 +134,7 @@ import { formatPrice, quoteForFill } from "@atomica/sdk";
 import { Faucet } from "../../src/components/Faucet";
 import { AuctionRevealer } from "../../src/components/AuctionRevealer";
 import { SettleButton } from "../../src/components/SettleButton";
-// SCOUT(#236) REMOVE: import ReleaseButton instead.
-import { ClaimButton } from "../../src/components/ClaimButton";
+import { ReleaseButton } from "../../src/components/ReleaseButton";
 import { Step8Monitor } from "../../src/components/SellFlow/steps/Step8Monitor";
 import {
   WalletContext,
@@ -160,12 +161,14 @@ import {
   isRevealed,
   isSettled,
   getBidResults,
-  getFakeEthBalance,
+  getLockOutcome,
   getPinnedEthereumConfig,
   assertEthereumConfigMatchesPin,
 } from "@atomica/sdk/aptos";
 import {
   approveFakeUsd,
+  getLockStatus,
+  LOCK_STATUS,
   currentWindowId as hostWindowId,
   lockBinding,
   lockFakeUsd,
@@ -195,9 +198,6 @@ const BID_QUANTITY = ethers.parseEther("0.1");
  */
 const COLLATERAL_AMOUNT = quoteForFill(BID_QUANTITY, BID_PRICE);
 const COLLATERAL_MINT = 10_000n * 10n ** 6n;
-// The Demo ClaimButton self-mints the clearing price number as FakeETH base
-// units (wei). It is a faucet amount, not a price: 2000 wei, not 2000 USD.
-const CLAIM_MINT_WEI = BID_PRICE;
 // SCOUT(#231) EDIT: this comment relies on a 24 hour docker epoch; UTC-anchored epoch ends change that.
 /**
  * The locks are made with at least this long left in their window, so the
@@ -274,7 +274,6 @@ function withProviders(account: string, children: React.ReactNode) {
   );
 }
 
-// SCOUT(#236) EDIT: the demo will mount SellFlow, but this browser suite cannot import it; the happy path keeps direct helpers unless vitest.config.ts gains polyfills.
 // Note: SellFlow is NOT imported. Steps 2-7 use direct helpers instead, and
 // individual component tests (03-07) cover the UI for each step. The proof
 // generator itself loads in this suite without Node polyfills: AuctionBidder
@@ -282,7 +281,6 @@ function withProviders(account: string, children: React.ReactNode) {
 
 // ── Test suite ────────────────────────────────────────────────────────────
 
-// SCOUT(#236) EDIT: the suite ends with release on Ethereum instead of the faucet claim; the header comment (steps 8b to 11) needs the same rewrite.
 describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
   let fixture: IntegrationFixture;
   let aptosClient: Aptos;
@@ -580,9 +578,8 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
 
   // ── Step 8b: Reveal — the chain opens the bid ─────────────────────────────
 
-  // SCOUT(#236) EDIT: the open step is one click on the real component.
   it(
-    "step 8b — reveal: a third account opens the bid on chain with open_bids, then finalize_window clears the window",
+    "step 8b — open: a third account clicks Open bids, which opens the bid on chain with open_bids, then finalize_window clears the window",
     async () => {
       console.log("[14-happy-path] Step 8b: wait for the timelock reveal, then open on chain");
       await pollUntil("timelock reveal", TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS, async () =>
@@ -590,10 +587,23 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       );
       console.log(`[14-happy-path] Timelock ${timelockId} revealed`);
 
-      withProviders(sellerEthAddress, <AuctionRevealer />);
-      fireEvent.change(screen.getByTestId(auctionRevealer.windowIdInput), {
-        target: { value: windowId.toString() },
+      // The carrier is neither seller nor bidder. Its Ethereum-derivable
+      // account pays the gas. It sends no price and no salt: open_bids
+      // decrypts the bid on chain with the revealed key.
+      const carrier = await setupWalletMock({
+        privateKey: fixture.eth.carrier.privateKey,
+        rpcUrl: fixture.eth.rpcUrl,
+        chainId: fixture.eth.chainId,
       });
+      await commands.fundAccount(await ethAccountAddress(fixture.eth.carrier), 500_000_000);
+
+      withProviders(
+        carrier,
+        <AuctionRevealer windowId={windowId} pairBcs={LAUNCH_PAIR_BCS} />,
+      );
+      expect(screen.getByTestId(auctionRevealer.revealerWindow).textContent).toContain(
+        windowId.toString(),
+      );
       fireEvent.click(screen.getByTestId(auctionRevealer.startPollingButton));
       await waitFor(
         () => {
@@ -603,33 +613,28 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         },
         { timeout: 30_000 },
       );
-      expect(screen.getByTestId(auctionRevealer.openBidsButton)).toBeTruthy();
+      fireEvent.click(screen.getByTestId(auctionRevealer.openBidsButton));
+      await waitFor(
+        () => {
+          expect(screen.getByTestId(auctionRevealer.openStatus).textContent).toContain(
+            "cleared the window",
+          );
+        },
+        { timeout: 180_000 },
+      );
+      expect(screen.getByTestId(auctionRevealer.openedCount).textContent).toContain("1 of 1");
 
-      // The deployer is neither seller nor bidder. It sends no price and no
-      // salt: open_bids decrypts the bid on chain with the revealed key.
-      await openBidsDirect(aptosClient, deployerAccount, {
-        windowId,
-        pairBcs: LAUNCH_PAIR_BCS,
-      });
       expect(await getOpenCursor(windowId, LAUNCH_PAIR_BCS)).toEqual({ next: 1n, total: 1n });
       const opened = await getBidInfo(windowId, LAUNCH_PAIR_BCS, 0n);
       expect(opened.opened).toBe(true);
       // The price the chain decrypted, whole USD per whole FakeETH.
       expect(opened.price).toBe(BID_PRICE);
       expect(opened.valid).toBe(true);
-      expect(
-        (await getWindowStatus(aptosClient, moduleAddr, windowId, LAUNCH_PAIR_BCS)).revealFinal,
-      ).toBe(false);
-
-      await finalizeWindowDirect(aptosClient, deployerAccount, {
-        windowId,
-        pairBcs: LAUNCH_PAIR_BCS,
-      });
       const status = await getWindowStatus(aptosClient, moduleAddr, windowId, LAUNCH_PAIR_BCS);
       expect(status.revealFinal).toBe(true);
       console.log(`[14-happy-path] Bid opened on chain at ${opened.price} and the window cleared`);
     },
-    (TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 180) * 1000,
+    (TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 300) * 1000,
   );
 
   // ── Step 9-10: settle via the real SettleButton ──────────────────────────
@@ -655,22 +660,19 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
 
       render(
         <WalletContext.Provider value={{ account: sellerEthAddress, connect: async () => {} }}>
-          <SettleButton
-            windowId={windowId}
-            pairBcs={LAUNCH_PAIR_BCS}
-            auctionEndTime={auctionEndTime}
-          />
+          <SettleButton windowId={windowId} pairBcs={LAUNCH_PAIR_BCS} pollIntervalMs={2_000} />
         </WalletContext.Provider>,
       );
 
-      // Enabled: the window ended and is not settled yet.
+      // Enabled from chain state (no client clock): the window exists, its
+      // timelock is revealed, every bid is opened, and it is not settled.
       const btn = await waitFor(
         () => {
           const b = screen.getByTestId(settleButton.settleButton);
           expect((b as HTMLButtonElement).disabled).toBe(false);
           return b;
         },
-        { timeout: 10_000 },
+        { timeout: 30_000 },
       );
       fireEvent.click(btn);
 
@@ -707,54 +709,89 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
     120_000,
   );
 
-  // SCOUT(#236) REMOVE: step 11, the faucet claim; replace it with the release action and ERC-20 balance asserts on Ethereum.
-  // ── Step 11: Claim via the real ClaimButton ──────────────────────────────
+  // ── Step 11: Release via the real ReleaseButton ─────────────────────────
   //
-  // ClaimButton reads the settlement and, in the Demo phase, the claim mints
-  // the clearing price in FakeETH to the wallet's derived Aptos address.
+  // The carrier wallet, neither seller nor bidder, presses Release. It
+  // carries the window's AuctionOutcome to LockBox through the Aptos light
+  // client and releases both locks per their leaves.
 
   it(
-    "step 11 — claim: ClaimButton mints the clearing price to the bidder wallet",
+    "release: the winner's FakeETH and the seller's FakeUSD ERC-20 balances rise by the outcome amounts and both locks read released",
     async () => {
-      console.log("[14-happy-path] Step 11: claim via real ClaimButton");
+      console.log("[14-happy-path] Step 11: release via real ReleaseButton");
 
-      bidderEthAddress = await setupWalletMock({
-        privateKey: fixture.eth.bidder.privateKey,
+      const rpc = new ethers.JsonRpcProvider(fixture.eth.rpcUrl, undefined, { cacheTimeout: -1 });
+      const fakeEth = new ethers.Contract(fixture.eth.contracts.fakeETH, ERC20_BALANCE_ABI, rpc);
+      const fakeUsd = new ethers.Contract(fixture.eth.contracts.fakeUSD, ERC20_BALANCE_ABI, rpc);
+      const winner = fixture.eth.bidder.address;
+      const seller = fixture.eth.seller.address;
+
+      // What each lock's leaf pays, as Aptos recorded it.
+      const paidTo = (o: { recipients: string[]; amounts: bigint[] }, who: string) =>
+        o.recipients.reduce(
+          (sum, r, i) => (r.toLowerCase() === who.toLowerCase() ? sum + o.amounts[i] : sum),
+          0n,
+        );
+      const sellerLockOutcome = await getLockOutcome("FakeETH", lockId);
+      const collateralOutcome = await getLockOutcome("FakeUSD", collateralLockId);
+      expect(paidTo(sellerLockOutcome, winner)).toBe(BID_QUANTITY);
+      expect(paidTo(collateralOutcome, seller)).toBe(COLLATERAL_AMOUNT);
+
+      const winnerEthBefore = (await fakeEth.balanceOf(winner)) as bigint;
+      const sellerUsdBefore = (await fakeUsd.balanceOf(seller)) as bigint;
+
+      const carrier = await setupWalletMock({
+        privateKey: fixture.eth.carrier.privateKey,
         rpcUrl: fixture.eth.rpcUrl,
         chainId: fixture.eth.chainId,
       });
-      const derived = (await getDerivedAddress(bidderEthAddress.toLowerCase())).toString();
-      const balanceBefore = await getFakeEthBalance(derived);
-
       withProviders(
-        bidderEthAddress,
-        // SCOUT(#236) REMOVE: render ReleaseButton here instead.
-        <ClaimButton windowId={windowId} pairBcs={LAUNCH_PAIR_BCS} />,
+        carrier,
+        <ReleaseButton windowId={windowId} pairBcs={LAUNCH_PAIR_BCS} pollIntervalMs={2_000} />,
       );
 
-      const claimBtn = await waitFor(
+      const releaseBtn = await waitFor(
         () => {
-          expect(screen.getByTestId(claimButton.claimStatus).textContent).toMatch(/^Settled/);
-          const b = screen.getByTestId(claimButton.claimButton) as HTMLButtonElement;
+          const b = screen.getByTestId(releaseButton.releaseButton) as HTMLButtonElement;
           expect(b.disabled).toBe(false);
           return b;
         },
-        { timeout: 30_000 },
+        { timeout: 60_000 },
       );
-      fireEvent.click(claimBtn);
+      fireEvent.click(releaseBtn);
 
       await waitFor(
         () => {
-          expect(screen.getByTestId(claimButton.claimStatus).textContent).toBe("Claimed");
+          expect(screen.getByTestId(releaseButton.releaseStatus).textContent).toBe(
+            "Released 2 lock(s).",
+          );
         },
-        { timeout: 60_000 },
+        { timeout: 300_000 },
       );
-      const balanceAfter = await getFakeEthBalance(derived);
-      expect(balanceAfter - balanceBefore).toBe(CLAIM_MINT_WEI);
 
-      console.log(`[14-happy-path] Claimed ${balanceAfter - balanceBefore} FakeETH units`);
+      const winnerEthGain = ((await fakeEth.balanceOf(winner)) as bigint) - winnerEthBefore;
+      const sellerUsdGain = ((await fakeUsd.balanceOf(seller)) as bigint) - sellerUsdBefore;
+      expect(winnerEthGain).toBe(paidTo(sellerLockOutcome, winner));
+      expect(sellerUsdGain).toBe(paidTo(collateralOutcome, seller));
+      expect(await getLockStatus(rpc, lockId)).toBe(LOCK_STATUS.Released);
+      expect(await getLockStatus(rpc, collateralLockId)).toBe(LOCK_STATUS.Released);
+      await waitFor(
+        () => {
+          expect(
+            screen
+              .getAllByTestId(releaseButton.releaseLock)
+              .map((r) => r.getAttribute("data-status")),
+          ).toEqual(["released", "released"]);
+          expect(screen.getByTestId(releaseButton.releaseButton)).toBeDisabled();
+        },
+        { timeout: 30_000 },
+      );
+
+      console.log(
+        `[14-happy-path] Released: winner +${ethers.formatEther(winnerEthGain)} FakeETH, seller +${ethers.formatUnits(sellerUsdGain, 6)} FakeUSD`,
+      );
     },
-    120_000,
+    420_000,
   );
 
   // ── Step 12: Step8Monitor shows the settled window and its history ───────
@@ -778,11 +815,15 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
         />,
       );
 
-      const badgeEl = await waitFor(
-        () => screen.getByTestId(step8Monitor.auctionStatusBadge),
-        { timeout: 10_000 },
+      // The badge reads the settlement from chain.
+      await waitFor(
+        () => {
+          expect(screen.getByTestId(step8Monitor.auctionStatusBadge).textContent).toBe(
+            "Settled",
+          );
+        },
+        { timeout: 30_000 },
       );
-      expect(badgeEl.textContent).toBe("Settled");
 
       // SettleButton reads is_settled and records the settlement in the history.
       await waitFor(
@@ -805,8 +846,6 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
     },
     60_000,
   );
-
-  it.todo("SCOUT(#236) release: the winner's FakeETH and the seller's FakeUSD ERC-20 balances rise by the outcome amounts and both locks read released");
 
   // ── Pin check: the SDK approve and lock read eth_proof::get_config ───────
 

@@ -225,11 +225,10 @@ export class EthereumDockerTestnet {
       "10",
       "--balance",
       "1000",
-      // SCOUT(#236) EDIT: the happy-path release step on the anvil tier needs anvil on prague; neither issue text names this file.
       // The Docker chain's genesis sets ELECTRA_FORK_EPOCH=0, which is Prague on
       // the EL. ETH_ANVIL_HARDFORK=prague turns on the same EIP-2537 BLS12-381
-      // precompiles that the Aptos light client needs (the browser unwind chunk
-      // sets it).
+      // precompiles that the Aptos light client needs (the unwind, happy-path
+      // and claim-reclaim browser chunks set it).
       "--hardfork",
       anvilHardfork(),
     ];

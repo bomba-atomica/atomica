@@ -36,14 +36,12 @@ exemptions:
       - source/atomica-web-components/tests/integration/08-auction-monitor.test.tsx
       - source/atomica-web-components/tests/integration/09-submit-bid.test.tsx
       - source/atomica-web-components/tests/integration/10-settle.test.tsx
-      # SCOUT(#236) EDIT: rename this line with the file when 11-claim-and-reclaim becomes the release test; the guard does not expand the browser matrix, so the new name must be listed here.
       - source/atomica-web-components/tests/integration/11-claim-and-reclaim.test.tsx
       - source/atomica-web-components/tests/integration/12a-bid-storage.test.tsx
       - source/atomica-web-components/tests/integration/13-bid-history.test.tsx
       - source/atomica-web-components/tests/integration/15-pool-events.test.tsx
       - source/atomica-web-components/tests/integration/16-settle-100-bids.test.tsx
       - source/atomica-web-components/tests/integration/17-unwind.test.tsx
-      # SCOUT(#236) TEST: this file is exempt and in no browser chunk, so its claim and release selector asserts never run in CI.
       - source/atomica-web-components/tests/integration/selectors.test.tsx
       - source/atomica-web-components/tests/integration/wallet-mock-smoke.test.tsx
 

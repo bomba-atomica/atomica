@@ -225,7 +225,6 @@ jobs:
         working-directory: source/atomica-sdk
         run: bun run test
 
-      # SCOUT(#236) TEST: the new tests/unit/ReleaseButton.test.tsx runs here with no workflow edit; vitest.unit.config.ts includes tests/unit/**.
       - name: Run atomica-web-components unit tests
         working-directory: source/atomica-web-components
         run: bun run test:unit
@@ -321,7 +320,6 @@ jobs:
         working-directory: source/atomica-demo
         run: bunx playwright install --with-deps chromium
 
-      # SCOUT(#236) EDIT: this step names demo test files one by one, so a new demo test file (the dev proxy table check) must be added to the list below.
       - name: Run Web Demo unit tests
         if: needs.changes.outputs.code != 'false' && matrix.type == 'meta'
         working-directory: source/atomica-demo
@@ -586,9 +584,10 @@ jobs:
       CI_CLASS: feature-correctness
       ETH_BACKEND: anvil
       ATOMICA_TEST_WINDOW_SCHEDULE: "900:900"
-      # Prague gives the unwind chunk the EIP-2537 precompiles the Aptos light
-      # client verifies with. The other chunks keep Cancun, like the Docker EL.
-      ETH_ANVIL_HARDFORK: ${{ matrix.chunk == 'unwind' && 'prague' || 'cancun' }}
+      # Prague gives the EIP-2537 precompiles the Aptos light client verifies
+      # with: the unwind chunk carries an outcome, and the happy-path and
+      # claim-reclaim chunks release on Ethereum. The other chunks keep Cancun.
+      ETH_ANVIL_HARDFORK: ${{ (matrix.chunk == 'unwind' || matrix.chunk == 'happy-path' || matrix.chunk == 'claim-reclaim') && 'prague' || 'cancun' }} # claim-reclaim was named claim-reclaim-fees
     permissions:
       packages: read
       contents: read
@@ -616,12 +615,10 @@ jobs:
           - chunk: settle-100-bids
             test_files: >-
               tests/integration/16-settle-100-bids.test.tsx
-          # SCOUT(#236) EDIT: tests/integration/11-claim-and-reclaim.test.tsx becomes a release test; rename it in this chunk's test_files if the file is renamed.
           - chunk: claim-reclaim
             test_files: >-
               tests/integration/11-claim-and-reclaim.test.tsx
               tests/integration/13-bid-history.test.tsx
-          # SCOUT(#236) TEST: this chunk runs 14-happy-path ending with release on Ethereum; on this anvil tier that needs the anvil backend on the prague hardfork (it starts on cancun today).
           - chunk: happy-path
             test_files: >-
               tests/integration/14-happy-path.test.tsx
@@ -681,7 +678,6 @@ jobs:
         working-directory: source/evm-contracts
         run: forge build
 
-      # SCOUT(#236) EDIT: a new or renamed chunk must also be added to the two chunk lists in the `if:` lines of this step and the next, and to the gate list in required-checks.
       - name: Install Aptos CLI
         if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim' || matrix.chunk == 'happy-path' || matrix.chunk == 'unwind'
         run: |
@@ -771,12 +767,10 @@ jobs:
           - chunk: settle-100-bids
             test_files: >-
               tests/integration/16-settle-100-bids.test.tsx
-          # SCOUT(#236) EDIT: tests/integration/11-claim-and-reclaim.test.tsx becomes a release test; rename it in this chunk's test_files if the file is renamed.
           - chunk: claim-reclaim
             test_files: >-
               tests/integration/11-claim-and-reclaim.test.tsx
               tests/integration/13-bid-history.test.tsx
-          # SCOUT(#236) TEST: this chunk runs 14-happy-path ending with release on Ethereum against the Docker PoS chain, where Prague is active.
           - chunk: happy-path
             test_files: >-
               tests/integration/14-happy-path.test.tsx
@@ -1188,7 +1182,6 @@ jobs:
       matrix:
         check: ["Required Checks", "Web Tests (unit)"]
     steps:
-      # SCOUT(#236) EDIT: a new or renamed browser chunk must be added to both Browser Tests lines of the gate list below, or the gate fails on an unknown job.
       - name: Wait for every gated job, fail unless each succeeded
         run: |
           set -euo pipefail

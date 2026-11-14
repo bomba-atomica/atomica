@@ -1,42 +1,50 @@
-// SCOUT(#236) ADD: useWindowRelease, the state and the action behind ReleaseButton; this stub throws and no component imports it.
-//
-// What the hook needs, and where each piece comes from today:
-//
-//   Lock ids of the window
-//     auction::get_window_lock_ids returns (seller ids, collateral ids). The
-//     Move view exists. The SDK has no reader: call it getWindowLockIds.
-//   Payouts of each lock
-//     lock_receipt::get_lock_outcome. The view exists only in pull request
-//     213. Its SDK reader belongs to the SDK unwind issue (195): call it
-//     getLockOutcome.
-//   Full Lock struct (depositor, token, nonce, amount, windowId, pairHash,
-//   deadline)
-//     LockBox stores only a commitment and Aptos stores no nonce, so read the
-//     Locked event by its indexed lock id. The SDK has no such reader (its
-//     getLocks filters by depositor and token): call it getLockById.
-//   Leaf index and proof
-//     buildOutcomeTree and outcomeProof from
-//     @atomica/sdk/settlement/outcome-tree. Both exist.
-//   Recorded outcome
-//     LockBox.outcomes(auctionKey). The ABI line exists, the SDK has no
-//     helper: call it getRecordedOutcome. auctionKey and lockBinding exist.
-//   Carry the outcome
-//     carryOutcome from the SDK unwind issue (195): event proof fetch,
-//     advanceEpoch and recordOutcome. None of it exists, and abis.ts has no
-//     recordOutcome line.
-//   Release one lock
-//     A releaseByOutcome binding from the SDK unwind issue (195). Only the
-//     ABI line exists.
-//   Lock status
-//     getLockStatus and LOCK_STATUS from @atomica/sdk/ethereum. Both exist.
-//
-// The carrier needs the version and event index of the settle transaction.
-// Nothing on chain stores them, so a wallet that did not send settle has to
-// scan for the AuctionOutcome event.
-//
-// SCOUT(#236) EDIT: a leaf may pay less than the lock amount (LockBox sends the remainder to the depositor), and an unpayable leaf needs reclaimUnpayable instead of releaseByOutcome.
-// The auction key is (windowId, pairHash) since the LockBox redeploy of the
-// computed lock deadline issue (221); auctionKey from the SDK builds it.
+/**
+ * useWindowRelease — the state and the action behind ReleaseButton, the
+ * third step of a trade (open, settle, release).
+ *
+ * Reads, every `pollIntervalMs` and after each action:
+ *   - whether the window settled on Aptos (`isSettled`);
+ *   - every lock of the window (`getWindowLockIds`: seller locks, then bid
+ *     collateral locks);
+ *   - each lock's fields from its `Locked` event (`getLockById`), its LockBox
+ *     status (`getLockStatus`) and, once settled, its leaf payouts
+ *     (`getLockOutcome`);
+ *   - whether LockBox holds the window's outcome root (`getRecordedOutcome`).
+ *
+ * `release` calls `carryAndReleaseWindow`: it records the window's
+ * `AuctionOutcome` on LockBox when it is missing (the carrier finds the event
+ * with `findOutcomeEvent`), then closes every lock that is still open with
+ * `releaseByOutcome`, or with `reclaimUnpayable` when its leaf is unpayable
+ * (`planWindowReleases`). Anyone may call it: no argument names a seller or a
+ * bidder, and LockBox checks every proof itself.
+ *
+ * A leaf may pay less than the lock amount: LockBox sends the remainder to
+ * the depositor. The payouts shown are the leaf's, not the whole lock.
+ *
+ * @see source/atomica-sdk/src/settlement/window-release.ts
+ * @see docs/decisions/trustless-v0-1-unwinding.md
+ */
+
+import { useCallback, useEffect, useState } from "react";
+import { ethers } from "ethers";
+import {
+  getLockOutcome,
+  getWindowLockIds,
+  isSettled,
+} from "@atomica/sdk/aptos";
+import { getChainConfig } from "@atomica/sdk/chain-config";
+import {
+  getLockById,
+  getLockStatus,
+  getRecordedOutcome,
+  LOCK_STATUS,
+  type LockFields,
+} from "@atomica/sdk/ethereum";
+import {
+  carryAndReleaseWindow,
+  defaultAptosNodes,
+  type WindowReleaseResult,
+} from "@atomica/sdk/settlement/window-release";
 
 /** Ethereum state of one lock of a window. */
 export type WindowLockStatus = "open" | "released" | "reclaimed" | "unknown";
@@ -49,28 +57,177 @@ export interface WindowLockRelease {
   asset: "FakeETH" | "FakeUSD";
   /** LockBox.statuses(lockId). */
   status: WindowLockStatus;
-  /** Payouts of the lock's outcome leaf. */
+  /** Lock amount from its `Locked` event; null when no event was found. */
+  amount: bigint | null;
+  /** Payouts of the lock's outcome leaf; empty before the window settles. */
   payouts: Array<{ recipient: string; amount: bigint }>;
 }
 
 /** What ReleaseButton renders and calls. */
 export interface WindowReleaseState {
+  /** True once the window settled on Aptos. */
+  settled: boolean;
   /** True once LockBox holds the window's outcome root. */
   outcomeRecorded: boolean;
   /** Every lock of the window: seller locks, then bid collateral locks. */
   locks: WindowLockRelease[];
   /** True when no lock of the window is still open. */
   allReleased: boolean;
+  /** True until the first read finishes. */
   loading: boolean;
+  /** True while `release` runs. */
+  releasing: boolean;
+  /** Result of the last `release`. */
+  result?: WindowReleaseResult;
   error?: string;
-  /** Record the outcome if needed, then release every open lock. */
+  /** Record the outcome if needed, then close every open lock. */
   release: () => Promise<void>;
 }
 
+function statusName(code: number): WindowLockStatus {
+  if (code === LOCK_STATUS.Open) return "open";
+  if (code === LOCK_STATUS.Released) return "released";
+  if (code === LOCK_STATUS.Reclaimed) return "reclaimed";
+  return "unknown";
+}
+
+/**
+ * The provider reads go through: the wallet's when one is injected (the same
+ * node the release transactions go to), else the configured Ethereum RPC.
+ */
+function readProvider(): ethers.Provider {
+  const injected = (window as unknown as { ethereum?: ethers.Eip1193Provider })
+    .ethereum;
+  return injected
+    ? new ethers.BrowserProvider(injected)
+    : new ethers.JsonRpcProvider(getChainConfig().ethereum.rpcUrl);
+}
+
+interface WindowRead {
+  settled: boolean;
+  outcomeRecorded: boolean;
+  locks: WindowLockRelease[];
+}
+
+async function readWindow(
+  windowId: bigint,
+  pairBcs: Uint8Array,
+): Promise<WindowRead> {
+  const settled = await isSettled(windowId, pairBcs);
+  const ids = await getWindowLockIds(windowId, pairBcs);
+  const entries = [
+    ...ids.sellers.map((id) => ({ id, asset: "FakeETH" as const })),
+    ...ids.collateral.map((id) => ({ id, asset: "FakeUSD" as const })),
+  ];
+  const provider = readProvider();
+  let firstLock: LockFields | null = null;
+  const locks: WindowLockRelease[] = [];
+  for (const { id, asset } of entries) {
+    const [fields, code, outcome] = await Promise.all([
+      getLockById(provider, id),
+      getLockStatus(provider, id),
+      settled ? getLockOutcome(asset, id) : Promise.resolve(null),
+    ]);
+    firstLock ??= fields;
+    locks.push({
+      lockId: id,
+      asset,
+      status: statusName(code),
+      amount: fields?.amount ?? null,
+      payouts: outcome
+        ? outcome.recipients.map((recipient, i) => ({
+            recipient,
+            amount: outcome.amounts[i],
+          }))
+        : [],
+    });
+  }
+  const outcomeRecorded = firstLock
+    ? (await getRecordedOutcome(provider, firstLock)).recorded
+    : false;
+  return { settled, outcomeRecorded, locks };
+}
+
 export function useWindowRelease(
-  _windowId: bigint | null,
-  _pairBcs: Uint8Array | null,
-  _account: string | null,
+  windowId: bigint | null,
+  pairBcs: Uint8Array | null,
+  account: string | null,
+  pollIntervalMs = 10_000,
 ): WindowReleaseState {
-  throw new Error("NOT_IMPLEMENTED: SCOUT(#236) useWindowRelease");
+  const [read, setRead] = useState<WindowRead | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [releasing, setReleasing] = useState(false);
+  const [result, setResult] = useState<WindowReleaseResult | undefined>(
+    undefined,
+  );
+  const [refresh, setRefresh] = useState(0);
+
+  useEffect(() => {
+    if (windowId === null || pairBcs === null) return;
+    let cancelled = false;
+    async function poll() {
+      try {
+        const r = await readWindow(windowId!, pairBcs!);
+        if (!cancelled) {
+          setRead(r);
+          setError(undefined);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      }
+    }
+    poll();
+    const timer = setInterval(poll, pollIntervalMs);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [windowId, pairBcs, pollIntervalMs, refresh]);
+
+  const locks = read?.locks ?? [];
+  const anyOpen = locks.some((l) => l.status === "open");
+
+  const release = useCallback(async () => {
+    if (!account || windowId === null || pairBcs === null) return;
+    setReleasing(true);
+    setError(undefined);
+    try {
+      // Re-read first: a lock another wallet closed meanwhile needs no
+      // transaction, and with no open lock nothing is sent at all.
+      const fresh = await readWindow(windowId, pairBcs);
+      setRead(fresh);
+      if (!fresh.settled || !fresh.locks.some((l) => l.status === "open")) {
+        return;
+      }
+      const provider = new ethers.BrowserProvider(
+        (window as unknown as { ethereum: ethers.Eip1193Provider }).ethereum,
+      );
+      setResult(
+        await carryAndReleaseWindow({
+          signer: await provider.getSigner(),
+          provider,
+          windowId,
+          pairBcs,
+          nodes: defaultAptosNodes(),
+        }),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setReleasing(false);
+      setRefresh((n) => n + 1);
+    }
+  }, [account, windowId, pairBcs]);
+
+  return {
+    settled: read?.settled ?? false,
+    outcomeRecorded: read?.outcomeRecorded ?? false,
+    locks,
+    allReleased: read !== null && !anyOpen,
+    loading: read === null && error === undefined,
+    releasing,
+    result,
+    error,
+    release,
+  };
 }

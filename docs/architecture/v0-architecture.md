@@ -482,7 +482,6 @@ SDK release path are retired (issue 195).
 
 ### 3.1 End-to-end flow
 
-<!-- SCOUT(#236) DOC: diagram: add the user flow: open, settle, then the release action that records the outcome and calls releaseByOutcome per lock. -->
 <!-- SCOUT(#242) DOC: diagram: "auction settle / unwind emits AuctionOutcome" is not on main (open pull request 213). -->
 
 ```
@@ -512,12 +511,34 @@ Validators attest the header ─────► ethereum_headers stores
                                                                                ▼
                                                                       LockBox.recordOutcome
                                                                       LockBox.releaseByOutcome
-                                                                      (or reclaim after deadline)
+                                                                      (reclaimUnpayable for an
+                                                                       unpayable leaf, or reclaim
+                                                                       after deadline)
 ```
+
+A user finishes a trade from the UI in three actions, in this order, on the
+sell flow monitoring step (`Step8Monitor`) and in the demo:
+
+```
+open                               settle                          release
+────                               ──────                          ───────
+AuctionRevealer: after the         SettleButton: enabled from      ReleaseButton: enabled once the
+timelock reveal, Open bids sends   chain state once the window     window settled on Aptos. It records
+open_bids until every bid is       exists, every bid is opened     the AuctionOutcome on LockBox when
+opened, then finalize_window.      and is_settled is false.        missing (recordOutcome), then calls
+An expired timelock points to      It sends auction::settle,       releaseByOutcome per open lock, or
+Unwind (UnwindButton).             which emits AuctionOutcome.     reclaimUnpayable for an unpayable leaf.
+```
+
+Any wallet may press each of them. `ReleaseButton` lists every lock of the
+window with its asset, leaf payouts and LockBox status. After release the
+winner holds the seller's FakeETH and the seller holds the winner's FakeUSD
+on Ethereum. A stuck or unwound window goes through `UnwindButton` instead.
 
 Every step is a permissionless call. Any wallet carries the data: the SDK
 outcome carrier (`source/atomica-sdk/src/settlement/outcome-carrier.ts`) and
-the UI Unwind and Reclaim actions (`UnwindButton`, `ReclaimLockButton`) send
+the UI Release, Unwind and Reclaim actions (`ReleaseButton`, `UnwindButton`,
+`ReclaimLockButton`) send
 ordinary transactions from the user's own wallet. Every byte a carrier brings
 is checked on chain, so a carrier holds no special authority.
 

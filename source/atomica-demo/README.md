@@ -84,11 +84,12 @@ bun run test:ui
 
 ### 3. Auction System
 
-<!-- SCOUT(#236) DOC: this list gains open, settle and release, and loses the faucet claim. -->
-
-- **Create Auction**: Lock FAKEETH into an auction window (no minimum price)
+- **Sell**: The sell flow locks FAKEETH on Ethereum, proves the lock on Aptos and joins an auction window; its monitoring step carries the trade to its end
 - **Place Bid**: Submit encrypted bids using IBE
 - **Sealed-Bid**: Bids hidden until reveal phase
+- **Open**: After the window's timelock key is revealed, anyone opens the bids on chain (an expired timelock points to Unwind)
+- **Settle**: Anyone settles the window once every bid is opened
+- **Release**: Anyone carries the window's outcome to the Ethereum LockBox and releases each lock: the winner receives the seller's FAKEETH and the seller the winner's FAKEUSD, on Ethereum
 
 ### 4. Developer Tools
 
