@@ -8,60 +8,47 @@ cross-chain settlement flow. Later phases extend, not replace, this foundation.
 
 ## §1 — Package Layout
 
-### 1.1 Target structure
+### 1.1 Package structure
 
-<!-- SCOUT(#242) DOC: section 1 reads as a plan: the renames of 1.2 are done and the React-import check of 1.3 already runs in .githooks/pre-push (not in CI). -->
+The codebase has three packages:
 
-The codebase converges on three packages:
-
-| Target package | Role | React? |
+| Package | Role | React? |
 |---|---|---|
 | `atomica-web-components` | Reusable React UI components | Yes |
 | `atomica-sdk` | Headless, zero-React business logic | No |
 | `atomica-demo` | Demo app, scripts, and orchestration shell | Yes (consumer only) |
 
-**Dependency rules (enforced by CI):**
+**Dependency rules:**
 - `atomica-web-components` → `atomica-sdk` ✓
 - `atomica-demo` → `atomica-web-components` and `atomica-sdk` ✓
-- `atomica-sdk` must have zero React imports — enforced by the pre-push hook
+- `atomica-sdk` must have zero React imports and must not import
+  `atomica-web-components`. The pre-push hook checks both (§1.3). No CI job
+  checks them.
 - No package may import from `atomica-demo`
 
-### 1.2 Mapping from current packages
+### 1.2 Renames (done)
 
-| Existing package | Target | Action |
+| Old package | Package now | Change |
 |---|---|---|
-| `source/atomica-web-ui` | `atomica-web-components` | In-place rename |
-| `source/atomica-web-demo` | `atomica-demo` | In-place rename |
-| `source/atomica-web` | (deleted) | Remove; its integration-test harness moves to `atomica-demo` |
-| `source/atomica-sdk` | `atomica-sdk` | Extended in place — no rename |
+| `source/atomica-web-ui` | `atomica-web-components` | Renamed in place |
+| `source/atomica-web-demo` | `atomica-demo` | Renamed in place |
+| `source/atomica-web` | (deleted) | Deleted; its integration-test harness moved to `atomica-demo` |
+| `source/atomica-sdk` | `atomica-sdk` | Extended in place, no rename |
 
-`source/atomica-web` is a thin integration-test wrapper with no production
-logic of its own. Keeping it adds a fourth package name for no benefit and
-creates ambiguity about which package owns shared entry points. Its
-Playwright/Vitest integration test configuration migrates to `atomica-demo`.
+### 1.3 Boundary check
 
-### 1.3 CI enforcement
-
-The existing pre-push hook (`scripts/install-hooks.sh`) will be extended with
-a single check:
-
-```bash
-grep -r "from 'react'" source/atomica-sdk/src && \
-  { echo "ERROR: atomica-sdk must not import React"; exit 1; }
-```
-
-No separate CI job is required at v0; the hook is sufficient. A GitHub Actions
-job is planned for Phase 3a.
+The pre-push hook (`.githooks/pre-push`, installed with
+`scripts/install-hooks.sh`) fails a code push when any file under
+`source/atomica-sdk/src` imports `react`, `react-dom` or
+`@atomica/atomica-web-components`. It is a local hook only: no GitHub Actions
+job runs this check.
 
 ---
 
 ## §2 — Auction Mechanism (v0.1 Beta)
 
-<!-- SCOUT(#242) DOC: section 2 was the pre-implementation target: auction.move is written and its structs and entry signatures differ from the code blocks in 2.3, 2.5 and 2.6. -->
-
-This section is detailed enough that an implementer can derive every Move data
-structure and entry-function signature for the `auction.move` rewrite in
-Phase 3a.
+This section describes `source/atomica-move-contracts/sources/auction.move` as
+built on `main`. Its code blocks match the Move structs and entry signatures.
 
 ### 2.1 Auction windows
 
@@ -81,8 +68,6 @@ All auctions within a window share the same `auction_window_id`. A day lasts
 (16:15 = 16×3600 + 15×60). Midnight is not a boundary.
 
 ### 2.2 Window ID formula
-
-<!-- SCOUT(#242) DOC: last sentence of 2.2 is false: submit_bid never reads the clock window id; it checks the window timelock status and deadline, and create_auction accepts the current and the next window id. -->
 
 ```
 day               = unix_seconds / 86400          // integer division
@@ -136,16 +121,16 @@ microseconds (section 2.3). `submit_bid` accepts a bid only while that timelock
 is `Pending` and strictly before its deadline, which binds every bid to the
 window clock.
 
-The window ID monotonically increases. A bid is only accepted when the current
-window ID matches the auction's registered window ID.
+The window ID monotonically increases. `create_auction` accepts only the
+current or the next window id (`E_STALE_WINDOW_ID`). `submit_bid` never reads
+the clock window id: it checks only the window timelock status and deadline,
+as above.
 
 ### 2.3 AuctionRegistry
 
-<!-- SCOUT(#242) DOC: WindowState as built also holds timelock_id, min_prices, revealed_prices, reveal_final, refunded and bid_results, bids is vector<SealedBid>, and sellers contribute supply, not bids. -->
-
 The registry is keyed by `(auction_window_id, pair)`, not by seller address.
-Multiple sellers offering the same pair in the same window contribute bids to
-the same clearing pool.
+Multiple sellers offering the same pair in the same window contribute supply
+to the same clearing pool.
 
 `create_auction(seller, window_id, pair_bcs, lock_id)` takes no timelock id.
 The package holds a timelock registrar: a named object at
@@ -203,11 +188,16 @@ struct AuctionRegistry has key {
 struct WindowState has store {
     pair:             Pair,
     window_id:        u64,
-    total_supply:     u256,   // sum of all seller lock amounts (FakeETH wei)
-    bids:             vector<Bid>,
+    timelock_id:      u64,                 // the window id's one timelock
+    total_supply:     u256,                // sum of all seller lock amounts (FakeETH wei)
+    bids:             vector<SealedBid>,   // §2.5
     settled:          bool,
-    clearing_price:   u64,
+    clearing_price:   u64,                 // whole USD per whole base token
     lock_ids:         vector<vector<u8>>,  // seller receipts
+    open_cursor:      u64,                 // next bid open_bids opens (§2.6)
+    reveal_final:     bool,                // finalize_window ran: all opened, cleared
+    refunded:         bool,                // refunded after the timelock expired
+    bid_results:      vector<BidResult>,   // per-bid fills, index-aligned to bids (§2.7)
 }
 ```
 
@@ -237,7 +227,9 @@ pair bytes. With the allowlist those bytes are always the BCS of a listed
 
 ### 2.5 Sealed Bid struct
 
-<!-- SCOUT(#242) DOC: Bid struct is stale: SealedBid holds one V2 ciphertext BCS(vk, U, nonce, C, sig), ct_id, a 32-byte price hash, a clear quantity, opened and price; there is no u_bytes, and the encoding follows the fork spec, not Drand tlock. -->
+As built by the ciphertext opening issue (228), `SealedBid` holds one V2
+ciphertext, `ct_id`, a clear quantity, the claimed collateral, `opened`,
+`price` and `valid`, with no price hash or salt.
 
 Bids are IBE-encrypted at submission time. The plaintext is the 8-byte
 little-endian `u64` price and nothing else: no salt and no price hash. The
@@ -285,7 +277,9 @@ opening judges the bid invalid, §2.6).
 
 ### 2.6 Reveal path
 
-<!-- SCOUT(#242) DOC: reveal as built: submit_cleartext_and_clear(settler, window_id, pair_bcs, cleartexts, salts) and open_bid check each (price, salt) against the 32-byte hash stored at submission, never against the ciphertext; the key getter is timelock::get_decryption_key. -->
+As built by the ciphertext opening issue (228), `open_bids` decrypts each bid
+on chain; nobody submits or checks a price, salt or hash.
+
 After the window closes the validators release the verified decryption key of
 the window's timelock (`timelock::get_decryption_key`, status `Revealed`). The
 chain then opens every bid itself with the fork native `ibe::decrypt_bid`
@@ -334,8 +328,6 @@ bid, and the reason is only in the event.
 
 ### 2.7 Uniform-price clearing algorithm
 
-<!-- SCOUT(#242) DOC: step 5: on main only opened losing bids are released; an unopened bid receipt stays claimed (BidUnopened) until the Aptos unwind (194) merges. -->
-
 Steps:
 1. Sort all revealed bids descending by price. Unopened and invalid bids
    (§2.6) are skipped: they never fill and never set the price.
@@ -347,7 +339,10 @@ Steps:
    undersubscribed window the lowest valid bid sets it.
 4. If the final winning bid would overfill supply, that bidder receives a
    partial fill proportional to remaining supply.
-5. Losing bids have their `collateral_lock_id` receipts released.
+5. Losing and invalid bids get their whole collateral back: `settle` records
+   a refund to the depositor for each such `collateral_lock_id` receipt (§2.8).
+   A window that never settles unwinds from its stuck deadline, and `unwind`
+   returns every receipt it still holds, opened or not (§3.1).
 
 **Worked numeric example:**
 
@@ -371,8 +366,11 @@ All winners pay 2 010 × their_fill in FakeUSD. Alice pays 8 040, Bob pays
 
 ### 2.8 Bidder collateral requirement
 
-<!-- SCOUT(#242) DOC: the contract does not enforce "at least bid_quantity × bid_price": submit_bid drops the receipt amount; say what is enforced today and name the bid validity issue (216) as the gap. -->
-Each bidder must hold an active FakeUSD `LockReceipt` on Ethereum whose
+As built by the bid validity issue (216), `submit_bid` does not check the
+collateral against quantity times price: it stores the claimed amount, and
+opening marks a bid invalid when its quote is above it.
+
+Each bidder should hold an active FakeUSD `LockReceipt` on Ethereum whose
 locked value is at least `bid_quantity × bid_price`, and never below the
 10 FakeUSD minimum bid collateral (`submit_bid` aborts with
 `E_COLLATERAL_TOO_SMALL`, 41). Here `bid_quantity` is in FakeETH wei,
@@ -459,13 +457,27 @@ every client use it. The SDK parses and shows prices with `parsePrice` and
 `formatPrice` (`formatPrice(2000n)` is `$2000`), and only `quote_for_fill`
 (SDK `quoteForFill`) turns a price into FakeUSD base units.
 
-<!-- SCOUT(#242) DOC: section 2.9: Ethereum settlement is driven by AuctionOutcome, which settle does not emit on main; AuctionSettled is no longer what section 3 uses. -->
+Ethereum settlement is driven by `AuctionOutcome`, not by `AuctionSettled`.
+LockBox `recordOutcome` verifies the `AuctionOutcome` event through the Aptos
+light client (§3.2) and releases each lock per its leaf (§3.5).
+`AuctionSettled` only reports the clearing to clients.
+
+```move
+#[event]
+struct AuctionOutcome has drop, store {
+    window_id:         u64,
+    pair_hash:         vector<u8>,
+    eth_lock_deadline: u64,        // LockBox decodes it and computes its own
+    dispositions_root: vector<u8>, // outcome_tree root over every claimed lock
+    leaf_count:        u64,
+}
+```
 
 ---
 
 ## §3 — Cross-Chain Settlement (v0.1 Trustless Flow)
 
-<!-- SCOUT(#242) DOC: "No relayer, admin key or operator account decides where funds go" contradicts the upgrade-key bullet of 3.2 (owner decision 30); "moving to this model through issues 194 to 203" is stale: only 194 and 195 are open. -->
+<!-- SCOUT(#242) DOC: "No relayer, admin key or operator account decides where funds go" contradicts the upgrade-key bullet of 3.2 (owner decision 30). -->
 
 v0.1 trusts only the 2/3 Aptos validator threshold. No relayer, admin key or
 operator account decides where funds go. The
@@ -481,8 +493,6 @@ relayer, its `Settlement`, `DepositBox` and `BLSVerifier` contracts and its
 SDK release path are retired (issue 195).
 
 ### 3.1 End-to-end flow
-
-<!-- SCOUT(#242) DOC: diagram: "auction settle / unwind emits AuctionOutcome" is not on main (open pull request 213). -->
 
 ```
 Ethereum chain                      Aptos chain                       Ethereum chain
@@ -596,8 +606,6 @@ and points every validator at the host's Ethereum RPC with `block_tag: latest`
 (`source/docker-testnet/config/generate-genesis.sh`).
 Each network attests one Ethereum chain id, and headers are keyed by block
 number only.
-
-<!-- SCOUT(#242) DOC: not on main: settle emits no AuctionOutcome and auction::unwind does not exist (open pull request 213 rewrites this paragraph). -->
 
 **Every auction ends in an outcome Ethereum can verify (issues 194, 199).**
 Aptos emits one `AuctionOutcome` per auction, from `settle`,
@@ -718,16 +726,16 @@ signature check, is deleted (issue 195).
 
 ### 3.3 Real BLS ships in v0.1
 
-<!-- SCOUT(#242) DOC: "issue 202 replaces it" is done: AptosLightClient.sol is merged; BLSVerifier.sol still ships until the SDK and UI unwind (195) deletes it. -->
-
 Real BLS verification is a v0.1 requirement, not a v1 upgrade. The target
 Ethereum networks, including the docker testnet, must enable EIP-2537
 (Pectra / Electra). The old `BLSVerifier.sol` checked Ethereum block hashes
 with the wrong key and signature sizes for Aptos. Issue 202 replaced it with
-the Aptos LedgerInfo verifier, and issue 195 deleted it. The browser test
-tiers run Cancun, except the unwind chunk, which runs anvil with Prague
-(`ETH_ANVIL_HARDFORK=prague`) and carries a real outcome through the light
-client. The Aptos Light Client Live job also runs anvil with Prague.
+the Aptos LedgerInfo verifier, and issue 195 deleted it. The anvil browser
+test chunks that carry a real outcome through the light client run Prague
+(`ETH_ANVIL_HARDFORK=prague`): `unwind`, `happy-path` and `claim-reclaim` in
+`test-web.yaml`, and the anvil happy path in `test-web.yml` (issue 236). The
+other anvil chunks run Cancun. The Aptos Light Client Live job also runs anvil
+with Prague.
 
 ### 3.4 ZK seam (v1 path)
 
@@ -798,8 +806,6 @@ locks. Before the relayer key is retired, the old deployment's
 
 ---
 
-<!-- SCOUT(#242) DOC: footer is stale: the Phase 3a and 3b work it promises is merged. -->
-
-*Document version: v0.1 — covers Phase 0b deliverables. Phase 3a will expand
-§2 with the full Move module implementation. Phase 3b will expand §3 with the
-light-client verifier and proof-gated LockBox deployment.*
+*Document version: v0.1 — describes the code on `main`. The `auction.move`
+implementation (Phase 3a), the light-client verifier and the proof-gated
+LockBox (Phase 3b) are merged.*

@@ -120,4 +120,4 @@ PRs touching consensus code will **not be merged** without evidence of all five 
 
 - [Rust Coding Guidelines](./rust-coding-guidelines.md) - General Rust standards and TDD approach
 - [Move Coding Guidelines](./move-coding-guidelines.md) - Move contract standards
-- [Architecture Overview](../technical/architecture-overview.md) - System design context
+- [v0 Architecture](../architecture/v0-architecture.md) - System design context

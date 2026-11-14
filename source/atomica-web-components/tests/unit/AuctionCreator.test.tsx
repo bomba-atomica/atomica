@@ -10,7 +10,7 @@
  *
  * Mocks @atomica/sdk/aptos and ethers so no blockchain connection is needed.
  *
- * @see docs/specifications/web-architecture.md
+ * @see docs/architecture/v0-architecture.md
  * @see #135 — Web component unit tests
  */
 

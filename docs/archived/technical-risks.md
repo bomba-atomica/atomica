@@ -1,6 +1,7 @@
-<!-- SCOUT(#242) DOC: wholly superseded (last updated 2025-12-22) yet the PRD links here "for detailed status"; archive it or rewrite it with the PRD status block. -->
-
 # Atomica Technical Risks
+
+> **Archived (issue 242):** superseded by the status block of the [PRD](../specifications/prd.md) and the [roadmap](../roadmap.md). Kept for reference only.
+
 
 **Document Type**: Risk Assessment & Status Tracking
 **Last Updated**: 2025-12-22
@@ -263,7 +264,7 @@ Risk #1 (Ethereum Signing) → Risk #2 (Timelock) → Risk #3 (Cross-Chain Verif
 ## References
 
 ### Architecture Documents
-- [Architecture Overview](/docs/technical/architecture-overview.md)
+- [Architecture Overview](architecture-overview.md)
 - [Architecture Plan](/docs/technical/architecture-plan.md)
 - [Ethereum Wallet Bridge](/docs/technical/ethereum-wallet-atomica-bridge.md)
 

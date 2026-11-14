@@ -119,7 +119,7 @@ cargo check && cargo test && cargo clippy
 //! Module-level documentation at the top of the file.
 //!
 //! This module handles XYZ functionality for the Atomica project.
-//! See [architecture overview](../../docs/technical/architecture-overview.md)
+//! See [v0 architecture](../../docs/architecture/v0-architecture.md)
 //! for system context.
 
 /// Validates a transaction signature and returns the signer address.
@@ -177,7 +177,7 @@ Always link back to relevant project documentation:
 //! ## Architecture
 //!
 //! This module implements the transaction flow described in
-//! [architecture-overview.md](../../docs/technical/architecture-overview.md).
+//! [v0-architecture.md](../../docs/architecture/v0-architecture.md).
 //!
 //! ## Testing Strategy
 //!
@@ -447,7 +447,7 @@ for testing requirements.
 
 ## Related Documentation
 
-- [Architecture Overview](../../docs/technical/architecture-overview.md)
+- [v0 Architecture](../../docs/architecture/v0-architecture.md)
 - [Specific Feature Design](../../docs/technical/feature-design.md)
 - [Parent Module README](../README.md)
 
@@ -614,7 +614,7 @@ atomica/
 - [Consensus Critical Guidelines](./consensus-critical-guidelines.md) - Testing requirements for consensus code
 - [TypeScript Coding Guidelines](./typescript-coding-guidelines.md) - Standards for TypeScript code
 - [Move Coding Guidelines](./move-coding-guidelines.md) - Standards for Move smart contracts
-- [Architecture Overview](../technical/architecture-overview.md) - System architecture
+- [v0 Architecture](../architecture/v0-architecture.md) - System architecture
 - [Runtime Environments](./runtime-environments.md) - Development and test environments
 
 ## Pre-Commit Checklist (CRITICAL)

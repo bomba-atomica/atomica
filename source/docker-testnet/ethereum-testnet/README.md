@@ -203,4 +203,4 @@ docker compose up -d
 ## Related Documentation
 
 - [Ethereum Coding Guidelines](../../../docs/development/ethereum-coding-guidelines.md)
-- [Architecture Overview](../../../docs/technical/architecture-overview.md)
+- [v0 Architecture](../../../docs/architecture/v0-architecture.md)

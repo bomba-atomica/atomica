@@ -308,5 +308,5 @@ By choosing unified architecture from the start:
 ## References
 
 - Unified architecture specification: `docs/technical/architecture-plan.md`
-- Architecture overview: `docs/technical/architecture-overview.md`
+- v0 architecture: `docs/architecture/v0-architecture.md`
 - Gas cost economics: `docs/technical/architecture-plan.md#gas-cost-analysis`

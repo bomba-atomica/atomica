@@ -21,8 +21,6 @@ The owner set three axioms:
 
 The axioms force four mechanisms:
 
-<!-- SCOUT(#242) DOC: unwind row: not on main; open pull request 213 (194) and the SDK and UI unwind (195) implement it. -->
-
 | Mechanism | What it replaces | Implementing issues |
 | --- | --- | --- |
 | **Validator-attested Ethereum headers.** Aptos validators certify Ethereum block headers with a 2/3+ voting-power quorum. Anyone may carry a certified header. No entry function writes headers. | The admin-only `eth_proof::submit_header` relayer. | 196, 197 |

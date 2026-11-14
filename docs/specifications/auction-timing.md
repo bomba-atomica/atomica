@@ -1,7 +1,7 @@
 # Auction Timing Specification (Canonical)
 
 **Status:** Canonical
-**Last Updated:** 2026-11-11
+**Last Updated:** 2026-11-14
 **Owner:** Product + Protocol Design
 
 This document is the single source of truth for Atomica auction timing.
@@ -40,10 +40,8 @@ This document is the single source of truth for Atomica auction timing.
 
 ## Settlement Coupling
 
-<!-- SCOUT(#242) DOC: "Settlement target remains 1-3 hours post-close" has no mechanism: settle is callable from the reveal and the budget below allows up to 72 h before reclaim. -->
-
 - Auction close occurs at the canonical timestamps above.
-- Settlement target remains **1-3 hours post-close** (see PRD for settlement flow details).
+- Settlement within **1-3 hours post-close** is a target with no mechanism. No code times settlement: `settle` is callable from the reveal until the stuck deadline, and the budget below allows up to 72 h before reclaim.
 
 ## Ethereum Lock Deadline
 
@@ -85,8 +83,6 @@ one or two close offsets (`DeployLockBox.productionWindowSchedule()`:
   values that Solidity, Move and the SDK must agree on.
 
 ### Settle deadline, stuck deadline and lock deadline
-
-<!-- SCOUT(#242) DOC: the settle and stuck deadline bullets describe open pull request 213: main has no stuck deadline, no unwind and no time limit on settle. -->
 
 The owner decision of 2026-11-11 (issue 194) keeps two Aptos deadlines apart
 from the Ethereum lock deadline:

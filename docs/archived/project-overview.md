@@ -24,7 +24,7 @@ source/
 ## Key Docs
 
 - Product requirements: `docs/specifications/prd.md`
-- Architecture overview: `docs/technical/architecture-overview.md`
+- Architecture overview: `docs/archived/architecture-overview.md`
 - Aptos state proofs: `docs/technical/aptos-state-proof.md`
 - Aptos proof systems summary: `docs/technical/aptos-proof-systems-summary.md`
 - Bridge implementation details: `docs/technical/aptos-ethereum-bridge-implementation.md`
