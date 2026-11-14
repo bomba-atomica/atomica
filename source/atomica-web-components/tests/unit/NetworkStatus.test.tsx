@@ -7,7 +7,7 @@
  *
  * Mocks the Aptos and Ethereum provider calls so no live chain is needed.
  *
- * @see docs/specifications/web-architecture.md
+ * @see docs/architecture/v0-architecture.md
  * @see #135 — Web component unit tests
  */
 

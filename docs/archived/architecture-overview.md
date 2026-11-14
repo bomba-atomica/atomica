@@ -1,6 +1,7 @@
-<!-- SCOUT(#242) DOC: wholly superseded (sealed reserve prices, N-layer onion, a 67 percent threshold) yet the PRD links here as the architecture; archive it or redirect to v0-architecture. -->
-
 # Atomica Architecture Overview
+
+> **Archived (issue 242):** superseded by [v0 Architecture](../architecture/v0-architecture.md). Kept for reference only.
+
 
 ## System Overview
 

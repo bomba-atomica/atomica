@@ -9,7 +9,7 @@
  *
  * Mocks @atomica/aptos-docker-testnet/browser and context providers.
  *
- * @see docs/specifications/web-architecture.md
+ * @see docs/architecture/v0-architecture.md
  * @see #135 — Web component unit tests
  */
 

@@ -10,8 +10,6 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 
 ### Entry points (public entry funs)
 
-<!-- SCOUT(#242) DOC: the `settle` row says "single highest bid; uniform-price clearing is scaffold"; the code clears at a uniform price. The unwind pull request (213) rewrites this row. -->
-
 | Module | Function | Status |
 |---|---|---|
 | `atomica::auction` | `create_auction` | live (aborts `E_PAIR_NOT_ALLOWED` unless `pair_bcs` is on the pair allowlist; takes no timelock id: the first call of a window id registers its one timelock through the package's registrar object, with the window close as deadline, and later sellers of any pair join it; at most 100 seller locks per window, each at least 0.01 FakeETH) |

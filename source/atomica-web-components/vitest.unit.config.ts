@@ -9,7 +9,7 @@
  *   bun run test:unit
  *   cd source/atomica-web-components && bun run test -- unit/
  *
- * @see docs/specifications/web-architecture.md
+ * @see docs/architecture/v0-architecture.md
  */
 
 import { defineConfig } from "vitest/config";

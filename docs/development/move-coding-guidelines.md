@@ -80,7 +80,7 @@ public fun get_metadata(): Object<Metadata> {
 /// Returns 0 if the account has not been initialized with this token.
 /// This is a read-only operation that does not modify state.
 ///
-/// See [architecture-overview.md](../../docs/technical/architecture-overview.md)
+/// See [v0-architecture.md](../../docs/architecture/v0-architecture.md)
 /// for the overall token accounting system design.
 public fun get_balance(account: address): u64 acquires TokenStore {
     // implementation
@@ -96,7 +96,7 @@ Add documentation at the top of each module:
 ///
 /// This module implements a test token that mimics ETH behavior on Aptos.
 /// It follows the fungible asset standard as described in
-/// [architecture-overview.md](../../docs/technical/architecture-overview.md).
+/// [v0-architecture.md](../../docs/architecture/v0-architecture.md).
 ///
 /// For testing requirements, see
 /// [move-coding-guidelines.md](../../docs/development/move-coding-guidelines.md).

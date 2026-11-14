@@ -8,7 +8,7 @@
  *
  * Mocks SDK faucet functions and context hooks to avoid live chain calls.
  *
- * @see docs/specifications/web-architecture.md
+ * @see docs/architecture/v0-architecture.md
  * @see #135 — Web component unit tests
  */
 

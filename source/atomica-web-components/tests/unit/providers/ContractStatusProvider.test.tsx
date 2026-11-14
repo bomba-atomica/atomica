@@ -11,7 +11,7 @@
  * Uses vi.mock to stub @atomica/sdk/contract-check so no network calls are made.
  *
  * @see source/atomica-web-components/src/context/ContractStatusContext.tsx
- * @see docs/specifications/web-architecture.md
+ * @see docs/architecture/v0-architecture.md
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";

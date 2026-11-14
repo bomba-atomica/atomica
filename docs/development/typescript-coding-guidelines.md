@@ -591,7 +591,7 @@ Always link to relevant documentation in comments:
 /**
  * Transaction utilities for the Atomica protocol.
  *
- * See [architecture-overview.md](../../docs/technical/architecture-overview.md)
+ * See [v0-architecture.md](../../docs/architecture/v0-architecture.md)
  * for the overall system design.
  *
  * For testing these utilities, refer to

@@ -1,5 +1,6 @@
-
 # Web Simulator Architecture
+
+> **Archived (issue 242):** this describes a deleted web simulator. For the current packages see [v0 Architecture](../architecture/v0-architecture.md) section 1.
 
 ## File Structure
 

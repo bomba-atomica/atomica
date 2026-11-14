@@ -6,7 +6,7 @@
  * or Docker environment is required.
  *
  * @see source/atomica-web-components/src/hooks/useTokenBalances.ts
- * @see docs/specifications/web-architecture.md
+ * @see docs/architecture/v0-architecture.md
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";

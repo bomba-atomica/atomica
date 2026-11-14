@@ -57,6 +57,6 @@ To prevent "Free Option" griefing (where a counterparty sees the outcome and dec
 | **Bridge Hack** | N/A | Impossible (no bridge) |
 
 ## Related Documentation
-- [Architecture Overview](architecture-overview.md)
+- [v0 Architecture](../architecture/v0-architecture.md)
 - [Timelock Encryption](../design/timelock-seller-stake-dkg.md)
 - [Prior Art: Bridges](../background/prior-art.md)

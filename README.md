@@ -37,10 +37,8 @@ Bids are encrypted using an **N-Layer "Onion"** scheme with configurable layer c
 ### Uniform Price Auction
 All winning bidders pay the same clearing price (lowest qualifying bid), regardless of original bid. Similar properties to Vickrey auctions (Nobel Prize-winning research).
 
-<!-- SCOUT(#242) DOC: the rebate curve below is described as product behaviour; the issue marks it as a later phase in the PRD but does not list this README, and the dead-code issue (238) deletes the only rebate code. -->
-
-### Fee Model: Deal Breakers Pay Deal Makers
-All externalities internalized. Fees proportional to distance from clearing price—accurate bidders get rebates, noisy bidders pay. **Zero operator fees for Bitcoin and Ethereum markets.**
+### Fee Model: Deal Breakers Pay Deal Makers (later phase)
+Not built: nothing on chain computes a fee or rebate. The planned model internalizes all externalities: fees proportional to distance from clearing price, so accurate bidders get rebates and noisy bidders pay. Zero operator fees for Bitcoin and Ethereum markets are planned too.
 
 ### Unified Cross-Chain Architecture
 All away chains (Ethereum, Solana, Base, Arbitrum, etc.) use identical verification mechanisms. BLS threshold signatures (v0.1 Beta), with ZK proof verification (v1.0+).
@@ -68,8 +66,11 @@ atomica/
 ├── docs/specifications/prd.md ← Start here (executive summary)
 ├── README.md                 ← This file (navigation guide)
 └── docs/
-    ├── development/          ← Implementation planning & status
-    │   ├── technical-risks.md
+    ├── roadmap.md            ← Capability status
+    ├── architecture/         ← Architecture as built
+    │   ├── v0-architecture.md
+    │   └── adr-timelock-ibe.md
+    ├── development/          ← Implementation planning
     │   └── timelock-implementation-plan.md
     ├── analysis/             ← Market & economic research
     │   ├── bear-market.md
@@ -82,7 +83,6 @@ atomica/
     ├── design/               ← Product design & strategy
     │   ├── timelock-seller-stake-dkg.md
     ├── technical/            ← Technical specifications
-    │   ├── architecture-overview.md
     │   ├── cross-chain-verification.md
     │   ├── cross-chain-swap.md
     │   ├── onion-timelock.md
@@ -107,14 +107,11 @@ atomica/
 
 ### 🚧 Development & Implementation
 
-<!-- SCOUT(#242) DOC: the status lines below are stale (Risk #2 and Risk #3 changed with issues 196, 197, 201, 202, 203); this README repeats the PRD status block and is not in the issue's touchpoints. -->
-
-**[Technical Risks](docs/development/technical-risks.md)** ⭐
-- Three major technical risks and current status
+**[Roadmap](docs/roadmap.md)** ⭐
+- Capability status for v0.1 Beta, v1.0 and v2.0, with the issue behind each gap
 - Risk #1: Ethereum signing of Aptos transactions (✅ DONE)
-- Risk #2: Timelock encryption end-to-end (🟡 IN PROGRESS)
-- Risk #3: Cross-chain transaction verification (⏳ PENDING)
-- Timeline estimates and success criteria
+- Risk #2: Timelock encryption end-to-end (✅ BUILT for the validator timelock layer; onion layers are a later phase)
+- Risk #3: Cross-chain transaction verification (✅ BUILT for Ethereum)
 
 **[Timelock Implementation Plan](docs/development/timelock-implementation-plan.md)** ⭐
 - Comprehensive 7-10 week roadmap for Risk #2
@@ -158,11 +155,10 @@ atomica/
 
 ### 🔧 Technical Specifications
 
-**[Architecture Overview](docs/technical/architecture-overview.md)** ⭐
-- Complete system architecture
-- Unified away chain verification
-- Dual-layer verification (BLS + ZK)
-- Account abstraction
+**[v0 Architecture](docs/architecture/v0-architecture.md)** ⭐
+- Package layout, auction mechanism and cross-chain settlement as built
+- Ethereum verifies validator BLS signatures over Aptos outcomes (ZK verification is a later phase)
+- Permissionless unwind and lock reclaim
 
 **[Onion Timelock Encryption](docs/technical/onion-timelock.md)**
 - Composition and ordering of encryption layers

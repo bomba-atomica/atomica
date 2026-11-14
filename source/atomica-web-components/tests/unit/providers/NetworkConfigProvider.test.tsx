@@ -11,7 +11,7 @@
  * @atomica/sdk/network-host, @aptos-labs/ts-sdk so no network calls are made.
  *
  * @see source/atomica-web-components/src/network/network-config-context.tsx
- * @see docs/specifications/web-architecture.md
+ * @see docs/architecture/v0-architecture.md
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
