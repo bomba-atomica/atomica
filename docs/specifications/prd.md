@@ -247,7 +247,7 @@ Bidders (arbitrageurs) earn through bid-ask spreads (buy at auction price, sell/
 - ✅ **Risk #2 (Timelock Encryption):** Built for one layer - the validator timelock DKG, V2 bid ciphertexts, the on-chain key reveal and on-chain bid opening (`open_bids`) are merged. More onion layers are a later phase
 - ✅ **Risk #3 (Cross-Chain Verification):** Built for Ethereum - v0.1 Beta trusts only the 2/3 validator threshold, no relayer: validators attest Ethereum headers, Ethereum verifies validator BLS signatures over Aptos outcomes, and any user can unwind a finished or stuck auction ([trustless v0.1 unwinding ADR](../decisions/trustless-v0-1-unwinding.md)); ZK double verification (v1.0)
 
-The UI that completes a trade end to end (open, settle and release) is open work (issue 236). GitHub issues track every open gap.
+The UI completes a trade end to end in three actions: Open bids, Settle, then Release, on the sell flow monitoring step and in the demo (issue 236). GitHub issues track every open gap.
 
 **→ See:** [Roadmap](../roadmap.md) for the status of each capability
 
