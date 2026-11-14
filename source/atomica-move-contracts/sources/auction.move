@@ -31,8 +31,9 @@
 ///
 /// ## Price unit
 ///
-/// Every price in this module (`SealedBid.price`, `BidOpened.price`, every `clearing_price`)
-/// is whole USD per whole base token, as an unsigned integer with no decimal shift. A price
+/// Every price in this module (`SealedBid.price`, the decrypted bid plaintext, every
+/// `clearing_price`) is whole USD per whole base token, as an unsigned integer with no
+/// decimal shift. A price
 /// of 2000 means 2000 USD per whole FakeETH. `quote_for_fill` alone turns a price into
 /// FakeUSD base units (6 decimals). The SDK `parsePrice`, `formatPrice` and `quoteForFill`
 /// use the same unit.

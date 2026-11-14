@@ -614,7 +614,7 @@ describe.sequential("14: Full demo happy-path e2e — no mocked hooks", () => {
       expect(await getOpenCursor(windowId, LAUNCH_PAIR_BCS)).toEqual({ next: 1n, total: 1n });
       const opened = await getBidInfo(windowId, LAUNCH_PAIR_BCS, 0n);
       expect(opened.opened).toBe(true);
-      // SCOUT(#217) EDIT: the price the chain decrypted, in whole USD.
+      // The price the chain decrypted, whole USD per whole FakeETH.
       expect(opened.price).toBe(BID_PRICE);
       expect(opened.valid).toBe(true);
       expect(

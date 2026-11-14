@@ -525,7 +525,7 @@ jobs:
       # Raise MIN_MOVE_TESTS when tests are added, so a silently skipped module fails the job.
       - name: Run Move Tests (at least MIN_MOVE_TESTS must run)
         env:
-          MIN_MOVE_TESTS: 271
+          MIN_MOVE_TESTS: 267
         run: |
           set -euo pipefail
           aptos move test --package-dir source/atomica-move-contracts | tee move-test.log

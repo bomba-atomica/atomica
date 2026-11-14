@@ -49,7 +49,10 @@ vi.mock("@atomica/sdk/chain-config", () => ({
 
 vi.mock("@atomica/sdk/aptos", () => ({
   isRevealed: mockIsRevealed,
-  submitCleartextAndClear: vi.fn(),
+  MAX_OPEN_BIDS_PER_CALL: 12n,
+  openBids: vi.fn(),
+  finalizeWindow: vi.fn(),
+  getOpenCursor: vi.fn(),
   getWindowTimelockId: vi.fn().mockResolvedValue(42n),
   decryptWindowBids: mockDecryptWindowBids,
 }));
@@ -121,8 +124,6 @@ describe("price display", () => {
         alreadyOpened: false,
         valid: true,
         price: 2000n,
-        salt: new Uint8Array(32).fill(0x22),
-        matchesCommitment: true,
       },
     ]);
     render(
