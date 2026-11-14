@@ -4,15 +4,13 @@ Status: `live`
 
 ## Purpose
 
-React UI component library and custom hooks for the Atomica auction interface. Provides all user-facing components — auction creation, bid submission, settlement, claim, bid history, and wallet/network context — as well as the React hooks that wire those components to on-chain state. Depends on `@atomica/sdk` for headless protocol logic and has zero awareness of testnet orchestration or deployment scripts.
+React UI component library and custom hooks for the Atomica auction interface. Provides all user-facing components — auction creation, bid submission, the trade after the close (open, settle, release), bid history, and wallet/network context — as well as the React hooks that wire those components to on-chain state. Depends on `@atomica/sdk` for headless protocol logic and has zero awareness of testnet orchestration or deployment scripts.
 
 ## Public API surface
 
 ### Entry point
 
 `src/index.ts` — re-exports everything below.
-
-<!-- SCOUT(#236) DOC: ClaimButton leaves this table; AuctionRevealer, SellFlow and ReleaseButton join it. -->
 
 ### Exported components
 
@@ -26,7 +24,10 @@ React UI component library and custom hooks for the Atomica auction interface. P
 | `NetworkStatus` | `src/components/NetworkStatus.tsx` |
 | `TxButton` | `src/components/TxButton.tsx` |
 | `SettleButton` | `src/components/SettleButton.tsx` |
-| `ClaimButton` | `src/components/ClaimButton.tsx` |
+| `AuctionRevealer`, `AuctionRevealerProps` | `src/components/AuctionRevealer.tsx` (open step: Open bids, expired timelock report) |
+| `ReleaseButton`, `ReleaseButtonProps` | `src/components/ReleaseButton.tsx` (release step: carry the outcome, release or reclaim each lock) |
+| `SellFlow` | `src/components/SellFlow/SellFlow.tsx` (seller path; its monitoring step mounts open, settle and release) |
+| `UnwindButton`, `ReclaimLockButton` | `src/components/UnwindButton.tsx`, `src/components/ReclaimLockButton.tsx` (stuck or unwound windows) |
 | `BidHistory`, `BidHistoryEntry` | `src/components/BidHistory.tsx` |
 
 ### Exported hooks
@@ -35,6 +36,7 @@ React UI component library and custom hooks for the Atomica auction interface. P
 |---|---|
 | `useTokenBalances` | `src/hooks/useTokenBalances.ts` |
 | `useBidHistory`, `UseBidHistoryResult` | `src/hooks/useBidHistory.ts` |
+| `useWindowRelease`, `WindowReleaseState`, `WindowLockRelease`, `WindowLockStatus` | `src/hooks/useWindowRelease.ts` |
 
 ### Exported context / providers
 

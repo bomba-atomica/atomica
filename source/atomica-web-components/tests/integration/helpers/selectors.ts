@@ -84,12 +84,13 @@ export const SELECTORS = {
 
   // AuctionRevealer
   auctionRevealer: {
-    windowIdInput: "revealer-window-id-input",
+    revealerWindow: "revealer-window",
     startPollingButton: "start-polling-button",
     revealStatus: "reveal-status",
     openBidsButton: "open-bids-button",
     openedCount: "opened-count",
     openStatus: "open-status",
+    timelockExpired: "timelock-expired",
   },
 
   // SettleButton
@@ -102,14 +103,14 @@ export const SELECTORS = {
     settleTotalFilled: "settle-total-filled",
   },
 
-  // SCOUT(#236) REMOVE: the claimButton block; add a releaseButton block.
-  // ClaimButton
-  claimButton: {
-    claimButton: "claim-button",
-    reclaimButton: "reclaim-button",
-    claimStatus: "claim-status",
-    claimResult: "claim-result",
-    claimAmount: "claim-amount",
+  // ReleaseButton
+  releaseButton: {
+    releaseButton: "release-button",
+    releaseNote: "release-note",
+    releaseLock: "release-lock",
+    releaseLockStatus: "release-lock-status",
+    releaseStatus: "release-status",
+    releaseError: "release-error",
   },
 
   // BidHistory
@@ -132,7 +133,6 @@ export const {
   auctionBidder,
   auctionRevealer,
   settleButton,
-  // SCOUT(#236) REMOVE: flat export.
-  claimButton,
+  releaseButton,
   bidHistory,
 } = SELECTORS;

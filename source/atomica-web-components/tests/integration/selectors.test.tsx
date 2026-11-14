@@ -23,8 +23,7 @@ import { Step7Auction } from "../../src/components/SellFlow/steps/Step7Auction";
 import { Step8Monitor } from "../../src/components/SellFlow/steps/Step8Monitor";
 import { AuctionBidder } from "../../src/components/AuctionBidder";
 import { SettleButton } from "../../src/components/SettleButton";
-// SCOUT(#236) REMOVE: the ClaimButton import and its two cases below.
-import { ClaimButton } from "../../src/components/ClaimButton";
+import { ReleaseButton } from "../../src/components/ReleaseButton";
 import { BidHistory } from "../../src/components/BidHistory";
 import type { BidHistoryEntry } from "../../src/components/BidHistory";
 import {
@@ -284,26 +283,14 @@ describe("Selector contract — data-testid attributes", () => {
     ).toBeTruthy();
   });
 
-  // SCOUT(#236) REMOVE: both ClaimButton cases.
-  it("ClaimButton: claim-button is present (v0 Beta — windowId + pairBcs props)", () => {
+  it("ReleaseButton: release-button is present (windowId + pairBcs props)", () => {
     render(
       <MinimalProviders>
-        <ClaimButton windowId={0n} pairBcs={new Uint8Array(0)} />
+        <ReleaseButton windowId={0n} pairBcs={new Uint8Array(0)} />
       </MinimalProviders>,
     );
     expect(
-      screen.getByTestId(SELECTORS.claimButton.claimButton),
-    ).toBeTruthy();
-  });
-
-  it("ClaimButton: reclaim-button is present (v0 Beta — windowId + pairBcs props)", () => {
-    render(
-      <MinimalProviders>
-        <ClaimButton windowId={0n} pairBcs={new Uint8Array(0)} />
-      </MinimalProviders>,
-    );
-    expect(
-      screen.getByTestId(SELECTORS.claimButton.reclaimButton),
+      screen.getByTestId(SELECTORS.releaseButton.releaseButton),
     ).toBeTruthy();
   });
 
@@ -355,9 +342,8 @@ describe("Selector contract — data-testid attributes", () => {
     expect(s.auctionBidder.bidStatus).toBe("bid-status");
     expect(s.settleButton.settleButton).toBe("settle-button");
     expect(s.settleButton.settleStatus).toBe("settle-status");
-    // SCOUT(#236) REMOVE: both claimButton asserts.
-    expect(s.claimButton.claimButton).toBe("claim-button");
-    expect(s.claimButton.reclaimButton).toBe("reclaim-button");
+    expect(s.releaseButton.releaseButton).toBe("release-button");
+    expect(s.releaseButton.releaseStatus).toBe("release-status");
     expect(s.bidHistory.bidHistoryTable).toBe("bid-history-table");
     expect(s.bidHistory.bidHistoryRow).toBe("bid-history-row");
   });

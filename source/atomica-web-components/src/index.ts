@@ -6,9 +6,19 @@ export { AccountStatus } from "./components/AccountStatus";
 export { NetworkStatus } from "./components/NetworkStatus";
 export { TxButton } from "./components/TxButton";
 export { SettleButton } from "./components/SettleButton";
-// SCOUT(#236) REMOVE: drop the ClaimButton export with the component.
-// SCOUT(#236) ADD: export AuctionRevealer, SellFlow and ReleaseButton here; SellFlow pulls @atomica/sdk/ethereum/proofs (Node-only dependencies) into every consumer of this index, so check the demo browser test first.
-export { ClaimButton } from "./components/ClaimButton";
+// The trade after the close: open, settle, release. SellFlow pulls
+// @atomica/sdk/ethereum/proofs into every consumer of this index.
+export { AuctionRevealer } from "./components/AuctionRevealer";
+export type { AuctionRevealerProps } from "./components/AuctionRevealer";
+export { ReleaseButton } from "./components/ReleaseButton";
+export type { ReleaseButtonProps } from "./components/ReleaseButton";
+export { SellFlow } from "./components/SellFlow/SellFlow";
+export { useWindowRelease } from "./hooks/useWindowRelease";
+export type {
+  WindowLockRelease,
+  WindowLockStatus,
+  WindowReleaseState,
+} from "./hooks/useWindowRelease";
 export { BidHistory } from "./components/BidHistory";
 export type { BidHistoryEntry } from "./components/BidHistory";
 

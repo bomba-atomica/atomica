@@ -65,7 +65,19 @@ vi.mock("@atomica/sdk/aptos", () => ({
   })),
   getWindowLockIds: vi.fn(async () => ({ sellers: [], collateral: [] })),
   getBidCount: vi.fn(async () => 0n),
+  isSettled: vi.fn(async () => false),
   aptos: { mock: "aptos-client" },
+}));
+// The trade steps the monitoring step mounts after the close have their own
+// tests (AuctionRevealer, SettleButton, ReleaseButton).
+vi.mock("../../src/components/AuctionRevealer", () => ({
+  AuctionRevealer: () => <div data-testid="stub-open" />,
+}));
+vi.mock("../../src/components/SettleButton", () => ({
+  SettleButton: () => <div data-testid="stub-settle" />,
+}));
+vi.mock("../../src/components/ReleaseButton", () => ({
+  ReleaseButton: () => <div data-testid="stub-release" />,
 }));
 vi.mock("@atomica/sdk", () => ({
   submitNativeTransaction: vi.fn(),

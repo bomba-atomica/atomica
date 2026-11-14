@@ -106,7 +106,6 @@ jobs:
         working-directory: source/atomica-web-components
         run: bunx playwright install --with-deps chromium
 
-      # SCOUT(#236) TEST: this step runs 14-happy-path a second time outside the gate; it is the only step the coverage guard credits for that file (the guard does not expand the browser matrix).
       - name: Run happy-path browser integration test
         working-directory: source/atomica-web-components
         env:

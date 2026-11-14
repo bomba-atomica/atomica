@@ -465,6 +465,7 @@ import {
   advanceEpochCalldata,
   carryOutcome,
   eventProofFromNode,
+  isLeafUnpayable,
   parseLedgerInfoWithSignatures,
   planWindowReleases,
   recordOutcomeCalldata,
@@ -749,6 +750,77 @@ describe("release without a settlement authority", () => {
         recordedRoot: "0x" + "99".repeat(32),
       }),
     ).toThrow(/differs from the recorded/);
+  });
+
+  /** Plan one open lock against a tree of `planned` and LOCK_B's outcome. */
+  function planOne(planned: (typeof outcomes)[number], amount: bigint) {
+    const window = [planned, outcomes[1]];
+    return planWindowReleases({
+      lockBoxAddress: "0x" + "cd".repeat(20),
+      outcomes: window,
+      openLocks: [lock(planned.lockId, amount)],
+      recordedRoot: windowOutcomeTree(window).root,
+    });
+  }
+
+  it("planWindowReleases emits reclaimUnpayable for a leaf with a zero recipient", () => {
+    const zero = {
+      lockId: LOCK_A,
+      recipients: [ethers.ZeroAddress, DEPOSITOR],
+      amounts: [4n, 6n],
+    };
+    const calls = planOne(zero, 10n);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].data.slice(0, 10)).toBe(
+      LOCKBOX.getFunction("reclaimUnpayable")!.selector,
+    );
+    const decoded = LOCKBOX.decodeFunctionData(
+      "reclaimUnpayable",
+      calls[0].data,
+    );
+    expect(decoded[1].map((p: ethers.Result) => p[1])).toEqual([4n, 6n]);
+    expect(
+      isLeafUnpayable(10n, [{ recipient: ethers.ZeroAddress, amount: 0n }]),
+    ).toBe(true);
+  });
+
+  it("planWindowReleases emits reclaimUnpayable for a leaf whose payouts sum above the lock amount", () => {
+    const over = {
+      lockId: LOCK_A,
+      recipients: [WINNER, DEPOSITOR],
+      amounts: [4n, 7n],
+    };
+    const calls = planOne(over, 10n);
+    expect(calls[0].data.slice(0, 10)).toBe(
+      LOCKBOX.getFunction("reclaimUnpayable")!.selector,
+    );
+    // An overflowing sum is unpayable too, whatever the lock amount.
+    const max = (1n << 256n) - 1n;
+    expect(
+      isLeafUnpayable(max, [
+        { recipient: WINNER, amount: max },
+        { recipient: DEPOSITOR, amount: 1n },
+      ]),
+    ).toBe(true);
+  });
+
+  it("planWindowReleases emits releaseByOutcome for a payable leaf", () => {
+    // A short sum is payable: LockBox sends the remainder to the depositor.
+    const short = {
+      lockId: LOCK_A,
+      recipients: [WINNER],
+      amounts: [4n],
+    };
+    const calls = planOne(short, 10n);
+    expect(calls[0].data.slice(0, 10)).toBe(
+      LOCKBOX.getFunction("releaseByOutcome")!.selector,
+    );
+    expect(planOne(outcomes[0], 10n)[0].data.slice(0, 10)).toBe(
+      LOCKBOX.getFunction("releaseByOutcome")!.selector,
+    );
+    expect(isLeafUnpayable(10n, [{ recipient: WINNER, amount: 10n }])).toBe(
+      false,
+    );
   });
 
   it("exports no relayer write: no settleFill, refund or settlementAuthority path", () => {

@@ -38,7 +38,10 @@ function describeRelease(result: WindowReleaseResult): string {
   if (result.carry && result.carry.status === "stale-light-client") {
     return "The Ethereum light client passed its age limit, so no outcome can be recorded. Each lock goes home by Reclaim after its deadline.";
   }
-  return `Outcome on Ethereum. Released ${result.released.length} lock(s).`;
+  const reclaimed = result.reclaimed.length
+    ? ` Returned ${result.reclaimed.length} unpayable lock(s) to their depositors.`
+    : "";
+  return `Outcome on Ethereum. Released ${result.released.length} lock(s).${reclaimed}`;
 }
 
 /**

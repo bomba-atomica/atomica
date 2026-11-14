@@ -1,9 +1,8 @@
-// SCOUT(#236) EDIT: import SellFlow, AuctionRevealer, SettleButton and ReleaseButton once the package index exports them.
 import {
   Faucet,
   SanityTest,
-  AuctionCreator,
   AuctionBidder,
+  SellFlow,
   AccountStatus,
   NetworkStatus,
   AppSettings,
@@ -13,8 +12,9 @@ import {
   AppStateProvider,
   useWallet,
 } from "@atomica/atomica-web-components";
+import { TradePanel } from "./TradePanel";
 
-function AppShell() {
+export function AppShell() {
   const { account, connect } = useWallet();
 
   return (
@@ -54,11 +54,13 @@ function AppShell() {
             <AppSettings />
             <Faucet />
             <SanityTest />
-            {/* SCOUT(#236) EDIT: mount SellFlow, AuctionBidder, the open step, SettleButton and ReleaseButton here. */}
+            {/* A trade: the seller sells, bidders bid, then anyone opens,
+                settles and releases the window. */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <AuctionCreator />
+              <SellFlow />
               <AuctionBidder />
             </div>
+            <TradePanel />
           </div>
         )}
       </main>

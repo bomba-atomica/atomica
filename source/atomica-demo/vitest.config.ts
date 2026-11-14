@@ -17,12 +17,23 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { playwright } from "@vitest/browser-playwright";
+import { nodePolyfills } from "vite-plugin-node-polyfills";
 import path from "path";
 
 export default defineConfig({
-  // SCOUT(#236) EDIT: App will import SellFlow, whose proof code needs the Node polyfills that vite.config.ts has and this config lacks; without them the app test of Web Tests (meta) may fail to load.
-  // AuctionBidder imports the proof generator; the app tests load it without polyfills.
-  plugins: [react()],
+  // App mounts SellFlow and AuctionBidder, which import the proof generator
+  // (@atomica/sdk/ethereum/proofs). The same Node polyfills as vite.config.ts.
+  plugins: [
+    react(),
+    nodePolyfills({
+      include: ["events", "buffer", "process", "util", "stream"],
+      globals: {
+        Buffer: true,
+        global: true,
+        process: true,
+      },
+    }),
+  ],
   resolve: {
     alias: {
       react: path.resolve(__dirname, "./node_modules/react"),

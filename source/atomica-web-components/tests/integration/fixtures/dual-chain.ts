@@ -58,7 +58,6 @@ export interface EthFixture {
   /** EVM chain ID. */
   chainId: number;
   /** Deployed contract addresses. */
-  // SCOUT(#236) EDIT: the release browser test needs that address, and a validator image that serves /v1/atomica/event_proof.
   contracts: {
     fakeETH: string;
     fakeUSD: string;
@@ -73,6 +72,14 @@ export interface EthFixture {
   };
   /** Bidder — holds FakeETH, submits auction bids. */
   bidder: {
+    address: string;
+    privateKey: string;
+  };
+  /**
+   * Carrier — funded with ETH for gas only. Neither seller nor bidder: it
+   * presses the permissionless release.
+   */
+  carrier: {
     address: string;
     privateKey: string;
   };
@@ -139,6 +146,10 @@ export async function setupIntegrationFixture(
       bidder: {
         address: info.eth.bidderAddress,
         privateKey: info.eth.bidderPrivateKey,
+      },
+      carrier: {
+        address: info.eth.carrierAddress,
+        privateKey: info.eth.carrierPrivateKey,
       },
     },
     aptos: {

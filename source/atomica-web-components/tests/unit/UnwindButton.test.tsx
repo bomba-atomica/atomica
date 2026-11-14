@@ -157,6 +157,7 @@ describe("UnwindButton", () => {
     mocks.carryAndReleaseWindow.mockResolvedValue({
       carry: { status: "recorded" },
       released: ["0xa", "0xb"],
+      reclaimed: [],
     });
     renderButton();
     await settled("eligible");
@@ -196,6 +197,7 @@ describe("UnwindButton", () => {
     mocks.carryAndReleaseWindow.mockResolvedValue({
       carry: { status: "unprovable", reason: "version 9 pruned" },
       released: [],
+      reclaimed: [],
     });
     renderButton();
     await settled("nothing-to-return");
