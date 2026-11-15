@@ -51,6 +51,31 @@ export interface WindowSchedule {
   closeOffsetsSecs: bigint[];
 }
 
+/** Fail deployment setup if Aptos and LockBox do not share the intended clock. */
+export function assertWindowSchedulesMatch(
+  expected: WindowSchedule,
+  lockBox: WindowSchedule,
+  aptos: WindowSchedule,
+): void {
+  const equal = (left: WindowSchedule, right: WindowSchedule) =>
+    left.daySecs === right.daySecs &&
+    left.closeOffsetsSecs.length === right.closeOffsetsSecs.length &&
+    left.closeOffsetsSecs.every(
+      (offset, index) => offset === right.closeOffsetsSecs[index],
+    );
+  if (!equal(lockBox, aptos)) {
+    throw new Error("Aptos and LockBox window schedules differ");
+  }
+  if (!equal(expected, lockBox)) {
+    throw new Error(
+      "LockBox window schedule differs from the intended schedule",
+    );
+  }
+  if (!equal(expected, aptos)) {
+    throw new Error("Aptos window schedule differs from the intended schedule");
+  }
+}
+
 /**
  * The production window clock: closes at 07:45 and 16:15 UTC. Aptos uses it
  * while no schedule is stored. Only a test chain (chain id 4) can store

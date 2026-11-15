@@ -18,7 +18,12 @@ import { waitForEthBlock } from "./eth-blocks.js";
 import { resolve as pathResolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
-import { PRODUCTION_WINDOW_SCHEDULE } from "@atomica/sdk/ethereum/lock-binding";
+import {
+    assertWindowSchedulesMatch,
+    PRODUCTION_WINDOW_SCHEDULE,
+    type WindowSchedule,
+} from "@atomica/sdk/ethereum/lock-binding";
+import { Aptos, AptosConfig } from "@aptos-labs/ts-sdk";
 import { execSync } from "child_process";
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
@@ -371,6 +376,13 @@ export async function setupDualChainTestnet(
     ]);
     console.log(`[Dual-Chain] ✓ LockBox implementation: ${lockBoxImplementation}`);
     console.log(`[Dual-Chain] ✓ LockBox: ${lockBox}`);
+    const lockBoxContract = new ethers.Contract(lockBox, lockBoxArtifact.abi, deployer);
+    const [lockBoxDaySecs, lockBoxOffsets] = await lockBoxContract.windowSchedule();
+    const lockBoxSchedule: WindowSchedule = {
+        daySecs: BigInt(lockBoxDaySecs),
+        closeOffsetsSecs: [...lockBoxOffsets].map((offset: bigint) => BigInt(offset)),
+    };
+    assertWindowSchedulesMatch(windowSchedule, lockBoxSchedule, windowSchedule);
 
     const aptosDeployerPrivateKey =
         process.env.APTOS_DEPLOYER_PRIVATE_KEY ||
@@ -428,6 +440,20 @@ export async function setupDualChainTestnet(
         fundAmount: 10_000_000_000n,
     });
     console.log(`[Dual-Chain] ✓ Aptos contracts deployed`);
+
+    const aptos = new Aptos(new AptosConfig({ fullnode: nodeUrl }));
+    const [aptosDaySecs, aptosOffsets] = await aptos.view({
+        payload: {
+            function: `${aptosModuleAddress}::eth_proof::get_window_schedule`,
+            functionArguments: [],
+        },
+    });
+    const aptosSchedule: WindowSchedule = {
+        daySecs: BigInt(aptosDaySecs as string),
+        closeOffsetsSecs: (aptosOffsets as string[]).map((offset) => BigInt(offset)),
+    };
+    assertWindowSchedulesMatch(windowSchedule, lockBoxSchedule, aptosSchedule);
+    console.log(`[Dual-Chain] ✓ LockBox and Aptos window schedules match`);
 
     console.log("[Dual-Chain] Dual-chain testnet ready.");
 

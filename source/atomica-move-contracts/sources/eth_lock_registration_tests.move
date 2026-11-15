@@ -516,4 +516,11 @@ module atomica::eth_lock_registration_tests {
         chain_id::initialize_for_test(framework, 4);
         eth_proof::set_window_schedule(atomica, 1800, vector[300, 600, 900]);
     }
+
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 18, location = atomica::eth_proof)] // E_INVALID_SCHEDULE
+    fun set_window_schedule_aborts_on_day_secs_above_max(framework: &signer, atomica: &signer) {
+        chain_id::initialize_for_test(framework, 4);
+        eth_proof::set_window_schedule(atomica, 86401, vector[86401]);
+    }
 }

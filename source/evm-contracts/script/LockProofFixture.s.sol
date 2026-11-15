@@ -60,6 +60,7 @@ contract LockProofFixture is Script {
             (address(fakeETH), address(fakeUSD), lightClient, typeTag, daySecs, closeOffsetsSecs, user)
         );
         LockBox lockBox = LockBox(address(new ERC1967Proxy(address(implementation), initialization)));
+        deployer.assertWindowSchedule(lockBox, daySecs, closeOffsetsSecs);
         uint64 windowId = uint64(vm.envOr("WINDOW_ID", uint256(lockBox.currentWindowId())));
         fakeETH.mint(user, TEN_ETH);
         fakeETH.approve(address(lockBox), TEN_ETH);

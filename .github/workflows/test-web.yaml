@@ -232,6 +232,17 @@ jobs:
         working-directory: source/atomica-sdk
         run: bun run test
 
+      - name: Check shared window clock vectors
+        run: bun scripts/check-window-vectors.js
+
+      - name: Prove the window vector check rejects drift
+        run: |
+          if bun scripts/check-window-vectors.js scripts/fixtures/window-vectors-drift/window_clock_vectors.json; then
+            echo "FAIL: the window vector check accepted the drift fixture"
+            exit 1
+          fi
+          echo "OK: the window vector check rejected the drift fixture"
+
       - name: Run atomica-web-components unit tests
         working-directory: source/atomica-web-components
         run: bun run test:unit

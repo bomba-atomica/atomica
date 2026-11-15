@@ -22,6 +22,7 @@ import {
 import { generateEthLockProofCommand, type EthLockProofResult } from "../src/browser-commands";
 import { syncAnvilClockToHost, waitForCertifiedEthBlock, waitForEthBlock } from "../src/eth-blocks";
 import {
+    assertWindowSchedulesMatch,
     currentWindowId,
     ethLockDeadline,
     PRODUCTION_WINDOW_SCHEDULE,
@@ -269,18 +270,21 @@ describe.sequential("Proof-gated LockBox with Aptos lock registration (live dual
         // Both chains run the test schedule: LockBox froze it at deploy and
         // eth_proof stored it right after publish.
         const [daySecs, offsets] = await lockBox.windowSchedule();
-        expect([BigInt(daySecs), [...offsets].map((o: bigint) => BigInt(o))]).toEqual([
-            testSchedule.daySecs,
-            testSchedule.closeOffsetsSecs,
-        ]);
+        const lockBoxSchedule: WindowSchedule = {
+            daySecs: BigInt(daySecs),
+            closeOffsetsSecs: [...offsets].map((o: bigint) => BigInt(o)),
+        };
         const [aptosDaySecs, aptosOffsets] = await aptos.view({
             payload: {
                 function: `${info.aptos.moduleAddress}::eth_proof::get_window_schedule`,
                 functionArguments: [],
             },
         });
-        expect(String(aptosDaySecs)).toBe("900");
-        expect((aptosOffsets as string[]).map(String)).toEqual(["900"]);
+        const aptosSchedule: WindowSchedule = {
+            daySecs: BigInt(aptosDaySecs as string),
+            closeOffsetsSecs: (aptosOffsets as string[]).map((offset) => BigInt(offset)),
+        };
+        assertWindowSchedulesMatch(testSchedule, lockBoxSchedule, aptosSchedule);
 
         // The lock binds to the SDK currentWindowId of that schedule: the
         // window open at the host second, or the next one when the anvil

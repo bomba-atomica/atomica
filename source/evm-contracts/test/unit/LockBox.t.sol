@@ -237,6 +237,32 @@ contract LockBoxTest is Test {
         _deploy(86_400, _offsets(1, 86_400));
     }
 
+    function test_constructorRejectsDaySecsAboveMax() public {
+        vm.expectRevert(LockBox.InvalidWindowSchedule.selector);
+        _deploy(86_401, _offsets(900));
+    }
+
+    function test_constructorAcceptsDaySecsAtMax() public {
+        LockBox atMax = _deploy(86_400, _offsets(86_400));
+        (uint64 actualDay,) = atMax.windowSchedule();
+        assertEq(actualDay, 86_400);
+    }
+
+    function test_deployScriptAssertsWindowSchedule() public {
+        (uint64 day, uint64[] memory offsets) = deployer.productionWindowSchedule();
+        deployer.assertWindowSchedule(lockBox, day, offsets);
+    }
+
+    function test_deployScriptRejectsMismatchedSchedule() public {
+        (uint64 day, uint64[] memory offsets) = deployer.productionWindowSchedule();
+        vm.expectRevert(DeployLockBox.WindowScheduleMismatch.selector);
+        deployer.assertWindowSchedule(lockBox, day - 1, offsets);
+        vm.expectRevert(DeployLockBox.WindowScheduleMismatch.selector);
+        deployer.assertWindowSchedule(lockBox, day, _offsets(offsets[0]));
+        vm.expectRevert(DeployLockBox.WindowScheduleMismatch.selector);
+        deployer.assertWindowSchedule(lockBox, day, _offsets(offsets[0], offsets[1] + 1));
+    }
+
     function test_deployScriptUsesProductionSchedule() public {
         (uint64 day, uint64[] memory offsets) = new DeployLockBox().productionWindowSchedule();
         assertEq(day, 86_400);

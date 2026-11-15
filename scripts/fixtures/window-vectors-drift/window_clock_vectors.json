@@ -1,0 +1,13 @@
+{
+  "day_secs": 86400,
+  "close_offsets_secs": [27900, 58500],
+  "reclaim_delay_secs": 259200,
+  "rows": [
+    {
+      "at": 0,
+      "window_id": 0,
+      "close": 27901,
+      "deadline": 287101
+    }
+  ]
+}
