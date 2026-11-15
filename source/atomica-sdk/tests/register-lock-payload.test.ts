@@ -12,7 +12,7 @@
  * Note: Aptos-side fake token mint payload removed — fake tokens mint on Ethereum.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import type { InputEntryFunctionData } from "@aptos-labs/ts-sdk";
 import { ethers } from "ethers";
 import { sha3_256 } from "@noble/hashes/sha3";
@@ -70,6 +70,25 @@ function makeMockProof(): LockedBalanceProof {
   };
 }
 
+const FAKE_ETH = "0x" + "33".repeat(20);
+const FAKE_USD = "0x" + "44".repeat(20);
+
+beforeEach(() => {
+  globalThis.__ATOMICA_CHAIN_CONFIG__ = {
+    ethereum: {
+      rpcUrl: "http://localhost:8545",
+      fakeETH: FAKE_ETH,
+      fakeUSD: FAKE_USD,
+      lockBox: "0x" + "55".repeat(20),
+    },
+    aptos: { contractAddress: "0xtest" },
+  };
+});
+
+afterEach(() => {
+  globalThis.__ATOMICA_CHAIN_CONFIG__ = undefined;
+});
+
 // ── getRegisterLockPayload ────────────────────────────────────────────────────
 
 describe("getRegisterLockPayload", () => {
@@ -91,8 +110,9 @@ describe("getRegisterLockPayload", () => {
   });
 
   it("getRegisterLockPayload with asset FakeUSD has the lock_receipt::FakeUSD type argument, and FakeETH with no asset", () => {
+    const usdProof = { ...makeMockProof(), tokenAddress: FAKE_USD };
     const usd = getRegisterLockPayload(
-      makeMockProof(),
+      usdProof,
       "FakeUSD",
     ) as InputEntryFunctionData;
     expect(usd.typeArguments).toEqual([
@@ -107,6 +127,44 @@ describe("getRegisterLockPayload", () => {
     // Only the type argument differs.
     expect(usd.function).toBe(eth.function);
     expect(usd.functionArguments).toEqual(eth.functionArguments);
+  });
+
+  it("rejects a proof token that does not match the requested asset", () => {
+    const proof = makeMockProof();
+    expect(() => getRegisterLockPayload(proof, "FakeUSD")).toThrow(
+      `Cannot register FakeUSD: proof token ${FAKE_ETH} does not match configured token ${FAKE_USD}`,
+    );
+    const usdProof = { ...proof, tokenAddress: FAKE_USD };
+    expect(() => getRegisterLockPayload(usdProof, "FakeETH")).toThrow(
+      `Cannot register FakeETH: proof token ${FAKE_USD} does not match configured token ${FAKE_ETH}`,
+    );
+  });
+
+  it("matches configured FakeETH and FakeUSD tokens case-insensitively", () => {
+    for (const [asset, address] of [
+      ["FakeETH", FAKE_ETH],
+      ["FakeUSD", FAKE_USD],
+    ] as const) {
+      const proof = {
+        ...makeMockProof(),
+        tokenAddress: address.toUpperCase().replace("0X", "0x"),
+      };
+      const normal = getRegisterLockPayload(
+        { ...proof, tokenAddress: address },
+        asset,
+      );
+      const mixedCase = getRegisterLockPayload(proof, asset);
+      expect(mixedCase.function).toBe(normal.function);
+      expect(mixedCase.typeArguments).toEqual(normal.typeArguments);
+      expect(mixedCase.functionArguments).toEqual(normal.functionArguments);
+    }
+  });
+
+  it("checks the FakeETH token when asset is omitted", () => {
+    const usdProof = { ...makeMockProof(), tokenAddress: FAKE_USD };
+    expect(() => getRegisterLockPayload(usdProof)).toThrow(
+      `Cannot register FakeETH: proof token ${FAKE_USD} does not match configured token ${FAKE_ETH}`,
+    );
   });
 
   it("getRegisterLockPayload sends eight arguments and no deadline", () => {

@@ -30,7 +30,9 @@ section and [v0 Architecture §3](../architecture/v0-architecture.md#3--cross-ch
 - **Registration.** Any account may submit `register_ethereum_lock`. The
   proof names the depositor. The receipt stores that Ethereum address as
   `eth_owner`. A bidder registers its FakeUSD collateral lock the same way,
-  with the `FakeUSD` asset type. The receipt id, and the collateral lock id
+  with the `FakeUSD` asset type. The SDK builder checks that the selected
+  asset matches the proven token address in the active chain config before it
+  builds the registration payload. The receipt id, and the collateral lock id
   of the bid, is the LockBox lock id, never a transaction hash.
 - **Ownership.** The receipt belongs to the depositor's Ethereum-derivable
   Aptos account, derived on chain from the address and the SIWE domain pinned
