@@ -39,7 +39,6 @@ exemptions:
       - source/atomica-web-components/tests/integration/11-claim-and-reclaim.test.tsx
       - source/atomica-web-components/tests/integration/12a-bid-storage.test.tsx
       - source/atomica-web-components/tests/integration/13-bid-history.test.tsx
-      - source/atomica-web-components/tests/integration/15-pool-events.test.tsx
       - source/atomica-web-components/tests/integration/16-settle-100-bids.test.tsx
       - source/atomica-web-components/tests/integration/17-unwind.test.tsx
       - source/atomica-web-components/tests/integration/selectors.test.tsx

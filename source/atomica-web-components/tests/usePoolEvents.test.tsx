@@ -9,9 +9,8 @@
  *   - Graceful degradation when Ethereum RPC URL is unreachable
  *   - Cleanup on unmount does not crash
  *
- * The subscription happy-path (callback fires on event) is covered by the
- * integration test at tests/integration/15-pool-events.test.tsx which uses
- * a live dual-chain Docker testnet.
+ * The hook has no production caller; these tests cover its defensive
+ * behaviour while it remains available.
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";

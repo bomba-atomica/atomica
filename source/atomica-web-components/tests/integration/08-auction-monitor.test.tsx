@@ -219,6 +219,7 @@ describe.sequential("08: Auction Monitor countdown and status", () => {
       const auction = await createLiveWindow(fixture, aptosClient, operator, {
         pairBcs: PAIR_BCS,
         lockAmount,
+        minWindowLeftSecs: 360n,
       });
 
       expect(
