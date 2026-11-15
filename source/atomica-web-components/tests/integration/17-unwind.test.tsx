@@ -98,6 +98,114 @@ const BID_QUANTITY = ethers.parseEther("0.1");
 const STALL_TIMEOUT_SECS = 2_700;
 const ERC20 = ["function balanceOf(address) view returns (uint256)"];
 
+type CarryRequestTraceEntry = {
+  label: string;
+  startedAt: number;
+  completedAt: number | null;
+  error?: string;
+};
+
+function traceCarryRequest<T>(
+  requests: CarryRequestTraceEntry[],
+  label: string,
+  request: () => Promise<T>,
+): Promise<T> {
+  const entry: CarryRequestTraceEntry = {
+    label,
+    startedAt: Date.now(),
+    completedAt: null,
+  };
+  requests.push(entry);
+
+  return Promise.resolve()
+    .then(request)
+    .then(
+      (result) => {
+        entry.completedAt = Date.now();
+        return result;
+      },
+      (error: unknown) => {
+        entry.completedAt = Date.now();
+        entry.error = error instanceof Error ? error.message : String(error);
+        throw error;
+      },
+    );
+}
+
+function formatCarryRequestTrace(
+  requests: CarryRequestTraceEntry[],
+  now = Date.now(),
+): string {
+  const pending = requests.filter((request) => request.completedAt === null);
+  const lastCompleted = requests
+    .filter((request) => request.completedAt !== null)
+    .reduce<CarryRequestTraceEntry | undefined>(
+      (latest, request) =>
+        !latest || request.completedAt! > latest.completedAt!
+          ? request
+          : latest,
+      undefined,
+    );
+
+  const pendingDetails = pending.length
+    ? pending
+        .map(
+          (request) =>
+            `- ${request.label} (${now - request.startedAt} ms pending)`,
+        )
+        .join("\n")
+    : "- none";
+  const lastCompletedDetails = lastCompleted
+    ? `${lastCompleted.label} in ${lastCompleted.completedAt! - lastCompleted.startedAt} ms${lastCompleted.error ? ` (failed: ${lastCompleted.error})` : ""}`
+    : "none";
+
+  return [
+    "Pending carrier requests:",
+    pendingDetails,
+    `Last completed carrier request: ${lastCompletedDetails}`,
+  ].join("\n");
+}
+
+function installCarryRequestTrace(requests: CarryRequestTraceEntry[]): () => void {
+  const originalFetch = window.fetch;
+  const wallet = window.ethereum;
+  const originalWalletRequest = wallet.request;
+
+  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : undefined;
+    const url = request?.url ?? input.toString();
+    const method = init?.method ?? request?.method ?? "GET";
+    return traceCarryRequest(requests, `fetch ${method} ${url}`, () =>
+      originalFetch.call(window, input, init),
+    );
+  }) as typeof window.fetch;
+
+  wallet.request = (args) =>
+    traceCarryRequest(requests, `wallet ${args.method}`, () =>
+      originalWalletRequest.call(wallet, args),
+    );
+
+  return () => {
+    window.fetch = originalFetch;
+    wallet.request = originalWalletRequest;
+  };
+}
+
+describe("carry request trace", () => {
+  it("lists a request that never finishes", () => {
+    const requests: CarryRequestTraceEntry[] = [];
+    void traceCarryRequest(
+      requests,
+      "fetch GET https://aptos.example/v1/view",
+      () => new Promise<never>(() => {}),
+    );
+
+    expect(formatCarryRequestTrace(requests)).toContain(
+      "https://aptos.example/v1/view",
+    );
+  });
+});
+
 describe.sequential("17: permissionless unwind and reclaim", () => {
   let fixture: IntegrationFixture;
   let aptosClient: Aptos;
@@ -230,14 +338,26 @@ describe.sequential("17: permissionless unwind and reclaim", () => {
         expect(screen.getByTestId("carry-outcome-button")).not.toBeDisabled(),
       { timeout: 60_000 },
     );
-    fireEvent.click(screen.getByTestId("carry-outcome-button"));
-    await waitFor(
-      () =>
-        expect(screen.getByTestId("unwind-status").textContent).toContain(
-          "Released 2 lock(s)",
-        ),
-      { timeout: 300_000 },
-    );
+    const carryRequests: CarryRequestTraceEntry[] = [];
+    const restoreCarryRequestTrace = installCarryRequestTrace(carryRequests);
+    try {
+      fireEvent.click(screen.getByTestId("carry-outcome-button"));
+      await waitFor(
+        () =>
+          expect(screen.getByTestId("unwind-status").textContent).toContain(
+            "Released 2 lock(s)",
+          ),
+        {
+          timeout: 300_000,
+          onTimeout: (error) => {
+            error.message = `${error.message}\n${formatCarryRequestTrace(carryRequests)}`;
+            return error;
+          },
+        },
+      );
+    } finally {
+      restoreCarryRequestTrace();
+    }
 
     expect(await fakeEth.balanceOf(seller)).toBe(sellerPreLock);
     expect(await fakeUsd.balanceOf(bidder)).toBe(bidderPreLock);
