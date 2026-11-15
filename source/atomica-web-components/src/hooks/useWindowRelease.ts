@@ -221,6 +221,8 @@ export function useWindowRelease(
         }),
       );
     } catch (e) {
+      const partial = (e as { result?: WindowReleaseResult }).result;
+      if (partial) setResult(partial);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setReleasing(false);

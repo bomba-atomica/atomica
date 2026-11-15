@@ -32,6 +32,7 @@ import {
   ethersCarrierChain,
   findOutcomeEvent,
   planWindowReleases,
+  revertErrorName,
   type CarryResult,
   type OutcomeEventLocation,
   type WindowLockOutcome,
@@ -52,6 +53,21 @@ export interface WindowReleaseResult {
   released: string[];
   /** Hashes of `reclaimUnpayable` and whole-lock `reclaim` transactions sent */
   reclaimed: string[];
+  /** Lock ids skipped because another wallet closed them before our send. */
+  skipped: string[];
+  /** True when a later send failed after earlier transactions were submitted. */
+  partial?: boolean;
+}
+
+/** Send failure that preserves transactions already broadcast for this window. */
+export class WindowReleaseError extends Error {
+  constructor(
+    message: string,
+    readonly result: WindowReleaseResult,
+  ) {
+    super(message);
+    this.name = "WindowReleaseError";
+  }
 }
 
 const RECLAIM_UNPAYABLE_SELECTOR = new ethers.Interface(
@@ -88,7 +104,7 @@ export async function carryAndReleaseWindow(input: {
     ...ids.sellers.map((id) => ({ id, asset: "FakeETH" as const })),
     ...ids.collateral.map((id) => ({ id, asset: "FakeUSD" as const })),
   ];
-  if (all.length === 0) return { released: [], reclaimed: [] };
+  if (all.length === 0) return { released: [], reclaimed: [], skipped: [] };
 
   const locks: LockFields[] = [];
   for (const { id } of all) {
@@ -97,7 +113,11 @@ export async function carryAndReleaseWindow(input: {
     locks.push(lock);
   }
 
-  let result: WindowReleaseResult = { released: [], reclaimed: [] };
+  let result: WindowReleaseResult = {
+    released: [],
+    reclaimed: [],
+    skipped: [],
+  };
   let outcome = await getRecordedOutcome(input.provider, locks[0]);
   if (!outcome.recorded) {
     const at =
@@ -119,7 +139,7 @@ export async function carryAndReleaseWindow(input: {
       at.version,
       at.eventIndex,
     );
-    result = { carry, released: [], reclaimed: [] };
+    result = { carry, released: [], reclaimed: [], skipped: [] };
     if (carry.status !== "recorded" && carry.status !== "already-recorded") {
       return result;
     }
@@ -147,7 +167,41 @@ export async function carryAndReleaseWindow(input: {
     auctionVoided: outcome.voided,
   });
   for (const call of calls) {
-    const hash = (await sendLockBoxCall(input.signer, call)).hash;
+    let hash: string;
+    try {
+      hash = (await sendLockBoxCall(input.signer, call)).hash;
+    } catch (e) {
+      if (revertErrorName(e) === "LockNotOpen") {
+        const seen = new Set<unknown>();
+        let current: unknown = e;
+        while (current && typeof current === "object" && !seen.has(current)) {
+          seen.add(current);
+          const data = (current as { data?: unknown }).data;
+          if (typeof data === "string") {
+            try {
+              const parsed = new ethers.Interface(LOCKBOX_ABI).parseError(data);
+              if (parsed?.name === "LockNotOpen") {
+                result.skipped.push(String(parsed.args[0]));
+                current = null;
+                break;
+              }
+            } catch {
+              // This nested data belongs to a different error interface.
+            }
+          }
+          current =
+            (current as { error?: unknown; info?: unknown }).error ??
+            (current as { info?: unknown }).info;
+        }
+        if (current !== null) result.skipped.push("unknown lock");
+        continue;
+      }
+      result.partial = true;
+      throw new WindowReleaseError(
+        e instanceof Error ? e.message : String(e),
+        result,
+      );
+    }
     if (
       call.data.startsWith(RECLAIM_UNPAYABLE_SELECTOR) ||
       call.data.startsWith(RECLAIM_SELECTOR)

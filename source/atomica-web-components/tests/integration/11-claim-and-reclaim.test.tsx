@@ -65,11 +65,23 @@ import {
   getBidResults,
   getLockOutcome,
 } from "@atomica/sdk/aptos";
-import { getLockStatus, LOCK_STATUS } from "@atomica/sdk/ethereum";
+import {
+  getLockById,
+  getLockStatus,
+  getRecordedOutcome,
+  LOCK_STATUS,
+  sendLockBoxCall,
+} from "@atomica/sdk/ethereum";
 import { quoteForFill } from "@atomica/sdk";
 import { WalletContext } from "../../src/context/WalletContext";
 import { ethers } from "ethers";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
+import {
+  carryOutcome,
+  ethersCarrierChain,
+  outcomeEventOfTransaction,
+  planWindowReleases,
+} from "@atomica/sdk/settlement/outcome-carrier";
 
 /** Whole USD per whole FakeETH. */
 const BID_PRICE = 2000n;
@@ -234,7 +246,11 @@ describe.sequential(
           TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS,
         );
         await openAndFinalizeWindowDirect(aptosClient, operator, auction);
-        await settleAuctionDirect(aptosClient, operator, auction);
+        const settleTx = await settleAuctionDirect(
+          aptosClient,
+          operator,
+          auction,
+        );
 
         const state = await getAuctionState(aptosClient, moduleAddr, auction);
         expect(state.settled).toBe(true);
@@ -265,6 +281,51 @@ describe.sequential(
           carrierUsd: (await fakeUsd.balanceOf(carrierAccount)) as bigint,
         };
 
+        // A second wallet carries the outcome and releases the seller lock
+        // before the ReleaseButton is pressed by the carrier wallet.
+        const outcomeAt = await outcomeEventOfTransaction(
+          fixture.aptos.nodeUrl,
+          moduleAddr,
+          settleTx,
+        );
+        expect(outcomeAt).toBeTruthy();
+        const sellerWallet = new ethers.Wallet(
+          fixture.eth.seller.privateKey,
+          rpc,
+        );
+        await carryOutcome(
+          await ethersCarrierChain(sellerWallet, fixture.eth.contracts.lockBox),
+          [fixture.aptos.nodeUrl],
+          outcomeAt!.version,
+          outcomeAt!.eventIndex,
+        );
+        const sellerLock = await getLockById(rpc, auction.sellerLockId);
+        const collateralLock = await getLockById(rpc, collateral);
+        expect(sellerLock).not.toBeNull();
+        expect(collateralLock).not.toBeNull();
+        const outcome = await getRecordedOutcome(rpc, sellerLock!);
+        const calls = planWindowReleases({
+          lockBoxAddress: fixture.eth.contracts.lockBox,
+          outcomes: [
+            {
+              lockId: auction.sellerLockId,
+              recipients: sellerOutcome.recipients,
+              amounts: sellerOutcome.amounts,
+            },
+            {
+              lockId: collateral,
+              recipients: collateralOutcome.recipients,
+              amounts: collateralOutcome.amounts,
+            },
+          ],
+          openLocks: [sellerLock!, collateralLock!],
+          recordedRoot: outcome.root,
+        });
+        await sendLockBoxCall(sellerWallet, calls[0]);
+        expect(await getLockStatus(rpc, auction.sellerLockId)).toBe(
+          LOCK_STATUS.Released,
+        );
+
         render(
           <ReleaseProviders account={carrierAccount}>
             <ReleaseButton
@@ -289,10 +350,13 @@ describe.sequential(
             expect(
               screen.getByTestId(SELECTORS.releaseButton.releaseStatus)
                 .textContent,
-            ).toBe("Released 2 lock(s).");
+            ).toBe("Released 1 lock(s).");
           },
           { timeout: 300_000 },
         );
+        expect(
+          screen.queryByTestId(SELECTORS.releaseButton.releaseError),
+        ).toBeNull();
 
         // The winner's FakeETH rises by its payout in the seller lock's leaf,
         // the seller's FakeUSD by its payout in the collateral lock's leaf.

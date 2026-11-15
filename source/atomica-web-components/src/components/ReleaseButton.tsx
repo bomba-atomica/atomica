@@ -32,10 +32,21 @@ function describeResult(result: WindowReleaseResult): string {
   if (result.carry?.status === "stale-light-client") {
     return "The Ethereum light client passed its age limit, so no outcome can be recorded. Each lock goes home by Reclaim after its deadline.";
   }
+  if (result.carry?.status === "auction-reclaimed") {
+    return "This auction was already reclaimed. Reclaim each open lock to return it to its depositor.";
+  }
   const reclaimed = result.reclaimed.length
     ? ` An unpayable leaf voided the auction; returned ${result.reclaimed.length} open lock(s) to their depositors.`
     : "";
-  return `Released ${result.released.length} lock(s).${reclaimed}`;
+  const skipped = result.skipped.length
+    ? ` Skipped ${result.skipped.map(short).join(", ")} because those locks were already closed.`
+    : "";
+  const hashes =
+    (result.skipped.length > 0 || result.partial) &&
+    (result.released.length || result.reclaimed.length)
+      ? ` Transactions: ${[...result.released, ...result.reclaimed].join(", ")}.`
+      : "";
+  return `Released ${result.released.length} lock(s).${reclaimed}${skipped}${hashes}`;
 }
 
 /**

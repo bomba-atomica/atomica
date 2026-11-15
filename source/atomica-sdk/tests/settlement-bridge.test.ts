@@ -693,6 +693,26 @@ describe("carryOutcome", () => {
     const result = await carryOutcome(chain, ["http://node-a"], 1337n, 2n);
     expect(result.status).toBe("stale-light-client");
   });
+
+  it("reports an auction already reclaimed without retrying its outcome", async () => {
+    goldenNode();
+    const { chain, sent } = fakeChain(2n, [
+      Object.assign(new Error("reclaimed"), {
+        code: "CALL_EXCEPTION",
+        data: LOCKBOX.encodeErrorResult("AuctionWasReclaimed", [
+          "0x" + "00".repeat(32),
+        ]),
+      }),
+    ]);
+    expect(await carryOutcome(chain, ["http://node-a"], 1337n, 2n)).toEqual({
+      status: "auction-reclaimed",
+    });
+    expect(
+      sent.filter((data) =>
+        data.startsWith(LOCKBOX.getFunction("recordOutcome")!.selector),
+      ),
+    ).toHaveLength(1);
+  });
 });
 
 // ─── No settlement authority (issue 195) ──────────────────────────────────
