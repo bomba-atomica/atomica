@@ -54,7 +54,8 @@ export const APTOS_LIGHT_CLIENT_ABI = [
 // AuctionOutcome: the payouts, then the remainder to the depositor), by
 // reclaimUnpayable (its recorded leaf is unpayable, so it goes home at once), or
 // by reclaim to its depositor after its deadline. Anyone may call each, and
-// anyone may carry an outcome with recordOutcome. There is no relayer.
+// anyone may carry an outcome with recordOutcome. A trusted admin can upgrade
+// the proxy until the one-way freeze.
 export const LOCKBOX_ABI = [
   "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash) returns (bytes32 lockId)",
   `function recordOutcome(${EVENT_PROOF_TUPLE} proof) returns (bytes32 key)`,
@@ -68,6 +69,10 @@ export const LOCKBOX_ABI = [
   "function windowClose(uint64 windowId) view returns (uint64)",
   "function lockDeadline(uint64 windowId) view returns (uint64)",
   "function windowSchedule() view returns (uint64 daySecs, uint64[] closeOffsetsSecs)",
+  "function admin() view returns (address)",
+  "function frozen() view returns (bool)",
+  "function freeze()",
+  "function upgradeToAndCall(address newImplementation, bytes data) payable",
   "function RECLAIM_DELAY() view returns (uint64)",
   "function commitmentStorageKey(bytes32 lockId) pure returns (bytes32)",
   "function commitments(bytes32 lockId) view returns (bytes32)",
@@ -76,6 +81,8 @@ export const LOCKBOX_ABI = [
   "function auctionReclaimed(bytes32 auctionKey) view returns (bool)",
   "function nextLockNonce() view returns (uint256)",
   "function lightClient() view returns (address)",
+  "function fakeETH() view returns (address)",
+  "function fakeUSD() view returns (address)",
   "event Locked(bytes32 indexed lockId, address indexed depositor, address indexed token, uint256 nonce, uint256 amount, uint64 windowId, bytes32 pairHash, uint64 deadline)",
   // `deadline` is lockDeadline(windowId); the auction key does not cover it.
   "event OutcomeRecorded(bytes32 indexed auctionKey, uint64 windowId, bytes32 pairHash, uint64 deadline, bytes32 root, uint64 leafCount, uint64 aptosVersion)",

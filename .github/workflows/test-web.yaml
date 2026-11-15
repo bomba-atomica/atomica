@@ -1001,22 +1001,23 @@ jobs:
       - name: Check light client and LockBox formatting
         working-directory: source/evm-contracts
         run: >-
-          forge fmt --check src/aptos src/escrow test/unit/aptos test/unit/LockBox.t.sol
+          forge fmt --check src/aptos src/escrow test/unit/aptos test/unit/LockBox.t.sol test/unit/LockBoxUpgrade.t.sol
           test/invariant test/integration/LockBoxAptosOutcome.t.sol test/utils/MockAptosLightClient.sol
-          test/utils/OutcomeTreeBuilder.sol script/DeployAptosLightClient.s.sol script/DeployLockBox.s.sol
+          test/utils/OutcomeTreeBuilder.sol test/utils/LockBoxV2Mock.sol script/DeployAptosLightClient.s.sol
+          script/DeployLockBox.s.sol script/LockProofFixture.s.sol
 
       - name: Run light client and LockBox tests (at least 60 must run)
         working-directory: source/evm-contracts
         run: |
           set -euo pipefail
-          forge test --match-path 'test/{unit/aptos/*,unit/LockBox.t.sol,invariant/LockBox*,integration/LockBoxAptosOutcome.t.sol}' -vv | tee forge-aptos.log
+          forge test --match-path 'test/{unit/aptos/*,unit/LockBox.t.sol,unit/LockBoxUpgrade.t.sol,invariant/LockBox*,integration/LockBoxAptosOutcome.t.sol}' -vv | tee forge-aptos.log
           passed=$(grep -oE '[0-9]+ tests passed' forge-aptos.log | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "Light client and LockBox tests passed: $passed"
           if [ "$passed" -lt 60 ]; then
             echo "::error::expected at least 60 light client and LockBox tests, $passed ran"
             exit 1
           fi
-          for suite in LockBoxTest OutcomeTreeVectorsTest LockBoxInvariantTest LockBoxAptosOutcomeTest; do
+          for suite in LockBoxTest OutcomeTreeVectorsTest LockBoxInvariantTest LockBoxAptosOutcomeTest LockBoxUpgradeTest DeployLockBoxProxyTest; do
             grep -q "test/.*:${suite}$" forge-aptos.log || { echo "::error::suite ${suite} did not run"; exit 1; }
           done
 

@@ -34,6 +34,10 @@
       "import": "./dist/contract-check.js",
       "types": "./dist/contract-check.d.ts"
     },
+    "./freeze-status": {
+      "import": "./dist/freeze-status.js",
+      "types": "./dist/freeze-status.d.ts"
+    },
     "./settlement/bridge": {
       "import": "./dist/settlement/bridge.js",
       "types": "./dist/settlement/bridge.d.ts"

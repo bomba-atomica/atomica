@@ -56,7 +56,9 @@ contract LockBoxAptosOutcomeTest is AptosVectors, AptosTestChain {
     /// A LockBox on the production window schedule.
     function _lockBox(IAptosLightClient client) internal returns (LockBox) {
         (uint64 daySecs, uint64[] memory closeOffsets) = new DeployLockBox().productionWindowSchedule();
-        return new LockBox(address(fakeETH), address(fakeUSD), client, tag, daySecs, closeOffsets);
+        (LockBox proxy,) = new DeployLockBox()
+            .deployProxy(address(fakeETH), address(fakeUSD), client, tag, daySecs, closeOffsets, address(this));
+        return proxy;
     }
 
     function _lock(LockBox lockBox, address who, address token, uint256 amount, uint64 w, bytes32 p)

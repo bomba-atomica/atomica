@@ -3,10 +3,11 @@ pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {IAptosLightClient} from "../aptos/IAptosLightClient.sol";
 import {OutcomeTree} from "./OutcomeTree.sol";
 
-// SCOUT(#242) DOC: "no admin, relayer, owner or upgrade key" below cites the decision record; say here too that a recorded outcome trusts the Aptos package upgrade key, if the owner names it (decision 30).
 /**
  * @title LockBox
  * @notice Escrow for FakeETH and FakeUSD locked into Atomica auctions.
@@ -18,7 +19,9 @@ import {OutcomeTree} from "./OutcomeTree.sol";
  *      - `reclaimUnpayable`: the recorded outcome covers the lock with a leaf LockBox cannot pay,
  *        so the whole amount goes back to its depositor at once.
  *      A lock that cannot be paid as recorded goes home.
- *      There is no admin, relayer, owner or upgrade key (docs/decisions/trustless-v0-1-unwinding.md).
+ *      The deploy-time admin can upgrade LockBox until the one-way `freeze`; the admin has no
+ *      function that moves, pauses or blocks a lock. Until the Move package is frozen, outcomes
+ *      also trust its upgrade admin.
  *
  *      Auction binding. A lock names its auction: `auctionKey(windowId, pairHash)`. LockBox computes
  *      the lock's deadline itself, `lockDeadline(windowId)`, from the window clock frozen at deploy
@@ -49,7 +52,7 @@ import {OutcomeTree} from "./OutcomeTree.sol";
  *      - Slot 4: nextLockNonce    uint256
  *      - Slot 5: outcomeTypeTag   bytes
  */
-contract LockBox {
+contract LockBox is Initializable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
     // ==================== Types ====================
@@ -99,9 +102,22 @@ contract LockBox {
     /// @notice Slot 5. BCS `TypeTag` of `<atomica>::auction::AuctionOutcome`.
     bytes public outcomeTypeTag;
 
-    IERC20 public immutable fakeETH;
-    IERC20 public immutable fakeUSD;
-    IAptosLightClient public immutable lightClient;
+    /// @custom:storage-location erc7201:atomica.storage.LockBox
+    struct LockBoxStorage {
+        IERC20 fakeETH;
+        IERC20 fakeUSD;
+        IAptosLightClient lightClient;
+        uint64 windowDaySecs;
+        uint64 windowCount;
+        uint64 closeOffset0;
+        uint64 closeOffset1;
+        address admin;
+        bool frozen;
+    }
+
+    // keccak256(abi.encode(uint256(keccak256("atomica.storage.LockBox")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant LOCKBOX_STORAGE_LOCATION =
+        0xe0903642a28bba2d9b1f838f91c5bf2d5afca6ff169d11e11b55016a170cad00;
 
     /// @notice BCS length of an AuctionOutcome: u64, vector<u8>(32), u64, vector<u8>(32), u64.
     uint256 private constant OUTCOME_BCS_LEN = 8 + 1 + 32 + 8 + 1 + 32 + 8;
@@ -110,15 +126,8 @@ contract LockBox {
     ///         `eth_proof::ETH_RECLAIM_DELAY_SECS` and the SDK `ETH_RECLAIM_DELAY_SECS`.
     uint64 public constant RECLAIM_DELAY = 259_200;
 
-    // Window clock, frozen at deploy (docs/specifications/auction-timing.md). Each day of
-    // `windowDaySecs` seconds holds `windowCount` windows (one or two); window `w` closes at
-    // `(w / windowCount) * windowDaySecs + closeOffset[w % windowCount]`. Mirrors
-    // `eth_proof::window_close_secs` and `eth_proof::window_id_at`. Immutables cannot hold an
-    // array, so the offsets are two scalars (`closeOffset1` is unused with one window a day).
-    uint64 private immutable windowDaySecs;
-    uint64 private immutable windowCount;
-    uint64 private immutable closeOffset0;
-    uint64 private immutable closeOffset1;
+    // The LockBox state above stays in slots 0-5: Aptos proves commitments at slot 0.
+    // Configuration and admin state use the namespaced storage struct above.
 
     // ==================== Events ====================
 
@@ -176,12 +185,22 @@ contract LockBox {
     error WindowClosed(uint64 windowId, uint64 current);
     /// @notice `lock` names a window above `currentWindowId() + 1`.
     error WindowTooFarAhead(uint64 windowId, uint64 current);
-    /// @notice The constructor's window schedule breaks the `eth_proof::set_window_schedule` rules.
+    /// @notice The initializer's window schedule breaks the `eth_proof::set_window_schedule` rules.
     error InvalidWindowSchedule();
     /// @notice `reclaimUnpayable` was called for a leaf that `releaseByOutcome` can pay.
     error LeafPayable(bytes32 lockId);
+    error NotAdmin();
+    error UpgradesFrozen();
+    error AlreadyFrozen();
+
+    event Frozen(address indexed admin);
 
     // ==================== Constructor ====================
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
 
     /**
      * @param _fakeETH FakeETH token
@@ -192,33 +211,81 @@ contract LockBox {
      * @param closeOffsetsSecs One or two window closes as seconds into the day, strictly
      *        increasing, the first above 0 and the last at most `daySecs`
      *        (production: [27_900, 58_500], 07:45 and 16:15 UTC). Reverts `InvalidWindowSchedule`.
+     * @param _admin The trusted upgrade admin until `freeze()` is called.
      */
-    constructor(
+    function initialize(
         address _fakeETH,
         address _fakeUSD,
         IAptosLightClient _lightClient,
         bytes memory _outcomeTypeTag,
         uint64 daySecs,
-        uint64[] memory closeOffsetsSecs
-    ) {
+        uint64[] memory closeOffsetsSecs,
+        address _admin
+    ) external initializer {
         require(_fakeETH != address(0), "Invalid FakeETH address");
         require(_fakeUSD != address(0), "Invalid FakeUSD address");
         require(address(_lightClient) != address(0), "Invalid light client");
         require(_outcomeTypeTag.length > 0, "Invalid type tag");
+        require(_admin != address(0), "Invalid admin");
         uint256 n = closeOffsetsSecs.length;
         if (n == 0 || n > 2 || closeOffsetsSecs[0] == 0 || closeOffsetsSecs[n - 1] > daySecs) {
             revert InvalidWindowSchedule();
         }
         if (n == 2 && closeOffsetsSecs[1] <= closeOffsetsSecs[0]) revert InvalidWindowSchedule();
-        fakeETH = IERC20(_fakeETH);
-        fakeUSD = IERC20(_fakeUSD);
-        lightClient = _lightClient;
+        LockBoxStorage storage s = _getLockBoxStorage();
+        s.fakeETH = IERC20(_fakeETH);
+        s.fakeUSD = IERC20(_fakeUSD);
+        s.lightClient = _lightClient;
+        s.admin = _admin;
         outcomeTypeTag = _outcomeTypeTag;
-        windowDaySecs = daySecs;
+        s.windowDaySecs = daySecs;
         // forge-lint: disable-next-line(unsafe-typecast)
-        windowCount = uint64(n); // n is 1 or 2
-        closeOffset0 = closeOffsetsSecs[0];
-        closeOffset1 = n == 2 ? closeOffsetsSecs[1] : 0;
+        s.windowCount = uint64(n); // n is 1 or 2
+        s.closeOffset0 = closeOffsetsSecs[0];
+        s.closeOffset1 = n == 2 ? closeOffsetsSecs[1] : 0;
+    }
+
+    modifier onlyAdmin() {
+        if (msg.sender != _getLockBoxStorage().admin) revert NotAdmin();
+        _;
+    }
+
+    function _authorizeUpgrade(address) internal view override onlyAdmin {
+        if (_getLockBoxStorage().frozen) revert UpgradesFrozen();
+    }
+
+    function freeze() external onlyAdmin {
+        LockBoxStorage storage s = _getLockBoxStorage();
+        if (s.frozen) revert AlreadyFrozen();
+        s.frozen = true;
+        emit Frozen(msg.sender);
+    }
+
+    function admin() external view returns (address) {
+        return _getLockBoxStorage().admin;
+    }
+
+    function frozen() external view returns (bool) {
+        return _getLockBoxStorage().frozen;
+    }
+
+    function fakeETH() public view returns (IERC20) {
+        return _getLockBoxStorage().fakeETH;
+    }
+
+    function fakeUSD() public view returns (IERC20) {
+        return _getLockBoxStorage().fakeUSD;
+    }
+
+    function lightClient() public view returns (IAptosLightClient) {
+        return _getLockBoxStorage().lightClient;
+    }
+
+    function _getLockBoxStorage() private pure returns (LockBoxStorage storage s) {
+        bytes32 slot = LOCKBOX_STORAGE_LOCATION;
+        assembly ("memory-safe") {
+            s.slot := slot
+        }
     }
 
     // ==================== Pure helpers ====================
@@ -240,20 +307,22 @@ contract LockBox {
     function currentWindowId() public view returns (uint64) {
         // forge-lint: disable-next-line(unsafe-typecast)
         uint64 t = uint64(block.timestamp);
+        LockBoxStorage storage s = _getLockBoxStorage();
         // forge-lint: disable-next-line(divide-before-multiply)
-        uint64 id = (t / windowDaySecs) * windowCount; // whole days, floored
-        uint64 s = t % windowDaySecs;
-        if (s >= closeOffset0) id++;
-        if (windowCount == 2 && s >= closeOffset1) id++;
+        uint64 id = (t / s.windowDaySecs) * s.windowCount; // whole days, floored
+        uint64 secondOfDay = t % s.windowDaySecs;
+        if (secondOfDay >= s.closeOffset0) id++;
+        if (s.windowCount == 2 && secondOfDay >= s.closeOffset1) id++;
         return id;
     }
 
     /// @notice Unix second at which `windowId` closes, the first second of window `windowId + 1`.
     ///         Mirrors `eth_proof::window_close_secs`. Reverts on uint64 overflow (window ids near 2^64).
     function windowClose(uint64 windowId) public view returns (uint64) {
-        uint64 offset = windowId % windowCount == 0 ? closeOffset0 : closeOffset1;
+        LockBoxStorage storage s = _getLockBoxStorage();
+        uint64 offset = windowId % s.windowCount == 0 ? s.closeOffset0 : s.closeOffset1;
         // forge-lint: disable-next-line(divide-before-multiply)
-        return (windowId / windowCount) * windowDaySecs + offset; // whole days, floored
+        return (windowId / s.windowCount) * s.windowDaySecs + offset; // whole days, floored
     }
 
     /// @notice The deadline of every lock of `windowId`: `windowClose(windowId) + RECLAIM_DELAY`.
@@ -264,10 +333,11 @@ contract LockBox {
 
     /// @notice The window clock frozen at deploy: seconds per day and the close offsets.
     function windowSchedule() external view returns (uint64 daySecs, uint64[] memory closeOffsetsSecs) {
-        daySecs = windowDaySecs;
-        closeOffsetsSecs = new uint64[](windowCount);
-        closeOffsetsSecs[0] = closeOffset0;
-        if (windowCount == 2) closeOffsetsSecs[1] = closeOffset1;
+        LockBoxStorage storage s = _getLockBoxStorage();
+        daySecs = s.windowDaySecs;
+        closeOffsetsSecs = new uint64[](s.windowCount);
+        closeOffsetsSecs[0] = s.closeOffset0;
+        if (s.windowCount == 2) closeOffsetsSecs[1] = s.closeOffset1;
     }
 
     /// @notice The value stored at slot 0 for a lock. Mirrored by `eth_proof::lock_commitment`.
@@ -300,7 +370,7 @@ contract LockBox {
      * @return lockId The lock's id (its Aptos receipt id)
      */
     function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash) external returns (bytes32 lockId) {
-        if (token != address(fakeETH) && token != address(fakeUSD)) revert UnsupportedToken(token);
+        if (token != address(fakeETH()) && token != address(fakeUSD())) revert UnsupportedToken(token);
         if (amount == 0) revert ZeroAmount();
         uint64 current = currentWindowId();
         if (windowId < current) revert WindowClosed(windowId, current);
@@ -324,7 +394,7 @@ contract LockBox {
      *      Light client errors (for example `StaleEpoch`) bubble up unchanged.
      */
     function recordOutcome(IAptosLightClient.EventProof calldata proof) external returns (bytes32 key) {
-        (uint64 version, bytes memory data) = lightClient.verifyEvent(proof, outcomeTypeTag);
+        (uint64 version, bytes memory data) = lightClient().verifyEvent(proof, outcomeTypeTag);
         (uint64 windowId, bytes32 pairHash,, bytes32 root, uint64 leafCount) = _decodeOutcome(data);
         if (root == bytes32(0) || leafCount == 0) revert BadOutcomeEvent();
 

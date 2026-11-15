@@ -344,20 +344,29 @@ export async function setupDualChainTestnet(
     // The type tag names the Atomica package below.
     const lightClient = await deployLightClient(deployer, aptosTestnet);
     console.log(`[Dual-Chain] ✓ AptosLightClient: ${lightClient}`);
-    // The last two arguments are the window clock LockBox freezes. It is the
+    // The window clock is stored in the proxy. The deployer is the temporary
+    // testnet upgrade admin; the proxy address is the one pinned on Aptos.
     // one the Aptos package uses: the ATOMICA_TEST_WINDOW_SCHEDULE test
     // schedule when set (stored by eth_proof::set_window_schedule below),
     // otherwise the production schedule (DeployLockBox.productionWindowSchedule),
     // two closes a day at 07:45 and 16:15 UTC.
     const windowSchedule = testWindowSchedule() ?? PRODUCTION_WINDOW_SCHEDULE;
-    const lockBox = await deployContract(deployer, readArtifact("LockBox"), [
+    const lockBoxArtifact = readArtifact("LockBox");
+    const lockBoxImplementation = await deployContract(deployer, lockBoxArtifact);
+    const lockBoxInitialization = new ethers.Interface(lockBoxArtifact.abi).encodeFunctionData("initialize", [
         fakeETH,
         fakeUSD,
         lightClient,
         auctionOutcomeTypeTag(aptosModuleAddress),
         windowSchedule.daySecs,
         windowSchedule.closeOffsetsSecs,
+        deployerAddress,
     ]);
+    const lockBox = await deployContract(deployer, readArtifact("ERC1967Proxy"), [
+        lockBoxImplementation,
+        lockBoxInitialization,
+    ]);
+    console.log(`[Dual-Chain] ✓ LockBox implementation: ${lockBoxImplementation}`);
     console.log(`[Dual-Chain] ✓ LockBox: ${lockBox}`);
 
     const aptosDeployerPrivateKey =

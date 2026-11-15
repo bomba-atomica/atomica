@@ -46,9 +46,13 @@ contracts/
 pragma solidity 0.8.24;  // Pin exact version, no floating ^
 ```
 
-### No Upgradeable Contracts
+### Upgrade Until Freeze
 
-Contracts are **immutable**. No proxy patterns, no UUPS, no transparent proxies. This simplifies formal verification.
+The LockBox is the one upgradeable contract: it is deployed behind an OpenZeppelin UUPS proxy,
+with a trusted admin until the one-way `freeze()` call. The admin can upgrade the implementation
+before freeze, but cannot move, pause, or block a lock. After freeze, every upgrade reverts. Other
+contracts remain immutable unless a settled owner decision says otherwise. See
+[`upgrade-freeze-runbook.md`](upgrade-freeze-runbook.md) for the operational procedure.
 
 ### Contract Governance
 
