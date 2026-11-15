@@ -72,6 +72,13 @@ contract LockBoxUpgradeTest is Test {
         lockBox.upgradeToAndCall(address(v2), bytes(""));
         vm.expectRevert(LockBox.AlreadyFrozen.selector);
         lockBox.freeze();
+
+        vm.expectRevert(LockBox.NotAdmin.selector);
+        vm.prank(stranger);
+        lockBox.upgradeToAndCall(address(v2), bytes(""));
+        vm.expectRevert(LockBox.NotAdmin.selector);
+        vm.prank(stranger);
+        lockBox.freeze();
     }
 
     function test_onlyAdminCanUpgradeOrFreeze() public {
@@ -91,6 +98,16 @@ contract LockBoxUpgradeTest is Test {
         implementation.initialize(address(fakeETH), address(fakeUSD), client, TYPE_TAG, daySecs, offsets, address(this));
         vm.expectRevert();
         lockBox.initialize(address(fakeETH), address(fakeUSD), client, TYPE_TAG, daySecs, offsets, address(this));
+    }
+
+    function test_proxyInitializerRejectsZeroAdmin() public {
+        LockBox implementation = new LockBox();
+        (uint64 daySecs, uint64[] memory offsets) = new DeployLockBox().productionWindowSchedule();
+        bytes memory initialization = abi.encodeCall(
+            LockBox.initialize, (address(fakeETH), address(fakeUSD), client, TYPE_TAG, daySecs, offsets, address(0))
+        );
+        vm.expectRevert(abi.encodeWithSignature("Error(string)", "Invalid admin"));
+        new ERC1967Proxy(address(implementation), initialization);
     }
 
     function test_bareImplementationIsDisabledAndProxyIsInitialized() public view {
@@ -127,6 +144,21 @@ contract LockBoxUpgradeTest is Test {
         );
         assertEq(fakeETH.balanceOf(stranger), 10 ether);
         assertEq(fakeETH.balanceOf(alice), 10 ether);
+    }
+
+    function test_lockRemainsPermissionlessAfterFreeze() public {
+        lockBox.freeze();
+        fakeETH.mint(stranger, 2 ether);
+        vm.startPrank(stranger);
+        fakeETH.approve(address(lockBox), 2 ether);
+        uint256 nonce = lockBox.nextLockNonce();
+        lockBox.lock(address(fakeETH), 2 ether, window, bytes32("post-freeze"));
+        vm.stopPrank();
+
+        bytes32 lockId = lockBox.getLockId(stranger, address(fakeETH), nonce);
+        assertTrue(lockBox.frozen());
+        assertEq(uint256(lockBox.statuses(lockId)), uint256(LockBox.Status.Open));
+        assertEq(fakeETH.balanceOf(address(lockBox)), 2 ether);
     }
 
     function _lock() private returns (LockBox.Lock memory l) {
@@ -167,5 +199,16 @@ contract DeployLockBoxProxyTest is Test {
         for (uint256 i = 0; i < offsets.length; i++) {
             assertEq(actualOffsets[i], offsets[i]);
         }
+    }
+
+    function test_runDeploysProxyUsingEnvironment() public {
+        uint256 deployerKey = 0xA11CE;
+        address admin = address(0xAD01);
+        vm.setEnv("PRIVATE_KEY", vm.toString(deployerKey));
+        vm.setEnv("LIGHT_CLIENT", vm.toString(address(new MockAptosLightClient(TYPE_TAG))));
+        vm.setEnv("LOCKBOX_ADMIN", vm.toString(admin));
+        vm.setEnv("ATOMICA_ADDRESS", vm.toString(bytes32(uint256(0xA70))));
+
+        new DeployLockBox().run();
     }
 }
