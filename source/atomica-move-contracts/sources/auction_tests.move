@@ -42,10 +42,9 @@ module atomica::auction_tests {
         auction::launch_pair_bcs()
     }
 
-    // BCS of Pair { ethereum, FakeETH, ethereum, OtherUSD }: a second pair that tests add
-    // with `allow_pair`.
+    // BCS of a second FakeETH/FakeUSD pair, on a non-launch base chain.
     fun other_pair_bcs(): vector<u8> {
-        auction::test_pair_bcs(b"ethereum", b"FakeETH", b"ethereum", b"OtherUSD")
+        auction::test_pair_bcs(b"testnet", b"FakeETH", b"ethereum", b"FakeUSD")
     }
 
 
@@ -633,7 +632,7 @@ module atomica::auction_tests {
     fun two_pairs_of_one_window_share_a_timelock(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
         auction::init_for_test(atomica);
-        auction::allow_pair(atomica, b"ethereum", b"FakeETH", b"ethereum", b"OtherUSD");
+        auction::allow_pair(atomica, b"testnet", b"FakeETH", b"ethereum", b"FakeUSD");
         let window_id = auction::current_window_id();
         let lock_a = b"pair_a_seller_lock_32bytes______";
         let lock_b = b"pair_b_seller_lock_32bytes______";
@@ -799,19 +798,19 @@ module atomica::auction_tests {
     fun allow_pair_only_package_account(atomica: &signer) {
         auction::init_for_test(atomica);
         let stranger = aptos_framework::account::create_signer_for_test(DERIVED_OWNER);
-        auction::allow_pair(&stranger, b"ethereum", b"FakeETH", b"ethereum", b"OtherUSD");
+        auction::allow_pair(&stranger, b"ethereum", b"FakeETH", b"ethereum", b"FakeUSD");
     }
 
-    // The same call from @atomica lists the pair, and `create_auction` then accepts the new
-    // pair's BCS and stores its `Pair`. Adding a listed pair again is a no-op.
+    // The same call from @atomica lists a non-launch chain pair, and `create_auction` accepts
+    // it. Adding a listed pair again is a no-op.
     #[test(atomica = @atomica)]
     fun allow_pair_from_package_account_lists_the_pair(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
         auction::init_for_test(atomica);
         let other = other_pair_bcs();
         assert!(!auction::is_pair_allowed(other), 1);
-        auction::allow_pair(atomica, b"ethereum", b"FakeETH", b"ethereum", b"OtherUSD");
-        auction::allow_pair(atomica, b"ethereum", b"FakeETH", b"ethereum", b"OtherUSD");
+        auction::allow_pair(atomica, b"testnet", b"FakeETH", b"ethereum", b"FakeUSD");
+        auction::allow_pair(atomica, b"testnet", b"FakeETH", b"ethereum", b"FakeUSD");
         assert!(auction::is_pair_allowed(other), 2);
         assert!(auction::is_pair_allowed(default_pair_bcs()), 3);
 
@@ -826,7 +825,30 @@ module atomica::auction_tests {
         );
         let (_, _, quote_chain, quote_token) = auction::test_get_window_pair(window_id, other);
         assert!(quote_chain == b"ethereum", 4);
-        assert!(quote_token == b"OtherUSD", 5);
+        assert!(quote_token == b"FakeUSD", 5);
+        let (base_chain, _, _, _) = auction::test_get_window_pair(window_id, other);
+        assert!(base_chain == b"testnet", 6);
+    }
+
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 45, location = atomica::auction)]
+    fun allow_pair_rejects_unknown_base_token(atomica: &signer) {
+        auction::init_for_test(atomica);
+        auction::allow_pair(atomica, b"ethereum", b"OtherETH", b"ethereum", b"FakeUSD");
+    }
+
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 45, location = atomica::auction)]
+    fun allow_pair_rejects_unknown_quote_token(atomica: &signer) {
+        auction::init_for_test(atomica);
+        auction::allow_pair(atomica, b"ethereum", b"FakeETH", b"ethereum", b"OtherUSD");
+    }
+
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 45, location = atomica::auction)]
+    fun allow_pair_rejects_swapped_roles(atomica: &signer) {
+        auction::init_for_test(atomica);
+        auction::allow_pair(atomica, b"ethereum", b"FakeUSD", b"ethereum", b"FakeETH");
     }
 
     // Two sellers with the launch pair for one window id join one window, and its
@@ -2094,7 +2116,7 @@ module atomica::auction_tests {
     fun create_auction_rejects_a_lock_bound_to_another_pair(atomica: &signer) {
         auction_bid_wrapper_tests::setup();
         auction::init_for_test(atomica);
-        auction::allow_pair(atomica, b"ethereum", b"FakeETH", b"ethereum", b"OtherUSD");
+        auction::allow_pair(atomica, b"testnet", b"FakeETH", b"ethereum", b"FakeUSD");
         let lock_id = b"other_pair_seller_lock_32bytes__";
         insert_eth_receipt(atomica, lock_id, @atomica, ETH);
         auction::create_auction(

@@ -156,8 +156,12 @@ launch pair (section 2.4). `create_auction` aborts with `E_PAIR_NOT_ALLOWED`
 (42) when `pair_bcs` is not listed. The check runs right after the window id
 checks. A new window stores the `Pair` the allowlist holds for those bytes.
 Only the package account adds a pair, through `allow_pair` (otherwise
-`E_NOT_PACKAGE_ACCOUNT`, 43), and the contract computes the key as the BCS of
-the `Pair`. The views are `is_pair_allowed(pair_bcs)` and `launch_pair_bcs()`.
+`E_NOT_PACKAGE_ACCOUNT`, 43). Since auctions escrow the receipt types
+`LockReceipt<Ethereum, FakeETH>` and `LockReceipt<Ethereum, FakeUSD>`,
+`allow_pair` requires `base_token == b"FakeETH"` and
+`quote_token == b"FakeUSD"` (otherwise `E_PAIR_TOKEN_UNSUPPORTED`, 45).
+Chain labels remain caller-defined. The contract computes the key as the BCS
+of the `Pair`. The views are `is_pair_allowed(pair_bcs)` and `launch_pair_bcs()`.
 Entries that find a window by `(window_id, pair_bcs)` abort with
 `E_AUCTION_NOT_FOUND` (1) for unlisted bytes, since no window exists for them.
 
