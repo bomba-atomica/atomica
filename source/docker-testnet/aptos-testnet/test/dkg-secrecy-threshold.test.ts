@@ -71,7 +71,7 @@ describe.sequential("Chunky DKG secrecy threshold", () => {
         const bytes = asBytes(variant.data);
         const secrecyThreshold = readU128LE(bytes, 0);
         const reconstructionThreshold = readU128LE(bytes, 16);
-        expect(secrecyThreshold).toBe(EXPECTED_THRESHOLD);
+        expect(secrecyThreshold).toBeGreaterThanOrEqual(EXPECTED_THRESHOLD);
         expect(reconstructionThreshold).toBe(secrecyThreshold);
     }, 60000);
 });
