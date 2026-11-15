@@ -353,15 +353,18 @@ export async function setupDualChainTestnet(
     const windowSchedule = testWindowSchedule() ?? PRODUCTION_WINDOW_SCHEDULE;
     const lockBoxArtifact = readArtifact("LockBox");
     const lockBoxImplementation = await deployContract(deployer, lockBoxArtifact);
-    const lockBoxInitialization = new ethers.Interface(lockBoxArtifact.abi).encodeFunctionData("initialize", [
-        fakeETH,
-        fakeUSD,
-        lightClient,
-        auctionOutcomeTypeTag(aptosModuleAddress),
-        windowSchedule.daySecs,
-        windowSchedule.closeOffsetsSecs,
-        deployerAddress,
-    ]);
+    const lockBoxInitialization = new ethers.Interface(lockBoxArtifact.abi).encodeFunctionData(
+        "initialize",
+        [
+            fakeETH,
+            fakeUSD,
+            lightClient,
+            auctionOutcomeTypeTag(aptosModuleAddress),
+            windowSchedule.daySecs,
+            windowSchedule.closeOffsetsSecs,
+            deployerAddress,
+        ],
+    );
     const lockBox = await deployContract(deployer, readArtifact("ERC1967Proxy"), [
         lockBoxImplementation,
         lockBoxInitialization,
