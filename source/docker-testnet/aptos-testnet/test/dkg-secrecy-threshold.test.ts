@@ -47,6 +47,8 @@ describe.sequential("Chunky DKG secrecy threshold", () => {
     let client: AptosClient;
 
     beforeAll(async () => {
+        // This suite must not reuse localnet state left by a preceding test file.
+        await teardownLocalnet();
         await setupLocalnet();
         testnet = getTestnet();
         client = new AptosClient(testnet.validatorApiUrl(0));
