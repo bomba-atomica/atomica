@@ -1,0 +1,86 @@
+name: Setup Playwright
+description: >-
+  Installs Playwright Chromium and its system packages. The browsers and the
+  apt .deb archives are cached under a key of the runner OS, the runner image
+  and the resolved Playwright version. A warm run installs from that cache and
+  never asks the apt mirror for a package.
+inputs:
+  working-directory:
+    description: Directory whose node_modules holds playwright. Run bun install there first.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Resolve the Playwright version
+      id: playwright
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        version=$(jq -er .version node_modules/playwright/package.json)
+        echo "Playwright ${version} on ${ImageOS:-unknown-image}"
+        echo "version=${version}" >> "$GITHUB_OUTPUT"
+        echo "image=${ImageOS:-unknown-image}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the Playwright cache
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/ms-playwright
+          ~/.cache/playwright-apt
+        key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}
+
+    - name: Install Chromium and its system packages
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
+      run: |
+        set -euo pipefail
+        apt_cache="$HOME/.cache/playwright-apt"
+
+        # Warm path: put the cached .debs in apt's archive directory and install
+        # them by name with --no-download, so apt never reads the mirror.
+        # (--no-download also blocks apt's fetch of a .deb passed as a path.)
+        # Any gap (a newer runner image, a missing package) makes apt fail,
+        # and the cold path runs instead.
+        warm() {
+          shopt -s nullglob
+          local debs=("$apt_cache"/*.deb) names=() d
+          if [ "${#debs[@]}" -gt 0 ]; then
+            sudo cp -t /var/cache/apt/archives "${debs[@]}"
+            for d in "${debs[@]}"; do names+=("$(dpkg-deb -f "$d" Package)"); done
+            sudo apt-get install -y --no-install-recommends --no-download "${names[@]}" || return 1
+          fi
+          # The browsers are restored, so this only checks them.
+          bunx playwright install chromium
+        }
+
+        # Cold path: install from the mirror and keep every .deb for the cache.
+        # If the mirror fails (one lacked fonts-unifont), point apt at
+        # archive.ubuntu.com and try the install once more.
+        cold() {
+          sudo rm -f /etc/apt/apt.conf.d/docker-clean
+          if ! bunx playwright install --with-deps chromium; then
+            echo "::warning::Playwright install failed on the apt mirror. Retrying once on archive.ubuntu.com."
+            sudo grep -rlE 'azure\.archive\.ubuntu\.com|apt-mirrors\.txt' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null \
+              | xargs -r sudo sed -i -E \
+                  -e 's#mirror\+file:/etc/apt/apt-mirrors\.txt#http://archive.ubuntu.com/ubuntu/#g' \
+                  -e 's#azure\.archive\.ubuntu\.com#archive.ubuntu.com#g'
+            sleep 15
+            bunx playwright install --with-deps chromium
+          fi
+          mkdir -p "$apt_cache"
+          find /var/cache/apt/archives -maxdepth 1 -name '*.deb' -exec cp -t "$apt_cache" {} +
+          echo "Cached $(find "$apt_cache" -name '*.deb' | wc -l) .deb archives"
+        }
+
+        if [ "$CACHE_HIT" = "true" ]; then
+          if warm; then
+            echo "Warm path: Playwright installed from the cache"
+            exit 0
+          fi
+          echo "::warning::The cached Playwright install failed. Falling back to the apt mirror."
+        fi
+        cold
+        echo "Cold path: Playwright installed from the mirror"

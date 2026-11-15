@@ -1,0 +1,32 @@
+# Fixture: the minimal shape check-ci-flake-guards.sh accepts.
+name: fixture
+on: pull_request
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Playwright browsers
+        working-directory: source/atomica-sdk
+        run: bunx playwright install --with-deps chromium
+
+  aptos-testnet-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull the validator image (one retry)
+        run: bash .github/scripts/pull-image-with-retry.sh example/validator:tag
+
+  browser-tests-anvil:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull the validator image (one retry)
+        run: bash .github/scripts/pull-image-with-retry.sh example/validator:tag
+      - name: Install Playwright browsers
+        uses: ./.github/actions/setup-playwright
+        with:
+          working-directory: source/atomica-web-components
+
+  browser-tests-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull the validator image (one retry)
+        run: bash .github/scripts/pull-image-with-retry.sh example/validator:tag

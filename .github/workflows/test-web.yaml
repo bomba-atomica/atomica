@@ -158,6 +158,12 @@ jobs:
           rm "$probe"
           echo "OK: the dist guard failed on the tracked dist file"
 
+      - name: Check Playwright is cached and the image pull retries once
+        run: bash .github/scripts/check-ci-flake-guards.sh
+
+      - name: Flake guard and pull retry pass their fixtures
+        run: bash .github/scripts/check-ci-flake-guards-fixtures.sh
+
   unit-tests:
     # No chain, no Docker: runs on every PR, drafts included.
     name: Unit Tests (atomica-sdk, atomica-web-components)
@@ -210,8 +216,9 @@ jobs:
 
       # The SDK suite runs in headless Chromium (vitest browser mode).
       - name: Install Playwright browsers (SDK)
-        working-directory: source/atomica-sdk
-        run: bunx playwright install --with-deps chromium
+        uses: ./.github/actions/setup-playwright
+        with:
+          working-directory: source/atomica-sdk
 
       # The SIWE golden vectors read by the SDK tests must equal what the
       # generator writes. A diff here means the fixture drifted.
@@ -317,8 +324,9 @@ jobs:
 
       - name: Install Playwright browsers (demo)
         if: needs.changes.outputs.code != 'false' && matrix.type == 'meta'
-        working-directory: source/atomica-demo
-        run: bunx playwright install --with-deps chromium
+        uses: ./.github/actions/setup-playwright
+        with:
+          working-directory: source/atomica-demo
 
       - name: Run Web Demo unit tests
         if: needs.changes.outputs.code != 'false' && matrix.type == 'meta'
@@ -354,6 +362,18 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The tests start the testnet with docker compose. Pulling its validator
+      # image here, with exactly one retry, absorbs a ghcr.io blip. Test steps
+      # are never retried, so a real code failure fails on the first attempt.
+      - name: Pull the validator image (one retry)
+        run: |
+          image=$(grep -oE 'IMAGE_NAME:-[^}"]+' source/docker-testnet/config/docker-compose.yaml | sed 's/^IMAGE_NAME:-//' | sort -u)
+          if [ -z "$image" ] || [ "$(wc -l <<<"$image")" -ne 1 ]; then
+            echo "::error::expected one default validator image in docker-compose.yaml, got: ${image:-none}"
+            exit 1
+          fi
+          bash .github/scripts/pull-image-with-retry.sh "$image"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -640,6 +660,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The tests start the testnet with docker compose. Pulling its validator
+      # image here, with exactly one retry, absorbs a ghcr.io blip. Test steps
+      # are never retried, so a real code failure fails on the first attempt.
+      - name: Pull the validator image (one retry)
+        run: |
+          image=$(grep -oE 'IMAGE_NAME:-[^}"]+' source/docker-testnet/config/docker-compose.yaml | sed 's/^IMAGE_NAME:-//' | sort -u)
+          if [ -z "$image" ] || [ "$(wc -l <<<"$image")" -ne 1 ]; then
+            echo "::error::expected one default validator image in docker-compose.yaml, got: ${image:-none}"
+            exit 1
+          fi
+          bash .github/scripts/pull-image-with-retry.sh "$image"
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -723,8 +755,9 @@ jobs:
         run: bun run build
 
       - name: Install Playwright browsers
-        working-directory: source/atomica-web-components
-        run: bunx playwright install --with-deps chromium
+        uses: ./.github/actions/setup-playwright
+        with:
+          working-directory: source/atomica-web-components
 
       - name: Run browser tests
         working-directory: source/atomica-web-components
@@ -788,6 +821,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The tests start the testnet with docker compose. Pulling its validator
+      # image here, with exactly one retry, absorbs a ghcr.io blip. Test steps
+      # are never retried, so a real code failure fails on the first attempt.
+      - name: Pull the validator image (one retry)
+        run: |
+          image=$(grep -oE 'IMAGE_NAME:-[^}"]+' source/docker-testnet/config/docker-compose.yaml | sed 's/^IMAGE_NAME:-//' | sort -u)
+          if [ -z "$image" ] || [ "$(wc -l <<<"$image")" -ne 1 ]; then
+            echo "::error::expected one default validator image in docker-compose.yaml, got: ${image:-none}"
+            exit 1
+          fi
+          bash .github/scripts/pull-image-with-retry.sh "$image"
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -871,8 +916,9 @@ jobs:
         run: bun run build
 
       - name: Install Playwright browsers
-        working-directory: source/atomica-web-components
-        run: bunx playwright install --with-deps chromium
+        uses: ./.github/actions/setup-playwright
+        with:
+          working-directory: source/atomica-web-components
 
       - name: Run browser tests
         working-directory: source/atomica-web-components

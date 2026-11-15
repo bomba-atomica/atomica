@@ -67,6 +67,24 @@ Detection fails open: if `changes` fails, its output is empty, which is not
 `false`, so every test runs and must succeed. Pushes to `main` keep
 `paths-ignore`.
 
+**Infra flakes:** two kinds of failure come from outside the code, and the
+workflow absorbs each one without retrying any test step.
+- Playwright installs go through `.github/actions/setup-playwright`. It caches
+  `~/.cache/ms-playwright` and the apt `.deb` archives under the key
+  `playwright-<runner.os>-<ImageOS>-<Playwright version>`, where the version is
+  read from the installed `node_modules/playwright`. A warm run installs the
+  cached `.deb` files with `apt-get --no-download`, so it never reads the apt
+  mirror. A cold run, or a warm run whose cached `.deb` files no longer fit the
+  runner image, installs from the mirror. If that fails, it points apt at
+  `archive.ubuntu.com` and tries once more.
+- The jobs that start the Aptos Docker testnet pull its validator image (the
+  default `IMAGE_NAME` in `source/docker-testnet/config/docker-compose.yaml`)
+  in an explicit step, with `.github/scripts/pull-image-with-retry.sh`. That
+  script retries a failed pull exactly once after 15 seconds.
+- The Test Coverage Guard job runs `check-ci-flake-guards.sh` and its fixtures,
+  so a bare `playwright install`, a cache key without the version, or a pull
+  without exactly one retry fails CI.
+
 ### `build-aptos-binary.yaml` (Reusable Workflow)
 
 A reusable workflow that builds and caches the `aptos` binary from the `source/atomica-aptos` submodule.
