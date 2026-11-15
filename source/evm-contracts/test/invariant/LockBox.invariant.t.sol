@@ -232,7 +232,7 @@ contract LockBoxHandler is Test {
         if (!inTree || lockBox.statuses(_id(i)) != LockBox.Status.Open) return;
         uint256 w = locks[i].windowId == windows[0] ? 0 : 1;
         if (lockBox.auctionVoided(_key(w))) {
-            vm.expectRevert(LockBox.AuctionWasVoided.selector);
+            vm.expectRevert(abi.encodeWithSelector(LockBox.AuctionWasVoided.selector, _key(w)));
             lockBox.releaseByOutcome(l, p, leaf);
             return;
         }
