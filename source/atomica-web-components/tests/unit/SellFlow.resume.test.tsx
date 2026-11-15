@@ -36,6 +36,7 @@ vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeEth: vi.fn(),
   lockFakeEth: vi.fn(),
   currentWindowId: vi.fn(() => 41538n),
+  lockTargetWindowId: vi.fn(() => 41538n),
   lockBinding: vi.fn((windowId: bigint) => ({
     windowId,
     pairHash: "0x" + "ee".repeat(32),
@@ -48,6 +49,7 @@ vi.mock("@atomica/sdk/ethereum/proofs", () => ({
   generateLockedBalanceProof: vi.fn(),
 }));
 vi.mock("@atomica/sdk/aptos", () => ({
+  auctionExists: vi.fn(async () => true),
   assertSiweDomain: vi.fn().mockResolvedValue(undefined),
   getRegisterLockPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),

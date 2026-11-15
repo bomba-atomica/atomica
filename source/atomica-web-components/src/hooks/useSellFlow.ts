@@ -16,6 +16,7 @@ import {
   approveFakeEth,
   currentWindowId,
   lockBinding,
+  lockTargetWindowId,
   lockFakeEth,
   lockFromReceipt,
   reclaimLock,
@@ -309,13 +310,13 @@ export function useSellFlow(
         // accept it, and the funds would wait for the reclaim deadline.
         // The window clock is the chain's (a test chain stores a short one).
         const schedule = await getWindowSchedule();
-        const windowId = currentWindowId(
+        const initialWindowId = lockTargetWindowId(
           BigInt(Math.floor(Date.now() / 1000)),
           schedule,
         );
         const refusal = await sellerLockRefusal(
           amount,
-          windowId,
+          initialWindowId,
           LAUNCH_PAIR_BCS,
         );
         if (refusal) {
@@ -328,7 +329,25 @@ export function useSellFlow(
         setState((s) => ({ ...s, loading: true }));
         await approveFakeEth(provider, amount);
 
-        // Step 2: Lock into the current window. LockBox computes its
+        // Approval may take long enough to cross a close margin or window
+        // boundary. Rebind only after rechecking the newly selected window.
+        const windowId = lockTargetWindowId(
+          BigInt(Math.floor(Date.now() / 1000)),
+          schedule,
+        );
+        if (windowId !== initialWindowId) {
+          const nextRefusal = await sellerLockRefusal(
+            amount,
+            windowId,
+            LAUNCH_PAIR_BCS,
+          );
+          if (nextRefusal) {
+            setError(nextRefusal);
+            return;
+          }
+        }
+
+        // Step 2: Lock into the selected window. LockBox computes its
         // deadline, lockDeadline(windowId) = auction::eth_lock_deadline:
         // after it, anyone may reclaim the lock to the seller. LockBox
         // reverts (WindowClosed) if the window closed by the time the lock

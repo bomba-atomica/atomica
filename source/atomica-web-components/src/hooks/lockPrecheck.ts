@@ -17,19 +17,11 @@
 
 import { ethers } from "ethers";
 import {
+  auctionExists,
   getBidCount,
   getWindowLimits,
   getWindowLockIds,
 } from "@atomica/sdk/aptos";
-
-/**
- * True when a view aborted with `E_AUCTION_NOT_FOUND` (1): the window does
- * not exist on Aptos yet, so it counts as empty.
- */
-export function isWindowNotFound(error: unknown): boolean {
-  const msg = error instanceof Error ? error.message : String(error);
-  return /E_AUCTION_NOT_FOUND|::auction: 0x1\b/.test(msg);
-}
 
 /**
  * Refusal message for a FakeETH seller lock of `amount` wei into
@@ -45,13 +37,9 @@ export async function sellerLockRefusal(
   if (amount < limits.minSellerLockAmount) {
     return `The minimum seller lock is ${ethers.formatEther(limits.minSellerLockAmount)} FakeETH. Aptos refuses a smaller lock.`;
   }
-  let sellerLocks = 0n;
-  try {
-    const { sellers } = await getWindowLockIds(windowId, pairBcs);
-    sellerLocks = BigInt(sellers.length);
-  } catch (e: unknown) {
-    if (!isWindowNotFound(e)) throw e;
-  }
+  if (!(await auctionExists(windowId, pairBcs))) return null;
+  const { sellers } = await getWindowLockIds(windowId, pairBcs);
+  const sellerLocks = BigInt(sellers.length);
   if (sellerLocks >= limits.maxSellerLocksPerWindow) {
     return `This window already holds the maximum of ${limits.maxSellerLocksPerWindow} seller locks. Aptos refuses another one.`;
   }
@@ -72,12 +60,10 @@ export async function bidCollateralRefusal(
   if (amount < limits.minBidCollateral) {
     return `The minimum bid collateral is ${ethers.formatUnits(limits.minBidCollateral, 6)} FakeUSD. Aptos refuses a smaller collateral.`;
   }
-  let bids = 0n;
-  try {
-    bids = BigInt(await getBidCount(windowId, pairBcs));
-  } catch (e: unknown) {
-    if (!isWindowNotFound(e)) throw e;
+  if (!(await auctionExists(windowId, pairBcs))) {
+    return "This auction window is not open yet. The current window is closing and no next window is open yet.";
   }
+  const bids = BigInt(await getBidCount(windowId, pairBcs));
   if (bids >= limits.maxBidsPerWindow) {
     return `This window already holds the maximum of ${limits.maxBidsPerWindow} bids. Aptos refuses another one.`;
   }

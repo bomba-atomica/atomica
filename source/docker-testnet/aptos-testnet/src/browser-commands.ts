@@ -113,7 +113,7 @@ import type { DualChainTestnetInfo } from "./dual-chain-testnet.js";
 import { ethers } from "ethers";
 import { syncAnvilClockToHost, waitForCertifiedEthBlock, waitForEthBlock } from "./eth-blocks.js";
 import {
-    currentWindowId,
+    lockTargetWindowId,
     lockBinding,
     type LockBinding,
     type WindowSchedule,
@@ -398,8 +398,8 @@ const LOCKBOX_LOCK_ABI = [
 ];
 
 /**
- * The binding of a test lock: the window open at `nowSecs` on the chain's
- * window clock `schedule` (the SDK `currentWindowId` mirror of
+ * The binding of a test lock: the target window at `nowSecs` on the chain's
+ * window clock `schedule` (the SDK `lockTargetWindowId` mirror of
  * `auction::current_window_id`; read the schedule from `LockBox.windowSchedule`,
  * which equals `eth_proof::get_window_schedule`) and the pair BCS of the
  * window the test claims the lock into (`pairBcsHex`, the SDK launch pair by
@@ -420,7 +420,11 @@ export function testLockBinding(
     nowSecs: bigint = BigInt(Math.floor(Date.now() / 1000)),
     pairBcsHex: string = LAUNCH_PAIR_BCS_HEX,
 ): LockBinding {
-    return lockBinding(currentWindowId(nowSecs, schedule), ethers.getBytes(pairBcsHex), schedule);
+    return lockBinding(
+        lockTargetWindowId(nowSecs, schedule),
+        ethers.getBytes(pairBcsHex),
+        schedule,
+    );
 }
 
 /** The window clock a LockBox froze at deploy (`LockBox.windowSchedule`). */

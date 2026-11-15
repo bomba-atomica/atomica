@@ -1,7 +1,7 @@
 # Auction Timing Specification (Canonical)
 
 **Status:** Canonical
-**Last Updated:** 2026-11-14
+**Last Updated:** 2026-11-15
 **Owner:** Product + Protocol Design
 
 This document is the single source of truth for Atomica auction timing.
@@ -57,6 +57,16 @@ next window near a close. After the deadline, anyone may `reclaim` an open
 lock to its depositor on Ethereum. Before it, only a proven Aptos
 `AuctionOutcome` closes the lock: `releaseByOutcome` pays its leaf, or
 `reclaimUnpayable` returns it whole when that leaf is unpayable (issue 222).
+
+Clients choose the target window with the SDK `lockTargetWindowId` helper. It
+uses the current window through exactly 60 seconds before its close, then picks
+the next window until the close second; at the close second the current window
+id has advanced and is selected. The one-minute close margin is a client-side
+buffer for the wallet approval and lock prompts. Seller and bidder flows read
+the clock again after approval and repeat their target-window pre-check if the
+target changed. A bidder may target the next window only after
+`auction::auction_exists` confirms that window is open; otherwise the flow
+refuses the collateral lock.
 
 LockBox takes its window clock as constructor immutables: seconds per day and
 one or two close offsets (`DeployLockBox.productionWindowSchedule()`:

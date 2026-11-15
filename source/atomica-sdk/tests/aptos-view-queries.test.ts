@@ -64,6 +64,7 @@ import {
   getWindowDeadlineUs,
   getWindowSchedule,
   getWindowLimits,
+  auctionExists,
   LAUNCH_PAIR_BCS,
 } from "../src/aptos/payloads.js";
 import * as aptosEntry from "../src/aptos/index.js";
@@ -74,6 +75,28 @@ import * as config from "../src/aptos/config.js";
 const WINDOW_ID = 42n;
 const PAIR_BCS = new Uint8Array([0x01, 0x02, 0x03]);
 const TIMELOCK_ID = 1n;
+
+describe("auctionExists", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("calls auction::auction_exists with the window and pair and returns the view result", async () => {
+    vi.mocked(config.aptos.view).mockResolvedValueOnce([true]);
+    await expect(auctionExists(WINDOW_ID, PAIR_BCS)).resolves.toBe(true);
+    expect(config.aptos.view).toHaveBeenCalledWith({
+      payload: {
+        function: "0xdeadbeef::auction::auction_exists",
+        functionArguments: [WINDOW_ID, PAIR_BCS],
+      },
+    });
+  });
+
+  it("returns false for a window that has not been opened", async () => {
+    vi.mocked(config.aptos.view).mockResolvedValueOnce([false]);
+    await expect(auctionExists(WINDOW_ID, PAIR_BCS)).resolves.toBe(false);
+  });
+});
 
 // ─── isSettled ─────────────────────────────────────────────────────────────────
 
