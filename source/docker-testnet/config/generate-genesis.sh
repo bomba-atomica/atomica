@@ -83,9 +83,8 @@ done
 # recorded in docs/decisions/aptos-validator-timelock.md. The first epoch ends
 # at the first block (genesis time is 0), so epoch 2 holds the timelock key.
 # timelock_dkg_enabled: true turns the timelock DKG on at genesis (atomica-aptos
-# layout flag, issue 155). Override the generic chunky DKG's default secrecy
-# threshold (one half) so genesis uses the same two-thirds bound for secrecy
-# and reconstruction selected in D4b.
+# layout flag, issue 155). Its default chunky DKG config and validator
+# transactions are already on for CLI genesis.
 # timelock_registrar is the only address 0x1::ibe_config::register_timelock
 # accepts: the auction package's registrar object, the named object address of
 # the package address and the seed "atomica/timelock-registrar". genesis.ts
@@ -112,12 +111,6 @@ voting_duration_secs: 43200
 voting_power_increase_limit: 20
 timelock_registrar: "${TIMELOCK_REGISTRAR}"
 timelock_dkg_enabled: true
-chunky_dkg_config_override:
-  V1:
-    secrecy_threshold:
-      value: 12297829382473034410
-    reconstruction_threshold:
-      value: 12297829382473034410
 eth_chain_id: ${ETH_CHAIN_ID}
 EOF
 
