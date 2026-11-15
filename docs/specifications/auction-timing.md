@@ -54,9 +54,11 @@ reverts `WindowClosed` for a window below the current one and
 far-future deadline. A lock sent in a window's last seconds may be mined in
 the next window and revert with no funds moved: clients should target the
 next window near a close. After the deadline, anyone may `reclaim` an open
-lock to its depositor on Ethereum. Before it, only a proven Aptos
-`AuctionOutcome` closes the lock: `releaseByOutcome` pays its leaf, or
-`reclaimUnpayable` returns it whole when that leaf is unpayable (issue 222).
+lock to its depositor on Ethereum. A fully payable proven Aptos
+`AuctionOutcome` releases every lock by `releaseByOutcome`. If one leaf is
+unpayable, `reclaimUnpayable` voids the whole auction and every other open lock
+can be reclaimed immediately, without a proof or deadline wait. Aptos rejects
+an unpayable leaf before emitting an outcome (issue 284).
 
 Clients choose the target window with the SDK `lockTargetWindowId` helper. It
 uses the current window through exactly 60 seconds before its close, then picks

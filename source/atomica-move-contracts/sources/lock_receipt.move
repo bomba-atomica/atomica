@@ -380,10 +380,9 @@ module atomica::lock_receipt {
     /// `outcome_tree::payouts_hash`.
     ///
     /// Aborts E_UNPAYABLE_OUTCOME unless every recipient is a nonzero 20-byte
-    /// address and the amounts sum exactly to the lock amount. LockBox
-    /// `releaseByOutcome` pays a short sum (the remainder to the depositor) and
-    /// returns a lock with an unpayable leaf whole by `reclaimUnpayable`, so no
-    /// leaf freezes a lock. The exact sum keeps every leaf a full disposition.
+    /// address and the amounts sum exactly to the lock amount. This prevents
+    /// LockBox from recording an outcome where one bad leaf could void the whole
+    /// auction. The exact sum keeps every leaf a full disposition.
     ///
     /// The status becomes STATUS_REVOKED when the only payout is the whole
     /// amount to the depositor, and STATUS_FILLED otherwise. Stores a
@@ -399,14 +398,41 @@ module atomica::lock_receipt {
         finalize<Chain, Asset>(lock_id, recipients, amounts, STATUS_CLAIMED)
     }
 
-    /// Return a CLAIMED receipt's whole amount to its depositor
-    /// (`record_outcome` with the single payout (eth_owner, amount)).
-    /// Returns the leaf's payouts hash.
+    /// Return a CLAIMED receipt's whole amount to its depositor and return the
+    /// leaf's payouts hash. A valid Ethereum owner gets the exact
+    /// (eth_owner, amount) payout. For a malformed owner, an empty leaf means
+    /// the LockBox returns the full lock remainder to its depositor without
+    /// treating the malformed address as a beneficiary.
     public(package) fun return_to_depositor<Chain, Asset>(
         lock_id: vector<u8>,
     ): vector<u8> acquires ReceiptRegistry {
         let (_, amount, _, _, eth_owner) = get_receipt<Chain, Asset>(lock_id);
-        finalize<Chain, Asset>(lock_id, vector[eth_owner], vector[amount], STATUS_CLAIMED)
+        if (vector::length(&eth_owner) == 20 && eth_owner != ZERO_ETH_ADDRESS) {
+            finalize<Chain, Asset>(lock_id, vector[eth_owner], vector[amount], STATUS_CLAIMED)
+        } else {
+            finalize_empty_refund<Chain, Asset>(lock_id, STATUS_CLAIMED)
+        }
+    }
+
+    /// Finalize an unpayable-depositor receipt as a zero-payout refund leaf.
+    /// LockBox's leaf rule sends the full lock amount to its depositor when no
+    /// payouts are listed. Keep this exceptional path separate from `finalize`
+    /// so settle and cancel continue rejecting malformed payout recipients.
+    fun finalize_empty_refund<Chain, Asset>(lock_id: vector<u8>, from: u8): vector<u8>
+    acquires ReceiptRegistry {
+        assert!(exists<ReceiptRegistry<Chain, Asset>>(@atomica), E_REGISTRY_NOT_INITIALIZED);
+        let registry = borrow_global_mut<ReceiptRegistry<Chain, Asset>>(@atomica);
+        assert!(table::contains(&registry.receipts, lock_id), E_RECEIPT_NOT_FOUND);
+        let receipt = table::borrow_mut(&mut registry.receipts, lock_id);
+        assert!(receipt.status == from, E_INVALID_STATUS);
+        let recipients = vector::empty<vector<u8>>();
+        let amounts = vector::empty<u256>();
+        let kind = STATUS_REVOKED;
+        receipt.status = kind;
+        let window_id = receipt.window_id;
+        table::add(&mut registry.outcomes, lock_id, LockOutcome { kind, window_id, recipients, amounts });
+        event::emit(LockOutcomeRecorded<Chain, Asset> { lock_id, kind, window_id, recipients, amounts });
+        outcome_tree::payouts_hash(&recipients, &amounts)
     }
 
     /// Cancel a receipt that no auction window claimed. Anyone may call it.
@@ -464,7 +490,9 @@ module atomica::lock_receipt {
             let r = vector::borrow(&recipients, i);
             assert!(vector::length(r) == 20 && *r != ZERO_ETH_ADDRESS, E_UNPAYABLE_OUTCOME);
             if (*r != receipt.eth_owner) { to_depositor_only = false; };
-            sum = sum + *vector::borrow(&amounts, i);
+            let payout = *vector::borrow(&amounts, i);
+            assert!(payout <= MAX_U256 - sum, E_UNPAYABLE_OUTCOME);
+            sum = sum + payout;
             i = i + 1;
         };
         assert!(sum == receipt.amount, E_UNPAYABLE_OUTCOME);

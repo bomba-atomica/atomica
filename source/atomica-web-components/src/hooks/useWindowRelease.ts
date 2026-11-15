@@ -14,9 +14,10 @@
  * `release` calls `carryAndReleaseWindow`: it records the window's
  * `AuctionOutcome` on LockBox when it is missing (the carrier finds the event
  * with `findOutcomeEvent`), then closes every lock that is still open with
- * `releaseByOutcome`, or with `reclaimUnpayable` when its leaf is unpayable
- * (`planWindowReleases`). Anyone may call it: no argument names a seller or a
- * bidder, and LockBox checks every proof itself.
+ * `releaseByOutcome` when all leaves are payable, or voids the whole auction
+ * with `reclaimUnpayable` and returns every open lock (`planWindowReleases`).
+ * Anyone may call it: no argument names a seller or a bidder, and LockBox
+ * checks every proof itself.
  *
  * A leaf may pay less than the lock amount: LockBox sends the remainder to
  * the depositor. The payouts shown are the leaf's, not the whole lock.
@@ -69,6 +70,8 @@ export interface WindowReleaseState {
   settled: boolean;
   /** True once LockBox holds the window's outcome root. */
   outcomeRecorded: boolean;
+  /** True when one unpayable leaf voided the whole auction. */
+  outcomeVoided: boolean;
   /** Every lock of the window: seller locks, then bid collateral locks. */
   locks: WindowLockRelease[];
   /** True when no lock of the window is still open. */
@@ -106,6 +109,7 @@ function readProvider(): ethers.Provider {
 interface WindowRead {
   settled: boolean;
   outcomeRecorded: boolean;
+  outcomeVoided: boolean;
   locks: WindowLockRelease[];
 }
 
@@ -142,10 +146,15 @@ async function readWindow(
         : [],
     });
   }
-  const outcomeRecorded = firstLock
-    ? (await getRecordedOutcome(provider, firstLock)).recorded
-    : false;
-  return { settled, outcomeRecorded, locks };
+  const recorded = firstLock
+    ? await getRecordedOutcome(provider, firstLock)
+    : undefined;
+  return {
+    settled,
+    outcomeRecorded: recorded?.recorded ?? false,
+    outcomeVoided: recorded?.voided ?? false,
+    locks,
+  };
 }
 
 export function useWindowRelease(
@@ -222,6 +231,7 @@ export function useWindowRelease(
   return {
     settled: read?.settled ?? false,
     outcomeRecorded: read?.outcomeRecorded ?? false,
+    outcomeVoided: read?.outcomeVoided ?? false,
     locks,
     allReleased: read !== null && !anyOpen,
     loading: read === null && error === undefined,

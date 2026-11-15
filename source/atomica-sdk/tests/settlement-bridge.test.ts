@@ -784,6 +784,51 @@ describe("release without a settlement authority", () => {
     ).toBe(true);
   });
 
+  it("voids the window first, then reclaims every other open lock without releasing", () => {
+    const bad = {
+      lockId: LOCK_A,
+      recipients: [ethers.ZeroAddress],
+      amounts: [10n],
+    };
+    const treeOutcomes = [bad, outcomes[1]];
+    const calls = planWindowReleases({
+      lockBoxAddress: "0x" + "cd".repeat(20),
+      outcomes: treeOutcomes,
+      openLocks: [lock(LOCK_A, 10n), lock(LOCK_B, 5n)],
+      recordedRoot: windowOutcomeTree(treeOutcomes).root,
+    });
+    expect(calls.map((call) => call.data.slice(0, 10))).toEqual([
+      LOCKBOX.getFunction("reclaimUnpayable")!.selector,
+      LOCKBOX.getFunction("reclaim")!.selector,
+    ]);
+    const second = LOCKBOX.decodeFunctionData("reclaim", calls[1].data);
+    expect(second[1]).toHaveLength(0);
+    expect(
+      calls.some(
+        (call) =>
+          call.data.slice(0, 10) ===
+          LOCKBOX.getFunction("releaseByOutcome")!.selector,
+      ),
+    ).toBe(false);
+  });
+
+  it("uses only immediate reclaim calls when LockBox already voided the auction", () => {
+    const calls = planWindowReleases({
+      lockBoxAddress: "0x" + "cd".repeat(20),
+      outcomes,
+      openLocks: [lock(LOCK_A, 10n), lock(LOCK_B, 5n)],
+      recordedRoot: windowOutcomeTree(outcomes).root,
+      auctionVoided: true,
+    });
+    expect(calls).toHaveLength(2);
+    expect(
+      calls.every(
+        (call) =>
+          call.data.slice(0, 10) === LOCKBOX.getFunction("reclaim")!.selector,
+      ),
+    ).toBe(true);
+  });
+
   it("planWindowReleases emits reclaimUnpayable for a leaf whose payouts sum above the lock amount", () => {
     const over = {
       lockId: LOCK_A,

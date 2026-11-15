@@ -136,10 +136,11 @@ section and [v0 Architecture §3](../architecture/v0-architecture.md#3--cross-ch
 > shipped LockBox is proof-gated: `lock(token, amount, windowId, pairHash)`
 > stores one commitment per lock at slot 0, which Aptos proves. It takes no
 > deadline: LockBox computes `lockDeadline(windowId)` and accepts only the
-> current or the next window (issue 221). A lock leaves only by
-> `releaseByOutcome` on a proven Aptos `AuctionOutcome` (its payouts, then the
-> remainder to the depositor), by `reclaimUnpayable` when its recorded leaf is
-> unpayable (issue 222), or by permissionless `reclaim` after its deadline.
+> current or the next window (issue 221). A fully payable outcome lets every
+> lock leave by `releaseByOutcome` (its payouts, then the remainder to the
+> depositor). `reclaimUnpayable` on one leaf voids the whole auction, after
+> which every other open lock returns whole immediately; otherwise a
+> permissionless `reclaim` returns an open lock after its deadline (issue 284).
 > There is no `withdraw`,
 > `getLockedBalance` or settlement authority. See
 > [v0 Architecture §3](../architecture/v0-architecture.md) and

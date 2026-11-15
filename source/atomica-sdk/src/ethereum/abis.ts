@@ -50,12 +50,11 @@ export const APTOS_LIGHT_CLIENT_ABI = [
 ] as const;
 
 // LockBox ABI - proof-gated escrow (source/evm-contracts/src/escrow/LockBox.sol).
-// A lock leaves only by releaseByOutcome (its leaf in a proven Aptos
-// AuctionOutcome: the payouts, then the remainder to the depositor), by
-// reclaimUnpayable (its recorded leaf is unpayable, so it goes home at once), or
-// by reclaim to its depositor after its deadline. Anyone may call each, and
-// anyone may carry an outcome with recordOutcome. A trusted admin can upgrade
-// the proxy until the one-way freeze.
+// A lock leaves by releaseByOutcome when every leaf in its auction is payable,
+// or reclaim. Proving one unpayable leaf with reclaimUnpayable voids the whole
+// auction, after which all remaining open locks can reclaim immediately.
+// Anyone may call each, and anyone may carry an outcome with recordOutcome.
+// A trusted admin can upgrade the proxy until the one-way freeze.
 export const LOCKBOX_ABI = [
   "function lock(address token, uint256 amount, uint64 windowId, bytes32 pairHash) returns (bytes32 lockId)",
   `function recordOutcome(${EVENT_PROOF_TUPLE} proof) returns (bytes32 key)`,
@@ -79,6 +78,7 @@ export const LOCKBOX_ABI = [
   "function statuses(bytes32 lockId) view returns (uint8)",
   "function outcomes(bytes32 auctionKey) view returns (bytes32 root, uint64 leafCount)",
   "function auctionReclaimed(bytes32 auctionKey) view returns (bool)",
+  "function auctionVoided(bytes32 auctionKey) view returns (bool)",
   "function nextLockNonce() view returns (uint256)",
   "function lightClient() view returns (address)",
   "function fakeETH() view returns (address)",
@@ -89,9 +89,11 @@ export const LOCKBOX_ABI = [
   "event LockReleased(bytes32 indexed lockId, bytes32 indexed auctionKey)",
   "event LockReclaimed(bytes32 indexed lockId, address indexed depositor, uint256 amount)",
   "event LockReclaimedUnpayable(bytes32 indexed lockId, bytes32 indexed auctionKey, address indexed depositor, uint256 amount)",
+  "event AuctionVoided(bytes32 indexed auctionKey)",
   "error LockNotOpen(bytes32 lockId, uint8 status)",
   "error OutcomeAlreadyRecorded(bytes32 auctionKey)",
   "error AuctionWasReclaimed(bytes32 auctionKey)",
+  "error AuctionWasVoided(bytes32 auctionKey)",
   "error NoOutcome(bytes32 auctionKey)",
   "error DeadlineNotReached(uint64 deadline)",
   "error WindowClosed(uint64 windowId, uint64 current)",

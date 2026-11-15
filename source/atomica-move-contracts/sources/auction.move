@@ -1261,9 +1261,10 @@ module atomica::auction {
     ///      included), each seller's unsold supply, and the whole collateral of a losing,
     ///      unopened or invalid bid go back to the depositor. A fill that does not fit the locks aborts
     ///      E_UNPAYABLE_FILL.
-    ///   4. Record each lock's outcome (`lock_receipt::record_outcome`), which refuses a
-    ///      payout list LockBox could not pay.
-    ///   5. Emit `AuctionSettled` and the window's one `AuctionOutcome` over every lock.
+    ///   4. Record every lock's exact, payable outcome. If any leaf has an invalid recipient,
+    ///      sum mismatch or overflow, the whole transaction aborts before any outcome is emitted.
+    ///   5. Emit `AuctionSettled` and the window's one `AuctionOutcome` over every lock only after
+    ///      all lock outcomes were recorded successfully.
     ///   6. Mark the window settled.
     ///
     /// @see docs/architecture/v0-architecture.md §2.8 and §2.9

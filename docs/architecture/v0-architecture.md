@@ -409,9 +409,12 @@ unwind then gives it one terminal state with a stored outcome record
 A filled lock's leftover (winner excess collateral with its rounding dust, or
 unsold seller supply) is a payout to its own depositor in the same record.
 Each record's amounts sum to the lock amount, and `record_outcome` refuses a
-zero, malformed or short-summing payout list, so Aptos never certifies an
-unpayable leaf. LockBox does not rely on this: it pays a short leaf's remainder
-to the depositor and returns a lock with an unpayable leaf whole (issue 222). Any account may call `lock_receipt::cancel_unauctioned` on an
+zero, malformed, short-summing, or overflowing payout list with
+`E_UNPAYABLE_OUTCOME`, so Aptos never certifies an unpayable leaf. LockBox also
+enforces the all-or-nothing rule for any recorded outcome: the first proven
+unpayable leaf voids the whole auction, and all remaining open locks return
+whole immediately (issue 284). A short but payable leaf sends its remainder
+to the depositor. Any account may call `lock_receipt::cancel_unauctioned` on an
 `ACTIVE` receipt at least `timelock_config::get_receipt_cancel_delay_us` (24 h)
 old.
 
@@ -459,7 +462,8 @@ every client use it. The SDK parses and shows prices with `parsePrice` and
 
 Ethereum settlement is driven by `AuctionOutcome`, not by `AuctionSettled`.
 LockBox `recordOutcome` verifies the `AuctionOutcome` event through the Aptos
-light client (§3.2) and releases each lock per its leaf (§3.5).
+light client (§3.2). If every leaf is payable it releases each lock per its
+leaf (§3.5); one unpayable leaf voids the auction and returns all open locks.
 `AuctionSettled` only reports the clearing to clients.
 
 ```move
@@ -520,10 +524,8 @@ Validators attest the header ─────► ethereum_headers stores
                                                                                │
                                                                                ▼
                                                                       LockBox.recordOutcome
-                                                                      LockBox.releaseByOutcome
-                                                                      (reclaimUnpayable for an
-                                                                       unpayable leaf, or reclaim
-                                                                       after deadline)
+                                                                      all payable: release each
+                                                                      otherwise: void, reclaim all
 ```
 
 A user finishes a trade from the UI in three actions, in this order, on the
@@ -535,9 +537,9 @@ open                               settle                          release
 AuctionRevealer: after the         SettleButton: enabled from      ReleaseButton: enabled once the
 timelock reveal, Open bids sends   chain state once the window     window settled on Aptos. It records
 open_bids until every bid is       exists, every bid is opened     the AuctionOutcome on LockBox when
-opened, then finalize_window.      and is_settled is false.        missing (recordOutcome), then calls
-An expired timelock points to      It sends auction::settle,       releaseByOutcome per open lock, or
-Unwind (UnwindButton).             which emits AuctionOutcome.     reclaimUnpayable for an unpayable leaf.
+opened, then finalize_window.      and is_settled is false.        missing (recordOutcome), then either
+An expired timelock points to      It sends auction::settle,       releases all payable leaves or voids
+Unwind (UnwindButton).             which emits AuctionOutcome.     and reclaims every lock.
 ```
 
 Any wallet may press each of them. `ReleaseButton` lists every lock of the
@@ -617,8 +619,12 @@ expiry plus the 24 h unwind grace,
 may call `unwind`. On a window that never settled, whatever its reveal state,
 it returns every lock to its depositor and emits an all-refund outcome. On a
 finalized window it returns only receipts still held and emits no second
-outcome. With nothing left it aborts `E_WINDOW_FINAL`. The 24 h grace is
-fixed on every deployed network. Only the local testing chain (chain id 4)
+outcome. With nothing left it aborts `E_WINDOW_FINAL`. If an exceptional
+malformed receipt has no valid Ethereum owner, its refund leaf has no payouts;
+LockBox sends the full amount to the original lock depositor without naming
+that address as a beneficiary. Normal settlement continues to reject malformed
+payout recipients. The 24 h grace is fixed on every deployed network. Only the
+local testing chain (chain id 4)
 lets the `@atomica` account shorten it
 (`timelock_config::set_unwind_grace_us_on_test_chain`), so a live test can
 stall a window past its stuck deadline in minutes. Winning fills go to
@@ -642,14 +648,17 @@ with a non-membership proof against the sorted outcome tree. A reclaim before
 any outcome is recorded voids that auction's outcome on Ethereum: no outcome
 can be recorded for it afterwards.
 
-**Leaf rule (issue 222).** A leaf means: these payouts, and the remainder to
-the depositor. A leaf whose payouts sum below the lock amount pays them, then
-sends `amount - sum` to the depositor. An empty leaf returns the whole lock. A
-leaf is unpayable when its payouts sum above the lock amount, when the sum
-overflows, or when a recipient is the zero address. `releaseByOutcome` reverts
-on it, and anyone may call `reclaimUnpayable` to return that lock whole to its
-depositor with no deadline wait. The other locks of the auction still release.
-A lock that cannot be paid as recorded goes home.
+**Leaf rule (issues 222 and 284).** A leaf means: these payouts, and the
+remainder to the depositor. A leaf whose payouts sum below the lock amount
+pays them, then sends `amount - sum` to the depositor. An empty leaf returns
+the whole lock. A leaf is unpayable when its payouts sum above the lock amount,
+when the sum overflows, or when a recipient is the zero address. Aptos refuses
+to record such a leaf. If one nevertheless appears in a proven outcome,
+anyone may call `reclaimUnpayable` with no deadline wait; that call voids the
+whole auction and returns the triggering lock. `releaseByOutcome` then refuses
+every lock in that auction, and `reclaim` returns each remaining open lock
+whole immediately without a membership proof. A release mined before the void
+stands, which is why Aptos validates every leaf before emitting its outcome.
 
 Payouts go to the Ethereum owner of each lock (the depositor the storage proof
 names), not to the bidder's Aptos signer address. A lock leaves the open
@@ -675,8 +684,11 @@ wallet:
   proof once and retries. When no node serves the proof, or the light client
   is stale, the outcome is unprovable and every lock goes home by `reclaim`.
 - `carryAndReleaseWindow` then rebuilds the outcome tree from the per-lock
-  outcomes on Aptos (`lock_receipt::get_lock_outcome`), checks its root against
-  the recorded one, and sends `releaseByOutcome` for each open lock.
+  outcomes on Aptos (`lock_receipt::get_lock_outcome`) and checks its root
+  against the recorded one. For a fully payable window it sends
+  `releaseByOutcome` for every open lock. For an unpayable leaf it first sends
+  `reclaimUnpayable` to void the auction, then `reclaim` for every other open
+  lock.
 - `reclaimLock` returns a lock after its deadline when no outcome is proven.
   The UI `ReclaimLockButton` is enabled only for such a lock.
 - Before any lock, the sell flow and the bidder call `assertSiweDomain`: the
@@ -783,15 +795,15 @@ function upgradeToAndCall(address newImplementation, bytes calldata data) extern
 // its dispositions root and leaf count for the auction key.
 function recordOutcome(IAptosLightClient.EventProof calldata proof) external returns (bytes32 auctionKey);
 // Pays a lock per its leaf: the payouts, then the remainder to the depositor.
-// Reverts ZeroRecipient or PayoutSumMismatch on an unpayable leaf.
+// Reverts AuctionWasVoided after any leaf voids the auction.
 function releaseByOutcome(Lock calldata l, OutcomeTree.Payout[] calldata payouts,
                           OutcomeTree.LeafProof calldata leaf) external;
-// No deadline wait: the whole lock to its depositor when its proven leaf is
-// unpayable (LeafPayable otherwise). Emits LockReclaimedUnpayable.
+// No deadline wait: on an unpayable proven leaf, voids the auction and returns
+// this lock. Emits AuctionVoided and LockReclaimedUnpayable.
 function reclaimUnpayable(Lock calldata l, OutcomeTree.Payout[] calldata payouts,
                           OutcomeTree.LeafProof calldata leaf) external;
-// After the deadline: back to the depositor, with a non-membership proof
-// when the auction has a recorded outcome.
+// After the deadline, or immediately after the auction is voided: back to the
+// depositor, with a non-membership proof only for a recorded, unvoided outcome.
 function reclaim(Lock calldata l, OutcomeTree.Neighbour[] calldata neighbours) external;
 ```
 

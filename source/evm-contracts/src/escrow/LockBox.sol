@@ -18,7 +18,8 @@ import {OutcomeTree} from "./OutcomeTree.sol";
  *        the auction's recorded outcome covers the lock.
  *      - `reclaimUnpayable`: the recorded outcome covers the lock with a leaf LockBox cannot pay,
  *        so the whole amount goes back to its depositor at once.
- *      A lock that cannot be paid as recorded goes home.
+ *      If any recorded leaf is unpayable, the whole auction is voided: that lock goes home and
+ *      every other open lock can be reclaimed whole immediately.
  *      The deploy-time admin can upgrade LockBox until the one-way `freeze`; the admin has no
  *      function that moves, pauses or blocks a lock. Until the Move package is frozen, outcomes
  *      also trust its upgrade admin.
@@ -30,8 +31,8 @@ import {OutcomeTree} from "./OutcomeTree.sol";
  *
  *      No outcome after a reclaim. If any lock of an auction is reclaimed before that auction has a
  *      recorded outcome, `auctionReclaimed` is set and no outcome can be recorded for it
- *      afterwards. Once an outcome is recorded, each lock in it closes on its own: a lock whose
- *      leaf is unpayable goes home by `reclaimUnpayable` while the other locks still release.
+ *      afterwards. Once an outcome is recorded, every leaf must be payable for any lock to release.
+ *      Proving one unpayable leaf voids the whole auction, so every remaining open lock goes home.
  *
  *      Leaf rule. A leaf means: these payouts, and the remainder to the depositor. Payouts that sum
  *      below the lock amount send `amount - sum` to the depositor; an empty list returns the whole
@@ -51,6 +52,7 @@ import {OutcomeTree} from "./OutcomeTree.sol";
  *      - Slot 3: auctionReclaimed mapping(bytes32 auctionKey => bool)
  *      - Slot 4: nextLockNonce    uint256
  *      - Slot 5: outcomeTypeTag   bytes
+ *      - Slot 6: auctionVoided    mapping(bytes32 auctionKey => bool)
  */
 contract LockBox is Initializable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
@@ -101,6 +103,9 @@ contract LockBox is Initializable, UUPSUpgradeable {
 
     /// @notice Slot 5. BCS `TypeTag` of `<atomica>::auction::AuctionOutcome`.
     bytes public outcomeTypeTag;
+
+    /// @notice Slot 6. An unpayable proven leaf voids its entire auction.
+    mapping(bytes32 => bool) public auctionVoided;
 
     /// @custom:storage-location erc7201:atomica.storage.LockBox
     struct LockBoxStorage {
@@ -158,10 +163,13 @@ contract LockBox is Initializable, UUPSUpgradeable {
 
     event LockReclaimed(bytes32 indexed lockId, address indexed depositor, uint256 amount);
 
-    /// @notice Emitted by `reclaimUnpayable`: the lock's leaf is unpayable, so `amount` went home.
+    /// @notice Emitted by `reclaimUnpayable`: the whole auction is voided and this lock went home.
     event LockReclaimedUnpayable(
         bytes32 indexed lockId, bytes32 indexed auctionKey, address indexed depositor, uint256 amount
     );
+
+    /// @notice Emitted once when a proven unpayable leaf voids its whole auction.
+    event AuctionVoided(bytes32 indexed auctionKey);
 
     // ==================== Errors ====================
 
@@ -180,6 +188,7 @@ contract LockBox is Initializable, UUPSUpgradeable {
     error ZeroRecipient();
     error DeadlineNotReached(uint64 deadline);
     error LockInTree(bytes32 lockId);
+    error AuctionWasVoided(bytes32 auctionKey);
 
     /// @notice `lock` names a window below `currentWindowId()`.
     error WindowClosed(uint64 windowId, uint64 current);
@@ -409,8 +418,9 @@ contract LockBox is Initializable, UUPSUpgradeable {
 
     /**
      * @notice Pay a lock out per its leaf in the recorded outcome of its auction. Permissionless.
-     * @dev Reverts `ZeroRecipient` or `PayoutSumMismatch` on an unpayable leaf; that lock goes home
-     *      by `reclaimUnpayable`.
+     * @dev Reverts `AuctionWasVoided` after any leaf voided this auction. Before a void, an
+     *      unpayable leaf reverts `ZeroRecipient` or `PayoutSumMismatch` and triggers
+     *      `reclaimUnpayable` instead.
      * @param l The lock's fields (checked against its commitment)
      * @param payouts The leaf's (recipient, amount) list. It may sum below the lock amount: the
      *        remainder goes to the depositor after the payouts. An empty list returns the whole lock.
@@ -423,6 +433,7 @@ contract LockBox is Initializable, UUPSUpgradeable {
     ) external {
         bytes32 lockId = _openLock(l);
         bytes32 key = auctionKey(l.windowId, l.pairHash);
+        if (auctionVoided[key]) revert AuctionWasVoided(key);
         Outcome memory o = outcomes[key];
         if (o.root == bytes32(0)) revert NoOutcome(key);
 
@@ -447,24 +458,27 @@ contract LockBox is Initializable, UUPSUpgradeable {
     // ==================== Reclaim ====================
 
     /**
-     * @notice Return a lock to its depositor after its deadline. Permissionless.
+     * @notice Return a lock to its depositor after its deadline, or immediately if its auction is
+     *         voided. Permissionless.
      * @param l The lock's fields (checked against its commitment)
      * @param neighbours Empty when the auction has no recorded outcome. Otherwise a proof that the
      *        lock id is not in the sorted tree: two adjacent leaves around it, or the first leaf
      *        (lock id below it) or the last leaf (lock id above it).
-     * @dev Before any outcome, a reclaim marks the auction reclaimed, so no outcome can be
-     *      recorded for it afterwards.
+     * @dev Before any outcome, a deadline reclaim marks the auction reclaimed, so no outcome can
+     *      be recorded afterwards. After a void, no deadline or non-membership proof is needed.
      */
     function reclaim(Lock calldata l, OutcomeTree.Neighbour[] calldata neighbours) external {
         bytes32 lockId = _openLock(l);
-        if (block.timestamp < l.deadline) revert DeadlineNotReached(l.deadline);
-
         bytes32 key = auctionKey(l.windowId, l.pairHash);
-        Outcome memory o = outcomes[key];
-        if (o.root == bytes32(0)) {
-            auctionReclaimed[key] = true;
-        } else if (!OutcomeTree.verifyAbsent(lockId, neighbours, o.leafCount, o.root)) {
-            revert LockInTree(lockId);
+        if (!auctionVoided[key]) {
+            if (block.timestamp < l.deadline) revert DeadlineNotReached(l.deadline);
+
+            Outcome memory o = outcomes[key];
+            if (o.root == bytes32(0)) {
+                auctionReclaimed[key] = true;
+            } else if (!OutcomeTree.verifyAbsent(lockId, neighbours, o.leafCount, o.root)) {
+                revert LockInTree(lockId);
+            }
         }
 
         statuses[lockId] = Status.Reclaimed;
@@ -473,12 +487,11 @@ contract LockBox is Initializable, UUPSUpgradeable {
     }
 
     /**
-     * @notice Return a lock to its depositor when its leaf in the recorded outcome is unpayable.
-     *         Permissionless, with no deadline wait: a recorded outcome is final, so that leaf can
-     *         never be released.
+     * @notice Return a lock to its depositor and void its whole auction when its recorded leaf is
+     *         unpayable. Permissionless, with no deadline wait. Every other open lock can then be
+     *         reclaimed immediately and no lock in the auction can be released.
      * @dev Checks in order: the lock is open, its auction has a recorded outcome (`NoOutcome`), the
-     *      leaf's proof holds (`InvalidProof`), and the leaf is unpayable (`LeafPayable`). It does
-     *      not set `auctionReclaimed`: the other locks of the auction still release.
+     *      leaf's proof holds (`InvalidProof`), and the leaf is unpayable (`LeafPayable`).
      * @param l The lock's fields (checked against its commitment)
      * @param payouts The leaf's (recipient, amount) list
      * @param leaf The leaf's index and Merkle proof
@@ -490,6 +503,7 @@ contract LockBox is Initializable, UUPSUpgradeable {
     ) external {
         bytes32 lockId = _openLock(l);
         bytes32 key = auctionKey(l.windowId, l.pairHash);
+        if (auctionVoided[key]) revert AuctionWasVoided(key);
         Outcome memory o = outcomes[key];
         if (o.root == bytes32(0)) revert NoOutcome(key);
         bytes32 leafHash = OutcomeTree.leafHash(lockId, OutcomeTree.payoutsHash(payouts));
@@ -497,7 +511,9 @@ contract LockBox is Initializable, UUPSUpgradeable {
         (bool unpayable,) = _leafUnpayable(l.amount, payouts);
         if (!unpayable) revert LeafPayable(lockId);
 
+        auctionVoided[key] = true;
         statuses[lockId] = Status.Reclaimed;
+        emit AuctionVoided(key);
         emit LockReclaimedUnpayable(lockId, key, l.depositor, l.amount);
         IERC20(l.token).safeTransfer(l.depositor, l.amount);
     }

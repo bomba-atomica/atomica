@@ -543,7 +543,7 @@ jobs:
       # Raise MIN_MOVE_TESTS when tests are added, so a silently skipped module fails the job.
       - name: Run Move Tests (at least MIN_MOVE_TESTS must run)
         env:
-          MIN_MOVE_TESTS: 267
+          MIN_MOVE_TESTS: 270
         run: |
           set -euo pipefail
           aptos move test --package-dir source/atomica-move-contracts | tee move-test.log
@@ -1052,15 +1052,15 @@ jobs:
           test/utils/OutcomeTreeBuilder.sol test/utils/LockBoxV2Mock.sol script/DeployAptosLightClient.s.sol
           script/DeployLockBox.s.sol script/LockProofFixture.s.sol
 
-      - name: Run light client and LockBox tests (at least 60 must run)
+      - name: Run light client and LockBox tests (at least 61 must run)
         working-directory: source/evm-contracts
         run: |
           set -euo pipefail
           forge test --match-path 'test/{unit/aptos/*,unit/LockBox.t.sol,unit/LockBoxUpgrade.t.sol,invariant/LockBox*,integration/LockBoxAptosOutcome.t.sol}' -vv | tee forge-aptos.log
           passed=$(grep -oE '[0-9]+ tests passed' forge-aptos.log | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "Light client and LockBox tests passed: $passed"
-          if [ "$passed" -lt 60 ]; then
-            echo "::error::expected at least 60 light client and LockBox tests, $passed ran"
+          if [ "$passed" -lt 61 ]; then
+            echo "::error::expected at least 61 light client and LockBox tests, $passed ran"
             exit 1
           fi
           for suite in LockBoxTest OutcomeTreeVectorsTest LockBoxInvariantTest LockBoxAptosOutcomeTest LockBoxUpgradeTest DeployLockBoxProxyTest; do

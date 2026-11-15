@@ -1905,6 +1905,68 @@ module atomica::auction_tests {
         auction::settle(&stranger(), WINDOW_ID, default_pair_bcs());
     }
 
+    // A zero Ethereum owner makes the winning bid's remainder leaf unpayable. There are two
+    // locks in the window (seller and bid); record_outcome aborts during settle before the single
+    // AuctionOutcome can be emitted. Move transaction atomicity rolls back earlier receipt writes.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 13, location = atomica::lock_receipt)] // E_UNPAYABLE_OUTCOME
+    fun settle_aborts_when_one_multi_lock_leaf_is_unpayable(atomica: &signer) {
+        revealed_window(atomica, 5 * ETH);
+        let bad_bid_lock = b"unpayable_bid_lock_32bytes______";
+        add_bid(atomica, bad_bid_lock, @0x0, 11_000 * USD, 5 * ETH);
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, default_pair_bcs(), vector[2100]);
+        auction::clear_uniform_price(WINDOW_ID, default_pair_bcs());
+        auction::settle(&stranger(), WINDOW_ID, default_pair_bcs());
+    }
+
+    // The same two-lock window can still unwind at the stuck deadline: both whole locks return,
+    // and its one all-refund AuctionOutcome matches the stored records despite the bad owner.
+    #[test(atomica = @atomica)]
+    fun unwind_returns_all_locks_after_unpayable_window(atomica: &signer) {
+        auction_bid_wrapper_tests::setup();
+        auction_bid_wrapper_tests::reveal_timelock();
+        auction::test_insert_window_with_timelock(
+            atomica, WINDOW_ID, default_pair_bcs(), 5 * ETH, false, 0, TIMELOCK_ID,
+        );
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+        add_seller(atomica, SELLER_LOCK, SELLER, 5 * ETH);
+        let bad_bid_lock = b"unpayable_bid_lock_32bytes______";
+        add_bid(atomica, bad_bid_lock, @0x0, 11_000 * USD, 5 * ETH);
+        to_stuck_deadline();
+        auction::unwind(&stranger(), WINDOW_ID, default_pair_bcs());
+
+        assert_returned<FakeETH>(SELLER_LOCK, SELLER, 5 * ETH);
+        assert_outcome<FakeUSD>(
+            bad_bid_lock,
+            lock_receipt::status_revoked(),
+            vector::empty<address>(),
+            vector::empty<u256>(),
+        );
+        let (_, _, refunded) = auction::get_window_status(WINDOW_ID, default_pair_bcs());
+        assert!(refunded && !auction::is_settled(WINDOW_ID, default_pair_bcs()), 1);
+
+        let emitted = event::emitted_events<auction::AuctionOutcome>();
+        assert!(vector::length(&emitted) == 1, 2);
+        let (window_id, pair_hash, deadline, root, leaf_count) =
+            auction::test_auction_outcome_fields(vector::borrow(&emitted, 0));
+        assert!(window_id == WINDOW_ID, 3);
+        assert!(pair_hash == auction::pair_hash(default_pair_bcs()), 4);
+        assert!(deadline == auction::eth_lock_deadline(WINDOW_ID), 5);
+        assert!(leaf_count == 2, 6);
+
+        let (_, _, seller_recipients, seller_amounts) =
+            lock_receipt::get_lock_outcome<Ethereum, FakeETH>(SELLER_LOCK);
+        let (_, _, bid_recipients, bid_amounts) =
+            lock_receipt::get_lock_outcome<Ethereum, FakeUSD>(bad_bid_lock);
+        let ids = vector[SELLER_LOCK, bad_bid_lock];
+        let hashes = vector[
+            outcome_tree::payouts_hash(&seller_recipients, &seller_amounts),
+            outcome_tree::payouts_hash(&bid_recipients, &bid_amounts),
+        ];
+        assert!(root == outcome_tree::root(&outcome_tree::sorted_leaves(ids, hashes)), 7);
+    }
+
     // From the stuck deadline on only unwind finalizes a window.
     #[test(atomica = @atomica)]
     #[expected_failure(abort_code = 35, location = atomica::auction)] // E_PAST_STUCK_DEADLINE

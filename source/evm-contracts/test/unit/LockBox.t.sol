@@ -825,8 +825,8 @@ contract LockBoxTest is Test {
 
     // ---------------------------------------------------------------- reclaimUnpayable
 
-    /// A stranger returns a lock with an unpayable leaf to its depositor before the deadline. The
-    /// auction is not marked reclaimed, and its other locks still release.
+    /// A stranger returns a lock with an unpayable leaf before the deadline. That voids the
+    /// auction, so the payable lock cannot release and is reclaimed whole immediately.
     function _assertReclaimUnpayable(OutcomeTree.Payout[] memory bad) internal {
         LockBox.Lock memory l = _lock(alice, address(fakeETH), 1 ether);
         LockBox.Lock memory other = _lock(bob, address(fakeETH), 2 ether);
@@ -841,6 +841,9 @@ contract LockBoxTest is Test {
         assertLt(block.timestamp, deadline);
 
         uint256 aliceBefore = fakeETH.balanceOf(alice);
+        uint256 bobBefore = fakeETH.balanceOf(bob);
+        vm.expectEmit(true, false, false, true, address(lockBox));
+        emit LockBox.AuctionVoided(key);
         vm.expectEmit(address(lockBox));
         emit LockBox.LockReclaimedUnpayable(_id(l), key, alice, 1 ether);
         vm.prank(stranger);
@@ -848,9 +851,15 @@ contract LockBoxTest is Test {
         assertEq(fakeETH.balanceOf(alice), aliceBefore + 1 ether);
         assertEq(fakeETH.balanceOf(stranger), 0);
         assertEq(uint8(lockBox.statuses(_id(l))), uint8(LockBox.Status.Reclaimed));
+        assertTrue(lockBox.auctionVoided(key));
         assertFalse(lockBox.auctionReclaimed(key));
 
+        vm.expectRevert(abi.encodeWithSelector(LockBox.AuctionWasVoided.selector, key));
         lockBox.releaseByOutcome(other, payouts[1], _leaf(leaves, pos[1]));
+        // Voiding removes both the deadline and membership-proof gates for remaining locks.
+        lockBox.reclaim(other, new OutcomeTree.Neighbour[](0));
+        assertEq(fakeETH.balanceOf(bob), bobBefore + 2 ether);
+        assertEq(uint8(lockBox.statuses(_id(other))), uint8(LockBox.Status.Reclaimed));
         assertEq(fakeETH.balanceOf(address(lockBox)), 0);
     }
 
@@ -864,6 +873,30 @@ contract LockBoxTest is Test {
 
     function test_reclaimUnpayableOnZeroRecipientReturnsLockToDepositor() public {
         _assertReclaimUnpayable(_payouts2(bob, 0.5 ether, address(0), 0.5 ether));
+    }
+
+    function test_reclaimUnpayableVoidsOnlyOnceAndRemainingBadLockReclaims() public {
+        OutcomeTree.Payout[] memory bad = _payouts1(bob, 2 ether);
+        LockBox.Lock memory first = _lock(alice, address(fakeETH), 1 ether);
+        LockBox.Lock memory second = _lock(bob, address(fakeETH), 1 ether);
+        bytes32[] memory ids = new bytes32[](2);
+        ids[0] = _id(first);
+        ids[1] = _id(second);
+        OutcomeTree.Payout[][] memory payouts = new OutcomeTree.Payout[][](2);
+        payouts[0] = bad;
+        payouts[1] = bad;
+        (bytes32[] memory leaves, uint256[] memory pos,,) = _tree(ids, payouts);
+        bytes32 key = _record(OutcomeTreeBuilder.root(leaves), 2);
+
+        lockBox.reclaimUnpayable(first, bad, _leaf(leaves, pos[0]));
+        assertTrue(lockBox.auctionVoided(key));
+        vm.expectRevert(abi.encodeWithSelector(LockBox.AuctionWasVoided.selector, key));
+        lockBox.reclaimUnpayable(second, bad, _leaf(leaves, pos[1]));
+
+        uint256 bobBefore = fakeETH.balanceOf(bob);
+        lockBox.reclaim(second, new OutcomeTree.Neighbour[](0));
+        assertEq(fakeETH.balanceOf(bob), bobBefore + 1 ether);
+        assertEq(fakeETH.balanceOf(address(lockBox)), 0);
     }
 
     function test_reclaimUnpayableRevertsOnPayableLeaf() public {

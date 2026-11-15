@@ -56,7 +56,7 @@ function describeRelease(result: WindowReleaseResult): string {
  *   either unfinished or finished with receipts it still holds
  *   (`getUnwindEligibility`). It remembers where its AuctionOutcome event is.
  * - **Carry outcome** brings the window's validator-signed `AuctionOutcome`
- *   to the LockBox and releases each open lock per its leaf
+ *   to the LockBox, releasing every open lock only when all leaves are payable
  *   (`carryAndReleaseWindow`). It is enabled once the window has an outcome
  *   (it settled, refunded or was unwound). Any wallet may press it.
  *

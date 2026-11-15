@@ -50,19 +50,24 @@ export interface WindowReleaseResult {
   carry?: CarryResult;
   /** Hashes of the `releaseByOutcome` transactions sent */
   released: string[];
-  /** Hashes of the `reclaimUnpayable` transactions sent (unpayable leaves) */
+  /** Hashes of `reclaimUnpayable` and whole-lock `reclaim` transactions sent */
   reclaimed: string[];
 }
 
 const RECLAIM_UNPAYABLE_SELECTOR = new ethers.Interface(
   LOCKBOX_ABI,
 ).getFunction("reclaimUnpayable")!.selector;
+const RECLAIM_SELECTOR = new ethers.Interface(LOCKBOX_ABI).getFunction(
+  "reclaim",
+)!.selector;
 
 /**
  * Record the window's `AuctionOutcome` on LockBox when it is not yet there,
- * then close each lock of the window that is still open: `releaseByOutcome`,
- * or `reclaimUnpayable` when its leaf is unpayable (`planWindowReleases`). Pass `outcomeAt` when the caller knows the event (for example from
- * its own `unwind` transaction); otherwise the carrier scans for it.
+ * then close each lock of the window that is still open. If every leaf is
+ * payable, each lock uses `releaseByOutcome`; one unpayable leaf voids the
+ * whole auction, after which every remaining lock uses immediate `reclaim`.
+ * Pass `outcomeAt` when the caller knows the event (for example from its own
+ * `unwind` transaction); otherwise the carrier scans for it.
  *
  * Stops after carrying when the outcome is unprovable or the light client is
  * stale: those locks go home by reclaim after their deadline.
@@ -139,10 +144,14 @@ export async function carryAndReleaseWindow(input: {
     outcomes,
     openLocks,
     recordedRoot: outcome.root,
+    auctionVoided: outcome.voided,
   });
   for (const call of calls) {
     const hash = (await sendLockBoxCall(input.signer, call)).hash;
-    if (call.data.startsWith(RECLAIM_UNPAYABLE_SELECTOR)) {
+    if (
+      call.data.startsWith(RECLAIM_UNPAYABLE_SELECTOR) ||
+      call.data.startsWith(RECLAIM_SELECTOR)
+    ) {
       result.reclaimed.push(hash);
     } else {
       result.released.push(hash);
