@@ -57,6 +57,9 @@ export interface WindowReleaseResult {
 const RECLAIM_UNPAYABLE_SELECTOR = new ethers.Interface(
   LOCKBOX_ABI,
 ).getFunction("reclaimUnpayable")!.selector;
+const RECLAIM_SELECTOR = new ethers.Interface(LOCKBOX_ABI).getFunction(
+  "reclaim",
+)!.selector;
 
 /**
  * Record the window's `AuctionOutcome` on LockBox when it is not yet there,
@@ -145,7 +148,10 @@ export async function carryAndReleaseWindow(input: {
   });
   for (const call of calls) {
     const hash = (await sendLockBoxCall(input.signer, call)).hash;
-    if (call.data.startsWith(RECLAIM_UNPAYABLE_SELECTOR)) {
+    if (
+      call.data.startsWith(RECLAIM_UNPAYABLE_SELECTOR) ||
+      call.data.startsWith(RECLAIM_SELECTOR)
+    ) {
       result.reclaimed.push(hash);
     } else {
       result.released.push(hash);

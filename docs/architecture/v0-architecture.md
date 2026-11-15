@@ -619,8 +619,12 @@ expiry plus the 24 h unwind grace,
 may call `unwind`. On a window that never settled, whatever its reveal state,
 it returns every lock to its depositor and emits an all-refund outcome. On a
 finalized window it returns only receipts still held and emits no second
-outcome. With nothing left it aborts `E_WINDOW_FINAL`. The 24 h grace is
-fixed on every deployed network. Only the local testing chain (chain id 4)
+outcome. With nothing left it aborts `E_WINDOW_FINAL`. If an exceptional
+malformed receipt has no valid Ethereum owner, its refund leaf has no payouts;
+LockBox sends the full amount to the original lock depositor without naming
+that address as a beneficiary. Normal settlement continues to reject malformed
+payout recipients. The 24 h grace is fixed on every deployed network. Only the
+local testing chain (chain id 4)
 lets the `@atomica` account shorten it
 (`timelock_config::set_unwind_grace_us_on_test_chain`), so a live test can
 stall a window past its stuck deadline in minutes. Winning fills go to
