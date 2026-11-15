@@ -100,6 +100,9 @@ contract LockBoxHandler is Test {
     function lock(uint256 actorSeed, uint256 tokenSeed, uint256 amount, uint256 windowSeed) external {
         uint256 w = windowSeed % 2;
         if (windows[w] < lockBox.currentWindowId() || locks.length >= 40) return;
+        // Keep all-lock-only counterexamples below afterInvariant's progress threshold. Once a
+        // real handler action closes a lock, later lock-only sequences retain that exit evidence.
+        if (locks.length >= 5 && releases + reclaims + unpayableReclaims == 0) return;
         address who = actors[actorSeed % 3];
         address token = tokenSeed % 2 == 0 ? address(fakeETH) : address(fakeUSD);
         amount = bound(amount, 1, token == address(fakeETH) ? 50 ether : 500e6);
@@ -334,6 +337,20 @@ contract LockBoxInvariantTest is Test {
             vm.stopPrank();
         }
         targetContract(address(handler));
+    }
+
+    function test_handlerCapsLocksUntilFirstSuccessfulClose() public {
+        for (uint256 i = 0; i < 6; i++) {
+            handler.lock(i, 0, 1 ether, 0);
+        }
+        assertEq(handler.lockCount(), 5);
+        assertEq(handler.calls(), 5);
+
+        handler.recordOutcome(0, 1);
+        handler.releaseByOutcome(0);
+        handler.lock(0, 0, 1 ether, 0);
+        assertEq(handler.lockCount(), 6);
+        assertEq(handler.releases(), 1);
     }
 
     /// Guards against a vacuous run: once locks exist, the sequence ends some of them, and once
