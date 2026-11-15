@@ -1,6 +1,7 @@
 [package]
 name = "AtomicaAuction"
 version = "0.0.0"
+upgrade_policy = "compatible"
 
 [dependencies]
 AptosFramework = { git = "https://github.com/bomba-atomica/atomica-aptos.git", subdir = "aptos-move/framework/aptos-framework", rev = "245937376b19dd278c3e62776aedc9401da28647" }

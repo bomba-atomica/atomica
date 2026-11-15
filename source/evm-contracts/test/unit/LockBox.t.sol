@@ -20,6 +20,7 @@ contract LockBoxTest is Test {
     FakeETH internal fakeETH;
     FakeUSD internal fakeUSD;
     MockAptosLightClient internal client;
+    DeployLockBox internal deployer;
 
     bytes internal constant TYPE_TAG =
         hex"07000000000000000000000000000000000000000000000000000000000000cafe0761756374696f6e0e41756374696f6e4f7574636f6d6500";
@@ -42,8 +43,9 @@ contract LockBoxTest is Test {
         fakeETH = new FakeETH();
         fakeUSD = new FakeUSD();
         client = new MockAptosLightClient(TYPE_TAG);
-        (daySecs, closeOffsets) = new DeployLockBox().productionWindowSchedule();
-        lockBox = new LockBox(address(fakeETH), address(fakeUSD), client, TYPE_TAG, daySecs, closeOffsets);
+        deployer = new DeployLockBox();
+        (daySecs, closeOffsets) = deployer.productionWindowSchedule();
+        lockBox = _deploy(daySecs, closeOffsets);
         window = lockBox.currentWindowId();
         deadline = lockBox.lockDeadline(window);
         for (uint256 i = 0; i < 3; i++) {
@@ -174,14 +176,22 @@ contract LockBoxTest is Test {
         assertEq(new DeployLockBox().outcomeTypeTag(bytes32(uint256(0xcafe))), TYPE_TAG);
     }
 
-    function test_constructorRejectsZeroLightClient() public {
+    function test_initializeRejectsZeroLightClient() public {
         vm.expectRevert("Invalid light client");
-        new LockBox(address(fakeETH), address(fakeUSD), IAptosLightClient(address(0)), TYPE_TAG, daySecs, closeOffsets);
+        deployer.deployProxy(
+            address(fakeETH),
+            address(fakeUSD),
+            IAptosLightClient(address(0)),
+            TYPE_TAG,
+            daySecs,
+            closeOffsets,
+            address(this)
+        );
     }
 
-    function test_constructorRejectsEmptyTypeTag() public {
+    function test_initializeRejectsEmptyTypeTag() public {
         vm.expectRevert("Invalid type tag");
-        new LockBox(address(fakeETH), address(fakeUSD), client, "", daySecs, closeOffsets);
+        deployer.deployProxy(address(fakeETH), address(fakeUSD), client, "", daySecs, closeOffsets, address(this));
     }
 
     function _offsets(uint64 a) internal pure returns (uint64[] memory o) {
@@ -196,7 +206,9 @@ contract LockBoxTest is Test {
     }
 
     function _deploy(uint64 day, uint64[] memory offsets) internal returns (LockBox) {
-        return new LockBox(address(fakeETH), address(fakeUSD), client, TYPE_TAG, day, offsets);
+        (LockBox proxy,) =
+            deployer.deployProxy(address(fakeETH), address(fakeUSD), client, TYPE_TAG, day, offsets, address(this));
+        return proxy;
     }
 
     /// The rules of `eth_proof::set_window_schedule`: one or two offsets, strictly increasing,

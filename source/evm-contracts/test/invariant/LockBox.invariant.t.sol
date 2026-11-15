@@ -10,6 +10,23 @@ import {FakeUSD} from "../../src/tokens/FakeUSD.sol";
 import {MockAptosLightClient} from "../utils/MockAptosLightClient.sol";
 import {OutcomeTreeBuilder} from "../utils/OutcomeTreeBuilder.sol";
 import {DeployLockBox} from "../../script/DeployLockBox.s.sol";
+import {LockBoxV2Mock} from "../utils/LockBoxV2Mock.sol";
+
+contract LockBoxAdminController {
+    LockBoxV2Mock private immutable v2;
+
+    constructor() {
+        v2 = new LockBoxV2Mock();
+    }
+
+    function upgrade(LockBox lockBox) external {
+        lockBox.upgradeToAndCall(address(v2), bytes(""));
+    }
+
+    function freeze(LockBox lockBox) external {
+        lockBox.freeze();
+    }
+}
 
 /**
  * @notice Drives random lock, recordOutcome, releaseByOutcome, reclaim and reclaimUnpayable
@@ -56,11 +73,16 @@ contract LockBoxHandler is Test {
     mapping(uint256 => bool) internal unpayable; // lock index => its leaf is unpayable
 
     uint256 public calls;
+    LockBoxAdminController private adminController;
+    bool public frozen;
+    bytes32 public implementationAtFreeze;
+    bytes32 private constant IMPLEMENTATION_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
 
-    constructor(LockBox _lockBox, FakeETH _fakeETH, FakeUSD _fakeUSD) {
+    constructor(LockBox _lockBox, FakeETH _fakeETH, FakeUSD _fakeUSD, LockBoxAdminController _adminController) {
         lockBox = _lockBox;
         fakeETH = _fakeETH;
         fakeUSD = _fakeUSD;
+        adminController = _adminController;
         uint64 current = _lockBox.currentWindowId();
         windows = [current, current + 1];
         deadlines = [_lockBox.lockDeadline(current), _lockBox.lockDeadline(current + 1)];
@@ -78,6 +100,9 @@ contract LockBoxHandler is Test {
     function lock(uint256 actorSeed, uint256 tokenSeed, uint256 amount, uint256 windowSeed) external {
         uint256 w = windowSeed % 2;
         if (windows[w] < lockBox.currentWindowId() || locks.length >= 40) return;
+        // Keep all-lock-only counterexamples below afterInvariant's progress threshold. Once a
+        // real handler action closes a lock, later lock-only sequences retain that exit evidence.
+        if (locks.length >= 5 && releases + reclaims + unpayableReclaims == 0) return;
         address who = actors[actorSeed % 3];
         address token = tokenSeed % 2 == 0 ? address(fakeETH) : address(fakeUSD);
         amount = bound(amount, 1, token == address(fakeETH) ? 50 ether : 500e6);
@@ -87,6 +112,18 @@ contract LockBoxHandler is Test {
         lockBox.lock(token, amount, windowId, PAIR);
         locks.push(LockBox.Lock(who, token, nonce, amount, windowId, PAIR, deadlines[w]));
         openAmount[token] += amount;
+        calls++;
+    }
+
+    function upgradeOrFreeze(uint256 choice) external {
+        if (frozen) return;
+        if (choice % 4 == 0) {
+            adminController.freeze(lockBox);
+            frozen = true;
+            implementationAtFreeze = vm.load(address(lockBox), IMPLEMENTATION_SLOT);
+        } else {
+            adminController.upgrade(lockBox);
+        }
         calls++;
     }
 
@@ -267,16 +304,25 @@ contract LockBoxInvariantTest is Test {
     FakeETH internal fakeETH;
     FakeUSD internal fakeUSD;
     LockBoxHandler internal handler;
+    LockBoxAdminController internal adminController;
 
     function setUp() public {
         vm.warp(1_700_000_000);
         fakeETH = new FakeETH();
         fakeUSD = new FakeUSD();
         (uint64 daySecs, uint64[] memory closeOffsets) = new DeployLockBox().productionWindowSchedule();
-        lockBox = new LockBox(
-            address(fakeETH), address(fakeUSD), new MockAptosLightClient(TYPE_TAG), TYPE_TAG, daySecs, closeOffsets
-        );
-        handler = new LockBoxHandler(lockBox, fakeETH, fakeUSD);
+        adminController = new LockBoxAdminController();
+        (lockBox,) = new DeployLockBox()
+            .deployProxy(
+                address(fakeETH),
+                address(fakeUSD),
+                new MockAptosLightClient(TYPE_TAG),
+                TYPE_TAG,
+                daySecs,
+                closeOffsets,
+                address(adminController)
+            );
+        handler = new LockBoxHandler(lockBox, fakeETH, fakeUSD, adminController);
         address[3] memory actors = [address(0xA11CE), address(0xB0B), address(0xCA401)];
         for (uint256 i = 0; i < 3; i++) {
             for (uint256 m = 0; m < 10; m++) {
@@ -293,9 +339,31 @@ contract LockBoxInvariantTest is Test {
         targetContract(address(handler));
     }
 
+    function test_handlerCapsLocksUntilFirstSuccessfulClose() public {
+        for (uint256 i = 0; i < 6; i++) {
+            handler.lock(i, 0, 1 ether, 0);
+        }
+        assertEq(handler.lockCount(), 5);
+        assertEq(handler.calls(), 5);
+
+        handler.recordOutcome(0, 1);
+        handler.releaseByOutcome(0);
+        handler.lock(0, 0, 1 ether, 0);
+        assertEq(handler.lockCount(), 6);
+        assertEq(handler.releases(), 1);
+    }
+
     /// Guards against a vacuous run: once locks exist, the sequence ends some of them, and once
     /// enough leaves exist, short and unpayable leaves are among them.
     function afterInvariant() public view {
+        if (handler.frozen()) {
+            assertTrue(lockBox.frozen(), "freeze state was lost");
+            assertEq(
+                vm.load(address(lockBox), 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc),
+                handler.implementationAtFreeze(),
+                "implementation changed after freeze"
+            );
+        }
         if (handler.lockCount() > 5) {
             assertGt(handler.releases() + handler.reclaims() + handler.unpayableReclaims(), 0);
         }

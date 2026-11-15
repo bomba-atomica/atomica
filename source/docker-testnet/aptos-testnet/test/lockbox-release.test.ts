@@ -13,6 +13,7 @@ import {
     type LockAsset,
     type LockReceiptInfo,
 } from "@atomica/sdk/settlement/bridge";
+import { evmFreezeStatus, moveFreezeStatus } from "@atomica/sdk/freeze-status";
 import {
     setupDualChainTestnet,
     teardownDualChainTestnet,
@@ -69,6 +70,9 @@ const LOCKBOX_ABI = [
     `function releaseByOutcome(${LOCK_TUPLE} l, (address recipient, uint256 amount)[] payouts, (uint256 index, bytes32[] proof) leaf)`,
     "function lockDeadline(uint64 windowId) view returns (uint64)",
     "function windowSchedule() view returns (uint64 daySecs, uint64[] closeOffsetsSecs)",
+    "function admin() view returns (address)",
+    "function frozen() view returns (bool)",
+    "function freeze()",
     "error DeadlineNotReached(uint64 deadline)",
     "error NoOutcome(bytes32 auctionKey)",
 ];
@@ -384,5 +388,18 @@ describe.sequential("Proof-gated LockBox with Aptos lock registration (live dual
                 storageProof: ethProof.storageProof[0].proof as string[],
             }),
         ).rejects.toThrow(/E_ALREADY_CLAIMED/);
+    }, 900_000);
+
+    it("reports both freeze states and freezes LockBox through its admin", async () => {
+        const lockBox = new ethers.Contract(info.eth.contracts.lockBox, LOCKBOX_ABI, provider);
+        const admin = new ethers.Wallet(info.eth.deployerPrivateKey, provider);
+        expect((await lockBox.admin()).toLowerCase()).toBe(admin.address.toLowerCase());
+        expect(await evmFreezeStatus(provider, info.eth.contracts.lockBox)).toBe(false);
+        expect(await moveFreezeStatus(aptos, info.aptos.moduleAddress)).toBe(false);
+
+        await (await lockBox.connect(admin).freeze()).wait();
+
+        expect(await evmFreezeStatus(provider, info.eth.contracts.lockBox)).toBe(true);
+        expect(await moveFreezeStatus(aptos, info.aptos.moduleAddress)).toBe(false);
     }, 900_000);
 });

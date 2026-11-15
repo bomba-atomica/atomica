@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {LockBox} from "../src/escrow/LockBox.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IAptosLightClient} from "../src/aptos/IAptosLightClient.sol";
 import {FakeETH} from "../src/tokens/FakeETH.sol";
 import {FakeUSD} from "../src/tokens/FakeUSD.sol";
@@ -23,11 +24,10 @@ import {DeployLockBox} from "./DeployLockBox.s.sol";
  *          --rpc-url http://localhost:8545 --ffi
  *        kill %1
  *
- *      `run` sends one transaction per block from anvil account 0 (nonce in brackets):
- *        block 1 FakeETH [0], block 2 FakeUSD [1], block 3 LockBox [2] at 0x9fE4…a6e0,
- *        block 4 mint 10 FakeETH [3], block 5 approve [4],
- *        block 6 lock 10 FakeETH, lock nonce 0, into window WINDOW_ID, pair hash keccak256("") [5],
- *        block 7 an unrelated FakeUSD mint [6].
+ *      `run` deploys the implementation and initialized proxy, then sends one transaction per
+ *      block from anvil account 0: FakeETH, FakeUSD, LockBox implementation, LockBox proxy,
+ *      mint, approve, lock, and an unrelated FakeUSD mint. The proxy address is the address Aptos
+ *      proves and clients pin.
  *      LockBox takes the production window schedule, or ATOMICA_TEST_WINDOW_SCHEDULE when set
  *      (`<day_secs>:<offset>[,<offset>...]`, e.g. `900:900`). WINDOW_ID defaults to its `currentWindowId()`
  *      at the chain clock. LockBox computes the deadline, `lockDeadline(WINDOW_ID)`: the window
@@ -54,8 +54,12 @@ contract LockProofFixture is Script {
         vm.startBroadcast(key);
         FakeETH fakeETH = new FakeETH();
         FakeUSD fakeUSD = new FakeUSD();
-        LockBox lockBox =
-            new LockBox(address(fakeETH), address(fakeUSD), lightClient, typeTag, daySecs, closeOffsetsSecs);
+        LockBox implementation = new LockBox();
+        bytes memory initialization = abi.encodeCall(
+            LockBox.initialize,
+            (address(fakeETH), address(fakeUSD), lightClient, typeTag, daySecs, closeOffsetsSecs, user)
+        );
+        LockBox lockBox = LockBox(address(new ERC1967Proxy(address(implementation), initialization)));
         uint64 windowId = uint64(vm.envOr("WINDOW_ID", uint256(lockBox.currentWindowId())));
         fakeETH.mint(user, TEN_ETH);
         fakeETH.approve(address(lockBox), TEN_ETH);
@@ -99,11 +103,11 @@ contract LockProofFixture is Script {
     function proofs() external {
         string memory rpc = vm.envOr("RPC_URL", string("http://localhost:8545"));
         address user = vm.addr(vm.envOr("PRIVATE_KEY", ANVIL_KEY_0));
-        address lockBox = vm.computeCreateAddress(user, 2);
+        address lockBox = vm.computeCreateAddress(user, 3);
         bytes32 lockId = LockBox(lockBox).getLockId(user, address(LockBox(lockBox).fakeETH()), 0);
         bytes32 slot = LockBox(lockBox).commitmentStorageKey(lockId);
         console.log("COMMITMENT:", vm.toString(LockBox(lockBox).commitments(lockId)));
-        for (uint256 b = 6; b <= 7; b++) {
+        for (uint256 b = 7; b <= 8; b++) {
             console.log("--- block", b);
             console.log("stateRoot:", vm.toString(bytes32(cast(_block(rpc, b)))));
             console.log(string(cast(_proof(rpc, lockBox, slot, b))));

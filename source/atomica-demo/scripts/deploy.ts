@@ -21,6 +21,7 @@
 
 import { spawn } from "child_process";
 import { ethers } from "ethers";
+import { readFileSync } from "fs";
 import {
   compileContracts,
   getFakeETHArtifact,
@@ -42,7 +43,7 @@ function siweDomain(): string {
 
 const ETH_RPC_URL = process.env.ETH_RPC_URL || "http://localhost:8545";
 /**
- * LockBox constructor inputs. LockBox releases a lock only on an Aptos
+ * LockBox initializer inputs. LockBox releases a lock only on an Aptos
  * AuctionOutcome proven by the Aptos light client, or by reclaim after its
  * deadline. LIGHT_CLIENT is the AptosLightClient address
  * (evm-contracts/script/DeployAptosLightClient.s.sol). Unset: a stand-in
@@ -166,24 +167,52 @@ async function deployEthereumContracts() {
   console.log(`  ✓ FakeUSD deployed at: ${fakeUSDAddress}`);
 
   console.log(`  LockBox light client: ${LIGHT_CLIENT}`);
-  console.log("  Deploying LockBox...");
-  const lockBoxContract = await deployWithRetry(
+  console.log("  Deploying LockBox implementation and proxy...");
+  const lockBoxArtifact = getLockBoxArtifact();
+  const lockBoxImplementation = await deployWithRetry(
     new ethers.ContractFactory(
-      getLockBoxArtifact().abi,
-      getLockBoxArtifact().bytecode.object,
+      lockBoxArtifact.abi,
+      lockBoxArtifact.bytecode.object,
       ethSigner,
     ),
     ethSigner,
-    // No relayer: outcomes are proven through the Aptos light client.
-    [
-      fakeETHAddress,
-      fakeUSDAddress,
-      LIGHT_CLIENT,
-      auctionOutcomeTypeTag(APTOS_DEPLOYER_ADDRESS),
-    ],
+  );
+  const implementationAddress = await lockBoxImplementation.getAddress();
+  const windowSchedule =
+    process.env.ATOMICA_TEST_WINDOW_SCHEDULE?.trim() === "900:900"
+      ? { daySecs: 900, closeOffsetsSecs: [900] }
+      : { daySecs: 86_400, closeOffsetsSecs: [27_900, 58_500] };
+  const initializeData = new ethers.Interface(
+    lockBoxArtifact.abi,
+  ).encodeFunctionData("initialize", [
+    fakeETHAddress,
+    fakeUSDAddress,
+    LIGHT_CLIENT,
+    auctionOutcomeTypeTag(APTOS_DEPLOYER_ADDRESS),
+    windowSchedule.daySecs,
+    windowSchedule.closeOffsetsSecs,
+    process.env.LOCKBOX_ADMIN?.trim() || deployerAddress,
+  ]);
+  const proxyArtifact = JSON.parse(
+    readFileSync(
+      "../evm-contracts/out/ERC1967Proxy.sol/ERC1967Proxy.json",
+      "utf-8",
+    ),
+  ) as { abi: ethers.InterfaceAbi; bytecode: { object: string } };
+  const lockBoxContract = await deployWithRetry(
+    new ethers.ContractFactory(
+      [...proxyArtifact.abi, ...lockBoxArtifact.abi],
+      proxyArtifact.bytecode.object,
+      ethSigner,
+    ),
+    ethSigner,
+    [implementationAddress, initializeData],
   );
   const lockBoxAddress = await lockBoxContract.getAddress();
-  console.log(`  ✓ LockBox deployed at: ${lockBoxAddress}`);
+  console.log(
+    `  ✓ LockBox implementation deployed at: ${implementationAddress}`,
+  );
+  console.log(`  ✓ LockBox proxy deployed at: ${lockBoxAddress}`);
 
   console.log("  ✅ Ethereum contracts deployed");
 

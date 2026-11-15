@@ -755,11 +755,13 @@ the same trust assumption.
 ### 3.5 Releases
 
 Each lock is released on its own (`source/evm-contracts/src/escrow/LockBox.sol`,
-issue 203). Every call is permissionless, and LockBox has no admin, relayer or
-upgrade key. It ships at a new address, and again with the computed lock
-deadline (issue 221). Its constructor takes the window clock as its last two
-arguments, `uint64 daySecs` and `uint64[] closeOffsetsSecs` (one or two
-closes, `DeployLockBox.productionWindowSchedule()`), and freezes them.
+issue 203). Every user path remains permissionless. LockBox is deployed behind
+an ERC1967 proxy with a UUPS implementation. Its admin can upgrade it until
+calling the one-way `freeze()`; after that all upgrades revert. The admin
+cannot move, pause, or block a lock. The proxy initializer stores the tokens,
+light client, admin, outcome type tag, and window schedule. Aptos proves the
+proxy's slot 0 commitment mapping, which remains the first sequential storage
+slot through upgrades.
 
 ```solidity
 // windowId must be currentWindowId() or the next one (WindowClosed,
@@ -773,6 +775,10 @@ function currentWindowId() external view returns (uint64);
 function windowClose(uint64 windowId) external view returns (uint64);
 function lockDeadline(uint64 windowId) external view returns (uint64);
 function windowSchedule() external view returns (uint64 daySecs, uint64[] memory closeOffsetsSecs);
+function admin() external view returns (address);
+function frozen() external view returns (bool);
+function freeze() external;
+function upgradeToAndCall(address newImplementation, bytes calldata data) external payable;
 // Verifies the AuctionOutcome event through the Aptos light client and stores
 // its dispositions root and leaf count for the auction key.
 function recordOutcome(IAptosLightClient.EventProof calldata proof) external returns (bytes32 auctionKey);

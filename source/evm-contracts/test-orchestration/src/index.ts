@@ -26,7 +26,10 @@
  *   bun run src/index.ts --keep-alive       # Don't tear down testnet
  */
 import { EthereumDockerTestnet } from "../../../docker-testnet/ethereum-testnet/typescript-sdk/dist/index.js";
-import { ETHEREUM_DEPLOYER_PRIVATE_KEY } from "../../../shared/test-constants";
+import {
+    ETHEREUM_DEPLOYER_ADDRESS,
+    ETHEREUM_DEPLOYER_PRIVATE_KEY,
+} from "../../../shared/test-constants";
 import { spawn } from "child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { resolve as pathResolve } from "path";
@@ -176,6 +179,7 @@ export class TestOrchestrator {
             ETH_RPC_URL: rpcUrl,
             PRIVATE_KEY: ETHEREUM_DEPLOYER_PRIVATE_KEY,
             LIGHT_CLIENT: STAND_IN_LIGHT_CLIENT,
+            LOCKBOX_ADMIN: ETHEREUM_DEPLOYER_ADDRESS,
             ATOMICA_ADDRESS: STAND_IN_ATOMICA_ADDRESS,
             FOUNDRY_PROFILE,
         };
