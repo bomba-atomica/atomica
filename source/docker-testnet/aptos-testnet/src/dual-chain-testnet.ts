@@ -23,7 +23,7 @@ import {
     PRODUCTION_WINDOW_SCHEDULE,
     type WindowSchedule,
 } from "@atomica/sdk/ethereum/lock-binding";
-import { Aptos, AptosConfig } from "@aptos-labs/ts-sdk";
+import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 import { execSync } from "child_process";
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
@@ -441,7 +441,7 @@ export async function setupDualChainTestnet(
     });
     console.log(`[Dual-Chain] ✓ Aptos contracts deployed`);
 
-    const aptos = new Aptos(new AptosConfig({ fullnode: nodeUrl }));
+    const aptos = new Aptos(new AptosConfig({ network: Network.LOCAL, fullnode: nodeUrl }));
     const [aptosDaySecs, aptosOffsets] = await aptos.view({
         payload: {
             function: `${aptosModuleAddress}::eth_proof::get_window_schedule`,
