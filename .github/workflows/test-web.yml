@@ -58,7 +58,7 @@ jobs:
 
       - name: Install Aptos CLI
         run: |
-          APTOS_VERSION="binary-245937376b"
+          APTOS_VERSION="binary-0ef2c9a5c5"
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
           APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
@@ -153,7 +153,7 @@ jobs:
 
       - name: Install Aptos CLI
         run: |
-          APTOS_VERSION="binary-245937376b"
+          APTOS_VERSION="binary-0ef2c9a5c5"
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
           APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"

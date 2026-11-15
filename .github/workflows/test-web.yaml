@@ -29,7 +29,7 @@ env:
   # The atomica-aptos binary release the Move jobs install. Its commit must equal
   # the AptosFramework rev in source/atomica-move-contracts/Move.toml (checked
   # by move-framework-pin).
-  APTOS_VERSION: binary-245937376b
+  APTOS_VERSION: binary-0ef2c9a5c5
 
 jobs:
   changes:
@@ -407,7 +407,7 @@ jobs:
       - name: Install Aptos CLI
         run: |
           # Download aptos binary from atomica-aptos releases
-          APTOS_VERSION="binary-245937376b"
+          APTOS_VERSION="binary-0ef2c9a5c5"
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
           APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
@@ -450,7 +450,7 @@ jobs:
       # ── Aptos Testnet SDK Tests ────────────────────────────────────────────
       # This step runs test/auction-round-trip.test.ts, the live lock, auction,
       # outcome and release round trip. The compose default validator image
-      # (binary-245937376b) serves /v1/atomica, so no image step is needed.
+      # (binary-0ef2c9a5c5) serves /v1/atomica, so no image step is needed.
       # ETH_BACKEND is unset, so the Ethereum side is the Docker PoS chain,
       # where Prague gives AptosLightClient its EIP-2537 precompiles.
       # It also runs test/lockbox-release.test.ts against the LockBox it deploys.
@@ -492,19 +492,33 @@ jobs:
     timeout-minutes: 5
     env:
       CI_CLASS: code-hygiene
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
-      # The script reads APTOS_VERSION from the top-level env of this file. It fails when
-      # the Move.toml rev, any workflow binary- tag, APTOS_PROOF_RELEASE or
-      # APTOS_PROOF_COMMIT differs from it. The validator image digest in
-      # source/docker-testnet/config/docker-compose.yaml stays unchecked: a
-      # digest cannot be compared with a tag without a registry read.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The script reads APTOS_VERSION from the top-level env and checks the
+      # Move.toml rev, workflow tags, proof pins, source-vector headers and
+      # exact upstream vectors. It also inspects the pinned image digest and
+      # verifies its OCI revision label.
       - name: Every fork pin must equal APTOS_VERSION
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/check-fork-pin.sh
 
-      # Proves the check fails on each bad fixture and passes on the good one
-      # and on the real tree.
+      # Proves the guard rejects a deliberately mutated pin and passes on the
+      # real tree. This step skips registry checks; the prior step covers them.
       - name: Fork pin check rejects the bad fixtures
         run: bash .github/scripts/check-fork-pin-fixtures.sh
 
@@ -713,7 +727,7 @@ jobs:
       - name: Install Aptos CLI
         if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim' || matrix.chunk == 'happy-path' || matrix.chunk == 'unwind'
         run: |
-          APTOS_VERSION="binary-245937376b"
+          APTOS_VERSION="binary-0ef2c9a5c5"
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
           APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
@@ -874,7 +888,7 @@ jobs:
       - name: Install Aptos CLI
         if: matrix.chunk == 'component' || matrix.chunk == 'auction' || matrix.chunk == 'bid-settle' || matrix.chunk == 'settle-100-bids' || matrix.chunk == 'claim-reclaim' || matrix.chunk == 'happy-path'
         run: |
-          APTOS_VERSION="binary-245937376b"
+          APTOS_VERSION="binary-0ef2c9a5c5"
           APTOS_HASH="${APTOS_VERSION#binary-}"
           APTOS_BINARY_NAME="aptos-${APTOS_HASH}"
           APTOS_URL="https://github.com/bomba-atomica/atomica-aptos/releases/download/${APTOS_VERSION}/${APTOS_BINARY_NAME}"
@@ -1080,9 +1094,9 @@ jobs:
     timeout-minutes: 45
     env:
       CI_CLASS: system-correctness
-      APTOS_PROOF_RELEASE: binary-245937376b
-      APTOS_PROOF_COMMIT: 245937376b19dd278c3e62776aedc9401da28647
-      IMAGE_NAME: atomica-validator:245937376b
+      APTOS_PROOF_RELEASE: binary-0ef2c9a5c5
+      APTOS_PROOF_COMMIT: 0ef2c9a5c5f40d5cfd9ff6703b0b6da334ef2870
+      IMAGE_NAME: atomica-validator:0ef2c9a5c5
     permissions:
       contents: read
     steps:

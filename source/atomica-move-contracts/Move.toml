@@ -4,7 +4,7 @@ version = "0.0.0"
 upgrade_policy = "compatible"
 
 [dependencies]
-AptosFramework = { git = "https://github.com/bomba-atomica/atomica-aptos.git", subdir = "aptos-move/framework/aptos-framework", rev = "245937376b19dd278c3e62776aedc9401da28647" }
+AptosFramework = { git = "https://github.com/bomba-atomica/atomica-aptos.git", subdir = "aptos-move/framework/aptos-framework", rev = "0ef2c9a5c5f40d5cfd9ff6703b0b6da334ef2870" }
 
 [addresses]
 atomica = "_"

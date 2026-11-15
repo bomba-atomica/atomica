@@ -1,7 +1,7 @@
 {
   "_source": {
     "repo": "bomba-atomica/atomica-aptos",
-    "commit": "55609bcfe36661a6857bb1bd1cad6a88f6ef44d4",
+    "commit": "0ef2c9a5c5f40d5cfd9ff6703b0b6da334ef2870",
     "path": "atomica/golden_vectors/aptos_outcome_proof_vectors.json",
     "note": "Copied verbatim below this header. Do not edit by hand: copy the file again from the fork and update this commit."
   },
