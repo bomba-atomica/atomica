@@ -61,7 +61,10 @@ describe.sequential("Chunky DKG secrecy threshold", () => {
             "0x1",
             "0x1::chunky_dkg_config::ChunkyDKGConfig",
         );
-        const variant = resource.variant as { type_name?: unknown; data?: unknown };
+        const config = resource.data as {
+            variant: { type_name?: unknown; data?: unknown };
+        };
+        const variant = config.variant;
         expect(typeof variant.type_name).toBe("string");
         expect(CONFIG_V1_TYPES.has(variant.type_name as string)).toBe(true);
 
