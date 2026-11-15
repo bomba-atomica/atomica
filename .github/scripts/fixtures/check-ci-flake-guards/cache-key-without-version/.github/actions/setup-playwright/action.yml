@@ -1,0 +1,14 @@
+# Fixture: a cached Playwright action keyed on the OS and the version.
+name: Setup Playwright
+runs:
+  using: composite
+  steps:
+    - id: playwright
+      shell: bash
+      run: echo "version=1.57.0" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/ms-playwright
+          ~/.cache/playwright-apt
+        key: playwright-${{ runner.os }}

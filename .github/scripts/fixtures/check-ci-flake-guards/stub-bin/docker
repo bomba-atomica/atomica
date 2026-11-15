@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Stub docker for the retry tests. Appends one line per call to
+# $STUB_DOCKER_LOG and fails the first $STUB_DOCKER_FAIL_FIRST calls.
+set -u
+echo "$*" >> "${STUB_DOCKER_LOG:?STUB_DOCKER_LOG must be set}"
+calls=$(wc -l < "$STUB_DOCKER_LOG")
+if [ "$calls" -le "${STUB_DOCKER_FAIL_FIRST:-0}" ]; then
+  echo "stub docker: failing call ${calls}" >&2
+  exit 1
+fi
+exit 0
