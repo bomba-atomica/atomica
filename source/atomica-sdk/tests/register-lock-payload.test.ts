@@ -141,13 +141,27 @@ describe("getRegisterLockPayload", () => {
   });
 
   it("matches configured FakeETH and FakeUSD tokens case-insensitively", () => {
-    for (const [asset, address] of [
-      ["FakeETH", FAKE_ETH],
-      ["FakeUSD", FAKE_USD],
-    ] as const) {
+    const caseSensitiveAddresses = [
+      ["FakeETH", "0xAa" + "aA".repeat(19)],
+      ["FakeUSD", "0xBb" + "bB".repeat(19)],
+    ] as const;
+
+    globalThis.__ATOMICA_CHAIN_CONFIG__ = {
+      ethereum: {
+        rpcUrl: "http://localhost:8545",
+        fakeETH: caseSensitiveAddresses[0][1],
+        fakeUSD: caseSensitiveAddresses[1][1],
+        lockBox: "0x" + "55".repeat(20),
+      },
+      aptos: { contractAddress: "0xtest" },
+    };
+
+    for (const [asset, address] of caseSensitiveAddresses) {
+      const mixedCaseAddress = address.toUpperCase().replace("0X", "0x");
+      expect(mixedCaseAddress).not.toBe(address);
       const proof = {
         ...makeMockProof(),
-        tokenAddress: address.toUpperCase().replace("0X", "0x"),
+        tokenAddress: mixedCaseAddress,
       };
       const normal = getRegisterLockPayload(
         { ...proof, tokenAddress: address },
