@@ -18,8 +18,9 @@ pragma solidity ^0.8.20;
  *
  *      A leaf means: these payouts, then the remainder of the lock to its depositor. The payouts may
  *      sum below the lock amount, and an empty list returns the whole lock. A sum above the amount
- *      or a zero recipient makes the leaf unpayable, and LockBox returns that lock whole
- *      (`reclaimUnpayable`). The hashes above do not depend on this rule.
+ *      or a zero recipient makes the leaf unpayable, and LockBox voids the auction: the
+ *      triggering lock uses `reclaimUnpayable`, then every other open lock uses `reclaim`.
+ *      The hashes above do not depend on this rule.
  */
 library OutcomeTree {
     /// @notice One payout of a lock: `amount` of the lock's token to `recipient`.

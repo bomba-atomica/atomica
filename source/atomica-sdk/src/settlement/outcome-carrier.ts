@@ -15,9 +15,9 @@
  *      the proof's epoch, with `advanceEpoch` (permissionless).
  *   3. `LockBox.recordOutcome(proof)`. A `StaleEpoch` revert means the
  *      validators changed epoch meanwhile: fetch a fresh proof once and retry.
- *   4. `LockBox.releaseByOutcome` per open lock, with the leaf built from the
- *      per-lock outcomes Aptos stores (`lock_receipt::get_lock_outcome`), or
- *      `LockBox.reclaimUnpayable` for a lock whose leaf is unpayable.
+ *   4. `LockBox.releaseByOutcome` per open lock when every leaf is payable.
+ *      If one leaf is unpayable, call `reclaimUnpayable` first to void the
+ *      auction, then reclaim every remaining open lock immediately.
  *
  * Encodings (BCS parsing, EIP-2537 key and signature encodings) follow
  * source/evm-contracts/src/aptos/IAptosLightClient.sol. The golden vector
@@ -32,6 +32,7 @@ import { ethers } from "ethers";
 import { bls12_381 } from "@noble/curves/bls12-381";
 import { APTOS_LIGHT_CLIENT_ABI, LOCKBOX_ABI } from "../ethereum/abis.js";
 import {
+  reclaimCall,
   reclaimUnpayableCall,
   releaseByOutcomeCall,
   type LockBoxCall,
@@ -662,9 +663,8 @@ const UINT256_LIMIT = 1n << 256n;
 /**
  * Whether LockBox treats a leaf as unpayable (`LockBox._leafUnpayable`): a
  * zero recipient, or payouts that sum above the lock amount or overflow
- * uint256. `releaseByOutcome` reverts on such a leaf, and
- * `reclaimUnpayable` sends the whole lock to its depositor instead. A sum
- * below the amount is payable: the remainder goes to the depositor.
+ * uint256. Proving one such leaf voids the whole auction. A sum below the
+ * amount is payable: the remainder goes to the depositor.
  */
 export function isLeafUnpayable(
   amount: bigint,
@@ -679,9 +679,10 @@ export function isLeafUnpayable(
 }
 
 /**
- * The calls that close every open lock of an auction: `releaseByOutcome`
- * for a payable leaf, `reclaimUnpayable` for an unpayable one
- * ({@link isLeafUnpayable}).
+ * The calls that close every open lock of an auction. A fully payable window
+ * uses `releaseByOutcome` for every lock. If one leaf is unpayable, the first
+ * call voids the auction with `reclaimUnpayable`; all remaining calls use
+ * `reclaim`, which is immediate and requires no membership proof after a void.
  *
  * `outcomes` lists every lock of the auction (the tree has one leaf per
  * lock). `openLocks` are the locks still open on Ethereum, with their fields
@@ -693,6 +694,8 @@ export function planWindowReleases(input: {
   outcomes: WindowLockOutcome[];
   openLocks: LockFields[];
   recordedRoot: string;
+  /** True when `reclaimUnpayable` already voided this auction. */
+  auctionVoided?: boolean;
 }): LockBoxCall[] {
   const tree = windowOutcomeTree(input.outcomes);
   if (tree.root.toLowerCase() !== input.recordedRoot.toLowerCase()) {
@@ -700,7 +703,7 @@ export function planWindowReleases(input: {
       `outcome root ${tree.root} rebuilt from Aptos differs from the recorded ${input.recordedRoot}`,
     );
   }
-  return input.openLocks.map((lock) => {
+  const planned = input.openLocks.map((lock) => {
     const id = ethers.hexlify(ethers.getBytes(lock.lockId));
     const index = tree.leaves.findIndex((l) => l.lockId === id);
     if (index < 0) throw new Error(`lock ${id} is not in the outcome tree`);
@@ -711,12 +714,31 @@ export function planWindowReleases(input: {
       recipient,
       amount: outcome.amounts[i],
     }));
-    const call = isLeafUnpayable(lock.amount, payouts)
-      ? reclaimUnpayableCall
-      : releaseByOutcomeCall;
-    return call(input.lockBoxAddress, lock, payouts, {
-      index,
-      proof: outcomeProof(tree, index),
-    });
+    return {
+      lock,
+      payouts,
+      leaf: { index, proof: outcomeProof(tree, index) },
+      unpayable: isLeafUnpayable(lock.amount, payouts),
+    };
   });
+  if (input.auctionVoided) {
+    return planned.map(({ lock }) => reclaimCall(input.lockBoxAddress, lock));
+  }
+  const trigger = planned.find((item) => item.unpayable);
+  if (!trigger) {
+    return planned.map(({ lock, payouts, leaf }) =>
+      releaseByOutcomeCall(input.lockBoxAddress, lock, payouts, leaf),
+    );
+  }
+  return [
+    reclaimUnpayableCall(
+      input.lockBoxAddress,
+      trigger.lock,
+      trigger.payouts,
+      trigger.leaf,
+    ),
+    ...planned
+      .filter((item) => item !== trigger)
+      .map(({ lock }) => reclaimCall(input.lockBoxAddress, lock)),
+  ];
 }

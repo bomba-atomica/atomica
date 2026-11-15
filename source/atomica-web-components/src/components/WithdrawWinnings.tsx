@@ -3,7 +3,9 @@
  *
  * Read-only. Nothing pushes payouts: after a window settles, any wallet
  * carries its validator-signed `AuctionOutcome` to the LockBox and releases
- * each lock per its leaf (UnwindButton, "Carry Outcome and Release Locks").
+ * each lock per its leaf only when all leaves are payable (UnwindButton,
+ * "Carry Outcome and Release Locks"). An unpayable leaf voids the auction and
+ * returns every open lock whole.
  * A lock whose outcome is never proven goes home by reclaim after its
  * deadline (ReclaimLockButton). There is no relayer.
  *

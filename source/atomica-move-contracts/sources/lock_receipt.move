@@ -380,10 +380,9 @@ module atomica::lock_receipt {
     /// `outcome_tree::payouts_hash`.
     ///
     /// Aborts E_UNPAYABLE_OUTCOME unless every recipient is a nonzero 20-byte
-    /// address and the amounts sum exactly to the lock amount. LockBox
-    /// `releaseByOutcome` pays a short sum (the remainder to the depositor) and
-    /// returns a lock with an unpayable leaf whole by `reclaimUnpayable`, so no
-    /// leaf freezes a lock. The exact sum keeps every leaf a full disposition.
+    /// address and the amounts sum exactly to the lock amount. This prevents
+    /// LockBox from recording an outcome where one bad leaf could void the whole
+    /// auction. The exact sum keeps every leaf a full disposition.
     ///
     /// The status becomes STATUS_REVOKED when the only payout is the whole
     /// amount to the depositor, and STATUS_FILLED otherwise. Stores a
@@ -464,7 +463,9 @@ module atomica::lock_receipt {
             let r = vector::borrow(&recipients, i);
             assert!(vector::length(r) == 20 && *r != ZERO_ETH_ADDRESS, E_UNPAYABLE_OUTCOME);
             if (*r != receipt.eth_owner) { to_depositor_only = false; };
-            sum = sum + *vector::borrow(&amounts, i);
+            let payout = *vector::borrow(&amounts, i);
+            assert!(payout <= MAX_U256 - sum, E_UNPAYABLE_OUTCOME);
+            sum = sum + payout;
             i = i + 1;
         };
         assert!(sum == receipt.amount, E_UNPAYABLE_OUTCOME);

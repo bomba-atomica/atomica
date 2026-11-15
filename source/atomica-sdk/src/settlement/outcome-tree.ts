@@ -28,7 +28,8 @@ export interface OutcomePayout {
  * One lock's disposition: these payouts, then the remainder of the lock to its
  * depositor. The payouts may sum below the lock amount; an empty list returns the
  * whole lock. A sum above the lock amount or a zero recipient makes the leaf
- * unpayable, and LockBox returns that lock whole (`reclaimUnpayable`).
+ * unpayable, and LockBox voids the auction: the triggering lock uses
+ * `reclaimUnpayable`, then every other open lock returns whole through `reclaim`.
  */
 export interface OutcomeEntry {
   /** bytes32 lock id (LockBox.getLockId) */

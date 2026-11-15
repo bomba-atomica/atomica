@@ -9,7 +9,7 @@
 **How:** Users lock native assets on their home chains and participate in twice-daily sealed-bid batch auctions. The target is settlement 1-3 hours after auction close; no code on main times it. Cross-chain atomic trades execute without bridges or custodians.
 
 **Key Innovations:**
-- **Non-custodial with bounded lock time**: Assets stay in the Ethereum LockBox, never with a custodian. As built, a lock pays out once the auction's proven outcome reaches Ethereum, or it goes back to its depositor: at once when its recorded leaf is unpayable, or by reclaim at the lock deadline (the window close plus 72 hours)
+- **Non-custodial with bounded lock time**: Assets stay in the Ethereum LockBox, never with a custodian. A fully payable proven outcome releases every lock. If any recorded leaf is unpayable, the first permissionless proof voids the whole auction and every remaining open lock returns whole to its depositor immediately; otherwise an open lock returns at its deadline (the window close plus 72 hours).
 - **True cross-chain atomic trades**: Native assets move between chains without bridges, wrapped tokens, or custodians
 - **Twice-daily liquidity concentration**: Two auctions per day aggregate global liquidity rather than fragmenting across time
 - **Timelock IBE cryptography**: Identity-Based Encryption enables sealed bids that automatically decrypt at auction deadline—no interactive reveal phase. Once the validators release the key, any account calls `open_bids` and the chain decrypts every bid itself; no bidder submits a price or a salt, so none can withhold one

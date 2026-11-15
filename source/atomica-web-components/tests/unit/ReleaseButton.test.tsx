@@ -111,6 +111,7 @@ const LOCKBOX_IFACE = new ethers.Interface(LOCKBOX_ABI);
 const RELEASE = LOCKBOX_IFACE.getFunction("releaseByOutcome")!.selector;
 const RECLAIM_UNPAYABLE =
   LOCKBOX_IFACE.getFunction("reclaimUnpayable")!.selector;
+const RECLAIM = LOCKBOX_IFACE.getFunction("reclaim")!.selector;
 
 const WINDOW_ID = 7n;
 const PAIR = new Uint8Array([1, 2, 3]);
@@ -164,6 +165,7 @@ function windowLocks(): TestLock[] {
 let locks: TestLock[];
 let statuses: Map<string, number>;
 let recorded: boolean;
+let voided: boolean;
 
 function fields(l: TestLock, nonce: number) {
   return {
@@ -182,6 +184,7 @@ function setup(ls: TestLock[]) {
   locks = ls;
   statuses = new Map(ls.map((l) => [l.id, LOCK_STATUS.Open]));
   recorded = false;
+  voided = false;
   const root = windowOutcomeTree(
     ls.map((l) => ({
       lockId: l.id,
@@ -214,6 +217,7 @@ function setup(ls: TestLock[]) {
     root: recorded ? root : ethers.ZeroHash,
     leafCount: recorded ? BigInt(locks.length) : 0n,
     recorded,
+    voided,
   }));
   m.findOutcomeEvent.mockResolvedValue({ version: 900n, eventIndex: 3n });
   m.ethersCarrierChain.mockResolvedValue({ chain: true });
@@ -226,9 +230,14 @@ function setup(ls: TestLock[]) {
     async (_signer: unknown, call: { to: string; data: string }) => {
       const selector = call.data.slice(0, 10);
       const name =
-        selector === RELEASE ? "releaseByOutcome" : "reclaimUnpayable";
+        selector === RELEASE
+          ? "releaseByOutcome"
+          : selector === RECLAIM
+            ? "reclaim"
+            : "reclaimUnpayable";
       const args = LOCKBOX_IFACE.decodeFunctionData(name, call.data);
       const id = locks[Number(args[0].nonce) - 1].id;
+      if (name === "reclaimUnpayable") voided = true;
       statuses.set(
         id,
         name === "releaseByOutcome"
@@ -243,17 +252,23 @@ function setup(ls: TestLock[]) {
 /** The decoded LockBox calls sent so far: function name and lock nonce. */
 function sentCalls() {
   return m.sendLockBoxCall.mock.calls.map(([, call]) => {
+    const selector = call.data.slice(0, 10);
     const name =
-      call.data.slice(0, 10) === RELEASE
+      selector === RELEASE
         ? "releaseByOutcome"
-        : "reclaimUnpayable";
+        : selector === RECLAIM
+          ? "reclaim"
+          : "reclaimUnpayable";
     const args = LOCKBOX_IFACE.decodeFunctionData(name, call.data);
     return {
       name,
       lockId: locks[Number(args[0].nonce) - 1].id,
-      recipients: (args[1] as ethers.Result[]).map((p) =>
-        (p[0] as string).toLowerCase(),
-      ),
+      recipients:
+        name === "reclaim"
+          ? []
+          : (args[1] as ethers.Result[]).map((p) =>
+              (p[0] as string).toLowerCase(),
+            ),
     };
   });
 }
@@ -437,7 +452,7 @@ describe("ReleaseButton", () => {
     ).toBe(true);
   });
 
-  it("calls reclaimUnpayable for a lock whose leaf is unpayable", async () => {
+  it("voids the auction on one unpayable leaf, then returns every open lock", async () => {
     const ls = windowLocks();
     // A zero recipient makes the losing bidder's leaf unpayable.
     ls[2].recipients = [ethers.ZeroAddress];
@@ -445,22 +460,24 @@ describe("ReleaseButton", () => {
     renderButton();
     await pressAndWait();
     expect(sentCalls().map((c) => [c.name, c.lockId])).toEqual([
-      ["releaseByOutcome", ls[0].id],
-      ["releaseByOutcome", ls[1].id],
       ["reclaimUnpayable", ls[2].id],
+      ["reclaim", ls[0].id],
+      ["reclaim", ls[1].id],
     ]);
-    expect(m.sendLockBoxCall.mock.calls[2][1].data.slice(0, 10)).toBe(
+    expect(m.sendLockBoxCall.mock.calls[0][1].data.slice(0, 10)).toBe(
       RECLAIM_UNPAYABLE,
     );
+    expect(m.sendLockBoxCall.mock.calls[1][1].data.slice(0, 10)).toBe(RECLAIM);
+    expect(m.sendLockBoxCall.mock.calls[2][1].data.slice(0, 10)).toBe(RECLAIM);
     expect(screen.getByTestId("release-status").textContent).toContain(
-      "Returned 1 unpayable lock(s) to their depositors",
+      "voided the auction; returned 3 open lock(s) to their depositors",
     );
     await waitFor(() =>
       expect(
         screen
           .getAllByTestId("release-lock")
           .map((r) => r.getAttribute("data-status")),
-      ).toEqual(["released", "released", "reclaimed"]),
+      ).toEqual(["reclaimed", "reclaimed", "reclaimed"]),
     );
   });
 });

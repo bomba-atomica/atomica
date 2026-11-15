@@ -222,9 +222,21 @@ contract LockBoxHandler is Test {
     function releaseByOutcome(uint256 lockSeed) external {
         if (locks.length == 0) return;
         uint256 i = lockSeed % locks.length;
-        (bool inTree, bool isUnpayable,, OutcomeTree.Payout[] memory p, OutcomeTree.LeafProof memory leaf) =
-            closeArgs(i);
-        if (!inTree || isUnpayable || lockBox.statuses(_id(i)) != LockBox.Status.Open) return;
+        (
+            bool inTree,
+            bool isUnpayable,
+            LockBox.Lock memory l,
+            OutcomeTree.Payout[] memory p,
+            OutcomeTree.LeafProof memory leaf
+        ) = closeArgs(i);
+        if (!inTree || lockBox.statuses(_id(i)) != LockBox.Status.Open) return;
+        uint256 w = locks[i].windowId == windows[0] ? 0 : 1;
+        if (lockBox.auctionVoided(_key(w))) {
+            vm.expectRevert(LockBox.AuctionWasVoided.selector);
+            lockBox.releaseByOutcome(l, p, leaf);
+            return;
+        }
+        if (isUnpayable) return;
         lockBox.releaseByOutcome(locks[i], p, leaf);
         _exit(i, false);
     }
@@ -234,10 +246,12 @@ contract LockBoxHandler is Test {
         if (locks.length == 0) return;
         uint256 i = lockSeed % locks.length;
         uint256 w = locks[i].windowId == windows[0] ? 0 : 1;
-        if (posOf[w][i] != 0 || lockBox.statuses(_id(i)) != LockBox.Status.Open) return;
-        if (block.timestamp < deadlines[w]) vm.warp(deadlines[w]);
+        if (lockBox.statuses(_id(i)) != LockBox.Status.Open) return;
+        bool isVoided = lockBox.auctionVoided(_key(w));
+        if (!isVoided && posOf[w][i] != 0) return;
+        if (!isVoided && block.timestamp < deadlines[w]) vm.warp(deadlines[w]);
         OutcomeTree.Neighbour[] memory nb;
-        if (recorded[w]) nb = _absence(w, _id(i));
+        if (!isVoided && recorded[w]) nb = _absence(w, _id(i));
         lockBox.reclaim(locks[i], nb);
         _exit(i, false);
     }
@@ -248,7 +262,10 @@ contract LockBoxHandler is Test {
         uint256 i = lockSeed % locks.length;
         (bool inTree, bool isUnpayable,, OutcomeTree.Payout[] memory p, OutcomeTree.LeafProof memory leaf) =
             closeArgs(i);
-        if (!inTree || !isUnpayable || lockBox.statuses(_id(i)) != LockBox.Status.Open) return;
+        uint256 w = locks[i].windowId == windows[0] ? 0 : 1;
+        if (
+            !inTree || !isUnpayable || lockBox.auctionVoided(_key(w)) || lockBox.statuses(_id(i)) != LockBox.Status.Open
+        ) return;
         lockBox.reclaimUnpayable(locks[i], p, leaf);
         _exit(i, true);
     }
@@ -403,8 +420,9 @@ contract LockBoxInvariantTest is Test {
         }
     }
 
-    /// Every open lock in a recorded tree can close now: by `releaseByOutcome` when its leaf is
-    /// payable, by `reclaimUnpayable` when not. Checked on a snapshot that is then dropped.
+    /// Every open lock in a recorded tree can close now: a payable leaf releases only before a
+    /// void; an unpayable leaf voids the auction and all remaining locks reclaim immediately.
+    /// Checked on a snapshot that is then dropped.
     function invariant_everyInTreeLockCanClose() public {
         uint256 snap = vm.snapshotState();
         for (uint256 i = 0; i < handler.lockCount(); i++) {
@@ -417,7 +435,9 @@ contract LockBoxInvariantTest is Test {
             ) = handler.closeArgs(i);
             bytes32 id = lockBox.getLockId(l.depositor, l.token, l.nonce);
             if (!inTree || lockBox.statuses(id) != LockBox.Status.Open) continue;
-            if (isUnpayable) lockBox.reclaimUnpayable(l, payouts, leaf);
+            bytes32 key = lockBox.auctionKey(l.windowId, l.pairHash);
+            if (lockBox.auctionVoided(key)) lockBox.reclaim(l, new OutcomeTree.Neighbour[](0));
+            else if (isUnpayable) lockBox.reclaimUnpayable(l, payouts, leaf);
             else lockBox.releaseByOutcome(l, payouts, leaf);
             assertTrue(lockBox.statuses(id) != LockBox.Status.Open, "in-tree lock stayed open");
         }

@@ -1905,6 +1905,20 @@ module atomica::auction_tests {
         auction::settle(&stranger(), WINDOW_ID, default_pair_bcs());
     }
 
+    // A zero Ethereum owner makes the winning bid's remainder leaf unpayable. There are two
+    // locks in the window (seller and bid); record_outcome aborts during settle before the single
+    // AuctionOutcome can be emitted. Move transaction atomicity rolls back earlier receipt writes.
+    #[test(atomica = @atomica)]
+    #[expected_failure(abort_code = 13, location = atomica::lock_receipt)] // E_UNPAYABLE_OUTCOME
+    fun settle_aborts_when_one_multi_lock_leaf_is_unpayable(atomica: &signer) {
+        revealed_window(atomica, 5 * ETH);
+        let bad_bid_lock = b"unpayable_bid_lock_32bytes______";
+        add_bid(atomica, bad_bid_lock, @0x0, 11_000 * USD, 5 * ETH);
+        auction::test_set_revealed_prices(atomica, WINDOW_ID, default_pair_bcs(), vector[2100]);
+        auction::clear_uniform_price(WINDOW_ID, default_pair_bcs());
+        auction::settle(&stranger(), WINDOW_ID, default_pair_bcs());
+    }
+
     // From the stuck deadline on only unwind finalizes a window.
     #[test(atomica = @atomica)]
     #[expected_failure(abort_code = 35, location = atomica::auction)] // E_PAST_STUCK_DEADLINE

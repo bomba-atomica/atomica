@@ -10,9 +10,9 @@
  * trigger each: `releaseByOutcome` pays it out per its leaf in a proven Aptos
  * `AuctionOutcome` (recorded with `recordOutcome` by any carrier, see
  * settlement/outcome-carrier.ts), with any remainder to its depositor;
- * `reclaimUnpayable` returns it to its depositor at once when that leaf is
- * unpayable; or `reclaim` returns it to its depositor after its deadline when no
- * recorded outcome covers it. There is no relayer and no settlement authority.
+ * `reclaimUnpayable` voids the whole auction when that leaf is unpayable;
+ * the remaining open locks can then `reclaim` immediately. A non-voided lock
+ * with no outcome returns after its deadline. There is no relayer or settlement authority.
  */
 
 import { ethers, type TransactionReceipt } from "ethers";
@@ -219,17 +219,23 @@ export async function getLockById(
 export async function getRecordedOutcome(
   provider: ethers.Provider,
   lock: Pick<LockFields, "windowId" | "pairHash">,
-): Promise<{ root: string; leafCount: bigint; recorded: boolean }> {
+): Promise<{
+  root: string;
+  leafCount: bigint;
+  recorded: boolean;
+  voided: boolean;
+}> {
   const contract = new ethers.Contract(
     getLockBoxAddress(),
     LOCKBOX_ABI,
     provider,
   );
-  const [root, leafCount] = (await contract.outcomes(auctionKey(lock))) as [
-    string,
-    bigint,
-  ];
-  return { root, leafCount, recorded: BigInt(root) !== 0n };
+  const key = auctionKey(lock);
+  const [[root, leafCount], voided] = await Promise.all([
+    contract.outcomes(key) as Promise<[string, bigint]>,
+    contract.auctionVoided(key) as Promise<boolean>,
+  ]);
+  return { root, leafCount, recorded: BigInt(root) !== 0n, voided };
 }
 
 /** Every lock `depositor` made of `token`, from the `Locked` events. */
@@ -334,8 +340,9 @@ export function reclaimUnpayableCall(
 
 /**
  * Call data of `LockBox.reclaim`: return an open lock to its depositor after
- * its deadline. `neighbours` is empty while the auction has no recorded
- * outcome, else a non-membership proof (`nonMembershipProof`).
+ * its deadline, or immediately when its auction is voided. `neighbours` is
+ * empty while the auction has no recorded outcome or has been voided; it is
+ * otherwise a non-membership proof (`nonMembershipProof`).
  */
 export function reclaimCall(
   lockBoxAddress: string,
@@ -399,9 +406,9 @@ export type ReclaimEligibility =
   "eligible" | "not-open" | "before-deadline" | "outcome-recorded";
 
 /**
- * Whether `reclaimLock` (no neighbours) would succeed: the lock is open, its
- * deadline passed on the Ethereum clock, and its auction has no proven
- * outcome. A lock whose auction has an outcome goes home by release instead.
+ * Whether `reclaimLock` (no neighbours) would succeed: the lock is open and
+ * either its auction is voided or its deadline passed with no outcome. A
+ * non-voided lock covered by an outcome must go through release.
  */
 export async function getReclaimEligibility(
   provider: ethers.Provider,
@@ -413,6 +420,7 @@ export async function getReclaimEligibility(
     getRecordedOutcome(provider, lock),
   ]);
   if (status !== LOCK_STATUS.Open) return "not-open";
+  if (outcome.voided) return "eligible";
   if (!block || BigInt(block.timestamp) < lock.deadline) {
     return "before-deadline";
   }

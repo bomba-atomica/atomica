@@ -33,7 +33,7 @@ function describeResult(result: WindowReleaseResult): string {
     return "The Ethereum light client passed its age limit, so no outcome can be recorded. Each lock goes home by Reclaim after its deadline.";
   }
   const reclaimed = result.reclaimed.length
-    ? ` Returned ${result.reclaimed.length} unpayable lock(s) to their depositors.`
+    ? ` An unpayable leaf voided the auction; returned ${result.reclaimed.length} open lock(s) to their depositors.`
     : "";
   return `Released ${result.released.length} lock(s).${reclaimed}`;
 }
@@ -44,9 +44,10 @@ function describeResult(result: WindowReleaseResult): string {
  * Once the window settled on Aptos, Release carries its `AuctionOutcome` to
  * the Ethereum LockBox when LockBox does not hold it yet, then pays out every
  * lock that is still open per its outcome leaf (`releaseByOutcome`). A lock
- * whose leaf is unpayable goes back whole to its depositor
- * (`reclaimUnpayable`). After release the winner holds the seller's FakeETH
- * and the seller holds the winner's FakeUSD on Ethereum.
+ * whose leaf is unpayable voids the whole auction (`reclaimUnpayable`);
+ * every other open lock then goes back whole to its depositor (`reclaim`).
+ * After a fully payable release the winner holds the seller's FakeETH and
+ * the seller holds the winner's FakeUSD on Ethereum.
  *
  * It lists every lock of the window (seller locks, then bid collateral
  * locks) with its asset, its leaf payouts and its LockBox status, and
@@ -71,6 +72,9 @@ export function ReleaseButton({
   else if (!state.settled) note = "Release opens once the window settles.";
   else if (state.locks.length === 0) note = "This window holds no locks.";
   else if (state.allReleased) note = "Every lock of this window is closed.";
+  else if (state.outcomeVoided)
+    note =
+      "This auction was voided. Release returns every open lock to its depositor.";
   else
     note = state.outcomeRecorded
       ? "The outcome is on Ethereum. Release pays each open lock."

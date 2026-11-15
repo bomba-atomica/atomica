@@ -354,6 +354,18 @@ module atomica::lock_receipt_tests {
         );
     }
 
+    #[test(framework = @0x1, atomica = @atomica)]
+    #[expected_failure(abort_code = 13, location = atomica::lock_receipt)] // E_UNPAYABLE_OUTCOME
+    fun record_outcome_rejects_u256_sum_overflow(framework: &signer, atomica: &signer) {
+        let lock_id = claimed_lock(framework, atomica);
+        let buyer = x"00000000000000000000000000000000000000b1";
+        lock_receipt::record_outcome<Ethereum, FakeETH>(
+            lock_id,
+            vector[buyer, lock_receipt::test_eth_owner(OWNER_194)],
+            vector[MAX_U256, 1u256],
+        );
+    }
+
     // A lock gets one outcome: a second record aborts.
     #[test(framework = @0x1, atomica = @atomica)]
     #[expected_failure(abort_code = 7, location = atomica::lock_receipt)] // E_INVALID_STATUS
