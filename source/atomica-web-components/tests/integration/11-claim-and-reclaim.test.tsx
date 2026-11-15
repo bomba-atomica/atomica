@@ -274,6 +274,13 @@ describe.sequential(
           quoteForFill(BID_QUANTITY, BID_PRICE),
         );
 
+        const before = {
+          winnerEth: (await fakeEth.balanceOf(winner)) as bigint,
+          sellerUsd: (await fakeUsd.balanceOf(seller)) as bigint,
+          carrierEth: (await fakeEth.balanceOf(carrierAccount)) as bigint,
+          carrierUsd: (await fakeUsd.balanceOf(carrierAccount)) as bigint,
+        };
+
         // A second wallet carries the outcome and releases the seller lock
         // before the ReleaseButton is pressed by the carrier wallet.
         const outcomeAt = await outcomeEventOfTransaction(
@@ -318,13 +325,6 @@ describe.sequential(
         expect(await getLockStatus(rpc, auction.sellerLockId)).toBe(
           LOCK_STATUS.Released,
         );
-
-        const before = {
-          winnerEth: (await fakeEth.balanceOf(winner)) as bigint,
-          sellerUsd: (await fakeUsd.balanceOf(seller)) as bigint,
-          carrierEth: (await fakeEth.balanceOf(carrierAccount)) as bigint,
-          carrierUsd: (await fakeUsd.balanceOf(carrierAccount)) as bigint,
-        };
 
         render(
           <ReleaseProviders account={carrierAccount}>
