@@ -417,7 +417,8 @@ export interface CarrierChain {
 /** Result of {@link carryOutcome}. */
 export type CarryResult =
   | { status: "recorded" | "already-recorded" }
-  | { status: "unprovable" | "stale-light-client"; reason: string };
+  | { status: "unprovable" | "stale-light-client"; reason: string }
+  | { status: "auction-reclaimed" };
 
 /** Name of a LockBox or light client custom error in a revert, if any. */
 export function revertErrorName(e: unknown): string | undefined {
@@ -521,6 +522,9 @@ export async function carryOutcome(
           status: "stale-light-client",
           reason: e instanceof Error ? e.message : String(e),
         };
+      }
+      if (name === "AuctionWasReclaimed") {
+        return { status: "auction-reclaimed" };
       }
       if (name === "StaleEpoch" && attempt === 0) continue;
       throw e;

@@ -158,6 +158,7 @@ describe("UnwindButton", () => {
       carry: { status: "recorded" },
       released: ["0xa", "0xb"],
       reclaimed: [],
+      skipped: [],
     });
     renderButton();
     await settled("eligible");
@@ -198,6 +199,7 @@ describe("UnwindButton", () => {
       carry: { status: "unprovable", reason: "version 9 pruned" },
       released: [],
       reclaimed: [],
+      skipped: [],
     });
     renderButton();
     await settled("nothing-to-return");

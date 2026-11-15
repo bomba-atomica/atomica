@@ -361,9 +361,70 @@ describe("ReleaseButton", () => {
       },
       { name: "releaseByOutcome", lockId: locks[1].id, recipients: [SELLER] },
     ]);
-    expect(screen.getByTestId("release-status").textContent).toBe(
+    expect(screen.getByTestId("release-status").textContent).toContain(
       "Released 2 lock(s).",
     );
+  });
+
+  it("skips a lock closed between planning and send and reports the other hashes", async () => {
+    const original = m.sendLockBoxCall.getMockImplementation()!;
+    m.sendLockBoxCall.mockImplementation(
+      async (...args: Parameters<typeof m.sendLockBoxCall>) => {
+        if (m.sendLockBoxCall.mock.calls.length === 2) {
+          throw Object.assign(new Error("closed elsewhere"), {
+            data: LOCKBOX_IFACE.encodeErrorResult("LockNotOpen", [
+              locks[1].id,
+              2,
+            ]),
+          });
+        }
+        return original(...args);
+      },
+    );
+    renderButton();
+    await pressAndWait();
+    expect(m.sendLockBoxCall).toHaveBeenCalledTimes(3);
+    expect(screen.getByTestId("release-status").textContent).toContain("0x1");
+    expect(screen.getByTestId("release-status").textContent).toContain("0x3");
+    expect(screen.getByTestId("release-status").textContent).toContain(
+      "0x22222222…",
+    );
+    expect(screen.queryByTestId("release-error")).toBeNull();
+  });
+
+  it("keeps sent hashes visible when a later wallet prompt is rejected", async () => {
+    const original = m.sendLockBoxCall.getMockImplementation()!;
+    m.sendLockBoxCall.mockImplementation(
+      async (...args: Parameters<typeof m.sendLockBoxCall>) => {
+        if (m.sendLockBoxCall.mock.calls.length === 2) {
+          throw Object.assign(new Error("User rejected the request"), {
+            code: "ACTION_REJECTED",
+          });
+        }
+        return original(...args);
+      },
+    );
+    renderButton();
+    fireEvent.click(await enabledButton());
+    await waitFor(() =>
+      expect(screen.getByTestId("release-error").textContent).toContain(
+        "User rejected",
+      ),
+    );
+    expect(screen.getByTestId("release-status").textContent).toContain("0x1");
+  });
+
+  it("explains an already reclaimed auction and sends no release or reclaim call", async () => {
+    m.carryOutcome.mockResolvedValue({ status: "auction-reclaimed" });
+    renderButton();
+    fireEvent.click(await enabledButton());
+    await waitFor(() =>
+      expect(screen.getByTestId("release-status").textContent).toContain(
+        "Reclaim each open lock",
+      ),
+    );
+    expect(m.sendLockBoxCall).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("release-error")).toBeNull();
   });
 
   it("shows the status of each lock and is disabled when every lock is released", async () => {
