@@ -93,6 +93,8 @@ module atomica::auction {
     const E_NOT_PACKAGE_ACCOUNT: u64 = 43;
     /// `finalize_window` ran while the opening cursor is below the bid count.
     const E_BIDS_NOT_ALL_OPENED: u64 = 44;
+    /// `allow_pair`: the token names do not match the lock receipt types used by auctions.
+    const E_PAIR_TOKEN_UNSUPPORTED: u64 = 45;
 
     /// `ibe::verify_bid_ct` rejected the ciphertext for the associated data built on chain.
     const E_INVALID_CIPHERTEXT: u64 = 12;
@@ -178,7 +180,8 @@ module atomica::auction {
 
     // ===================== Types =====================
 
-    /// Trading pair descriptor.
+    /// Trading pair descriptor. `allow_pair` requires `FakeETH` as the base token and `FakeUSD`
+    /// as the quote token because those are the receipt types auction entry points consume.
     /// @see docs/architecture/v0-architecture.md §2.4
     struct Pair has copy, drop, store {
         base_chain:  vector<u8>,   // e.g. b"ethereum"
@@ -476,7 +479,8 @@ module atomica::auction {
     }
 
     /// The launch pair: FakeETH against FakeUSD, both locked on Ethereum. The token names
-    /// match the receipt types `lock_receipt::FakeETH` and `lock_receipt::FakeUSD`.
+    /// match the receipt types `lock_receipt::FakeETH` and `lock_receipt::FakeUSD`; allow_pair
+    /// permits other chain labels but keeps these token roles fixed.
     fun launch_pair(): Pair {
         Pair {
             base_chain:  b"ethereum",
@@ -619,8 +623,9 @@ module atomica::auction {
     }
 
     /// Adds a pair to the allowlist from its four fields. Only `@atomica` may call it
-    /// (E_NOT_PACKAGE_ACCOUNT). The contract computes the key, `bcs::to_bytes` of the `Pair`.
-    /// Adding a pair that is already listed is a no-op.
+    /// (E_NOT_PACKAGE_ACCOUNT), and the token names must match the lock receipt types used by
+    /// auctions (E_PAIR_TOKEN_UNSUPPORTED). Chain labels are caller-defined. The contract
+    /// computes the key, `bcs::to_bytes` of the `Pair`. Adding a listed pair is a no-op.
     public entry fun allow_pair(
         atomica:     &signer,
         base_chain:  vector<u8>,
@@ -629,6 +634,10 @@ module atomica::auction {
         quote_token: vector<u8>,
     ) acquires PairAllowlist {
         assert!(signer::address_of(atomica) == @atomica, E_NOT_PACKAGE_ACCOUNT);
+        assert!(
+            base_token == b"FakeETH" && quote_token == b"FakeUSD",
+            E_PAIR_TOKEN_UNSUPPORTED
+        );
         let pair = Pair { base_chain, base_token, quote_chain, quote_token };
         let key = bcs::to_bytes(&pair);
         let allowlist = borrow_global_mut<PairAllowlist>(@atomica);

@@ -13,7 +13,7 @@ Move smart contracts deployed on the Atomica Aptos testnet. Implements the seale
 | Module | Function | Status |
 |---|---|---|
 | `atomica::auction` | `create_auction` | live (aborts `E_PAIR_NOT_ALLOWED` unless `pair_bcs` is on the pair allowlist; takes no timelock id: the first call of a window id registers its one timelock through the package's registrar object, with the window close as deadline, and later sellers of any pair join it; at most 100 seller locks per window, each at least 0.01 FakeETH) |
-| `atomica::auction` | `allow_pair` | live (package account only; adds a pair from its four fields) |
+| `atomica::auction` | `allow_pair` | live (package account only; base token must be `FakeETH` and quote token `FakeUSD`, or aborts `E_PAIR_TOKEN_UNSUPPORTED` (45); chain labels are caller-defined) |
 | `atomica::eth_proof` | `set_window_schedule` | test chain only (package account, chain id 4, once: stores a short window clock such as `900, [900]`) |
 | `atomica::auction` | `submit_bid` | live (V2 bid ciphertext of the 8-byte price, checked with `ibe::verify_bid_ct`; no commitment; at most 100 bids per window, collateral at least 10 FakeUSD) |
 | `atomica::auction` | `open_bids` | live (any account, registry status `Revealed`: decrypts up to `MAX_OPEN_BIDS_PER_CALL` (12) bids from the window's cursor with `ibe::decrypt_bid`; never clears; issue 228) |

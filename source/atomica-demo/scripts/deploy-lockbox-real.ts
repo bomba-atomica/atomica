@@ -26,6 +26,8 @@ import {
   PRODUCTION_WINDOW_SCHEDULE,
 } from "@atomica/sdk/ethereum/lock-binding";
 import { LAUNCH_PAIR_BCS } from "@atomica/sdk/settlement/bridge";
+import { isPairAllowed } from "@atomica/sdk/aptos";
+import { assertPairAllowed, lockLaunchPair } from "./lock-launch-pair";
 import { serializeProofForAptos } from "../src/lib/ethereum/proofs/index";
 import type {
   TokenContract,
@@ -56,6 +58,9 @@ async function main() {
   let testnet: EthereumDockerTestnet | undefined;
 
   try {
+    // Fail before any Ethereum transaction if Aptos cannot create this pair's window.
+    await assertPairAllowed(LAUNCH_PAIR_BCS, isPairAllowed);
+
     console.log("\n📦 Step 1/6: Starting Ethereum Docker testnet...");
     console.log("   (This may take 2-3 minutes for first-time setup)");
 
@@ -178,16 +183,6 @@ async function main() {
     const amount = ethers.parseEther("10");
     console.log(`   Minting ${ethers.formatEther(amount)} FAKETH...`);
 
-    let tx = await fakeETH.mint(deployerAccount.address, amount);
-    await tx.wait();
-    console.log("   ✅ Minted");
-
-    console.log("   Approving LockBox...");
-    tx = await fakeETH.approve(lockBoxAddress, amount);
-    await tx.wait();
-    console.log("   ✅ Approved");
-
-    console.log("   Locking tokens...");
     // Bound to the current window of that clock and the launch pair BCS.
     // LockBox computes the deadline, auction::eth_lock_deadline(window) (see
     // @atomica/sdk lock-binding).
@@ -196,14 +191,37 @@ async function main() {
       LAUNCH_PAIR_BCS,
       schedule,
     );
-    tx = await lockBox.lock(
-      fakeETHAddress,
-      amount,
-      binding.windowId,
-      binding.pairHash,
+    console.log(
+      "   Checking the launch pair and sending Ethereum transactions...",
     );
-    const lockReceipt = await tx.wait();
-    console.log("   ✅ Locked");
+    const lockReceipt = await lockLaunchPair({
+      pairBcs: LAUNCH_PAIR_BCS,
+      pairHash: binding.pairHash,
+      isPairAllowed,
+      mint: async () => {
+        const tx = await fakeETH.mint(deployerAccount.address, amount);
+        await tx.wait();
+        console.log("   ✅ Minted");
+      },
+      approve: async () => {
+        console.log("   Approving LockBox...");
+        const tx = await fakeETH.approve(lockBoxAddress, amount);
+        await tx.wait();
+        console.log("   ✅ Approved");
+      },
+      lock: async (pairHash) => {
+        console.log("   Locking tokens...");
+        const tx = await lockBox.lock(
+          fakeETHAddress,
+          amount,
+          binding.windowId,
+          pairHash,
+        );
+        const receipt = await tx.wait();
+        console.log("   ✅ Locked");
+        return receipt;
+      },
+    });
 
     if (!lockReceipt || !lockReceipt.blockNumber) {
       throw new Error("Lock transaction failed");
@@ -304,7 +322,9 @@ async function main() {
     console.error("\n❌ Error:", error);
     throw error;
   } finally {
-    console.log("\n💡 Testnet left running for inspection");
+    if (testnet) {
+      console.log("\n💡 Testnet left running for inspection");
+    }
   }
 }
 
