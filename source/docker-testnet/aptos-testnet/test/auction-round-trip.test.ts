@@ -11,6 +11,7 @@ import {
     type InputGenerateTransactionPayloadData,
 } from "@aptos-labs/ts-sdk";
 import { simulateMaxGasAmount } from "@atomica/sdk";
+import type { ChainConfig } from "@atomica/sdk/chain-config";
 import {
     CONTRACT_ADDR,
     MAX_OPEN_BIDS_PER_CALL,
@@ -147,6 +148,10 @@ let carrier: ethers.Wallet;
 let lockBox: ethers.Contract;
 let fakeEth: ethers.Contract;
 let fakeUsd: ethers.Contract;
+const globalWithChainConfig = globalThis as typeof globalThis & {
+    __ATOMICA_CHAIN_CONFIG__?: ChainConfig;
+};
+let previousChainConfig: ChainConfig | undefined;
 
 let seller: TestLock;
 let winner: TestLock;
@@ -296,6 +301,19 @@ async function settlement(): Promise<{ filled: bigint; quote: bigint; clearingPr
 describe.sequential("Live cross-chain round trip: lock, auction, outcome, release", () => {
     beforeAll(async () => {
         info = await setupDualChainTestnet();
+        // The live testnet deploys fresh token addresses. Keep the SDK payload
+        // builder's asset check aligned with those deployed contracts instead
+        // of the zero-address defaults used by this Node test process.
+        previousChainConfig = globalWithChainConfig.__ATOMICA_CHAIN_CONFIG__;
+        globalWithChainConfig.__ATOMICA_CHAIN_CONFIG__ = {
+            ethereum: {
+                rpcUrl: info.eth.rpcUrl,
+                fakeETH: info.eth.contracts.fakeETH,
+                fakeUSD: info.eth.contracts.fakeUSD,
+                lockBox: info.eth.contracts.lockBox,
+            },
+            aptos: { contractAddress: info.aptos.moduleAddress },
+        };
         provider = new ethers.JsonRpcProvider(info.eth.rpcUrl, undefined, { cacheTimeout: -1 });
         aptos = new Aptos(
             new AptosConfig({ network: Network.LOCAL, fullnode: info.aptos.nodeUrl }),
@@ -450,7 +468,11 @@ describe.sequential("Live cross-chain round trip: lock, auction, outcome, releas
     }, 2_400_000);
 
     afterAll(async () => {
-        await teardownDualChainTestnet();
+        try {
+            await teardownDualChainTestnet();
+        } finally {
+            globalWithChainConfig.__ATOMICA_CHAIN_CONFIG__ = previousChainConfig;
+        }
     }, 300_000);
 
     it("LockBox.outcomes(auctionKey) holds the root and leaf count of the AuctionOutcome event that auction::settle emitted", async () => {
