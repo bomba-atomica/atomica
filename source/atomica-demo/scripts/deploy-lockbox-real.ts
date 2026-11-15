@@ -139,22 +139,24 @@ async function main() {
       lockBoxArtifact.bytecode.object,
     );
     const implementationAddress = await lockBoxImplementation.getAddress();
-    const initializeData = new ethers.Interface(lockBoxArtifact.abi).encodeFunctionData(
-      "initialize",
-      [
-        fakeETHAddress,
-        fakeUSDAddress,
-        // Ethereum-only fixture run: no light client, dev Atomica address 0xcafe,
-        // and the window clock above.
-        "0x000000000000000000000000000000000000dEaD",
-        "0x07000000000000000000000000000000000000000000000000000000000000cafe0761756374696f6e0e41756374696f6e4f7574636f6d6500",
-        schedule.daySecs,
-        schedule.closeOffsetsSecs,
-        deployerAccount.address,
-      ],
-    );
+    const initializeData = new ethers.Interface(
+      lockBoxArtifact.abi,
+    ).encodeFunctionData("initialize", [
+      fakeETHAddress,
+      fakeUSDAddress,
+      // Ethereum-only fixture run: no light client, dev Atomica address 0xcafe,
+      // and the window clock above.
+      "0x000000000000000000000000000000000000dEaD",
+      "0x07000000000000000000000000000000000000000000000000000000000000cafe0761756374696f6e0e41756374696f6e4f7574636f6d6500",
+      schedule.daySecs,
+      schedule.closeOffsetsSecs,
+      deployerAccount.address,
+    ]);
     const proxyArtifact = JSON.parse(
-      readFileSync("evm-contracts/out/ERC1967Proxy.sol/ERC1967Proxy.json", "utf-8"),
+      readFileSync(
+        "evm-contracts/out/ERC1967Proxy.sol/ERC1967Proxy.json",
+        "utf-8",
+      ),
     ) as { abi: ethers.InterfaceAbi; bytecode: { object: string } };
     const proxy = await deployContract<ethers.Contract>(
       deployer,

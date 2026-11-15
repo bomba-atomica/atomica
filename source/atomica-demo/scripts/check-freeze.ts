@@ -11,9 +11,7 @@ function required(name: string): string {
 }
 
 async function main(): Promise<void> {
-  const aptos = new Aptos(
-    new AptosConfig({ fullnode: required("APTOS_URL") }),
-  );
+  const aptos = new Aptos(new AptosConfig({ fullnode: required("APTOS_URL") }));
   const ethereum = new JsonRpcProvider(required("ETH_RPC_URL"));
   const [moveFrozen, evmFrozen] = await Promise.all([
     moveFreezeStatus(aptos, required("ATOMICA_ADDRESS")),

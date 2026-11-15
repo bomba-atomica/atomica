@@ -182,20 +182,22 @@ async function deployEthereumContracts() {
     process.env.ATOMICA_TEST_WINDOW_SCHEDULE?.trim() === "900:900"
       ? { daySecs: 900, closeOffsetsSecs: [900] }
       : { daySecs: 86_400, closeOffsetsSecs: [27_900, 58_500] };
-  const initializeData = new ethers.Interface(lockBoxArtifact.abi).encodeFunctionData(
-    "initialize",
-    [
-      fakeETHAddress,
-      fakeUSDAddress,
-      LIGHT_CLIENT,
-      auctionOutcomeTypeTag(APTOS_DEPLOYER_ADDRESS),
-      windowSchedule.daySecs,
-      windowSchedule.closeOffsetsSecs,
-      process.env.LOCKBOX_ADMIN?.trim() || deployerAddress,
-    ],
-  );
+  const initializeData = new ethers.Interface(
+    lockBoxArtifact.abi,
+  ).encodeFunctionData("initialize", [
+    fakeETHAddress,
+    fakeUSDAddress,
+    LIGHT_CLIENT,
+    auctionOutcomeTypeTag(APTOS_DEPLOYER_ADDRESS),
+    windowSchedule.daySecs,
+    windowSchedule.closeOffsetsSecs,
+    process.env.LOCKBOX_ADMIN?.trim() || deployerAddress,
+  ]);
   const proxyArtifact = JSON.parse(
-    readFileSync("../evm-contracts/out/ERC1967Proxy.sol/ERC1967Proxy.json", "utf-8"),
+    readFileSync(
+      "../evm-contracts/out/ERC1967Proxy.sol/ERC1967Proxy.json",
+      "utf-8",
+    ),
   ) as { abi: ethers.InterfaceAbi; bytecode: { object: string } };
   const lockBoxContract = await deployWithRetry(
     new ethers.ContractFactory(
@@ -207,7 +209,9 @@ async function deployEthereumContracts() {
     [implementationAddress, initializeData],
   );
   const lockBoxAddress = await lockBoxContract.getAddress();
-  console.log(`  ✓ LockBox implementation deployed at: ${implementationAddress}`);
+  console.log(
+    `  ✓ LockBox implementation deployed at: ${implementationAddress}`,
+  );
   console.log(`  ✓ LockBox proxy deployed at: ${lockBoxAddress}`);
 
   console.log("  ✅ Ethereum contracts deployed");
