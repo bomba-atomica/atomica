@@ -42,7 +42,8 @@ function describeResult(result: WindowReleaseResult): string {
     ? ` Skipped ${result.skipped.map(short).join(", ")} because those locks were already closed.`
     : "";
   const hashes =
-    result.released.length || result.reclaimed.length
+    (result.skipped.length > 0 || result.partial) &&
+    (result.released.length || result.reclaimed.length)
       ? ` Transactions: ${[...result.released, ...result.reclaimed].join(", ")}.`
       : "";
   return `Released ${result.released.length} lock(s).${reclaimed}${skipped}${hashes}`;

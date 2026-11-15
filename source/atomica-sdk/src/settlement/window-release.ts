@@ -55,6 +55,8 @@ export interface WindowReleaseResult {
   reclaimed: string[];
   /** Lock ids skipped because another wallet closed them before our send. */
   skipped: string[];
+  /** True when a later send failed after earlier transactions were submitted. */
+  partial?: boolean;
 }
 
 /** Send failure that preserves transactions already broadcast for this window. */
@@ -194,6 +196,7 @@ export async function carryAndReleaseWindow(input: {
         if (current !== null) result.skipped.push("unknown lock");
         continue;
       }
+      result.partial = true;
       throw new WindowReleaseError(
         e instanceof Error ? e.message : String(e),
         result,
