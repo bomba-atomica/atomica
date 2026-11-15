@@ -49,6 +49,7 @@ import {
   finalizeWindowDirect,
   settleAuctionDirect,
   getAuctionState,
+  waitForChainTime,
   TEST_WINDOW_SECS,
   type LiveWindow,
 } from "./helpers/auction-setup";
@@ -72,6 +73,9 @@ import {
   getWindowLockIds,
   getMaxOpenBids,
   getOpenCursor,
+  getReceiptStatus,
+  getStuckDeadlineUs,
+  getUnwindPayload,
 } from "@atomica/sdk/aptos";
 import { getDerivedAddress } from "@atomica/aptos-docker-testnet/browser";
 import { ethers } from "ethers";
@@ -107,6 +111,8 @@ const PAIR_BCS = LAUNCH_PAIR_BCS;
 const MIN_WINDOW_LEFT_SECS = 840n;
 /** Seconds to wait after the deadline for the validators to reveal the key. */
 const REVEAL_TIMEOUT_SECS = 300;
+/** The test chain's shortened grace keeps the permissionless unwind bounded. */
+const UNWIND_GRACE_US = 60_000_000n;
 /** The ts-sdk default maxGasAmount, used when nothing sets one. */
 const TS_SDK_DEFAULT_MAX_GAS = 200_000;
 
@@ -139,7 +145,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
   const prices: bigint[] = [];
 
   beforeAll(async () => {
-    fixture = await setupIntegrationFixture();
+    fixture = await setupIntegrationFixture({ unwindGraceUs: UNWIND_GRACE_US });
     moduleAddr = fixture.aptos.moduleAddress;
 
     aptosClient = new Aptos(
@@ -411,4 +417,116 @@ describe.sequential("16: Settle a 100-bid window", () => {
     (3 * TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 600) * 1000,
   );
 
+  it(
+    "a never-settled window at both caps unwinds in one transaction and its gas used is below the maximum transaction gas",
+    async () => {
+      const stuck = await createLiveWindow(fixture, aptosClient, operator, {
+        pairBcs: PAIR_BCS,
+        minWindowLeftSecs: MIN_WINDOW_LEFT_SECS,
+        lockAmount: SELLER_LOCK,
+      });
+      await joinWindowAsSellers(
+        fixture,
+        aptosClient,
+        operator,
+        stuck,
+        SELLER_LOCK_COUNT - 1,
+        SELLER_LOCK,
+      );
+
+      const bidderAptosAddress = await ethAccountAddress(fixture.eth.bidder);
+      const collateralIds = await lockBidCollaterals(
+        fixture,
+        aptosClient,
+        operator,
+        PAIR_BCS,
+        BID_COUNT,
+        COLLATERAL,
+      );
+      expect(new Set(collateralIds).size).toBe(BID_COUNT);
+      for (let i = 0; i < BID_COUNT; i++) {
+        const sealed = await sealBid(
+          stuck.windowId,
+          PAIR_BCS,
+          bidderAptosAddress,
+          BASE_PRICE + PRICE_STEP * BigInt(i),
+        );
+        await submitAsEthAccount(
+          aptosClient,
+          fixture.eth.bidder,
+          getBidPayload(
+            stuck.windowId,
+            PAIR_BCS,
+            sealed.ciphertext,
+            ethers.getBytes(collateralIds[i]),
+            BID_QUANTITY,
+          ),
+        );
+      }
+
+      const locks = await getWindowLockIds(stuck.windowId, PAIR_BCS);
+      expect(locks.sellers).toHaveLength(SELLER_LOCK_COUNT);
+      expect(locks.collateral).toHaveLength(BID_COUNT);
+      const state = await getAuctionState(aptosClient, moduleAddr, stuck);
+      expect(state.totalSupply).toBe(SUPPLY);
+      expect(state.bidCount).toBe(BigInt(BID_COUNT));
+      expect(state.settled).toBe(false);
+
+      const stuckDeadlineUs = await getStuckDeadlineUs(
+        stuck.windowId,
+        PAIR_BCS,
+      );
+      expect(stuckDeadlineUs).toBeGreaterThanOrEqual(
+        stuck.deadlineUs + UNWIND_GRACE_US,
+      );
+      await waitForChainTime(
+        aptosClient,
+        stuckDeadlineUs,
+        3 * TEST_WINDOW_SECS,
+      );
+
+      // The seller's Ethereum-derived account has no operator rights; it sends
+      // the same simulated-gas SDK transaction any account can send.
+      const { hash: unwindHash } = await submitNativeTransaction(
+        aptosClient,
+        settlerEthAddress,
+        getUnwindPayload(stuck.windowId, PAIR_BCS),
+      );
+      const unwindTx = await logGas(aptosClient, "unwind", unwindHash);
+      expect(unwindTx.success).toBe(true);
+
+      const { maxGasAmount } = await getGasLimits(aptosClient);
+      console.log(
+        `[gas] unwind at both caps (${SELLER_LOCK_COUNT} seller locks, ${BID_COUNT} bids): gas_used=${unwindTx.gas_used} max_transaction_gas=${maxGasAmount}`,
+      );
+      expect(Number(unwindTx.gas_used)).toBeLessThan(maxGasAmount);
+      expect(Number(unwindTx.max_gas_amount)).not.toBe(TS_SDK_DEFAULT_MAX_GAS);
+      expect(Number(unwindTx.max_gas_amount)).toBeGreaterThan(
+        Number(unwindTx.gas_used),
+      );
+
+      const unwindEvents = (unwindTx.events ?? []).filter((event) =>
+        event.type.endsWith("::auction::AuctionUnwound"),
+      );
+      expect(unwindEvents).toHaveLength(1);
+      const unwindEvent = unwindEvents[0].data as {
+        returned_count: string;
+        outcome_emitted: boolean;
+      };
+      expect(BigInt(unwindEvent.returned_count)).toBe(
+        BigInt(SELLER_LOCK_COUNT + BID_COUNT),
+      );
+      expect(unwindEvent.outcome_emitted).toBe(true);
+
+      const statuses = await Promise.all([
+        ...locks.sellers.map((lockId) => getReceiptStatus("FakeETH", lockId)),
+        ...locks.collateral.map((lockId) =>
+          getReceiptStatus("FakeUSD", lockId),
+        ),
+      ]);
+      expect(statuses).toHaveLength(SELLER_LOCK_COUNT + BID_COUNT);
+      expect(statuses).not.toContain(1);
+    },
+    (3 * TEST_WINDOW_SECS + REVEAL_TIMEOUT_SECS + 600) * 1000,
+  );
 });

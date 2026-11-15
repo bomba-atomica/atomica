@@ -131,6 +131,108 @@ module atomica::integration_tests {
         assert_every_cap_lock_returned(window_id, pair);
     }
 
+    // Build two adjacent, both-caps windows whose all-refund leaf sets are identical. The
+    // same 200 lock ids, owners, and amounts appear in each outcome; FakeETH/FakeUSD
+    // registries are disjoint, so the ids can be assigned to the other asset in the second
+    // window without reusing a receipt. This lets one test compare the actual roots emitted
+    // by refund_expired_window and unwind.
+    fun build_windows_with_matching_refund_leaves(atomica: &signer): (u64, u64, vector<u8>) {
+        use atomica::auction;
+        use atomica::lock_receipt::{Self, Ethereum, FakeETH, FakeUSD};
+
+        let _framework = atomica::auction_bid_wrapper_tests::setup();
+        auction::init_for_test(atomica);
+        lock_receipt::initialize<Ethereum, FakeETH>(atomica);
+        lock_receipt::initialize<Ethereum, FakeUSD>(atomica);
+        let pair = auction::launch_pair_bcs();
+        let pair_hash = auction::pair_hash(pair);
+        let refund_window = auction::current_window_id();
+        let unwind_window = refund_window + 1;
+        let (max_bids, max_sellers, min_lock, min_collateral) = auction::get_window_limits();
+        let shared_amount = if (min_lock > min_collateral) { min_lock } else { min_collateral };
+
+        let i = 0;
+        while (i < max_sellers) {
+            let seller_id = cap_lock_id(b"matching_seller_", i);
+            let seller_owner = cap_party(@0x5E, i);
+            let bidder_id = cap_lock_id(b"matching_bid_", i);
+            let bidder_owner = cap_party(@0xB1D, i);
+
+            // Create both windows first: each can then accept its 100 bids in the next pass.
+            // Refund window: FakeETH seller. Unwind window: FakeETH seller with the bidder ID.
+            lock_receipt::insert_bound_test_receipt<Ethereum, FakeETH>(
+                seller_id, seller_owner, shared_amount, refund_window, pair_hash,
+            );
+            let refund_seller = aptos_framework::account::create_signer_for_test(seller_owner);
+            auction::create_auction(&refund_seller, refund_window, pair, seller_id);
+
+            lock_receipt::insert_bound_test_receipt<Ethereum, FakeETH>(
+                bidder_id, bidder_owner, shared_amount, unwind_window, pair_hash,
+            );
+            let unwind_seller = aptos_framework::account::create_signer_for_test(bidder_owner);
+            auction::create_auction(&unwind_seller, unwind_window, pair, bidder_id);
+            i = i + 1;
+        };
+
+        let j = 0;
+        while (j < max_bids) {
+            let bidder_id = cap_lock_id(b"matching_bid_", j);
+            let bidder_owner = cap_party(@0xB1D, j);
+            let seller_id = cap_lock_id(b"matching_seller_", j);
+            let seller_owner = cap_party(@0x5E, j);
+
+            // Refund window: FakeUSD bidder. Unwind window: FakeETH seller.
+            lock_receipt::insert_bound_test_receipt<Ethereum, FakeUSD>(
+                bidder_id, bidder_owner, shared_amount, refund_window, pair_hash,
+            );
+            lock_receipt::claim_for_window<Ethereum, FakeUSD>(bidder_owner, bidder_id, refund_window, pair_hash);
+            auction::test_insert_bid_with_qty(atomica, refund_window, pair, bidder_owner, bidder_id, bidder_id, 1);
+
+            lock_receipt::insert_bound_test_receipt<Ethereum, FakeUSD>(
+                seller_id, seller_owner, shared_amount, unwind_window, pair_hash,
+            );
+            lock_receipt::claim_for_window<Ethereum, FakeUSD>(seller_owner, seller_id, unwind_window, pair_hash);
+            auction::test_insert_bid_with_qty(atomica, unwind_window, pair, seller_owner, seller_id, seller_id, 1);
+            j = j + 1;
+        };
+
+        let (refund_sellers, refund_bids) = auction::get_window_lock_ids(refund_window, pair);
+        let (unwind_sellers, unwind_bids) = auction::get_window_lock_ids(unwind_window, pair);
+        assert!(vector::length(&refund_sellers) == max_sellers, 230);
+        assert!(vector::length(&refund_bids) == max_bids, 231);
+        assert!(vector::length(&unwind_sellers) == max_sellers, 232);
+        assert!(vector::length(&unwind_bids) == max_bids, 233);
+        (refund_window, unwind_window, pair)
+    }
+
+    #[test(atomica = @atomica)]
+    fun refund_and_unwind_at_both_caps_emit_the_same_outcome(atomica: &signer) {
+        use atomica::auction;
+        let (refund_window, unwind_window, pair) =
+            build_windows_with_matching_refund_leaves(atomica);
+
+        // Unwind the later window first. Its stuck deadline is after the earlier window's
+        // timelock deadline, so the subsequent reconfiguration also expires the refund
+        // window's key.
+        timestamp::update_global_time_for_test(
+            auction::get_stuck_deadline_us(unwind_window, pair),
+        );
+        let stranger = aptos_framework::account::create_signer_for_test(@0x7777);
+        auction::unwind(&stranger, unwind_window, pair);
+        aptos_framework::reconfiguration::reconfigure_for_test_custom();
+        auction::refund_expired_window(&stranger, refund_window, pair);
+
+        let outcomes = aptos_framework::event::emitted_events<auction::AuctionOutcome>();
+        assert!(vector::length(&outcomes) == 2, 234);
+        let (unwound_id, _, _, unwind_root, unwind_leaves) =
+            auction::test_auction_outcome_fields(vector::borrow(&outcomes, 0));
+        let (refunded_id, _, _, refund_root, refund_leaves) =
+            auction::test_auction_outcome_fields(vector::borrow(&outcomes, 1));
+        assert!(unwound_id == unwind_window && refunded_id == refund_window, 235);
+        assert!(unwind_leaves == 200 && refund_leaves == 200, 236);
+        assert!(unwind_root == refund_root, 237);
+    }
+
     // ===================== Lock, auction, unwind (issue 194) =====================
 
     // Sum of the payout amounts of every LockOutcomeRecorded event of `Asset`.
