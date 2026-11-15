@@ -187,13 +187,11 @@ else
     if [ "$inspected_digest" != "$expected_digest" ]; then
       fail "$COMPOSE" "inspected digest ${inspected_digest:-<missing>} differs from pinned digest ${expected_digest}"
     fi
-    revision=$(jq -r '
-      if (.annotations | type) == "object" then
-        .annotations["org.opencontainers.image.revision"] // empty
-      elif (.annotations | type) == "array" then
-        [.annotations[] | select(test("(^|:)org\\.opencontainers\\.image\\.revision=")) | sub("^.*org\\.opencontainers\\.image\\.revision="; "")][0] // empty
-      else empty end
-    ' <<<"$manifest")
+    image_config=$(docker buildx imagetools inspect "$compose_image" --format '{{json .Image}}' 2>&1) || {
+      fail "$COMPOSE" "cannot inspect validator image config ${compose_image}: ${image_config}"
+      image_config=""
+    }
+    revision=$(jq -r '.config.Labels["org.opencontainers.image.revision"] // empty' <<<"$image_config")
     if [ "$revision" != "$REV" ]; then
       fail "$COMPOSE" "validator image OCI revision ${revision:-<missing>} differs from APTOS_PROOF_COMMIT ${REV}"
     fi
