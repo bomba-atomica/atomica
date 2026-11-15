@@ -11,6 +11,7 @@ import { submitNativeTransaction } from "../transaction.js";
 import type { LockedBalanceProof } from "../ethereum/proofs/generator.js";
 import type { WindowSchedule } from "../ethereum/lock-binding.js";
 import { LAUNCH_PAIR_BCS } from "../settlement/bridge.js";
+import { getChainConfig } from "../chain-config.js";
 import {
   setPinnedEthereumConfigReader,
   type PinnedEthereumConfig,
@@ -325,7 +326,7 @@ export type RegisterLockAsset = "FakeETH" | "FakeUSD";
  *
  * `asset` sets the receipt type: `FakeETH` (the default) for a seller lock,
  * `FakeUSD` for a bidder's collateral lock. It must name the token the proof
- * covers, or Aptos rejects the registration.
+ * covers; this is checked against the active chain config before building.
  *
  * Serialises directly from LockedBalanceProof, matching the Move entry function:
  *   register_ethereum_lock<Asset>(carrier, block_number, user_address,
@@ -347,6 +348,14 @@ export function getRegisterLockPayload(
   proof: LockedBalanceProof,
   asset: RegisterLockAsset = "FakeETH",
 ): InputGenerateTransactionPayloadData {
+  const config = getChainConfig().ethereum;
+  const configuredToken = asset === "FakeETH" ? config.fakeETH : config.fakeUSD;
+  if (proof.tokenAddress.toLowerCase() !== configuredToken.toLowerCase()) {
+    throw new Error(
+      `Cannot register ${asset}: proof token ${proof.tokenAddress} does not match configured token ${configuredToken}`,
+    );
+  }
+
   return {
     function: `${CONTRACT_ADDR}::lock_receipt::register_ethereum_lock`,
     typeArguments: [`${CONTRACT_ADDR}::lock_receipt::${asset}`],

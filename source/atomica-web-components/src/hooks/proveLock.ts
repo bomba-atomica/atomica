@@ -5,7 +5,8 @@
  * Aptos checks a lock proof against the state root the validators certified,
  * so this waits for a certified Ethereum block that covers the lock block and
  * proves `commitments[lockId]` at that block. The caller registers the proof
- * with `getRegisterLockPayload(proof, asset)`, whose asset must name `token`.
+ * with `getRegisterLockPayload(proof, asset)`, which checks that the asset
+ * names the configured token proved by `token` before building the payload.
  *
  * @see docs/specifications/cross-chain-locking.md
  */
