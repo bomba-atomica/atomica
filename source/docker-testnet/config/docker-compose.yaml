@@ -2,10 +2,10 @@
 #
 # This compose file sets up a single-node or multi-node testnet using validator images.
 #
-# No CI check ties the digest below to APTOS_VERSION: move both together
-# (see README.md, "Moving the Fork Pin").
+# CI checks that this pinned image digest was built from the same fork commit
+# as APTOS_VERSION (see README.md, "Moving the Fork Pin").
 # Image Configuration:
-#   - Defaults to ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:f8dc4a3a74d1ad23384c5f279d8863fec606bde9930de19380a4ce8232674087
+#   - Defaults to ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:3fbe77d30cf8e4bd2a9184fede63790a5ff2f7e77754b145029768ecd975aecc
 #   - Override with IMAGE_NAME environment variable
 #
 # Architecture:
@@ -24,7 +24,7 @@ name: atomica-testnet
 services:
   # Validator 0
   validator-0:
-    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:f8dc4a3a74d1ad23384c5f279d8863fec606bde9930de19380a4ce8232674087}"
+    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:3fbe77d30cf8e4bd2a9184fede63790a5ff2f7e77754b145029768ecd975aecc}"
     container_name: atomica-validator-0
     hostname: validator-0
     user: root
@@ -73,7 +73,7 @@ services:
 
   # Validator 1
   validator-1:
-    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:f8dc4a3a74d1ad23384c5f279d8863fec606bde9930de19380a4ce8232674087}"
+    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:3fbe77d30cf8e4bd2a9184fede63790a5ff2f7e77754b145029768ecd975aecc}"
     container_name: atomica-validator-1
     hostname: validator-1
     user: root
@@ -116,7 +116,7 @@ services:
 
   # Validator 2
   validator-2:
-    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:f8dc4a3a74d1ad23384c5f279d8863fec606bde9930de19380a4ce8232674087}"
+    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:3fbe77d30cf8e4bd2a9184fede63790a5ff2f7e77754b145029768ecd975aecc}"
     container_name: atomica-validator-2
     hostname: validator-2
     user: root
@@ -159,7 +159,7 @@ services:
 
   # Validator 3
   validator-3:
-    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:f8dc4a3a74d1ad23384c5f279d8863fec606bde9930de19380a4ce8232674087}"
+    image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:3fbe77d30cf8e4bd2a9184fede63790a5ff2f7e77754b145029768ecd975aecc}"
     container_name: atomica-validator-3
     hostname: validator-3
     user: root

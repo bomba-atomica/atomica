@@ -2,7 +2,7 @@
  * Unit tests for `sealBid` and `decryptWindowBids` (V2 sealed bids).
  *
  * The Aptos client is mocked. Its views return the fork's golden dealing
- * (`ibe_v2_golden_vectors.json`, atomica-aptos 245937376b, vectors 3.1.0):
+ * (`ibe_v2_golden_vectors.json`, atomica-aptos 0ef2c9a5c5f40d5cfd9ff6703b0b6da334ef2870, vectors 3.2.0):
  * timelock 11 of chain 7, epoch 3, deadline 1.7e15 us, its mpk, identity and
  * revealed key, and the golden bid associated data for bidder 0x0101..01 on
  * auction 5. The price bid constants are price case 0 of that file (bidder

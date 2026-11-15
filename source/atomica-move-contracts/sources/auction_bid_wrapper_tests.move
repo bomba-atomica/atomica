@@ -843,7 +843,7 @@ module atomica::auction_bid_wrapper_tests {
     }
 
     // The fork test `largest_decrypt_batch_fits_max_execution_gas` (decrypt native issue 227,
-    // fork revision 245937376b) asserts B = 13 decrypts fit `max_execution_gas` and 14 do not;
+    // fork revision 0ef2c9a5c5) asserts B = 13 decrypts fit `max_execution_gas` and 14 do not;
     // the doc of `ibe::decrypt_bid` names it ("largest batch: 13"). The cap is B - 1.
     #[test]
     fun max_open_bids_is_one_below_the_decrypt_batch_limit() {

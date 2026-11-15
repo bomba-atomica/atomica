@@ -4,7 +4,7 @@
  * Replaces the retired G1 Boneh-Franklin tests. The vectors in
  * `fixtures/ibe_v2_golden_vectors.json` are a byte copy of
  * `atomica/golden_vectors/ibe_v2_golden_vectors.json` in `bomba-atomica/atomica-aptos` at
- * commit `245937376b` (the pinned framework, vectors version 3.1.0). They come from
+ * commit `0ef2c9a5c5f40d5cfd9ff6703b0b6da334ef2870` (the pinned framework, vectors version 3.2.0). They come from
  * `cargo test -p aptos-dkg --lib ibe::golden_vectors::write_golden_vectors -- --ignored`.
  *
  * The valid golden bid was made by `encrypt_bid` with `StdRng::seed_from_u64(seed ^ 0xB1D)` from
