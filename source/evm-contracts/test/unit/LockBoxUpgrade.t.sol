@@ -203,12 +203,23 @@ contract DeployLockBoxProxyTest is Test {
 
     function test_runDeploysProxyUsingEnvironment() public {
         uint256 deployerKey = 0xA11CE;
+        address deployer = vm.addr(deployerKey);
         address admin = address(0xAD01);
         vm.setEnv("PRIVATE_KEY", vm.toString(deployerKey));
         vm.setEnv("LIGHT_CLIENT", vm.toString(address(new MockAptosLightClient(TYPE_TAG))));
         vm.setEnv("LOCKBOX_ADMIN", vm.toString(admin));
         vm.setEnv("ATOMICA_ADDRESS", vm.toString(bytes32(uint256(0xA70))));
 
+        address expectedProxy = vm.computeCreateAddress(deployer, vm.getNonce(deployer) + 3);
         new DeployLockBox().run();
+
+        LockBox lockBox = LockBox(expectedProxy);
+        assertEq(lockBox.admin(), admin);
+        assertFalse(lockBox.frozen());
+        (uint64 daySecs, uint64[] memory closeOffsetsSecs) = lockBox.windowSchedule();
+        assertEq(daySecs, 86_400);
+        assertEq(closeOffsetsSecs.length, 2);
+        assertEq(closeOffsetsSecs[0], 27_900);
+        assertEq(closeOffsetsSecs[1], 58_500);
     }
 }
