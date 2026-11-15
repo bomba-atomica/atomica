@@ -302,7 +302,10 @@ function registerLockPayload(
  * largest test bid: 0.25 FakeETH at 2000 is 500 FakeUSD, and the usual
  * 0.1 FakeETH at 2000 costs 200 FakeUSD.
  */
-export const DEFAULT_COLLATERAL = quoteForFill(ethers.parseEther("0.25"), 2000n);
+export const DEFAULT_COLLATERAL = quoteForFill(
+  ethers.parseEther("0.25"),
+  2000n,
+);
 // DEFAULT_COLLATERAL is above the 10 FakeUSD minimum bid collateral (auction::get_window_limits).
 
 /**
@@ -679,6 +682,142 @@ export async function createLiveWindow(
     timelockId,
     deadlineUs,
     sellerLockId: lockId,
+  };
+}
+
+/**
+ * Create a window at both receipt caps from lock batches generated together.
+ * The proof batches are started concurrently so LockBox binds seller locks
+ * and bid collateral to the same window even when Ethereum proof generation
+ * advances its test clock across a window boundary.
+ */
+export async function createLiveWindowWithBothCaps(
+  fixture: IntegrationFixture,
+  aptosClient: Aptos,
+  operator: Account,
+  options: {
+    pairBcs: Uint8Array;
+    sellerLockCount: number;
+    bidCount: number;
+    sellerLockAmount: bigint;
+    collateralAmount: bigint;
+    minWindowLeftSecs?: bigint;
+  },
+): Promise<{
+  window: LiveWindow;
+  sellerLockIds: string[];
+  collateralLockIds: string[];
+}> {
+  const moduleAddr = fixture.aptos.moduleAddress;
+  await waitForTimelockKey(aptosClient);
+  await waitForWindowTimeLeft(
+    aptosClient,
+    moduleAddr,
+    options.minWindowLeftSecs ?? MIN_WINDOW_LEFT_SECS,
+  );
+
+  const pairBcsHex = ethers.hexlify(options.pairBcs);
+  const [sellerResults, bidderResults]: [
+    CommandEthLockProofResult[],
+    CommandEthLockProofResult[],
+  ] = await Promise.all([
+    commands.generateEthLockProofs(
+      fixture.eth.rpcUrl,
+      fixture.aptos.nodeUrl,
+      fixture.eth.seller.privateKey,
+      fixture.eth.contracts.fakeETH,
+      fixture.eth.contracts.lockBox,
+      options.sellerLockAmount.toString(),
+      options.sellerLockCount,
+      pairBcsHex,
+    ),
+    commands.generateEthLockProofs(
+      fixture.eth.rpcUrl,
+      fixture.aptos.nodeUrl,
+      fixture.eth.bidder.privateKey,
+      fixture.eth.contracts.fakeUSD,
+      fixture.eth.contracts.lockBox,
+      options.collateralAmount.toString(),
+      options.bidCount,
+      pairBcsHex,
+    ),
+  ]);
+
+  const proofResults = [...sellerResults, ...bidderResults];
+  const windowId = BigInt(sellerResults[0].proof.windowId);
+  const pairHash = sellerResults[0].proof.pairHash;
+  if (
+    proofResults.some(
+      ({ proof }) =>
+        proof.windowId !== windowId.toString() || proof.pairHash !== pairHash,
+    )
+  ) {
+    throw new Error(
+      "both-cap lock proofs were not bound to one auction window and pair",
+    );
+  }
+
+  const proofs = proofResults.map((result) => ({
+    ...result.proof,
+    storageValue: BigInt(result.proof.storageValue),
+  }));
+  const sellerProofs = proofs.slice(0, sellerResults.length);
+  const bidderProofs = proofs.slice(sellerResults.length);
+  await submitManyDirect(aptosClient, operator, [
+    ...sellerProofs.map((proof) =>
+      registerLockPayload(moduleAddr, proof, "FakeETH"),
+    ),
+    ...bidderProofs.map((proof) =>
+      registerLockPayload(moduleAddr, proof, "FakeUSD"),
+    ),
+  ]);
+
+  for (const { lockId } of sellerResults) {
+    await createAuctionDirect(
+      aptosClient,
+      fixture.eth.seller,
+      lockId,
+      windowId,
+      options.pairBcs,
+    );
+  }
+
+  const timelockId = await getWindowTimelock(aptosClient, moduleAddr, windowId);
+  const deadlineUs = await getWindowDeadlineUs(
+    aptosClient,
+    moduleAddr,
+    windowId,
+  );
+  const status = await getWindowStatus(
+    aptosClient,
+    moduleAddr,
+    windowId,
+    options.pairBcs,
+  );
+  if (
+    status.timelockId !== timelockId ||
+    status.revealFinal ||
+    status.refunded
+  ) {
+    throw new Error(
+      `window ${windowId} reads back ${JSON.stringify({
+        timelockId: status.timelockId.toString(),
+        revealFinal: status.revealFinal,
+        refunded: status.refunded,
+      })}, expected timelock ${timelockId}`,
+    );
+  }
+
+  return {
+    window: {
+      windowId,
+      pairBcs: options.pairBcs,
+      timelockId,
+      deadlineUs,
+      sellerLockId: sellerResults[0].lockId,
+    },
+    sellerLockIds: sellerResults.map(({ lockId }) => lockId),
+    collateralLockIds: bidderResults.map(({ lockId }) => lockId),
   };
 }
 

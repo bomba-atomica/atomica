@@ -39,6 +39,7 @@ import {
 import { setupWalletMock } from "./fixtures/wallet-mock";
 import {
   createLiveWindow,
+  createLiveWindowWithBothCaps,
   joinWindowAsSellers,
   lockBidCollaterals,
   submitAsEthAccount,
@@ -420,30 +421,22 @@ describe.sequential("16: Settle a 100-bid window", () => {
   it(
     "a never-settled window at both caps unwinds in one transaction and its gas used is below the maximum transaction gas",
     async () => {
-      const stuck = await createLiveWindow(fixture, aptosClient, operator, {
+      const {
+        window: stuck,
+        sellerLockIds,
+        collateralLockIds,
+      } = await createLiveWindowWithBothCaps(fixture, aptosClient, operator, {
         pairBcs: PAIR_BCS,
         minWindowLeftSecs: MIN_WINDOW_LEFT_SECS,
-        lockAmount: SELLER_LOCK,
+        sellerLockCount: SELLER_LOCK_COUNT,
+        bidCount: BID_COUNT,
+        sellerLockAmount: SELLER_LOCK,
+        collateralAmount: COLLATERAL,
       });
-      await joinWindowAsSellers(
-        fixture,
-        aptosClient,
-        operator,
-        stuck,
-        SELLER_LOCK_COUNT - 1,
-        SELLER_LOCK,
-      );
 
       const bidderAptosAddress = await ethAccountAddress(fixture.eth.bidder);
-      const collateralIds = await lockBidCollaterals(
-        fixture,
-        aptosClient,
-        operator,
-        PAIR_BCS,
-        BID_COUNT,
-        COLLATERAL,
-      );
-      expect(new Set(collateralIds).size).toBe(BID_COUNT);
+      expect(new Set(sellerLockIds).size).toBe(SELLER_LOCK_COUNT);
+      expect(new Set(collateralLockIds).size).toBe(BID_COUNT);
       for (let i = 0; i < BID_COUNT; i++) {
         const sealed = await sealBid(
           stuck.windowId,
@@ -458,7 +451,7 @@ describe.sequential("16: Settle a 100-bid window", () => {
             stuck.windowId,
             PAIR_BCS,
             sealed.ciphertext,
-            ethers.getBytes(collateralIds[i]),
+            ethers.getBytes(collateralLockIds[i]),
             BID_QUANTITY,
           ),
         );
