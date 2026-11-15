@@ -33,6 +33,7 @@ vi.mock("@atomica/sdk/ethereum", () => ({
   approveFakeEth: vi.fn(),
   lockFakeEth: vi.fn(),
   currentWindowId: vi.fn(() => 41538n),
+  lockTargetWindowId: vi.fn(() => 41538n),
   lockBinding: vi.fn((windowId: bigint) => ({
     windowId,
     pairHash: "0x" + "ee".repeat(32),
@@ -56,6 +57,7 @@ vi.mock("@atomica/sdk/ethereum/proofs", () => ({
 // getWindowDeadlineUs answers the close of window 41538 (07:45 UTC), and
 // getWindowSchedule the production schedule.
 vi.mock("@atomica/sdk/aptos", () => ({
+  auctionExists: vi.fn(async () => true),
   assertSiweDomain: vi.fn().mockResolvedValue(undefined),
   getRegisterLockPayload: vi.fn(),
   getCreateAuctionPayload: vi.fn(),
@@ -84,6 +86,7 @@ import { useSellFlow } from "../../../src/hooks/useSellFlow";
 import {
   approveFakeEth,
   lockFakeEth,
+  lockTargetWindowId,
   lockFromReceipt,
   reclaimLock,
 } from "@atomica/sdk/ethereum";
@@ -91,6 +94,7 @@ import { generateLockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
 import type { LockedBalanceProof } from "@atomica/sdk/ethereum/proofs";
 import {
   aptos,
+  auctionExists,
   assertSiweDomain,
   getRegisterLockPayload,
   getCreateAuctionPayload,
@@ -347,6 +351,86 @@ describe("useSellFlow state machine", () => {
       });
       expect(stored()).not.toHaveProperty("minPrice");
       unmount();
+    });
+
+    it("rechecks and rebinds the lock after approval advances across a window", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(0);
+      vi.mocked(lockTargetWindowId)
+        .mockReturnValueOnce(41538n)
+        .mockReturnValueOnce(41539n);
+      vi.mocked(approveFakeEth).mockImplementationOnce(async () => {
+        vi.setSystemTime(2_000);
+        return undefined as never;
+      });
+      vi.spyOn(
+        ethers.JsonRpcProvider.prototype,
+        "getBlockNumber",
+      ).mockResolvedValue(77);
+      vi.mocked(lockFakeEth).mockResolvedValue({
+        hash: "0xlocktx",
+        blockNumber: 77,
+      } as never);
+
+      const { result, unmount } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      await act(async () => {
+        await result.current.lockEth(10n ** 18n);
+      });
+
+      expect(lockTargetWindowId).toHaveBeenCalledTimes(2);
+      expect(auctionExists).toHaveBeenCalledTimes(2);
+      expect(getWindowLockIds).toHaveBeenNthCalledWith(
+        1,
+        41538n,
+        LAUNCH_PAIR_BCS,
+      );
+      expect(getWindowLockIds).toHaveBeenNthCalledWith(
+        2,
+        41539n,
+        LAUNCH_PAIR_BCS,
+      );
+      expect(lockFakeEth).toHaveBeenCalledWith(expect.anything(), 10n ** 18n, {
+        windowId: 41539n,
+        pairHash: "0x" + "ee".repeat(32),
+        deadline: 1_794_728_700n,
+      });
+      unmount();
+      vi.useRealTimers();
+    });
+
+    it("does not lock when the post-approval seller pre-check refuses", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(0);
+      vi.mocked(lockTargetWindowId)
+        .mockReturnValueOnce(41538n)
+        .mockReturnValueOnce(41539n);
+      vi.mocked(approveFakeEth).mockImplementationOnce(async () => {
+        vi.setSystemTime(2_000);
+        return undefined as never;
+      });
+      vi.mocked(auctionExists)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true);
+      vi.mocked(getWindowLockIds)
+        .mockResolvedValueOnce({ sellers: [], collateral: [] })
+        .mockResolvedValueOnce({
+          sellers: Array.from({ length: 100 }, (_, i) => `0x${i}`),
+          collateral: [],
+        });
+
+      const { result, unmount } = renderHook(() => useSellFlow(ACCOUNT));
+      await act(async () => {});
+      await act(async () => {
+        await result.current.lockEth(10n ** 18n);
+      });
+
+      expect(getWindowLockIds).toHaveBeenCalledTimes(2);
+      expect(lockFakeEth).not.toHaveBeenCalled();
+      expect(result.current.step).toBe("lock");
+      expect(result.current.error).toContain("maximum of 100 seller locks");
+      unmount();
+      vi.useRealTimers();
     });
 
     it("confirming: moves to generating-proof once the lock block has 1 confirmation", async () => {
@@ -650,11 +734,7 @@ describe("useSellFlow state machine", () => {
         ethers.JsonRpcProvider.prototype,
         "getBlockNumber",
       ).mockResolvedValue(77);
-      vi.mocked(getWindowLockIds).mockRejectedValueOnce(
-        new Error(
-          "Move abort in 0xdeadbeef::auction: E_AUCTION_NOT_FOUND(0x1): window not found",
-        ),
-      );
+      vi.mocked(auctionExists).mockResolvedValueOnce(false);
       vi.mocked(approveFakeEth).mockResolvedValue(undefined as never);
       vi.mocked(lockFakeEth).mockResolvedValue({
         hash: "0xlocktx",
@@ -667,6 +747,7 @@ describe("useSellFlow state machine", () => {
       });
 
       expect(lockFakeEth).toHaveBeenCalled();
+      expect(getWindowLockIds).not.toHaveBeenCalled();
       expect(result.current.error).toBeUndefined();
       expect(result.current.step).toBe("confirming");
       unmount();

@@ -24,6 +24,9 @@ export const WINDOW_AFTERNOON_CLOSE_SECS = 58_500n;
  */
 export const ETH_RECLAIM_DELAY_SECS = 259_200n;
 
+/** Start targeting the next window when less than one minute remains. */
+export const LOCK_TARGET_CLOSE_MARGIN_SECS = 60n;
+
 /** The fields that bind a lock to its auction. */
 export interface LockBinding {
   windowId: bigint;
@@ -92,6 +95,24 @@ export function currentWindowId(
     if (t >= offset) id += 1n;
   }
   return id;
+}
+
+/**
+ * Pick the window a client should bind a new lock to. Near a close, target
+ * the next window so an approve prompt cannot leave the lock with too little
+ * time for its auction transaction. LockBox accepts only the current and
+ * next window, and callers must re-run their pre-check if this result changes
+ * after approval.
+ */
+export function lockTargetWindowId(
+  nowSecs: bigint,
+  schedule: WindowSchedule = PRODUCTION_WINDOW_SCHEDULE,
+): bigint {
+  const current = currentWindowId(nowSecs, schedule);
+  return windowCloseSecs(current, schedule) - nowSecs <
+    LOCK_TARGET_CLOSE_MARGIN_SECS
+    ? current + 1n
+    : current;
 }
 
 /**

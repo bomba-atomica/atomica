@@ -951,6 +951,20 @@ export async function getWindowLockIds(
   };
 }
 
+/** Whether an auction exists for `(windowId, pairBcs)` on Aptos. */
+export async function auctionExists(
+  windowId: bigint,
+  pairBcs: Uint8Array,
+): Promise<boolean> {
+  const [exists] = await aptos.view({
+    payload: {
+      function: `${CONTRACT_ADDR}::auction::auction_exists`,
+      functionArguments: [windowId, pairBcs],
+    },
+  });
+  return Boolean(exists);
+}
+
 /** `lock_receipt::get_receipt` status of one receipt (`RECEIPT_STATUS`). */
 export async function getReceiptStatus(
   asset: ReceiptAsset,

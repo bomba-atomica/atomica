@@ -10,8 +10,8 @@ import {
 } from "@atomica/sdk/aptos";
 import {
   approveFakeUsd,
-  currentWindowId,
   lockBinding,
+  lockTargetWindowId,
   lockFakeUsd,
   lockFromReceipt,
   type LockFields,
@@ -135,7 +135,7 @@ export function AuctionBidder() {
         const amountWei = ethers.parseUnits(collateralAmount || "0", 6); // FakeUSD uses 6 decimals
         // The window clock is the chain's (a test chain stores a short one).
         const schedule = await getWindowSchedule();
-        const lockWindowId = currentWindowId(
+        const initialWindowId = lockTargetWindowId(
           BigInt(Math.floor(Date.now() / 1000)),
           schedule,
         );
@@ -145,7 +145,7 @@ export function AuctionBidder() {
         //    would wait for the reclaim deadline.
         const refusal = await bidCollateralRefusal(
           amountWei,
-          lockWindowId,
+          initialWindowId,
           pairBytes(pairBcsHex),
         );
         if (refusal) {
@@ -161,6 +161,22 @@ export function AuctionBidder() {
         // 1. Approve LockBox to spend FakeUSD.
         await approveFakeUsd(provider, amountWei);
         setLockStatus("Approved. Waiting for MetaMask — Lock FakeUSD...");
+
+        const lockWindowId = lockTargetWindowId(
+          BigInt(Math.floor(Date.now() / 1000)),
+          schedule,
+        );
+        if (lockWindowId !== initialWindowId) {
+          const nextRefusal = await bidCollateralRefusal(
+            amountWei,
+            lockWindowId,
+            pairBytes(pairBcsHex),
+          );
+          if (nextRefusal) {
+            setLockStatus(`Refused: ${nextRefusal}`);
+            return;
+          }
+        }
 
         // 2. Lock FakeUSD in LockBox as collateral margin, bound to the
         //    current window and the pair the bid names. Step 2 starts on

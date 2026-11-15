@@ -29,6 +29,7 @@ import { WalletContext } from "../../src/context/WalletContext";
 
 // Stub SDK modules so no blockchain calls are made.
 vi.mock("@atomica/sdk/aptos", () => ({
+  auctionExists: vi.fn(async () => true),
   assertSiweDomain: vi.fn().mockResolvedValue(undefined),
   submitBid: vi.fn().mockResolvedValue({ hash: "0xabc123" }),
   sealBid: vi.fn().mockResolvedValue({
@@ -84,6 +85,7 @@ vi.mock("@atomica/sdk/ethereum", () => ({
     deadline: 1_800_000_000n,
   })),
   currentWindowId: vi.fn(() => 7n),
+  lockTargetWindowId: vi.fn(() => 7n),
   lockBinding: vi.fn((windowId: bigint) => ({
     windowId,
     pairHash: "0x" + "00".repeat(32),
@@ -106,8 +108,16 @@ vi.mock("@atomica/sdk/chain-config", () => ({
 }));
 
 import { AuctionBidder } from "../../src/components/AuctionBidder";
-import { assertSiweDomain, getBidCount } from "@atomica/sdk/aptos";
-import { approveFakeUsd, lockFakeUsd } from "@atomica/sdk/ethereum";
+import {
+  assertSiweDomain,
+  auctionExists,
+  getBidCount,
+} from "@atomica/sdk/aptos";
+import {
+  approveFakeUsd,
+  lockFakeUsd,
+  lockTargetWindowId,
+} from "@atomica/sdk/ethereum";
 
 const ACCOUNT = "0x1234567890123456789012345678901234567890";
 
@@ -447,6 +457,60 @@ describe("AuctionBidder — lock pre-check", () => {
     expect(getBidCount).toHaveBeenCalledWith(7n, expect.any(Uint8Array));
     expect(approveFakeUsd).not.toHaveBeenCalled();
     expect(lockFakeUsd).not.toHaveBeenCalled();
+  });
+
+  it("rechecks and rebinds bidder collateral after approval crosses a window", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(0);
+    vi.mocked(lockTargetWindowId)
+      .mockReturnValueOnce(7n)
+      .mockReturnValueOnce(8n);
+    vi.mocked(approveFakeUsd).mockImplementationOnce(async () => {
+      vi.setSystemTime(2_000);
+      return { hash: "0xapprove" } as never;
+    });
+    renderBidder();
+    fireEvent.change(screen.getByTestId("collateral-amount-input"), {
+      target: { value: "50" },
+    });
+    fireEvent.click(screen.getByTestId("approve-lock-usd-button"));
+    await screen.findByTestId("submit-bid-step");
+
+    expect(lockTargetWindowId).toHaveBeenCalledTimes(2);
+    expect(auctionExists).toHaveBeenCalledTimes(2);
+    expect(lockFakeUsd).toHaveBeenCalledTimes(1);
+    const binding = vi.mocked(lockFakeUsd).mock.calls[0][2];
+    expect(binding.windowId).toBe(8n);
+    vi.useRealTimers();
+  });
+
+  it("does not lock bidder collateral when the post-approval pre-check refuses", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(0);
+    vi.mocked(lockTargetWindowId)
+      .mockReturnValueOnce(7n)
+      .mockReturnValueOnce(8n);
+    vi.mocked(approveFakeUsd).mockImplementationOnce(async () => {
+      vi.setSystemTime(2_000);
+      return { hash: "0xapprove" } as never;
+    });
+    vi.mocked(auctionExists)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    renderBidder();
+    fireEvent.change(screen.getByTestId("collateral-amount-input"), {
+      target: { value: "50" },
+    });
+    fireEvent.click(screen.getByTestId("approve-lock-usd-button"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("lock-status").textContent).toContain(
+        "current window is closing",
+      ),
+    );
+    expect(auctionExists).toHaveBeenCalledTimes(2);
+    expect(lockFakeUsd).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });
 
