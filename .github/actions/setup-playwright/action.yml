@@ -39,14 +39,18 @@ runs:
         set -euo pipefail
         apt_cache="$HOME/.cache/playwright-apt"
 
-        # Warm path: install the cached .debs with --no-download, so apt never
-        # reads the mirror. Any gap (a newer runner image, a missing package)
-        # makes apt fail, and the cold path runs instead.
+        # Warm path: put the cached .debs in apt's archive directory and install
+        # them by name with --no-download, so apt never reads the mirror.
+        # (--no-download also blocks apt's fetch of a .deb passed as a path.)
+        # Any gap (a newer runner image, a missing package) makes apt fail,
+        # and the cold path runs instead.
         warm() {
           shopt -s nullglob
-          local debs=("$apt_cache"/*.deb)
+          local debs=("$apt_cache"/*.deb) names=() d
           if [ "${#debs[@]}" -gt 0 ]; then
-            sudo apt-get install -y --no-install-recommends --no-download "${debs[@]}" || return 1
+            sudo cp -t /var/cache/apt/archives "${debs[@]}"
+            for d in "${debs[@]}"; do names+=("$(dpkg-deb -f "$d" Package)"); done
+            sudo apt-get install -y --no-install-recommends --no-download "${names[@]}" || return 1
           fi
           # The browsers are restored, so this only checks them.
           bunx playwright install chromium
