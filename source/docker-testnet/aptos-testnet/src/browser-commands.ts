@@ -114,6 +114,7 @@ import { ethers } from "ethers";
 import { syncAnvilClockToHost, waitForCertifiedEthBlock, waitForEthBlock } from "./eth-blocks.js";
 import {
     lockTargetWindowId,
+    currentWindowId,
     lockBinding,
     type LockBinding,
     type WindowSchedule,
@@ -453,15 +454,27 @@ async function currentTestLockBinding(
     provider: ethers.JsonRpcProvider,
     lockBox: ethers.Contract,
     pairBcsHex: string,
+    lockCount = 0,
 ): Promise<LockBinding> {
     await syncAnvilClockToHost(provider);
     const schedule = await lockBoxWindowSchedule(lockBox);
     const latest = await provider.getBlock("latest");
-    return testLockBinding(
-        schedule,
-        BigInt(Math.max(Math.floor(Date.now() / 1000), latest?.timestamp ?? 0)),
-        pairBcsHex,
-    );
+    const now = BigInt(Math.max(Math.floor(Date.now() / 1000), latest?.timestamp ?? 0));
+    return batchTestLockBinding(schedule, now, lockCount, pairBcsHex);
+}
+
+/** Reserve one Anvil second per lock in addition to the normal closing margin. */
+export function batchTestLockBinding(
+    schedule: WindowSchedule,
+    now: bigint,
+    lockCount: number,
+    pair: string,
+): LockBinding {
+    const binding = testLockBinding(schedule, now + BigInt(lockCount), pair);
+    if (binding.windowId > currentWindowId(now, schedule) + 1n) {
+        throw new Error("lock batch exceeds the current and next Ethereum windows");
+    }
+    return binding;
 }
 
 /**
@@ -769,7 +782,12 @@ export const generateBothCapLockProofsCommand: BrowserCommand<
         binding: async (provider: ethers.JsonRpcProvider, contract: ethers.Contract) => {
             if (++ready === 2) releaseReady();
             await bothReady;
-            sharedBinding ??= currentTestLockBinding(provider, contract, pair);
+            sharedBinding ??= currentTestLockBinding(
+                provider,
+                contract,
+                pair,
+                sellerCount + bidderCount,
+            );
             return sharedBinding;
         },
         locksMined: async () => {

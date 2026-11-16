@@ -735,6 +735,16 @@ export async function createLiveWindowWithBothCaps(
   const proofResults = [...sellerResults, ...bidderResults];
   const windowId = BigInt(sellerResults[0].proof.windowId);
   const pairHash = sellerResults[0].proof.pairHash;
+  // Ethereum can run ahead of Aptos after Anvil mines one block per lock.
+  // Wait until this binding is within Aptos's current-or-next window rule.
+  const schedule = await getChainWindowSchedule(aptosClient, moduleAddr);
+  const aptosWindow = await currentWindowId(aptosClient, moduleAddr);
+  if (windowId > aptosWindow + 1n) {
+    await waitForChainTime(
+      aptosClient,
+      windowCloseSecs(windowId - 2n, schedule) * 1_000_000n,
+    );
+  }
   if (
     proofResults.some(
       ({ proof }) =>
