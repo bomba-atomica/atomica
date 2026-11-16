@@ -9,7 +9,7 @@
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   render,
@@ -160,23 +160,51 @@ describe("price display", () => {
     };
     walk(srcDir);
     expect(files.length).toBeGreaterThan(10);
-    // A division by 1e6, 1_000_000, 1000000 or 10 ** 6 (number or bigint) on
-    // a line that names a price. Microsecond to second conversions name no
-    // price and are allowed.
+    // Scan every line for million divisors; only these exact deadline
+    // microsecond-to-second conversions are allowlisted.
     const divideByMillion =
       /\/\s*\(?\s*(1e6|1_000_000n?|1000000n?|10n?\s*\*\*\s*6n?)\b/;
+    const allowlist = [
+      {
+        file: "components/SellFlow/steps/Step8Monitor.tsx",
+        line: "if (!cancelled) setDeadline(Number(us / 1_000_000n));",
+      },
+      {
+        file: "hooks/useSellFlow.ts",
+        line: "(await getWindowDeadlineUs(windowId)) / 1_000_000n,",
+      },
+    ];
+    const isOffender = (file: string, line: string) =>
+      divideByMillion.test(line) &&
+      !allowlist.some(
+        (entry) => entry.file === file && entry.line === line.trim(),
+      );
+    expect(allowlist).toHaveLength(2);
+    for (const entry of allowlist) {
+      const lines = readFileSync(join(srcDir, entry.file), "utf8").split("\n");
+      expect(lines.filter((line) => line.trim() === entry.line)).toHaveLength(
+        1,
+      );
+      expect(isOffender(entry.file, entry.line)).toBe(false);
+      expect(isOffender("another-file.ts", entry.line)).toBe(true);
+      expect(isOffender(entry.file, "amount / 1_000_000n")).toBe(true);
+    }
     const offenders = files.flatMap((f) =>
       readFileSync(f, "utf8")
         .split("\n")
-        .filter((line) => /price/i.test(line) && divideByMillion.test(line))
-        .map((line) => `${f}: ${line.trim()}`),
+        .filter((line) => isOffender(relative(srcDir, f), line))
+        .map((line) => `${relative(srcDir, f)}: ${line.trim()}`),
     );
     expect(offenders).toEqual([]);
     // The old SettleButton display would be caught.
     expect(
-      /price/i.test("(Number(clearingPrice) / 1e6).toFixed(2)") &&
-        divideByMillion.test("(Number(clearingPrice) / 1e6).toFixed(2)"),
+      isOffender(
+        "SettleButton.tsx",
+        "(Number(clearingPrice) / 1e6).toFixed(2)",
+      ),
     ).toBe(true);
+    expect(isOffender("example.ts", "Number(clearing) / 1e6")).toBe(true);
+    expect(isOffender("example.ts", "amount / 1_000_000n")).toBe(true);
     // formatUsd (the old million divider) is gone from BidHistory.
     expect(
       readFileSync(join(srcDir, "components/BidHistory.tsx"), "utf8"),
