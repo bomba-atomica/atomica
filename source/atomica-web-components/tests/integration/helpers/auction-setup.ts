@@ -687,9 +687,8 @@ export async function createLiveWindow(
 
 /**
  * Create a window at both receipt caps from lock batches generated together.
- * The proof batches are started concurrently so LockBox binds seller locks
- * and bid collateral to the same window even when Ethereum proof generation
- * advances its test clock across a window boundary.
+ * The batches share a binding and finish locking before proof generation
+ * advances the Ethereum test clock.
  */
 export async function createLiveWindowWithBothCaps(
   fixture: IntegrationFixture,
@@ -717,31 +716,21 @@ export async function createLiveWindowWithBothCaps(
   );
 
   const pairBcsHex = ethers.hexlify(options.pairBcs);
-  const [sellerResults, bidderResults]: [
-    CommandEthLockProofResult[],
-    CommandEthLockProofResult[],
-  ] = await Promise.all([
-    commands.generateEthLockProofs(
+  const [sellerResults, bidderResults] =
+    await commands.generateBothCapLockProofs(
       fixture.eth.rpcUrl,
       fixture.aptos.nodeUrl,
       fixture.eth.seller.privateKey,
-      fixture.eth.contracts.fakeETH,
-      fixture.eth.contracts.lockBox,
-      options.sellerLockAmount.toString(),
-      options.sellerLockCount,
-      pairBcsHex,
-    ),
-    commands.generateEthLockProofs(
-      fixture.eth.rpcUrl,
-      fixture.aptos.nodeUrl,
       fixture.eth.bidder.privateKey,
+      fixture.eth.contracts.fakeETH,
       fixture.eth.contracts.fakeUSD,
       fixture.eth.contracts.lockBox,
+      options.sellerLockAmount.toString(),
       options.collateralAmount.toString(),
+      options.sellerLockCount,
       options.bidCount,
       pairBcsHex,
-    ),
-  ]);
+    );
 
   const proofResults = [...sellerResults, ...bidderResults];
   const windowId = BigInt(sellerResults[0].proof.windowId);
