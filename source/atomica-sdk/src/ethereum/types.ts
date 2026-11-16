@@ -11,6 +11,7 @@ export interface TokenContract {
 }
 
 export interface LockBoxContract {
+  windowSchedule(): Promise<[bigint, bigint[]]>;
   /** LockBox computes the deadline from `windowId`. */
   lock(
     token: string,

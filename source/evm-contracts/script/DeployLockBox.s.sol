@@ -24,6 +24,8 @@ import {FakeUSD} from "../src/tokens/FakeUSD.sol";
  *      `daySecs` and `closeOffsetsSecs`, are the window clock stored in the proxy.
  */
 contract DeployLockBox is Script {
+    error WindowScheduleMismatch();
+
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         IAptosLightClient lightClient = IAptosLightClient(vm.envAddress("LIGHT_CLIENT"));
@@ -40,6 +42,7 @@ contract DeployLockBox is Script {
         (uint64 daySecs, uint64[] memory closeOffsetsSecs) = productionWindowSchedule();
         (LockBox lockBox, address implementation) =
             deployProxy(address(fakeETH), address(fakeUSD), lightClient, typeTag, daySecs, closeOffsetsSecs, admin);
+        assertWindowSchedule(lockBox, daySecs, closeOffsetsSecs);
         console.log("LockBox implementation deployed at:", implementation);
         console.log("LockBox proxy deployed at:", address(lockBox));
 
@@ -82,6 +85,17 @@ contract DeployLockBox is Script {
         closeOffsetsSecs = new uint64[](2);
         closeOffsetsSecs[0] = 27_900;
         closeOffsetsSecs[1] = 58_500;
+    }
+
+    /// @notice Reverts unless the deployed proxy froze the intended schedule.
+    function assertWindowSchedule(LockBox lockBox, uint64 daySecs, uint64[] memory closeOffsetsSecs) public view {
+        (uint64 actualDaySecs, uint64[] memory actualOffsets) = lockBox.windowSchedule();
+        if (actualDaySecs != daySecs || actualOffsets.length != closeOffsetsSecs.length) {
+            revert WindowScheduleMismatch();
+        }
+        for (uint256 i = 0; i < closeOffsetsSecs.length; i++) {
+            if (actualOffsets[i] != closeOffsetsSecs[i]) revert WindowScheduleMismatch();
+        }
     }
 
     /// @notice BCS TypeTag of `<atomica>::auction::AuctionOutcome`.

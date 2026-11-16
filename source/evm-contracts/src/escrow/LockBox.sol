@@ -55,6 +55,8 @@ import {OutcomeTree} from "./OutcomeTree.sol";
  *      - Slot 6: auctionVoided    mapping(bytes32 auctionKey => bool)
  */
 contract LockBox is Initializable, UUPSUpgradeable {
+    /// @notice Maximum supported window schedule day length (one day).
+    uint64 public constant MAX_WINDOW_DAY_SECS = 86_400;
     using SafeERC20 for IERC20;
 
     // ==================== Types ====================
@@ -237,7 +239,10 @@ contract LockBox is Initializable, UUPSUpgradeable {
         require(_outcomeTypeTag.length > 0, "Invalid type tag");
         require(_admin != address(0), "Invalid admin");
         uint256 n = closeOffsetsSecs.length;
-        if (n == 0 || n > 2 || closeOffsetsSecs[0] == 0 || closeOffsetsSecs[n - 1] > daySecs) {
+        if (
+            daySecs > MAX_WINDOW_DAY_SECS || n == 0 || n > 2 || closeOffsetsSecs[0] == 0
+                || closeOffsetsSecs[n - 1] > daySecs
+        ) {
             revert InvalidWindowSchedule();
         }
         if (n == 2 && closeOffsetsSecs[1] <= closeOffsetsSecs[0]) revert InvalidWindowSchedule();

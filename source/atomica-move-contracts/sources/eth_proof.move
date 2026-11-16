@@ -83,6 +83,7 @@ module atomica::eth_proof {
     // through `window_id_at`, because a Move constant is private.
     /// Seconds per day.
     const WINDOW_DAY_SECS: u64 = 86400;
+    const MAX_WINDOW_DAY_SECS: u64 = 86400;
     /// Second of the day of the morning close, 07:45:00 UTC.
     const WINDOW_MORNING_CLOSE_SECS: u64 = 27900;
     /// Second of the day of the afternoon close, 16:15:00 UTC.
@@ -155,6 +156,7 @@ module atomica::eth_proof {
         assert!(n == 1 || n == 2, E_INVALID_SCHEDULE);
         let first = *vector::borrow(&close_offsets_secs, 0);
         let last = *vector::borrow(&close_offsets_secs, n - 1);
+        assert!(day_secs <= MAX_WINDOW_DAY_SECS, E_INVALID_SCHEDULE);
         assert!(first > 0 && last <= day_secs, E_INVALID_SCHEDULE);
         assert!(n == 1 || first < last, E_INVALID_SCHEDULE);
         move_to(admin, WindowSchedule { day_secs, close_offsets_secs });

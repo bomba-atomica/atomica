@@ -21,7 +21,12 @@
 
 import { spawn } from "child_process";
 import { ethers } from "ethers";
+import {
+  assertWindowSchedulesMatch,
+  type WindowSchedule,
+} from "@atomica/sdk/ethereum/lock-binding";
 import { readFileSync } from "fs";
+import { assertDemoDeploymentWindowSchedulesMatch } from "./deploy-window-schedule.js";
 import {
   compileContracts,
   getFakeETHArtifact,
@@ -182,6 +187,10 @@ async function deployEthereumContracts() {
     process.env.ATOMICA_TEST_WINDOW_SCHEDULE?.trim() === "900:900"
       ? { daySecs: 900, closeOffsetsSecs: [900] }
       : { daySecs: 86_400, closeOffsetsSecs: [27_900, 58_500] };
+  const expectedWindowSchedule: WindowSchedule = {
+    daySecs: BigInt(windowSchedule.daySecs),
+    closeOffsetsSecs: windowSchedule.closeOffsetsSecs.map(BigInt),
+  };
   const initializeData = new ethers.Interface(
     lockBoxArtifact.abi,
   ).encodeFunctionData("initialize", [
@@ -209,6 +218,17 @@ async function deployEthereumContracts() {
     [implementationAddress, initializeData],
   );
   const lockBoxAddress = await lockBoxContract.getAddress();
+  const [actualDaySecs, actualOffsets] = await lockBoxContract.windowSchedule();
+  assertWindowSchedulesMatch(
+    expectedWindowSchedule,
+    {
+      daySecs: BigInt(actualDaySecs),
+      closeOffsetsSecs: [...actualOffsets].map((offset: bigint) =>
+        BigInt(offset),
+      ),
+    },
+    expectedWindowSchedule,
+  );
   console.log(
     `  ✓ LockBox implementation deployed at: ${implementationAddress}`,
   );
@@ -220,6 +240,7 @@ async function deployEthereumContracts() {
     fakeETH: fakeETHAddress,
     fakeUSD: fakeUSDAddress,
     lockBox: lockBoxAddress,
+    windowSchedule: expectedWindowSchedule,
   };
 }
 
@@ -227,6 +248,7 @@ async function deployAptosContracts(eth: {
   lockBox: string;
   fakeETH: string;
   fakeUSD: string;
+  windowSchedule: WindowSchedule;
 }) {
   console.log("\n📦 Deploying Move contracts to Aptos...");
   console.log(`  API: ${APTOS_URL}`);
@@ -294,6 +316,21 @@ async function deployAptosContracts(eth: {
     await execCommand("aptos", runArgs);
     console.log(`  ✓ ${initFunc.functionId}`);
   }
+
+  const lockBoxArtifact = getLockBoxArtifact();
+  const lockBox = new ethers.Contract(
+    eth.lockBox,
+    lockBoxArtifact.abi,
+    new ethers.JsonRpcProvider(ETH_RPC_URL),
+  );
+  await assertDemoDeploymentWindowSchedulesMatch({
+    aptosUrl: APTOS_URL,
+    moduleAddress: APTOS_DEPLOYER_ADDRESS,
+    expected: eth.windowSchedule,
+    lockBox: {
+      windowSchedule: () => lockBox.getFunction("windowSchedule")(),
+    },
+  });
 
   console.log("  ✅ Aptos contracts deployed");
 }

@@ -73,6 +73,9 @@ refuses the collateral lock.
 LockBox takes its window clock as constructor immutables: seconds per day and
 one or two close offsets (`DeployLockBox.productionWindowSchedule()`:
 `86400` and `[27900, 58500]`). Nothing can change them after deploy.
+Both LockBox and Aptos reject schedules whose `daySecs` exceeds
+`MAX_WINDOW_DAY_SECS = 86400`, keeping all accepted schedules bounded to one
+UTC day.
 
 - **Window close.** `auction::current_window_id` changes exactly at the two
   canonical closes, 07:45 UTC (27 900 s into the UTC day) and 16:15 UTC

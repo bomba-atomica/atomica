@@ -32,7 +32,7 @@ import { serializeProofForAptos } from "../src/lib/ethereum/proofs/index";
 import type {
   TokenContract,
   LockBoxContract,
-} from "../src/lib/ethereum/types.js";
+} from "../../atomica-sdk/src/ethereum/types.js";
 
 async function deployContract<T>(
   signer: ethers.Signer,
@@ -177,6 +177,19 @@ async function main() {
     ) as unknown as LockBoxContract;
 
     const lockBoxAddress = await lockBox.getAddress();
+    const [actualDaySecs, actualOffsets] = await lockBox.windowSchedule();
+    if (
+      BigInt(actualDaySecs) !== BigInt(schedule.daySecs) ||
+      actualOffsets.length !== schedule.closeOffsetsSecs.length ||
+      [...actualOffsets].some(
+        (offset: bigint, index: number) =>
+          BigInt(offset) !== BigInt(schedule.closeOffsetsSecs[index]),
+      )
+    ) {
+      throw new Error(
+        "LockBox window schedule differs from the intended schedule",
+      );
+    }
 
     console.log("\n🪙 Step 4/6: Minting and locking tokens...");
 
