@@ -114,6 +114,7 @@ import { ethers } from "ethers";
 import { syncAnvilClockToHost, waitForCertifiedEthBlock, waitForEthBlock } from "./eth-blocks.js";
 import {
     lockTargetWindowId,
+    currentWindowId,
     lockBinding,
     type LockBinding,
     type WindowSchedule,
@@ -205,6 +206,20 @@ declare module "vitest/browser" {
             mintAmountWei?: string,
             pairBcsHex?: string,
         ): Promise<EthLockProofResult>;
+        generateBothCapLockProofs(
+            rpcUrl: string,
+            aptosNodeUrl: string,
+            sellerPrivateKey: string,
+            bidderPrivateKey: string,
+            sellerToken: string,
+            bidderToken: string,
+            lockBox: string,
+            sellerAmount: string,
+            bidderAmount: string,
+            sellerCount: number,
+            bidderCount: number,
+            pairBcsHex: string,
+        ): Promise<[EthLockProofResult[], EthLockProofResult[]]>;
         generateEthLockProofs(
             rpcUrl: string,
             aptosNodeUrl: string,
@@ -435,6 +450,33 @@ export async function lockBoxWindowSchedule(lockBox: ethers.Contract): Promise<W
     return { daySecs: BigInt(daySecs), closeOffsetsSecs: [...offsets].map((o) => BigInt(o)) };
 }
 
+async function currentTestLockBinding(
+    provider: ethers.JsonRpcProvider,
+    lockBox: ethers.Contract,
+    pairBcsHex: string,
+    lockCount = 0,
+): Promise<LockBinding> {
+    await syncAnvilClockToHost(provider);
+    const schedule = await lockBoxWindowSchedule(lockBox);
+    const latest = await provider.getBlock("latest");
+    const now = BigInt(Math.max(Math.floor(Date.now() / 1000), latest?.timestamp ?? 0));
+    return batchTestLockBinding(schedule, now, lockCount, pairBcsHex);
+}
+
+/** Reserve one Anvil second per lock in addition to the normal closing margin. */
+export function batchTestLockBinding(
+    schedule: WindowSchedule,
+    now: bigint,
+    lockCount: number,
+    pair: string,
+): LockBinding {
+    const binding = testLockBinding(schedule, now + BigInt(lockCount), pair);
+    if (binding.windowId > currentWindowId(now, schedule) + 1n) {
+        throw new Error("lock batch exceeds the current and next Ethereum windows");
+    }
+    return binding;
+}
+
 /**
  * Lock `count` times and return the storage proof of each lock. The live
  * round-trip test (test/auction-round-trip.test.ts) calls it directly, once
@@ -467,6 +509,13 @@ export async function lockAndProve(
     mintAmount: bigint,
     count: number,
     pairBcsHex: string = LAUNCH_PAIR_BCS_HEX,
+    coordination?: {
+        binding: (
+            provider: ethers.JsonRpcProvider,
+            lockBox: ethers.Contract,
+        ) => Promise<LockBinding>;
+        locksMined: () => Promise<void>;
+    },
 ): Promise<EthLockProofResult[]> {
     const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
     const seller = new ethers.Wallet(sellerPrivateKey, provider);
@@ -492,15 +541,9 @@ export async function lockAndProve(
 
     // Right before the locks: bring anvil up to the host clock, then bind to
     // the window of the later of the host second and the latest block time.
-    await syncAnvilClockToHost(provider);
-    const schedule = await lockBoxWindowSchedule(lockBox);
-    const latest = await provider.getBlock("latest");
-    const hostNow = Math.floor(Date.now() / 1000);
-    const binding = testLockBinding(
-        schedule,
-        BigInt(Math.max(hostNow, latest?.timestamp ?? 0)),
-        pairBcsHex,
-    );
+    const binding = coordination
+        ? await coordination.binding(provider, lockBox)
+        : await currentTestLockBinding(provider, lockBox, pairBcsHex);
     const lockHashes: string[] = [];
     for (let i = 0; i < count; i++) {
         const lockTx = await (
@@ -530,6 +573,9 @@ export async function lockAndProve(
         lockNonces.push(lockLog.args.nonce as bigint);
         proofBlockNumber = Math.max(proofBlockNumber, receipt.blockNumber);
     }
+
+    // Both batches must finish locking before either advances the Anvil clock.
+    await coordination?.locksMined();
 
     // Wait for archive proof availability (12 blocks). Mines them on anvil,
     // 12 seconds apart, which moves block.timestamp ahead of the host and
@@ -701,4 +747,78 @@ export const generateEthLockProofsCommand: BrowserCommand<
         count,
         pairBcsHex,
     );
+};
+
+/** Lock both sides before either batch mines proof-availability blocks. */
+export const generateBothCapLockProofsCommand: BrowserCommand<
+    [string, string, string, string, string, string, string, string, string, number, number, string]
+> = async (
+    _ctx,
+    rpc,
+    aptos,
+    sellerKey,
+    bidderKey,
+    sellerToken,
+    bidderToken,
+    lockBox,
+    sellerAmount,
+    bidderAmount,
+    sellerCount,
+    bidderCount,
+    pair,
+) => {
+    let ready = 0;
+    let releaseReady!: () => void;
+    const bothReady = new Promise<void>((resolve) => {
+        releaseReady = resolve;
+    });
+    let sharedBinding: Promise<LockBinding> | undefined;
+    let mined = 0;
+    let releaseMined!: () => void;
+    const bothMined = new Promise<void>((resolve) => {
+        releaseMined = resolve;
+    });
+    const coordination = {
+        binding: async (provider: ethers.JsonRpcProvider, contract: ethers.Contract) => {
+            if (++ready === 2) releaseReady();
+            await bothReady;
+            sharedBinding ??= currentTestLockBinding(
+                provider,
+                contract,
+                pair,
+                sellerCount + bidderCount,
+            );
+            return sharedBinding;
+        },
+        locksMined: async () => {
+            if (++mined === 2) releaseMined();
+            await bothMined;
+        },
+    };
+    return Promise.all([
+        lockAndProve(
+            rpc,
+            aptos,
+            sellerKey,
+            sellerToken,
+            lockBox,
+            BigInt(sellerAmount),
+            BigInt(sellerAmount) * BigInt(sellerCount),
+            sellerCount,
+            pair,
+            coordination,
+        ),
+        lockAndProve(
+            rpc,
+            aptos,
+            bidderKey,
+            bidderToken,
+            lockBox,
+            BigInt(bidderAmount),
+            BigInt(bidderAmount) * BigInt(bidderCount),
+            bidderCount,
+            pair,
+            coordination,
+        ),
+    ]);
 };
