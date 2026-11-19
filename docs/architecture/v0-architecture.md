@@ -381,7 +381,7 @@ locked value is at least `bid_quantity × bid_price`, and never below the
 `bid_price` is whole USD per whole FakeETH, and the product is in FakeUSD
 base units (6 decimals), computed as
 `quote_for_fill(bid_quantity, bid_price)`. The receipt's `lock_id`
-is stored in `Bid.collateral_lock_id`. This mirrors the seller-side
+is stored in `SealedBid.collateral_lock_id`. This mirrors the seller-side
 `LockReceipt<Ethereum, FakeETH>` in
 `source/atomica-move-contracts/sources/lock_receipt.move`.
 

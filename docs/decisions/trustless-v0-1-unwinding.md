@@ -9,6 +9,8 @@
 
 ## Decision
 
+> **Amendment (2026-11-13, issue 221).** PR 262 (commit c819c6f, LockBox computes the lock deadline from the window id) edited this accepted ADR without a note. It rewrote the per-lock deadline row: LockBox computes the deadline as `lockDeadline(windowId)`, no caller supplies one, and `lock` accepts only the current or the next window. It added 221 to that row's implementing issues, and it added to the Negative consequences that the computed deadline needs one more LockBox redeploy, batched with the leaf payment rule (222). The owner kept that edit (decision D2).
+
 <!-- SCOUT(#242) DOC: decision sentence (owner decision 30): "No relayer, admin key or operator account can move, hold or freeze user funds" contradicts Trust Assumptions below, where the package upgrade-key holder can emit any AuctionOutcome. -->
 
 v0.1 Beta is trustless. It trusts only the 2/3 Aptos validator threshold. No relayer, admin key or operator account can move, hold or freeze user funds.
