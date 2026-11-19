@@ -79,8 +79,8 @@ Item 15 is the largest single simplification in this review. It removes roughly 
 
 | # | Decision | Context |
 | --- | --- | --- |
-| 30 | Does the PRD trust model name the package upgrade key, or does the key get a delay or go away? | E-4 |
-| 31 | Does the PRD state the one-half secrecy bound, or do the thresholds change? | Chapter 5 |
+| 30 | **Resolved (D4a):** the admin is trusted until the one-way freeze on both chains, and the PRD trust model says so. Was: does the PRD trust model name the package upgrade key, or does the key get a delay or go away? | E-4 |
+| 31 | **Resolved (D4b):** the timelock DKG uses two thirds of stake for both secrecy and reconstruction, and the PRD states the two-thirds bound. Was: does the PRD state the secrecy bound, or do the thresholds change? | Chapter 5 |
 | 32 | Is `LockBox.reclaim` enough for axiom 3, so that the Aptos unwind can shrink? | Chapter 2, S-3 |
 | 33 | Keep a reserve price and enforce it, or remove the field? | A-4 |
 | 34 | What is the rule for an undersubscribed window? | A-5 |

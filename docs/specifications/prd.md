@@ -129,15 +129,13 @@ No trusted oracles or bridges.
 
 ### Sealed Bid Implementation
 
-<!-- SCOUT(#242) DOC: the 67 percent sentence (owner decision 31): the fork keeps bids secret only against at most one half of stake and needs two thirds to reveal; the seller-set 33 percent is unbuilt. -->
-
-**N-Layer "Onion" Timelock Encryption:** Bids encrypted using pluggable, configurable layers. As built, a bid uses one layer, the Atomica validator timelock (IBE over BLS12-381), which the validators release after the window close. The other onion layers, the seller DKG layer and the Drand layer are a later phase.
+**N-Layer "Onion" Timelock Encryption:** Bids encrypted using pluggable, configurable layers. As built, a bid uses one layer, the Atomica validator timelock (IBE over BLS12-381), which the validators release after the window close. Bid secrecy holds against any coalition holding less than two thirds of stake: the timelock DKG uses one threshold of two thirds of validator stake for both secrecy and key reconstruction. The other onion layers, the seller DKG layer and the Drand layer are a later phase.
 
 **Example: Dual-Layer (Validators + Sellers), a later phase**
 1. **Outer Layer:** Atomica Validator Timelock (BLS12-381) - Decrypts at auction deadline
 2. **Inner Layer:** Seller Group DKG (BLS12-381) - Decrypts only if Sellers (stake-weighted) participate
 
-This prevents "Invisible Handshake" attacks where validators collude off-chain. Decryption requires cooperation from BOTH the Validator Set (>67%) AND the Seller Set (>33%). Invalid bids are filtered when the chain opens them: a bid whose ciphertext does not decrypt to an 8-byte price, a bid with a zero price, or whose collateral does not cover its quantity at its own price, is invalid, never fills, and gets its whole collateral back. A bid with a zero quantity or a quantity above the window supply is refused at submission.
+This prevents "Invisible Handshake" attacks where validators collude off-chain. In that later phase, decryption requires cooperation from BOTH the Validator Set (two thirds of stake) AND the Seller Set (>33%). Invalid bids are filtered when the chain opens them: a bid whose ciphertext does not decrypt to an 8-byte price, a bid with a zero price, or whose collateral does not cover its quantity at its own price, is invalid, never fills, and gets its whole collateral back. A bid with a zero quantity or a quantity above the window supply is refused at submission.
 
 **Orthogonal Key Generation (later phase):** How each layer generates its keys (DKG, beacon, threshold) is independent of the onion encryption structure. Layers can be composed freely:
 - Validators only, Validators + Drand, Validators + Sellers, Validators + Drand + Sellers, etc.
@@ -240,12 +238,10 @@ Bidders (arbitrageurs) earn through bid-ask spreads (buy at auction price, sell/
 
 ## Development Status
 
-<!-- SCOUT(#242) DOC: the Risk #3 bullet repeats "trusts only the 2/3 validator threshold, no relayer" without the package upgrade-key assumption (owner decision 30). -->
-
 **Current Progress:**
 - ✅ **Risk #1 (Ethereum Signing):** Complete - users can sign Atomica transactions with MetaMask
 - ✅ **Risk #2 (Timelock Encryption):** Built for one layer - the validator timelock DKG, V2 bid ciphertexts, the on-chain key reveal and on-chain bid opening (`open_bids`) are merged. More onion layers are a later phase
-- ✅ **Risk #3 (Cross-Chain Verification):** Built for Ethereum - v0.1 Beta trusts only the 2/3 validator threshold, no relayer: validators attest Ethereum headers, Ethereum verifies validator BLS signatures over Aptos outcomes, and any user can unwind a finished or stuck auction ([trustless v0.1 unwinding ADR](../decisions/trustless-v0-1-unwinding.md)); ZK double verification (v1.0)
+- ✅ **Risk #3 (Cross-Chain Verification):** Built for Ethereum - v0.1 Beta trusts the 2/3 validator threshold and the admin until the one-way freeze on both chains, no relayer: validators attest Ethereum headers, Ethereum verifies validator BLS signatures over Aptos outcomes, and any user can unwind a finished or stuck auction ([trustless v0.1 unwinding ADR](../decisions/trustless-v0-1-unwinding.md)); ZK double verification (v1.0)
 
 The UI completes a trade end to end in three actions: Open bids, Settle, then Release, on the sell flow monitoring step and in the demo (issue 236). GitHub issues track every open gap.
 
@@ -263,7 +259,7 @@ Atomica prioritizes:
 
 ### System Characteristics & Tradeoffs
 
-<!-- SCOUT(#242) DOC: "Custodial Risk" row: "locked only for auction duration; guaranteed delivery or refund": the lock deadline is the window close plus 72 h (owner decision 36), and the package upgrade-key holder can redirect a lock (owner decision 30). -->
+<!-- SCOUT(#242) DOC: "Custodial Risk" row: "locked only for auction duration; guaranteed delivery or refund": the lock deadline is the window close plus 72 h (owner decision 36). -->
 
 | Characteristic | Ideal State | Atomica's Approach |
 |----------------|-------------|--------------------|
@@ -285,8 +281,6 @@ Atomica prioritizes:
 
 ## Open Questions
 
-<!-- SCOUT(#242) DOC: question 9: the package upgrade-key is the governance question that matters (owner decision 30). -->
-
 1. Optimal settlement delay within the 1-3 hour target range
 2. Distance-to-clearing-price rebate curve calibration
 3. Later phase: reserve price mechanics if needed (RMS deviation fee structure). Launch has no reserve price (review decision 33).
@@ -295,7 +289,7 @@ Atomica prioritizes:
 6. DoS prevention (spam bids/commitments). Timelock registration spam is closed: only the auction package registers a timelock, one per window id. Bid and seller spam is partly answered: a window takes at most 100 bids and 100 seller locks, each seller lock is at least 0.01 FakeETH and each bid's collateral at least 10 FakeUSD, so filling a window costs real capital. The UI checks these limits before the Ethereum lock, so an honest user never locks an amount Aptos refuses.
 7. Economic bounds on griefing attacks. Partly answered: a dust bid can no longer win supply or cancel a window, because an under-collateralised bid is invalid at opening and skipped. Its collateral still goes back in full (no slash), so spam is bounded by the collateral a bid must lock.
 8. Away-chain reorganization detection/resolution
-9. Governance for parameter changes and upgrades
+9. Governance for parameter changes and upgrades. Until the one-way freeze, the admin decides upgrades on both chains, so the admin is a trusted party until then ([upgrade and freeze runbook](../development/upgrade-freeze-runbook.md))
 10. State growth management (multiple auctions, commitment storage)
 
 ## Success Criteria
@@ -346,19 +340,15 @@ Atomica prioritizes:
 
 ## Protocol Evolution Roadmap
 
-<!-- SCOUT(#242) DOC: table row v0.1 Beta: "2/3 validator threshold only" omits the package upgrade-key (owner decision 30). -->
-
 See [Plan Evolution (Archived)](../archived/plan-evolution.md) for the multi-phase roadmap from v0.1 Beta to v2.0:
 
 | Phase | Trust Model | Key Innovation |
 |-------|-------------|----------------|
-| **v0.1 Beta** | 2/3 validator threshold only, no relayer | Working system with verified BLS settlement and permissionless unwind (current) |
+| **v0.1 Beta** | 2/3 validator threshold, admin until the freeze, no relayer | Working system with verified BLS settlement and permissionless unwind (current) |
 | **v1.0** | Same validator assumption + ZK | ZK auction verification |
 | **v2.0** | Same validator assumption + ratchet | Cross-chain auctions + BitVM |
 
-<!-- SCOUT(#242) DOC: trust model sentence (owner decision 30): "No relayer, admin key or operator can move or freeze funds" contradicts the decision record's Trust Assumptions; also state the bid secrecy bound (owner decision 31). -->
-
-**v0.1 Trust Model:** v0.1 trusts only the 2/3 validator threshold. No relayer, admin key or operator can move or freeze funds. All funds unwind to their origin unless the auction executes flawlessly, and any user can send a transaction to a finished or stuck auction to unwind it. See the [trustless v0.1 unwinding ADR](../decisions/trustless-v0-1-unwinding.md).
+**v0.1 Trust Model:** v0.1 trusts the 2/3 validator threshold and the admin. The admin is trusted until the one-way freeze on both chains. Until then the EVM LockBox admin can upgrade the LockBox proxy, and the Aptos `@atomica` package publisher can upgrade the Move package. An upgrade can change where funds go, so v0.1 trusts the admin until each chain is frozen. After the freeze both are immutable. No admin function moves, pauses or blocks user funds, and no relayer or operator is trusted. Bid secrecy holds against any coalition holding less than two thirds of stake. All funds unwind to their origin unless the auction executes flawlessly, and any user can send a transaction to a finished or stuck auction to unwind it. See the [trustless v0.1 unwinding ADR](../decisions/trustless-v0-1-unwinding.md) and the [upgrade and freeze runbook](../development/upgrade-freeze-runbook.md).
 
 **v0 → v1 Trust Reduction:**
 - Same validator honesty assumption (2/3 threshold)

@@ -131,12 +131,12 @@ Atomica auctions require sealed bids to prevent:
 
 ### Benefit 2: Shared Liveness Assumptions
 
-<!-- SCOUT(#242) DOC: "Timelock decryption requires 2/3+ validators ... same threshold" (also Defense 1 and Offline Collusion): the fork secrecy threshold is one half of stake; only the reveal threshold is two thirds (owner decision 31). -->
-
 **Unified security model:**
 - Atomica consensus requires 2/3+ validators
-- Timelock decryption requires 2/3+ validators
+- Timelock decryption requires two thirds of stake
 - **Same validators, same threshold**
+
+Bid secrecy holds against any coalition holding less than two thirds of stake (owner decision D4b). The timelock DKG uses one stake-weighted threshold of two thirds for both secrecy and key reconstruction. The mempool DKG is unchanged.
 
 **Property:**
 - If Atomica consensus works, timelock works
@@ -287,7 +287,7 @@ struct DecryptionShare {
 
 **Security parameter:** t = 2n/3 + 1
 
-**Attack requirement:** Attacker must compromise t validators
+**Attack requirement:** Attacker must compromise t validators. Bid secrecy holds against any coalition holding less than two thirds of stake, because the timelock DKG secrecy threshold equals its reconstruction threshold.
 
 **Analysis:**
 - Same as attacking Aptos consensus
@@ -328,7 +328,7 @@ Even if the chain is live, >2/3 of validators could coordinate *off-chain* (e.g.
 - **Plausible Deniability:** Validators could claim they never generated the key, while secretly holding it.
 
 **Mitigation:**
-This falls under the same security threshold as a consensus takeover. If >2/3 validators are coordinating secretly to break protocol rules:
+This falls under the same security threshold as a consensus takeover. Bid secrecy holds against any coalition holding less than two thirds of stake, so only a coalition holding two thirds of stake can reconstruct the key early. If >2/3 validators are coordinating secretly to break protocol rules:
 - They could also fork the chain, double-spend, or censor transactions.
 - The "Offline Collusion" risk is isomorphic to the standard "67% Attack" risk.
 - **Defense:** We implement a **Seller-Stake DKG** and **Scuttle Reward** mechanism to make this collusion economically unstable.

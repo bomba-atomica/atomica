@@ -11,9 +11,7 @@
 
 > **Amendment (2026-11-13, issue 221).** PR 262 (commit c819c6f, LockBox computes the lock deadline from the window id) edited this accepted ADR without a note. It rewrote the per-lock deadline row: LockBox computes the deadline as `lockDeadline(windowId)`, no caller supplies one, and `lock` accepts only the current or the next window. It added 221 to that row's implementing issues, and it added to the Negative consequences that the computed deadline needs one more LockBox redeploy, batched with the leaf payment rule (222). The owner kept that edit (decision D2).
 
-<!-- SCOUT(#242) DOC: decision sentence (owner decision 30): "No relayer, admin key or operator account can move, hold or freeze user funds" contradicts Trust Assumptions below, where the package upgrade-key holder can emit any AuctionOutcome. -->
-
-v0.1 Beta is trustless. It trusts only the 2/3 Aptos validator threshold. No relayer, admin key or operator account can move, hold or freeze user funds.
+v0.1 Beta trusts the 2/3 Aptos validator threshold and the admin. The admin is trusted until the one-way freeze on both chains (owner decision D4a). Until then the admin can upgrade the EVM LockBox and the Aptos `@atomica` package, and an upgrade can change where funds go. After the freeze both are immutable. No admin function, relayer or operator account can move, hold or freeze user funds.
 
 The owner set three axioms:
 
@@ -52,16 +50,14 @@ The PRD already set the v0.1 trust model as the 2/3 validator threshold. The rel
 
 **Positive**
 
-<!-- SCOUT(#242) DOC: "Funds never depend on one key" contradicts the upgrade-key assumption below (owner decision 30); "matches the PRD ... plus the one named assumption" is false while the PRD names no upgrade-key holder. -->
-
-- Funds never depend on one key. A stuck auction always has a way home.
-- The v0.1 trust model matches the PRD: the 2/3 validator threshold, plus the one named assumption below.
+- No relayer or operator key can strand funds. A stuck auction always has a way home.
+- The v0.1 trust model matches the PRD: the 2/3 validator threshold, plus the admin until the freeze and the bid secrecy bound named below.
 - ZK in v1.0 becomes a second, independent check on auction clearing. It no longer has to remove a trusted relayer.
 
 **Negative**
 
 - Real BLS verification on Ethereum now ships in v0.1. It needs EIP-2537 precompiles on every target Ethereum network, including the docker testnet (Electra enabled).
-- `LockBox` has no upgrade path. The proof-gated LockBox ships at a new address. The computed lock deadline (221) needs one more redeploy, batched with the leaf payment rule (222).
+- Until the freeze, the admin can upgrade `LockBox` behind its UUPS proxy and republish the Move package, so users trust the admin until both chains are frozen (owner decision D4a). The computed lock deadline (221) needs one more redeploy, batched with the leaf payment rule (222).
 - The Aptos fork gains validator header attestation and outcome-proof endpoints. That widens the fork's delta from upstream.
 
 **Neutral**
@@ -72,10 +68,9 @@ The PRD already set the v0.1 trust model as the 2/3 validator threshold. The rel
 
 ## Trust Assumptions
 
-<!-- SCOUT(#242) DOC: add the bid secrecy assumption once the owner answers decision 31: the fork keeps bids secret only against at most one half of stake, which this section does not name. -->
-
 - **The 2/3 validator threshold.** A quorum of the current Aptos validator set can finalize any outcome.
-- **The `@atomica` package upgrade key (owner decision, 2026-11-11).** The `@atomica` Move package stays upgradeable at v0.1. v0.1 does not set `upgrade_policy` to immutable. The upgrade key holder can publish code that emits any `AuctionOutcome` event, and the validator quorum signs it like any other transaction. The Ethereum light client proves only that the event is final, so Ethereum lock safety at v0.1 also trusts that key.
+- **The admin, until the one-way freeze on both chains (owner decision D4a).** The `@atomica` Move package stays upgradeable with the `compatible` policy until the admin republishes it as `immutable`. The `@atomica` package publisher can publish code that emits any `AuctionOutcome` event, and the validator quorum signs it like any other transaction. The Ethereum light client proves only that the event is final, so Ethereum lock safety also trusts that key until the freeze. The LockBox admin can upgrade the LockBox proxy until it calls `freeze()`. Its admin functions cannot move, pause or block a lock, but a new implementation could. The [upgrade and freeze runbook](../development/upgrade-freeze-runbook.md) describes both freezes.
+- **Bid secrecy (owner decision D4b).** Bid secrecy holds against any coalition holding less than two thirds of stake. The timelock DKG uses one threshold of two thirds of validator stake for both secrecy and key reconstruction. The mempool DKG is unchanged.
 
 ---
 
