@@ -200,6 +200,59 @@ bun run test test/faucet.test.ts
 ATOMICA_DEBUG_TESTNET=1 npm test
 ```
 
+## Local devnet run
+
+One command brings up the whole dual-chain devnet on a workstation, checks it, and tears it down:
+
+```bash
+cd source/atomica-demo
+bun run devnet:check
+```
+
+It runs `scripts/local-devnet-check.ts`, which runs `prepare:deps` once the host checks pass. That script starts both chains with `setupDualChainTestnet`, which deploys the Atomica Move package and the EVM contracts. It then asserts three things:
+
+- `auction::is_pair_allowed(LAUNCH_PAIR_BCS)` is true.
+- A FakeETH lock through LockBox emits `Locked`.
+- `create_auction` for the lock's window succeeds.
+
+It prints a JSON report and exits 0 only when all three hold and teardown succeeded. The report holds `pairAllowed`, the `Locked` event, the `create_auction` transaction hash, the docker caps of each container, and `maxLoad1m`.
+
+Prerequisites:
+
+- The `aptos` CLI on `PATH`, the same release binary CI installs (`binary-0ef2c9a5c5`).
+- Forge output in `source/evm-contracts/out` (`forge build`).
+- The `ethereum-testnet-setup` image. The check refuses to run without it, because compose would build it.
+
+The validators use the pinned prebuilt image from `config/docker-compose.yaml`. The check never builds an image, a release binary, or a swarm.
+
+Host guards (`scripts/host-load-guard.ts`):
+
+- It refuses to start when the 1-minute load average is 32 or more.
+- It refuses to start when containers of this devnet exist. It matches only the compose projects `atomica-testnet` and `ethereum-testnet` and their container names, so other projects' containers do not count.
+- It refuses to start when another docker network overlaps `172.19.0.0/16`, the subnet of `atomica-testnet`. The error names that network.
+- Right after the host checks pass it creates the `atomica-testnet` network itself, so no other project takes the subnet during the minutes before the Aptos `compose up`. Compose reuses it. Teardown removes it.
+- It checks the load every 30 seconds. At 32 or more it aborts and tears down.
+- It tears down on success, failure, SIGINT and SIGTERM with `docker compose down -v --remove-orphans` in both compose directories.
+
+Every devnet container has a CPU and memory cap:
+
+| Container                         | CPUs | Memory |
+| --------------------------------- | ---- | ------ |
+| `atomica-validator-0..3` (each)   | 1    | 3 GB   |
+| `eth-execution`                   | 1    | 2 GB   |
+| `eth-beacon`                      | 1    | 3 GB   |
+| `eth-validator-1..4` (each)       | 0.25 | 512 MB |
+| Ethereum `setup` (genesis)        | 0.5  | 1 GB   |
+| Aptos genesis (`docker run --rm`) | 0.5  | 2 GB   |
+| **Total**                         | 8    | 22 GB  |
+
+Check the caps of a running devnet:
+
+```bash
+docker inspect --format '{{.Name}} {{.HostConfig.NanoCpus}} {{.HostConfig.Memory}}' \
+  $(docker ps -q --filter name=atomica-validator- --filter name=eth-)
+```
+
 ## Manual Docker Operation
 
 ```bash

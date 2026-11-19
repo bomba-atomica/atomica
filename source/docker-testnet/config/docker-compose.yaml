@@ -12,6 +12,7 @@
 # - 4 validator nodes
 # - Shared genesis volume for coordination
 # - Exposed REST APIs (8080-8083) and metrics (9101-9104)
+# - CPU and memory caps on each validator (1 CPU, 3 GB)
 #
 # Usage:
 #   1. Start testnet: docker compose up -d
@@ -26,6 +27,10 @@ services:
   validator-0:
     image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:3fbe77d30cf8e4bd2a9184fede63790a5ff2f7e77754b145029768ecd975aecc}"
     container_name: atomica-validator-0
+    # Host-safety caps (issue 281): the devnet's caps total 8 CPUs and 22 GB
+    # (README.md, "Local devnet run").
+    cpus: 1.0
+    mem_limit: 3g
     hostname: validator-0
     user: root
     networks:
@@ -75,6 +80,8 @@ services:
   validator-1:
     image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:3fbe77d30cf8e4bd2a9184fede63790a5ff2f7e77754b145029768ecd975aecc}"
     container_name: atomica-validator-1
+    cpus: 1.0
+    mem_limit: 3g
     hostname: validator-1
     user: root
     depends_on:
@@ -118,6 +125,8 @@ services:
   validator-2:
     image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:3fbe77d30cf8e4bd2a9184fede63790a5ff2f7e77754b145029768ecd975aecc}"
     container_name: atomica-validator-2
+    cpus: 1.0
+    mem_limit: 3g
     hostname: validator-2
     user: root
     depends_on:
@@ -161,6 +170,8 @@ services:
   validator-3:
     image: "${IMAGE_NAME:-ghcr.io/bomba-atomica/atomica-aptos/validator@sha256:3fbe77d30cf8e4bd2a9184fede63790a5ff2f7e77754b145029768ecd975aecc}"
     container_name: atomica-validator-3
+    cpus: 1.0
+    mem_limit: 3g
     hostname: validator-3
     user: root
     depends_on:

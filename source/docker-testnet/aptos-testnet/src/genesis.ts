@@ -179,9 +179,15 @@ function runGenesisScript(config: ScriptConfig): Promise<void> {
 
         // Run the script inside Docker container with the same image that will run validators
         // This ensures aptos CLI version matches the Move framework version
+        // Host-safety caps (issue 281), counted in the devnet's 8 CPU and
+        // 22 GB total (source/docker-testnet/README.md, "Local devnet run").
         const dockerArgs = [
             "run",
             "--rm",
+            "--cpus",
+            "0.5",
+            "--memory",
+            "2g",
             "-v",
             `${workspaceDir}:/workspace`,
             "-v",
