@@ -103,6 +103,38 @@ export interface NetworkInfo {
 
 export type NetworkLister = () => Promise<NetworkInfo[]>;
 
+/** Gateway of {@link DEVNET_SUBNET}, as the compose file sets it. */
+export const DEVNET_GATEWAY = "172.19.0.1";
+
+/**
+ * `docker network create` arguments that reserve the devnet network right
+ * after the host checks pass, so no other project's network takes the subnet
+ * before the Aptos `compose up` minutes later.
+ *
+ * Compose v2 (pkg/compose/create.go, resolveOrCreateNetwork) reuses an
+ * existing network whose `com.docker.compose.network` label names the
+ * network key and that has no config-hash label; a missing project label is
+ * only a warning. The project label is left off on purpose: `compose down`
+ * (removeNetwork) lists networks by project and network label, so the
+ * `compose down` that DockerTestnet.new runs before genesis leaves the
+ * reservation alone. The check's teardown removes it with `docker network rm`.
+ */
+export function devnetNetworkCreateArgs(): string[] {
+  return [
+    "network",
+    "create",
+    "--driver",
+    "bridge",
+    "--subnet",
+    DEVNET_SUBNET,
+    "--gateway",
+    DEVNET_GATEWAY,
+    "--label",
+    `com.docker.compose.network=${DEVNET_NETWORK}`,
+    DEVNET_NETWORK,
+  ];
+}
+
 /** IPv4 CIDR as [first, last] address numbers; null for anything else (IPv6). */
 function cidrRange(cidr: string): [number, number] | null {
   const match = /^(\d+)\.(\d+)\.(\d+)\.(\d+)\/(\d+)$/.exec(cidr.trim());

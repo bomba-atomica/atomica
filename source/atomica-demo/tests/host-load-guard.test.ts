@@ -5,6 +5,7 @@ import {
   LOAD_LIMIT,
   assertHostReady,
   assertSubnetFree,
+  devnetNetworkCreateArgs,
   isDevnetContainer,
   subnetsOverlap,
   runGuarded,
@@ -164,5 +165,23 @@ describe("host load guard", () => {
     ).resolves.toBeUndefined();
     expect(subnetsOverlap("172.19.5.0/24", "172.19.0.0/16")).toBe(true);
     expect(subnetsOverlap("172.18.0.0/16", "172.19.0.0/16")).toBe(false);
+  });
+
+  it("reserves atomica-testnet as compose reuses it and down skips it", () => {
+    const args = devnetNetworkCreateArgs();
+    expect(args.slice(0, 2)).toEqual(["network", "create"]);
+    expect(args.at(-1)).toBe("atomica-testnet");
+    expect(args).toEqual(
+      expect.arrayContaining([
+        "--subnet",
+        "172.19.0.0/16",
+        "--gateway",
+        "172.19.0.1",
+        "com.docker.compose.network=atomica-testnet",
+      ]),
+    );
+    // A project label would let the compose down before genesis remove it.
+    expect(args.join(" ")).not.toContain("com.docker.compose.project");
+    expect(args.join(" ")).not.toContain("com.docker.compose.config-hash");
   });
 });

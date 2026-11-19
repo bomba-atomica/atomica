@@ -26,7 +26,9 @@ import { loadavg } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  DEVNET_NETWORK,
   assertSubnetFree,
+  devnetNetworkCreateArgs,
   isDevnetContainer,
   runGuarded,
   type ContainerInfo,
@@ -139,9 +141,29 @@ async function listNetworks(): Promise<NetworkInfo[]> {
     });
 }
 
+function networkExists(): boolean {
+  try {
+    docker(["network", "inspect", DEVNET_NETWORK]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Remove both compose projects with their volumes and networks. Synchronous,
- * so a signal handler finishes it before the process exits.
+ * Reserve the devnet subnet now (see devnetNetworkCreateArgs). The container
+ * guard passed, so a leftover atomica-testnet has no devnet attached: replace
+ * it, which also drops any compose labels a past run left on it.
+ */
+function reserveNetwork(): void {
+  if (networkExists()) docker(["network", "rm", DEVNET_NETWORK]);
+  docker(devnetNetworkCreateArgs());
+}
+
+/**
+ * Remove both compose projects with their volumes and networks, then the
+ * reserved network. Synchronous, so a signal handler finishes it before the
+ * process exits.
  */
 function teardownDevnet(): void {
   if (!devnetStarted) return;
@@ -156,6 +178,18 @@ function teardownDevnet(): void {
     } catch (error) {
       failed = true;
       console.error(`[devnet:check] teardown failed in ${dir}:`, error);
+    }
+  }
+  // The reserved network has no project label, so compose down skips it.
+  if (networkExists()) {
+    try {
+      docker(["network", "rm", DEVNET_NETWORK]);
+    } catch (error) {
+      failed = true;
+      console.error(
+        `[devnet:check] could not remove ${DEVNET_NETWORK}:`,
+        error,
+      );
     }
   }
   devnetStarted = false;
@@ -243,6 +277,7 @@ function fromAptosTestnet(specifier: string) {
 /** Bring the devnet up and run the three assertions. */
 async function runDevnetCheck(): Promise<void> {
   devnetStarted = true;
+  reserveNetwork();
   // Build the local packages only after every host check passed.
   execFileSync("bun", ["run", "prepare:deps"], {
     cwd: resolve(SCRIPT_DIR, ".."),
