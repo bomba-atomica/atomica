@@ -485,10 +485,10 @@ struct AuctionOutcome has drop, store {
 
 ## §3 — Cross-Chain Settlement (v0.1 Trustless Flow)
 
-<!-- SCOUT(#242) DOC: "No relayer, admin key or operator account decides where funds go" contradicts the upgrade-key bullet of 3.2 (owner decision 30). -->
-
-v0.1 trusts only the 2/3 Aptos validator threshold. No relayer, admin key or
-operator account decides where funds go. The
+v0.1 trusts the 2/3 Aptos validator threshold and the admin until the one-way
+freeze on both chains. Until then an admin upgrade can change code on either
+chain (§3.2, §3.5). No relayer, operator account or admin function decides
+where funds go. The
 [trustless v0.1 unwinding ADR](../decisions/trustless-v0-1-unwinding.md)
 records the three owner axioms behind this section:
 

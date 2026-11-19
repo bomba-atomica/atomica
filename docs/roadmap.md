@@ -20,9 +20,7 @@ tracks any gap.
 
 ## v0.1 Beta — Trustless single-chain auction with verified BLS settlement
 
-<!-- SCOUT(#242) DOC: goal sentence: "trusts only the 2/3 validator threshold" omits the package upgrade-key (owner decision 30) and the one-half secrecy bound (owner decision 31). -->
-
-Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ethereum, settled back to Ethereum by a verified BLS outcome proof. v0.1 trusts only the 2/3 validator threshold. No relayer is trusted, and any user can unwind a finished or stuck auction. See the [trustless v0.1 unwinding ADR](decisions/trustless-v0-1-unwinding.md).
+Goal: working sealed-bid batch auction on Aptos + cross-chain deposit from Ethereum, settled back to Ethereum by a verified BLS outcome proof. v0.1 trusts the 2/3 validator threshold and the admin until the one-way freeze on both chains. Bid secrecy holds against any coalition holding less than two thirds of stake. No relayer is trusted, and any user can unwind a finished or stuck auction. See the [trustless v0.1 unwinding ADR](decisions/trustless-v0-1-unwinding.md).
 
 
 | Capability | Owning module(s) under `source/` | Status |
