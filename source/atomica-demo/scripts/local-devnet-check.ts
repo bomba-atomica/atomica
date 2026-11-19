@@ -18,6 +18,7 @@
  * validator image and never builds an image.
  *
  * Run from source/atomica-demo; the package script loads source/.env.test.
+ * It runs `prepare:deps` itself, after the host checks pass.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -25,9 +26,11 @@ import { loadavg } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  assertSubnetFree,
   isDevnetContainer,
   runGuarded,
   type ContainerInfo,
+  type NetworkInfo,
 } from "./host-load-guard";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -117,6 +120,25 @@ async function listContainers(): Promise<ContainerInfo[]> {
     });
 }
 
+/** Every docker network with its IPv4 and IPv6 subnets. */
+async function listNetworks(): Promise<NetworkInfo[]> {
+  const ids = docker(["network", "ls", "-q"]).split("\n").filter(Boolean);
+  if (ids.length === 0) return [];
+  return docker([
+    "network",
+    "inspect",
+    "--format",
+    "{{.Name}}\t{{range .IPAM.Config}}{{.Subnet}} {{end}}",
+    ...ids,
+  ])
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => {
+      const [name, subnets = ""] = line.split("\t");
+      return { name, subnets: subnets.split(" ").filter(Boolean) };
+    });
+}
+
 /**
  * Remove both compose projects with their volumes and networks. Synchronous,
  * so a signal handler finishes it before the process exits.
@@ -171,6 +193,7 @@ async function readCaps(): Promise<Report["caps"]> {
 
 /** Fail before starting anything when a prerequisite would build or is missing. */
 async function preflight(): Promise<void> {
+  await assertSubnetFree(listNetworks);
   try {
     docker(["image", "inspect", ETH_SETUP_IMAGE]);
   } catch {
@@ -220,6 +243,11 @@ function fromAptosTestnet(specifier: string) {
 /** Bring the devnet up and run the three assertions. */
 async function runDevnetCheck(): Promise<void> {
   devnetStarted = true;
+  // Build the local packages only after every host check passed.
+  execFileSync("bun", ["run", "prepare:deps"], {
+    cwd: resolve(SCRIPT_DIR, ".."),
+    stdio: ["ignore", "inherit", "inherit"],
+  });
   const { ethers } = await fromAptosTestnet("ethers");
   const {
     Account,

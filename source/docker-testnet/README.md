@@ -209,7 +209,7 @@ cd source/atomica-demo
 bun run devnet:check
 ```
 
-It runs `scripts/local-devnet-check.ts`. That script starts both chains with `setupDualChainTestnet`, which deploys the Atomica Move package and the EVM contracts. It then asserts three things:
+It runs `scripts/local-devnet-check.ts`, which runs `prepare:deps` once the host checks pass. That script starts both chains with `setupDualChainTestnet`, which deploys the Atomica Move package and the EVM contracts. It then asserts three things:
 
 - `auction::is_pair_allowed(LAUNCH_PAIR_BCS)` is true.
 - A FakeETH lock through LockBox emits `Locked`.
@@ -229,6 +229,7 @@ Host guards (`scripts/host-load-guard.ts`):
 
 - It refuses to start when the 1-minute load average is 32 or more.
 - It refuses to start when containers of this devnet exist. It matches only the compose projects `atomica-testnet` and `ethereum-testnet` and their container names, so other projects' containers do not count.
+- It refuses to start when another docker network overlaps `172.19.0.0/16`, the subnet of `atomica-testnet`. The error names that network.
 - It checks the load every 30 seconds. At 32 or more it aborts and tears down.
 - It tears down on success, failure, SIGINT and SIGTERM with `docker compose down -v --remove-orphans` in both compose directories.
 

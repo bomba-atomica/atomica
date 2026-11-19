@@ -4,7 +4,9 @@ import {
   LOAD_CHECK_INTERVAL_MS,
   LOAD_LIMIT,
   assertHostReady,
+  assertSubnetFree,
   isDevnetContainer,
+  subnetsOverlap,
   runGuarded,
   type ContainerInfo,
   type Timers,
@@ -135,5 +137,32 @@ describe("host load guard", () => {
       }),
     ).rejects.toThrow("assertion failed");
     expect(teardown).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses when another network holds the devnet subnet", async () => {
+    await expect(
+      assertSubnetFree(async () => [
+        { name: "bridge", subnets: ["172.17.0.0/16"] },
+        { name: "forge-ci-abc_default", subnets: ["172.19.0.0/16"] },
+      ]),
+    ).rejects.toThrow(/forge-ci-abc_default .*overlaps the devnet subnet/);
+    await expect(
+      assertSubnetFree(async () => [
+        { name: "wide", subnets: ["172.16.0.0/12"] },
+      ]),
+    ).rejects.toThrow(HostGuardError);
+  });
+
+  it("allows other subnets and the devnet's own network", async () => {
+    await expect(
+      assertSubnetFree(async () => [
+        { name: "bridge", subnets: ["172.17.0.0/16", "fd00::/64"] },
+        { name: "rm_smoke", subnets: ["172.20.0.0/16"] },
+        { name: "atomica-testnet", subnets: ["172.19.0.0/16"] },
+        { name: "host", subnets: [] },
+      ]),
+    ).resolves.toBeUndefined();
+    expect(subnetsOverlap("172.19.5.0/24", "172.19.0.0/16")).toBe(true);
+    expect(subnetsOverlap("172.18.0.0/16", "172.19.0.0/16")).toBe(false);
   });
 });

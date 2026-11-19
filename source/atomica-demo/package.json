@@ -12,7 +12,7 @@
     "check:freeze": "bun scripts/check-freeze.ts",
     "prepare:deps": "cd ../docker-testnet/ethereum-testnet/typescript-sdk && bun install && bun run build && cd ../../../state-proofs/typescript && bun install && bun run build && cd ../../atomica-sdk && bun install && bun run build && cd ../docker-testnet/aptos-testnet && bun install && bun run build && cd ../../atomica-web-components && bun install && bun run build",
     "demo": "bun run prepare:deps && bun scripts/orchestrator.ts",
-    "devnet:check": "bun run prepare:deps && bun --env-file=../.env.test scripts/local-devnet-check.ts",
+    "devnet:check": "bun --env-file=../.env.test scripts/local-devnet-check.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

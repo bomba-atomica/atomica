@@ -91,6 +91,57 @@ export async function assertHostReady(
   return load;
 }
 
+/** Network and subnet the Aptos compose file pins (config/docker-compose.yaml). */
+export const DEVNET_NETWORK = "atomica-testnet";
+export const DEVNET_SUBNET = "172.19.0.0/16";
+
+/** One docker network with the IPv4 subnets of its IPAM config. */
+export interface NetworkInfo {
+  name: string;
+  subnets: string[];
+}
+
+export type NetworkLister = () => Promise<NetworkInfo[]>;
+
+/** IPv4 CIDR as [first, last] address numbers; null for anything else (IPv6). */
+function cidrRange(cidr: string): [number, number] | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)\.(\d+)\/(\d+)$/.exec(cidr.trim());
+  if (!match) return null;
+  const base = match
+    .slice(1, 5)
+    .reduce((acc, octet) => acc * 256 + Number(octet), 0);
+  const size = 2 ** (32 - Number(match[5]));
+  const first = base - (base % size);
+  return [first, first + size - 1];
+}
+
+/** Whether two IPv4 CIDRs share any address. */
+export function subnetsOverlap(a: string, b: string): boolean {
+  const ra = cidrRange(a);
+  const rb = cidrRange(b);
+  return ra !== null && rb !== null && ra[0] <= rb[1] && rb[0] <= ra[1];
+}
+
+/**
+ * Refuse to start when another docker network holds the devnet subnet, or
+ * compose fails with "Pool overlaps". Our own `atomica-testnet` network does
+ * not count: the container guard handles a running devnet.
+ */
+export async function assertSubnetFree(
+  listNetworks: NetworkLister,
+): Promise<void> {
+  const clash = (await listNetworks()).find(
+    (network) =>
+      network.name !== DEVNET_NETWORK &&
+      network.subnets.some((subnet) => subnetsOverlap(subnet, DEVNET_SUBNET)),
+  );
+  if (clash) {
+    throw new HostGuardError(
+      `docker network ${clash.name} (${clash.subnets.join(", ")}) overlaps the devnet subnet ${DEVNET_SUBNET}: refusing to start the devnet`,
+    );
+  }
+}
+
 /** Timer functions, injected so tests can drive time. */
 export interface Timers {
   setInterval(callback: () => void, ms: number): unknown;
