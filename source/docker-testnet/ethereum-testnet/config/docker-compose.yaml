@@ -1,4 +1,7 @@
 name: ethereum-testnet
+# Host-safety caps (issue 281): every service has a CPU and memory cap. With
+# the Aptos validators and the genesis container the devnet's caps total
+# 8 CPUs and 22 GB (source/docker-testnet/README.md, "Local devnet run").
 services:
   # 1. Setup Service (Generates Artifacts, Initializes Geth, Imports Keys)
   setup:
@@ -32,11 +35,15 @@ services:
       - NUMBER_OF_VALIDATORS=4
       - EL_AND_CL_MNEMONIC=giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete
     entrypoint: ["/bin/bash", "/generate.sh"]
+    cpus: 0.5
+    mem_limit: 1g
 
   # 4. Main Execution Client
   geth:
     image: ethereum/client-go:v1.16.7
     container_name: eth-execution
+    cpus: 1.0
+    mem_limit: 2g
     restart: unless-stopped
     depends_on:
       setup:
@@ -67,6 +74,8 @@ services:
   beacon:
     image: sigp/lighthouse:v7.1.0
     container_name: eth-beacon
+    cpus: 1.0
+    mem_limit: 3g
     restart: unless-stopped
     depends_on:
       geth:
@@ -100,6 +109,8 @@ services:
   validator-1:
     image: sigp/lighthouse:v7.1.0
     container_name: eth-validator-1
+    cpus: 0.25
+    mem_limit: 512m
     restart: unless-stopped
     depends_on:
       beacon:
@@ -120,6 +131,8 @@ services:
   validator-2:
     image: sigp/lighthouse:v7.1.0
     container_name: eth-validator-2
+    cpus: 0.25
+    mem_limit: 512m
     restart: unless-stopped
     depends_on:
       beacon:
@@ -140,6 +153,8 @@ services:
   validator-3:
     image: sigp/lighthouse:v7.1.0
     container_name: eth-validator-3
+    cpus: 0.25
+    mem_limit: 512m
     restart: unless-stopped
     depends_on:
       beacon:
@@ -160,6 +175,8 @@ services:
   validator-4:
     image: sigp/lighthouse:v7.1.0
     container_name: eth-validator-4
+    cpus: 0.25
+    mem_limit: 512m
     restart: unless-stopped
     depends_on:
       beacon:
